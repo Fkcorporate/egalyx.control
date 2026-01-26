@@ -14917,7 +14917,6 @@ def gestionnaire_check_access():
     
     return html
 
-
 @app.route('/gestionnaire/utilisateur/creer', methods=['GET', 'POST'])
 @login_required
 def gestionnaire_creer_utilisateur():
@@ -14961,7 +14960,6 @@ def gestionnaire_creer_utilisateur():
             EqualTo('password', message='Les mots de passe doivent correspondre')
         ])
         
-        # Rôles possibles (sans admin)
         role = SelectField('Rôle', 
             choices=[
                 ('utilisateur', 'Utilisateur Standard'),
@@ -14980,8 +14978,17 @@ def gestionnaire_creer_utilisateur():
     
     form = GestionnaireNouvelUtilisateurForm()
     
+    # DEBUG: Vérifier le formulaire
+    print(f"DEBUG: Formulaire créé, type: {type(form)}")
+    print(f"DEBUG: Champ is_active: {form.is_active}")
+    print(f"DEBUG: Type du champ is_active: {type(form.is_active)}")
+    
     if form.validate_on_submit():
         try:
+            print(f"DEBUG: Formulaire validé, données reçues")
+            print(f"DEBUG: is_active.data = {form.is_active.data}")
+            print(f"DEBUG: username.data = {form.username.data}")
+            
             # Vérifier les limites
             if client.formule:
                 current_count = User.query.filter_by(
@@ -15006,16 +15013,17 @@ def gestionnaire_creer_utilisateur():
                 flash(f'Un utilisateur avec ce nom ou email existe déjà dans votre client', 'error')
                 return redirect(url_for('gestionnaire_creer_utilisateur'))
             
-            # Créer l'utilisateur STANDARD (pas gestionnaire)
+            # Créer l'utilisateur
             user = User(
                 username=form.username.data,
                 email=form.email.data,
                 role=form.role.data,
                 department=form.department.data or '',
-                is_active=form.is_active.data,
+                is_active=form.is_active.data,  # ICI: utiliser form.is_active.data
                 client_id=client.id,
                 is_client_admin=False,
-                can_manage_users=False,  # Pas gestionnaire par défaut
+                can_manage_users=(form.role.data == 'manager'),
+                can_view_users_list=(form.role.data == 'manager'),
                 created_at=datetime.utcnow()
             )
             
@@ -15046,13 +15054,15 @@ def gestionnaire_creer_utilisateur():
                     'can_view_dashboard': True,
                     'can_view_reports': True,
                     'can_view_departments': True,
-                    'can_view_users_list': False,
-                    'can_edit_users': False,
-                    'can_create_users': False,
-                    'can_deactivate_users': False,
+                    'can_view_users_list': True,
+                    'can_edit_users': True,
+                    'can_create_users': True,
+                    'can_deactivate_users': True,
                     'can_manage_risks': True,
                     'can_manage_kri': True,
-                    'can_manage_audit': True
+                    'can_manage_audit': True,
+                    'can_manage_action_plans': True,
+                    'can_manage_permissions': True
                 },
                 'compliance': {
                     'can_view_dashboard': True,
@@ -15085,6 +15095,9 @@ def gestionnaire_creer_utilisateur():
             
         except Exception as e:
             db.session.rollback()
+            print(f"DEBUG: Erreur complète: {str(e)}")
+            import traceback
+            traceback.print_exc()
             flash(f'❌ Erreur lors de la création: {str(e)}', 'error')
     
     return render_template('gestionnaire/creer_utilisateur.html',
