@@ -1,0 +1,342 @@
+{% extends "base.html" %}
+
+{% block title %}Rapports d'Audit{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <h2>
+        <i class="fas fa-file-pdf me-2" style="color: #fd7e14;"></i>
+        Rapports d'Audit
+    </h2>
+    <div>
+        <button class="btn btn-audit me-2" onclick="genererRapportConsolide()">
+            <i class="fas fa-download me-1"></i> Rapport Consolidé
+        </button>
+        <a href="{{ url_for('liste_audits') }}" class="btn btn-secondary">
+            <i class="fas fa-arrow-left me-1"></i> Retour aux Audits
+        </a>
+    </div>
+</div>
+
+<div class="row">
+    <!-- Statistiques -->
+    <div class="col-md-12 mb-4">
+        <div class="row">
+            <div class="col-md-3">
+                <div class="card card-modern bg-primary text-white">
+                    <div class="card-body">
+                        <div class="d-flex justify-content-between">
+                            <div>
+                                <h4 class="mb-0">{{ audits|length }}</h4>
+                                <p class="mb-0">Total Audits</p>
+                            </div>
+                            <div class="align-self-center">
+                                <i class="fas fa-clipboard-list fa-2x opacity-50"></i>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-3">
+                <div class="card card-modern bg-success text-white">
+                    <div class="card-body">
+                        <div class="d-flex justify-content-between">
+                            <div>
+                                <h4 class="mb-0">{{ audits|selectattr('statut', 'equalto', 'termine')|list|length }}</h4>
+                                <p class="mb-0">Audits Terminés</p>
+                            </div>
+                            <div class="align-self-center">
+                                <i class="fas fa-check-circle fa-2x opacity-50"></i>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-3">
+                <div class="card card-modern bg-warning text-white">
+                    <div class="card-body">
+                        <div class="d-flex justify-content-between">
+                            <div>
+                                <h4 class="mb-0">{{ constatations_total }}</h4>
+                                <p class="mb-0">Constatations</p>
+                            </div>
+                            <div class="align-self-center">
+                                <i class="fas fa-exclamation-triangle fa-2x opacity-50"></i>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-3">
+                <div class="card card-modern bg-info text-white">
+                    <div class="card-body">
+                        <div class="d-flex justify-content-between">
+                            <div>
+                                <h4 class="mb-0">{{ recommandations_total }}</h4>
+                                <p class="mb-0">Recommandations</p>
+                            </div>
+                            <div class="align-self-center">
+                                <i class="fas fa-lightbulb fa-2x opacity-50"></i>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Rapports par Audit -->
+    <div class="col-md-12">
+        <div class="card card-modern">
+            <div class="card-header">
+                <h5 class="card-title mb-0">
+                    <i class="fas fa-file-alt me-2"></i>
+                    Rapports par Audit
+                </h5>
+            </div>
+            <div class="card-body">
+                {% if audits %}
+                <div class="table-responsive">
+                    <table class="table table-hover">
+                        <thead>
+                            <tr>
+                                <th>Référence</th>
+                                <th>Titre</th>
+                                <th>Type</th>
+                                <th>Période</th>
+                                <th>Constatations</th>
+                                <th>Recommandations</th>
+                                <th>Statut</th>
+                                <th>Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for audit in audits %}
+                            <tr>
+                                <td>
+                                    <strong>{{ audit.reference }}</strong>
+                                </td>
+                                <td>
+                                    {{ audit.titre }}
+                                    {% if audit.description %}
+                                    <br><small class="text-muted">{{ audit.description[:80] }}{% if audit.description|length > 80 %}...{% endif %}</small>
+                                    {% endif %}
+                                </td>
+                                <td>
+                                    <span class="badge bg-secondary">{{ audit.type_audit|title if audit.type_audit else 'Non défini' }}</span>
+                                </td>
+                                <td>
+                                    {% if audit.date_debut_prevue and audit.date_fin_prevue %}
+                                    {{ audit.date_debut_prevue.strftime('%d/%m/%Y') }} - {{ audit.date_fin_prevue.strftime('%d/%m/%Y') }}
+                                    {% else %}
+                                    <span class="text-muted">Non définie</span>
+                                    {% endif %}
+                                </td>
+                                <td>
+                                    <span class="badge {% if audit.constatations %}bg-warning{% else %}bg-secondary{% endif %}">
+                                        {{ audit.constatations|length }}
+                                    </span>
+                                </td>
+                                <td>
+                                    <span class="badge {% if audit.recommandations %}bg-info{% else %}bg-secondary{% endif %}">
+                                        {{ audit.recommandations|length }}
+                                    </span>
+                                </td>
+                                <td>
+                                    {% set statut_badge = {
+                                        'planifie': 'secondary',
+                                        'en_cours': 'warning', 
+                                        'termine': 'success',
+                                        'annule': 'danger'
+                                    } %}
+                                    <span class="badge bg-{{ statut_badge.get(audit.statut, 'secondary') }}">
+                                        {{ audit.statut|title if audit.statut else 'Non défini' }}
+                                    </span>
+                                </td>
+                                <td>
+                                    <div class="btn-group btn-group-sm">
+                                        <a href="{{ url_for('detail_audit', id=audit.id) }}" 
+                                           class="btn btn-outline-primary"
+                                           title="Voir l'audit">
+                                            <i class="fas fa-eye"></i>
+                                        </a>
+                                        <button class="btn btn-outline-success"
+                                                onclick="genererRapportAudit({{ audit.id }})"
+                                                title="Générer rapport">
+                                            <i class="fas fa-file-pdf"></i>
+                                        </button>
+                                        <button class="btn btn-outline-info"
+                                                onclick="afficherSynthese({{ audit.id }})"
+                                                title="Synthèse">
+                                            <i class="fas fa-chart-bar"></i>
+                                        </button>
+                                    </div>
+                                </td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+                {% else %}
+                <div class="text-center py-5">
+                    <i class="fas fa-file-pdf fa-4x text-muted mb-3"></i>
+                    <h5 class="text-muted">Aucun audit disponible</h5>
+                    <p class="text-muted">Les rapports d'audit seront générés à partir des audits créés.</p>
+                    <a href="{{ url_for('nouvel_audit') }}" class="btn btn-audit">
+                        <i class="fas fa-plus me-1"></i> Créer un audit
+                    </a>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Graphiques de synthèse -->
+<div class="row mt-4">
+    <div class="col-md-6">
+        <div class="card card-modern">
+            <div class="card-header">
+                <h6 class="card-title mb-0">
+                    <i class="fas fa-chart-pie me-2"></i>
+                    Répartition par Type d'Audit
+                </h6>
+            </div>
+            <div class="card-body">
+                <canvas id="chartTypeAudit" width="400" height="300"></canvas>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-6">
+        <div class="card card-modern">
+            <div class="card-header">
+                <h6 class="card-title mb-0">
+                    <i class="fas fa-chart-bar me-2"></i>
+                    Évolution des Audits
+                </h6>
+            </div>
+            <div class="card-body">
+                <canvas id="chartEvolutionAudits" width="400" height="300"></canvas>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Modal Synthèse Audit -->
+<div class="modal fade" id="modalSynthese" tabindex="-1">
+    <div class="modal-dialog modal-xl">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Synthèse de l'Audit</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body" id="syntheseContent">
+                <!-- Contenu chargé dynamiquement -->
+            </div>
+        </div>
+    </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<script>
+// Données pour les graphiques - avec valeurs par défaut sécurisées
+const typesAudit = {{ types_audit|tojson|default({'labels': [], 'data': []}) }};
+const evolutionAudits = {{ evolution_audits|tojson|default({'labels': [], 'data': []}) }};
+
+// S'assurer que les données existent
+const typesAuditData = typesAudit && typesAudit.data ? typesAudit : {labels: [], data: []};
+const evolutionAuditsData = evolutionAudits && evolutionAudits.data ? evolutionAudits : {labels: [], data: []};
+
+// Graphique circulaire - Types d'audit
+const ctxPie = document.getElementById('chartTypeAudit');
+if (ctxPie) {
+    new Chart(ctxPie, {
+        type: 'pie',
+        data: {
+            labels: typesAuditData.labels,
+            datasets: [{
+                data: typesAuditData.data,
+                backgroundColor: [
+                    '#667eea', '#764ba2', '#f093fb', '#f5576c', '#4facfe', '#00f2fe'
+                ]
+            }]
+        },
+        options: {
+            responsive: true,
+            plugins: {
+                legend: {
+                    position: 'bottom'
+                }
+            }
+        }
+    });
+}
+
+// Graphique barres - Évolution
+const ctxBar = document.getElementById('chartEvolutionAudits');
+if (ctxBar) {
+    new Chart(ctxBar, {
+        type: 'bar',
+        data: {
+            labels: evolutionAuditsData.labels,
+            datasets: [{
+                label: 'Audits par mois',
+                data: evolutionAuditsData.data,
+                backgroundColor: 'rgba(253, 126, 20, 0.8)',
+                borderColor: 'rgba(253, 126, 20, 1)',
+                borderWidth: 1
+            }]
+        },
+        options: {
+            responsive: true,
+            scales: {
+                y: {
+                    beginAtZero: true
+                }
+            }
+        }
+    });
+}
+
+// Générer rapport pour un audit spécifique
+function genererRapportAudit(auditId) {
+    alert(`Génération du rapport pour l'audit #${auditId}`);
+    // Implémentation réelle : redirection vers une route de génération PDF
+    // window.open(`/audit/${auditId}/rapport-pdf`, '_blank');
+}
+
+// Générer rapport consolidé
+function genererRapportConsolide() {
+    alert('Génération du rapport consolidé - À implémenter');
+    // Implémentation réelle : redirection vers une route de génération PDF consolidé
+}
+
+// Afficher synthèse détaillée
+function afficherSynthese(auditId) {
+    const syntheseContent = `
+        <div class="text-center">
+            <div class="spinner-border text-primary" role="status">
+                <span class="visually-hidden">Chargement...</span>
+            </div>
+            <p class="mt-2">Chargement de la synthèse...</p>
+        </div>
+    `;
+    
+    document.getElementById('syntheseContent').innerHTML = syntheseContent;
+    const modal = new bootstrap.Modal(document.getElementById('modalSynthese'));
+    modal.show();
+    
+    // Simulation de chargement
+    setTimeout(() => {
+        document.getElementById('syntheseContent').innerHTML = `
+            <h6>Synthèse de l'audit #${auditId}</h6>
+            <div class="alert alert-info">
+                <i class="fas fa-info-circle me-2"></i>
+                Cette fonctionnalité affichera une synthèse détaillée de l'audit avec graphiques et statistiques.
+            </div>
+            <p>Implémentation en cours de développement...</p>
+        `;
+    }, 1000);
+}
+</script>
+{% endblock %}

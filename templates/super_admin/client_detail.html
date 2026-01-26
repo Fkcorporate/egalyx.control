@@ -1,0 +1,869 @@
+{% extends "base.html" %}
+{% block title %}Super Admin - Détail Client{% endblock %}
+
+{% block content %}
+<div class="container-fluid py-4">
+    <!-- Navigation -->
+    <nav aria-label="breadcrumb" class="mb-4">
+        <ol class="breadcrumb">
+            <li class="breadcrumb-item"><a href="{{ url_for('super_admin_dashboard') }}">Super Admin</a></li>
+            <li class="breadcrumb-item"><a href="{{ url_for('super_admin_clients') }}">Clients</a></li>
+            <li class="breadcrumb-item active">{{ client.nom }}</li>
+        </ol>
+    </nav>
+
+    <!-- En-tête Client -->
+    <div class="fk-card mb-4">
+        <div class="fk-card-body">
+            <div class="row align-items-center">
+                <div class="col-md-8">
+                    <div class="d-flex align-items-center mb-3">
+                        <div class="rounded-circle bg-primary bg-opacity-10 p-3 me-3">
+                            <i class="fas fa-building fa-2x text-primary"></i>
+                        </div>
+                        <div>
+                            <h1 class="h3 mb-1">{{ client.nom }}</h1>
+                            <p class="text-muted mb-0">
+                                <i class="fas fa-id-card me-1"></i>{{ client.reference }} • 
+                                <i class="fas fa-envelope me-1"></i>{{ client.contact_email }}
+                            </p>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-md-4 text-md-end">
+                    <div class="btn-group">
+                        {% if client.is_active %}
+                        <a href="{{ url_for('super_admin_suspendre_client', id=client.id) }}" 
+                           class="fk-btn fk-btn-warning"
+                           onclick="return confirm('Suspender le client {{ client.nom }} ?')">
+                            <i class="fas fa-pause me-2"></i>Suspendre
+                        </a>
+                        {% else %}
+                        <a href="{{ url_for('super_admin_reactiver_client', id=client.id) }}" 
+                           class="fk-btn fk-btn-success"
+                           onclick="return confirm('Réactiver le client {{ client.nom }} ?')">
+                            <i class="fas fa-play me-2"></i>Réactiver
+                        </a>
+                        {% endif %}
+                        <button type="button" class="fk-btn fk-btn-outline dropdown-toggle dropdown-toggle-split" 
+                                data-bs-toggle="dropdown">
+                            <span class="visually-hidden">Menu</span>
+                        </button>
+                        <ul class="dropdown-menu">
+                            <li>
+                                <a class="dropdown-item" href="#" data-bs-toggle="modal" data-bs-target="#apiKeysModal">
+                                    <i class="fas fa-key me-2"></i>Voir clés API
+                                </a>
+                            </li>
+                            <li>
+                                <a class="dropdown-item" href="#" data-bs-toggle="modal" data-bs-target="#resetPasswordModal">
+                                    <i class="fas fa-redo me-2"></i>Réinitialiser mot de passe admin
+                                </a>
+                            </li>
+                            <li>
+                                <a class="dropdown-item" href="#" 
+                                   data-bs-toggle="modal" 
+                                   data-bs-target="#viewCredentialsModal"
+                                   onclick="loadClientCredentials({{ client.id }})">
+                                    <i class="fas fa-user-shield me-2"></i>Voir identifiants
+                                </a>
+                            </li>
+                        </ul>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Badges statut -->
+            <div class="d-flex flex-wrap gap-2 mt-3">
+                <span class="badge bg-{{ 'success' if client.is_active else 'danger' }} fs-6">
+                    {{ 'ACTIF' if client.is_active else 'SUSPENDU' }}
+                </span>
+                <span class="badge bg-{{ 'success' if client.plan == 'enterprise' else 'warning' if client.plan == 'premium' else 'info' }} fs-6">
+                    {{ client.plan|upper }}
+                </span>
+                <span class="badge bg-secondary fs-6">
+                    <i class="fas fa-users me-1"></i>{{ client.nb_utilisateurs }}/{{ client.max_utilisateurs }} utilisateurs
+                </span>
+                <span class="badge bg-secondary fs-6">
+                    <i class="fas fa-exclamation-triangle me-1"></i>{{ client.nb_risques }}/{{ client.max_risques }} risques
+                </span>
+                <span class="badge bg-secondary fs-6">
+                    <i class="fas fa-clipboard-check me-1"></i>{{ client.nb_audits }}/{{ client.max_audits }} audits
+                </span>
+            </div>
+        </div>
+    </div>
+
+    <!-- Bouton Voir Identifiants visible -->
+    <div class="mb-4">
+        <button class="btn btn-warning btn-sm" 
+                data-bs-toggle="modal" 
+                data-bs-target="#viewCredentialsModal"
+                onclick="loadClientCredentials({{ client.id }})">
+            <i class="fas fa-key me-2"></i> Voir identifiants client
+        </button>
+    </div>
+
+    <!-- Onglets -->
+    <ul class="nav nav-tabs mb-4" id="clientTabs" role="tablist">
+        <li class="nav-item" role="presentation">
+            <button class="nav-link active" id="overview-tab" data-bs-toggle="tab" data-bs-target="#overview" 
+                    type="button" role="tab">Vue d'ensemble</button>
+        </li>
+        <li class="nav-item" role="presentation">
+            <button class="nav-link" id="environnements-tab" data-bs-toggle="tab" data-bs-target="#environnements" 
+                    type="button" role="tab">Environnements</button>
+        </li>
+        <li class="nav-item" role="presentation">
+            <button class="nav-link" id="utilisateurs-tab" data-bs-toggle="tab" data-bs-target="#utilisateurs" 
+                    type="button" role="tab">Utilisateurs ({{ utilisateurs|length }})</button>
+        </li>
+        <li class="nav-item" role="presentation">
+            <button class="nav-link" id="activites-tab" data-bs-toggle="tab" data-bs-target="#activites" 
+                    type="button" role="tab">Activités</button>
+        </li>
+        <li class="nav-item" role="presentation">
+            <button class="nav-link" id="configuration-tab" data-bs-toggle="tab" data-bs-target="#configuration" 
+                    type="button" role="tab">Configuration</button>
+        </li>
+    </ul>
+
+    <!-- Contenu des onglets -->
+    <div class="tab-content" id="clientTabsContent">
+        <!-- Onglet 1: Vue d'ensemble -->
+        <div class="tab-pane fade show active" id="overview" role="tabpanel">
+            <div class="row">
+                <!-- Informations client -->
+                <div class="col-lg-6">
+                    <div class="fk-card h-100">
+                        <div class="fk-card-header">
+                            <h5 class="mb-0">Informations client</h5>
+                        </div>
+                        <div class="fk-card-body">
+                            <dl class="row mb-0">
+                                <dt class="col-sm-4">Nom</dt>
+                                <dd class="col-sm-8">{{ client.nom }}</dd>
+                                
+                                <dt class="col-sm-4">Référence</dt>
+                                <dd class="col-sm-8"><code>{{ client.reference }}</code></dd>
+                                
+                                <dt class="col-sm-4">Description</dt>
+                                <dd class="col-sm-8">{{ client.description or 'Non spécifiée' }}</dd>
+                                
+                                <dt class="col-sm-4">Contact</dt>
+                                <dd class="col-sm-8">
+                                    {{ client.contact_nom }}<br>
+                                    {{ client.contact_email }}<br>
+                                    {{ client.contact_telephone or 'Non spécifié' }}
+                                </dd>
+                                
+                                <dt class="col-sm-4">Domaine</dt>
+                                <dd class="col-sm-8">{{ client.domaine or 'Utilisation du domaine par défaut' }}</dd>
+                                
+                                <dt class="col-sm-4">Date création</dt>
+                                <dd class="col-sm-8">{{ client.created_at|format_datetime }}</dd>
+                                
+                                <dt class="col-sm-4">Dernière activité</dt>
+                                <dd class="col-sm-8">
+                                    {% if client.derniere_activite %}
+                                    {{ client.derniere_activite|format_datetime }}
+                                    {% else %}
+                                    <span class="text-muted">Aucune activité enregistrée</span>
+                                    {% endif %}
+                                </dd>
+                            </dl>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- Statistiques -->
+                <div class="col-lg-6">
+                    <div class="fk-card h-100">
+                        <div class="fk-card-header">
+                            <h5 class="mb-0">Utilisation & Limites</h5>
+                        </div>
+                        <div class="fk-card-body">
+                            <!-- Utilisateurs -->
+                            <div class="mb-4">
+                                <div class="d-flex justify-content-between mb-1">
+                                    <span>Utilisateurs</span>
+                                    <span>{{ client.nb_utilisateurs }} / {{ client.max_utilisateurs }}</span>
+                                </div>
+                                <div class="progress" style="height: 10px;">
+                                    <div class="progress-bar bg-{{ 'danger' if client.nb_utilisateurs >= client.max_utilisateurs else 'success' }}" 
+                                         style="width: {{ (client.nb_utilisateurs / client.max_utilisateurs * 100)|round }}%"></div>
+                                </div>
+                                <small class="text-muted">{{ ((client.nb_utilisateurs / client.max_utilisateurs) * 100)|round }}% de la limite utilisée</small>
+                            </div>
+                            
+                            <!-- Risques -->
+                            <div class="mb-4">
+                                <div class="d-flex justify-content-between mb-1">
+                                    <span>Risques</span>
+                                    <span>{{ client.nb_risques }} / {{ client.max_risques }}</span>
+                                </div>
+                                <div class="progress" style="height: 10px;">
+                                    <div class="progress-bar bg-{{ 'danger' if client.nb_risques >= client.max_risques else 'warning' }}" 
+                                         style="width: {{ (client.nb_risques / client.max_risques * 100)|round }}%"></div>
+                                </div>
+                            </div>
+                            
+                            <!-- Audits -->
+                            <div class="mb-4">
+                                <div class="d-flex justify-content-between mb-1">
+                                    <span>Audits</span>
+                                    <span>{{ client.nb_audits }} / {{ client.max_audits }}</span>
+                                </div>
+                                <div class="progress" style="height: 10px;">
+                                    <div class="progress-bar bg-{{ 'danger' if client.nb_audits >= client.max_audits else 'info' }}" 
+                                         style="width: {{ (client.nb_audits / client.max_audits * 100)|round }}%"></div>
+                                </div>
+                            </div>
+                            
+                            <!-- Informations plan -->
+                            <div class="alert alert-{{ 'success' if client.plan == 'enterprise' else 'warning' if client.plan == 'premium' else 'info' }} mt-4">
+                                <h6 class="alert-heading">Plan {{ client.plan|title }}</h6>
+                                <p class="mb-0">
+                                    {% if client.plan == 'standard' %}
+                                    Plan standard avec limites de base. Idéal pour les petites équipes.
+                                    {% elif client.plan == 'premium' %}
+                                    Plan premium avec capacités étendues. Recommandé pour les moyennes entreprises.
+                                    {% else %}
+                                    Plan enterprise avec support prioritaire et limites étendues.
+                                    {% endif %}
+                                </p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Onglet 2: Environnements -->
+        <div class="tab-pane fade" id="environnements" role="tabpanel">
+            <div class="fk-card">
+                <div class="fk-card-header d-flex justify-content-between align-items-center">
+                    <h5 class="mb-0">Environnements du client</h5>
+                    <button class="fk-btn fk-btn-primary btn-sm" data-bs-toggle="modal" data-bs-target="#addEnvironmentModal">
+                        <i class="fas fa-plus me-2"></i>Ajouter un environnement
+                    </button>
+                </div>
+                <div class="fk-card-body">
+                    {% if environnements %}
+                    <div class="table-responsive">
+                        <table class="table fk-table">
+                            <thead>
+                                <tr>
+                                    <th>Nom</th>
+                                    <th>URL</th>
+                                    <th>Serveur</th>
+                                    <th>Base de données</th>
+                                    <th>Statut</th>
+                                    <th>Créé le</th>
+                                    <th>Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for env in environnements %}
+                                <tr>
+                                    <td>
+                                        <strong>{{ env.nom }}</strong>
+                                        {% if env.sous_domaine %}
+                                        <br><small class="text-muted">{{ env.sous_domaine }}</small>
+                                        {% endif %}
+                                    </td>
+                                    <td>
+                                        {% if env.url_acces %}
+                                        <a href="{{ env.url_acces }}" target="_blank" class="text-decoration-none">
+                                            {{ env.url_acces }}
+                                            <i class="fas fa-external-link-alt ms-1"></i>
+                                        </a>
+                                        {% else %}
+                                        <span class="text-muted">Non configuré</span>
+                                        {% endif %}
+                                    </td>
+                                    <td>
+                                        {% if env.server_ip %}
+                                        <code>{{ env.server_ip }}</code>
+                                        {% else %}
+                                        <span class="text-muted">Serveur partagé</span>
+                                        {% endif %}
+                                    </td>
+                                    <td>
+                                        {% if env.db_name %}
+                                        <span class="badge bg-dark">{{ env.db_name }}</span>
+                                        <br><small>{{ env.db_user }}@{{ env.db_host }}</small>
+                                        {% else %}
+                                        <span class="text-muted">Base partagée</span>
+                                        {% endif %}
+                                    </td>
+                                    <td>
+                                        <span class="badge bg-{{ 'success' if env.statut == 'actif' else 'warning' if env.statut == 'en_maintenance' else 'danger' }}">
+                                            {{ env.statut|upper }}
+                                        </span>
+                                    </td>
+                                    <td>{{ env.created_at|format_date }}</td>
+                                    <td>
+                                        <div class="btn-group btn-group-sm">
+                                            <button class="btn btn-outline-info" 
+                                                    data-bs-toggle="modal" 
+                                                    data-bs-target="#envDetailsModal{{ env.id }}"
+                                                    title="Détails">
+                                                <i class="fas fa-info-circle"></i>
+                                            </button>
+                                            {% if env.statut == 'actif' %}
+                                            <button class="btn btn-outline-warning"
+                                                    onclick="maintenanceEnvironment({{ env.id }})"
+                                                    title="Mettre en maintenance">
+                                                <i class="fas fa-tools"></i>
+                                            </button>
+                                            {% endif %}
+                                        </div>
+                                    </td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                    {% else %}
+                    <div class="text-center py-5">
+                        <i class="fas fa-server fa-3x text-muted mb-3"></i>
+                        <h5>Aucun environnement</h5>
+                        <p class="text-muted mb-4">Ce client n'a pas encore d'environnement configuré.</p>
+                        <button class="fk-btn fk-btn-primary" data-bs-toggle="modal" data-bs-target="#addEnvironmentModal">
+                            <i class="fas fa-plus me-2"></i>Créer le premier environnement
+                        </button>
+                    </div>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+
+        <!-- Onglet 3: Utilisateurs -->
+        <div class="tab-pane fade" id="utilisateurs" role="tabpanel">
+            <div class="fk-card">
+                <div class="fk-card-header d-flex justify-content-between align-items-center">
+                    <h5 class="mb-0">Utilisateurs du client</h5>
+                    <button class="fk-btn fk-btn-primary btn-sm" data-bs-toggle="modal" data-bs-target="#addUserModal">
+                        <i class="fas fa-user-plus me-2"></i>Ajouter un utilisateur
+                    </button>
+                </div>
+                <div class="fk-card-body">
+                    {% if utilisateurs %}
+                    <div class="table-responsive">
+                        <table class="table fk-table">
+                            <thead>
+                                <tr>
+                                    <th>Utilisateur</th>
+                                    <th>Rôle</th>
+                                    <th>Email</th>
+                                    <th>Statut</th>
+                                    <th>Dernière connexion</th>
+                                    <th>Créé le</th>
+                                    <th>Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for user in utilisateurs %}
+                                <tr>
+                                    <td>
+                                        <div class="d-flex align-items-center">
+                                            <div class="avatar-sm bg-primary bg-opacity-10 text-primary rounded-circle d-flex align-items-center justify-content-center me-3">
+                                                <i class="fas fa-user"></i>
+                                            </div>
+                                            <div>
+                                                <strong>{{ user.username }}</strong>
+                                                {% if user.is_client_admin %}
+                                                <br><small class="text-warning"><i class="fas fa-crown"></i> Admin Client</small>
+                                                {% endif %}
+                                            </div>
+                                        </div>
+                                    </td>
+                                    <td>
+                                        <span class="badge bg-{{ 'danger' if user.role == 'admin' else 'warning' if user.role == 'manager' else 'info' }}">
+                                            {{ user.get_role_display_name() }}
+                                        </span>
+                                    </td>
+                                    <td>{{ user.email }}</td>
+                                    <td>
+                                        {% if user.is_active %}
+                                        <span class="badge bg-success">Actif</span>
+                                        {% else %}
+                                        <span class="badge bg-danger">Inactif</span>
+                                        {% endif %}
+                                    </td>
+                                    <td>
+                                        {% if user.last_login %}
+                                        <small class="text-muted">{{ user.last_login|format_datetime }}</small>
+                                        {% else %}
+                                        <span class="text-muted">Jamais</span>
+                                        {% endif %}
+                                    </td>
+                                    <td>{{ user.created_at|format_date }}</td>
+                                    <td>
+                                        <div class="btn-group btn-group-sm">
+                                            <button class="btn btn-outline-primary"
+                                                    data-bs-toggle="modal"
+                                                    data-bs-target="#editUserModal{{ user.id }}"
+                                                    title="Modifier">
+                                                <i class="fas fa-edit"></i>
+                                            </button>
+                                            <button class="btn btn-outline-warning"
+                                                    onclick="toggleUserStatus({{ user.id }}, {{ 'false' if user.is_active else 'true' }})"
+                                                    title="{{ 'Désactiver' if user.is_active else 'Activer' }}">
+                                                <i class="fas fa-{{ 'ban' if user.is_active else 'check' }}"></i>
+                                            </button>
+                                            {% if not user.is_client_admin %}
+                                            <button class="btn btn-outline-danger"
+                                                    onclick="deleteUser({{ user.id }}, '{{ user.username }}')"
+                                                    title="Supprimer">
+                                                <i class="fas fa-trash"></i>
+                                            </button>
+                                            {% endif %}
+                                        </div>
+                                    </td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                    {% else %}
+                    <div class="text-center py-5">
+                        <i class="fas fa-users fa-3x text-muted mb-3"></i>
+                        <h5>Aucun utilisateur</h5>
+                        <p class="text-muted mb-4">Ce client n'a pas encore d'utilisateurs.</p>
+                        <button class="fk-btn fk-btn-primary" data-bs-toggle="modal" data-bs-target="#addUserModal">
+                            <i class="fas fa-user-plus me-2"></i>Créer le premier utilisateur
+                        </button>
+                    </div>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+
+        <!-- Onglet 4: Activités -->
+        <div class="tab-pane fade" id="activites" role="tabpanel">
+            <div class="fk-card">
+                <div class="fk-card-header">
+                    <h5 class="mb-0">Journal d'activités</h5>
+                </div>
+                <div class="fk-card-body">
+                    {% if activites %}
+                    <div class="timeline">
+                        {% for activite in activites %}
+                        <div class="timeline-item">
+                            <div class="timeline-marker"></div>
+                            <div class="timeline-content">
+                                <div class="d-flex justify-content-between">
+                                    <h6 class="mb-1">
+                                        <i class="fas fa-{{ 
+                                            'user-plus' if 'creation' in activite.action 
+                                            else 'user-edit' if 'modification' in activite.action 
+                                            else 'building' if 'client' in activite.action
+                                            else 'bell'
+                                        }} text-primary me-2"></i>
+                                        {{ activite.details|tojson|safe }}
+                                    </h6>
+                                    <small class="text-muted">{{ activite.created_at|format_datetime }}</small>
+                                </div>
+                                <div class="d-flex justify-content-between align-items-center">
+                                    <small class="text-muted">
+                                        {% if activite.utilisateur %}
+                                        Par {{ activite.utilisateur.username }}
+                                        {% else %}
+                                        Système
+                                        {% endif %}
+                                    </small>
+                                    <small class="badge bg-light text-dark">
+                                        {{ activite.ip_address }}
+                                    </small>
+                                </div>
+                            </div>
+                        </div>
+                        {% endfor %}
+                    </div>
+                    {% else %}
+                    <div class="text-center py-5">
+                        <i class="fas fa-history fa-3x text-muted mb-3"></i>
+                        <h5>Aucune activité</h5>
+                        <p class="text-muted mb-0">Aucune activité enregistrée pour ce client.</p>
+                    </div>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+
+        <!-- Onglet 5: Configuration -->
+        <div class="tab-pane fade" id="configuration" role="tabpanel">
+            <div class="row">
+                <div class="col-lg-6">
+                    <div class="fk-card h-100">
+                        <div class="fk-card-header">
+                            <h5 class="mb-0">Modifier le client</h5>
+                        </div>
+                        <div class="fk-card-body">
+                            <form method="POST" action="{{ url_for('super_admin_update_client', id=client.id) }}">
+                                {{ form.hidden_tag() }}
+                                
+                                <div class="mb-3">
+                                    <label class="form-label">Nom du client</label>
+                                    <input type="text" class="form-control" value="{{ client.nom }}" readonly>
+                                    <small class="text-muted">Le nom ne peut pas être modifié après création</small>
+                                </div>
+                                
+                                <div class="mb-3">
+                                    <label class="form-label">Email de contact</label>
+                                    <input type="email" class="form-control" name="contact_email" value="{{ client.contact_email }}" required>
+                                </div>
+                                
+                                <div class="mb-3">
+                                    <label class="form-label">Plan</label>
+                                    <select class="form-select" name="plan">
+                                        <option value="standard" {% if client.plan == 'standard' %}selected{% endif %}>Standard</option>
+                                        <option value="premium" {% if client.plan == 'premium' %}selected{% endif %}>Premium</option>
+                                        <option value="enterprise" {% if client.plan == 'enterprise' %}selected{% endif %}>Enterprise</option>
+                                    </select>
+                                </div>
+                                
+                                <div class="row mb-3">
+                                    <div class="col-md-4">
+                                        <label class="form-label">Max utilisateurs</label>
+                                        <input type="number" class="form-control" name="max_utilisateurs" value="{{ client.max_utilisateurs }}" min="1">
+                                    </div>
+                                    <div class="col-md-4">
+                                        <label class="form-label">Max risques</label>
+                                        <input type="number" class="form-control" name="max_risques" value="{{ client.max_risques }}" min="1">
+                                    </div>
+                                    <div class="col-md-4">
+                                        <label class="form-label">Max audits</label>
+                                        <input type="number" class="form-control" name="max_audits" value="{{ client.max_audits }}" min="1">
+                                    </div>
+                                </div>
+                                
+                                <div class="mb-3">
+                                    <label class="form-label">Domaine personnalisé</label>
+                                    <input type="text" class="form-control" name="domaine" value="{{ client.domaine or '' }}" 
+                                           placeholder="client.votredomaine.com">
+                                </div>
+                                
+                                <button type="submit" class="fk-btn fk-btn-primary">Mettre à jour</button>
+                            </form>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="col-lg-6">
+                    <div class="fk-card h-100">
+                        <div class="fk-card-header">
+                            <h5 class="mb-0">Actions administrateur</h5>
+                        </div>
+                        <div class="fk-card-body">
+                            <div class="d-grid gap-2">
+                                <button class="fk-btn fk-btn-outline-danger" 
+                                        onclick="resetClientData({{ client.id }})">
+                                    <i class="fas fa-trash-restore me-2"></i>Réinitialiser les données
+                                </button>
+                                
+                                <button class="fk-btn fk-btn-outline-warning"
+                                        onclick="exportClientData({{ client.id }})">
+                                    <i class="fas fa-download me-2"></i>Exporter toutes les données
+                                </button>
+                                
+                                <button class="fk-btn fk-btn-outline-info"
+                                        onclick="showApiUsage({{ client.id }})">
+                                    <i class="fas fa-chart-line me-2"></i>Voir l'utilisation API
+                                </button>
+                                
+                                {% if client.is_active %}
+                                <button class="fk-btn fk-btn-danger"
+                                        onclick="terminateClient({{ client.id }})">
+                                    <i class="fas fa-skull-crossbones me-2"></i>Résilier le client
+                                </button>
+                                {% endif %}
+                            </div>
+                            
+                            <hr class="my-4">
+                            
+                            <h6 class="mb-3">Informations techniques</h6>
+                            <dl class="row small">
+                                <dt class="col-sm-4">Client ID</dt>
+                                <dd class="col-sm-8"><code>{{ client.id }}</code></dd>
+                                
+                                <dt class="col-sm-4">Référence</dt>
+                                <dd class="col-sm-8"><code>{{ client.reference }}</code></dd>
+                                
+                                <dt class="col-sm-4">API Key</dt>
+                                <dd class="col-sm-8">
+                                    <code class="text-truncate d-inline-block" style="max-width: 200px;">
+                                        {{ client.api_key or 'Non générée' }}
+                                    </code>
+                                </dd>
+                                
+                                <dt class="col-sm-4">Créé le</dt>
+                                <dd class="col-sm-8">{{ client.created_at|format_datetime }}</dd>
+                                
+                                <dt class="col-sm-4">Activé le</dt>
+                                <dd class="col-sm-8">{{ client.date_activation|format_date if client.date_activation else 'N/A' }}</dd>
+                                
+                                <dt class="col-sm-4">Expire le</dt>
+                                <dd class="col-sm-8">{{ client.date_expiration|format_date if client.date_expiration else 'Sans expiration' }}</dd>
+                            </dl>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Modal Voir Identifiants -->
+<div class="modal fade" id="viewCredentialsModal" tabindex="-1">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header bg-warning">
+                <h5 class="modal-title text-white">
+                    <i class="fas fa-key me-2"></i>Identifiants Client
+                </h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <div class="alert alert-danger">
+                    <i class="fas fa-exclamation-triangle me-2"></i>
+                    <strong>Informations sensibles !</strong> Ces identifiants donnent un accès complet au client.
+                </div>
+                
+                <div id="credentialsContent">
+                    <!-- Les identifiants seront chargés ici -->
+                    <div class="text-center py-4">
+                        <div class="spinner-border text-warning" role="status">
+                            <span class="visually-hidden">Chargement...</span>
+                        </div>
+                        <p class="mt-2">Chargement des identifiants...</p>
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Fermer</button>
+                <button type="button" class="btn btn-warning" onclick="resetAdminPassword({{ client.id }})">
+                    <i class="fas fa-redo me-2"></i>Réinitialiser mot de passe
+                </button>
+                <button type="button" class="btn btn-success" onclick="printCredentials()">
+                    <i class="fas fa-print me-2"></i>Imprimer
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Modals -->
+{% include 'super_admin/modals/client_modals.html' %}
+
+<style>
+.timeline {
+    position: relative;
+    padding-left: 30px;
+}
+.timeline-item {
+    position: relative;
+    padding-bottom: 20px;
+}
+.timeline-marker {
+    position: absolute;
+    left: -30px;
+    top: 0;
+    width: 12px;
+    height: 12px;
+    border-radius: 50%;
+    background-color: #3b82f6;
+    border: 2px solid white;
+    box-shadow: 0 0 0 3px #3b82f6;
+}
+.timeline-content {
+    background: #f8fafc;
+    border-radius: 8px;
+    padding: 15px;
+    border-left: 3px solid #3b82f6;
+}
+.avatar-sm {
+    width: 40px;
+    height: 40px;
+}
+</style>
+
+<script>
+// Fonctions JavaScript pour les actions
+function toggleUserStatus(userId, newStatus) {
+    if (confirm(newStatus ? 'Activer cet utilisateur ?' : 'Désactiver cet utilisateur ?')) {
+        fetch(`/api/client/user/${userId}/toggle`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRFToken': '{{ csrf_token() }}'
+            }
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                location.reload();
+            }
+        });
+    }
+}
+
+function deleteUser(userId, username) {
+    if (confirm(`Supprimer définitivement l'utilisateur ${username} ?`)) {
+        fetch(`/api/client/user/${userId}`, {
+            method: 'DELETE',
+            headers: {
+                'X-CSRFToken': '{{ csrf_token() }}'
+            }
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                location.reload();
+            }
+        });
+    }
+}
+
+function maintenanceEnvironment(envId) {
+    if (confirm('Mettre cet environnement en maintenance ?')) {
+        fetch(`/api/client/environment/${envId}/maintenance`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRFToken': '{{ csrf_token() }}'
+            }
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                location.reload();
+            }
+        });
+    }
+}
+
+// ==================== GESTION DES IDENTIFIANTS ====================
+// Charger les identifiants
+async function loadClientCredentials(clientId) {
+    try {
+        const response = await fetch(`/api/client/${clientId}/show-credentials`);
+        const data = await response.json();
+        
+        if (data.success) {
+            const content = document.getElementById('credentialsContent');
+            content.innerHTML = `
+                <div class="row">
+                    <div class="col-md-6">
+                        <h6>Client :</h6>
+                        <dl class="mb-3">
+                            <dt>Nom</dt>
+                            <dd><strong>${data.client.nom}</strong></dd>
+                            <dt>Référence</dt>
+                            <dd><code>${data.client.reference}</code></dd>
+                            <dt>API Key</dt>
+                            <dd><code class="text-truncate">${data.client.api_key || 'Non générée'}</code></dd>
+                        </dl>
+                    </div>
+                    <div class="col-md-6">
+                        <h6>Admin Client :</h6>
+                        <dl class="mb-3">
+                            <dt>Username</dt>
+                            <dd><code>${data.admin.username}</code></dd>
+                            <dt>Email</dt>
+                            <dd>${data.admin.email}</dd>
+                            <dt>Mot de passe</dt>
+                            <dd><span class="text-danger">••••••••</span> <small class="text-muted">(caché pour sécurité)</small></dd>
+                        </dl>
+                    </div>
+                </div>
+                
+                <div class="alert alert-info">
+                    <h6><i class="fas fa-link me-2"></i>URL d'accès :</h6>
+                    <input type="text" class="form-control" value="${data.access_url}" readonly id="accessUrl">
+                    <small class="text-muted">Donnez cette URL à votre client pour qu'il puisse se connecter</small>
+                </div>
+                
+                <div class="alert alert-light">
+                    <h6><i class="fas fa-shield-alt me-2"></i>Sécurité :</h6>
+                    <ul class="small mb-0">
+                        <li>Le client doit changer son mot de passe dès la première connexion</li>
+                        <li>Conservez l'API Key en lieu sûr</li>
+                        <li>Ne partagez jamais les identifiants par email non sécurisé</li>
+                    </ul>
+                </div>
+            `;
+        } else {
+            document.getElementById('credentialsContent').innerHTML = `
+                <div class="alert alert-danger">
+                    <i class="fas fa-exclamation-circle me-2"></i>
+                    ${data.error}
+                </div>
+            `;
+        }
+    } catch (error) {
+        document.getElementById('credentialsContent').innerHTML = `
+            <div class="alert alert-danger">
+                <i class="fas fa-exclamation-circle me-2"></i>
+                Erreur de chargement : ${error}
+            </div>
+        `;
+    }
+}
+
+// Réinitialiser mot de passe
+async function resetAdminPassword(clientId) {
+    if (confirm('Générer un nouveau mot de passe pour l\'admin client ?')) {
+        try {
+            const response = await fetch(`/api/client/${clientId}/reset-admin-password`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRFToken': '{{ csrf_token() }}'
+                }
+            });
+            
+            const data = await response.json();
+            
+            if (data.success) {
+                // Afficher le nouveau mot de passe
+                const content = document.getElementById('credentialsContent');
+                content.innerHTML += `
+                    <div class="alert alert-success mt-3">
+                        <h6><i class="fas fa-check-circle me-2"></i>Nouveau mot de passe généré :</h6>
+                        <div class="d-flex align-items-center mt-2">
+                            <code class="fs-5 me-3">${data.password}</code>
+                            <button class="btn btn-sm btn-outline-secondary" 
+                                    onclick="copyToClipboard('${data.password}')">
+                                <i class="fas fa-copy"></i>
+                            </button>
+                        </div>
+                        <small class="text-danger d-block mt-2">
+                            <i class="fas fa-exclamation-circle"></i>
+                            Copiez ce mot de passe immédiatement !
+                        </small>
+                    </div>
+                `;
+                
+                showToast('Mot de passe réinitialisé', 'success');
+            } else {
+                showToast(data.error, 'error');
+            }
+        } catch (error) {
+            showToast('Erreur réseau', 'error');
+        }
+    }
+}
+
+function copyToClipboard(text) {
+    navigator.clipboard.writeText(text);
+    showToast('Copié dans le presse-papier', 'success');
+}
+
+function printCredentials() {
+    window.print();
+}
+</script>
+{% endblock %}

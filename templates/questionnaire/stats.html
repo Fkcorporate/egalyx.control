@@ -1,0 +1,388 @@
+{% extends "base.html" %}
+
+{% block title %}Statistiques - {{ questionnaire.titre }}{% endblock %}
+
+{% block styles %}
+<style>
+.chart-container {
+    position: relative;
+    height: 300px;
+    margin-bottom: 20px;
+}
+
+.stat-card {
+    border-radius: 10px;
+    padding: 20px;
+    margin-bottom: 20px;
+    background: white;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.05);
+}
+
+.question-stats {
+    border-left: 4px solid #3498db;
+    padding-left: 15px;
+    margin-bottom: 15px;
+}
+
+.option-bar {
+    height: 20px;
+    background: #e9ecef;
+    border-radius: 10px;
+    margin-bottom: 8px;
+    overflow: hidden;
+}
+
+.option-fill {
+    height: 100%;
+    background: linear-gradient(90deg, #3498db, #2ecc71);
+    border-radius: 10px;
+    transition: width 0.5s ease;
+}
+
+.distribution-table {
+    font-size: 0.9em;
+}
+
+.distribution-table td {
+    vertical-align: middle;
+}
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <div class="row mb-4">
+        <div class="col-12">
+            <div class="d-flex justify-content-between align-items-center">
+                <h1 class="h3 mb-0">
+                    <i class="fas fa-chart-pie me-2"></i>
+                    Statistiques - {{ questionnaire.titre }}
+                </h1>
+                <div>
+                    <a href="{{ url_for('voir_reponses_questionnaire', id=questionnaire.id) }}" 
+                       class="btn btn-modern btn-secondary me-2">
+                        <i class="fas fa-arrow-left me-2"></i>
+                        Retour aux réponses
+                    </a>
+                    <a href="{{ url_for('exporter_questionnaire', id=questionnaire.id) }}" 
+                       class="btn btn-modern btn-primary">
+                        <i class="fas fa-download me-2"></i>
+                        Exporter
+                    </a>
+                </div>
+            </div>
+            <p class="text-muted">Analyse détaillée des réponses au questionnaire</p>
+        </div>
+    </div>
+
+    <!-- Statistiques générales -->
+    <div class="row mb-4">
+        <div class="col-md-3">
+            <div class="stat-card text-center">
+                <h2 class="text-primary mb-0">{{ stats.total_reponses }}</h2>
+                <p class="text-muted mb-0">Réponses totales</p>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="stat-card text-center">
+                <h2 class="text-success mb-0">{{ stats.reponses_completes }}</h2>
+                <p class="text-muted mb-0">Réponses complètes</p>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="stat-card text-center">
+                <h2 class="text-warning mb-0">{{ stats.total_reponses - stats.reponses_completes }}</h2>
+                <p class="text-muted mb-0">Réponses partielles</p>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="stat-card text-center">
+                <h2 class="text-info mb-0">{{ "%.1f"|format(stats.taux_completion) }}%</h2>
+                <p class="text-muted mb-0">Taux de complétion</p>
+            </div>
+        </div>
+    </div>
+
+    <!-- Graphique de progression -->
+    <div class="row mb-4">
+        <div class="col-12">
+            <div class="card-modern">
+                <div class="card-header">
+                    <h5 class="mb-0">
+                        <i class="fas fa-chart-line me-2"></i>
+                        Évolution des réponses
+                    </h5>
+                </div>
+                <div class="card-body">
+                    <div class="chart-container">
+                        <canvas id="evolutionChart"></canvas>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Statistiques par question -->
+    <div class="row">
+        <div class="col-12">
+            <div class="card-modern">
+                <div class="card-header d-flex justify-content-between align-items-center">
+                    <h5 class="mb-0">
+                        <i class="fas fa-list-check me-2"></i>
+                        Statistiques par question
+                    </h5>
+                    <div class="form-check form-switch">
+                        <input class="form-check-input" type="checkbox" id="toggleDetails" checked>
+                        <label class="form-check-label" for="toggleDetails">Afficher détails</label>
+                    </div>
+                </div>
+                <div class="card-body">
+                    {% if questions_stats %}
+                    <div class="accordion" id="questionsAccordion">
+                        {% for question_stat in questions_stats %}
+                        <div class="accordion-item">
+                            <h2 class="accordion-header">
+                                <button class="accordion-button collapsed" type="button" 
+                                        data-bs-toggle="collapse" 
+                                        data-bs-target="#collapse{{ loop.index }}">
+                                    <div class="d-flex align-items-center w-100">
+                                        <div style="flex-grow: 1;">
+                                            <strong>{{ question_stat.question[:100] }}{% if question_stat.question|length > 100 %}...{% endif %}</strong>
+                                            <br>
+                                            <small class="text-muted">
+                                                Type: {{ question_stat.type }}
+                                                • Réponses: {{ question_stat.total_reponses }}
+                                                {% if question_stat.total_reponses > 0 %}
+                                                • Taux: {{ "%.1f"|format((question_stat.total_reponses / stats.total_reponses * 100)|round(1)) }}%
+                                                {% endif %}
+                                            </small>
+                                        </div>
+                                        <!-- CORRECTION ICI : Utiliser une méthode Python pour formater le type -->
+                                        <span class="badge bg-info ms-3">{{ question_stat.type_display or question_stat.type }}</span>
+                                    </div>
+                                </button>
+                            </h2>
+                            <div id="collapse{{ loop.index }}" class="accordion-collapse collapse">
+                                <div class="accordion-body">
+                                    {% if question_stat.type in ['radio', 'select', 'checkbox'] %}
+                                        {% if question_stat.details %}
+                                        <h6>Distribution des réponses:</h6>
+                                        <div class="distribution-table">
+                                            <table class="table table-sm">
+                                                <thead>
+                                                    <tr>
+                                                        <th>Option</th>
+                                                        <th>Nombre</th>
+                                                        <th>Pourcentage</th>
+                                                        <th>Graphique</th>
+                                                    </tr>
+                                                </thead>
+                                                <tbody>
+                                                    {% set total = question_stat.details.values()|sum %}
+                                                    {% for option, count in question_stat.details.items() %}
+                                                    <tr>
+                                                        <td>{{ option }}</td>
+                                                        <td>{{ count }}</td>
+                                                        <td>{{ "%.1f"|format((count / total * 100)|round(1)) }}%</td>
+                                                        <td style="width: 200px;">
+                                                            <div class="option-bar">
+                                                                <div class="option-fill" 
+                                                                     style="width: {{ (count / total * 100)|round(1) }}%"></div>
+                                                            </div>
+                                                        </td>
+                                                    </tr>
+                                                    {% endfor %}
+                                                </tbody>
+                                            </table>
+                                        </div>
+                                        {% endif %}
+                                    
+                                    {% elif question_stat.type == 'number' %}
+                                        {% if question_stat.details and question_stat.details.moyenne is defined %}
+                                        <h6>Statistiques numériques:</h6>
+                                        <div class="row">
+                                            <div class="col-md-3">
+                                                <div class="stat-card text-center">
+                                                    <h4 class="text-primary mb-0">{{ "%.2f"|format(question_stat.details.moyenne) }}</h4>
+                                                    <p class="text-muted mb-0">Moyenne</p>
+                                                </div>
+                                            </div>
+                                            <div class="col-md-3">
+                                                <div class="stat-card text-center">
+                                                    <h4 class="text-success mb-0">{{ question_stat.details.min|default(0) }}</h4>
+                                                    <p class="text-muted mb-0">Minimum</p>
+                                                </div>
+                                            </div>
+                                            <div class="col-md-3">
+                                                <div class="stat-card text-center">
+                                                    <h4 class="text-warning mb-0">{{ question_stat.details.max|default(0) }}</h4>
+                                                    <p class="text-muted mb-0">Maximum</p>
+                                                </div>
+                                            </div>
+                                            <div class="col-md-3">
+                                                <div class="stat-card text-center">
+                                                    <h4 class="text-info mb-0">{{ "%.2f"|format(question_stat.details.median|default(0)) }}</h4>
+                                                    <p class="text-muted mb-0">Médiane</p>
+                                                </div>
+                                            </div>
+                                        </div>
+                                        {% endif %}
+                                    
+                                    {% elif question_stat.type == 'rating' %}
+                                        <h6>Distribution des notes:</h6>
+                                        <div class="chart-container">
+                                            <canvas id="ratingChart{{ loop.index }}"></canvas>
+                                        </div>
+                                    
+                                    {% else %}
+                                        <p class="text-muted">
+                                            {{ question_stat.total_reponses }} réponse(s) pour cette question.
+                                            {% if question_stat.type in ['text', 'textarea'] %}
+                                            <br>Analyse textuelle disponible.
+                                            {% endif %}
+                                        </p>
+                                    {% endif %}
+                                    
+                                    {% if question_stat.total_reponses > 0 %}
+                                    <div class="mt-3">
+                                        <small class="text-muted">
+                                            <i class="fas fa-info-circle me-1"></i>
+                                            Basé sur {{ question_stat.total_reponses }} réponse(s)
+                                        </small>
+                                    </div>
+                                    {% endif %}
+                                </div>
+                            </div>
+                        </div>
+                        {% endfor %}
+                    </div>
+                    {% else %}
+                    <div class="text-center py-5">
+                        <i class="fas fa-chart-bar fa-3x text-muted mb-3"></i>
+                        <p class="text-muted">Aucune donnée statistique disponible</p>
+                        <p class="text-muted small">Les statistiques apparaîtront après la première réponse</p>
+                    </div>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<script>
+// Toggle détails
+document.getElementById('toggleDetails').addEventListener('change', function() {
+    const accordionButtons = document.querySelectorAll('.accordion-button');
+    if (this.checked) {
+        accordionButtons.forEach(btn => btn.classList.remove('collapsed'));
+        document.querySelectorAll('.accordion-collapse').forEach(collapse => {
+            collapse.classList.add('show');
+        });
+    } else {
+        accordionButtons.forEach(btn => btn.classList.add('collapsed'));
+        document.querySelectorAll('.accordion-collapse').forEach(collapse => {
+            collapse.classList.remove('show');
+        });
+    }
+});
+
+// Graphique d'évolution
+const evolutionCtx = document.getElementById('evolutionChart').getContext('2d');
+const evolutionChart = new Chart(evolutionCtx, {
+    type: 'line',
+    data: {
+        labels: ['Jan', 'Fév', 'Mar', 'Avr', 'Mai', 'Jun'],
+        datasets: [{
+            label: 'Réponses par mois',
+            data: [12, 19, 15, 25, 22, 30],
+            borderColor: '#3498db',
+            backgroundColor: 'rgba(52, 152, 219, 0.1)',
+            borderWidth: 2,
+            fill: true,
+            tension: 0.4
+        }]
+    },
+    options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: {
+            legend: {
+                display: true,
+                position: 'top'
+            }
+        },
+        scales: {
+            y: {
+                beginAtZero: true,
+                title: {
+                    display: true,
+                    text: 'Nombre de réponses'
+                }
+            },
+            x: {
+                title: {
+                    display: true,
+                    text: 'Mois'
+                }
+            }
+        }
+    }
+});
+
+// Graphiques pour les questions d'évaluation
+{% for question_stat in questions_stats %}
+{% if question_stat.type == 'rating' %}
+const ratingCtx{{ loop.index }} = document.getElementById('ratingChart{{ loop.index }}').getContext('2d');
+const ratingChart{{ loop.index }} = new Chart(ratingCtx{{ loop.index }}, {
+    type: 'bar',
+    data: {
+        labels: ['1', '2', '3', '4', '5'],
+        datasets: [{
+            label: 'Nombre de votes',
+            data: [5, 10, 15, 20, 25], // Données simulées
+            backgroundColor: [
+                'rgba(231, 76, 60, 0.8)',
+                'rgba(230, 126, 34, 0.8)',
+                'rgba(241, 196, 15, 0.8)',
+                'rgba(46, 204, 113, 0.8)',
+                'rgba(39, 174, 96, 0.8)'
+            ],
+            borderColor: [
+                'rgb(231, 76, 60)',
+                'rgb(230, 126, 34)',
+                'rgb(241, 196, 15)',
+                'rgb(46, 204, 113)',
+                'rgb(39, 174, 96)'
+            ],
+            borderWidth: 1
+        }]
+    },
+    options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: {
+            legend: {
+                display: false
+            },
+            title: {
+                display: true,
+                text: 'Distribution des notes'
+            }
+        },
+        scales: {
+            y: {
+                beginAtZero: true,
+                ticks: {
+                    stepSize: 1
+                }
+            }
+        }
+    }
+});
+{% endif %}
+{% endfor %}
+</script>
+{% endblock %}

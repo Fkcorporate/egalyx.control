@@ -1,0 +1,1234 @@
+{% extends "base.html" %}
+
+{% block title %}Éditer Questionnaire - {{ questionnaire.titre }}{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <!-- En-tête -->
+    <div class="row mb-4">
+        <div class="col-12">
+            <div class="d-flex justify-content-between align-items-center">
+                <h1 class="h3 mb-0">
+                    <i class="fas fa-poll me-2"></i>
+                    {{ questionnaire.titre }}
+                </h1>
+                <div>
+                    <a href="{{ url_for('questionnaire_public', code=questionnaire.code) }}" 
+                       target="_blank" class="btn btn-modern btn-primary me-2">
+                        <i class="fas fa-external-link-alt me-2"></i>
+                        Lien public
+                    </a>
+                    <a href="{{ url_for('voir_reponses_questionnaire', id=questionnaire.id) }}" 
+                       class="btn btn-modern btn-success me-2">
+                        <i class="fas fa-chart-bar me-2"></i>
+                        Voir réponses
+                    </a>
+                    <div class="dropdown d-inline">
+                        <button class="btn btn-modern btn-secondary dropdown-toggle" 
+                                type="button" data-bs-toggle="dropdown">
+                            <i class="fas fa-cog me-2"></i>
+                            Actions
+                        </button>
+                        <ul class="dropdown-menu dropdown-menu-modern">
+                            <li>
+                                <a class="dropdown-item dropdown-item-modern" 
+                                   href="{{ url_for('exporter_questionnaire', id=questionnaire.id) }}">
+                                    <i class="fas fa-download me-2"></i>
+                                    Exporter
+                                </a>
+                            </li>
+                            <li>
+                                <a class="dropdown-item dropdown-item-modern" 
+                                   href="{{ url_for('statistiques_questionnaire', id=questionnaire.id) }}">
+                                    <i class="fas fa-chart-pie me-2"></i>
+                                    Statistiques
+                                </a>
+                            </li>
+                            <li><hr class="dropdown-divider"></li>
+                            <li>
+                                <form method="POST" 
+                                      action="{{ url_for('supprimer_questionnaire', id=questionnaire.id) }}" 
+                                      class="d-inline"
+                                      onsubmit="return confirm('Êtes-vous sûr de vouloir supprimer ce questionnaire ?');">
+                                    <button type="submit" class="dropdown-item dropdown-item-modern text-danger">
+                                        <i class="fas fa-trash me-2"></i>
+                                        Supprimer
+                                    </button>
+                                </form>
+                            </li>
+                        </ul>
+                    </div>
+                </div>
+            </div>
+            <p class="text-muted mb-0">{{ questionnaire.description }}</p>
+        </div>
+    </div>
+
+    <!-- Configuration -->
+    <div class="row mb-4">
+        <div class="col-12">
+            <div class="card-modern">
+                <div class="card-header d-flex justify-content-between align-items-center">
+                    <h5 class="mb-0">
+                        <i class="fas fa-sliders-h me-2"></i>
+                        Configuration
+                    </h5>
+                    <button class="btn btn-sm btn-modern btn-primary" 
+                            data-bs-toggle="modal" 
+                            data-bs-target="#configModal">
+                        <i class="fas fa-edit me-1"></i>
+                        Modifier
+                    </button>
+                </div>
+                <div class="card-body">
+                    <div class="row">
+                        <div class="col-md-6">
+                            <p><strong>Code:</strong> {{ questionnaire.code }}</p>
+                            <p><strong>Statut:</strong> 
+                                <span class="badge bg-{{ 'success' if questionnaire.est_actif else 'danger' }}">
+                                    {{ 'Actif' if questionnaire.est_actif else 'Inactif' }}
+                                </span>
+                            </p>
+                            <p><strong>Accès:</strong> 
+                                <span class="badge bg-{{ 'info' if questionnaire.est_public else 'warning' }}">
+                                    {{ 'Public' if questionnaire.est_public else 'Privé' }}
+                                </span>
+                            </p>
+                            <p><strong>Date début:</strong> 
+                                {{ questionnaire.date_debut.strftime('%d/%m/%Y %H:%M') if questionnaire.date_debut else 'Non définie' }}
+                            </p>
+                        </div>
+                        <div class="col-md-6">
+                            <p><strong>Date fin:</strong> 
+                                {{ questionnaire.date_fin.strftime('%d/%m/%Y %H:%M') if questionnaire.date_fin else 'Non définie' }}
+                            </p>
+                            <p><strong>Temps estimé:</strong> 
+                                {{ questionnaire.temps_estime }} minutes
+                            </p>
+                            <p><strong>Lien public:</strong></p>
+                            <div class="input-group">
+                                <input type="text" class="form-control" 
+                                       value="{{ request.url_root }}questionnaires/{{ questionnaire.code }}/repondre" 
+                                       readonly id="publicLink">
+                                <button class="btn btn-outline-secondary" type="button" 
+                                        onclick="copyToClipboard('publicLink')">
+                                    <i class="fas fa-copy"></i>
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Catégories -->
+    <div class="row mb-4">
+        <div class="col-12">
+            <div class="card-modern">
+                <div class="card-header d-flex justify-content-between align-items-center">
+                    <h5 class="mb-0">
+                        <i class="fas fa-layer-group me-2"></i>
+                        Structure du questionnaire
+                    </h5>
+                    <button class="btn btn-sm btn-modern btn-primary" 
+                            data-bs-toggle="modal" 
+                            data-bs-target="#categorieModal">
+                        <i class="fas fa-plus me-1"></i>
+                        Ajouter une catégorie
+                    </button>
+                </div>
+                <div class="card-body">
+                    {% if questionnaire.categories %}
+                    <div class="sortable-list" id="categories-list">
+                        {% for categorie in questionnaire.categories %}
+                        <div class="categorie-item mb-4" data-id="{{ categorie.id }}">
+                            <div class="card border">
+                                <div class="card-header bg-light d-flex justify-content-between align-items-center">
+                                    <div>
+                                        <i class="fas fa-grip-vertical drag-handle me-2" style="cursor: move;"></i>
+                                        <strong>{{ categorie.titre }}</strong>
+                                        <span class="badge bg-secondary ms-2">
+                                            {{ categorie.questions|length }} questions
+                                        </span>
+                                    </div>
+                                    <div>
+                                        <button class="btn btn-sm btn-outline-primary me-1"
+                                                data-bs-toggle="collapse" 
+                                                data-bs-target="#questions-{{ categorie.id }}">
+                                            <i class="fas fa-chevron-down"></i>
+                                        </button>
+                                        <button class="btn btn-sm btn-outline-warning me-1 edit-categorie-btn"
+                                                data-bs-toggle="modal"
+                                                data-bs-target="#editCategorieModal"
+                                                data-id="{{ categorie.id }}"
+                                                data-titre="{{ categorie.titre }}"
+                                                data-description="{{ categorie.description }}"
+                                                data-ordre="{{ categorie.ordre }}">
+                                            <i class="fas fa-edit"></i>
+                                        </button>
+                                        <button class="btn btn-sm btn-outline-danger" 
+                                                onclick="deleteCategorie({{ categorie.id }})">
+                                            <i class="fas fa-trash"></i>
+                                        </button>
+                                    </div>
+                                </div>
+                                <div class="collapse" id="questions-{{ categorie.id }}">
+                                    <div class="card-body">
+                                        {% if categorie.description %}
+                                        <p class="text-muted">{{ categorie.description }}</p>
+                                        {% endif %}
+                                        
+                                        <!-- Liste des questions -->
+                                        <div class="sortable-list mt-3" id="questions-list-{{ categorie.id }}">
+                                            {% for question in categorie.questions %}
+                                            <div class="question-item mb-3 p-3 border rounded" 
+                                                 data-id="{{ question.id }}">
+                                                <div class="d-flex justify-content-between align-items-start">
+                                                    <div style="flex-grow: 1;">
+                                                        <div class="d-flex align-items-center mb-2">
+                                                            <i class="fas fa-grip-vertical drag-handle me-2" 
+                                                               style="cursor: move;"></i>
+                                                            <strong>{{ question.texte[:100] }}{% if question.texte|length > 100 %}...{% endif %}</strong>
+                                                            <span class="badge bg-info ms-2">
+                                                                {{ question.get_type_display() }}
+                                                            </span>
+                                                            {% if question.est_obligatoire %}
+                                                            <span class="badge bg-danger ms-1">Obligatoire</span>
+                                                            {% endif %}
+                                                        </div>
+                                                        
+                                                        {% if question.description %}
+                                                        <p class="text-muted mb-2">{{ question.description }}</p>
+                                                        {% endif %}
+                                                        
+                                                        {% if question.options %}
+                                                        <div class="options-list ms-4 mt-2">
+                                                            {% for option in question.options %}
+                                                            <div class="form-check mb-1">
+                                                                {% if question.type == 'radio' %}
+                                                                <input class="form-check-input" type="radio" disabled>
+                                                                {% elif question.type == 'checkbox' %}
+                                                                <input class="form-check-input" type="checkbox" disabled>
+                                                                {% endif %}
+                                                                <label class="form-check-label">
+                                                                    {{ option.texte }}
+                                                                    {% if option.score is not none %}
+                                                                    <span class="badge bg-success ms-1">{{ option.score }}</span>
+                                                                    {% endif %}
+                                                                </label>
+                                                            </div>
+                                                            {% endfor %}
+                                                        </div>
+                                                        {% endif %}
+                                                    </div>
+                                                    <div class="btn-group ms-3">
+                                                        <button class="btn btn-sm btn-outline-primary edit-question-btn"
+                                                                data-bs-toggle="modal"
+                                                                data-bs-target="#questionModal"
+                                                                data-id="{{ question.id }}">
+                                                            <i class="fas fa-edit"></i>
+                                                        </button>
+                                                        <button class="btn btn-sm btn-outline-danger"
+                                                                onclick="deleteQuestion({{ question.id }})">
+                                                            <i class="fas fa-trash"></i>
+                                                        </button>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                            {% endfor %}
+                                        </div>
+                                        
+                                        <!-- Bouton ajouter question -->
+                                        <button class="btn btn-sm btn-modern btn-success mt-3 add-question-btn"
+                                                data-bs-toggle="modal"
+                                                data-bs-target="#questionModal"
+                                                data-categorie-id="{{ categorie.id }}">
+                                            <i class="fas fa-plus me-1"></i>
+                                            Ajouter une question
+                                        </button>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        {% endfor %}
+                    </div>
+                    {% else %}
+                    <div class="text-center py-5">
+                        <i class="fas fa-layer-group fa-3x text-muted mb-3"></i>
+                        <p class="text-muted">Aucune catégorie créée</p>
+                        <button class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#categorieModal">
+                            <i class="fas fa-plus me-2"></i>
+                            Créer votre première catégorie
+                        </button>
+                    </div>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Statistiques rapides -->
+    <div class="row">
+        <div class="col-md-4">
+            <div class="card-modern">
+                <div class="card-body text-center">
+                    <h2 class="mb-0 text-primary">{{ questionnaire.reponses|length }}</h2>
+                    <p class="text-muted mb-0">Réponses totales</p>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-4">
+            <div class="card-modern">
+                <div class="card-body text-center">
+                    <h2 class="mb-0 text-success">
+                        {{ questionnaire.reponses|selectattr('statut', 'equalto', 'complet')|list|length }}
+                    </h2>
+                    <p class="text-muted mb-0">Réponses complètes</p>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-4">
+            <div class="card-modern">
+                <div class="card-body text-center">
+                    <h2 class="mb-0 text-info">{{ questionnaire.categories|length }}</h2>
+                    <p class="text-muted mb-0">Catégories</p>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Modal Configuration -->
+<div class="modal fade" id="configModal" tabindex="-1">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <form method="POST" action="{{ url_for('update_questionnaire', id=questionnaire.id) }}">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                <div class="modal-header">
+                    <h5 class="modal-title">Configuration du questionnaire</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="row">
+                        <div class="col-md-6">
+                            <div class="mb-3">
+                                <label class="form-label">Titre</label>
+                                <input type="text" class="form-control" name="titre" 
+                                       value="{{ questionnaire.titre }}" required>
+                            </div>
+                            <div class="mb-3">
+                                <label class="form-label">Description</label>
+                                <textarea class="form-control" name="description" rows="3">{{ questionnaire.description }}</textarea>
+                            </div>
+                            <div class="mb-3">
+                                <label class="form-label">Instructions</label>
+                                <textarea class="form-control" name="instructions" rows="3">{{ questionnaire.instructions }}</textarea>
+                            </div>
+                        </div>
+                        <div class="col-md-6">
+                            <div class="mb-3">
+                                <label class="form-label">Code</label>
+                                <input type="text" class="form-control" name="code" 
+                                       value="{{ questionnaire.code }}" required>
+                            </div>
+                            <div class="mb-3">
+                                <label class="form-label">Configuration</label>
+                                <div class="form-check mb-2">
+                                    <input class="form-check-input" type="checkbox" name="est_actif" 
+                                           {% if questionnaire.est_actif %}checked{% endif %}>
+                                    <label class="form-check-label">Actif</label>
+                                </div>
+                                <div class="form-check mb-2">
+                                    <input class="form-check-input" type="checkbox" name="est_public" 
+                                           {% if questionnaire.est_public %}checked{% endif %}>
+                                    <label class="form-check-label">Public (accessible sans connexion)</label>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Annuler</button>
+                    <button type="submit" class="btn btn-primary">Enregistrer</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<!-- Modal Catégorie -->
+<div class="modal fade" id="categorieModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <form method="POST" action="{{ url_for('ajouter_categorie_questionnaire', id=questionnaire.id) }}">
+                {{ form_categorie.hidden_tag() }}
+                <div class="modal-header">
+                    <h5 class="modal-title">Nouvelle catégorie</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="mb-3">
+                        {{ form_categorie.titre.label(class="form-label") }}
+                        {{ form_categorie.titre(class="form-control", placeholder="Titre de la catégorie") }}
+                    </div>
+                    <div class="mb-3">
+                        {{ form_categorie.description.label(class="form-label") }}
+                        {{ form_categorie.description(class="form-control", rows="3", placeholder="Description (optionnel)") }}
+                    </div>
+                    <div class="mb-3">
+                        {{ form_categorie.ordre.label(class="form-label") }}
+                        {{ form_categorie.ordre(class="form-control", type="number", min="0", value="0") }}
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Annuler</button>
+                    {{ form_categorie.submit(class="btn btn-primary", value="Ajouter") }}
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<!-- Modal Éditer Catégorie -->
+<div class="modal fade" id="editCategorieModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <form id="editCategorieForm" method="POST" action="#">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                <input type="hidden" id="editCategorieId" name="categorie_id">
+                
+                <div class="modal-header">
+                    <h5 class="modal-title">Modifier la catégorie</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                
+                <div class="modal-body">
+                    <div class="mb-3">
+                        <label class="form-label">Titre de la catégorie</label>
+                        <input type="text" class="form-control" id="editCategorieTitre" name="titre" required>
+                        <small class="text-muted">Titre de la catégorie (pas du questionnaire)</small>
+                    </div>
+                    
+                    <div class="mb-3">
+                        <label class="form-label">Description</label>
+                        <textarea class="form-control" id="editCategorieDescription" name="description" rows="3"></textarea>
+                        <small class="text-muted">Description de la catégorie</small>
+                    </div>
+                    
+                    <div class="mb-3">
+                        <label class="form-label">Ordre d'affichage</label>
+                        <input type="number" class="form-control" id="editCategorieOrdre" name="ordre" min="0" value="0">
+                        <small class="text-muted">Position de la catégorie dans le questionnaire (0 = première)</small>
+                    </div>
+                </div>
+                
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Annuler</button>
+                    <button type="submit" class="btn btn-primary" id="saveCategorieBtn">
+                        <i class="fas fa-save me-2"></i>
+                        Enregistrer les modifications
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<!-- Modal Question -->
+<div class="modal fade" id="questionModal" tabindex="-1">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <form id="questionForm" method="POST" action="#">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="questionModalTitle">Nouvelle question</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <input type="hidden" id="categorieId" name="categorie_id">
+                    <input type="hidden" id="questionId" name="question_id">
+                    
+                    <div class="row">
+                        <div class="col-md-8">
+                            <div class="mb-3">
+                                <label class="form-label">Question <span class="text-danger">*</span></label>
+                                <textarea class="form-control" id="questionTexte" name="texte" rows="3" 
+                                          placeholder="Votre question ici..." required></textarea>
+                            </div>
+                            <div class="mb-3">
+                                <label class="form-label">Description (optionnel)</label>
+                                <textarea class="form-control" id="questionDescription" name="description" rows="2" 
+                                          placeholder="Description supplémentaire..."></textarea>
+                            </div>
+                        </div>
+                        <div class="col-md-4">
+                            <div class="mb-3">
+                                <label class="form-label">Type de question</label>
+                                <select class="form-select" id="questionType" name="type" onchange="updateQuestionType()">
+                                    <option value="text">Texte court</option>
+                                    <option value="textarea">Texte long</option>
+                                    <option value="radio">Choix unique</option>
+                                    <option value="checkbox">Choix multiple</option>
+                                    <option value="select">Liste déroulante</option>
+                                    <option value="date">Date</option>
+                                    <option value="email">Email</option>
+                                    <option value="number">Nombre</option>
+                                    <option value="range">Échelle</option>
+                                    <option value="rating">Évaluation</option>
+                                    <option value="yesno">Oui/Non</option>
+                                </select>
+                            </div>
+                            <div class="mb-3">
+                                <div class="form-check">
+                                    <input class="form-check-input" type="checkbox" id="estObligatoire" name="est_obligatoire" value="true">
+                                    <label class="form-check-label" for="estObligatoire">
+                                        Question obligatoire
+                                    </label>
+                                </div>
+                            </div>
+                            <div class="mb-3">
+                                <label class="form-label">Ordre</label>
+                                <input type="number" class="form-control" id="questionOrdre" name="ordre" value="0" min="0">
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- Options (pour radio, checkbox, select) -->
+                    <div id="optionsSection" style="display: none;">
+                        <hr>
+                        <div class="d-flex justify-content-between align-items-center mb-3">
+                            <h6 class="mb-0">Options de réponse</h6>
+                            <button type="button" class="btn btn-sm btn-primary" onclick="addOption()">
+                                <i class="fas fa-plus me-1"></i>Ajouter option
+                            </button>
+                        </div>
+                        <div id="optionsContainer">
+                            <!-- Les options seront ajoutées ici dynamiquement -->
+                        </div>
+                    </div>
+                    
+                    <!-- Paramètres spécifiques -->
+                    <div id="specificSettings" style="display: none;">
+                        <hr>
+                        <h6>Paramètres spécifiques</h6>
+                        <div class="row">
+                            <div class="col-md-6" id="rangeSettings" style="display: none;">
+                                <div class="mb-3">
+                                    <label class="form-label">Valeur minimale</label>
+                                    <input type="number" class="form-control" id="valeursMin" name="valeurs_min" value="0">
+                                </div>
+                                <div class="mb-3">
+                                    <label class="form-label">Valeur maximale</label>
+                                    <input type="number" class="form-control" id="valeursMax" name="valeurs_max" value="100">
+                                </div>
+                            </div>
+                            <div class="col-md-6" id="ratingSettings" style="display: none;">
+                                <div class="mb-3">
+                                    <label class="form-label">Échelle min</label>
+                                    <input type="number" class="form-control" id="echelleMin" name="echelle_min" value="1" min="1">
+                                </div>
+                                <div class="mb-3">
+                                    <label class="form-label">Échelle max</label>
+                                    <input type="number" class="form-control" id="echelleMax" name="echelle_max" value="5" min="2">
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Annuler</button>
+                    <button type="submit" class="btn btn-primary" id="saveQuestionBtn">
+                        <i class="fas fa-save me-2"></i>
+                        Enregistrer
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+{% endblock %}
+{% block scripts %}
+<!-- Inclure Sortable.js -->
+<script src="https://cdn.jsdelivr.net/npm/sortablejs@1.14.0/Sortable.min.js"></script>
+
+<script>
+    // Variables globales
+    let optionCounter = 0;
+    
+    // Initialiser le glisser-déposer et les événements
+    document.addEventListener('DOMContentLoaded', function() {
+        console.log('🔧 Initialisation de l\'éditeur de questionnaire');
+        
+        // Initialiser Sortable.js pour les catégories
+        const categoriesList = document.getElementById('categories-list');
+        if (categoriesList) {
+            new Sortable(categoriesList, {
+                animation: 150,
+                handle: '.drag-handle',
+                onEnd: function() {
+                    updateCategorieOrder();
+                }
+            });
+        }
+        
+        // Initialiser Sortable.js pour les questions
+        document.querySelectorAll('[id^="questions-list-"]').forEach(list => {
+            new Sortable(list, {
+                animation: 150,
+                handle: '.drag-handle',
+                onEnd: function(evt) {
+                    const categorieId = evt.from.id.split('-')[2];
+                    updateQuestionOrder(categorieId);
+                }
+            });
+        });
+        
+        // Configuration des boutons
+        setupButtons();
+        console.log('✅ Éditeur initialisé');
+    });
+    
+    // ========================
+    // FONCTIONS DE CONFIGURATION
+    // ========================
+    
+    function setupButtons() {
+        // Boutons modifier catégorie
+        document.querySelectorAll('.edit-categorie-btn').forEach(button => {
+            button.addEventListener('click', function() {
+                const id = this.getAttribute('data-id');
+                const titre = this.getAttribute('data-titre');
+                const description = this.getAttribute('data-description');
+                const ordre = this.getAttribute('data-ordre');
+                
+                console.log('✏️ Édition catégorie:', { id, titre, description, ordre });
+                
+                // Vérifier que l'ID est valide
+                if (!id || id === '0' || id === 'null' || id === 'undefined') {
+                    alert('❌ Erreur: ID de catégorie invalide');
+                    return;
+                }
+                
+                document.getElementById('editCategorieId').value = id;
+                document.getElementById('editCategorieTitre').value = titre || '';
+                document.getElementById('editCategorieDescription').value = description || '';
+                document.getElementById('editCategorieOrdre').value = ordre || 0;
+            });
+        });
+        
+        // Boutons ajouter question
+        document.querySelectorAll('.add-question-btn').forEach(button => {
+            button.addEventListener('click', function() {
+                const categorieId = this.getAttribute('data-categorie-id');
+                console.log('➕ Ajout question à catégorie:', categorieId);
+                
+                document.getElementById('categorieId').value = categorieId;
+                document.getElementById('questionId').value = '';
+                document.getElementById('questionModalTitle').textContent = 'Nouvelle question';
+                resetQuestionForm();
+            });
+        });
+        
+        // Boutons modifier question
+        document.querySelectorAll('.edit-question-btn').forEach(button => {
+            button.addEventListener('click', function() {
+                const questionId = this.getAttribute('data-id');
+                console.log('✏️ Édition question:', questionId);
+                
+                document.getElementById('questionModalTitle').textContent = 'Modifier la question';
+                loadQuestion(questionId);
+            });
+        });
+        
+        // Formulaire de question
+        document.getElementById('questionForm').addEventListener('submit', handleQuestionSubmit);
+        
+        // Formulaire de catégorie
+        document.getElementById('editCategorieForm').addEventListener('submit', handleCategorieSubmit);
+    }
+    
+    // ========================
+    // GESTION DES FORMULAIRES
+    // ========================
+    
+    async function handleQuestionSubmit(e) {
+        e.preventDefault();
+        
+        const questionId = document.getElementById('questionId').value;
+        const categorieId = document.getElementById('categorieId').value;
+        const questionText = document.getElementById('questionTexte').value.trim();
+        
+        // Validation
+        if (!questionText) {
+            alert('❌ Veuillez saisir le texte de la question');
+            document.getElementById('questionTexte').focus();
+            return;
+        }
+        
+        if (!categorieId) {
+            alert('❌ Erreur: aucune catégorie sélectionnée');
+            return;
+        }
+        
+        // Préparer les données
+        const data = {
+            texte: questionText,
+            description: document.getElementById('questionDescription').value,
+            type: document.getElementById('questionType').value,
+            ordre: document.getElementById('questionOrdre').value || 0,
+            est_obligatoire: document.getElementById('estObligatoire').checked,
+            valeurs_min: null,
+            valeurs_max: null,
+            echelle_min: null,
+            echelle_max: null,
+            options: []
+        };
+        
+        // Paramètres spécifiques
+        const questionType = document.getElementById('questionType').value;
+        if (questionType === 'range') {
+            data.valeurs_min = parseFloat(document.getElementById('valeursMin').value) || 0;
+            data.valeurs_max = parseFloat(document.getElementById('valeursMax').value) || 100;
+        } else if (questionType === 'rating') {
+            data.echelle_min = parseFloat(document.getElementById('echelleMin').value) || 1;
+            data.echelle_max = parseFloat(document.getElementById('echelleMax').value) || 5;
+        }
+        
+        // Options pour questions à choix
+        if (['radio', 'checkbox', 'select'].includes(questionType)) {
+            document.querySelectorAll('.option-item').forEach((option, index) => {
+                const valeur = option.querySelector('.option-valeur').value.trim();
+                const texte = option.querySelector('.option-texte').value.trim();
+                if (texte) {
+                    data.options.push({
+                        valeur: valeur || texte.toLowerCase().replace(/\s+/g, '_'),
+                        texte: texte,
+                        ordre: index + 1
+                    });
+                }
+            });
+        }
+        
+        // Déterminer l'URL et la méthode
+        let url, method;
+        if (questionId && questionId !== '') {
+            url = `/api/question/${questionId}`;
+            method = 'PUT';
+        } else {
+            url = `/api/categorie/${categorieId}/question`;
+            method = 'POST';
+        }
+        
+        console.log('📤 Envoi de la question:', { url, method, data });
+        
+        // Envoyer
+        await submitJSONRequest(url, method, data, 'questionModal');
+    }
+    
+    async function handleCategorieSubmit(e) {
+        e.preventDefault();
+        
+        const categorieId = document.getElementById('editCategorieId').value;
+        const titre = document.getElementById('editCategorieTitre').value.trim();
+        
+        if (!categorieId || categorieId === '0') {
+            alert('❌ Erreur: ID de catégorie invalide');
+            return;
+        }
+        
+        if (!titre) {
+            alert('❌ Le titre de la catégorie est requis');
+            document.getElementById('editCategorieTitre').focus();
+            return;
+        }
+        
+        // Préparer les données au format JSON
+        const data = {
+            titre: titre,
+            description: document.getElementById('editCategorieDescription').value,
+            ordre: document.getElementById('editCategorieOrdre').value || 0
+        };
+        
+        const url = `/api/categorie/${categorieId}/update`;
+        console.log('📤 Envoi de la catégorie à:', url, 'avec données:', data);
+        
+        // CORRECTION : Utiliser PUT pour l'API de mise à jour
+        await submitJSONRequest(url, 'PUT', data, 'editCategorieModal');
+    }
+    
+    async function submitJSONRequest(url, method, data, modalId) {
+        const submitBtn = document.querySelector(`#${modalId} button[type="submit"]`);
+        const originalText = submitBtn.innerHTML;
+        
+        // Indicateur de chargement
+        submitBtn.innerHTML = '<i class="fas fa-spinner fa-spin me-2"></i>Enregistrement...';
+        submitBtn.disabled = true;
+        
+        try {
+            console.log(`📤 ${method} vers ${url}:`, data);
+            
+            const response = await fetch(url, {
+                method: method,
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRFToken': getCSRFToken()
+                },
+                body: JSON.stringify(data)
+            });
+            
+            console.log('📥 Réponse reçue:', response.status);
+            
+            // Lire le corps de la réponse UNE SEULE FOIS
+            const responseText = await response.text();
+            
+            // Essayer de parser la réponse comme JSON
+            let result;
+            try {
+                result = JSON.parse(responseText);
+                console.log('📊 Réponse JSON:', result);
+            } catch (jsonError) {
+                console.error('❌ Réponse non-JSON:', responseText);
+                
+                // Si ce n'est pas du JSON, traiter comme HTML
+                result = {
+                    success: false,
+                    error: `Erreur serveur (${response.status}). La réponse n'est pas au format JSON.`
+                };
+                
+                // Essayer d'extraire un message d'erreur du HTML
+                if (responseText.includes('CSRF')) {
+                    result.error = 'Erreur CSRF. Veuillez rafraîchir la page.';
+                } else if (response.status === 404) {
+                    result.error = 'Route non trouvée. Vérifiez l\'URL.';
+                } else if (response.status === 500) {
+                    result.error = 'Erreur serveur interne.';
+                }
+            }
+            
+            if (response.ok && result.success) {
+                // Succès
+                const modal = bootstrap.Modal.getInstance(document.getElementById(modalId));
+                if (modal) modal.hide();
+                
+                // Afficher message et recharger
+                showSuccessMessage('✅ Enregistrement réussi !');
+                setTimeout(() => {
+                    location.reload();
+                }, 1000);
+            } else {
+                // Échec
+                const errorMsg = result.error || result.message || `Erreur ${response.status}`;
+                showErrorMessage('❌ Erreur: ' + errorMsg);
+            }
+        } catch (error) {
+            console.error('💥 Erreur réseau:', error);
+            showErrorMessage('❌ Erreur réseau: ' + error.message);
+        } finally {
+            submitBtn.innerHTML = originalText;
+            submitBtn.disabled = false;
+        }
+    }
+    
+    // ========================
+    // FONCTIONS UTILITAIRES
+    // ========================
+    
+    function resetQuestionForm() {
+        console.log('🔄 Réinitialisation du formulaire de question');
+        
+        document.getElementById('questionTexte').value = '';
+        document.getElementById('questionDescription').value = '';
+        document.getElementById('questionType').value = 'text';
+        document.getElementById('estObligatoire').checked = false;
+        document.getElementById('questionOrdre').value = 0;
+        document.getElementById('optionsContainer').innerHTML = '';
+        document.getElementById('valeursMin').value = '0';
+        document.getElementById('valeursMax').value = '100';
+        document.getElementById('echelleMin').value = '1';
+        document.getElementById('echelleMax').value = '5';
+        optionCounter = 0;
+        updateQuestionType();
+    }
+    
+    async function loadQuestion(questionId) {
+        try {
+            console.log('📥 Chargement question:', questionId);
+            
+            // Réinitialiser
+            resetQuestionForm();
+            document.getElementById('questionId').value = questionId;
+            
+            // Trouver la catégorie depuis le DOM
+            const questionElement = document.querySelector(`.question-item[data-id="${questionId}"]`);
+            if (questionElement) {
+                const categorieElement = questionElement.closest('.categorie-item');
+                if (categorieElement) {
+                    const categorieId = categorieElement.getAttribute('data-id');
+                    document.getElementById('categorieId').value = categorieId;
+                    console.log('📋 Catégorie trouvée:', categorieId);
+                }
+            }
+            
+            // Essayer l'API
+            console.log('🔍 Appel API:', `/api/question/${questionId}`);
+            const response = await fetch(`/api/question/${questionId}`);
+            
+            if (response.ok) {
+                const data = await response.json();
+                console.log('📊 Données reçues:', data);
+                
+                if (data.success) {
+                    // Remplir le formulaire
+                    document.getElementById('questionTexte').value = data.texte || '';
+                    document.getElementById('questionDescription').value = data.description || '';
+                    document.getElementById('questionType').value = data.type || 'text';
+                    document.getElementById('questionOrdre').value = data.ordre || 0;
+                    document.getElementById('estObligatoire').checked = data.est_obligatoire || false;
+                    
+                    // Charger les options
+                    if (data.options && data.options.length > 0) {
+                        data.options.forEach(option => {
+                            addOption(option);
+                        });
+                    }
+                } else {
+                    console.warn('⚠️ API retourne success: false');
+                }
+            } else {
+                console.warn('⚠️ Route API non disponible, chargement depuis DOM');
+                // Charger depuis les attributs data
+                if (questionElement) {
+                    document.getElementById('questionTexte').value = questionElement.getAttribute('data-texte') || '';
+                    document.getElementById('questionDescription').value = questionElement.getAttribute('data-description') || '';
+                    document.getElementById('questionType').value = questionElement.getAttribute('data-type') || 'text';
+                    document.getElementById('questionOrdre').value = questionElement.getAttribute('data-ordre') || 0;
+                    document.getElementById('estObligatoire').checked = questionElement.getAttribute('data-obligatoire') === 'true';
+                }
+            }
+            
+            updateQuestionType();
+            
+        } catch (error) {
+            console.error('❌ Erreur chargement:', error);
+            showErrorMessage('⚠️ Impossible de charger la question depuis l\'API');
+        }
+    }
+    
+    function updateQuestionType() {
+        const type = document.getElementById('questionType').value;
+        const optionsSection = document.getElementById('optionsSection');
+        const specificSettings = document.getElementById('specificSettings');
+        
+        console.log('🔄 Mise à jour du type:', type);
+        
+        // Afficher/masquer les options
+        optionsSection.style.display = ['radio', 'checkbox', 'select'].includes(type) ? 'block' : 'none';
+        
+        // Afficher/masquer les paramètres spécifiques
+        if (type === 'range') {
+            specificSettings.style.display = 'block';
+            document.getElementById('rangeSettings').style.display = 'block';
+            document.getElementById('ratingSettings').style.display = 'none';
+        } else if (type === 'rating') {
+            specificSettings.style.display = 'block';
+            document.getElementById('rangeSettings').style.display = 'none';
+            document.getElementById('ratingSettings').style.display = 'block';
+        } else {
+            specificSettings.style.display = 'none';
+        }
+        
+        // Ajouter une option par défaut si nécessaire
+        if (['radio', 'checkbox', 'select'].includes(type) && 
+            document.querySelectorAll('.option-item').length === 0) {
+            addOption();
+        }
+    }
+    
+    function addOption(optionData = null) {
+        optionCounter++;
+        
+        const optionHtml = `
+            <div class="option-item mb-2 border p-2 rounded">
+                <div class="row g-2">
+                    <div class="col-1">
+                        <i class="fas fa-grip-vertical drag-handle" style="cursor: move; line-height: 38px;"></i>
+                    </div>
+                    <div class="col-4">
+                        <input type="text" class="form-control option-valeur" 
+                               value="${optionData ? optionData.valeur : 'option_' + optionCounter}" 
+                               placeholder="valeur" required>
+                    </div>
+                    <div class="col-5">
+                        <input type="text" class="form-control option-texte" 
+                               value="${optionData ? optionData.texte : 'Option ' + optionCounter}" 
+                               placeholder="Texte de l'option" required>
+                    </div>
+                    <div class="col-2">
+                        <button type="button" class="btn btn-sm btn-danger" onclick="this.closest('.option-item').remove()">
+                            <i class="fas fa-trash"></i>
+                        </button>
+                    </div>
+                </div>
+            </div>
+        `;
+        
+        document.getElementById('optionsContainer').insertAdjacentHTML('beforeend', optionHtml);
+    }
+    
+    // ========================
+    // FONCTIONS DE SUPPRESSION
+    // ========================
+    
+    function deleteCategorie(id) {
+        if (confirm('⚠️ Supprimer cette catégorie et toutes ses questions ? Cette action est irréversible.')) {
+            fetchWithLoader(`/api/categorie/${id}/delete`, {
+                method: 'DELETE',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRFToken': getCSRFToken()
+                }
+            });
+        }
+    }
+    
+    function deleteQuestion(id) {
+        if (confirm('⚠️ Supprimer cette question ? Cette action est irréversible.')) {
+            fetchWithLoader(`/api/question/${id}`, {
+                method: 'DELETE',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRFToken': getCSRFToken()
+                }
+            });
+        }
+    }
+    
+    async function fetchWithLoader(url, options) {
+        const button = event?.target;
+        if (button) {
+            const originalText = button.innerHTML;
+            button.innerHTML = '<i class="fas fa-spinner fa-spin"></i>';
+            button.disabled = true;
+        }
+        
+        try {
+            const response = await fetch(url, options);
+            const responseText = await response.text();
+            let result;
+            
+            try {
+                result = JSON.parse(responseText);
+            } catch {
+                result = { success: response.ok };
+            }
+            
+            if (result.success) {
+                showSuccessMessage('✅ Suppression réussie !');
+                setTimeout(() => {
+                    location.reload();
+                }, 800);
+            } else {
+                showErrorMessage('❌ Erreur: ' + (result.error || 'Échec de la suppression'));
+            }
+        } catch (error) {
+            console.error('💥 Erreur:', error);
+            showErrorMessage('❌ Erreur réseau: ' + error.message);
+        } finally {
+            if (button) {
+                button.innerHTML = originalText;
+                button.disabled = false;
+            }
+        }
+    }
+    
+    // ========================
+    // RÉORGANISATION
+    // ========================
+    
+    function updateCategorieOrder() {
+        const order = Array.from(document.querySelectorAll('.categorie-item'))
+            .map(item => item.dataset.id)
+            .filter(id => id && id !== 'undefined' && id !== '0');
+        
+        if (order.length === 0) return;
+        
+        console.log('🔀 Réorganisation catégories:', order);
+        
+        fetch('/api/questionnaire/{{ questionnaire.id }}/reorder-categories', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRFToken': getCSRFToken()
+            },
+            body: JSON.stringify({ order: order })
+        }).catch(error => {
+            console.error('❌ Erreur réorganisation catégories:', error);
+        });
+    }
+    
+    function updateQuestionOrder(categorieId) {
+        const order = Array.from(document.querySelectorAll(`#questions-list-${categorieId} .question-item`))
+            .map(item => item.dataset.id)
+            .filter(id => id && id !== 'undefined' && id !== '0');
+        
+        if (order.length === 0) return;
+        
+        console.log(`🔀 Réorganisation questions catégorie ${categorieId}:`, order);
+        
+        fetch(`/api/categorie/${categorieId}/reorder-questions`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRFToken': getCSRFToken()
+            },
+            body: JSON.stringify({ order: order })
+        }).catch(error => {
+            console.error('❌ Erreur réorganisation questions:', error);
+        });
+    }
+    
+    // ========================
+    // UTILITAIRES ET AFFICHAGE
+    // ========================
+    
+    function getCSRFToken() {
+        const meta = document.querySelector('meta[name="csrf-token"]');
+        return meta ? meta.getAttribute('content') : '';
+    }
+    
+    function showSuccessMessage(message) {
+        // Créer une alerte Bootstrap
+        const alertDiv = document.createElement('div');
+        alertDiv.className = 'alert alert-success alert-dismissible fade show';
+        alertDiv.style.position = 'fixed';
+        alertDiv.style.top = '20px';
+        alertDiv.style.right = '20px';
+        alertDiv.style.zIndex = '9999';
+        alertDiv.style.minWidth = '300px';
+        alertDiv.innerHTML = `
+            ${message}
+            <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+        `;
+        
+        document.body.appendChild(alertDiv);
+        
+        // Auto-dismiss après 3 secondes
+        setTimeout(() => {
+            if (alertDiv.parentNode) {
+                alertDiv.remove();
+            }
+        }, 3000);
+    }
+    
+    function showErrorMessage(message) {
+        // Créer une alerte Bootstrap
+        const alertDiv = document.createElement('div');
+        alertDiv.className = 'alert alert-danger alert-dismissible fade show';
+        alertDiv.style.position = 'fixed';
+        alertDiv.style.top = '20px';
+        alertDiv.style.right = '20px';
+        alertDiv.style.zIndex = '9999';
+        alertDiv.style.minWidth = '300px';
+        alertDiv.innerHTML = `
+            ${message}
+            <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+        `;
+        
+        document.body.appendChild(alertDiv);
+        
+        // Auto-dismiss après 5 secondes
+        setTimeout(() => {
+            if (alertDiv.parentNode) {
+                alertDiv.remove();
+            }
+        }, 5000);
+    }
+    
+    function copyToClipboard(elementId) {
+        const element = document.getElementById(elementId);
+        if (!element) {
+            console.error('Élément non trouvé:', elementId);
+            return;
+        }
+        
+        element.select();
+        element.setSelectionRange(0, 99999);
+        
+        try {
+            const successful = document.execCommand('copy');
+            if (successful) {
+                const button = element.nextElementSibling;
+                if (button) {
+                    const original = button.innerHTML;
+                    button.innerHTML = '<i class="fas fa-check"></i>';
+                    button.classList.remove('btn-outline-secondary');
+                    button.classList.add('btn-success');
+                    
+                    setTimeout(() => {
+                        button.innerHTML = original;
+                        button.classList.remove('btn-success');
+                        button.classList.add('btn-outline-secondary');
+                    }, 2000);
+                }
+            }
+        } catch (err) {
+            console.error('Erreur copie:', err);
+        }
+    }
+    function envoyerSoumission(data) {
+    console.log('🚀 Envoi soumission complète...');
+    console.log('📦 Données envoyées:', JSON.stringify(data, null, 2));
+    
+    // Test d'abord avec la route debug
+    fetch('/api/debug/test-submit', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            'Accept': 'application/json'
+        },
+        body: JSON.stringify(data)
+    })
+    .then(response => {
+        console.log('🧪 Debug test:', response.status);
+        return response.text();
+    })
+    .then(text => {
+        console.log('🧪 Debug response:', text);
+        
+        // Ensuite envoyer la vraie requête
+        return fetch(`/api/questionnaire/${questionnaireId}/repondre`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'Accept': 'application/json'
+            },
+            body: JSON.stringify(data)
+        });
+    })
+    .then(async response => {
+        const text = await response.text();
+        console.log('📥 Réponse serveur:', response.status, text);
+        
+        try {
+            const result = JSON.parse(text);
+            
+            if (response.ok && result.success !== false) {
+                // SUCCÈS
+                traiterSuccesSoumission(result);
+            } else {
+                // ÉCHEC
+                traiterEchecSoumission(result, text, data);
+            }
+        } catch (e) {
+            // Réponse non-JSON
+            traiterReponseNonJSON(response, text, data);
+        }
+    })
+    .catch(error => {
+        // Erreur réseau
+        traiterErreurReseau(error, data);
+    });
+}
+</script>
+{% endblock %}

@@ -1,0 +1,683 @@
+<!-- templates/super_admin/control_panel.html -->
+{% extends "base.html" %}
+
+{% block title %}Super Admin - Panel de contrôle{% endblock %}
+
+{% block content %}
+<div class="container-fluid py-4">
+    <!-- Navigation -->
+    <nav aria-label="breadcrumb" class="mb-4">
+        <ol class="breadcrumb">
+            <li class="breadcrumb-item"><a href="{{ url_for('super_admin_dashboard') }}">Super Admin</a></li>
+            <li class="breadcrumb-item active">Panel de contrôle</li>
+        </ol>
+    </nav>
+
+    <!-- En-tête -->
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <h1 class="h3 mb-0">
+            <i class="fas fa-cogs text-warning me-2"></i>Panel de contrôle
+        </h1>
+        <div class="dropdown">
+            <button class="fk-btn fk-btn-outline dropdown-toggle" type="button" data-bs-toggle="dropdown">
+                <i class="fas fa-cog me-2"></i>Actions rapides
+            </button>
+            <ul class="dropdown-menu">
+                <li>
+                    <a class="dropdown-item" href="{{ url_for('super_admin_nouvelle_formule') }}">
+                        <i class="fas fa-plus-circle me-2"></i>Nouvelle formule
+                    </a>
+                </li>
+                <li>
+                    <a class="dropdown-item" href="{{ url_for('super_admin_nouveau_client') }}">
+                        <i class="fas fa-building me-2"></i>Nouveau client
+                    </a>
+                </li>
+                <li><hr class="dropdown-divider"></li>
+                <li>
+                    <a class="dropdown-item" href="{{ url_for('super_admin_management') }}">
+                        <i class="fas fa-crown me-2"></i>Gérer super admins
+                    </a>
+                </li>
+                <li>
+                    <a class="dropdown-item" href="{{ url_for('super_admin_debug_filter') }}">
+                        <i class="fas fa-bug me-2"></i>Debug filtrage
+                    </a>
+                </li>
+                <li>
+                    <a class="dropdown-item" href="{{ url_for('super_admin_fix_data_filter') }}">
+                        <i class="fas fa-wrench me-2"></i>Corriger filtrage
+                    </a>
+                </li>
+            </ul>
+        </div>
+    </div>
+
+    <!-- Section : Mode de vue -->
+    <div class="row mb-4">
+        <div class="col-12">
+            <div class="fk-card">
+                <div class="fk-card-header">
+                    <h5 class="mb-0">
+                        <i class="fas fa-eye me-2"></i>Mode de vue actuel
+                    </h5>
+                </div>
+                <div class="fk-card-body">
+                    <div class="d-flex align-items-center justify-content-between">
+                        <div>
+                            <div class="d-flex align-items-center mb-2">
+                                <span class="badge bg-{{ view_class }} me-2 p-2">
+                                    <i class="{{ view_icon }} me-1"></i>{{ view_text }}
+                                </span>
+                                {% if viewing_client %}
+                                <span class="text-muted">
+                                    <i class="fas fa-building me-1"></i>Client : <strong>{{ viewing_client.nom }}</strong> ({{ viewing_client.reference }})
+                                </span>
+                                {% endif %}
+                            </div>
+                            <p class="text-muted mb-0 small">
+                                {% if viewing_client %}
+                                    Vous visualisez toutes les données du client <strong>{{ viewing_client.nom }}</strong>
+                                {% elif session.get('view_mode') == 'my_data_only' %}
+                                    Vous visualisez uniquement <strong>vos données personnelles</strong> (créées par vous)
+                                {% else %}
+                                    Vous visualisez <strong>toutes les données</strong> de tous les clients (vue super admin)
+                                {% endif %}
+                            </p>
+                        </div>
+                        <div>
+                            <div class="btn-group">
+                                <!-- Bouton pour voir uniquement mes données -->
+                                <a href="{{ url_for('super_admin_view_my_own_data') }}" 
+                                   class="fk-btn fk-btn-sm {% if session.get('view_mode') == 'my_data_only' %}fk-btn-primary{% else %}fk-btn-outline{% endif %}">
+                                    <i class="fas fa-user me-2"></i>Mes données
+                                </a>
+                                
+                                <!-- Bouton pour voir tous les clients -->
+                                <a href="{{ url_for('view_all_clients') }}" 
+                                   class="fk-btn fk-btn-sm {% if not viewing_client and session.get('view_mode') != 'my_data_only' %}fk-btn-primary{% else %}fk-btn-outline{% endif %}">
+                                    <i class="fas fa-globe me-2"></i>Tous clients
+                                </a>
+                                
+                                {% if viewing_client %}
+                                <a href="{{ url_for('switch_back') }}" class="fk-btn fk-btn-sm fk-btn-outline">
+                                    <i class="fas fa-arrow-left me-2"></i>Revenir
+                                </a>
+                                {% endif %}
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Section : Modes de vue disponibles -->
+    <div class="row mb-4">
+        <div class="col-md-4">
+            <div class="fk-card h-100">
+                <div class="fk-card-header d-flex align-items-center">
+                    <div class="rounded-circle bg-primary bg-opacity-10 p-2 me-3">
+                        <i class="fas fa-user text-primary"></i>
+                    </div>
+                    <h6 class="mb-0">Vue Personnelle</h6>
+                </div>
+                <div class="fk-card-body">
+                    <p class="small mb-2">Voir uniquement les données que vous avez créées.</p>
+                    <ul class="small text-muted mb-3">
+                        <li><i class="fas fa-check text-success me-1"></i> Vos risques créés</li>
+                        <li><i class="fas fa-check text-success me-1"></i> Vos audits créés</li>
+                        <li><i class="fas fa-check text-success me-1"></i> Vos clients créés</li>
+                        <li><i class="fas fa-check text-success me-1"></i> Vos formules créées</li>
+                    </ul>
+                    {% if session.get('view_mode') != 'my_data_only' %}
+                    <a href="{{ url_for('super_admin_view_my_own_data') }}" class="fk-btn fk-btn-sm fk-btn-outline w-100">
+                        <i class="fas fa-user me-2"></i>Activer ce mode
+                    </a>
+                    {% else %}
+                    <div class="text-center text-success">
+                        <i class="fas fa-check-circle me-1"></i> Actif
+                    </div>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+        
+        <div class="col-md-4">
+            <div class="fk-card h-100">
+                <div class="fk-card-header d-flex align-items-center">
+                    <div class="rounded-circle bg-success bg-opacity-10 p-2 me-3">
+                        <i class="fas fa-building text-success"></i>
+                    </div>
+                    <h6 class="mb-0">Vue Client</h6>
+                </div>
+                <div class="fk-card-body">
+                    <p class="small mb-2">Voir toutes les données d'un client spécifique.</p>
+                    <ul class="small text-muted mb-3">
+                        <li><i class="fas fa-check text-success me-1"></i> Tous les risques du client</li>
+                        <li><i class="fas fa-check text-success me-1"></i> Tous les audits du client</li>
+                        <li><i class="fas fa-check text-success me-1"></i> Tous les utilisateurs du client</li>
+                        <li><i class="fas fa-check text-success me-1"></i> Toutes les données du client</li>
+                    </ul>
+                    {% if not viewing_client %}
+                    <div class="dropdown">
+                        <button class="fk-btn fk-btn-sm fk-btn-outline w-100 dropdown-toggle" type="button" data-bs-toggle="dropdown">
+                            <i class="fas fa-eye me-2"></i>Choisir un client
+                        </button>
+                        <ul class="dropdown-menu">
+                            {% for client in available_clients %}
+                            <li>
+                                <a class="dropdown-item" href="{{ url_for('switch_client', client_id=client.id) }}">
+                                    <i class="fas fa-building me-2"></i>{{ client.nom }}
+                                </a>
+                            </li>
+                            {% endfor %}
+                        </ul>
+                    </div>
+                    {% else %}
+                    <div class="text-center text-success">
+                        <i class="fas fa-check-circle me-1"></i> Visualisation : {{ viewing_client.nom }}
+                    </div>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+        
+        <div class="col-md-4">
+            <div class="fk-card h-100">
+                <div class="fk-card-header d-flex align-items-center">
+                    <div class="rounded-circle bg-info bg-opacity-10 p-2 me-3">
+                        <i class="fas fa-globe text-info"></i>
+                    </div>
+                    <h6 class="mb-0">Vue Globale</h6>
+                </div>
+                <div class="fk-card-body">
+                    <p class="small mb-2">Voir toutes les données de tous les clients.</p>
+                    <ul class="small text-muted mb-3">
+                        <li><i class="fas fa-check text-success me-1"></i> Tous les risques</li>
+                        <li><i class="fas fa-check text-success me-1"></i> Tous les audits</li>
+                        <li><i class="fas fa-check text-success me-1"></i> Tous les clients</li>
+                        <li><i class="fas fa-check text-success me-1"></i> Toutes les formules</li>
+                    </ul>
+                    {% if not viewing_client and session.get('view_mode') != 'my_data_only' %}
+                    <div class="text-center text-success">
+                        <i class="fas fa-check-circle me-1"></i> Actif
+                    </div>
+                    {% else %}
+                    <a href="{{ url_for('view_all_clients') }}" class="fk-btn fk-btn-sm fk-btn-outline w-100">
+                        <i class="fas fa-globe me-2"></i>Activer ce mode
+                    </a>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Statistiques selon le mode de vue -->
+    <div class="row mb-4">
+        <div class="col-md-3">
+            <div class="fk-card">
+                <div class="fk-card-body">
+                    <div class="d-flex align-items-center">
+                        <div class="rounded-circle bg-primary bg-opacity-10 p-3 me-3">
+                            <i class="fas fa-building fa-lg text-primary"></i>
+                        </div>
+                        <div>
+                            <h3 class="mb-0">{{ stats.total_clients }}</h3>
+                            <p class="text-muted mb-0">Clients</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="fk-card">
+                <div class="fk-card-body">
+                    <div class="d-flex align-items-center">
+                        <div class="rounded-circle bg-success bg-opacity-10 p-3 me-3">
+                            <i class="fas fa-users fa-lg text-success"></i>
+                        </div>
+                        <div>
+                            <h3 class="mb-0">{{ stats.clients_actifs }}</h3>
+                            <p class="text-muted mb-0">Clients actifs</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="fk-card">
+                <div class="fk-card-body">
+                    <div class="d-flex align-items-center">
+                        <div class="rounded-circle bg-warning bg-opacity-10 p-3 me-3">
+                            <i class="fas fa-layer-group fa-lg text-warning"></i>
+                        </div>
+                        <div>
+                            <h3 class="mb-0">{{ formules_count }}</h3>
+                            <p class="text-muted mb-0">Formules</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="fk-card">
+                <div class="fk-card-body">
+                    <div class="d-flex align-items-center">
+                        <div class="rounded-circle bg-danger bg-opacity-10 p-3 me-3">
+                            <i class="fas fa-user-shield fa-lg text-danger"></i>
+                        </div>
+                        <div>
+                            <h3 class="mb-0">{{ super_admins_count }}</h3>
+                            <p class="text-muted mb-0">Super Admins</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Informations de débogage (visible uniquement en développement) -->
+    {% if config.DEBUG %}
+    <div class="fk-card mb-4">
+        <div class="fk-card-header">
+            <h5 class="mb-0">
+                <i class="fas fa-bug me-2"></i>Informations de débogage
+            </h5>
+        </div>
+        <div class="fk-card-body">
+            <div class="row">
+                <div class="col-md-6">
+                    <h6>Session</h6>
+                    <ul class="small">
+                        <li>Viewing client ID: {{ session.get('viewing_client_id', 'Non défini') }}</li>
+                        <li>View mode: {{ session.get('view_mode', 'Non défini') }}</li>
+                        <li>User ID: {{ current_user.id }}</li>
+                        <li>User role: {{ current_user.role }}</li>
+                        <li>Client ID: {{ current_user.client_id }}</li>
+                    </ul>
+                </div>
+                <div class="col-md-6">
+                    <h6>Actions rapides</h6>
+                    <div class="d-grid gap-2">
+                        <a href="{{ url_for('super_admin_debug_filter') }}" class="fk-btn fk-btn-sm fk-btn-outline">
+                            <i class="fas fa-search me-2"></i>Vérifier filtrage
+                        </a>
+                        <a href="{{ url_for('super_admin_fix_data_filter') }}" class="fk-btn fk-btn-sm fk-btn-outline">
+                            <i class="fas fa-wrench me-2"></i>Corriger filtrage
+                        </a>
+                        <a href="{{ url_for('view_reset') }}" class="fk-btn fk-btn-sm fk-btn-outline">
+                            <i class="fas fa-redo me-2"></i>Réinitialiser vue
+                        </a>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    {% endif %}
+
+    <!-- Section formules -->
+    <div class="fk-card mb-4">
+        <div class="fk-card-header d-flex justify-content-between align-items-center">
+            <h5 class="mb-0">
+                <i class="fas fa-layer-group me-2"></i>Formules d'abonnement
+            </h5>
+            <a href="{{ url_for('super_admin_formules') }}" class="fk-btn fk-btn-sm fk-btn-outline">
+                Voir toutes
+            </a>
+        </div>
+        <div class="fk-card-body">
+            {% if recent_formules %}
+            <div class="row">
+                {% for formule in recent_formules %}
+                <div class="col-md-4 mb-3">
+                    <div class="border rounded p-3 h-100">
+                        <div class="d-flex justify-content-between align-items-start mb-2">
+                            <h6 class="mb-0">{{ formule.nom }}</h6>
+                            <span class="badge bg-{{ 'success' if formule.code == 'enterprise' else 'warning' if formule.code == 'premium' else 'info' }}">
+                                {{ formule.code|upper }}
+                            </span>
+                        </div>
+                        <p class="small text-muted mb-2">{{ formule.description|truncate(80) }}</p>
+                        
+                        <div class="d-flex justify-content-between align-items-center">
+                            <div>
+                                <strong class="text-primary">{{ formule.prix_mensuel }}€</strong>
+                                <small class="text-muted">/mois</small>
+                            </div>
+                            <div class="text-end">
+                                <small class="text-muted">{{ formule.clients|length }} clients</small>
+                            </div>
+                        </div>
+                        
+                        <div class="mt-2">
+                            <a href="{{ url_for('super_admin_editer_formule', id=formule.id) }}" 
+                               class="btn btn-sm btn-outline-primary w-100">
+                                <i class="fas fa-edit me-1"></i>Éditer
+                            </a>
+                        </div>
+                    </div>
+                </div>
+                {% endfor %}
+            </div>
+            {% else %}
+            <div class="text-center py-4">
+                <i class="fas fa-layer-group fa-2x text-muted mb-3"></i>
+                <p class="text-muted mb-0">Aucune formule configurée</p>
+            </div>
+            {% endif %}
+        </div>
+    </div>
+
+    <!-- Section clients -->
+    <div class="fk-card mb-4">
+        <div class="fk-card-header d-flex justify-content-between align-items-center">
+            <h5 class="mb-0">
+                <i class="fas fa-building me-2"></i>Clients récents
+            </h5>
+            <a href="{{ url_for('super_admin_clients') }}" class="fk-btn fk-btn-sm fk-btn-outline">
+                Voir tous
+            </a>
+        </div>
+        <div class="fk-card-body">
+            {% if clients_recents %}
+            <div class="table-responsive">
+                <table class="table fk-table">
+                    <thead>
+                        <tr>
+                            <th>Client</th>
+                            <th>Formule</th>
+                            <th>Utilisation</th>
+                            <th>Statut</th>
+                            <th>Créé le</th>
+                            <th>Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for client in clients_recents %}
+                        <tr>
+                            <td>
+                                <strong>{{ client.nom }}</strong>
+                                <br><small class="text-muted">{{ client.reference }}</small>
+                            </td>
+                            <td>
+                                {% if client.formule %}
+                                <span class="badge bg-{{ 'success' if client.formule.code == 'enterprise' else 'warning' if client.formule.code == 'premium' else 'info' }}">
+                                    {{ client.formule.code|upper }}
+                                </span>
+                                {% else %}
+                                <span class="badge bg-secondary">Aucune</span>
+                                {% endif %}
+                            </td>
+                            <td>
+                                <small>
+                                    {{ client.nb_utilisateurs }}/{{ client.formule.max_utilisateurs if client.formule else '∞' }} users
+                                    <br>
+                                    {{ client.nb_risques }}/{{ client.formule.max_risques if client.formule else '∞' }} risques
+                                </small>
+                            </td>
+                            <td>
+                                {% if client.is_active %}
+                                <span class="badge bg-success">Actif</span>
+                                {% else %}
+                                <span class="badge bg-danger">Inactif</span>
+                                {% endif %}
+                            </td>
+                            <td>
+                                <small>{{ client.created_at|format_date }}</small>
+                            </td>
+                            <td>
+                                <div class="btn-group btn-group-sm">
+                                    <a href="{{ url_for('super_admin_client_detail', id=client.id) }}" 
+                                       class="btn btn-outline-primary" title="Voir">
+                                        <i class="fas fa-eye"></i>
+                                    </a>
+                                    <button class="btn btn-outline-warning" 
+                                            title="Voir comme ce client"
+                                            onclick="switchToClient({{ client.id }}, '{{ client.nom }}')">
+                                        <i class="fas fa-user-shield"></i>
+                                    </button>
+                                </div>
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+            {% else %}
+            <div class="text-center py-4">
+                <i class="fas fa-building fa-2x text-muted mb-3"></i>
+                <p class="text-muted mb-0">Aucun client</p>
+            </div>
+            {% endif %}
+        </div>
+    </div>
+
+    <!-- Actions système -->
+    <div class="row">
+        <div class="col-md-6">
+            <div class="fk-card h-100">
+                <div class="fk-card-header">
+                    <h5 class="mb-0">
+                        <i class="fas fa-tools me-2"></i>Actions système
+                    </h5>
+                </div>
+                <div class="fk-card-body">
+                    <div class="d-grid gap-2">
+                        <button class="fk-btn fk-btn-outline" onclick="reloadTemplates()">
+                            <i class="fas fa-sync me-2"></i>Recharger templates
+                        </button>
+                        <button class="fk-btn fk-btn-outline" onclick="clearCache()">
+                            <i class="fas fa-broom me-2"></i>Vider le cache
+                        </button>
+                        <button class="fk-btn fk-btn-outline" onclick="checkSystemHealth()">
+                            <i class="fas fa-heartbeat me-2"></i>Vérifier santé système
+                        </button>
+                        <button class="fk-btn fk-btn-outline" onclick="exportSystemLogs()">
+                            <i class="fas fa-download me-2"></i>Exporter logs système
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <div class="col-md-6">
+            <div class="fk-card h-100">
+                <div class="fk-card-header">
+                    <h5 class="mb-0">
+                        <i class="fas fa-chart-line me-2"></i>Statistiques avancées
+                    </h5>
+                </div>
+                <div class="fk-card-body">
+                    <ul class="list-unstyled mb-0">
+                        <li class="mb-2">
+                            <i class="fas fa-users text-primary me-2"></i>
+                            <strong>{{ total_utilisateurs }}</strong> utilisateurs totaux
+                        </li>
+                        <li class="mb-2">
+                            <i class="fas fa-exclamation-triangle text-danger me-2"></i>
+                            <strong>{{ total_risques }}</strong> risques actifs
+                        </li>
+                        <li class="mb-2">
+                            <i class="fas fa-clipboard-check text-warning me-2"></i>
+                            <strong>{{ total_audits }}</strong> audits en cours
+                        </li>
+                        <li>
+                            <i class="fas fa-server text-success me-2"></i>
+                            <strong>{{ environnements_count }}</strong> environnements
+                        </li>
+                    </ul>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Guide d'utilisation -->
+    <div class="fk-card mt-4">
+        <div class="fk-card-header">
+            <h5 class="mb-0">
+                <i class="fas fa-question-circle me-2"></i>Guide d'utilisation des modes de vue
+            </h5>
+        </div>
+        <div class="fk-card-body">
+            <div class="row">
+                <div class="col-md-4">
+                    <h6><i class="fas fa-user text-primary me-2"></i>Mode "Mes données"</h6>
+                    <p class="small">Utilisez ce mode pour :</p>
+                    <ul class="small">
+                        <li>Vérifier vos propres créations</li>
+                        <li>Tester de nouvelles fonctionnalités</li>
+                        <li>Isoler vos données de test</li>
+                        <li>Gérer vos propres ressources</li>
+                    </ul>
+                </div>
+                <div class="col-md-4">
+                    <h6><i class="fas fa-building text-success me-2"></i>Mode "Client"</h6>
+                    <p class="small">Utilisez ce mode pour :</p>
+                    <ul class="small">
+                        <li>Assister un client spécifique</li>
+                        <li>Résoudre des problèmes client</li>
+                        <li>Vérifier l'utilisation d'un client</li>
+                        <li>Former les administrateurs client</li>
+                    </ul>
+                </div>
+                <div class="col-md-4">
+                    <h6><i class="fas fa-globe text-info me-2"></i>Mode "Tous clients"</h6>
+                    <p class="small">Utilisez ce mode pour :</p>
+                    <ul class="small">
+                        <li>Surveiller l'ensemble de la plateforme</li>
+                        <li>Générer des rapports globaux</li>
+                        <li>Gérer les formules et tarifs</li>
+                        <li>Superviser l'infrastructure</li>
+                    </ul>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+function switchToClient(clientId, clientName) {
+    if (confirm(`Passer en mode "Vue client" pour ${clientName} ?\n\nVous verrez toutes les données de ce client.`)) {
+        window.location.href = `/switch_client/${clientId}`;
+    }
+}
+
+// Actions système
+function reloadTemplates() {
+    fetch('/api/system/reload-templates', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json'
+        }
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            alert('Templates rechargés avec succès');
+        }
+    });
+}
+
+function clearCache() {
+    fetch('/api/system/clear-cache', {
+        method: 'POST'
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            alert('Cache vidé avec succès');
+        }
+    });
+}
+
+function checkSystemHealth() {
+    fetch('/api/system/health')
+    .then(response => response.json())
+    .then(data => {
+        let message = 'Santé système :\n\n';
+        message += `• Base de données: ${data.database ? '✅ OK' : '❌ ERREUR'}\n`;
+        message += `• Cache: ${data.cache ? '✅ OK' : '❌ ERREUR'}\n`;
+        message += `• Fichiers: ${data.filesystem ? '✅ OK' : '❌ ERREUR'}\n`;
+        message += `• Uptime: ${data.uptime}\n`;
+        
+        alert(message);
+    });
+}
+
+function exportSystemLogs() {
+    window.open('/api/system/export-logs', '_blank');
+}
+
+// Fonction pour réinitialiser la vue
+function resetView() {
+    if (confirm('Réinitialiser toutes les préférences de vue ?')) {
+        window.location.href = '/view-reset';
+    }
+}
+</script>
+
+<style>
+.fk-card {
+    border: 1px solid #e2e8f0;
+    border-radius: 0.5rem;
+    background: white;
+    margin-bottom: 1rem;
+}
+.fk-card-header {
+    padding: 1rem 1.5rem;
+    border-bottom: 1px solid #e2e8f0;
+    background: #f8fafc;
+}
+.fk-card-body {
+    padding: 1.5rem;
+}
+.fk-btn {
+    padding: 0.5rem 1rem;
+    border-radius: 0.375rem;
+    font-weight: 500;
+    transition: all 0.2s;
+}
+.fk-btn-primary {
+    background: #3b82f6;
+    color: white;
+    border: 1px solid #3b82f6;
+}
+.fk-btn-primary:hover {
+    background: #2563eb;
+    border-color: #2563eb;
+}
+.fk-btn-outline {
+    background: transparent;
+    border: 1px solid #cbd5e1;
+    color: #64748b;
+}
+.fk-btn-outline:hover {
+    background: #f1f5f9;
+    border-color: #94a3b8;
+}
+.fk-btn-sm {
+    padding: 0.25rem 0.75rem;
+    font-size: 0.875rem;
+}
+.fk-table {
+    width: 100%;
+}
+.fk-table th {
+    font-weight: 600;
+    color: #475569;
+    font-size: 0.875rem;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    padding: 0.75rem 1rem;
+    border-bottom: 2px solid #e2e8f0;
+}
+.fk-table td {
+    padding: 1rem;
+    border-bottom: 1px solid #e2e8f0;
+}
+.fk-table tr:hover {
+    background: #f8fafc;
+}
+</style>
+{% endblock %}

@@ -1,0 +1,282 @@
+{% extends "base.html" %}
+
+{% block title %}Réponse #{{ reponse.id }}{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <div class="row mb-4">
+        <div class="col-12">
+            <div class="d-flex justify-content-between align-items-center">
+                <h1 class="h3 mb-0">
+                    <i class="fas fa-file-alt me-2"></i>
+                    Réponse #{{ reponse.id }}
+                </h1>
+                <div>
+                    <a href="{{ url_for('voir_reponses_questionnaire', id=reponse.questionnaire_id) }}" 
+                       class="btn btn-modern btn-secondary me-2">
+                        <i class="fas fa-arrow-left me-2"></i>
+                        Retour
+                    </a>
+                    <button class="btn btn-modern btn-primary" onclick="window.print()">
+                        <i class="fas fa-print me-2"></i>
+                        Imprimer
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Informations générales -->
+    <div class="row mb-4">
+        <div class="col-md-6">
+            <div class="card-modern mb-4">
+                <div class="card-header">
+                    <h5 class="mb-0">
+                        <i class="fas fa-info-circle me-2"></i>
+                        Informations de la réponse
+                    </h5>
+                </div>
+                <div class="card-body">
+                    <div class="row">
+                        <div class="col-6">
+                            <p class="mb-2"><strong>Questionnaire:</strong></p>
+                            <p class="mb-2"><strong>Date début:</strong></p>
+                            <p class="mb-2"><strong>Date fin:</strong></p>
+                            <p class="mb-2"><strong>Durée:</strong></p>
+                            <p class="mb-2"><strong>Statut:</strong></p>
+                        </div>
+                        <div class="col-6">
+                            <p class="mb-2">{{ reponse.questionnaire.titre }}</p>
+                            <p class="mb-2">{{ reponse.date_debut.strftime('%d/%m/%Y %H:%M') }}</p>
+                            <p class="mb-2">
+                                {% if reponse.date_fin %}
+                                {{ reponse.date_fin.strftime('%d/%m/%Y %H:%M') }}
+                                {% else %}
+                                -
+                                {% endif %}
+                            </p>
+                            <p class="mb-2">
+                                {% if reponse.duree %}
+                                {{ (reponse.duree // 60) }}min {{ reponse.duree % 60 }}s
+                                {% else %}
+                                -
+                                {% endif %}
+                            </p>
+                            <p class="mb-0">
+                                {% if reponse.statut == 'complet' %}
+                                <span class="badge bg-success">Complet</span>
+                                {% elif reponse.statut == 'en_cours' %}
+                                <span class="badge bg-warning">En cours</span>
+                                {% else %}
+                                <span class="badge bg-danger">Abandonné</span>
+                                {% endif %}
+                            </p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <div class="col-md-6">
+            <div class="card-modern mb-4">
+                <div class="card-header">
+                    <h5 class="mb-0">
+                        <i class="fas fa-user me-2"></i>
+                        Informations du répondant
+                    </h5>
+                </div>
+                <div class="card-body">
+                    <div class="row">
+                        <div class="col-6">
+                            <p class="mb-2"><strong>Nom:</strong></p>
+                            <p class="mb-2"><strong>Email:</strong></p>
+                            <p class="mb-2"><strong>Adresse IP:</strong></p>
+                            <p class="mb-2"><strong>Navigateur:</strong></p>
+                        </div>
+                        <div class="col-6">
+                            <p class="mb-2">{{ reponse.nom_repondant or 'Non renseigné' }}</p>
+                            <p class="mb-2">{{ reponse.email_repondant or 'Non renseigné' }}</p>
+                            <p class="mb-2">{{ reponse.ip_address or '-' }}</p>
+                            <p class="mb-0">
+                                <small>{{ reponse.user_agent[:50] }}{% if reponse.user_agent|length > 50 %}...{% endif %}</small>
+                            </p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Réponses détaillées -->
+    <div class="row">
+        <div class="col-12">
+            <div class="card-modern">
+                <div class="card-header">
+                    <h5 class="mb-0">
+                        <i class="fas fa-list-check me-2"></i>
+                        Réponses détaillées
+                    </h5>
+                </div>
+                <div class="card-body">
+                    {% set question_counter = namespace(value=1) %}
+                    {% for categorie in reponse.questionnaire.categories %}
+                    <div class="categorie-section mb-4">
+                        <h6 class="text-primary mb-3 border-bottom pb-2">
+                            {% if reponse.questionnaire.afficher_numero_questions %}
+                            {{ loop.index }}. 
+                            {% endif %}
+                            {{ categorie.titre }}
+                        </h6>
+                        
+                        {% if categorie.description %}
+                        <p class="text-muted mb-3">{{ categorie.description }}</p>
+                        {% endif %}
+                        
+                        {% for question in categorie.questions %}
+                        {% set reponse_question = reponse.reponses|selectattr('question_id', 'equalto', question.id)|first %}
+                        <div class="question-reponse mb-3 p-3 border rounded">
+                            <div class="d-flex justify-content-between align-items-start mb-2">
+                                <div style="flex-grow: 1;">
+                                    <h6 class="mb-1">
+                                        {% if reponse.questionnaire.afficher_numero_questions %}
+                                        {{ question_counter.value }}. 
+                                        {% set question_counter.value = question_counter.value + 1 %}
+                                        {% endif %}
+                                        {{ question.texte }}
+                                        {% if question.est_obligatoire %}
+                                        <span class="badge bg-danger ms-1">Obligatoire</span>
+                                        {% endif %}
+                                    </h6>
+                                    {% if question.description %}
+                                    <p class="text-muted mb-2"><small>{{ question.description }}</small></p>
+                                    {% endif %}
+                                </div>
+                                <span class="badge bg-info">{{ question.get_type_display() }}</span>
+                            </div>
+                            
+                            <div class="reponse-content">
+                                {% if reponse_question %}
+                                    {% if question.type in ['text', 'textarea', 'email'] %}
+                                        <div class="alert alert-light">
+                                            <strong>Réponse:</strong>
+                                            <p class="mb-0 mt-1">{{ reponse_question.valeur_texte or 'Non répondue' }}</p>
+                                        </div>
+                                    
+                                    {% elif question.type == 'number' %}
+                                        <div class="alert alert-light">
+                                            <strong>Réponse:</strong>
+                                            <p class="mb-0 mt-1">{{ reponse_question.valeur_numerique or 'Non répondue' }}</p>
+                                        </div>
+                                    
+                                    {% elif question.type == 'date' %}
+                                        <div class="alert alert-light">
+                                            <strong>Réponse:</strong>
+                                            <p class="mb-0 mt-1">
+                                                {% if reponse_question.valeur_date %}
+                                                {{ reponse_question.valeur_date.strftime('%d/%m/%Y') }}
+                                                {% else %}
+                                                Non répondue
+                                                {% endif %}
+                                            </p>
+                                        </div>
+                                    
+                                    {% elif question.type in ['radio', 'select'] %}
+                                        {% set selected_option = question.options|selectattr('valeur', 'equalto', reponse_question.valeur_texte)|first %}
+                                        <div class="alert alert-light">
+                                            <strong>Réponse:</strong>
+                                            <p class="mb-0 mt-1">
+                                                {% if selected_option %}
+                                                {{ selected_option.texte }}
+                                                {% elif reponse_question.valeur_texte %}
+                                                {{ reponse_question.valeur_texte }}
+                                                {% else %}
+                                                Non répondue
+                                                {% endif %}
+                                            </p>
+                                        </div>
+                                    
+                                    {% elif question.type == 'checkbox' %}
+                                        {% if reponse_question.options_selectionnees %}
+                                        <div class="alert alert-light">
+                                            <strong>Réponses:</strong>
+                                            <ul class="mb-0 mt-1">
+                                                {% for rep_option in reponse_question.options_selectionnees %}
+                                                <li>{{ rep_option.option.texte }}</li>
+                                                {% endfor %}
+                                            </ul>
+                                        </div>
+                                        {% else %}
+                                        <div class="alert alert-light">
+                                            <strong>Réponse:</strong>
+                                            <p class="mb-0 mt-1">Non répondue</p>
+                                        </div>
+                                        {% endif %}
+                                    
+                                    {% elif question.type == 'rating' %}
+                                        <div class="alert alert-light">
+                                            <strong>Réponse:</strong>
+                                            <div class="mt-1">
+                                                {% for i in range(question.echelle_min, question.echelle_max + 1) %}
+                                                    {% if i <= reponse_question.valeur_numerique %}
+                                                    <i class="fas fa-star text-warning"></i>
+                                                    {% else %}
+                                                    <i class="far fa-star text-warning"></i>
+                                                    {% endif %}
+                                                {% endfor %}
+                                                <span class="ms-2">({{ reponse_question.valeur_numerique }}/{{ question.echelle_max }})</span>
+                                            </div>
+                                        </div>
+                                    
+                                    {% elif question.type == 'yesno' %}
+                                        <div class="alert alert-light">
+                                            <strong>Réponse:</strong>
+                                            <p class="mb-0 mt-1">
+                                                {% if reponse_question.valeur_texte == 'oui' %}
+                                                <span class="badge bg-success">Oui</span>
+                                                {% elif reponse_question.valeur_texte == 'non' %}
+                                                <span class="badge bg-danger">Non</span>
+                                                {% else %}
+                                                Non répondue
+                                                {% endif %}
+                                            </p>
+                                        </div>
+                                    {% endif %}
+                                {% else %}
+                                    <div class="alert alert-warning">
+                                        <strong>Réponse:</strong>
+                                        <p class="mb-0 mt-1">Non répondue</p>
+                                    </div>
+                                {% endif %}
+                            </div>
+                        </div>
+                        {% endfor %}  <!-- Fin questions -->
+                    </div>
+                    {% endfor %}  <!-- Fin catégories -->
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<style>
+@media print {
+    .navbar-modern, .sidebar-modern, .footer-modern, .btn-modern {
+        display: none !important;
+    }
+    
+    .card-modern {
+        border: 1px solid #dee2e6 !important;
+        box-shadow: none !important;
+    }
+    
+    body {
+        background: white !important;
+        padding: 20px !important;
+    }
+    
+    .container-fluid {
+        padding: 0 !important;
+    }
+}
+</style>
+{% endblock %}

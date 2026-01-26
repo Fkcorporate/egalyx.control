@@ -1,0 +1,380 @@
+<!-- veille/detail_veille.html -->
+{% extends "base.html" %}
+
+{% block content %}
+<div class="d-flex justify-content-between flex-wrap flex-md-nowrap align-items-center pt-3 pb-2 mb-3 border-bottom">
+    <h1 class="h2">
+        <i class="fas fa-balance-scale"></i> {{ veille.titre }}
+    </h1>
+    <div class="btn-toolbar mb-2 mb-md-0">
+        <a href="{{ url_for('veille_reglementaire') }}" class="btn btn-secondary me-2">
+            <i class="fas fa-arrow-left"></i> Retour
+        </a>
+        <a href="{{ url_for('modifier_veille', id=veille.id) }}" class="btn btn-warning me-2">
+            <i class="fas fa-edit"></i> Modifier
+        </a>
+        <button class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#actionModal">
+            <i class="fas fa-tasks"></i> Gérer les actions
+        </button>
+    </div>
+</div>
+
+<div class="row">
+    <!-- Informations principales -->
+    <div class="col-md-8">
+        <div class="card mb-4">
+            <div class="card-header">
+                <h5 class="mb-0"><i class="fas fa-info-circle"></i> Informations générales</h5>
+            </div>
+            <div class="card-body">
+                <div class="row">
+                    <div class="col-md-6">
+                        <p><strong>Référence :</strong> {{ veille.reference or '-' }}</p>
+                        <p><strong>Type :</strong> {{ veille.type_reglementation }}</p>
+                        <p><strong>Organisme émetteur :</strong> {{ veille.organisme_emetteur or '-' }}</p>
+                        <p><strong>Créée par :</strong> {{ veille.createur.username if veille.createur else '-' }}</p>
+                    </div>
+                    <div class="col-md-6">
+                        <p><strong>Date publication :</strong> 
+                            {% if veille.date_publication %}
+                            {{ veille.date_publication.strftime('%d/%m/%Y') }}
+                            {% else %}-{% endif %}
+                        </p>
+                        <p><strong>Date application :</strong> 
+                            {% if veille.date_application %}
+                            {{ veille.date_application.strftime('%d/%m/%Y') }}
+                            {% set days_left = (veille.date_application - datetime.now().date()).days %}
+                            {% if days_left > 0 %}
+                            <span class="badge bg-info">J-{{ days_left }}</span>
+                            {% elif days_left == 0 %}
+                            <span class="badge bg-warning">Aujourd'hui</span>
+                            {% else %}
+                            <span class="badge bg-secondary">J+{{ -days_left }}</span>
+                            {% endif %}
+                            {% else %}-{% endif %}
+                        </p>
+                        <p><strong>Statut :</strong> 
+                            {% if veille.statut == 'en_vigueur' %}
+                            <span class="badge bg-success">En vigueur</span>
+                            {% elif veille.statut == 'projet' %}
+                            <span class="badge bg-warning">Projet</span>
+                            {% else %}
+                            <span class="badge bg-secondary">{{ veille.statut }}</span>
+                            {% endif %}
+                        </p>
+                        <p><strong>Impact estimé :</strong>
+                            {% if veille.impact_estime == 'eleve' %}
+                            <span class="badge bg-danger">Élevé</span>
+                            {% elif veille.impact_estime == 'moyen' %}
+                            <span class="badge bg-warning">Moyen</span>
+                            {% elif veille.impact_estime == 'faible' %}
+                            <span class="badge bg-success">Faible</span>
+                            {% else %}
+                            <span class="badge bg-secondary">Non évalué</span>
+                            {% endif %}
+                        </p>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Description -->
+        <div class="card mb-4">
+            <div class="card-header">
+                <h5 class="mb-0"><i class="fas fa-align-left"></i> Description</h5>
+            </div>
+            <div class="card-body">
+                {% if veille.description %}
+                <div class="p-3 bg-light rounded" style="white-space: pre-line;">
+                    {{ veille.description }}
+                </div>
+                {% else %}
+                <p class="text-muted">Aucune description disponible</p>
+                {% endif %}
+            </div>
+        </div>
+        
+        <!-- Actions actives -->
+        <div class="card mb-4">
+            <div class="card-header d-flex justify-content-between align-items-center">
+                <h5 class="mb-0"><i class="fas fa-tasks"></i> Actions Actives</h5>
+                <span class="badge bg-primary">{{ actions_actives|length }}</span>
+            </div>
+            <div class="card-body">
+                {% if actions_actives %}
+                <div class="table-responsive">
+                    <table class="table table-sm">
+                        <thead>
+                            <tr>
+                                <th>Description</th>
+                                <th>Responsable</th>
+                                <th>Échéance</th>
+                                <th>Statut</th>
+                                <th>Jours restants</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for action in actions_actives %}
+                            <tr>
+                                <td>{{ action.description }}</td>
+                                <td>{{ action.responsable.username if action.responsable else 'Non assigné' }}</td>
+                                <td>
+                                    {% if action.date_echeance %}
+                                    {{ action.date_echeance.strftime('%d/%m/%Y') }}
+                                    {% else %}
+                                    <span class="text-muted">Non définie</span>
+                                    {% endif %}
+                                </td>
+                                <td>
+                                    <span class="badge bg-{% if action.statut == 'termine' %}success{% elif action.statut == 'en_cours' %}info{% else %}warning{% endif %}">
+                                        {{ action.statut }}
+                                    </span>
+                                </td>
+                                <td>
+                                    {% if action.date_echeance %}
+                                        {% set days_left = (action.date_echeance - datetime.now().date()).days %}
+                                        {% if action.statut == 'termine' %}
+                                        <span class="text-success">Terminé</span>
+                                        {% elif days_left > 0 %}
+                                        <span class="text-primary">J-{{ days_left }}</span>
+                                        {% elif days_left == 0 %}
+                                        <span class="text-warning">Aujourd'hui</span>
+                                        {% else %}
+                                        <span class="text-danger">J+{{ -days_left }}</span>
+                                        {% endif %}
+                                    {% else %}
+                                    <span class="text-muted">-</span>
+                                    {% endif %}
+                                </td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+                {% else %}
+                <p class="text-muted text-center">Aucune action active pour cette veille</p>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+
+    <!-- Statistiques latérales -->
+    <div class="col-md-4">
+        <!-- Statistiques actions -->
+        <div class="card mb-4">
+            <div class="card-header">
+                <h5 class="mb-0"><i class="fas fa-chart-pie"></i> Statistiques</h5>
+            </div>
+            <div class="card-body">
+                {% set actions_archivees = veille.actions|selectattr('is_archived', 'equalto', true)|list %}
+                {% set actions_total = actions_actives|length + actions_archivees|length %}
+                
+                <div class="mb-3">
+                    <h6>Répartition des actions</h6>
+                    <div class="progress" style="height: 20px;">
+                        {% if actions_total > 0 %}
+                            {% set terminees = actions_actives|selectattr('statut', 'equalto', 'termine')|list|length %}
+                            {% set en_cours = actions_actives|selectattr('statut', 'equalto', 'en_cours')|list|length %}
+                            {% set a_faire = actions_actives|selectattr('statut', 'equalto', 'a_faire')|list|length %}
+                            
+                            <div class="progress-bar bg-success" style="width: {{ (terminees/actions_total*100) }}%">
+                                {{ terminees }}
+                            </div>
+                            <div class="progress-bar bg-info" style="width: {{ (en_cours/actions_total*100) }}%">
+                                {{ en_cours }}
+                            </div>
+                            <div class="progress-bar bg-warning" style="width: {{ (a_faire/actions_total*100) }}%">
+                                {{ a_faire }}
+                            </div>
+                            {% if actions_archivees|length > 0 %}
+                            <div class="progress-bar bg-secondary" style="width: {{ (actions_archivees|length/actions_total*100) }}%">
+                                {{ actions_archivees|length }}
+                            </div>
+                            {% endif %}
+                        {% endif %}
+                    </div>
+                    <small class="text-muted d-block mt-2">
+                        <span class="text-success">● Terminées</span>
+                        <span class="text-info ms-2">● En cours</span>
+                        <span class="text-warning ms-2">● À faire</span>
+                        {% if actions_archivees|length > 0 %}
+                        <span class="text-secondary ms-2">● Archivées</span>
+                        {% endif %}
+                    </small>
+                </div>
+                
+                <div class="row text-center">
+                    <div class="col-6">
+                        <div class="border rounded p-2">
+                            <h5 class="mb-0 text-primary">{{ actions_actives|length }}</h5>
+                            <small class="text-muted">Actives</small>
+                        </div>
+                    </div>
+                    <div class="col-6">
+                        <div class="border rounded p-2">
+                            <h5 class="mb-0 text-secondary">{{ actions_archivees|length }}</h5>
+                            <small class="text-muted">Archivées</small>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Documents -->
+        <div class="card mb-4">
+            <div class="card-header">
+                <h5 class="mb-0"><i class="fas fa-file"></i> Documents ({{ veille.documents|length }})</h5>
+            </div>
+            <div class="card-body">
+                {% if veille.documents %}
+                <ul class="list-group list-group-flush">
+                    {% for doc in veille.documents[:3] %}
+                    <li class="list-group-item d-flex justify-content-between align-items-center">
+                        <div class="text-truncate" style="max-width: 70%;">
+                            <i class="fas fa-file text-primary me-2"></i>
+                            <small>{{ doc.nom_original }}</small>
+                        </div>
+                        <div>
+                            <a href="{{ url_for('telecharger_document_veille', doc_id=doc.id) }}" 
+                               class="btn btn-sm btn-success">
+                                <i class="fas fa-download"></i>
+                            </a>
+                        </div>
+                    </li>
+                    {% endfor %}
+                </ul>
+                {% if veille.documents|length > 3 %}
+                <div class="text-center mt-2">
+                    <small class="text-muted">+ {{ veille.documents|length - 3 }} autres documents</small>
+                </div>
+                {% endif %}
+                {% else %}
+                <p class="text-muted small text-center">Aucun document</p>
+                {% endif %}
+                <button class="btn btn-sm btn-outline-primary w-100 mt-2" 
+                        data-bs-toggle="modal" 
+                        data-bs-target="#documentModal">
+                    <i class="fas fa-upload"></i> Ajouter un document
+                </button>
+            </div>
+        </div>
+
+        <!-- Actions rapides -->
+        <div class="card">
+            <div class="card-header">
+                <h5 class="mb-0"><i class="fas fa-bolt"></i> Actions rapides</h5>
+            </div>
+            <div class="card-body">
+                <div class="d-grid gap-2">
+                    <a href="{{ url_for('rapport_actions_a_faire') }}?veille={{ veille.id }}" 
+                       class="btn btn-outline-info">
+                        <i class="fas fa-list"></i> Voir toutes les actions
+                    </a>
+                    {% if veille.is_archived %}
+                    <a href="{{ url_for('restaurer_veille', id=veille.id) }}" 
+                       class="btn btn-outline-success"
+                       onclick="return confirm('Restaurer cette veille ?')">
+                        <i class="fas fa-undo"></i> Restaurer la veille
+                    </a>
+                    {% else %}
+                    <a href="{{ url_for('archiver_veille', id=veille.id) }}" 
+                       class="btn btn-outline-warning"
+                       onclick="return confirm('Archiver cette veille ?')">
+                        <i class="fas fa-archive"></i> Archiver la veille
+                    </a>
+                    {% endif %}
+                    <button class="btn btn-outline-primary" data-bs-toggle="modal" data-bs-target="#documentModal">
+                        <i class="fas fa-file-upload"></i> Ajouter un document
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Modal Actions (identique à celui de liste.html) -->
+<div class="modal fade" id="actionModal" tabindex="-1">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Actions - {{ veille.titre }}</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <!-- Le même contenu que dans liste.html -->
+                <p class="text-center text-muted">
+                    <i class="fas fa-exclamation-circle"></i>
+                    Ouvrez cette veille depuis la liste principale pour gérer les actions
+                </p>
+            </div>
+            <div class="modal-footer">
+                <a href="{{ url_for('veille_reglementaire') }}" class="btn btn-primary">
+                    <i class="fas fa-external-link-alt"></i> Ouvrir dans la liste
+                </a>
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Fermer</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Modal Documents -->
+<div class="modal fade" id="documentModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Ajouter un document</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <form action="{{ url_for('ajouter_document_veille', veille_id=veille.id) }}" method="POST" enctype="multipart/form-data">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                <div class="modal-body">
+                    <div class="mb-3">
+                        <label class="form-label">Sélectionner un fichier</label>
+                        <input type="file" name="document" class="form-control" required>
+                        <small class="text-muted">Formats autorisés: PDF, Word, Excel, PowerPoint, images (max 16MB)</small>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Annuler</button>
+                    <button type="submit" class="btn btn-primary">
+                        <i class="fas fa-upload"></i> Téléverser
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block styles %}
+<style>
+.hover-card:hover {
+    transform: translateY(-3px);
+    transition: transform 0.2s;
+}
+
+.progress-bar {
+    transition: width 0.5s ease-in-out;
+}
+
+.text-truncate {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.list-group-item:hover {
+    background-color: #f8f9fa;
+}
+</style>
+{% endblock %}
+
+{% block scripts %}
+<script>
+// Initialiser les modals
+document.addEventListener('DOMContentLoaded', function() {
+    // Tooltips
+    $('[data-bs-toggle="tooltip"]').tooltip();
+});
+</script>
+{% endblock %}

@@ -1,0 +1,295 @@
+<!-- templates/super_admin/clients/upgrade.html -->
+{% extends "base.html" %}
+
+{% block title %}Super Admin - Changer la formule{% endblock %}
+
+{% block content %}
+<div class="container-fluid py-4">
+    <nav aria-label="breadcrumb" class="mb-4">
+        <ol class="breadcrumb">
+            <li class="breadcrumb-item"><a href="{{ url_for('super_admin_dashboard') }}">Super Admin</a></li>
+            <li class="breadcrumb-item"><a href="{{ url_for('super_admin_clients') }}">Clients</a></li>
+            <li class="breadcrumb-item"><a href="{{ url_for('super_admin_client_detail', id=client.id) }}">{{ client.nom }}</a></li>
+            <li class="breadcrumb-item active">Changer formule</li>
+        </ol>
+    </nav>
+
+    <div class="row">
+        <div class="col-lg-8">
+            <div class="fk-card">
+                <div class="fk-card-header">
+                    <h5 class="mb-0">
+                        <i class="fas fa-level-up-alt me-2"></i>Changer la formule du client
+                    </h5>
+                </div>
+                <div class="fk-card-body">
+                    <!-- Résumé actuel -->
+                    <div class="alert alert-info mb-4">
+                        <div class="d-flex">
+                            <div class="me-3">
+                                <i class="fas fa-info-circle fa-2x"></i>
+                            </div>
+                            <div>
+                                <h6>Formule actuelle</h6>
+                                <p class="mb-1">
+                                    <strong>{{ client.formule.nom if client.formule else 'Aucune formule' }}</strong>
+                                    {% if client.formule %}
+                                    • {{ client.formule.prix_mensuel }}€/mois
+                                    {% endif %}
+                                </p>
+                                <small class="text-muted">
+                                    Utilisation : 
+                                    {{ client.nb_utilisateurs }}/{{ client.formule.max_utilisateurs if client.formule else '∞' }} utilisateurs •
+                                    {{ client.nb_risques }}/{{ client.formule.max_risques if client.formule else '∞' }} risques
+                                </small>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <form method="POST" action="">
+                        {{ form.hidden_tag() }}
+                        
+                        <div class="mb-4">
+                            <label class="form-label">{{ form.formule_id.label }}</label>
+                            <select class="form-select" name="{{ form.formule_id.name }}" required>
+                                <option value="">Sélectionnez une formule...</option>
+                                {% for f in formules %}
+                                <option value="{{ f.id }}" 
+                                        {% if form.formule_id.data == f.id %}selected{% endif %}
+                                        data-prix-mensuel="{{ f.prix_mensuel }}"
+                                        data-prix-annuel="{{ f.prix_annuel }}">
+                                    {{ f.nom }} - {{ f.prix_mensuel }}€/mois
+                                    {% if f.prix_annuel %}
+                                    ({{ f.prix_annuel }}€/an - économisez {{ '%0.0f'|format((1 - (f.prix_annuel / (f.prix_mensuel * 12))) * 100) }}%)
+                                    {% endif %}
+                                </option>
+                                {% endfor %}
+                            </select>
+                            {% if form.formule_id.errors %}
+                            <div class="text-danger small">
+                                {% for error in form.formule_id.errors %}
+                                {{ error }}
+                                {% endfor %}
+                            </div>
+                            {% endif %}
+                        </div>
+                        
+                        <div class="row mb-4">
+                            <div class="col-md-6">
+                                <label class="form-label">{{ form.periode.label }}</label>
+                                {{ form.periode(class="form-select") }}
+                            </div>
+                            <div class="col-md-6">
+                                <label class="form-label">{{ form.date_effet.label }}</label>
+                                {{ form.date_effet(class="form-control", type="date") }}
+                            </div>
+                        </div>
+                        
+                        <div class="mb-4">
+                            <div class="form-check">
+                                {{ form.is_renouvellement_auto(class="form-check-input") }}
+                                <label class="form-check-label">{{ form.is_renouvellement_auto.label }}</label>
+                            </div>
+                        </div>
+                        
+                        <!-- Comparaison des formules -->
+                        <div class="mb-4">
+                            <h6>Comparaison</h6>
+                            <div id="comparisonTable">
+                                <!-- Tableau généré par JavaScript -->
+                                <div class="text-center py-3">
+                                    <small class="text-muted">Sélectionnez une formule pour voir la comparaison</small>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <div class="alert alert-warning">
+                            <i class="fas fa-exclamation-triangle me-2"></i>
+                            <strong>Attention :</strong> Le changement de formule prend effet immédiatement. 
+                            Toutes les fonctionnalités non incluses dans la nouvelle formule seront désactivées.
+                        </div>
+                        
+                        <div class="mt-4">
+                            {{ form.submit(class="fk-btn fk-btn-primary") }}
+                            <a href="{{ url_for('super_admin_client_detail', id=client.id) }}" 
+                               class="fk-btn fk-btn-outline">Annuler</a>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+        
+        <div class="col-lg-4">
+            <div class="fk-card">
+                <div class="fk-card-header">
+                    <h5 class="mb-0">Formules disponibles</h5>
+                </div>
+                <div class="fk-card-body">
+                    {% for formule in formules %}
+                    <div class="mb-3 p-3 border rounded">
+                        <h6 class="mb-1">{{ formule.nom }}</h6>
+                        <p class="text-muted small mb-2">{{ formule.description|truncate(80) }}</p>
+                        
+                        <div class="d-flex justify-content-between align-items-center">
+                            <div>
+                                <strong class="text-primary">{{ formule.prix_mensuel }}€</strong>
+                                <small class="text-muted">/mois</small>
+                            </div>
+                            <div>
+                                <small>
+                                    <i class="fas fa-users me-1"></i>{{ formule.max_utilisateurs }}
+                                    <i class="fas fa-exclamation-triangle ms-2 me-1"></i>{{ formule.max_risques }}
+                                </small>
+                            </div>
+                        </div>
+                    </div>
+                    {% endfor %}
+                </div>
+            </div>
+            
+            <div class="fk-card mt-4">
+                <div class="fk-card-header">
+                    <h5 class="mb-0">Recommandations</h5>
+                </div>
+                <div class="fk-card-body">
+                    <ul class="small mb-0">
+                        <li class="mb-2">
+                            <i class="fas fa-check text-success me-2"></i>
+                            Choisissez une formule adaptée aux besoins actuels
+                        </li>
+                        <li class="mb-2">
+                            <i class="fas fa-check text-success me-2"></i>
+                            L'abonnement annuel offre une économie significative
+                        </li>
+                        <li class="mb-2">
+                            <i class="fas fa-check text-success me-2"></i>
+                            Le renouvellement automatique évite les interruptions
+                        </li>
+                        <li>
+                            <i class="fas fa-check text-success me-2"></i>
+                            Vous pourrez toujours changer de formule ultérieurement
+                        </li>
+                    </ul>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    const formuleSelect = document.querySelector('select[name="formule_id"]');
+    const periodeSelect = document.querySelector('select[name="periode"]');
+    const comparisonTable = document.getElementById('comparisonTable');
+    
+    // Données des formules (injectées depuis Flask)
+    const formulesData = {
+        {% for f in formules %}
+        {{ f.id }}: {
+            nom: "{{ f.nom }}",
+            prix_mensuel: {{ f.prix_mensuel }},
+            prix_annuel: {{ f.prix_annuel }},
+            max_utilisateurs: {{ f.max_utilisateurs }},
+            max_risques: {{ f.max_risques }},
+            max_audits: {{ f.max_audits }},
+            features: {{ f.get_features_list()|length }},
+            modules: {{ f.get_modules_list()|length }}
+        },
+        {% endfor %}
+        current: {
+            nom: "{{ client.formule.nom if client.formule else 'Aucune' }}",
+            prix_mensuel: {{ client.formule.prix_mensuel if client.formule else 0 }},
+            max_utilisateurs: {{ client.formule.max_utilisateurs if client.formule else 0 }},
+            max_risques: {{ client.formule.max_risques if client.formule else 0 }},
+            max_audits: {{ client.formule.max_audits if client.formule else 0 }}
+        }
+    };
+    
+    function updateComparison() {
+        const selectedFormuleId = formuleSelect.value;
+        
+        if (!selectedFormuleId) {
+            comparisonTable.innerHTML = `
+                <div class="text-center py-3">
+                    <small class="text-muted">Sélectionnez une formule pour voir la comparaison</small>
+                </div>
+            `;
+            return;
+        }
+        
+        const current = formulesData.current;
+        const selected = formulesData[selectedFormuleId];
+        
+        let html = `
+            <div class="table-responsive">
+                <table class="table table-sm">
+                    <thead>
+                        <tr>
+                            <th>Fonctionnalité</th>
+                            <th class="text-center">Actuel</th>
+                            <th class="text-center">Nouveau</th>
+                            <th class="text-center">Différence</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td>Prix mensuel</td>
+                            <td class="text-center">${current.prix_mensuel}€</td>
+                            <td class="text-center">${selected.prix_mensuel}€</td>
+                            <td class="text-center ${selected.prix_mensuel > current.prix_mensuel ? 'text-danger' : 'text-success'}">
+                                ${selected.prix_mensuel > current.prix_mensuel ? '+' : ''}${(selected.prix_mensuel - current.prix_mensuel).toFixed(2)}€
+                            </td>
+                        </tr>
+                        <tr>
+                            <td>Utilisateurs max</td>
+                            <td class="text-center">${current.max_utilisateurs}</td>
+                            <td class="text-center">${selected.max_utilisateurs}</td>
+                            <td class="text-center ${selected.max_utilisateurs > current.max_utilisateurs ? 'text-success' : 'text-danger'}">
+                                ${selected.max_utilisateurs > current.max_utilisateurs ? '+' : ''}${selected.max_utilisateurs - current.max_utilisateurs}
+                            </td>
+                        </tr>
+                        <tr>
+                            <td>Risques max</td>
+                            <td class="text-center">${current.max_risques}</td>
+                            <td class="text-center">${selected.max_risques}</td>
+                            <td class="text-center ${selected.max_risques > current.max_risques ? 'text-success' : 'text-danger'}">
+                                ${selected.max_risques > current.max_risques ? '+' : ''}${selected.max_risques - current.max_risques}
+                            </td>
+                        </tr>
+                        <tr>
+                            <td>Audits max</td>
+                            <td class="text-center">${current.max_audits}</td>
+                            <td class="text-center">${selected.max_audits}</td>
+                            <td class="text-center ${selected.max_audits > current.max_audits ? 'text-success' : 'text-danger'}">
+                                ${selected.max_audits > current.max_audits ? '+' : ''}${selected.max_audits - current.max_audits}
+                            </td>
+                        </tr>
+                        <tr>
+                            <td>Features</td>
+                            <td class="text-center">-</td>
+                            <td class="text-center">${selected.features}</td>
+                            <td class="text-center text-success">+${selected.features}</td>
+                        </tr>
+                        <tr>
+                            <td>Modules</td>
+                            <td class="text-center">-</td>
+                            <td class="text-center">${selected.modules}</td>
+                            <td class="text-center text-success">+${selected.modules}</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        `;
+        
+        comparisonTable.innerHTML = html;
+    }
+    
+    formuleSelect.addEventListener('change', updateComparison);
+    updateComparison();
+    
+    // Mettre à jour la date d'effet par défaut
+    const today = new Date().toISOString().split('T')[0];
+    document.querySelector('input[name="date_effet"]').value = today;
+});
+</script>
+{% endblock %}

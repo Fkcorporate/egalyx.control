@@ -1,0 +1,422 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="container-fluid">
+    <div class="d-flex justify-content-between flex-wrap flex-md-nowrap align-items-center pt-3 pb-2 mb-3 border-bottom">
+        <h1 class="h2">
+            <i class="fas fa-exclamation-triangle"></i> 
+            Fiche du Risque : {{ risque.reference }}
+            {% for champ in champs_personnalises %}
+                {% if champ.nom_technique == 'priorite' and champ.get_valeur() == 'haute' %}
+                <span class="badge bg-danger ms-2">Haute priorité</span>
+                {% endif %}
+            {% endfor %}
+        </h1>
+        <div class="btn-toolbar mb-2 mb-md-0">
+            <a href="{{ url_for('detail_cartographie', id=risque.cartographie_id) }}" class="btn btn-secondary me-2">
+                <i class="fas fa-arrow-left"></i> Retour
+            </a>
+            
+            <!-- Bouton pour ajouter un champ personnalisé -->
+            <button type="button" class="btn btn-success me-2" data-bs-toggle="modal" data-bs-target="#modalAjoutChamp">
+                <i class="fas fa-plus"></i> Ajouter un champ
+            </button>
+            
+            <!-- Bouton pour ajouter un fichier -->
+            <button type="button" class="btn btn-primary me-2" data-bs-toggle="modal" data-bs-target="#modalAjoutFichier">
+                <i class="fas fa-file-upload"></i> Ajouter un fichier
+            </button>
+        </div>
+    </div>
+
+    <!-- Affichage des champs configurés par section -->
+    <div class="row">
+        <!-- Section Informations Générales -->
+        <div class="col-md-6">
+            <div class="card shadow mb-4">
+                <div class="card-header bg-primary text-white">
+                    <h6 class="mb-0">
+                        <i class="fas fa-info-circle"></i> Informations Générales
+                        <button class="btn btn-sm btn-light float-end" data-bs-toggle="collapse" 
+                                data-bs-target="#sectionGeneral">
+                            <i class="fas fa-chevron-down"></i>
+                        </button>
+                    </h6>
+                </div>
+                <div class="card-body collapse show" id="sectionGeneral">
+                    <table class="table table-sm table-borderless">
+                        <!-- Champs fixes -->
+                        <tr>
+                            <th width="40%">Référence:</th>
+                            <td><strong class="text-primary">{{ risque.reference }}</strong></td>
+                        </tr>
+                        <tr>
+                            <th>Intitulé:</th>
+                            <td>{{ risque.intitule }}</td>
+                        </tr>
+                        
+                        <!-- Champs personnalisés de la section 'general' -->
+                        {% for champ in champs_personnalises if champ.config and champ.config.section == 'general' %}
+                        <tr>
+                            <th>{{ champ.config.nom_affichage }}:</th>
+                            <td>
+                                {% if champ.config.type_champ == 'checkbox' %}
+                                    {% if champ.get_valeur() %}
+                                    <span class="badge bg-success">Oui</span>
+                                    {% else %}
+                                    <span class="badge bg-secondary">Non</span>
+                                    {% endif %}
+                                {% elif champ.config.type_champ == 'select' %}
+                                    <span class="badge bg-info">{{ champ.get_valeur() }}</span>
+                                {% elif champ.config.type_champ == 'date' %}
+                                    {{ champ.get_valeur().strftime('%d/%m/%Y') if champ.get_valeur() }}
+                                {% else %}
+                                    {{ champ.get_valeur() or '<span class="text-muted">Non renseigné</span>'|safe }}
+                                {% endif %}
+                                
+                                <!-- Bouton d'édition -->
+                                <button class="btn btn-sm btn-outline-warning float-end" 
+                                        onclick="editerChamp({{ champ.id }})">
+                                    <i class="fas fa-edit"></i>
+                                </button>
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </table>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Section Analyse du Risque -->
+        <div class="col-md-6">
+            <div class="card shadow mb-4">
+                <div class="card-header bg-warning text-dark">
+                    <h6 class="mb-0">
+                        <i class="fas fa-search"></i> Analyse du Risque
+                    </h6>
+                </div>
+                <div class="card-body">
+                    <!-- Champs personnalisés de la section 'analyse' -->
+                    {% for champ in champs_personnalises if champ.config and champ.config.section == 'analyse' %}
+                    <div class="mb-3">
+                        <h6>{{ champ.config.nom_affichage }}:</h6>
+                        <div class="ps-3 border-start border-warning border-3">
+                            {% if champ.config.type_champ == 'textarea' %}
+                                {{ champ.get_valeur()|nl2br|safe }}
+                            {% elif champ.config.type_champ == 'multiselect' %}
+                                {% for valeur in champ.get_valeur() or [] %}
+                                <span class="badge bg-warning me-1">{{ valeur }}</span>
+                                {% endfor %}
+                            {% else %}
+                                {{ champ.get_valeur() or '<span class="text-muted">Non renseigné</span>'|safe }}
+                            {% endif %}
+                            
+                            <button class="btn btn-sm btn-outline-warning float-end mt-2" 
+                                    onclick="editerChamp({{ champ.id }})">
+                                <i class="fas fa-edit"></i>
+                            </button>
+                        </div>
+                        {% if champ.config.aide_texte %}
+                        <small class="text-muted">{{ champ.config.aide_texte }}</small>
+                        {% endif %}
+                    </div>
+                    {% endfor %}
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Section Documentation -->
+    <div class="row">
+        <div class="col-md-12">
+            <div class="card shadow">
+                <div class="card-header bg-info text-white">
+                    <h6 class="mb-0">
+                        <i class="fas fa-file"></i> Documentation
+                    </h6>
+                </div>
+                <div class="card-body">
+                    <div class="row">
+                        <!-- Champs de documentation -->
+                        <div class="col-md-6">
+                            {% for champ in champs_personnalises if champ.config and champ.config.section == 'documentation' %}
+                            <div class="mb-3">
+                                <label class="form-label fw-bold">{{ champ.config.nom_affichage }}:</label>
+                                <div class="border rounded p-3">
+                                    {% if champ.config.type_champ == 'fichier' and champ.get_valeur() %}
+                                        <a href="{{ url_for('telecharger_fichier', id=champ.id) }}" 
+                                           class="text-decoration-none">
+                                            <i class="fas fa-file me-2"></i>{{ champ.get_valeur() }}
+                                        </a>
+                                    {% else %}
+                                        {{ champ.get_valeur() or '<span class="text-muted">Aucun document</span>'|safe }}
+                                    {% endif %}
+                                    
+                                    <button class="btn btn-sm btn-outline-info float-end" 
+                                            onclick="editerChamp({{ champ.id }})">
+                                        <i class="fas fa-edit"></i>
+                                    </button>
+                                </div>
+                            </div>
+                            {% endfor %}
+                        </div>
+                        
+                        <!-- Liste des fichiers attachés -->
+                        <div class="col-md-6">
+                            <h6>Fichiers attachés</h6>
+                            {% if fichiers %}
+                            <div class="list-group">
+                                {% for fichier in fichiers %}
+                                <div class="list-group-item">
+                                    <div class="d-flex justify-content-between align-items-center">
+                                        <div>
+                                            <i class="fas fa-file-{{ fichier.type_fichier|split('/')[1] if fichier.type_fichier else 'alt' }} me-2"></i>
+                                            <a href="{{ url_for('telecharger_fichier_risque', id=fichier.id) }}"
+                                               class="text-decoration-none">
+                                                {{ fichier.nom_fichier }}
+                                            </a>
+                                            {% if fichier.categorie %}
+                                            <span class="badge bg-secondary ms-2">{{ fichier.categorie }}</span>
+                                            {% endif %}
+                                        </div>
+                                        <div>
+                                            <small class="text-muted me-2">
+                                                {{ (fichier.taille / 1024)|round(1) }} Ko
+                                            </small>
+                                            <form method="POST" 
+                                                  action="{{ url_for('supprimer_fichier_risque', id=fichier.id) }}"
+                                                  class="d-inline"
+                                                  onsubmit="return confirm('Supprimer ce fichier ?');">
+                                                <button type="submit" class="btn btn-sm btn-outline-danger">
+                                                    <i class="fas fa-trash"></i>
+                                                </button>
+                                            </form>
+                                        </div>
+                                    </div>
+                                    {% if fichier.description %}
+                                    <small class="text-muted">{{ fichier.description }}</small>
+                                    {% endif %}
+                                </div>
+                                {% endfor %}
+                            </div>
+                            {% else %}
+                            <div class="alert alert-info">
+                                <i class="fas fa-info-circle"></i> Aucun fichier attaché à ce risque
+                            </div>
+                            {% endif %}
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Modal pour ajouter un champ personnalisé -->
+<div class="modal fade" id="modalAjoutChamp" tabindex="-1" aria-labelledby="modalAjoutChampLabel" aria-hidden="true">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="modalAjoutChampLabel">
+                    <i class="fas fa-plus"></i> Ajouter un champ personnalisé
+                </h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <form method="POST" action="{{ url_for('ajouter_champ_personnalise', risque_id=risque.id) }}" 
+                      id="formAjoutChamp">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                    
+                    <div class="mb-3">
+                        <label class="form-label">Sélectionner un champ :</label>
+                        <select class="form-select" name="champ_config_id" id="selectChampConfig" 
+                                onchange="chargerConfigurationChamp()">
+                            <option value="">-- Sélectionner --</option>
+                            {% for config in champs_disponibles %}
+                            <option value="{{ config.id }}" 
+                                    data-type="{{ config.type_champ }}"
+                                    data-section="{{ config.section }}">
+                                {{ config.nom_affichage }} ({{ config.type_champ }})
+                            </option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    
+                    <div id="contenuChampDynamic">
+                        <!-- Contenu chargé dynamiquement selon le type de champ -->
+                    </div>
+                </form>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Annuler</button>
+                <button type="submit" form="formAjoutChamp" class="btn btn-primary">Ajouter</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Modal pour ajouter un fichier -->
+<div class="modal fade" id="modalAjoutFichier" tabindex="-1" aria-labelledby="modalAjoutFichierLabel" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="modalAjoutFichierLabel">
+                    <i class="fas fa-file-upload"></i> Ajouter un fichier
+                </h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <form method="POST" action="{{ url_for('ajouter_fichier_risque', risque_id=risque.id) }}" 
+                      enctype="multipart/form-data" id="formAjoutFichier">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                    
+                    <div class="mb-3">
+                        <label class="form-label">Fichier :</label>
+                        <input type="file" class="form-control" name="fichier" required>
+                        <small class="form-text text-muted">
+                            Formats autorisés : {{ config_fichiers.extensions|join(', ') }}<br>
+                            Taille max : {{ config_fichiers.taille_max_mo }} Mo
+                        </small>
+                    </div>
+                    
+                    <div class="mb-3">
+                        <label class="form-label">Catégorie :</label>
+                        <select class="form-select" name="categorie">
+                            {% for categorie in categories_fichiers %}
+                            <option value="{{ categorie }}">{{ categorie }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    
+                    <div class="mb-3">
+                        <label class="form-label">Description :</label>
+                        <textarea class="form-control" name="description" rows="3"></textarea>
+                    </div>
+                </form>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Annuler</button>
+                <button type="submit" form="formAjoutFichier" class="btn btn-primary">Téléverser</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Modal pour éditer un champ -->
+<div class="modal fade" id="modalEditerChamp" tabindex="-1" aria-labelledby="modalEditerChampLabel" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="modalEditerChampLabel">Modifier le champ</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <!-- Contenu chargé dynamiquement -->
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+function editerChamp(champId) {
+    fetch(`/risque/champ/${champId}/editer`)
+        .then(response => response.text())
+        .then(html => {
+            document.querySelector('#modalEditerChamp .modal-body').innerHTML = html;
+            new bootstrap.Modal(document.getElementById('modalEditerChamp')).show();
+        });
+}
+
+function chargerConfigurationChamp() {
+    const select = document.getElementById('selectChampConfig');
+    const selectedOption = select.options[select.selectedIndex];
+    const typeChamp = selectedOption.getAttribute('data-type');
+    const section = selectedOption.getAttribute('data-section');
+    
+    let html = '';
+    
+    switch(typeChamp) {
+        case 'texte':
+            html = `
+                <div class="mb-3">
+                    <label class="form-label">Valeur :</label>
+                    <input type="text" class="form-control" name="valeur">
+                </div>
+            `;
+            break;
+            
+        case 'textarea':
+            html = `
+                <div class="mb-3">
+                    <label class="form-label">Valeur :</label>
+                    <textarea class="form-control" name="valeur" rows="4"></textarea>
+                </div>
+            `;
+            break;
+            
+        case 'select':
+            // Charger les options depuis le serveur
+            fetch(`/parametrage/liste/${selectedOption.value}/options`)
+                .then(response => response.json())
+                .then(options => {
+                    let optionsHtml = '';
+                    options.forEach(option => {
+                        optionsHtml += `<option value="${option[0]}">${option[1]}</option>`;
+                    });
+                    
+                    html = `
+                        <div class="mb-3">
+                            <label class="form-label">Valeur :</label>
+                            <select class="form-select" name="valeur">
+                                <option value="">-- Sélectionner --</option>
+                                ${optionsHtml}
+                            </select>
+                        </div>
+                    `;
+                    document.getElementById('contenuChampDynamic').innerHTML = html;
+                });
+            return;
+            
+        case 'checkbox':
+            html = `
+                <div class="mb-3 form-check">
+                    <input type="checkbox" class="form-check-input" name="valeur" id="valeurCheckbox" value="true">
+                    <label class="form-check-label" for="valeurCheckbox">Coché</label>
+                </div>
+            `;
+            break;
+            
+        case 'date':
+            html = `
+                <div class="mb-3">
+                    <label class="form-label">Date :</label>
+                    <input type="date" class="form-control" name="valeur">
+                </div>
+            `;
+            break;
+            
+        case 'fichier':
+            html = `
+                <div class="mb-3">
+                    <label class="form-label">Fichier :</label>
+                    <input type="file" class="form-control" name="valeur">
+                </div>
+            `;
+            break;
+    }
+    
+    // Ajouter le champ de section caché
+    html += `<input type="hidden" name="section" value="${section}">`;
+    
+    document.getElementById('contenuChampDynamic').innerHTML = html;
+}
+
+// Initialiser les tooltips
+document.addEventListener('DOMContentLoaded', function() {
+    var tooltipTriggerList = [].slice.call(document.querySelectorAll('[data-bs-toggle="tooltip"]'))
+    var tooltipList = tooltipTriggerList.map(function (tooltipTriggerEl) {
+        return new bootstrap.Tooltip(tooltipTriggerEl)
+    });
+});
+</script>
+{% endblock %}

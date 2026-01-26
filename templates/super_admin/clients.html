@@ -1,0 +1,163 @@
+{% extends "base.html" %}
+{% block title %}Super Admin - Clients{% endblock %}
+
+{% block content %}
+<div class="container-fluid py-4">
+    <!-- Navigation -->
+    <nav aria-label="breadcrumb" class="mb-4">
+        <ol class="breadcrumb">
+            <li class="breadcrumb-item"><a href="{{ url_for('super_admin_dashboard') }}">Super Admin</a></li>
+            <li class="breadcrumb-item active">Clients</li>
+        </ol>
+    </nav>
+
+    <!-- En-tête -->
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <h1 class="h3 mb-0">Clients</h1>
+        <a href="{{ url_for('super_admin_nouveau_client') }}" class="fk-btn fk-btn-primary">
+            <i class="fas fa-plus me-2"></i>Nouveau client
+        </a>
+    </div>
+
+    <!-- Statistiques -->
+    <div class="row mb-4">
+        <div class="col-md-3">
+            <div class="fk-card">
+                <div class="fk-card-body text-center">
+                    <h2 class="mb-1">{{ clients|length }}</h2>
+                    <p class="text-muted mb-0">Clients totaux</p>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="fk-card">
+                <div class="fk-card-body text-center">
+                    <h2 class="mb-1">{{ clients|selectattr('is_active')|list|length }}</h2>
+                    <p class="text-muted mb-0">Clients actifs</p>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="fk-card">
+                <div class="fk-card-body text-center">
+                    <h2 class="mb-1">{{ clients|selectattr('plan', 'equalto', 'enterprise')|list|length }}</h2>
+                    <p class="text-muted mb-0">Clients Enterprise</p>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="fk-card">
+                <div class="fk-card-body text-center">
+                    <h2 class="mb-1">{{ total_utilisateurs or 0 }}</h2>
+                    <p class="text-muted mb-0">Utilisateurs totaux</p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Table des clients -->
+    <div class="fk-card">
+        <div class="fk-card-header">
+            <h5 class="mb-0">Liste des clients</h5>
+        </div>
+        <div class="fk-card-body">
+            {% if clients %}
+            <div class="table-responsive">
+                <table class="table fk-table">
+                    <thead>
+                        <tr>
+                            <th>Client</th>
+                            <th>Plan</th>
+                            <th>Utilisateurs</th>
+                            <th>Activité</th>
+                            <th>Statut</th>
+                            <th>Créé le</th>
+                            <th>Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for client in clients %}
+                        <tr>
+                            <td>
+                                <div class="d-flex align-items-center">
+                                    <div class="avatar-sm bg-primary bg-opacity-10 text-primary rounded-circle d-flex align-items-center justify-content-center me-3">
+                                        <i class="fas fa-building"></i>
+                                    </div>
+                                    <div>
+                                        <strong>{{ client.nom }}</strong>
+                                        <br>
+                                        <small class="text-muted">{{ client.reference }}</small>
+                                    </div>
+                                </div>
+                            </td>
+                            <td>
+                                <span class="badge bg-{{ 'success' if client.plan == 'enterprise' else 'warning' if client.plan == 'premium' else 'info' }}">
+                                    {{ client.plan|upper }}
+                                </span>
+                            </td>
+                            <td>
+                                {{ client.nb_utilisateurs }} / {{ client.max_utilisateurs }}
+                                <div class="progress mt-1" style="height: 5px;">
+                                    <div class="progress-bar bg-{{ 'danger' if client.nb_utilisateurs >= client.max_utilisateurs else 'success' }}" 
+                                         style="width: {{ (client.nb_utilisateurs / client.max_utilisateurs * 100)|round }}%"></div>
+                                </div>
+                            </td>
+                            <td>
+                                {% if client.derniere_activite %}
+                                <small class="text-muted">{{ client.derniere_activite|format_date }}</small>
+                                {% else %}
+                                <span class="text-muted">Aucune</span>
+                                {% endif %}
+                            </td>
+                            <td>
+                                {% if client.is_active %}
+                                <span class="badge bg-success">Actif</span>
+                                {% else %}
+                                <span class="badge bg-danger">Suspendu</span>
+                                {% endif %}
+                            </td>
+                            <td>
+                                <small>{{ client.created_at|format_date }}</small>
+                            </td>
+                            <td>
+                                <div class="btn-group btn-group-sm">
+                                    <a href="{{ url_for('super_admin_client_detail', id=client.id) }}" 
+                                       class="btn btn-outline-primary" title="Voir">
+                                        <i class="fas fa-eye"></i>
+                                    </a>
+                                    {% if client.is_active %}
+                                    <a href="{{ url_for('super_admin_suspendre_client', id=client.id) }}" 
+                                       class="btn btn-outline-warning" 
+                                       title="Suspendre"
+                                       onclick="return confirm('Suspendre le client {{ client.nom }} ?')">
+                                        <i class="fas fa-pause"></i>
+                                    </a>
+                                    {% else %}
+                                    <a href="{{ url_for('super_admin_reactiver_client', id=client.id) }}" 
+                                       class="btn btn-outline-success" 
+                                       title="Réactiver"
+                                       onclick="return confirm('Réactiver le client {{ client.nom }} ?')">
+                                        <i class="fas fa-play"></i>
+                                    </a>
+                                    {% endif %}
+                                </div>
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+            {% else %}
+            <div class="text-center py-5">
+                <i class="fas fa-building fa-3x text-muted mb-3"></i>
+                <h5>Aucun client</h5>
+                <p class="text-muted mb-4">Vous n'avez pas encore créé de clients.</p>
+                <a href="{{ url_for('super_admin_nouveau_client') }}" class="fk-btn fk-btn-primary">
+                    <i class="fas fa-plus me-2"></i>Créer votre premier client
+                </a>
+            </div>
+            {% endif %}
+        </div>
+    </div>
+</div>
+{% endblock %}

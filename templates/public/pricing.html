@@ -1,0 +1,276 @@
+<!-- templates/public/pricing.html -->
+{% extends "base_public.html" %}
+
+{% block title %}Nos Formules{% endblock %}
+
+{% block content %}
+<div class="container py-5">
+    <!-- En-tête -->
+    <div class="text-center mb-5">
+        <h1 class="display-4 mb-3">Choisissez votre formule</h1>
+        <p class="lead text-muted mb-4">
+            Des solutions adaptées à tous les besoins, de la petite équipe à l'entreprise
+        </p>
+        
+        <div class="form-check form-check-inline form-switch">
+            <input class="form-check-input" type="checkbox" id="toggleAnnual" checked>
+            <label class="form-check-label" for="toggleAnnual">
+                Facturation annuelle (économisez jusqu'à 20%)
+            </label>
+        </div>
+    </div>
+    
+    <!-- Formules -->
+    <div class="row row-cols-1 row-cols-md-3 mb-5">
+        {% for formule in formules %}
+        {% if formule.is_public %}
+        <div class="col mb-4">
+            <div class="card card-formule card-formule-{{ formule.code }} h-100">
+                <div class="card-body text-center p-4">
+                    <!-- En-tête -->
+                    <div class="mb-4">
+                        <h3 class="card-title">{{ formule.nom }}</h3>
+                        <div class="display-4 mb-2">
+                            <span class="price-monthly">{{ formule.prix_mensuel }}€</span>
+                            <span class="price-yearly d-none">{{ formule.prix_annuel }}€</span>
+                            <small class="text-muted">/{{ 'mois' if formule.prix_mensuel else 'an' }}</small>
+                        </div>
+                        <p class="text-muted">{{ formule.description }}</p>
+                    </div>
+                    
+                    <!-- Caractéristiques principales -->
+                    <ul class="list-unstyled mb-4">
+                        <li class="mb-2">
+                            <i class="fas fa-users text-primary me-2"></i>
+                            <strong>{{ formule.max_utilisateurs }}</strong> utilisateurs
+                        </li>
+                        <li class="mb-2">
+                            <i class="fas fa-exclamation-triangle text-danger me-2"></i>
+                            <strong>{{ formule.max_risques }}</strong> risques
+                        </li>
+                        <li class="mb-2">
+                            <i class="fas fa-clipboard-check text-warning me-2"></i>
+                            <strong>{{ formule.max_audits }}</strong> audits
+                        </li>
+                        <li class="mb-2">
+                            <i class="fas fa-layer-group text-success me-2"></i>
+                            <strong>{{ formule.get_modules_list()|length }}</strong> modules
+                        </li>
+                        <li>
+                            <i class="fas fa-star text-info me-2"></i>
+                            <strong>{{ formule.get_features_list()|length }}</strong> features
+                        </li>
+                    </ul>
+                    
+                    <!-- Bouton -->
+                    {% if current_user.is_authenticated and current_user.is_client_admin %}
+                    <a href="{{ url_for('client_admin_usage') }}" 
+                       class="btn btn-outline-primary w-100">
+                        <i class="fas fa-chart-bar me-2"></i>Gérer mon abonnement
+                    </a>
+                    {% elif current_user.is_authenticated %}
+                    <button class="btn btn-outline-secondary w-100" disabled>
+                        Contactez votre admin
+                    </button>
+                    {% else %}
+                    <a href="{{ url_for('register') }}?formule={{ formule.code }}" 
+                       class="btn btn-primary w-100">
+                        <i class="fas fa-rocket me-2"></i>Commencer l'essai
+                    </a>
+                    {% endif %}
+                </div>
+                
+                <!-- Footer avec détails -->
+                <div class="card-footer bg-transparent border-top-0">
+                    <button class="btn btn-link w-100" 
+                            data-bs-toggle="collapse" 
+                            data-bs-target="#details{{ formule.id }}">
+                        <i class="fas fa-chevron-down me-2"></i>Voir tous les détails
+                    </button>
+                    
+                    <div class="collapse" id="details{{ formule.id }}">
+                        <div class="pt-3">
+                            <h6 class="mb-2">Modules inclus :</h6>
+                            <div class="d-flex flex-wrap gap-1 mb-3">
+                                {% for module in formule.get_modules_list() %}
+                                <span class="badge bg-success">{{ module }}</span>
+                                {% endfor %}
+                            </div>
+                            
+                            <h6 class="mb-2">Features :</h6>
+                            <ul class="feature-list small">
+                                {% for feature_key, is_active in formule.features.items() %}
+                                <li class="{{ 'feature-included' if is_active else 'feature-excluded' }}">
+                                    <i class="fas fa-{{ 'check' if is_active else 'times' }} me-2"></i>
+                                    {{ feature_key|replace('_', ' ')|title }}
+                                </li>
+                                {% endfor %}
+                            </ul>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        {% endif %}
+        {% endfor %}
+    </div>
+    
+    <!-- Tableau de comparaison -->
+    <div class="card mb-5">
+        <div class="card-header">
+            <h5 class="mb-0">Comparaison complète des formules</h5>
+        </div>
+        <div class="card-body">
+            <div class="table-responsive">
+                <table class="comparison-table">
+                    <thead>
+                        <tr>
+                            <th>Fonctionnalité</th>
+                            {% for formule in formules %}
+                            {% if formule.is_public %}
+                            <th class="text-center">{{ formule.nom }}</th>
+                            {% endif %}
+                            {% endfor %}
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for feature_key, feature_name in {
+                            'risques': 'Gestion des risques',
+                            'kri': 'Indicateurs KRI',
+                            'audit': 'Audit interne',
+                            'veille_reglementaire': 'Veille règlementaire',
+                            'logigrammes': 'Logigrammes',
+                            'ia_analyse': 'Analyse IA',
+                            'reports_avances': 'Rapports avancés',
+                            'multi_sites': 'Multi-sites',
+                            'support_prioritaire': 'Support prioritaire',
+                            'custom_domain': 'Domaine perso',
+                            'sso': 'SSO'
+                        }.items() %}
+                        <tr>
+                            <td>{{ feature_name }}</td>
+                            {% for formule in formules %}
+                            {% if formule.is_public %}
+                            <td class="text-center">
+                                {% if formule.features[feature_key] %}
+                                <i class="fas fa-check feature-check"></i>
+                                {% else %}
+                                <i class="fas fa-times feature-cross"></i>
+                                {% endif %}
+                            </td>
+                            {% endif %}
+                            {% endfor %}
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+    
+    <!-- FAQ -->
+    <div class="row justify-content-center">
+        <div class="col-lg-8">
+            <h2 class="text-center mb-4">Questions fréquentes</h2>
+            
+            <div class="accordion" id="faqAccordion">
+                <div class="accordion-item">
+                    <h3 class="accordion-header">
+                        <button class="accordion-button" type="button" data-bs-toggle="collapse" data-bs-target="#faq1">
+                            Puis-je changer de formule à tout moment ?
+                        </button>
+                    </h3>
+                    <div id="faq1" class="accordion-collapse collapse show" data-bs-parent="#faqAccordion">
+                        <div class="accordion-body">
+                            Oui, vous pouvez passer à une formule supérieure à tout moment. 
+                            Pour les downgrades, contactez notre support.
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="accordion-item">
+                    <h3 class="accordion-header">
+                        <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#faq2">
+                            Y a-t-il un engagement ?
+                        </button>
+                    </h3>
+                    <div id="faq2" class="accordion-collapse collapse" data-bs-parent="#faqAccordion">
+                        <div class="accordion-body">
+                            Non, tous nos abonnements sont sans engagement. Vous pouvez résilier à tout moment.
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="accordion-item">
+                    <h3 class="accordion-header">
+                        <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#faq3">
+                            Proposez-vous un essai gratuit ?
+                        </button>
+                    </h3>
+                    <div id="faq3" class="accordion-collapse collapse" data-bs-parent="#faqAccordion">
+                        <div class="accordion-body">
+                            Oui, toutes les formules incluent un essai gratuit de 14 jours. 
+                            Aucune carte bancaire requise.
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+// Toggle annuel/mensuel
+document.getElementById('toggleAnnual').addEventListener('change', function() {
+    const isAnnual = this.checked;
+    
+    document.querySelectorAll('.price-monthly').forEach(el => {
+        el.classList.toggle('d-none', isAnnual);
+    });
+    
+    document.querySelectorAll('.price-yearly').forEach(el => {
+        el.classList.toggle('d-none', !isAnnual);
+    });
+    
+    // Mettre à jour les textes
+    document.querySelectorAll('.price-period').forEach(el => {
+        el.textContent = isAnnual ? '/an' : '/mois';
+    });
+});
+</script>
+
+<style>
+.card-formule {
+    transition: transform 0.3s, box-shadow 0.3s;
+}
+
+.card-formule:hover {
+    transform: translateY(-10px);
+    box-shadow: 0 20px 40px rgba(0,0,0,0.1);
+}
+
+.card-formule-standard {
+    border-top: 5px solid #3b82f6;
+}
+
+.card-formule-premium {
+    border-top: 5px solid #f59e0b;
+}
+
+.card-formule-enterprise {
+    border-top: 5px solid #10b981;
+}
+
+.display-4 {
+    font-weight: 300;
+}
+
+.feature-check {
+    color: #10b981;
+}
+
+.feature-cross {
+    color: #9ca3af;
+}
+</style>
+{% endblock %}

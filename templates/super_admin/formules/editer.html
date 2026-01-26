@@ -1,0 +1,896 @@
+<!-- templates/super_admin/formules/editer.html -->
+{% extends "base.html" %}
+
+{% block title %}Super Admin - Éditer formule{% endblock %}
+
+{% block content %}
+<div class="container-fluid py-4">
+    <nav aria-label="breadcrumb" class="mb-4">
+        <ol class="breadcrumb">
+            <li class="breadcrumb-item"><a href="{{ url_for('super_admin_dashboard') }}">Super Admin</a></li>
+            <li class="breadcrumb-item"><a href="{{ url_for('super_admin_formules') }}">Formules</a></li>
+            <li class="breadcrumb-item active">{{ formule.nom }}</li>
+        </ol>
+    </nav>
+
+    <!-- En-tête -->
+    <div class="row mb-4">
+        <div class="col-md-8">
+            <div class="d-flex align-items-center">
+                <div class="rounded-circle bg-primary bg-opacity-10 p-3 me-3">
+                    <i class="fas fa-layer-group fa-2x text-primary"></i>
+                </div>
+                <div>
+                    <h1 class="h3 mb-1">{{ formule.nom }} <code>{{ formule.code }}</code></h1>
+                    <p class="text-muted mb-0">
+                        {{ formule.description|default('Pas de description', true) }}
+                    </p>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-4 text-md-end">
+            <div class="btn-group">
+                <a href="{{ url_for('super_admin_formules') }}" class="fk-btn fk-btn-outline">
+                    <i class="fas fa-arrow-left me-2"></i>Retour
+                </a>
+                <button type="button" class="fk-btn fk-btn-outline dropdown-toggle dropdown-toggle-split" 
+                        data-bs-toggle="dropdown">
+                    <span class="visually-hidden">Actions</span>
+                </button>
+                <ul class="dropdown-menu">
+                    <li>
+                        <a class="dropdown-item" href="{{ url_for('super_admin_dupliquer_formule', id=formule.id) }}">
+                            <i class="fas fa-copy me-2"></i>Dupliquer
+                        </a>
+                    </li>
+                    <li>
+                        <a class="dropdown-item" href="{{ url_for('correct_modules_mapping') }}"
+                           onclick="return confirm('Corriger le mapping des modules pour toutes les formules ?')">
+                            <i class="fas fa-wrench me-2"></i>Corriger mapping
+                        </a>
+                    </li>
+                    {% if clients_count == 0 %}
+                    <li><hr class="dropdown-divider"></li>
+                    <li>
+                        <a class="dropdown-item text-danger" 
+                           href="{{ url_for('super_admin_supprimer_formule', id=formule.id) }}"
+                           onclick="return confirm('Supprimer cette formule ?')">
+                            <i class="fas fa-trash me-2"></i>Supprimer
+                        </a>
+                    </li>
+                    {% endif %}
+                </ul>
+            </div>
+        </div>
+    </div>
+
+    <!-- Statistiques -->
+    <div class="row mb-4">
+        <div class="col-md-3">
+            <div class="fk-card">
+                <div class="fk-card-body text-center">
+                    <h2 class="mb-1">{{ clients_count }}</h2>
+                    <p class="text-muted mb-0">Clients</p>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="fk-card">
+                <div class="fk-card-body text-center">
+                    <h2 class="mb-1">{{ formule.get_features_list()|length }}</h2>
+                    <p class="text-muted mb-0">Features</p>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="fk-card">
+                <div class="fk-card-body text-center">
+                    <h2 class="mb-1">{{ formule.get_modules_list()|length }}</h2>
+                    <p class="text-muted mb-0">Modules</p>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="fk-card">
+                <div class="fk-card-body text-center">
+                    <h2 class="mb-1">{{ formule.roles_autorises|length }}</h2>
+                    <p class="text-muted mb-0">Rôles</p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Warning important -->
+    <div class="row mb-4">
+        <div class="col-12">
+            <div class="alert alert-warning">
+                <div class="d-flex align-items-center">
+                    <i class="fas fa-exclamation-triangle fa-2x me-3"></i>
+                    <div>
+                        <h6 class="mb-1">ATTENTION : Modules à noms corrigés</h6>
+                        <p class="mb-0">
+                            Les modules suivants utilisent maintenant les noms de la base de données :<br>
+                            <strong>veille_reglementaire</strong> • 
+                            <strong>gestion_processus</strong> • 
+                            <strong>analyse_ia</strong> • 
+                            <strong>tableaux_bord</strong>
+                        </p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Onglets -->
+    <ul class="nav nav-tabs mb-4" id="formuleTabs" role="tablist">
+        <li class="nav-item" role="presentation">
+            <button class="nav-link active" id="general-tab" data-bs-toggle="tab" data-bs-target="#general" 
+                    type="button" role="tab">Général</button>
+        </li>
+        <li class="nav-item" role="presentation">
+            <button class="nav-link" id="features-tab" data-bs-toggle="tab" data-bs-target="#features" 
+                    type="button" role="tab">Features</button>
+        </li>
+        <li class="nav-item" role="presentation">
+            <button class="nav-link" id="modules-tab" data-bs-toggle="tab" data-bs-target="#modules" 
+                    type="button" role="tab">Modules</button>
+        </li>
+        <li class="nav-item" role="presentation">
+            <button class="nav-link" id="roles-tab" data-bs-toggle="tab" data-bs-target="#roles" 
+                    type="button" role="tab">Rôles autorisés</button>
+        </li>
+        <li class="nav-item" role="presentation">
+            <button class="nav-link" id="clients-tab" data-bs-toggle="tab" data-bs-target="#clients" 
+                    type="button" role="tab">Clients ({{ clients_count }})</button>
+        </li>
+        <li class="nav-item" role="presentation">
+            <button class="nav-link" id="debug-tab" data-bs-toggle="tab" data-bs-target="#debug" 
+                    type="button" role="tab">
+                <i class="fas fa-bug"></i> Debug
+            </button>
+        </li>
+    </ul>
+
+    <!-- Contenu des onglets -->
+    <div class="tab-content" id="formuleTabsContent">
+        <!-- Onglet 1: Général -->
+        <div class="tab-pane fade show active" id="general" role="tabpanel">
+            <div class="fk-card">
+                <div class="fk-card-header">
+                    <h5 class="mb-0">Informations générales</h5>
+                </div>
+                <div class="fk-card-body">
+                    <form method="POST" action="">
+                        {{ form.hidden_tag() }}
+                        
+                        <div class="row">
+                            <div class="col-md-6 mb-3">
+                                <label class="form-label">{{ form.nom.label }}</label>
+                                {{ form.nom(class="form-control", placeholder="Nom de la formule") }}
+                            </div>
+                            <div class="col-md-6 mb-3">
+                                <label class="form-label">{{ form.code.label }}</label>
+                                {{ form.code(class="form-control", placeholder="Code unique") }}
+                                <small class="text-muted">Ne pas modifier après création de clients</small>
+                            </div>
+                        </div>
+                        
+                        <div class="mb-3">
+                            <label class="form-label">{{ form.description.label }}</label>
+                            {{ form.description(class="form-control", rows=3, placeholder="Description détaillée...") }}
+                        </div>
+                        
+                        <hr class="my-4">
+                        
+                        <h6 class="mb-3">Tarification</h6>
+                        <div class="row">
+                            <div class="col-md-4 mb-3">
+                                <label class="form-label">{{ form.prix_mensuel.label }}</label>
+                                <div class="input-group">
+                                    {{ form.prix_mensuel(class="form-control", step="0.01") }}
+                                    <span class="input-group-text">€/mois</span>
+                                </div>
+                            </div>
+                            <div class="col-md-4 mb-3">
+                                <label class="form-label">{{ form.prix_annuel.label }}</label>
+                                <div class="input-group">
+                                    {{ form.prix_annuel(class="form-control", step="0.01") }}
+                                    <span class="input-group-text">€/an</span>
+                                </div>
+                            </div>
+                            <div class="col-md-4 mb-3">
+                                <label class="form-label">Économie annuelle</label>
+                                <div class="input-group">
+                                    <input type="text" class="form-control" 
+                                           value="{{ '%0.1f'|format((1 - (formule.prix_annuel / (formule.prix_mensuel * 12))) * 100) if formule.prix_mensuel and formule.prix_annuel else 0 }}"
+                                           readonly>
+                                    <span class="input-group-text">%</span>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <hr class="my-4">
+                        
+                        <h6 class="mb-3">Limites</h6>
+                        <div class="row">
+                            <div class="col-md-3 mb-3">
+                                <label class="form-label">{{ form.max_utilisateurs.label }}</label>
+                                {{ form.max_utilisateurs(class="form-control") }}
+                            </div>
+                            <div class="col-md-3 mb-3">
+                                <label class="form-label">{{ form.max_risques.label }}</label>
+                                {{ form.max_risques(class="form-control") }}
+                            </div>
+                            <div class="col-md-3 mb-3">
+                                <label class="form-label">{{ form.max_audits.label }}</label>
+                                {{ form.max_audits(class="form-control") }}
+                            </div>
+                            <div class="col-md-3 mb-3">
+                                <label class="form-label">{{ form.max_processus.label }}</label>
+                                {{ form.max_processus(class="form-control") }}
+                            </div>
+                        </div>
+                        
+                        <div class="row">
+                            <div class="col-md-3 mb-3">
+                                <label class="form-label">{{ form.max_logigrammes.label }}</label>
+                                {{ form.max_logigrammes(class="form-control") }}
+                            </div>
+                            <div class="col-md-3 mb-3">
+                                <label class="form-label">{{ form.stockage_upload.label }}</label>
+                                <div class="input-group">
+                                    {{ form.stockage_upload(class="form-control") }}
+                                    <span class="input-group-text">Mo</span>
+                                </div>
+                            </div>
+                            <div class="col-md-3 mb-3">
+                                <label class="form-label">{{ form.stockage_documents.label }}</label>
+                                <div class="input-group">
+                                    {{ form.stockage_documents(class="form-control") }}
+                                    <span class="input-group-text">Mo</span>
+                                </div>
+                            </div>
+                            <div class="col-md-3 mb-3">
+                                <label class="form-label">{{ form.ordre_affichage.label }}</label>
+                                {{ form.ordre_affichage(class="form-control") }}
+                            </div>
+                        </div>
+                        
+                        <hr class="my-4">
+                        
+                        <div class="row">
+                            <div class="col-md-4 mb-3">
+                                <div class="form-check form-switch">
+                                    {{ form.is_active(class="form-check-input") }}
+                                    <label class="form-check-label">{{ form.is_active.label }}</label>
+                                </div>
+                            </div>
+                            <div class="col-md-4 mb-3">
+                                <div class="form-check form-switch">
+                                    {{ form.is_public(class="form-check-input") }}
+                                    <label class="form-check-label">{{ form.is_public.label }}</label>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <div class="mt-4">
+                            {{ form.submit(class="fk-btn fk-btn-primary") }}
+                            <a href="{{ url_for('super_admin_formules') }}" class="fk-btn fk-btn-outline">Annuler</a>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+
+        <!-- Onglet 2: Features -->
+        <div class="tab-pane fade" id="features" role="tabpanel">
+            <div class="fk-card">
+                <div class="fk-card-header">
+                    <h5 class="mb-0">Features de la formule</h5>
+                </div>
+                <div class="fk-card-body">
+                    <form method="POST" action="{{ url_for('super_admin_update_formule_features', id=formule.id) }}">
+                        {{ features_form.hidden_tag() }}
+                        
+                        <div class="row">
+                            {% for feature_key, feature_name in {
+                                'risques': 'Gestion des risques',
+                                'kri': 'Indicateurs KRI',
+                                'audit': 'Audit interne',
+                                'veille_reglementaire': 'Veille règlementaire',
+                                'logigrammes': 'Logigrammes/Processus',
+                                'reports_avances': 'Rapports avancés',
+                                'multi_sites': 'Multi-sites',
+                                'api_avancee': 'API avancée',
+                                'sauvegardes_auto': 'Sauvegardes automatiques',
+                                'support_prioritaire': 'Support prioritaire',
+                                'custom_domain': 'Domaine personnalisé',
+                                'sso': 'SSO (Single Sign-On)'
+                            }.items() %}
+                            <div class="col-md-4 mb-3">
+                                <div class="form-check form-switch">
+                                    <input class="form-check-input" type="checkbox" 
+                                           name="features-{{ feature_key }}" 
+                                           id="features-{{ feature_key }}"
+                                           {% if formule.features.get(feature_key, false) %}checked{% endif %}>
+                                    <label class="form-check-label" for="features-{{ feature_key }}">
+                                        {{ feature_name }}
+                                    </label>
+                                </div>
+                            </div>
+                            {% endfor %}
+                        </div>
+                        
+                        <div class="mt-4">
+                            <button type="submit" class="fk-btn fk-btn-primary">
+                                <i class="fas fa-save me-2"></i>Mettre à jour les features
+                            </button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+
+        <!-- Onglet 3: Modules - VERSION CORRIGÉE -->
+        <div class="tab-pane fade" id="modules" role="tabpanel">
+            <div class="fk-card">
+                <div class="fk-card-header">
+                    <h5 class="mb-0">Modules accessibles</h5>
+                    <small class="text-muted">
+                        <i class="fas fa-info-circle"></i> 
+                        Utilisez les noms EXACTS de la base de données
+                    </small>
+                </div>
+                <div class="fk-card-body">
+                    <form method="POST" action="{{ url_for('super_admin_update_formule_modules', id=formule.id) }}">
+                        {{ modules_form.hidden_tag() }}
+                        
+                        <div class="alert alert-info mb-4">
+                            <div class="d-flex align-items-center">
+                                <i class="fas fa-database fa-2x me-3"></i>
+                                <div>
+                                    <h6 class="mb-1">Noms corrigés dans la base</h6>
+                                    <p class="mb-0">
+                                        Les modules utilisent maintenant les noms de la base de données.<br>
+                                        <strong>Anciens noms :</strong> veille, processus, ia_analyse, tableaux_bord_personnalisables<br>
+                                        <strong>Nouveaux noms :</strong> veille_reglementaire, gestion_processus, analyse_ia, tableaux_bord
+                                    </p>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <div class="row">
+                            <!-- MODULES STANDARDS -->
+                            {% for module_key, module_name in {
+                                'cartographie': 'Cartographie des risques',
+                                'matrices_risque': 'Matrices de risque',
+                                'suivi_kri': 'Suivi KRI',
+                                'audit_interne': 'Audit interne',
+                                'plans_action': 'Plans d\'action',
+                                'organigramme': 'Organigramme',
+                                'questionnaires': 'Questionnaires',
+                                'portail_fournisseurs': 'Portail fournisseurs',
+                                'reporting_avance': 'Reporting avancé'
+                            }.items() %}
+                            <div class="col-md-4 mb-3">
+                                <div class="permission-item border rounded p-3">
+                                    <div class="form-check form-switch">
+                                        <input class="form-check-input" 
+                                            type="checkbox" 
+                                            name="modules-{{ module_key }}" 
+                                            id="modules-{{ module_key }}"
+                                            {% if formule.modules.get(module_key, false) %}checked{% endif %}>
+                                        <label class="form-check-label" for="modules-{{ module_key }}">
+                                            <strong>{{ module_name }}</strong>
+                                            <small class="text-muted d-block mt-1">
+                                                <i class="fas fa-database"></i> {{ module_key }}
+                                            </small>
+                                        </label>
+                                    </div>
+                                    
+                                    <div class="mt-2 small">
+                                        <span class="badge bg-{% if formule.modules.get(module_key, false) %}success{% else %}secondary{% endif %}">
+                                            {% if formule.modules.get(module_key, false) %}
+                                            <i class="fas fa-check"></i> Activé
+                                            {% else %}
+                                            <i class="fas fa-times"></i> Désactivé
+                                            {% endif %}
+                                        </span>
+                                    </div>
+                                </div>
+                            </div>
+                            {% endfor %}
+                            
+                            <!-- MODULES CORRIGÉS (noms de la base) -->
+                            {% set corrected_modules = [
+                                ('veille_reglementaire', 'Veille règlementaire'),
+                                ('gestion_processus', 'Gestion des processus'),
+                                ('analyse_ia', 'Analyse IA'),
+                                ('tableaux_bord', 'Tableaux de bord personnalisables')
+                            ] %}
+                            
+                            {% for module_db, display_name in corrected_modules %}
+                            <div class="col-md-4 mb-3">
+                                <div class="permission-item border border-success rounded p-3 bg-success bg-opacity-10">
+                                    <div class="form-check form-switch">
+                                        <input class="form-check-input" 
+                                            type="checkbox" 
+                                            name="modules-{{ module_db }}" 
+                                            id="modules-{{ module_db }}"
+                                            {% if formule.modules.get(module_db, false) %}checked{% endif %}>
+                                        <label class="form-check-label" for="modules-{{ module_db }}">
+                                            <strong>{{ display_name }}</strong>
+                                            <small class="text-muted d-block mt-1">
+                                                <i class="fas fa-database"></i> {{ module_db }}
+                                            </small>
+                                        </label>
+                                    </div>
+                                    
+                                    <div class="mt-2">
+                                        <span class="badge bg-{% if formule.modules.get(module_db, false) %}success{% else %}secondary{% endif %}">
+                                            {% if formule.modules.get(module_db, false) %}
+                                            <i class="fas fa-check"></i> Activé (DB)
+                                            {% else %}
+                                            <i class="fas fa-times"></i> Désactivé (DB)
+                                            {% endif %}
+                                        </span>
+                                        
+                                        <!-- Vérification des permissions associées -->
+                                        {% set permission_map = {
+                                            'veille_reglementaire': 'can_manage_regulatory',
+                                            'gestion_processus': 'can_manage_logigram',
+                                            'analyse_ia': 'can_use_ia_analysis',
+                                            'tableaux_bord': 'can_view_dashboard'
+                                        } %}
+                                        
+                                        {% if module_db in permission_map %}
+                                            {% set perm_key = permission_map[module_db] %}
+                                            {% set perm_active = formule.permissions_template.get(perm_key, false) %}
+                                            {% set module_active = formule.modules.get(module_db, false) %}
+                                            
+                                            {% if module_active != perm_active %}
+                                            <span class="badge bg-warning ms-1">
+                                                <i class="fas fa-exclamation-triangle"></i> Permission non synchronisée
+                                            </span>
+                                            {% endif %}
+                                        {% endif %}
+                                    </div>
+                                    
+                                    <div class="mt-2 small text-success">
+                                        <i class="fas fa-check-circle"></i>
+                                        Nom corrigé dans la base de données
+                                    </div>
+                                </div>
+                            </div>
+                            {% endfor %}
+                        </div>
+                        
+                        <div class="mt-4">
+                            <button type="submit" class="fk-btn fk-btn-primary">
+                                <i class="fas fa-save me-2"></i>Mettre à jour les modules
+                            </button>
+                            <button type="button" onclick="toggleAllModules(true)" class="fk-btn fk-btn-outline me-2">
+                                <i class="fas fa-check-square me-2"></i>Tout activer
+                            </button>
+                            <button type="button" onclick="toggleAllModules(false)" class="fk-btn fk-btn-outline me-2">
+                                <i class="fas fa-square me-2"></i>Tout désactiver
+                            </button>
+                            <a href="{{ url_for('debug_module_state', formule_id=formule.id) }}" 
+                               class="fk-btn fk-btn-info me-2">
+                                <i class="fas fa-stethoscope me-2"></i>Diagnostic
+                            </a>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+
+        <!-- Onglet 4: Rôles autorisés -->
+        <div class="tab-pane fade" id="roles" role="tabpanel">
+            <div class="fk-card">
+                <div class="fk-card-header">
+                    <h5 class="mb-0">Rôles autorisés</h5>
+                </div>
+                <div class="fk-card-body">
+                    <form method="POST" action="{{ url_for('super_admin_update_formule_roles', id=formule.id) }}">
+                        {{ roles_form.hidden_tag() }}
+                        
+                        <div class="row">
+                            {% for role_key, role_name in {
+                                'utilisateur': 'Utilisateur Standard',
+                                'auditeur': 'Auditeur',
+                                'manager': 'Manager',
+                                'admin': 'Administrateur Client',
+                                'compliance': 'Responsable Conformité',
+                                'consultant': 'Consultant'
+                            }.items() %}
+                            <div class="col-md-4 mb-3">
+                                <div class="form-check form-switch">
+                                    <input class="form-check-input" type="checkbox" 
+                                           name="roles-{{ role_key }}" 
+                                           id="roles-{{ role_key }}"
+                                           {% if role_key in formule.roles_autorises %}checked{% endif %}>
+                                    <label class="form-check-label" for="roles-{{ role_key }}">
+                                        {{ role_name }}
+                                    </label>
+                                </div>
+                            </div>
+                            {% endfor %}
+                        </div>
+                        
+                        <div class="mt-4">
+                            <button type="submit" class="fk-btn fk-btn-primary">
+                                <i class="fas fa-save me-2"></i>Mettre à jour les rôles
+                            </button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+
+        <!-- Onglet 5: Clients -->
+        <div class="tab-pane fade" id="clients" role="tabpanel">
+            <div class="fk-card">
+                <div class="fk-card-header">
+                    <h5 class="mb-0">Clients utilisant cette formule</h5>
+                </div>
+                <div class="fk-card-body">
+                    {% if clients_count > 0 %}
+                    <div class="table-responsive">
+                        <table class="table fk-table">
+                            <thead>
+                                <tr>
+                                    <th>Client</th>
+                                    <th>Abonnement</th>
+                                    <th>Statut</th>
+                                    <th>Utilisation</th>
+                                    <th>Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for client in formule.clients %}
+                                <tr>
+                                    <td>
+                                        <strong>{{ client.nom }}</strong>
+                                        <br><small class="text-muted">{{ client.reference }}</small>
+                                    </td>
+                                    <td>
+                                        {% set abonnement = client.abonnements|selectattr('statut', 'equalto', 'actif')|first %}
+                                        {% if abonnement %}
+                                        <small>
+                                            Depuis {{ abonnement.date_debut|format_date }}
+                                            <br>{{ abonnement.periode|title }}
+                                        </small>
+                                        {% else %}
+                                        <span class="text-muted">Aucun abonnement actif</span>
+                                        {% endif %}
+                                    </td>
+                                    <td>
+                                        {% if client.is_active %}
+                                        <span class="badge bg-success">Actif</span>
+                                        {% else %}
+                                        <span class="badge bg-danger">Inactif</span>
+                                        {% endif %}
+                                    </td>
+                                    <td>
+                                        <small>
+                                            {{ client.nb_utilisateurs }}/{{ formule.max_utilisateurs }} users
+                                            <br>
+                                            {{ client.nb_risques }}/{{ formule.max_risques }} risques
+                                        </small>
+                                    </td>
+                                    <td>
+                                        <a href="{{ url_for('super_admin_client_detail', id=client.id) }}" 
+                                           class="btn btn-sm btn-outline-primary">
+                                            <i class="fas fa-eye"></i>
+                                        </a>
+                                        <a href="{{ url_for('super_admin_upgrade_client', client_id=client.id) }}" 
+                                           class="btn btn-sm btn-outline-warning">
+                                            <i class="fas fa-level-up-alt"></i>
+                                        </a>
+                                    </td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                    {% else %}
+                    <div class="text-center py-5">
+                        <i class="fas fa-users fa-3x text-muted mb-3"></i>
+                        <h5>Aucun client</h5>
+                        <p class="text-muted">Aucun client n'utilise actuellement cette formule.</p>
+                    </div>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+
+        <!-- Onglet 6: Debug -->
+        <!-- Dans la section Onglet 6: Debug -->
+    <div class="tab-pane fade" id="debug" role="tabpanel">
+        <div class="fk-card">
+            <div class="fk-card-header">
+                <h5 class="mb-0">Debug - Modules et Permissions</h5>
+            </div>
+            <div class="fk-card-body">
+                <div class="row">
+                    <!-- Modules actuels -->
+                    <div class="col-md-6 mb-4">
+                        <h6>Modules dans la base :</h6>
+                        <div class="table-responsive">
+                            <table class="table table-sm">
+                                <thead>
+                                    <tr>
+                                        <th>Nom DB</th>
+                                        <th>Valeur</th>
+                                        <th>Statut</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {% for module_db, is_active in formule.modules.items() %}
+                                    <tr class="{% if module_db in ['veille_reglementaire', 'gestion_processus', 'analyse_ia', 'tableaux_bord', 'plans_action'] %}table-info{% endif %}">
+                                        <td>
+                                            <code>{{ module_db }}</code>
+                                            {% if module_db in ['veille_reglementaire', 'gestion_processus', 'analyse_ia', 'tableaux_bord', 'plans_action'] %}
+                                            <span class="badge bg-info">Important</span>
+                                            {% endif %}
+                                        </td>
+                                        <td>
+                                            {% if is_active %}
+                                            <span class="badge bg-success">Actif</span>
+                                            {% else %}
+                                            <span class="badge bg-secondary">Inactif</span>
+                                            {% endif %}
+                                        </td>
+                                        <td>
+                                            {% if module_db == 'plans_action' %}
+                                                {% set permission_active = formule.permissions_template.get('can_manage_action_plans', false) %}
+                                                {% if is_active != permission_active %}
+                                                <span class="badge bg-warning">Permission non synchro</span>
+                                                {% endif %}
+                                            {% endif %}
+                                        </td>
+                                    </tr>
+                                    {% endfor %}
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                    
+                    <!-- Permissions associées - AJOUTER PLANS D'ACTION -->
+                    <div class="col-md-6 mb-4">
+                        <h6>Permissions associées :</h6>
+                        <div class="table-responsive">
+                            <table class="table table-sm">
+                                <thead>
+                                    <tr>
+                                        <th>Permission</th>
+                                        <th>Valeur</th>
+                                        <th>Module lié</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {% set module_permission_map = {
+                                        'veille_reglementaire': 'can_manage_regulatory',
+                                        'gestion_processus': 'can_manage_logigram',
+                                        'analyse_ia': 'can_use_ia_analysis',
+                                        'tableaux_bord': 'can_view_dashboard',
+                                        'suivi_kri': 'can_manage_kri',
+                                        'audit_interne': 'can_manage_audit',
+                                        'reporting_avance': 'can_export_data',
+                                        'plans_action': 'can_manage_action_plans'
+                                    } %}
+                                    
+                                    {% for module_db, permission in module_permission_map.items() %}
+                                    <tr class="{% if formule.modules.get(module_db, false) != formule.permissions_template.get(permission, false) %}table-warning{% endif %}">
+                                        <td><code>{{ permission }}</code></td>
+                                        <td>
+                                            {% if formule.permissions_template.get(permission, false) %}
+                                            <span class="badge bg-success">True</span>
+                                            {% else %}
+                                            <span class="badge bg-secondary">False</span>
+                                            {% endif %}
+                                        </td>
+                                        <td>
+                                            <code>{{ module_db }}</code>
+                                            {% if formule.modules.get(module_db, false) %}
+                                            <span class="badge bg-success">Module actif</span>
+                                            {% else %}
+                                            <span class="badge bg-secondary">Module inactif</span>
+                                            {% endif %}
+                                            
+                                            <!-- Vérification spécifique pour plans_action -->
+                                            {% if module_db == 'plans_action' %}
+                                                {% if formule.modules.get('plans_action', false) %}
+                                                    {% if not formule.permissions_template.get('can_manage_action_plans', false) %}
+                                                    <span class="badge bg-danger ms-1">Permission manquante!</span>
+                                                    {% endif %}
+                                                {% endif %}
+                                            {% endif %}
+                                        </td>
+                                    </tr>
+                                    {% endfor %}
+                                    
+                                    <!-- Permissions pour plans_action (si elles existent) -->
+                                    {% if 'can_view_action_plans' in formule.permissions_template %}
+                                    <tr>
+                                        <td><code>can_view_action_plans</code></td>
+                                        <td>
+                                            {% if formule.permissions_template.get('can_view_action_plans', false) %}
+                                            <span class="badge bg-success">True</span>
+                                            {% else %}
+                                            <span class="badge bg-secondary">False</span>
+                                            {% endif %}
+                                        </td>
+                                        <td>
+                                            <code>plans_action</code>
+                                            <span class="badge bg-info">Permission consultation</span>
+                                        </td>
+                                    </tr>
+                                    {% endif %}
+                                </tbody>
+                            </table>
+                        </div>
+                        
+                        <!-- Section spécifique pour diagnostiquer plans_action -->
+                        <div class="alert alert-info mt-3">
+                            <h6><i class="fas fa-stethoscope me-2"></i>Diagnostic Plans d'action</h6>
+                            <div class="row mt-2">
+                                <div class="col-md-6">
+                                    <strong>Module :</strong>
+                                    {% if formule.modules.get('plans_action', false) %}
+                                    <span class="badge bg-success">Activé</span>
+                                    {% else %}
+                                    <span class="badge bg-danger">Désactivé</span>
+                                    {% endif %}
+                                </div>
+                                <div class="col-md-6">
+                                    <strong>Permission can_manage_action_plans :</strong>
+                                    {% if formule.permissions_template.get('can_manage_action_plans', false) %}
+                                    <span class="badge bg-success">Activée</span>
+                                    {% else %}
+                                    <span class="badge bg-danger">Désactivée</span>
+                                    {% endif %}
+                                </div>
+                            </div>
+                            {% if formule.modules.get('plans_action', false) != formule.permissions_template.get('can_manage_action_plans', false) %}
+                            <div class="alert alert-warning mt-2 mb-0">
+                                <i class="fas fa-exclamation-triangle me-2"></i>
+                                <strong>Incohérence détectée :</strong> Le module est {% if formule.modules.get('plans_action', false) %}activé{% else %}désactivé{% endif %} 
+                                mais la permission est {% if formule.permissions_template.get('can_manage_action_plans', false) %}activée{% else %}désactivée{% endif %}
+                            </div>
+                            {% endif %}
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- Boutons de debug - AJOUTER BOUTON SPÉCIFIQUE -->
+                <div class="mt-4">
+                    <a href="{{ url_for('fix_plans_action_specific', id=formule.id) }}" 
+                    class="fk-btn fk-btn-warning me-2"
+                    onclick="return confirm('Corriger spécifiquement le module Plans d\\'action ?')">
+                     <i class="fas fa-tasks me-2"></i>Corriger Plans d'action
+                 </a>
+                    <a href="{{ url_for('fix_module_inconsistency') }}" 
+                    class="fk-btn fk-btn-warning me-2"
+                    onclick="return confirm('Corriger les incohérences de modules ?')">
+                        <i class="fas fa-wrench me-2"></i>Corriger toutes incohérences
+                    </a>
+                    <a href="{{ url_for('debug_module_state', formule_id=formule.id) }}" 
+                    class="fk-btn fk-btn-info me-2">
+                        <i class="fas fa-stethoscope me-2"></i>Diagnostic complet
+                    </a>
+                    <a href="{{ url_for('debug_formule_modules', id=formule.id) }}" 
+                    class="fk-btn fk-btn-outline-primary me-2" target="_blank">
+                        <i class="fas fa-code me-2"></i>Debug JSON
+                    </a>
+                </div>
+            </div>
+        </div>
+    </div>
+
+<script>
+function toggleAllModules(activate) {
+    const checkboxes = document.querySelectorAll('#modules input[type="checkbox"]');
+    checkboxes.forEach(checkbox => {
+        checkbox.checked = activate;
+    });
+}
+
+function checkModuleConsistency() {
+    // Récupérer les modules problématiques
+    const problemModules = {
+        'veille_reglementaire': 'can_manage_regulatory',
+        'gestion_processus': 'can_manage_logigram',
+        'analyse_ia': 'can_use_ia_analysis',
+        'tableaux_bord': 'can_view_dashboard'
+    };
+    
+    let inconsistencies = [];
+    
+    for (const [module, permission] of Object.entries(problemModules)) {
+        const moduleCheckbox = document.querySelector(`input[name="modules-${module}"]`);
+        if (moduleCheckbox) {
+            const moduleActive = moduleCheckbox.checked;
+            const permissionActive = document.querySelector(`input[name="${permission}"]`);
+            
+            if (permissionActive && moduleActive !== permissionActive.checked) {
+                inconsistencies.push({
+                    module: module,
+                    permission: permission,
+                    moduleActive: moduleActive,
+                    permissionActive: permissionActive.checked
+                });
+            }
+        }
+    }
+    
+    if (inconsistencies.length > 0) {
+        alert(`Incohérences détectées:\n\n${inconsistencies.map(i => 
+            `• ${i.module}: module=${i.moduleActive}, permission=${i.permissionActive}`
+        ).join('\n')}`);
+        return false;
+    }
+    
+    alert('✅ Toutes les permissions sont cohérentes avec les modules');
+    return true;
+}
+
+// JavaScript supplémentaire pour améliorer l'UX
+document.addEventListener('DOMContentLoaded', function() {
+    // Highlight les modules corrigés
+    const correctedModules = ['veille_reglementaire', 'gestion_processus', 'analyse_ia', 'tableaux_bord'];
+    
+    correctedModules.forEach(moduleName => {
+        const element = document.getElementById(`modules-${moduleName}`);
+        if (element) {
+            const parent = element.closest('.permission-item');
+            if (parent) {
+                parent.addEventListener('mouseover', function() {
+                    this.style.boxShadow = '0 0 0 2px rgba(25, 135, 84, 0.25)';
+                });
+                parent.addEventListener('mouseout', function() {
+                    this.style.boxShadow = '';
+                });
+            }
+        }
+    });
+    
+    // Confirmation pour la correction
+    const correctBtn = document.querySelector('a[href*="fix_all_modules_mapping"]');
+    if (correctBtn) {
+        correctBtn.addEventListener('click', function(e) {
+            if (!confirm('Cette action corrigera le mapping des modules pour TOUTES les formules. Continuer ?')) {
+                e.preventDefault();
+            }
+        });
+    }
+});
+</script>
+
+<style>
+.form-check.form-switch .form-check-input {
+    height: 1.5rem;
+    width: 3rem;
+}
+
+.permission-item {
+    transition: all 0.3s ease;
+    height: 100%;
+}
+
+.permission-item:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+}
+
+.table-info {
+    background-color: rgba(13, 110, 253, 0.05) !important;
+}
+
+.badge.bg-info {
+    font-size: 0.7em;
+    padding: 0.2em 0.5em;
+}
+</style>
+{% endblock %}

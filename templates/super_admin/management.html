@@ -1,0 +1,386 @@
+<!-- templates/super_admin/management.html -->
+{% extends "base.html" %}
+
+{% block title %}Gestion Super Admins{% endblock %}
+
+{% block content %}
+<div class="container-fluid py-4">
+    <!-- Navigation -->
+    <nav aria-label="breadcrumb" class="mb-4">
+        <ol class="breadcrumb">
+            <li class="breadcrumb-item"><a href="{{ url_for('super_admin_dashboard') }}">Super Admin</a></li>
+            <li class="breadcrumb-item active">Gestion Super Admins</li>
+        </ol>
+    </nav>
+
+    <!-- En-tête -->
+    <div class="row mb-4">
+        <div class="col-md-8">
+            <h1 class="h3 mb-2">
+                <i class="fas fa-crown text-warning me-2"></i>Gestion des Super Admins
+            </h1>
+            <p class="text-muted">
+                Gestion des administrateurs avec accès universel à la plateforme
+            </p>
+        </div>
+    </div>
+
+    <!-- Liste des Super Admins -->
+    <div class="fk-card mb-4">
+        <div class="fk-card-header d-flex justify-content-between align-items-center">
+            <h5 class="mb-0">
+                <i class="fas fa-users-crown me-2"></i>Super Admins existants
+            </h5>
+            <span class="badge bg-warning">{{ super_admins|length }} super admin(s)</span>
+        </div>
+        <div class="fk-card-body">
+            {% if super_admins %}
+            <div class="table-responsive">
+                <table class="table fk-table">
+                    <thead>
+                        <tr>
+                            <th>Utilisateur</th>
+                            <th>Email</th>
+                            <th>Créé le</th>
+                            <th>Dernière connexion</th>
+                            <th>Statut</th>
+                            <th>Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for admin in super_admins %}
+                        <tr class="{{ 'table-warning' if admin.id == current_user.id }}">
+                            <td>
+                                <div class="d-flex align-items-center">
+                                    <div class="avatar-sm bg-warning bg-opacity-10 text-warning rounded-circle d-flex align-items-center justify-content-center me-3">
+                                        <i class="fas fa-crown"></i>
+                                    </div>
+                                    <div>
+                                        <strong>{{ admin.username }}</strong>
+                                        {% if admin.id == current_user.id %}
+                                        <br><small class="text-warning"><i class="fas fa-user"></i> Vous</small>
+                                        {% endif %}
+                                    </div>
+                                </div>
+                            </td>
+                            <td>{{ admin.email }}</td>
+                            <td>{{ admin.created_at|format_datetime }}</td>
+                            <td>
+                                {% if admin.last_login %}
+                                {{ admin.last_login|format_datetime }}
+                                {% else %}
+                                <span class="text-muted">Jamais</span>
+                                {% endif %}
+                            </td>
+                            <td>
+                                {% if admin.is_active %}
+                                <span class="badge bg-success">Actif</span>
+                                {% else %}
+                                <span class="badge bg-danger">Inactif</span>
+                                {% endif %}
+                            </td>
+                            <td>
+                                <div class="btn-group btn-group-sm">
+                                    {% if admin.id != current_user.id %}
+                                    <button class="btn btn-outline-primary"
+                                            data-bs-toggle="modal"
+                                            data-bs-target="#resetPasswordModal{{ admin.id }}"
+                                            title="Réinitialiser mot de passe">
+                                        <i class="fas fa-key"></i>
+                                    </button>
+                                    <button class="btn btn-outline-warning"
+                                            onclick="toggleAdminStatus({{ admin.id }}, {{ 'false' if admin.is_active else 'true' }})"
+                                            title="{{ 'Désactiver' if admin.is_active else 'Activer' }}">
+                                        <i class="fas fa-{{ 'ban' if admin.is_active else 'check' }}"></i>
+                                    </button>
+                                    <button class="btn btn-outline-danger"
+                                            onclick="deleteSuperAdmin({{ admin.id }}, '{{ admin.username }}')"
+                                            title="Supprimer">
+                                        <i class="fas fa-trash"></i>
+                                    </button>
+                                    {% else %}
+                                    <span class="text-muted">Vous-même</span>
+                                    {% endif %}
+                                </div>
+                            </td>
+                        </tr>
+
+                        <!-- Modal Réinitialisation mot de passe -->
+                        <div class="modal fade" id="resetPasswordModal{{ admin.id }}" tabindex="-1">
+                            <div class="modal-dialog">
+                                <div class="modal-content">
+                                    <div class="modal-header">
+                                        <h5 class="modal-title">Réinitialiser mot de passe</h5>
+                                        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                                    </div>
+                                    <div class="modal-body">
+                                        <p>Réinitialiser le mot de passe de <strong>{{ admin.username }}</strong></p>
+                                        <form id="resetPasswordForm{{ admin.id }}" 
+                                              onsubmit="resetAdminPassword(event, {{ admin.id }})">
+                                            <div class="mb-3">
+                                                <label class="form-label">Nouveau mot de passe</label>
+                                                <input type="password" class="form-control" 
+                                                       name="new_password" required minlength="8">
+                                            </div>
+                                            <div class="mb-3">
+                                                <label class="form-label">Confirmer</label>
+                                                <input type="password" class="form-control" 
+                                                       name="confirm_password" required>
+                                            </div>
+                                        </form>
+                                    </div>
+                                    <div class="modal-footer">
+                                        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">
+                                            Annuler
+                                        </button>
+                                        <button type="submit" form="resetPasswordForm{{ admin.id }}" 
+                                                class="btn btn-warning">
+                                            Réinitialiser
+                                        </button>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+            {% else %}
+            <div class="text-center py-5">
+                <i class="fas fa-crown fa-3x text-muted mb-3"></i>
+                <h5>Aucun super admin</h5>
+                <p class="text-muted">Créez votre premier super admin ci-dessous.</p>
+            </div>
+            {% endif %}
+        </div>
+    </div>
+
+    <!-- Création d'un nouveau Super Admin -->
+    <div class="fk-card">
+        <div class="fk-card-header">
+            <h5 class="mb-0">
+                <i class="fas fa-plus-circle me-2"></i>Créer un nouveau Super Admin
+            </h5>
+        </div>
+        <div class="fk-card-body">
+            <div class="row">
+                <div class="col-lg-8">
+                    <form method="POST" action="">
+                        {{ form.hidden_tag() }}
+                        
+                        <div class="row mb-3">
+                            <div class="col-md-6">
+                                <label class="form-label">{{ form.username.label }}</label>
+                                {{ form.username(class="form-control", placeholder="superadmin2") }}
+                                {% if form.username.errors %}
+                                <div class="text-danger">
+                                    {% for error in form.username.errors %}
+                                    <small>{{ error }}</small>
+                                    {% endfor %}
+                                </div>
+                                {% endif %}
+                                <small class="text-muted">Nom d'utilisateur unique</small>
+                            </div>
+                            <div class="col-md-6">
+                                <label class="form-label">{{ form.email.label }}</label>
+                                {{ form.email(class="form-control", placeholder="superadmin2@entreprise.com") }}
+                                {% if form.email.errors %}
+                                <div class="text-danger">
+                                    {% for error in form.email.errors %}
+                                    <small>{{ error }}</small>
+                                    {% endfor %}
+                                </div>
+                                {% endif %}
+                            </div>
+                        </div>
+                        
+                        <div class="row mb-3">
+                            <div class="col-md-6">
+                                <label class="form-label">{{ form.password.label }}</label>
+                                {{ form.password(class="form-control") }}
+                                {% if form.password.errors %}
+                                <div class="text-danger">
+                                    {% for error in form.password.errors %}
+                                    <small>{{ error }}</small>
+                                    {% endfor %}
+                                </div>
+                                {% endif %}
+                                <small class="text-muted">Minimum 8 caractères</small>
+                            </div>
+                            <div class="col-md-6">
+                                <label class="form-label">{{ form.confirm_password.label }}</label>
+                                {{ form.confirm_password(class="form-control") }}
+                                {% if form.confirm_password.errors %}
+                                <div class="text-danger">
+                                    {% for error in form.confirm_password.errors %}
+                                    <small>{{ error }}</small>
+                                    {% endfor %}
+                                </div>
+                                {% endif %}
+                            </div>
+                        </div>
+                        
+                        <div class="alert alert-info">
+                            <i class="fas fa-info-circle me-2"></i>
+                            <strong>Attention :</strong> Un super admin a accès à TOUTES les données de TOUS les clients.
+                            Utilisez avec prudence.
+                        </div>
+                        
+                        <div class="mt-4">
+                            {{ form.submit(class="btn btn-warning") }}
+                        </div>
+                    </form>
+                </div>
+                
+                <div class="col-lg-4">
+                    <div class="alert alert-warning">
+                        <h6 class="alert-heading">
+                            <i class="fas fa-shield-alt me-2"></i>Permissions Super Admin
+                        </h6>
+                        <p class="mb-2">Un super admin peut :</p>
+                        <ul class="small mb-0">
+                            <li>Voir et gérer tous les clients</li>
+                            <li>Accéder à toutes les données</li>
+                            <li>Créer/supprimer des super admins</li>
+                            <li>Provisionner des serveurs</li>
+                            <li>Aucune restriction de permissions</li>
+                        </ul>
+                    </div>
+                    
+                    <div class="alert alert-light">
+                        <h6 class="alert-heading">
+                            <i class="fas fa-exclamation-triangle me-2"></i>Recommandations
+                        </h6>
+                        <ul class="small mb-0">
+                            <li>Limitez le nombre de super admins</li>
+                            <li>Utilisez des mots de passe forts</li>
+                            <li>Journalisez toutes les actions</li>
+                            <li>Désactivez les comptes inactifs</li>
+                        </ul>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- API Routes -->
+<script>
+// API endpoint pour les actions
+const API_BASE = '/api/super-admin';
+
+async function toggleAdminStatus(adminId, newStatus) {
+    if (confirm(newStatus ? 'Activer ce super admin ?' : 'Désactiver ce super admin ?')) {
+        try {
+            const response = await fetch(`${API_BASE}/${adminId}/toggle`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRFToken': '{{ csrf_token() }}'
+                }
+            });
+            
+            const data = await response.json();
+            
+            if (data.success) {
+                showToast(data.message, 'success');
+                setTimeout(() => location.reload(), 1500);
+            } else {
+                showToast(data.error, 'error');
+            }
+        } catch (error) {
+            showToast('Erreur réseau', 'error');
+        }
+    }
+}
+
+async function resetAdminPassword(event, adminId) {
+    event.preventDefault();
+    
+    const form = event.target;
+    const formData = new FormData(form);
+    const password = formData.get('new_password');
+    const confirm = formData.get('confirm_password');
+    
+    if (password !== confirm) {
+        showToast('Les mots de passe ne correspondent pas', 'error');
+        return;
+    }
+    
+    if (password.length < 8) {
+        showToast('Le mot de passe doit avoir au moins 8 caractères', 'error');
+        return;
+    }
+    
+    if (confirm('Réinitialiser le mot de passe ?')) {
+        try {
+            const response = await fetch(`${API_BASE}/${adminId}/reset-password`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRFToken': '{{ csrf_token() }}'
+                },
+                body: JSON.stringify({ password: password })
+            });
+            
+            const data = await response.json();
+            
+            if (data.success) {
+                showToast('Mot de passe réinitialisé', 'success');
+                // Fermer le modal
+                const modal = bootstrap.Modal.getInstance(document.getElementById(`resetPasswordModal${adminId}`));
+                modal.hide();
+            } else {
+                showToast(data.error, 'error');
+            }
+        } catch (error) {
+            showToast('Erreur réseau', 'error');
+        }
+    }
+}
+
+function deleteSuperAdmin(adminId, username) {
+    if (confirm(`Supprimer définitivement le super admin ${username} ?\n\nCette action est irréversible !`)) {
+        fetch(`${API_BASE}/${adminId}`, {
+            method: 'DELETE',
+            headers: {
+                'X-CSRFToken': '{{ csrf_token() }}'
+            }
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                showToast(data.message, 'success');
+                setTimeout(() => location.reload(), 1500);
+            } else {
+                showToast(data.error, 'error');
+            }
+        })
+        .catch(error => {
+            showToast('Erreur réseau', 'error');
+        });
+    }
+}
+
+function showToast(message, type = 'info') {
+    const toast = document.createElement('div');
+    toast.className = `toast align-items-center text-bg-${type} border-0`;
+    toast.innerHTML = `
+        <div class="d-flex">
+            <div class="toast-body">
+                <i class="fas fa-${type === 'success' ? 'check-circle' : 'exclamation-circle'} me-2"></i>
+                ${message}
+            </div>
+            <button type="button" class="btn-close btn-close-white me-2 m-auto" 
+                    data-bs-dismiss="toast"></button>
+        </div>
+    `;
+    
+    document.body.appendChild(toast);
+    const bsToast = new bootstrap.Toast(toast);
+    bsToast.show();
+    
+    setTimeout(() => toast.remove(), 3000);
+}
+</script>
+{% endblock %}
