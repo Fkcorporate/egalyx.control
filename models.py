@@ -2252,6 +2252,21 @@ class Recommandation(db.Model):
         # Si le statut est 'termine', mettre le taux à 100%
         if nouveau_statut == 'termine':
             self.taux_avancement = 100
+
+    def archiver(self, user_id, raison=None):
+        """Archiver la recommandation"""
+        self.is_archived = True
+        self.archived_at = datetime.utcnow()
+        self.archived_by = user_id
+        if raison:
+            self.archive_raison = raison
+    
+    def restaurer(self):
+        """Restaurer la recommandation"""
+        self.is_archived = False
+        self.archived_at = None
+        self.archived_by = None
+        self.archive_raison = None
     
     def mettre_a_jour_avancement(self, nouveau_taux, utilisateur_id):
         """Met à jour le taux d'avancement"""
