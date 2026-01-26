@@ -2173,7 +2173,12 @@ class Recommandation(db.Model):
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
     client_id = db.Column(db.Integer, db.ForeignKey('clients.id'), nullable=True)
-
+    is_archived = db.Column(db.Boolean, default=False)
+    archived_at = db.Column(db.DateTime)
+    archived_by = db.Column(db.Integer, db.ForeignKey('user.id'))
+    client_id = db.Column(db.Integer, db.ForeignKey('clients.id'), nullable=True)
+    
+    
     # Relations corrigées
     audit = db.relationship('Audit', back_populates='recommandations')
     constatation = db.relationship('Constatation', back_populates='recommandations')
@@ -2182,6 +2187,8 @@ class Recommandation(db.Model):
     createur = db.relationship('User', foreign_keys=[created_by])
     plan_action = db.relationship('PlanAction', back_populates='recommandation', uselist=False, lazy=True)
     historique = db.relationship('HistoriqueRecommandation', backref='recommandation', lazy=True, cascade='all, delete-orphan')
+    archive_user = db.relationship('User', foreign_keys=[archived_by])
+    client = db.relationship('Client')
     
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
