@@ -21439,7 +21439,10 @@ def liste_risques():
             risque.derniere_evaluation = None
         
         # Compter le nombre de KRI actifs
-        risque.nb_kri_actifs = len([k for k in risque.kris if getattr(k, 'est_actif', True)])
+        if risque.kri and getattr(risque.kri, 'est_actif', True):
+            risque.nb_kri_actifs = 1
+        else:
+            risque.nb_kri_actifs = 0
     
     # ========================
     # 8. RENDU
