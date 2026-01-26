@@ -14387,7 +14387,6 @@ def client_admin_editer_utilisateur(id):
                          current_user=current_user,
                          is_self_edit=is_self_edit)  # <-- Ajouter cette variable
 
-
 @app.route('/client-admin/utilisateur/creer-gestionnaire', methods=['GET', 'POST'])
 @login_required
 def client_admin_creer_gestionnaire():
@@ -14455,27 +14454,17 @@ def client_admin_creer_gestionnaire():
         can_delete_users = BooleanField('Peut supprimer (désactiver) les utilisateurs', default=True)
         
         # Permissions métier selon le rôle
-        if current_user.has_permission('can_manage_risks'):
-            can_manage_risks = BooleanField('Peut gérer les risques', default=True)
-            can_validate_risks = BooleanField('Peut valider les risques', default=True)
-            can_confirm_evaluations = BooleanField('Peut confirmer les évaluations', default=True)
-        
-        if current_user.has_permission('can_manage_kri'):
-            can_manage_kri = BooleanField('Peut gérer les KRI', default=True)
-        
-        if current_user.has_permission('can_manage_audit'):
-            can_manage_audit = BooleanField('Peut gérer les audits', default=True)
-        
-        if current_user.has_permission('can_manage_regulatory'):
-            can_manage_regulatory = BooleanField('Peut gérer la veille réglementaire', default=True)
-        
-        if current_user.has_permission('can_manage_logigram'):
-            can_manage_logigram = BooleanField('Peut gérer les logigrammes', default=True)
-        
-        if current_user.has_permission('can_manage_departments'):
-            can_view_departments = BooleanField('Peut voir les directions/services', default=True)
-            can_manage_departments = BooleanField('Peut gérer les directions/services', default=True)
-            can_access_all_departments = BooleanField('Peut accéder à tous les départements', default=True)
+        # CORRIGÉ: Toujours créer les champs, ils seront affichés ou non dans le template
+        can_manage_risks = BooleanField('Peut gérer les risques', default=True)
+        can_validate_risks = BooleanField('Peut valider les risques', default=True)
+        can_confirm_evaluations = BooleanField('Peut confirmer les évaluations', default=True)
+        can_manage_kri = BooleanField('Peut gérer les KRI', default=True)
+        can_manage_audit = BooleanField('Peut gérer les audits', default=True)
+        can_manage_regulatory = BooleanField('Peut gérer la veille réglementaire', default=True)
+        can_manage_logigram = BooleanField('Peut gérer les logigrammes', default=True)
+        can_view_departments = BooleanField('Peut voir les directions/services', default=True)
+        can_manage_departments = BooleanField('Peut gérer les directions/services', default=True)
+        can_access_all_departments = BooleanField('Peut accéder à tous les départements', default=True)
         
         # Autres permissions
         can_export_data = BooleanField('Peut exporter des données', default=True)
@@ -14533,6 +14522,7 @@ def client_admin_creer_gestionnaire():
             user.set_password(form.password.data)
             
             # Définir les permissions COMPLÈTES pour les gestionnaires
+            # CORRIGÉ: Accéder correctement aux champs booléens
             permissions = {
                 # Permissions de base (toujours activées pour les gestionnaires)
                 'can_view_dashboard': True,
@@ -14542,25 +14532,25 @@ def client_admin_creer_gestionnaire():
                 'can_view_users_list': True,
                 
                 # Permissions de gestion d'utilisateurs
-                'can_edit_users': getattr(form, 'can_edit_users', False).data,
-                'can_create_users': getattr(form, 'can_create_users', False).data,
-                'can_deactivate_users': getattr(form, 'can_deactivate_users', False).data,
-                'can_delete_users': getattr(form, 'can_delete_users', False).data,
+                'can_edit_users': form.can_edit_users.data if hasattr(form, 'can_edit_users') else False,
+                'can_create_users': form.can_create_users.data if hasattr(form, 'can_create_users') else False,
+                'can_deactivate_users': form.can_deactivate_users.data if hasattr(form, 'can_deactivate_users') else False,
+                'can_delete_users': form.can_delete_users.data if hasattr(form, 'can_delete_users') else False,
                 'can_manage_users': True,  # Toujours True pour les gestionnaires
                 
                 # Permissions métier selon le rôle
-                'can_manage_risks': getattr(form, 'can_manage_risks', False).data,
-                'can_validate_risks': getattr(form, 'can_validate_risks', False).data,
-                'can_confirm_evaluations': getattr(form, 'can_confirm_evaluations', False).data,
-                'can_manage_kri': getattr(form, 'can_manage_kri', False).data,
-                'can_manage_audit': getattr(form, 'can_manage_audit', False).data,
-                'can_manage_regulatory': getattr(form, 'can_manage_regulatory', False).data,
-                'can_manage_logigram': getattr(form, 'can_manage_logigram', False).data,
-                'can_manage_departments': getattr(form, 'can_manage_departments', False).data,
-                'can_access_all_departments': getattr(form, 'can_access_all_departments', False).data,
+                'can_manage_risks': form.can_manage_risks.data if hasattr(form, 'can_manage_risks') else False,
+                'can_validate_risks': form.can_validate_risks.data if hasattr(form, 'can_validate_risks') else False,
+                'can_confirm_evaluations': form.can_confirm_evaluations.data if hasattr(form, 'can_confirm_evaluations') else False,
+                'can_manage_kri': form.can_manage_kri.data if hasattr(form, 'can_manage_kri') else False,
+                'can_manage_audit': form.can_manage_audit.data if hasattr(form, 'can_manage_audit') else False,
+                'can_manage_regulatory': form.can_manage_regulatory.data if hasattr(form, 'can_manage_regulatory') else False,
+                'can_manage_logigram': form.can_manage_logigram.data if hasattr(form, 'can_manage_logigram') else False,
+                'can_manage_departments': form.can_manage_departments.data if hasattr(form, 'can_manage_departments') else False,
+                'can_access_all_departments': form.can_access_all_departments.data if hasattr(form, 'can_access_all_departments') else False,
                 
                 # Autres permissions
-                'can_archive_data': getattr(form, 'can_archive_data', False).data,
+                'can_archive_data': form.can_archive_data.data if hasattr(form, 'can_archive_data') else False,
                 
                 # Permissions DÉSACTIVÉES pour les gestionnaires
                 'can_manage_settings': False,        # Pas de paramétrage système
@@ -14608,12 +14598,297 @@ def client_admin_creer_gestionnaire():
                 for perm, value in role_permissions[form.role.data].items():
                     permissions[perm] = value
             
-            # Appliquer les permissions du formulaire
-            for field_name, field in form._fields.items():
-                if field_name.startswith('can_') and isinstance(field, BooleanField):
-                    perm_name = field_name
-                    if hasattr(form, field_name):
-                        permissions[perm_name] = getattr(form, field_name).data
+            # Vérifier la cohérence avec la formule du client
+            if client.formule:
+                formule = client.formule
+                
+                # Désactiver les permissions non incluses dans la formule
+                formule_permissions = formule.get_permissions_list()
+                for perm in list(permissions.keys()):
+                    if perm.startswith('can_') and perm not in formule_permissions:
+                        # Si la permission n'est pas dans la formule, la désactiver
+                        permissions[perm] = False
+            
+            user.permissions = permissions
+            
+            print(f"📊 DEBUG: Permissions du gestionnaire créé:")
+            for perm, value in permissions.items():
+                if value:
+                    print(f"  ✓ {perm}")
+            
+            # Sauvegarder
+            db.session.add(user)
+            
+            # Mettre à jour les statistiques du client
+            client.nb_utilisateurs = User.query.filter_by(
+                client_id=client.id, 
+                is_active=True
+            ).count()
+            
+            # Journaliser
+            journal = JournalActiviteClient(
+                client_id=client.id,
+                utilisateur_id=current_user.id,
+                action='creation_gestionnaire',
+                details={
+                    'username': user.username,
+                    'email': user.email,
+                    'role': user.role,
+                    'is_gestionnaire': True,
+                    'permissions': {
+                        'view_users': permissions.get('can_view_users_list', False),
+                        'edit_users': permissions.get('can_edit_users', False),
+                        'create_users': permissions.get('can_create_users', False),
+                        'deactivate_users': permissions.get('can_deactivate_users', False),
+                        'delete_users': permissions.get('can_delete_users', False),
+                        'manage_users': True
+                    },
+                    'created_by': current_user.username
+                }
+            )
+            db.session.add(journal)
+            
+            db.session.commit()
+            
+            flash(f'✅ Gestionnaire {user.username} créé avec succès', 'success')
+            return redirect(url_for('client_admin_utilisateurs'))
+            
+        except Exception as e:
+            db.session.rollback()
+            print(f"❌ Erreur création gestionnaire: {str(e)}")
+            import traceback
+            traceback.print_exc()
+            flash(f'❌ Erreur lors de la création: {str(e)}', 'error')
+    else:
+        # Afficher les erreurs de validation
+        if form.errors:
+            print("❌ Erreurs de validation du formulaire gestionnaire:")
+            for field, errors in form.errors.items():
+                print(f"  {field}: {errors}")
+            
+            # Afficher les messages d'erreur
+            for field, errors in form.errors.items():
+                if errors:
+                    flash(f'Erreur {field}: {errors[0]}', 'error')
+    
+    # Calculer le pourcentage d'utilisation
+    pourcentage = (current_count / max_users * 100) if max_users > 0 else 0
+    
+    return render_template('client_admin/creer_gestionnaire.html',
+                         form=form,
+                         client=client,
+                         limite=max_users,
+                         utilisateurs_actuels=current_count,
+                         pourcentage=pourcentage)@app.route('/client-admin/utilisateur/creer-gestionnaire', methods=['GET', 'POST'])
+@login_required
+def client_admin_creer_gestionnaire():
+    """Créer un gestionnaire d'utilisateurs - version admin client"""
+    
+    print(f"🔍 DEBUG: Route appelée - client_admin_creer_gestionnaire")
+    
+    if not current_user.is_client_admin:
+        flash('Accès réservé aux administrateurs client', 'error')
+        return redirect(url_for('dashboard'))
+    
+    client = current_user.client
+    if not client:
+        flash('Aucun client associé à votre compte', 'error')
+        return redirect(url_for('dashboard'))
+    
+    # Vérifier la limite d'utilisateurs
+    current_count = User.query.filter_by(client_id=client.id, is_active=True).count()
+    max_users = client.formule.max_utilisateurs if client.formule else 10
+    
+    if current_count >= max_users:
+        flash(f'Limite d\'utilisateurs atteinte ({max_users}). Veuillez mettre à jour votre formule.', 'error')
+        return redirect(url_for('client_admin_utilisateurs'))
+    
+    # Formulaire spécifique pour les gestionnaires
+    from flask_wtf import FlaskForm
+    from wtforms import StringField, PasswordField, SelectField, BooleanField, SubmitField
+    from wtforms.validators import DataRequired, Email, Length, EqualTo
+    
+    class CreerGestionnaireForm(FlaskForm):
+        username = StringField('Nom d\'utilisateur', validators=[
+            DataRequired(message='Le nom d\'utilisateur est requis')
+        ])
+        email = StringField('Email', validators=[
+            DataRequired(message='L\'email est requis'),
+            Email(message='Format d\'email invalide')
+        ])
+        password = PasswordField('Mot de passe', validators=[
+            DataRequired(message='Le mot de passe est requis'),
+            Length(min=6, message='Le mot de passe doit avoir au moins 6 caractères')
+        ])
+        confirm_password = PasswordField('Confirmer le mot de passe', validators=[
+            DataRequired(message='Veuillez confirmer le mot de passe'),
+            EqualTo('password', message='Les mots de passe doivent correspondre')
+        ])
+        
+        # Rôles possibles pour les gestionnaires (pas admin)
+        role = SelectField('Rôle', 
+            choices=[
+                ('manager', 'Manager'),
+                ('auditeur', 'Auditeur'),
+                ('compliance', 'Responsable Conformité'),
+                ('consultant', 'Consultant'),
+                ('utilisateur', 'Utilisateur Standard')
+            ],
+            default='manager',
+            validators=[DataRequired()]
+        )
+        
+        # Permissions de gestion d'utilisateurs (TOUTES activées pour un gestionnaire)
+        can_view_users_list = BooleanField('Peut voir la liste des utilisateurs', default=True)
+        can_edit_users = BooleanField('Peut éditer les utilisateurs (sauf admin)', default=True)
+        can_create_users = BooleanField('Peut créer de nouveaux utilisateurs', default=True)
+        can_deactivate_users = BooleanField('Peut activer/désactiver les comptes', default=True)
+        can_delete_users = BooleanField('Peut supprimer (désactiver) les utilisateurs', default=True)
+        
+        # Permissions métier selon le rôle
+        # CORRIGÉ: Toujours créer les champs, ils seront affichés ou non dans le template
+        can_manage_risks = BooleanField('Peut gérer les risques', default=True)
+        can_validate_risks = BooleanField('Peut valider les risques', default=True)
+        can_confirm_evaluations = BooleanField('Peut confirmer les évaluations', default=True)
+        can_manage_kri = BooleanField('Peut gérer les KRI', default=True)
+        can_manage_audit = BooleanField('Peut gérer les audits', default=True)
+        can_manage_regulatory = BooleanField('Peut gérer la veille réglementaire', default=True)
+        can_manage_logigram = BooleanField('Peut gérer les logigrammes', default=True)
+        can_view_departments = BooleanField('Peut voir les directions/services', default=True)
+        can_manage_departments = BooleanField('Peut gérer les directions/services', default=True)
+        can_access_all_departments = BooleanField('Peut accéder à tous les départements', default=True)
+        
+        # Autres permissions
+        can_export_data = BooleanField('Peut exporter des données', default=True)
+        can_archive_data = BooleanField('Peut archiver des données', default=True)
+        
+        department = StringField('Département')
+        is_active = BooleanField('Activer le compte immédiatement', default=True)
+        submit = SubmitField('Créer le gestionnaire')
+    
+    form = CreerGestionnaireForm()
+    
+    if form.validate_on_submit():
+        print("✅ Formulaire de création gestionnaire validé avec succès!")
+        
+        try:
+            # Vérifier les limites
+            if client.formule:
+                current_count = User.query.filter_by(
+                    client_id=client.id, 
+                    is_active=True
+                ).count()
+                
+                if current_count >= client.formule.max_utilisateurs:
+                    flash(f'❌ Limite atteinte pendant la création. Veuillez réessayer.', 'error')
+                    return redirect(url_for('client_admin_creer_gestionnaire'))
+            
+            # Vérifier si l'utilisateur existe déjà
+            existing_user = User.query.filter(
+                db.or_(
+                    User.username == form.username.data,
+                    User.email == form.email.data
+                ),
+                User.client_id == client.id
+            ).first()
+            
+            if existing_user:
+                flash(f'Un utilisateur avec ce nom ou email existe déjà dans votre client', 'error')
+                return redirect(url_for('client_admin_creer_gestionnaire'))
+            
+            # Créer l'utilisateur avec permissions de gestion COMPLÈTES
+            user = User(
+                username=form.username.data,
+                email=form.email.data,
+                role=form.role.data,
+                department=form.department.data or '',
+                is_active=form.is_active.data,
+                client_id=client.id,
+                is_client_admin=False,  # JAMAIS True pour un gestionnaire
+                can_view_users_list=True,  # Toujours True pour les gestionnaires
+                can_manage_users=True,    # True car c'est un gestionnaire
+                created_at=datetime.utcnow()
+            )
+            
+            # Définir le mot de passe
+            user.set_password(form.password.data)
+            
+            # Définir les permissions COMPLÈTES pour les gestionnaires
+            # CORRIGÉ: Accéder correctement aux champs booléens
+            permissions = {
+                # Permissions de base (toujours activées pour les gestionnaires)
+                'can_view_dashboard': True,
+                'can_view_reports': True,
+                'can_export_data': True,
+                'can_view_departments': True,
+                'can_view_users_list': True,
+                
+                # Permissions de gestion d'utilisateurs
+                'can_edit_users': form.can_edit_users.data if hasattr(form, 'can_edit_users') else False,
+                'can_create_users': form.can_create_users.data if hasattr(form, 'can_create_users') else False,
+                'can_deactivate_users': form.can_deactivate_users.data if hasattr(form, 'can_deactivate_users') else False,
+                'can_delete_users': form.can_delete_users.data if hasattr(form, 'can_delete_users') else False,
+                'can_manage_users': True,  # Toujours True pour les gestionnaires
+                
+                # Permissions métier selon le rôle
+                'can_manage_risks': form.can_manage_risks.data if hasattr(form, 'can_manage_risks') else False,
+                'can_validate_risks': form.can_validate_risks.data if hasattr(form, 'can_validate_risks') else False,
+                'can_confirm_evaluations': form.can_confirm_evaluations.data if hasattr(form, 'can_confirm_evaluations') else False,
+                'can_manage_kri': form.can_manage_kri.data if hasattr(form, 'can_manage_kri') else False,
+                'can_manage_audit': form.can_manage_audit.data if hasattr(form, 'can_manage_audit') else False,
+                'can_manage_regulatory': form.can_manage_regulatory.data if hasattr(form, 'can_manage_regulatory') else False,
+                'can_manage_logigram': form.can_manage_logigram.data if hasattr(form, 'can_manage_logigram') else False,
+                'can_manage_departments': form.can_manage_departments.data if hasattr(form, 'can_manage_departments') else False,
+                'can_access_all_departments': form.can_access_all_departments.data if hasattr(form, 'can_access_all_departments') else False,
+                
+                # Autres permissions
+                'can_archive_data': form.can_archive_data.data if hasattr(form, 'can_archive_data') else False,
+                
+                # Permissions DÉSACTIVÉES pour les gestionnaires
+                'can_manage_settings': False,        # Pas de paramétrage système
+                'can_manage_permissions': False,     # Pas de gestion permissions avancées
+                'can_delete_data': False,            # Pas de suppression définitive
+                'can_provision_servers': False,      # Pas d'administration système
+                'can_manage_clients': False,         # Pas de gestion clients
+                'is_super_admin': False,             # Jamais super admin
+                'can_manage_system': False,          # Pas d'administration système
+                
+                # Permissions par défaut
+                'can_access_all_departments': False,
+                'can_manage_templates': False,
+                'can_manage_lists': False,
+                'can_manage_fields': False,
+                'can_manage_files': False,
+                'can_use_ia_analysis': False
+            }
+            
+            # Ajuster les permissions selon le rôle choisi
+            role_permissions = {
+                'manager': {
+                    'can_manage_risks': True,
+                    'can_validate_risks': True,
+                    'can_confirm_evaluations': True,
+                    'can_manage_kri': True,
+                    'can_manage_audit': True
+                },
+                'auditeur': {
+                    'can_manage_audit': True
+                },
+                'compliance': {
+                    'can_manage_regulatory': True
+                },
+                'consultant': {
+                    # Permissions de consultation seulement
+                },
+                'utilisateur': {
+                    # Pas de permissions spéciales
+                }
+            }
+            
+            # Appliquer les permissions du rôle
+            if form.role.data in role_permissions:
+                for perm, value in role_permissions[form.role.data].items():
+                    permissions[perm] = value
             
             # Vérifier la cohérence avec la formule du client
             if client.formule:
