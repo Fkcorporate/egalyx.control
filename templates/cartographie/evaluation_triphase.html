@@ -1409,6 +1409,144 @@ function exporterEvaluationCourante() {
     printWindow.document.close();
     printWindow.print();
 }
+    // Configuration du zoom
+const ZOOM_LEVEL = 0.9; // 90%
+
+// Fonction pour appliquer le zoom
+function applyZoom() {
+    // Méthode 1: Utiliser la propriété zoom (support limité)
+    document.body.style.zoom = `${ZOOM_LEVEL * 100}%`;
+    
+    // Méthode 2: Utiliser transform: scale (support plus large)
+    document.body.style.transform = `scale(${ZOOM_LEVEL})`;
+    document.body.style.transformOrigin = 'top left';
+    
+    // Ajuster les dimensions pour compenser le scale
+    const scaleFactor = 1 / ZOOM_LEVEL;
+    document.body.style.width = `${scaleFactor * 100}%`;
+    document.body.style.minHeight = `${scaleFactor * 100}vh`;
+    
+    // Ajuster les conteneurs principaux
+    const mainContainers = document.querySelectorAll('.container, .container-fluid, .row');
+    mainContainers.forEach(container => {
+        container.style.maxWidth = 'none';
+        container.style.width = '100%';
+    });
+    
+    // Empêcher le débordement horizontal
+    document.documentElement.style.overflowX = 'hidden';
+    document.body.style.overflowX = 'hidden';
+    
+    console.log(`Zoom appliqué à ${ZOOM_LEVEL * 100}%`);
+}
+
+// Fonction pour ajuster les éléments spécifiques après zoom
+function adjustElementsAfterZoom() {
+    // Ajuster les largeurs des colonnes Bootstrap si nécessaire
+    const cols = document.querySelectorAll('[class*="col-"]');
+    cols.forEach(col => {
+        const classes = col.className.split(' ');
+        const colClass = classes.find(c => c.startsWith('col-'));
+        if (colClass) {
+            // S'assurer que les colonnes prennent bien leur largeur
+            col.style.flex = '0 0 auto';
+        }
+    });
+    
+    // Ajuster les canvas (comme la matrice)
+    const canvases = document.querySelectorAll('canvas');
+    canvases.forEach(canvas => {
+        const originalWidth = canvas.getAttribute('width');
+        const originalHeight = canvas.getAttribute('height');
+        if (originalWidth && originalHeight) {
+            canvas.style.width = `${originalWidth * ZOOM_LEVEL}px`;
+            canvas.style.height = `${originalHeight * ZOOM_LEVEL}px`;
+        }
+    });
+    
+    // Ajuster les tailles de police si nécessaire
+    const smallTexts = document.querySelectorAll('small, .small, .form-text');
+    smallTexts.forEach(text => {
+        const currentSize = parseFloat(window.getComputedStyle(text).fontSize);
+        if (currentSize < 11) {
+            text.style.fontSize = `${currentSize / ZOOM_LEVEL}px`;
+        }
+    });
+}
+
+// Appliquer le zoom au chargement
+document.addEventListener('DOMContentLoaded', function() {
+    // Appliquer le zoom immédiatement
+    applyZoom();
+    
+    // Ajuster les éléments après un court délai
+    setTimeout(() => {
+        adjustElementsAfterZoom();
+        
+        // Initialiser les composants de l'évaluation
+        initialiserBarometre();
+        forcerRecalculAvecValeursFinales();
+        calculerScorePhase1();
+        calculerScorePhase2();
+        calculerScorePhase3();
+        dessinerMiniMatrice();
+        restaurerValeursBarometre();
+    }, 50);
+    
+    // Réappliquer après que tout le contenu soit chargé
+    setTimeout(applyZoom, 200);
+    setTimeout(adjustElementsAfterZoom, 300);
+    
+    // Vérifier périodiquement que le zoom est toujours appliqué
+    setInterval(() => {
+        const currentTransform = window.getComputedStyle(document.body).transform;
+        if (currentTransform === 'none' || !currentTransform.includes('0.9')) {
+            applyZoom();
+        }
+    }, 1000);
+});
+
+// Gérer le redimensionnement
+let resizeTimeout;
+window.addEventListener('resize', function() {
+    clearTimeout(resizeTimeout);
+    resizeTimeout = setTimeout(function() {
+        applyZoom();
+        setTimeout(adjustElementsAfterZoom, 100);
+    }, 250);
+});
+
+// Gérer l'impression (désactiver le zoom pour l'impression)
+window.addEventListener('beforeprint', function() {
+    document.body.style.zoom = '100%';
+    document.body.style.transform = 'scale(1)';
+    document.body.style.width = '100%';
+    document.body.style.minHeight = '100vh';
+});
+
+window.addEventListener('afterprint', function() {
+    // Rétablir le zoom après impression
+    setTimeout(() => {
+        applyZoom();
+        setTimeout(adjustElementsAfterZoom, 200);
+    }, 100);
+});
+
+// Ajouter une fonction pour désactiver/activer le zoom si nécessaire
+function toggleZoom(enabled) {
+    if (enabled) {
+        applyZoom();
+        setTimeout(adjustElementsAfterZoom, 100);
+    } else {
+        document.body.style.zoom = '100%';
+        document.body.style.transform = 'scale(1)';
+        document.body.style.width = '100%';
+        document.body.style.minHeight = '100vh';
+    }
+}
+
+// Exposer la fonction globalement pour un contrôle manuel
+window.toggleZoom = toggleZoom;
 </script>
 
 <style>
