@@ -580,7 +580,192 @@
         {% endif %}
     </div>
 </div>
+<!-- ========== DISPOSITIFS DE MAÎTRISE ========== -->
+<div class="row mt-4">
+    <div class="col-12">
+        <div class="card shadow">
+            <div class="card-header bg-warning text-dark d-flex justify-content-between align-items-center">
+                <h6 class="mb-0">
+                    <i class="fas fa-shield-alt me-2"></i>Dispositifs de Maîtrise
+                    <span class="badge bg-primary ms-2">{{ dispositifs|length }}</span>
+                </h6>
+                <div class="btn-group">
+                    <a href="{{ url_for('liste_dispositifs_risque', risque_id=risque.id) }}" 
+                       class="btn btn-sm btn-outline-primary">
+                        <i class="fas fa-external-link-alt me-1"></i>Voir tout
+                    </a>
+                    <a href="{{ url_for('nouveau_dispositif', risque_id=risque.id) }}" 
+                       class="btn btn-sm btn-success">
+                        <i class="fas fa-plus me-1"></i>Ajouter
+                    </a>
+                </div>
+            </div>
+            <div class="card-body">
+                {% if dispositifs %}
+                <!-- Statistiques rapides -->
+            <div class="row mb-4">
+                {# Solution manuelle pour éviter les erreurs avec None #}
+                {% set dispositifs_efficaces = [] %}
+                {% set dispositifs_a_verifier = [] %}
+                {% set dispositifs_avec_plan = [] %}
+                
+                {% for dispositif in dispositifs %}
+                    {% if dispositif.efficacite_reelle is not none and dispositif.efficacite_reelle >= 4 %}
+                        {% set dispositifs_efficaces = dispositifs_efficaces + [dispositif] %}
+                    {% endif %}
+                    {% if dispositif.prochaine_verification is none %}
+                        {% set dispositifs_a_verifier = dispositifs_a_verifier + [dispositif] %}
+                    {% endif %}
+                    {% if dispositif.plan_action_id is not none %}
+                        {% set dispositifs_avec_plan = dispositifs_avec_plan + [dispositif] %}
+                    {% endif %}
+                {% endfor %}
+                
+                <div class="col-md-3">
+                    <div class="card bg-light border">
+                        <div class="card-body text-center py-2">
+                            <h5 class="mb-0">{{ dispositifs|length }}</h5>
+                            <small class="text-muted">Total</small>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-md-3">
+                    <div class="card bg-success text-white">
+                        <div class="card-body text-center py-2">
+                            <h5 class="mb-0">{{ dispositifs_efficaces|length }}</h5>
+                            <small>Efficaces</small>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-md-3">
+                    <div class="card bg-warning text-dark">
+                        <div class="card-body text-center py-2">
+                            <h5 class="mb-0">{{ dispositifs_a_verifier|length }}</h5>
+                            <small>À vérifier</small>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-md-3">
+                    <div class="card bg-info text-white">
+                        <div class="card-body text-center py-2">
+                            <h5 class="mb-0">{{ dispositifs_avec_plan|length }}</h5>
+                            <small>Avec plans</small>
+                        </div>
+                    </div>
+                </div>
+            </div>
 
+                <!-- Liste des dispositifs -->
+                <div class="table-responsive">
+                    <table class="table table-hover table-sm">
+                        <thead>
+                            <tr>
+                                <th>RÉFÉRENCE</th>
+                                <th>NOM</th>
+                                <th>TYPE</th>
+                                <th>EFFICACITÉ</th>
+                                <th>STATUT</th>
+                                <th>PROCHAINE VÉRIF</th>
+                                <th class="text-end">ACTIONS</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for dispositif in dispositifs[:5] %}
+                            <tr>
+                                <td>
+                                    <strong>{{ dispositif.reference }}</strong>
+                                </td>
+                                <td>
+                                    <div class="fw-bold">{{ dispositif.nom|truncate(30) }}</div>
+                                    {% if dispositif.description %}
+                                    <small class="text-muted">{{ dispositif.description|truncate(40) }}</small>
+                                    {% endif %}
+                                </td>
+                                <td>
+                                    {% if dispositif.type_dispositif == 'Préventif' %}
+                                    <span class="badge bg-success">{{ dispositif.type_dispositif[:1] }}</span>
+                                    {% elif dispositif.type_dispositif == 'Détectif' %}
+                                    <span class="badge bg-warning text-dark">{{ dispositif.type_dispositif[:1] }}</span>
+                                    {% elif dispositif.type_dispositif == 'Correctif' %}
+                                    <span class="badge bg-danger">{{ dispositif.type_dispositif[:1] }}</span>
+                                    {% else %}
+                                    <span class="badge bg-secondary">{{ dispositif.type_dispositif[:1] }}</span>
+                                    {% endif %}
+                                </td>
+                                <td>
+                                    {% if dispositif.efficacite_reelle %}
+                                    <div class="progress" style="height: 8px;">
+                                        <div class="progress-bar bg-{% if dispositif.efficacite_reelle >= 4 %}success{% elif dispositif.efficacite_reelle >= 3 %}warning{% else %}danger{% endif %}" 
+                                             style="width: {{ (dispositif.efficacite_reelle / 5) * 100 }}%">
+                                        </div>
+                                    </div>
+                                    <small class="text-muted">{{ dispositif.efficacite_reelle }}/5</small>
+                                    {% else %}
+                                    <span class="badge bg-secondary">Non évalué</span>
+                                    {% endif %}
+                                </td>
+                                <td>
+                                    {% if dispositif.statut == 'actif' %}
+                                    <span class="badge bg-success">Actif</span>
+                                    {% elif dispositif.statut == 'inactif' %}
+                                    <span class="badge bg-secondary">Inactif</span>
+                                    {% else %}
+                                    <span class="badge bg-warning text-dark">{{ dispositif.statut }}</span>
+                                    {% endif %}
+                                </td>
+                                <td>
+                                    {% if dispositif.prochaine_verification %}
+                                        {% set jours_restants = (dispositif.prochaine_verification - datetime.now().date()).days %}
+                                        {{ dispositif.prochaine_verification.strftime('%d/%m/%Y') }}
+                                        <br>
+                                        <small class="text-{% if jours_restants <= 7 %}danger{% elif jours_restants <= 30 %}warning{% else %}success{% endif %}">
+                                            {{ jours_restants }} jour(s)
+                                        </small>
+                                    {% else %}
+                                        <span class="badge bg-warning text-dark">Non planifiée</span>
+                                    {% endif %}
+                                </td>
+                                <td>
+                                    <div class="btn-group btn-group-sm">
+                                        <a href="{{ url_for('detail_dispositif', dispositif_id=dispositif.id) }}" 
+                                           class="btn btn-outline-info" title="Détails">
+                                            <i class="fas fa-eye"></i>
+                                        </a>
+                                        <a href="{{ url_for('evaluer_dispositif', dispositif_id=dispositif.id) }}" 
+                                           class="btn btn-outline-warning" title="Évaluer">
+                                            <i class="fas fa-chart-bar"></i>
+                                        </a>
+                                    </div>
+                                </td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+                
+                {% if dispositifs|length > 5 %}
+                <div class="text-center mt-3">
+                    <a href="{{ url_for('liste_dispositifs_risque', risque_id=risque.id) }}" class="btn btn-sm btn-outline-primary">
+                        <i class="fas fa-list me-1"></i>Voir tous les {{ dispositifs|length }} dispositifs
+                    </a>
+                </div>
+                {% endif %}
+                
+                {% else %}
+                <!-- Aucun dispositif -->
+                <div class="text-center py-5">
+                    <i class="fas fa-shield-alt fa-4x text-muted mb-3"></i>
+                    <h5 class="text-muted">Aucun dispositif de maîtrise défini</h5>
+                    <p class="text-muted">Les dispositifs de maîtrise renforcent la gestion de ce risque</p>
+                    <a href="{{ url_for('nouveau_dispositif', risque_id=risque.id) }}" class="btn btn-success">
+                        <i class="fas fa-plus me-2"></i>Créer le premier dispositif
+                    </a>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</div>
 <!-- Section Documentation et Fichiers -->
 <div class="row mt-4">
     <div class="col-md-12">
