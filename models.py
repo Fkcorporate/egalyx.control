@@ -591,7 +591,72 @@ class User(UserMixin, db.Model):
                 self.id == audit.responsable_id or 
                 self.id == audit.created_by)
     
-
+    def can_edit_plan(self, plan):
+        """Vérifie si l'utilisateur peut modifier un plan d'action - VERSION MULTI-TENANT"""
+        
+        # 1. SUPER ADMIN : peut tout faire
+        if self.role == 'super_admin':
+            return True
+        
+        # 2. Récupérer le client_id du plan
+        plan_client_id = getattr(plan, 'client_id', None)
+        
+        # 3. Si le plan n'a pas de client_id, essayer de le trouver via les relations
+        if plan_client_id is None:
+            # Essayer de trouver le client_id via le risque
+            if hasattr(plan, 'risque') and plan.risque:
+                plan_client_id = getattr(plan.risque, 'client_id', None)
+            # Essayer de trouver via l'audit
+            elif hasattr(plan, 'audit') and plan.audit:
+                plan_client_id = getattr(plan.audit, 'client_id', None)
+            # Essayer de trouver via le créateur
+            elif hasattr(plan, 'created_by'):
+                createur = User.query.get(plan.created_by)
+                if createur:
+                    plan_client_id = createur.client_id
+        
+        # 4. Vérifier que l'utilisateur est dans le même client que le plan
+        user_client_id = getattr(self, 'client_id', None)
+        
+        if plan_client_id is not None and user_client_id != plan_client_id:
+            print(f"❌ Rejeté: client mismatch (user: {user_client_id}, plan: {plan_client_id})")
+            return False
+        
+        # 5. ADMIN CLIENT : peut modifier tous les plans de son client
+        if self.is_client_admin:
+            print(f"✅ Admin client autorisé pour plan {plan.id}")
+            return True
+        
+        # 6. CRÉATEUR DU PLAN : peut modifier
+        if hasattr(plan, 'created_by') and self.id == plan.created_by:
+            print(f"✅ Créateur du plan autorisé")
+            return True
+        
+        # 7. RESPONSABLE DU PLAN : peut modifier
+        if hasattr(plan, 'responsable_id') and self.id == plan.responsable_id:
+            print(f"✅ Responsable du plan autorisé")
+            return True
+        
+        # 8. RESPONSABLE DU RISQUE : peut modifier
+        if hasattr(plan, 'risque') and plan.risque:
+            if hasattr(plan.risque, 'created_by') and self.id == plan.risque.created_by:
+                print(f"✅ Créateur du risque autorisé")
+                return True
+        
+        # 9. RESPONSABLE DE L'AUDIT : peut modifier
+        if hasattr(plan, 'audit') and plan.audit:
+            if hasattr(plan.audit, 'responsable_id') and self.id == plan.audit.responsable_id:
+                print(f"✅ Responsable de l'audit autorisé")
+                return True
+            if hasattr(plan.audit, 'created_by') and self.id == plan.audit.created_by:
+                print(f"✅ Créateur de l'audit autorisé")
+                return True
+        
+        # 10. Vérifier la permission can_manage_action_plans
+        has_permission = self.has_permission('can_manage_action_plans')
+        print(f"📋 Permission can_manage_action_plans: {has_permission}")
+        
+        return has_permission
     
     def can_add_constatation(self, audit):
         """Vérifie si l'utilisateur peut ajouter une constatation"""
@@ -954,6 +1019,11 @@ class Risque(db.Model):
     # CORRECTION: Relation KRI avec primaryjoin explicite
     kri = db.relationship('KRI', back_populates='risque', uselist=False, lazy=True,
                          primaryjoin='Risque.id == KRI.risque_id')
+    
+    dispositifs_maitrise = db.relationship('DispositifMaitrise', 
+                                          back_populates='risque',
+                                          cascade='all, delete-orphan',
+                                          lazy=True)
 
 # -------------------- EVALUATION RISQUE (CORRIGÉ) --------------------
 # -------------------- EVALUATION RISQUE (CORRIGÉ) --------------------
@@ -1044,6 +1114,13 @@ class CampagneEvaluation(db.Model):
     date_debut = db.Column(db.Date)
     date_fin = db.Column(db.Date)
     statut = db.Column(db.String(20), default='en_cours')  # en_cours, terminee, archivee
+    
+    # AJOUTEZ CES CHAMPS POUR L'ARCHIVAGE
+    is_archived = db.Column(db.Boolean, default=False)
+    archived_at = db.Column(db.DateTime)
+    archived_by = db.Column(db.Integer, db.ForeignKey('user.id'))
+    archive_reason = db.Column(db.Text)
+    
     created_by = db.Column(db.Integer, db.ForeignKey('user.id'))
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
@@ -1053,6 +1130,9 @@ class CampagneEvaluation(db.Model):
     createur = db.relationship('User', foreign_keys=[created_by])
     evaluations = db.relationship('EvaluationRisque', back_populates='campagne', cascade='all, delete-orphan')
     client_id = db.Column(db.Integer, db.ForeignKey('clients.id'), nullable=True)
+    
+    # AJOUTEZ CETTE RELATION
+    archive_user = db.relationship('User', foreign_keys=[archived_by])
     
     def __repr__(self):
         return f'<CampagneEvaluation {self.id}: {self.nom}>'
@@ -2306,106 +2386,142 @@ class PlanAction(db.Model):
     date_fin_reelle = db.Column(db.Date)
     statut = db.Column(db.String(50), default='en_attente')
     pourcentage_realisation = db.Column(db.Integer, default=0)
-    # Évaluation finale
-    efficacite = db.Column(db.String(50))  # efficace, partiellement_efficace, inefficace
-    score_efficacite = db.Column(db.Integer)  # 0-100
+    efficacite = db.Column(db.String(50))
+    score_efficacite = db.Column(db.Integer)
     commentaire_evaluation = db.Column(db.Text)
-    # Relations multiples
-    audit_id = db.Column(db.Integer, db.ForeignKey('audits.id'), nullable=False)  # 'audits.id'
-    recommandation_id = db.Column(db.Integer, db.ForeignKey('recommandations.id'))
-    risque_id = db.Column(db.Integer, db.ForeignKey('risques.id'))
-    constatations_ids = db.Column(db.String(500))  # Plusieurs constats peuvent être liés
-    responsable_id = db.Column(db.Integer, db.ForeignKey('user.id'))
+    priorite = db.Column(db.String(20), default='moyenne')
+    
+    # Colonnes d'archivage - LA NOUVELLE COLONNE EST AJOUTÉE
+    is_archived = db.Column(db.Boolean, default=False)
+    archived_at = db.Column(db.DateTime)
+    archived_by = db.Column(db.Integer, db.ForeignKey('user.id'))
+    archive_reason = db.Column(db.Text)  # Cette colonne existe déjà dans votre base
+    statut_archive = db.Column(db.String(20), default='actif')  # NOUVELLE COLONNE
+    
     created_by = db.Column(db.Integer, db.ForeignKey('user.id'))
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
-    is_archived = db.Column(db.Boolean, default=False)
     client_id = db.Column(db.Integer, db.ForeignKey('clients.id'), nullable=True)
     
-    # Relations corrigées
+    # Relations multiples
+    audit_id = db.Column(db.Integer, db.ForeignKey('audits.id'), nullable=True)
+    recommandation_id = db.Column(db.Integer, db.ForeignKey('recommandations.id'), nullable=True)
+    risque_id = db.Column(db.Integer, db.ForeignKey('risques.id'), nullable=True)
+    dispositif_id = db.Column(db.Integer, db.ForeignKey('dispositifs_maitrise.id'), nullable=True)
+    constatations_ids = db.Column(db.String(500))
+    responsable_id = db.Column(db.Integer, db.ForeignKey('user.id'))
+    
+    # Relations
     audit = db.relationship('Audit', back_populates='plans_action')
     recommandation = db.relationship('Recommandation', back_populates='plan_action')
     risque = db.relationship('Risque', backref='plans_action')
+    dispositif = db.relationship('DispositifMaitrise', foreign_keys=[dispositif_id])
     responsable = db.relationship('User', foreign_keys=[responsable_id])
     createur = db.relationship('User', foreign_keys=[created_by])
     sous_actions = db.relationship('SousAction', backref='plan_action', lazy=True, cascade='all, delete-orphan')
-    etapes = db.relationship('EtapePlanAction', backref='plan_action', lazy=True, cascade='all, delete-orphan')
+    
+    # REMARQUE : N'ÉCRIVEZ PAS @property pour is_archived car c'est une vraie colonne
     
     @property
     def progression_reelle(self):
-        """Calcule la progression réelle basée sur les sous-actions"""
+        """Calcule automatiquement la progression basée sur les sous-actions"""
         if not self.sous_actions:
-            return self.pourcentage_realisation
+            return self.pourcentage_realisation or 0
         
-        total = len(self.sous_actions)
-        if total == 0:
+        sous_actions_actives = [sa for sa in self.sous_actions]
+        
+        if not sous_actions_actives:
             return 0
         
-        total_progression = sum(s.pourcentage_realisation for s in self.sous_actions)
-        return round(total_progression / total)
+        total_progression = sum(sa.pourcentage_realisation or 0 for sa in sous_actions_actives)
+        progression_calculee = round(total_progression / len(sous_actions_actives))
+        
+        if progression_calculee != self.pourcentage_realisation:
+            self.pourcentage_realisation = progression_calculee
+            try:
+                db.session.commit()
+            except:
+                db.session.rollback()
+        
+        return progression_calculee
     
     @property
     def est_en_retard(self):
         """Vérifie si le plan est en retard"""
-        if not self.date_fin_prevue or self.statut == 'termine':
+        if self.statut == 'termine':
             return False
+        
+        if not self.date_fin_prevue:
+            return False
+        
         return datetime.utcnow().date() > self.date_fin_prevue
+
+    @property
+    def couleur_priorite(self):
+        """Retourne la couleur Bootstrap pour la priorité"""
+        couleurs = {
+            'faible': 'success',
+            'moyenne': 'warning',
+            'haute': 'danger',
+            'critique': 'dark'
+        }
+        return couleurs.get(self.priorite, 'secondary')
     
     @property
     def couleur_statut(self):
-        """Couleur Bootstrap pour le statut"""
+        """Retourne la couleur Bootstrap en fonction du statut"""
         couleurs = {
             'en_attente': 'secondary',
-            'planifie': 'info',
             'en_cours': 'warning',
             'termine': 'success',
-            'suspendu': 'dark',
+            'suspendu': 'info',
             'annule': 'danger'
         }
-        return couleurs.get(self.statut, 'light')
+        return couleurs.get(self.statut, 'secondary')
     
-    def get_constatations_list(self):
-        """Retourne la liste des IDs de constatations"""
-        if self.constatations_ids:
-            try:
-                return [int(id.strip()) for id in self.constatations_ids.split(',') if id.strip()]
-            except (ValueError, AttributeError):
-                return []
-        return []
-    
-    def ajouter_constatation(self, constatation_id):
-        """Ajoute une constatation au plan"""
-        constatations_list = self.get_constatations_list()
-        if constatation_id not in constatations_list:
-            constatations_list.append(constatation_id)
-            self.constatations_ids = ','.join(str(id) for id in constatations_list)
-    
-    def terminer(self, score_efficacite=None, commentaire=None):
-        """Termine le plan d'action"""
-        self.statut = 'termine'
-        self.date_fin_reelle = datetime.utcnow().date()
-        self.pourcentage_realisation = 100
+    # Dans votre modèle PlanAction
+    def archiver(self, user_id, reason=None):
+        """Archiver le plan"""
+        self.is_archived = True
+        self.statut_archive = 'archive'
+        self.archived_at = datetime.utcnow()
+        self.archived_by = user_id
+        if reason:
+            self.archive_reason = reason
+        self.updated_at = datetime.utcnow()
         
-        if score_efficacite is not None:
-            self.score_efficacite = score_efficacite
-            if score_efficacite >= 80:
-                self.efficacite = 'efficace'
-            elif score_efficacite >= 50:
-                self.efficacite = 'partiellement_efficace'
-            else:
-                self.efficacite = 'inefficace'
-        
-        if commentaire:
-            self.commentaire_evaluation = commentaire
-        
+    def desarchiver(self):
+        """Désarchiver le plan"""
+        self.is_archived = False
+        self.statut_archive = 'actif'
+        self.archived_at = None
+        self.archived_by = None
+        self.archive_reason = None
         self.updated_at = datetime.utcnow()
     
-    def calculer_efficacite(self):
-        """Calcule automatiquement l'efficacité si possible"""
-        if self.recommandation and self.recommandation.risque:
-            # Logique de calcul d'efficacité basée sur la réduction du risque
-            pass
-        return None
+    def to_dict(self):
+        """Convertit l'objet PlanAction en dictionnaire pour la sérialisation JSON"""
+        return {
+            'id': self.id,
+            'reference': self.reference,
+            'nom': self.nom,
+            'description': self.description,
+            'date_debut': self.date_debut.isoformat() if self.date_debut else None,
+            'date_fin_prevue': self.date_fin_prevue.isoformat() if self.date_fin_prevue else None,
+            'date_fin_reelle': self.date_fin_reelle.isoformat() if self.date_fin_reelle else None,
+            'statut': self.statut,
+            'pourcentage_realisation': self.pourcentage_realisation,
+            'client_id': self.client_id,
+            'progression_reelle': self.progression_reelle,
+            'est_en_retard': self.est_en_retard,
+            'couleur_statut': self.couleur_statut,
+            'is_archived': self.is_archived,
+            'statut_archive': self.statut_archive,
+            'archived_at': self.archived_at.isoformat() if self.archived_at else None,
+            'archived_by': self.archived_by,
+            'priorite': self.priorite,
+            'archive_reason': self.archive_reason
+        }
     
     def __repr__(self):
         return f'<PlanAction {self.reference}: {self.nom}>'
@@ -2454,6 +2570,33 @@ class SousAction(db.Model):
         self.pourcentage_realisation = 100
         self.date_fin_reelle = datetime.utcnow().date()
         self.updated_at = datetime.utcnow()
+
+# -------------------- ETAPE PLAN ACTION - CORRIGÉ --------------------
+class EtapePlanAction(db.Model):
+    __tablename__ = 'etapes_plan_action'
+    
+    id = db.Column(db.Integer, primary_key=True)
+    plan_action_id = db.Column(db.Integer, db.ForeignKey('plans_action.id'), nullable=False)  # 'plans_action.id'
+    ordre = db.Column(db.Integer, nullable=False)
+    description = db.Column(db.Text, nullable=False)
+    date_echeance = db.Column(db.Date)
+    statut = db.Column(db.String(50), default='a_faire')
+    responsable_id = db.Column(db.Integer, db.ForeignKey('user.id'))
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    responsable = db.relationship('User', foreign_keys=[responsable_id])
+    
+    @property
+    def couleur_statut(self):
+        """Couleur Bootstrap pour le statut"""
+        couleurs = {
+            'a_faire': 'secondary',
+            'en_cours': 'warning',
+            'termine': 'success',
+            'retarde': 'danger'
+        }
+        return couleurs.get(self.statut, 'light')
 
 # -------------------- ETAPE PLAN ACTION - CORRIGÉ --------------------
 class EtapePlanAction(db.Model):
@@ -4998,3 +5141,245 @@ class FichierRapport(db.Model):
             # Pour les PDF, on pourrait utiliser un visualiseur PDF
             return f"/pdf-viewer?file={self.id}"
         return None
+
+
+
+
+# models.py - Ajoutez ces classes
+class DispositifMaitrise(db.Model):
+    __tablename__ = 'dispositifs_maitrise'
+    
+    id = db.Column(db.Integer, primary_key=True)
+    risque_id = db.Column(db.Integer, db.ForeignKey('risques.id'), nullable=False)
+    reference = db.Column(db.String(50), unique=True, nullable=False)
+    nom = db.Column(db.String(300), nullable=False)
+    description = db.Column(db.Text)
+    type_dispositif = db.Column(db.String(100))
+    nature = db.Column(db.String(100))
+    frequence = db.Column(db.String(100))
+    responsable_id = db.Column(db.Integer, db.ForeignKey('user.id'))
+    direction_id = db.Column(db.Integer, db.ForeignKey('direction.id'))
+    service_id = db.Column(db.Integer, db.ForeignKey('service.id'))
+    commentaire_evaluation = db.Column(db.Text)  # Commentaire de l'évaluation
+    reduction_risque_pourcentage = db.Column(db.Float, default=0.0)
+    # Évaluation du dispositif
+    efficacite_attendue = db.Column(db.Integer)
+    efficacite_reelle = db.Column(db.Integer)
+    couverture = db.Column(db.Integer)
+    date_mise_en_place = db.Column(db.Date)
+    date_derniere_verification = db.Column(db.Date)
+    prochaine_verification = db.Column(db.Date)
+    
+    # Statut
+    statut = db.Column(db.String(50), default='actif')
+    justification_statut = db.Column(db.Text)
+    
+    # Liens avec audit
+    audit_id = db.Column(db.Integer, db.ForeignKey('audits.id'))
+    plan_action_id = db.Column(db.Integer, db.ForeignKey('plans_action.id'))
+    
+    # Traçabilité
+    created_by = db.Column(db.Integer, db.ForeignKey('user.id'))
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    is_archived = db.Column(db.Boolean, default=False)
+    archived_at = db.Column(db.DateTime)
+    archived_by = db.Column(db.Integer, db.ForeignKey('user.id'))
+    
+    # Multi-tenant
+    client_id = db.Column(db.Integer, db.ForeignKey('clients.id'))
+    
+    # Relations
+    risque = db.relationship('Risque', back_populates='dispositifs_maitrise')
+    responsable = db.relationship('User', foreign_keys=[responsable_id])
+    direction = db.relationship('Direction')
+    service = db.relationship('Service')
+    audit = db.relationship('Audit')
+    
+    # CORRECTION : Supprimez back_populates ou changez pour backref
+    plan_action = db.relationship('PlanAction', foreign_keys=[plan_action_id])  # Simple relation
+    
+    createur = db.relationship('User', foreign_keys=[created_by])
+    archive_user = db.relationship('User', foreign_keys=[archived_by])
+    client = db.relationship('Client')
+    
+    # Documentation
+    documents = db.relationship('DocumentDispositif', back_populates='dispositif', cascade='all, delete-orphan')
+    verifications = db.relationship('VerificationDispositif', back_populates='dispositif', cascade='all, delete-orphan')
+    
+    def __repr__(self):
+        return f'<DispositifMaitrise {self.reference}: {self.nom}>'
+
+
+    def get_reduction_risque_conforme(self):
+        """
+        Calcul conforme ISO 31000 avec logique réaliste
+        Un dispositif parfait (5/5 + 5/5) devrait approcher la réduction max du type
+        """
+        if not self.efficacite_reelle or not self.couverture:
+            return 0.0
+        
+        # 1. RÉDUCTION MAX PAR TYPE (normes sectorielles)
+        reduction_max_par_type = {
+            'Préventif': 75,   # Peut éviter la survenance jusqu'à 75%
+            'Détectif': 60,    # Bonne détection peut réduire impact jusqu'à 60%
+            'Correctif': 45,   # Correction rapide peut limiter jusqu'à 45%
+            'Dirigeant': 30    # Cadre de contrôle jusqu'à 30%
+        }
+        
+        # 2. SCORE DE BASE SUR 100 (efficacité 60%, couverture 40%)
+        efficacite_norm = self.efficacite_reelle / 5  # 0-1
+        couverture_norm = self.couverture / 5         # 0-1
+        score_base = (efficacite_norm * 60) + (couverture_norm * 40)  # /100
+        
+        # 3. APPLIQUER LE SCORE À LA RÉDUCTION MAX
+        type_dispositif = self.type_dispositif or 'Correctif'
+        reduction_max = reduction_max_par_type.get(type_dispositif, 45)
+        reduction_calcul = (score_base / 100) * reduction_max
+        
+        # 4. FACTEURS MODÉRATEURS (beaucoup plus réalistes)
+        facteurs = {
+            'nature': {
+                'Automatique': 1.0,      # Pas de pénalité pour automatique
+                'Technique': 0.95,       # Légère réduction
+                'Procédurale': 0.85,     # Procédure bien appliquée
+                'Organisationnelle': 0.80,
+                'Humaine': 0.75,
+                None: 0.85
+            },
+            'frequence': {
+                'Permanente': 1.0,       # Surveillance permanente
+                'Continue': 0.95,        # Continue mais non permanente
+                'Temps réel': 0.95,      # Temps réel
+                'Quotidienne': 0.90,     # Quotidien
+                'Hebdomadaire': 0.85,    # Hebdomadaire
+                'Mensuelle': 0.75,       # Mensuel
+                'Trimestrielle': 0.65,   # Trimestriel
+                'Annuelle': 0.55,        # Annuel
+                'Exceptionnelle': 0.45,  # Exceptionnel
+                None: 0.75
+            }
+        }
+        
+        facteur_nature = facteurs['nature'].get(self.nature or 'Procédurale', 0.85)
+        facteur_frequence = facteurs['frequence'].get(self.frequence or 'Mensuelle', 0.75)
+        
+        # 5. RÉDUCTION FINALE (facteurs moins pénalisants)
+        reduction_finale = reduction_calcul * facteur_nature * facteur_frequence
+        
+        # Garantir un minimum pour un dispositif parfait
+        if self.efficacite_reelle == 5 and self.couverture == 5:
+            # Un dispositif parfait devrait donner au moins 80% de la réduction max
+            reduction_finale = max(reduction_finale, reduction_max * 0.8)
+        
+        return round(min(reduction_finale, reduction_max), 1)
+
+    def get_reduction_risque_detaille(self):
+        """
+        Retourne le calcul détaillé avec explications
+        """
+        details = {}
+        
+        # Réduction max selon type
+        reduction_max_par_type = {
+            'Préventif': 75, 'Détectif': 60, 'Correctif': 45, 'Dirigeant': 30
+        }
+        
+        type_dispositif = self.type_dispositif or 'Correctif'
+        details['reduction_max_type'] = reduction_max_par_type.get(type_dispositif, 45)
+        details['type'] = type_dispositif
+        
+        # Scores
+        details['efficacite'] = self.efficacite_reelle or 0
+        details['couverture'] = self.couverture or 0
+        details['efficacite_norm'] = (self.efficacite_reelle or 0) / 5
+        details['couverture_norm'] = (self.couverture or 0) / 5
+        
+        # Score de base pondéré (60% efficacité, 40% couverture)
+        details['score_pondere'] = (details['efficacite_norm'] * 60) + (details['couverture_norm'] * 40)
+        details['reduction_calcul'] = (details['score_pondere'] / 100) * details['reduction_max_type']
+        
+        # Facteurs plus réalistes
+        facteurs_nature = {
+            'Automatique': 1.0, 'Technique': 0.95, 'Procédurale': 0.85,
+            'Organisationnelle': 0.80, 'Humaine': 0.75
+        }
+        facteurs_frequence = {
+            'Permanente': 1.0, 'Continue': 0.95, 'Temps réel': 0.95,
+            'Quotidienne': 0.90, 'Hebdomadaire': 0.85, 'Mensuelle': 0.75,
+            'Trimestrielle': 0.65, 'Annuelle': 0.55
+        }
+        
+        details['facteur_nature'] = facteurs_nature.get(self.nature or 'Procédurale', 0.85)
+        details['nature'] = self.nature or 'Procédurale'
+        details['facteur_frequence'] = facteurs_frequence.get(self.frequence or 'Mensuelle', 0.75)
+        details['frequence'] = self.frequence or 'Mensuelle'
+        
+        # Réduction finale
+        details['reduction_finale'] = details['reduction_calcul'] * details['facteur_nature'] * details['facteur_frequence']
+        
+        # Garantir un minimum pour dispositif parfait
+        if details['efficacite'] == 5 and details['couverture'] == 5:
+            details['reduction_finale'] = max(details['reduction_finale'], details['reduction_max_type'] * 0.8)
+            details['garantie_minimum'] = True
+        else:
+            details['garantie_minimum'] = False
+        
+        # Limiter au maximum du type
+        details['reduction_finale'] = min(details['reduction_finale'], details['reduction_max_type'])
+        details['reduction_finale'] = round(details['reduction_finale'], 1)
+        
+        return details
+    
+    def get_niveau_efficacite(self):
+        """Retourne le niveau d'efficacité basé sur l'écart entre attendu et réel"""
+        if self.efficacite_attendue and self.efficacite_reelle:
+            ecart = self.efficacite_attendue - self.efficacite_reelle
+            if ecart <= 0:
+                return 'Satisfaisant'
+            elif ecart == 1:
+                return 'À améliorer'
+            else:
+                return 'Insuffisant'
+        return 'Non évalué'
+
+
+class DocumentDispositif(db.Model):
+    __tablename__ = 'documents_dispositif'
+    
+    id = db.Column(db.Integer, primary_key=True)
+    dispositif_id = db.Column(db.Integer, db.ForeignKey('dispositifs_maitrise.id'), nullable=False)
+    nom_fichier = db.Column(db.String(300))
+    type_document = db.Column(db.String(100))  # Procédure, Mode opératoire, Fiche de contrôle, etc.
+    description = db.Column(db.Text)
+    chemin_fichier = db.Column(db.String(500))
+    taille = db.Column(db.Integer)  # En octets
+    
+    uploaded_by = db.Column(db.Integer, db.ForeignKey('user.id'))
+    uploaded_at = db.Column(db.DateTime, default=datetime.utcnow)
+    client_id = db.Column(db.Integer, db.ForeignKey('clients.id'))
+    
+    # Relations
+    dispositif = db.relationship('DispositifMaitrise', back_populates='documents')
+    uploader = db.relationship('User')
+
+
+class VerificationDispositif(db.Model):
+    __tablename__ = 'verifications_dispositif'
+    
+    id = db.Column(db.Integer, primary_key=True)
+    dispositif_id = db.Column(db.Integer, db.ForeignKey('dispositifs_maitrise.id'), nullable=False)
+    date_verification = db.Column(db.Date, nullable=False)
+    type_verification = db.Column(db.String(100))  # Test, Observation, Revue documentaire
+    resultat = db.Column(db.String(50))  # Conforme, Non conforme, À corriger
+    commentaire = db.Column(db.Text)
+    fichiers_preuves = db.Column(db.String(500))  # CSV de chemins de fichiers
+    
+    verificateur_id = db.Column(db.Integer, db.ForeignKey('user.id'))
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    client_id = db.Column(db.Integer, db.ForeignKey('clients.id'))
+    
+    # Relations
+    dispositif = db.relationship('DispositifMaitrise', back_populates='verifications')
+    verificateur = db.relationship('User')
+
