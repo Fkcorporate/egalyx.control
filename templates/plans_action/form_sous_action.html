@@ -1,0 +1,213 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <h2>
+        <i class="fas fa-plus-circle me-2"></i>
+        {% if action == 'creer' %}
+            Nouvelle sous-action
+        {% else %}
+            Modifier la sous-action
+        {% endif %}
+    </h2>
+    <a href="{{ url_for('detail_plan_action_risque', plan_id=plan.id) }}" class="btn btn-secondary">
+        <i class="fas fa-arrow-left me-1"></i> Retour au plan
+    </a>
+</div>
+
+<div class="row">
+    <div class="col-lg-8 mx-auto">
+        <div class="card shadow">
+            <div class="card-header bg-primary text-white">
+                <h6 class="mb-0">
+                    <i class="fas fa-list-check me-2"></i>
+                    Sous-action pour le plan {{ plan.reference }}
+                </h6>
+            </div>
+            <div class="card-body">
+                <form method="POST" id="sousActionForm">
+                    {{ form.hidden_tag() }}
+                    
+                    <!-- Informations sur le plan -->
+                    <div class="alert alert-info mb-4">
+                        <i class="fas fa-info-circle me-2"></i>
+                        <strong>Plan :</strong> {{ plan.reference }} - {{ plan.nom }}
+                        {% if sous_action and sous_action.reference %}
+                        <br><strong>Sous-action :</strong> {{ sous_action.reference }}
+                        {% endif %}
+                    </div>
+                    
+                    <!-- Description (UNE SEULE FOIS) -->
+                    <div class="mb-3">
+                        {{ form.description.label(class="form-label fw-bold") }}
+                        {{ form.description(class="form-control", rows="4", 
+                                          placeholder="Décrivez la sous-action à réaliser...") }}
+                        {% if form.description.errors %}
+                        <div class="text-danger">
+                            {% for error in form.description.errors %}
+                            <small>{{ error }}</small>
+                            {% endfor %}
+                        </div>
+                        {% endif %}
+                    </div>
+                    
+                    <!-- Responsable uniquement -->
+                    <div class="row mb-4">
+                        <div class="col-md-6">
+                            {{ form.responsable_id.label(class="form-label fw-bold") }}
+                            {{ form.responsable_id(class="form-select") }}
+                            {% if form.responsable_id.errors %}
+                            <div class="text-danger">
+                                {% for error in form.responsable_id.errors %}
+                                <small>{{ error }}</small>
+                                {% endfor %}
+                            </div>
+                            {% endif %}
+                        </div>
+                        
+                        <!-- Si votre formulaire a un champ commentaire, ajoutez-le ici -->
+                        {% if form.commentaire %}
+                        <div class="col-md-6">
+                            {{ form.commentaire.label(class="form-label fw-bold") }}
+                            {{ form.commentaire(class="form-control", rows="2",
+                            placeholder="Commentaires supplémentaires...") }}
+                            {% if form.commentaire.errors %}
+                            <div class="text-danger">
+                                {% for error in form.commentaire.errors %}
+                                <small>{{ error }}</small>
+                                {% endfor %}
+                            </div>
+                            {% endif %}
+                        </div>
+                        {% endif %}
+                    </div>
+                    
+                    <!-- Dates -->
+                    <div class="row mb-4">
+                        <div class="col-md-6">
+                            {{ form.date_debut.label(class="form-label fw-bold") }}
+                            {{ form.date_debut(class="form-control", type="date") }}
+                            {% if form.date_debut.errors %}
+                            <div class="text-danger">
+                                {% for error in form.date_debut.errors %}
+                                <small>{{ error }}</small>
+                                {% endfor %}
+                            </div>
+                            {% endif %}
+                        </div>
+                        
+                        <div class="col-md-6">
+                            {{ form.date_fin_prevue.label(class="form-label fw-bold") }}
+                            {{ form.date_fin_prevue(class="form-control", type="date") }}
+                            {% if form.date_fin_prevue.errors %}
+                            <div class="text-danger">
+                                {% for error in form.date_fin_prevue.errors %}
+                                <small>{{ error }}</small>
+                                {% endfor %}
+                            </div>
+                            {% endif %}
+                        </div>
+                    </div>
+                    
+                    <!-- Si votre formulaire a un champ pourcentage_realisation -->
+                    {% if form.pourcentage_realisation %}
+                    <div class="mb-4">
+                        {{ form.pourcentage_realisation.label(class="form-label fw-bold") }}
+                        {{ form.pourcentage_realisation(class="form-control", type="number", 
+                                                      min="0", max="100", 
+                                                      placeholder="Progression en % (0-100)") }}
+                        <div class="mt-2">
+                            <input type="range" class="form-range" min="0" max="100" 
+                                   value="{{ form.pourcentage_realisation.data or 0 }}"
+                                   oninput="document.getElementById('pourcentage_realisation').value = this.value">
+                        </div>
+                        {% if form.pourcentage_realisation.errors %}
+                        <div class="text-danger">
+                            {% for error in form.pourcentage_realisation.errors %}
+                            <small>{{ error }}</small>
+                            {% endfor %}
+                        </div>
+                        {% endif %}
+                    </div>
+                    {% endif %}
+                    
+                    <!-- Boutons -->
+                    <div class="d-flex justify-content-between">
+                        <a href="{{ url_for('detail_plan_action_risque', plan_id=plan.id) }}" 
+                           class="btn btn-secondary">
+                            <i class="fas fa-times me-1"></i> Annuler
+                        </a>
+                        <button type="submit" class="btn btn-primary">
+                            {% if action == 'creer' %}
+                                <i class="fas fa-check me-1"></i> Créer la sous-action
+                            {% else %}
+                                <i class="fas fa-save me-1"></i> Enregistrer
+                            {% endif %}
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    // Set default dates if empty (only for creation)
+    {% if action == 'creer' %}
+    const today = new Date().toISOString().split('T')[0];
+    const inTwoWeeks = new Date(new Date().setDate(new Date().getDate() + 14)).toISOString().split('T')[0];
+    
+    const dateDebutField = document.getElementById('date_debut');
+    const dateFinField = document.getElementById('date_fin_prevue');
+    
+    if (dateDebutField && !dateDebutField.value) {
+        dateDebutField.value = today;
+    }
+    if (dateFinField && !dateFinField.value) {
+        dateFinField.value = inTwoWeeks;
+    }
+    {% endif %}
+    
+    // Validation des dates
+    const dateDebut = document.getElementById('date_debut');
+    const dateFin = document.getElementById('date_fin_prevue');
+    
+    if (dateDebut && dateFin) {
+        dateFin.addEventListener('change', function() {
+            if (dateDebut.value && dateFin.value) {
+                const debut = new Date(dateDebut.value);
+                const fin = new Date(dateFin.value);
+                
+                if (fin < debut) {
+                    alert('La date d\'échéance doit être postérieure à la date de début.');
+                    dateFin.value = '';
+                    dateFin.focus();
+                }
+            }
+        });
+    }
+    
+    // Gestion du slider pour le pourcentage
+    const pourcentageInput = document.getElementById('pourcentage_realisation');
+    if (pourcentageInput) {
+        const slider = document.querySelector('input[type="range"]');
+        if (slider) {
+            // Mettre à jour le slider quand l'input change
+            pourcentageInput.addEventListener('input', function() {
+                const value = Math.min(100, Math.max(0, parseInt(this.value) || 0));
+                this.value = value;
+                slider.value = value;
+            });
+            
+            // Mettre à jour l'input quand le slider change
+            slider.addEventListener('input', function() {
+                pourcentageInput.value = this.value;
+            });
+        }
+    }
+});
+</script>
+{% endblock %}

@@ -1,0 +1,188 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <h2>
+        <i class="fas fa-plus-circle me-2"></i>
+        {% if action == 'creer' %}
+        Nouveau plan d'action
+        {% else %}
+        Modifier le plan d'action
+        {% endif %}
+    </h2>
+    <a href="{% if action == 'creer' %}{{ url_for('voir_plans_action_risque', risque_id=risque.id) }}{% else %}{{ url_for('detail_plan_action_risque', plan_id=plan.id) }}{% endif %}" 
+       class="btn btn-secondary">
+        <i class="fas fa-arrow-left me-1"></i> 
+        {% if action == 'creer' %}Retour aux plans d'action{% else %}Retour au plan{% endif %}
+    </a>
+</div>
+
+<div class="row">
+    <div class="col-lg-8 mx-auto">
+        <div class="card shadow">
+            <div class="card-header bg-primary text-white">
+                <h6 class="mb-0">
+                    <i class="fas fa-tasks me-2"></i>
+                    {% if action == 'creer' %}
+                    Plan d'action pour le risque {{ risque.reference }}
+                    {% else %}
+                    Modification : {{ plan.reference }}
+                    {% endif %}
+                </h6>
+            </div>
+            <div class="card-body">
+                <form method="POST" id="planActionForm">
+                    {{ form.hidden_tag() }}
+                    
+                    <!-- Champs cachés -->
+                    {{ form.risque_id() }}
+                    {{ form.dispositif_id() }}
+                    
+                    <!-- Informations contextuelles -->
+                    <div class="alert alert-info mb-4">
+                        <i class="fas fa-info-circle me-2"></i>
+                        <strong>Risque :</strong> {{ risque.reference }} - {{ risque.intitule }}
+                        {% if action == 'modifier' and plan.dispositif %}
+                        <br><strong>Dispositif lié :</strong> {{ plan.dispositif.reference }}
+                        {% elif form.dispositif_id.data %}
+                        <br><strong>Dispositif lié :</strong> ID {{ form.dispositif_id.data }}
+                        {% endif %}
+                    </div>
+                    
+                    <!-- Nom -->
+                    <div class="mb-3">
+                        {{ form.nom.label(class="form-label fw-bold") }}
+                        {{ form.nom(class="form-control", placeholder="Ex: Mise en place de contrôles supplémentaires") }}
+                        {% if form.nom.errors %}
+                        <div class="text-danger">
+                            {% for error in form.nom.errors %}
+                            <small>{{ error }}</small>
+                            {% endfor %}
+                        </div>
+                        {% endif %}
+                    </div>
+                    
+                    <!-- Description -->
+                    <div class="mb-4">
+                        {{ form.description.label(class="form-label fw-bold") }}
+                        {{ form.description(class="form-control", rows="4", 
+                                          placeholder="Décrivez les actions à mettre en place, les objectifs, les bénéfices attendus...") }}
+                        {% if form.description.errors %}
+                        <div class="text-danger">
+                            {% for error in form.description.errors %}
+                            <small>{{ error }}</small>
+                            {% endfor %}
+                        </div>
+                        {% endif %}
+                    </div>
+                    
+                    <div class="row mb-4">
+                        <div class="col-md-6">
+                            {{ form.responsable_id.label(class="form-label fw-bold") }}
+                            {{ form.responsable_id(class="form-select") }}
+                            {% if form.responsable_id.errors %}
+                            <div class="text-danger">
+                                {% for error in form.responsable_id.errors %}
+                                <small>{{ error }}</small>
+                                {% endfor %}
+                            </div>
+                            {% endif %}
+                        </div>
+                        
+                        <div class="col-md-6">
+                            {{ form.priorite.label(class="form-label fw-bold") }}
+                            {{ form.priorite(class="form-select") }}
+                            {% if form.priorite.errors %}
+                            <div class="text-danger">
+                                {% for error in form.priorite.errors %}
+                                <small>{{ error }}</small>
+                                {% endfor %}
+                            </div>
+                            {% endif %}
+                        </div>
+                    </div>
+                    
+                    <!-- Dates -->
+                    <div class="row mb-4">
+                        <div class="col-md-6">
+                            {{ form.date_debut.label(class="form-label fw-bold") }}
+                            {{ form.date_debut(class="form-control", type="date") }}
+                            {% if form.date_debut.errors %}
+                            <div class="text-danger">
+                                {% for error in form.date_debut.errors %}
+                                <small>{{ error }}</small>
+                                {% endfor %}
+                            </div>
+                            {% endif %}
+                        </div>
+                        
+                        <div class="col-md-6">
+                            {{ form.date_echeance.label(class="form-label fw-bold") }}
+                            {{ form.date_echeance(class="form-control", type="date") }}
+                            {% if form.date_echeance.errors %}
+                            <div class="text-danger">
+                                {% for error in form.date_echeance.errors %}
+                                <small>{{ error }}</small>
+                                {% endfor %}
+                            </div>
+                            {% endif %}
+                        </div>
+                    </div>
+                    
+                    <!-- Boutons -->
+                    <div class="d-flex justify-content-between">
+                        <a href="{% if action == 'creer' %}{{ url_for('voir_plans_action_risque', risque_id=risque.id) }}{% else %}{{ url_for('detail_plan_action_risque', plan_id=plan.id) }}{% endif %}" 
+                           class="btn btn-secondary">
+                            <i class="fas fa-times me-1"></i> Annuler
+                        </a>
+                        <button type="submit" class="btn btn-primary">
+                            <i class="fas fa-check me-1"></i> 
+                            {% if action == 'creer' %}Créer le plan d'action{% else %}Enregistrer les modifications{% endif %}
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    // Set default dates for creation
+    {% if action == 'creer' %}
+    const today = new Date().toISOString().split('T')[0];
+    const inOneMonth = new Date(new Date().setMonth(new Date().getMonth() + 1)).toISOString().split('T')[0];
+    
+    const dateDebutField = document.getElementById('date_debut');
+    const dateEcheanceField = document.getElementById('date_echeance');
+    
+    if (dateDebutField && !dateDebutField.value) {
+        dateDebutField.value = today;
+    }
+    if (dateEcheanceField && !dateEcheanceField.value) {
+        dateEcheanceField.value = inOneMonth;
+    }
+    {% endif %}
+    
+    // Validation des dates
+    const dateDebut = document.getElementById('date_debut');
+    const dateEcheance = document.getElementById('date_echeance');
+    
+    if (dateDebut && dateEcheance) {
+        dateEcheance.addEventListener('change', function() {
+            if (dateDebut.value && dateEcheance.value) {
+                const debut = new Date(dateDebut.value);
+                const echeance = new Date(dateEcheance.value);
+                
+                if (echeance < debut) {
+                    alert('La date d\'échéance doit être postérieure à la date de début');
+                    dateEcheance.value = '';
+                }
+            }
+        });
+    }
+});
+</script>
+{% endblock %}
