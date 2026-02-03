@@ -1,0 +1,202 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <h2>
+        <i class="fas fa-tasks me-2"></i> Plans d'action
+    </h2>
+    <div class="btn-toolbar">
+        <a href="{{ url_for('detail_risque', id=risque.id) }}" class="btn btn-secondary me-2">
+            <i class="fas fa-arrow-left me-1"></i> Retour au risque
+        </a>
+        <a href="{{ url_for('nouveau_plan_action_risque', risque_id=risque.id) }}" class="btn btn-primary">
+            <i class="fas fa-plus me-1"></i> Nouveau plan d'action
+        </a>
+    </div>
+</div>
+
+<!-- Statistiques -->
+<div class="row mb-4">
+    <div class="col-md-3">
+        <div class="card text-center">
+            <div class="card-body">
+                <h3 class="text-primary">{{ plans_action|length }}</h3>
+                <p class="text-muted mb-0">Total plans</p>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card text-center">
+            <div class="card-body">
+                {% set en_cours = plans_action|selectattr('statut', 'equalto', 'en_cours')|list|length %}
+                <h3 class="text-warning">{{ en_cours }}</h3>
+                <p class="text-muted mb-0">En cours</p>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card text-center">
+            <div class="card-body">
+                {% set termines = plans_action|selectattr('statut', 'equalto', 'termine')|list|length %}
+                <h3 class="text-success">{{ termines }}</h3>
+                <p class="text-muted mb-0">Terminés</p>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card text-center">
+            <div class="card-body">
+                {% set en_retard = plans_action|selectattr('statut', 'equalto', 'en_retard')|list|length %}
+                <h3 class="text-danger">{{ en_retard }}</h3>
+                <p class="text-muted mb-0">En retard</p>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="card shadow">
+    <div class="card-header bg-light d-flex justify-content-between align-items-center">
+        <h6 class="mb-0">
+            <i class="fas fa-list me-2"></i>
+            Plans d'action pour le risque {{ risque.reference }} - {{ risque.intitule }}
+        </h6>
+        <div class="btn-group">
+            <button class="btn btn-sm btn-outline-secondary dropdown-toggle" type="button" 
+                    data-bs-toggle="dropdown" aria-expanded="false">
+                <i class="fas fa-filter me-1"></i> Filtrer
+            </button>
+            <ul class="dropdown-menu dropdown-menu-end">
+                <li><a class="dropdown-item" href="#" onclick="filterPlans('all')">Tous</a></li>
+                <li><hr class="dropdown-divider"></li>
+                <li><a class="dropdown-item" href="#" onclick="filterPlans('en_cours')">En cours</a></li>
+                <li><a class="dropdown-item" href="#" onclick="filterPlans('termine')">Terminés</a></li>
+                <li><a class="dropdown-item" href="#" onclick="filterPlans('en_retard')">En retard</a></li>
+            </ul>
+        </div>
+    </div>
+    
+    <div class="card-body">
+        {% if plans_action %}
+        <div class="table-responsive">
+            <table class="table table-hover" id="plansTable">
+                <thead>
+                    <tr>
+                        <th width="15%">Référence</th>
+                        <th width="25%">Titre</th>
+                        <th width="15%">Responsable</th>
+                        <th width="15%">Dates</th>
+                        <th width="10%">Statut</th>
+                        <th width="10%">Priorité</th>
+                        <th width="10%">Actions</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for plan in plans_action %}
+                    <tr class="plan-row" data-statut="{{ plan.statut }}">
+                        <td>
+                            <strong>{{ plan.reference }}</strong>
+                        </td>
+                        <td>
+                            <div class="fw-semibold">{{ plan.titre|truncate(50) }}</div>
+                            {% if plan.description %}
+                            <small class="text-muted">{{ plan.description|truncate(70) }}</small>
+                            {% endif %}
+                        </td>
+                        <td>
+                            {% if plan.responsable %}
+                            {{ plan.responsable.username }}
+                            {% else %}
+                            <span class="text-muted">Non assigné</span>
+                            {% endif %}
+                        </td>
+                        <td>
+                            <div class="small">
+                                <div>Début: {{ plan.date_debut.strftime('%d/%m/%Y') if plan.date_debut else '-' }}</div>
+                                <div>Échéance: {{ plan.date_echeance.strftime('%d/%m/%Y') if plan.date_echeance else '-' }}</div>
+                            </div>
+                        </td>
+                        <td>
+                            {% if plan.statut == 'en_attente' %}
+                            <span class="badge bg-secondary">En attente</span>
+                            {% elif plan.statut == 'en_cours' %}
+                            <span class="badge bg-warning text-dark">En cours</span>
+                            {% elif plan.statut == 'termine' %}
+                            <span class="badge bg-success">Terminé</span>
+                            {% elif plan.statut == 'en_retard' %}
+                            <span class="badge bg-danger">En retard</span>
+                            {% endif %}
+                        </td>
+                        <td>
+                            {% if plan.priorite == 'critique' %}
+                            <span class="badge bg-danger">{{ plan.priorite|title }}</span>
+                            {% elif plan.priorite == 'haute' %}
+                            <span class="badge bg-warning text-dark">{{ plan.priorite|title }}</span>
+                            {% elif plan.priorite == 'moyenne' %}
+                            <span class="badge bg-info">{{ plan.priorite|title }}</span>
+                            {% else %}
+                            <span class="badge bg-secondary">{{ plan.priorite|title }}</span>
+                            {% endif %}
+                        </td>
+                        <td>
+                            <div class="btn-group btn-group-sm">
+                                <a href="{{ url_for('detail_plan_action', plan_id=plan.id) }}" 
+                                   class="btn btn-outline-primary" title="Voir">
+                                    <i class="fas fa-eye"></i>
+                                </a>
+                                <a href="{{ url_for('modifier_plan_action', plan_id=plan.id) }}" 
+                                   class="btn btn-outline-warning" title="Modifier">
+                                    <i class="fas fa-edit"></i>
+                                </a>
+                                {% if plan.dispositif_id %}
+                                <a href="{{ url_for('detail_dispositif', dispositif_id=plan.dispositif_id) }}" 
+                                   class="btn btn-outline-info" title="Voir dispositif">
+                                    <i class="fas fa-shield-alt"></i>
+                                </a>
+                                {% endif %}
+                            </div>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        {% else %}
+        <div class="text-center py-5">
+            <i class="fas fa-tasks fa-4x text-muted mb-3"></i>
+            <h5 class="text-muted">Aucun plan d'action</h5>
+            <p class="text-muted mb-4">Aucun plan d'action n'a été créé pour ce risque.</p>
+            <a href="{{ url_for('nouveau_plan_action_risque', risque_id=risque.id) }}" class="btn btn-primary">
+                <i class="fas fa-plus me-1"></i> Créer un premier plan d'action
+            </a>
+        </div>
+        {% endif %}
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+function filterPlans(statut) {
+    const rows = document.querySelectorAll('.plan-row');
+    
+    rows.forEach(row => {
+        if (statut === 'all' || row.dataset.statut === statut) {
+            row.style.display = '';
+        } else {
+            row.style.display = 'none';
+        }
+    });
+    
+    // Mettre à jour le texte du bouton de filtre
+    const filterText = {
+        'all': 'Tous',
+        'en_cours': 'En cours',
+        'termine': 'Terminés',
+        'en_retard': 'En retard'
+    };
+    
+    document.querySelector('.btn-outline-secondary .fa-filter').parentNode.innerHTML = 
+        `<i class="fas fa-filter me-1"></i> ${filterText[statut]}`;
+}
+</script>
+{% endblock %}
