@@ -39,7 +39,12 @@ from werkzeug.security import generate_password_hash, check_password_hash
 from markupsafe import escape, Markup
 from sqlalchemy import event, and_, or_, not_, text
 from apscheduler.schedulers.background import BackgroundScheduler
-
+from forms_dispositifs import (
+    DispositifMaitriseForm, 
+    EvaluationDispositifForm,
+    VerificationDispositifForm,
+    DocumentDispositifForm, SimplePlanActionForm, SousActionForm, CampagneForm
+)
 # ========================
 # NE PAS IMPORTER FLASK-MAIL ICI
 # Nous allons utiliser une solution alternative
@@ -77,7 +82,7 @@ try:
         Questionnaire, QuestionnaireCategorie, Question, OptionQuestion, ConditionQuestion,
         ReponseQuestionnaire, ReponseQuestion, ReponseOption, CampagneEvaluation,
         AnalyseIA, FichierMetadata, RecommandationGlobale, JournalActiviteClient, EnvironnementClient, Client,
-        FormuleAbonnement, AbonnementClient, FichierRapport
+        FormuleAbonnement, AbonnementClient, FichierRapport, VerificationDispositif, DocumentDispositif, DispositifMaitrise
     )
     
     MODELS_IMPORTED = True
@@ -22276,6 +22281,2806 @@ def nouveau_risque_sans_cartographie():
 
 
 
+@app.route('/risque/<int:risque_id>/dispositifs')
+@login_required
+def liste_dispositifs_risque(risque_id):
+    """Liste des dispositifs de maîtrise pour un risque"""
+    risque = Risque.query.get_or_404(risque_id)
+    
+    if not check_client_access(risque):
+        flash('Accès non autorisé', 'error')
+        return redirect(url_for('detail_risque', id=risque_id))
+    
+    dispositifs = get_client_filter(DispositifMaitrise)\
+        .filter_by(risque_id=risque_id, is_archived=False)\
+        .order_by(DispositifMaitrise.reference.asc())\
+        .all()
+    
+    # Statistiques
+    stats = {
+        'total': len(dispositifs),
+        'par_type': {},
+        'par_statut': {},
+        'efficaces': sum(1 for d in dispositifs if d.efficacite_reelle and d.efficacite_reelle >= 4)
+    }
+    
+    for dispositif in dispositifs:
+        stats['par_type'][dispositif.type_dispositif] = stats['par_type'].get(dispositif.type_dispositif, 0) + 1
+        stats['par_statut'][dispositif.statut] = stats['par_statut'].get(dispositif.statut, 0) + 1
+    
+    return render_template('dispositifs/liste.html',
+                         risque=risque,
+                         dispositifs=dispositifs,
+                         stats=stats)
+
+@app.route('/cartographie/<int:cartographie_id>/campagnes')
+@login_required
+def liste_campagnes_cartographie(cartographie_id):
+    """Afficher toutes les campagnes d'une cartographie"""
+    cartographie = Cartographie.query.get_or_404(cartographie_id)
+    
+    if not check_client_access(cartographie):
+        flash('Accès non autorisé', 'error')
+        return redirect(url_for('liste_cartographies'))
+    
+    # Vérifier si on veut voir les archives
+    voir_archives = request.args.get('archives', 'non') == 'oui'
+    
+    # Construire la requête
+    query = CampagneEvaluation.query.filter_by(cartographie_id=cartographie_id)
+    
+    # Filtrer selon si on veut voir les archives ou non
+    if voir_archives:
+        # Si on veut voir les archives, on ne filtre QUE les archives
+        campagnes = query.filter(CampagneEvaluation.statut == 'archivee')\
+                         .order_by(CampagneEvaluation.date_debut.desc()).all()
+    else:
+        # Si on veut voir les actives, on exclut les archives
+        campagnes = query.filter(CampagneEvaluation.statut != 'archivee')\
+                         .order_by(CampagneEvaluation.date_debut.desc()).all()
+    
+    # Calculer les statistiques - CORRECTION ICI
+    total_risques = Risque.query\
+        .filter_by(cartographie_id=cartographie_id, is_archived=False)\
+        .count()
+    
+    campagnes_data = []
+    for campagne in campagnes:
+        risques_evalues = EvaluationRisque.query\
+            .join(Risque)\
+            .filter(
+                Risque.cartographie_id == cartographie_id,
+                Risque.is_archived == False,
+                EvaluationRisque.campagne_id == campagne.id
+            )\
+            .count()
+        
+        progression = (risques_evalues / total_risques * 100) if total_risques > 0 else 0
+        
+        campagnes_data.append({
+            'campagne': campagne,
+            'total_risques': total_risques,
+            'risques_evalues': risques_evalues,
+            'progression': progression,
+            'est_active': (campagne.id == cartographie.campagne_active_id) if hasattr(cartographie, 'campagne_active_id') else False
+        })
+    
+    # Statistiques globales - CALCUL CORRECT
+    # Pour calculer correctement, il faut toutes les campagnes
+    toutes_campagnes = CampagneEvaluation.query\
+        .filter_by(cartographie_id=cartographie_id)\
+        .all()
+    
+    stats = {
+        'total': len([c for c in toutes_campagnes if c.statut != 'archivee']),
+        'archives': len([c for c in toutes_campagnes if c.statut == 'archivee']),
+        'en_cours': len([c for c in toutes_campagnes if c.statut == 'en_cours']),
+        'terminees': len([c for c in toutes_campagnes if c.statut == 'terminee'])
+    }
+    
+    return render_template('campagnes/liste.html',
+                         cartographie=cartographie,
+                         campagnes_data=campagnes_data,
+                         stats=stats,
+                         voir_archives=voir_archives,
+                         current_user=current_user)
+
+
+@app.route('/cartographie/<int:cartographie_id>/campagnes/supprimer-toutes-archives', methods=['POST'])
+@csrf.exempt
+@login_required
+def supprimer_toutes_campagnes_archivees(cartographie_id):
+    """Supprimer toutes les campagnes archivées"""
+    if current_user.role != 'admin' and not current_user.is_client_admin:
+        flash('Accès non autorisé. Admin uniquement.', 'error')
+        return redirect(url_for('liste_campagnes_cartographie', cartographie_id=cartographie_id))
+    
+    try:
+        # Récupérer toutes les campagnes archivées
+        campagnes_archivees = CampagneEvaluation.query\
+            .filter_by(cartographie_id=cartographie_id, is_archived=True)\
+            .all()
+        
+        count = 0
+        for campagne in campagnes_archivees:
+            # Vérifier s'il y a des évaluations
+            evaluations_count = EvaluationRisque.query.filter_by(campagne_id=campagne.id).count()
+            if evaluations_count == 0:  # Ne supprimer que si pas d'évaluations
+                db.session.delete(campagne)
+                count += 1
+        
+        db.session.commit()
+        flash(f'{count} campagne(s) archivée(s) supprimée(s)', 'success')
+        
+    except Exception as e:
+        db.session.rollback()
+        flash(f'Erreur: {str(e)}', 'error')
+    
+    return redirect(url_for('liste_campagnes_cartographie', cartographie_id=cartographie_id, archives='oui'))
+
+
+@app.route('/cartographie/<int:cartographie_id>/cloturer-campagne/<int:campagne_id>')
+@login_required
+def cloturer_campagne_specifique(cartographie_id, campagne_id):
+    """Clôturer une campagne spécifique"""
+    campagne = CampagneEvaluation.query.get_or_404(campagne_id)
+    
+    if not check_client_access(campagne.cartographie):
+        flash('Accès non autorisé', 'error')
+        return redirect(url_for('liste_cartographies'))
+    
+    if campagne.statut != 'en_cours':
+        flash('Seules les campagnes en cours peuvent être clôturées', 'error')
+        return redirect(url_for('liste_campagnes_cartographie', cartographie_id=cartographie_id))
+    
+    campagne.statut = 'terminee'
+    campagne.date_fin = datetime.utcnow().date()
+    campagne.updated_at = datetime.utcnow()
+    
+    db.session.commit()
+    flash(f'Campagne "{campagne.nom}" clôturée avec succès', 'success')
+    return redirect(url_for('liste_campagnes_cartographie', cartographie_id=cartographie_id))
+
+@app.route('/campagne/<int:campagne_id>/modifier', methods=['GET', 'POST'])
+@login_required
+def modifier_campagne(campagne_id):
+    """Modifier une campagne d'évaluation"""
+    campagne = CampagneEvaluation.query.get_or_404(campagne_id)
+    cartographie = campagne.cartographie
+    
+    if not check_client_access(cartographie):
+        flash('Accès non autorisé', 'error')
+        return redirect(url_for('liste_cartographies'))
+    
+    # Vérifier les permissions
+    if not current_user.has_permission('can_manage_risks'):
+        flash('Vous n\'avez pas la permission de modifier les campagnes', 'error')
+        return redirect(url_for('liste_campagnes_cartographie', cartographie_id=cartographie.id))
+    
+    form = CampagneForm(obj=campagne)
+    
+    if form.validate_on_submit():
+        campagne.nom = form.nom.data
+        campagne.description = form.description.data
+        campagne.date_debut = form.date_debut.data
+        campagne.date_fin = form.date_fin.data
+        
+        # Ne pas permettre de modifier le statut si la campagne est terminée
+        if campagne.statut != 'terminee':
+            campagne.statut = form.statut.data
+        
+        campagne.updated_at = datetime.utcnow()
+        
+        db.session.commit()
+        flash('Campagne modifiée avec succès', 'success')
+        return redirect(url_for('liste_campagnes_cartographie', cartographie_id=cartographie.id))
+    
+    return render_template('campagnes/form_modifier.html',
+                         form=form,
+                         campagne=campagne,
+                         cartographie=cartographie)
+
+@app.route('/campagne/<int:campagne_id>/archiver', methods=['POST'])
+@csrf.exempt
+@login_required
+def archiver_campagne(campagne_id):
+    """Archiver une campagne d'évaluation - VERSION CORRIGÉE"""
+    campagne = CampagneEvaluation.query.get_or_404(campagne_id)
+    cartographie = campagne.cartographie
+    
+    if not check_client_access(cartographie):
+        flash('Accès non autorisé', 'error')
+        return redirect(url_for('liste_cartographies'))
+    
+    # Vérifier les permissions
+    if not current_user.has_permission('can_archive_data'):
+        flash('Vous n\'avez pas la permission d\'archiver', 'error')
+        return redirect(url_for('liste_campagnes_cartographie', cartographie_id=cartographie.id))
+    
+    print(f"🔍 DEBUG - Archivage campagne {campagne_id}: {campagne.nom}")
+    print(f"🔍 DEBUG - Statut AVANT: '{campagne.statut}'")
+    
+    try:
+        # CORRECTION ICI : Il faut changer le statut en 'archivee'
+        campagne.statut = 'archivee'  # <-- CE CHANGEMENT EST CRUCIAL !
+        campagne.archived_at = datetime.utcnow()
+        campagne.archived_by = current_user.id
+        campagne.updated_at = datetime.utcnow()
+        
+        print(f"🔍 DEBUG - Statut APRÈS: '{campagne.statut}'")
+        
+        db.session.commit()
+        
+        # Vérifier
+        campagne_refresh = CampagneEvaluation.query.get(campagne_id)
+        print(f"🔍 DEBUG - Vérification après commit: statut='{campagne_refresh.statut}'")
+        
+        flash(f'Campagne "{campagne.nom}" archivée avec succès', 'success')
+        
+    except Exception as e:
+        db.session.rollback()
+        print(f"❌ Erreur lors de l'archivage: {str(e)}")
+        flash(f'Erreur lors de l\'archivage: {str(e)}', 'error')
+    
+    return redirect(url_for('liste_campagnes_cartographie', cartographie_id=cartographie.id))
+
+
+@app.route('/campagne/<int:campagne_id>/desarchiver', methods=['POST'])
+@csrf.exempt
+@login_required
+def desarchiver_campagne(campagne_id):
+    """Désarchiver une campagne d'évaluation - VERSION CORRIGÉE"""
+    campagne = CampagneEvaluation.query.get_or_404(campagne_id)
+    cartographie = campagne.cartographie
+    
+    if not check_client_access(cartographie):
+        flash('Accès non autorisé', 'error')
+        return redirect(url_for('liste_cartographies'))
+    
+    # Vérifier les permissions
+    if not current_user.has_permission('can_archive_data'):
+        flash('Vous n\'avez pas la permission de désarchiver', 'error')
+        return redirect(url_for('liste_campagnes_cartographie', cartographie_id=cartographie.id))
+    
+    print(f"🔍 DEBUG - Désarchivage campagne {campagne_id}: {campagne.nom}")
+    print(f"🔍 DEBUG - Statut AVANT: '{campagne.statut}'")
+    
+    try:
+        # CORRECTION ICI : Remettre un statut actif
+        campagne.statut = 'en_cours'  # ou 'terminee' selon ce qu'elle était avant
+        campagne.archived_at = None
+        campagne.archived_by = None
+        campagne.updated_at = datetime.utcnow()
+        
+        print(f"🔍 DEBUG - Statut APRÈS: '{campagne.statut}'")
+        
+        db.session.commit()
+        
+        flash(f'Campagne "{campagne.nom}" désarchivée avec succès', 'success')
+        
+    except Exception as e:
+        db.session.rollback()
+        print(f"❌ Erreur lors du désarchivage: {str(e)}")
+        flash(f'Erreur lors du désarchivage: {str(e)}', 'error')
+    
+    return redirect(url_for('liste_campagnes_cartographie', cartographie_id=cartographie.id, archives='oui'))
+
+
+
+@app.route('/campagne/<int:campagne_id>/supprimer', methods=['POST'])
+@csrf.exempt
+@login_required
+def supprimer_campagne(campagne_id):
+    """Supprimer une campagne d'évaluation"""
+    campagne = CampagneEvaluation.query.get_or_404(campagne_id)
+    cartographie = campagne.cartographie
+    
+    if not check_client_access(cartographie):
+        flash('Accès non autorisé', 'error')
+        return redirect(url_for('liste_cartographies'))
+    
+    # Vérifier les permissions
+    if current_user.role != 'admin' and not current_user.is_client_admin:
+        flash('Seuls les administrateurs peuvent supprimer des campagnes', 'error')
+        return redirect(url_for('liste_campagnes_cartographie', cartographie_id=cartographie.id))
+    
+    # Vérifier si la campagne est active
+    if hasattr(cartographie, 'campagne_active_id') and cartographie.campagne_active_id == campagne_id:
+        flash('Impossible de supprimer la campagne active. Changez d\'abord de campagne active.', 'error')
+        return redirect(url_for('liste_campagnes_cartographie', cartographie_id=cartographie.id))
+    
+    # Vérifier s'il y a des évaluations associées
+    evaluations_count = EvaluationRisque.query.filter_by(campagne_id=campagne_id).count()
+    
+    try:
+        nom_campagne = campagne.nom
+        
+        if evaluations_count > 0:
+            # Option 1 : Supprimer aussi les évaluations
+            # Supprimer les évaluations associées
+            EvaluationRisque.query.filter_by(campagne_id=campagne_id).delete()
+            
+            # Supprimer la campagne
+            db.session.delete(campagne)
+            
+            flash(f'Campagne "{nom_campagne}" supprimée avec succès ({evaluations_count} évaluation(s) supprimée(s))', 'success')
+        else:
+            # Option 2 : Si pas d'évaluations, suppression simple
+            db.session.delete(campagne)
+            flash(f'Campagne "{nom_campagne}" supprimée avec succès', 'success')
+        
+        db.session.commit()
+        
+    except Exception as e:
+        db.session.rollback()
+        print(f"❌ Erreur lors de la suppression: {str(e)}")
+        flash(f'Erreur lors de la suppression: {str(e)}', 'error')
+    
+    # Rediriger vers la bonne page (archives ou actives)
+    if campagne.statut == 'archivee':
+        return redirect(url_for('liste_campagnes_cartographie', cartographie_id=cartographie.id, archives='oui'))
+    else:
+        return redirect(url_for('liste_campagnes_cartographie', cartographie_id=cartographie.id))
+
+
+
+
+@app.route('/risque/<int:risque_id>/dispositif/nouveau', methods=['GET', 'POST'])
+@login_required
+def nouveau_dispositif(risque_id):
+    """Créer un nouveau dispositif de maîtrise"""
+    risque = Risque.query.get_or_404(risque_id)
+    
+    if not check_client_access(risque):
+        flash('Accès non autorisé', 'error')
+        return redirect(url_for('detail_risque', id=risque_id))
+    
+    form = DispositifMaitriseForm()
+    
+    # Pré-remplir les choix
+    utilisateurs = get_client_filter(User).filter_by(is_active=True).all()
+    form.responsable_id.choices = [(0, 'Non assigné')] + \
+        [(u.id, f"{u.username} - {u.role}") for u in utilisateurs]
+    
+    directions = get_client_filter(Direction).all()
+    form.direction_id.choices = [(0, 'Non spécifié')] + \
+        [(d.id, d.nom) for d in directions]
+    
+    services = get_client_filter(Service).all()
+    form.service_id.choices = [(0, 'Non spécifié')] + \
+        [(s.id, s.nom) for s in services]
+    
+    if form.validate_on_submit():
+        # Générer une référence automatique
+        try:
+            dernier_dispositif = DispositifMaitrise.query\
+                .filter(DispositifMaitrise.reference.like(f'DM-{risque.reference}-%'))\
+                .order_by(DispositifMaitrise.reference.desc())\
+                .first()
+            
+            if dernier_dispositif:
+                try:
+                    num = int(dernier_dispositif.reference.split('-')[-1]) + 1
+                except:
+                    num = 1
+            else:
+                num = 1
+        except:
+            # Si la table n'existe pas encore
+            num = 1
+        
+        reference = f"DM-{risque.reference}-{num:03d}"
+        
+        # Créer le dispositif
+        dispositif = DispositifMaitrise(
+            risque_id=risque_id,
+            reference=reference,
+            nom=form.nom.data,
+            description=form.description.data,
+            type_dispositif=form.type_dispositif.data,
+            nature=form.nature.data,
+            frequence=form.frequence.data,
+            responsable_id=form.responsable_id.data if form.responsable_id.data != 0 else None,
+            direction_id=form.direction_id.data if form.direction_id.data != 0 else None,
+            service_id=form.service_id.data if form.service_id.data != 0 else None,
+            efficacite_attendue=form.efficacite_attendue.data if form.efficacite_attendue.data != 0 else None,
+            date_mise_en_place=form.date_mise_en_place.data,
+            statut='actif',
+            created_by=current_user.id,
+            client_id=current_user.client_id
+        )
+        
+        db.session.add(dispositif)
+        db.session.commit()
+        
+        # Notification
+        try:
+            from models import Notification
+            notif = Notification(
+                type_notification='success',
+                titre=f"Nouveau dispositif de maîtrise",
+                message=f"Dispositif '{dispositif.nom}' créé pour le risque {risque.reference}",
+                destinataire_id=current_user.id,
+                entite_type='dispositif',
+                entite_id=dispositif.id
+            )
+            db.session.add(notif)
+            db.session.commit()
+        except Exception as e:
+            print(f"⚠️ Erreur création notification: {e}")
+        
+        flash('Dispositif de maîtrise créé avec succès', 'success')
+        return redirect(url_for('liste_dispositifs_risque', risque_id=risque_id))
+    
+    return render_template('dispositifs/form.html',
+                         form=form,
+                         risque=risque,
+                         action='creer')
+
+@app.route('/dispositif/<int:dispositif_id>/archiver', methods=['POST'])
+@login_required
+def archiver_dispositif(dispositif_id):
+    """Archiver un dispositif de maîtrise"""
+    dispositif = DispositifMaitrise.query.get_or_404(dispositif_id)
+    
+    if not check_client_access(dispositif):
+        flash('Accès non autorisé', 'error')
+        return redirect(url_for('detail_dispositif', dispositif_id=dispositif_id))
+    
+    # Vérifier les permissions
+    if not current_user.has_permission('can_archive_data'):
+        flash('Vous n\'avez pas la permission d\'archiver', 'error')
+        return redirect(url_for('detail_dispositif', dispositif_id=dispositif_id))
+    
+    # Archiver le dispositif
+    dispositif.is_archived = True
+    dispositif.archived_at = datetime.utcnow()
+    dispositif.archived_by = current_user.id
+    dispositif.statut = 'inactif'
+    dispositif.updated_at = datetime.utcnow()
+    
+    db.session.commit()
+    
+    flash('Dispositif archivé avec succès', 'success')
+    return redirect(url_for('liste_dispositifs_risque', risque_id=dispositif.risque_id))
+
+@app.route('/dispositif/<int:dispositif_id>/desarchiver', methods=['POST'])
+@login_required
+def desarchiver_dispositif(dispositif_id):
+    """Désarchiver un dispositif de maîtrise"""
+    dispositif = DispositifMaitrise.query.get_or_404(dispositif_id)
+    
+    if not check_client_access(dispositif):
+        flash('Accès non autorisé', 'error')
+        return redirect(url_for('liste_dispositifs_risque', risque_id=dispositif.risque_id))
+    
+    # Vérifier les permissions
+    if not current_user.has_permission('can_archive_data'):
+        flash('Vous n\'avez pas la permission de désarchiver', 'error')
+        return redirect(url_for('liste_dispositifs_risque', risque_id=dispositif.risque_id))
+    
+    # Désarchiver le dispositif
+    dispositif.is_archived = False
+    dispositif.archived_at = None
+    dispositif.archived_by = None
+    dispositif.updated_at = datetime.utcnow()
+    
+    db.session.commit()
+    
+    flash('Dispositif désarchivé avec succès', 'success')
+    return redirect(url_for('detail_dispositif', dispositif_id=dispositif_id))
+
+
+@app.route('/dispositif/document/<int:doc_id>/telecharger')
+@login_required
+def telecharger_document_dispositif(doc_id):
+    """Télécharger un document attaché à un dispositif"""
+    document = DocumentDispositif.query.get_or_404(doc_id)
+    dispositif = document.dispositif
+    
+    if not check_client_access(dispositif):
+        flash('Accès non autorisé', 'error')
+        return redirect(url_for('detail_dispositif', dispositif_id=dispositif.id))
+    
+    # Vérifier que le fichier existe
+    if not document.chemin_fichier or not os.path.exists(document.chemin_fichier):
+        flash('Fichier introuvable', 'error')
+        return redirect(url_for('detail_dispositif', dispositif_id=dispositif.id))
+    
+    return send_file(
+        document.chemin_fichier,
+        as_attachment=True,
+        download_name=document.nom_fichier
+    )
+
+@app.route('/dispositif/<int:dispositif_id>/document/upload', methods=['POST'])
+@login_required
+def uploader_document_dispositif(dispositif_id):
+    """Uploader un document pour un dispositif"""
+    dispositif = DispositifMaitrise.query.get_or_404(dispositif_id)
+    
+    if not check_client_access(dispositif):
+        flash('Accès non autorisé', 'error')
+        return redirect(url_for('detail_dispositif', dispositif_id=dispositif_id))
+    
+    if 'fichier' not in request.files:
+        flash('Aucun fichier sélectionné', 'error')
+        return redirect(url_for('detail_dispositif', dispositif_id=dispositif_id))
+    
+    fichier = request.files['fichier']
+    if fichier.filename == '':
+        flash('Aucun fichier sélectionné', 'error')
+        return redirect(url_for('detail_dispositif', dispositif_id=dispositif_id))
+    
+    # Vérifier l'extension
+    allowed_extensions = app.config.get('ALLOWED_EXTENSIONS', 
+                                       ['pdf', 'doc', 'docx', 'xls', 'xlsx', 'ppt', 'pptx', 'txt', 'jpg', 'jpeg', 'png'])
+    if not '.' in fichier.filename or \
+       fichier.filename.rsplit('.', 1)[1].lower() not in allowed_extensions:
+        flash('Type de fichier non autorisé', 'error')
+        return redirect(url_for('detail_dispositif', dispositif_id=dispositif_id))
+    
+    # Créer le dossier de stockage s'il n'existe pas
+    upload_folder = app.config.get('UPLOAD_FOLDER_DISPOSITIFS', 'uploads/dispositifs')
+    if not os.path.exists(upload_folder):
+        os.makedirs(upload_folder)
+    
+    # Générer un nom de fichier unique
+    filename = secure_filename(f"{dispositif_id}_{datetime.now().timestamp()}_{fichier.filename}")
+    filepath = os.path.join(upload_folder, filename)
+    
+    try:
+        fichier.save(filepath)
+        
+        # Créer l'entrée dans la base de données
+        document = DocumentDispositif(
+            dispositif_id=dispositif_id,
+            nom_fichier=fichier.filename,
+            type_document=request.form.get('type_document'),
+            description=request.form.get('description'),
+            chemin_fichier=filepath,
+            taille=os.path.getsize(filepath),
+            uploaded_by=current_user.id,
+            client_id=current_user.client_id
+        )
+        
+        db.session.add(document)
+        db.session.commit()
+        
+        flash('Document téléversé avec succès', 'success')
+        
+    except Exception as e:
+        db.session.rollback()
+        flash(f'Erreur lors du téléversement: {str(e)}', 'error')
+    
+    return redirect(url_for('detail_dispositif', dispositif_id=dispositif_id))
+
+@app.route('/risque/<int:risque_id>/plan-action/nouveau', methods=['GET', 'POST'])
+@login_required
+def nouveau_plan_action_pour_risque(risque_id):
+    """Créer un nouveau plan d'action pour un risque"""
+    risque = Risque.query.get_or_404(risque_id)
+    
+    if not check_client_access(risque):
+        flash('Accès non autorisé', 'error')
+        return redirect(url_for('detail_risque', id=risque_id))
+    
+    form = SimplePlanActionForm()
+    
+    # Pré-remplir les choix
+    utilisateurs = get_client_filter(User).filter_by(is_active=True).all()
+    form.responsable_id.choices = [(0, 'Non assigné')] + \
+        [(u.id, f"{u.username} - {u.role}") for u in utilisateurs]
+    
+    # Pré-remplir les valeurs par défaut
+    if request.method == 'GET':
+        dispositif_id = request.args.get('dispositif_id')
+        if dispositif_id:
+            form.dispositif_id.data = dispositif_id
+            
+            dispositif = DispositifMaitrise.query.get(dispositif_id)
+            if dispositif and check_client_access(dispositif):
+                form.nom.data = f"Amélioration dispositif {dispositif.reference}"
+                form.description.data = f"Plan d'action pour améliorer le dispositif de maîtrise {dispositif.reference}: {dispositif.nom}\n\nObjectif: Augmenter l'efficacité du dispositif."
+        
+        # Pré-remplir l'ID du risque
+        form.risque_id.data = risque_id
+    
+    if form.validate_on_submit():
+        # 1. Créer ou récupérer un audit par défaut
+        try:
+            audit_par_defaut = get_client_filter(Audit)\
+                .filter_by(reference='AUDIT-DEFAULT')\
+                .first()
+            
+            if not audit_par_defaut:
+                audit_par_defaut = Audit(
+                    reference='AUDIT-DEFAULT',
+                    nom='Audit Général (Plans Action Risques)',
+                    description='Audit par défaut pour les plans d\'action liés aux risques',
+                    date_debut=datetime.utcnow().date(),
+                    date_fin_prevue=datetime.utcnow().date(),
+                    statut='termine',
+                    type_audit='interne',
+                    portee='Générale',
+                    created_by=current_user.id,
+                    client_id=current_user.client_id
+                )
+                db.session.add(audit_par_defaut)
+                db.session.commit()
+        except Exception as e:
+            print(f"⚠️ Erreur création audit par défaut: {e}")
+            # Essayer de prendre le premier audit existant
+            audit_par_defaut = get_client_filter(Audit).first()
+            if not audit_par_defaut:
+                flash('Impossible de créer un plan d\'action. Aucun audit disponible.', 'error')
+                return redirect(url_for('voir_plans_action_risque', risque_id=risque_id))
+        
+        # 2. Générer une référence automatique
+        try:
+            dernier_plan = PlanAction.query\
+                .filter(PlanAction.reference.like(f'PA-{risque.reference}-%'))\
+                .order_by(PlanAction.reference.desc())\
+                .first()
+            
+            if dernier_plan:
+                try:
+                    num = int(dernier_plan.reference.split('-')[-1]) + 1
+                except:
+                    num = 1
+            else:
+                num = 1
+        except:
+            num = 1
+        
+        reference = f"PA-{risque.reference}-{num:03d}"
+        
+        # 3. Créer le plan d'action avec l'audit par défaut
+        plan_action = PlanAction(
+            reference=reference,
+            nom=form.nom.data,
+            description=form.description.data,
+            risque_id=risque_id,
+            audit_id=audit_par_defaut.id,  # Utiliser l'audit par défaut
+            dispositif_id=form.dispositif_id.data if form.dispositif_id.data else None,
+            responsable_id=form.responsable_id.data if form.responsable_id.data != 0 else None,
+            date_debut=form.date_debut.data,
+            date_fin_prevue=form.date_echeance.data,
+            date_fin_reelle=None,
+            statut='en_cours',
+            priorite=form.priorite.data,
+            pourcentage_realisation=0,
+            created_by=current_user.id,
+            client_id=current_user.client_id
+        )
+        
+        try:
+            db.session.add(plan_action)
+            db.session.commit()
+            
+            # 4. Lier le dispositif au plan créé
+            dispositif_id = form.dispositif_id.data
+            if dispositif_id:
+                dispositif = DispositifMaitrise.query.get(dispositif_id)
+                if dispositif and check_client_access(dispositif):
+                    dispositif.plan_action_id = plan_action.id
+                    db.session.commit()
+            
+            flash('Plan d\'action créé avec succès', 'success')
+            # REDIRECTION VERS LA LISTE DES PLANS D'ACTION
+            return redirect(url_for('voir_plans_action_risque', risque_id=risque_id))
+            
+        except Exception as e:
+            db.session.rollback()
+            print(f"❌ Erreur création plan: {e}")
+            flash(f'Erreur: {str(e)}', 'error')
+    
+    return render_template('plans_action/form_simple.html',
+                         form=form,
+                         risque=risque,
+                         action='creer')
+
+@app.route('/plan-action-risque/<int:plan_id>')
+@login_required
+def detail_plan_action_risque(plan_id):
+    """Détail d'un plan d'action lié à un risque"""
+    plan_action = PlanAction.query.get_or_404(plan_id)
+    
+    if not check_client_access(plan_action):
+        flash('Accès non autorisé', 'error')
+        return redirect(url_for('dashboard'))
+    
+    # Récupérer les sous-actions triées par date de création
+    sous_actions = SousAction.query\
+        .filter_by(plan_action_id=plan_id)\
+        .order_by(SousAction.created_at.asc())\
+        .all()
+    
+    # Récupérer les étapes triées par ordre
+    etapes = EtapePlanAction.query\
+        .filter_by(plan_action_id=plan_id)\
+        .order_by(EtapePlanAction.ordre.asc())\
+        .all()
+    
+    # Calculer l'avancement basé sur les sous-actions
+    total_sous_actions = len(sous_actions)
+    sous_actions_terminees = sum(1 for s in sous_actions if s.statut == 'termine')
+    pourcentage_avancement = (sous_actions_terminees / total_sous_actions * 100) if total_sous_actions > 0 else 0
+    
+    return render_template('plans_action/detail_risque.html',
+                         plan=plan_action,
+                         sous_actions=sous_actions,
+                         etapes=etapes,
+                         pourcentage_avancement=pourcentage_avancement,
+                         sous_actions_terminees=sous_actions_terminees,
+                         total_sous_actions=total_sous_actions,
+                         is_risque_plan=True,
+                         datetime=datetime)
+
+@app.route('/plan-action-risque/<int:plan_id>/modifier', methods=['GET', 'POST'])
+@login_required
+def modifier_plan_action_risque(plan_id):
+    """Modifier un plan d'action lié à un risque"""
+    plan_action = PlanAction.query.get_or_404(plan_id)
+    
+    if not check_client_access(plan_action):
+        flash('Accès non autorisé', 'error')
+        return redirect(url_for('detail_plan_action_risque', plan_id=plan_id))
+    
+    # Vérifier les permissions
+    if (current_user.id != plan_action.created_by and 
+        not current_user.has_permission('can_manage_plans')):
+        flash('Vous n\'êtes pas autorisé à modifier ce plan d\'action', 'error')
+        return redirect(url_for('detail_plan_action_risque', plan_id=plan_id))
+    
+    form = SimplePlanActionForm(obj=plan_action)
+    
+    # Pré-remplir les choix
+    utilisateurs = get_client_filter(User).filter_by(is_active=True).all()
+    form.responsable_id.choices = [(0, 'Non assigné')] + \
+        [(u.id, f"{u.username} - {u.role}") for u in utilisateurs]
+    
+    # Pré-remplir la date d'échéance et l'ID du risque
+    if request.method == 'GET':
+        form.date_echeance.data = plan_action.date_fin_prevue
+        form.priorite.data = getattr(plan_action, 'priorite', 'moyenne')
+        form.risque_id.data = plan_action.risque_id
+    
+    if form.validate_on_submit():
+        plan_action.nom = form.nom.data
+        plan_action.description = form.description.data
+        plan_action.responsable_id = form.responsable_id.data if form.responsable_id.data != 0 else None
+        plan_action.date_debut = form.date_debut.data
+        plan_action.date_fin_prevue = form.date_echeance.data
+        
+        # Mettre à jour la priorité si le champ existe
+        if hasattr(plan_action, 'priorite'):
+            plan_action.priorite = form.priorite.data
+        
+        plan_action.updated_at = datetime.utcnow()
+        
+        db.session.commit()
+        flash('Plan d\'action modifié avec succès', 'success')
+        # REDIRECTION VERS LE DÉTAIL DU PLAN
+        return redirect(url_for('detail_plan_action_risque', plan_id=plan_id))
+    
+    return render_template('plans_action/form_simple.html',
+                         form=form,
+                         risque=plan_action.risque,
+                         action='modifier',
+                         plan=plan_action)
+
+@app.route('/plan-action-risque/<int:plan_id>/sous-action/nouveau', methods=['GET', 'POST'])
+@login_required
+def nouveau_sous_action_risque(plan_id):
+    """Ajouter une sous-action à un plan d'action risque"""
+    plan_action = PlanAction.query.get_or_404(plan_id)
+    
+    if not check_client_access(plan_action):
+        flash('Accès non autorisé', 'error')
+        return redirect(url_for('detail_plan_action_risque', plan_id=plan_id))
+    
+    # Vérifier les permissions
+    if (current_user.id != plan_action.created_by and 
+        not current_user.has_permission('can_manage_plans')):
+        flash('Vous n\'êtes pas autorisé à ajouter des sous-actions', 'error')
+        return redirect(url_for('detail_plan_action_risque', plan_id=plan_id))
+    
+    # Utilisez le formulaire AVEC commentaire
+    form = SousActionForm()
+    
+    # Pré-remplir les choix
+    utilisateurs = get_client_filter(User).filter_by(is_active=True).all()
+    form.responsable_id.choices = [(0, 'Non assigné')] + \
+        [(u.id, f"{u.username} - {u.role}") for u in utilisateurs]
+    
+    if request.method == 'GET':
+        # Définir les dates par défaut
+        form.date_debut.data = datetime.now().date()
+        form.date_fin_prevue.data = (datetime.now() + timedelta(days=14)).date()
+    
+    if form.validate_on_submit():
+        # Trouver le prochain ordre
+        dernier_sous_action = SousAction.query\
+            .filter_by(plan_action_id=plan_id)\
+            .order_by(SousAction.created_at.desc())\
+            .first()
+        
+        # Générer une référence
+        reference = f"SA-{plan_action.reference}-{(dernier_sous_action.id + 1) if dernier_sous_action else 1:03d}"
+        
+        # Créer la sous-action - UTILISEZ SEULEMENT LES CHAMPS DISPONIBLES
+        sous_action = SousAction(
+            plan_action_id=plan_id,
+            reference=reference,
+            description=form.description.data,
+            # Ne pas utiliser form.commentaire.data si le champ n'existe pas
+            # commentaire=form.commentaire.data if hasattr(form, 'commentaire') else None,
+            date_debut=form.date_debut.data,
+            date_fin_prevue=form.date_fin_prevue.data,
+            responsable_id=form.responsable_id.data if form.responsable_id.data != 0 else None,
+            statut='a_faire',
+            pourcentage_realisation=0,
+            client_id=current_user.client_id
+        )
+        
+        db.session.add(sous_action)
+        db.session.commit()
+        
+        flash('Sous-action ajoutée avec succès', 'success')
+        return redirect(url_for('detail_plan_action_risque', plan_id=plan_id))
+    
+    return render_template('plans_action/form_sous_action.html',
+                         form=form,
+                         plan=plan_action,
+                         action='creer')
+
+
+# ============================================================================
+# ROUTES POUR LES PLANS D'ACTION RISQUE
+# ============================================================================
+@app.route('/plan-action-risque/<int:plan_id>/archiver', methods=['POST'])
+@csrf.exempt  # Important si vous utilisez AJAX
+@login_required
+def archiver_plan_risque(plan_id):
+    """Archiver un plan d'action risque - VERSION CORRIGÉE"""
+    plan_action = PlanAction.query.get_or_404(plan_id)
+    
+    if not check_client_access(plan_action):
+        flash('Accès non autorisé', 'error')
+        return redirect(url_for('detail_plan_action_risque', plan_id=plan_id))
+    
+    # Vérifier les permissions
+    if (current_user.id != plan_action.created_by and 
+        not current_user.has_permission('can_manage_plans')):
+        flash('Vous n\'êtes pas autorisé à archiver ce plan', 'error')
+        return redirect(url_for('detail_plan_action_risque', plan_id=plan_id))
+    
+    try:
+        # Vérifier si déjà archivé
+        if plan_action.is_archived:
+            flash('Ce plan est déjà archivé', 'warning')
+            return redirect(url_for('voir_plans_action_risque', 
+                                  risque_id=plan_action.risque_id,
+                                  archives='oui'))
+        
+        print(f"🔍 DEBUG - Archivage plan {plan_id}")
+        print(f"🔍 DEBUG - AVANT: is_archived={plan_action.is_archived}, statut_archive={plan_action.statut_archive}")
+        
+        # Archiver le plan
+        plan_action.archiver(current_user.id, "Archivé manuellement")
+        
+        print(f"🔍 DEBUG - APRÈS: is_archived={plan_action.is_archived}, statut_archive={plan_action.statut_archive}")
+        
+        # Journalisation (facultatif)
+        try:
+            from models import JournalActivite
+            journal = JournalActivite(
+                utilisateur_id=current_user.id,
+                action='archivage_plan',
+                details=json.dumps({
+                    'plan_id': plan_id,
+                    'plan_reference': plan_action.reference
+                }),
+                entite_type='plan_action',
+                entite_id=plan_id,
+                client_id=current_user.client_id
+            )
+            db.session.add(journal)
+        except Exception as e:
+            print(f"⚠️ Erreur journalisation: {e}")
+        
+        db.session.commit()
+        print(f"✅ Plan {plan_id} archivé avec succès")
+        
+        flash(f'Plan "{plan_action.reference}" archivé avec succès', 'success')
+        
+        # Vérifier la requête AJAX
+        if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
+            return jsonify({
+                'success': True,
+                'message': 'Plan archivé avec succès',
+                'redirect': url_for('voir_plans_action_risque', 
+                                  risque_id=plan_action.risque_id)
+            })
+        
+        # Redirection normale
+        return redirect(url_for('voir_plans_action_risque', 
+                              risque_id=plan_action.risque_id))
+        
+    except Exception as e:
+        db.session.rollback()
+        print(f"❌ Erreur archivage: {e}")
+        import traceback
+        traceback.print_exc()
+        flash(f'Erreur lors de l\'archivage: {str(e)}', 'error')
+        return redirect(url_for('detail_plan_action_risque', plan_id=plan_id))
+
+@app.route('/plan-action-risque/<int:plan_id>/desarchiver', methods=['POST'])
+@csrf.exempt
+@login_required
+def desarchiver_plan_risque(plan_id):
+    """Désarchiver un plan d'action risque - VERSION CORRIGÉE"""
+    plan_action = PlanAction.query.get_or_404(plan_id)
+    
+    if not check_client_access(plan_action):
+        flash('Accès non autorisé', 'error')
+        return redirect(url_for('detail_plan_action_risque', plan_id=plan_id))
+    
+    # Vérifier les permissions
+    if (current_user.id != plan_action.created_by and 
+        not current_user.has_permission('can_manage_plans')):
+        flash('Vous n\'êtes pas autorisé à désarchiver ce plan', 'error')
+        return redirect(url_for('detail_plan_action_risque', plan_id=plan_id))
+    
+    try:
+        # Vérifier si déjà désarchivé
+        if not plan_action.is_archived:
+            flash('Ce plan n\'est pas archivé', 'warning')
+            return redirect(url_for('voir_plans_action_risque', 
+                                  risque_id=plan_action.risque_id))
+        
+        print(f"🔍 DEBUG - Désarchivage plan {plan_id}")
+        print(f"🔍 DEBUG - AVANT: is_archived={plan_action.is_archived}, statut_archive={plan_action.statut_archive}")
+        
+        # Désarchiver le plan
+        plan_action.desarchiver()
+        
+        print(f"🔍 DEBUG - APRÈS: is_archived={plan_action.is_archived}, statut_archive={plan_action.statut_archive}")
+        
+        # Journalisation (facultatif)
+        try:
+            from models import JournalActivite
+            journal = JournalActivite(
+                utilisateur_id=current_user.id,
+                action='desarchivage_plan',
+                details=json.dumps({
+                    'plan_id': plan_id,
+                    'plan_reference': plan_action.reference
+                }),
+                entite_type='plan_action',
+                entite_id=plan_id,
+                client_id=current_user.client_id
+            )
+            db.session.add(journal)
+        except Exception as e:
+            print(f"⚠️ Erreur journalisation: {e}")
+        
+        db.session.commit()
+        print(f"✅ Plan {plan_id} désarchivé avec succès")
+        
+        flash(f'Plan "{plan_action.reference}" désarchivé avec succès', 'success')
+        
+        # Vérifier la requête AJAX
+        if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
+            return jsonify({
+                'success': True,
+                'message': 'Plan désarchivé avec succès',
+                'redirect': url_for('voir_plans_action_risque', 
+                                  risque_id=plan_action.risque_id)
+            })
+        
+        # Redirection normale - retourner aux archives pour voir le changement
+        return redirect(url_for('voir_plans_action_risque', 
+                              risque_id=plan_action.risque_id,
+                              archives='oui'))
+        
+    except Exception as e:
+        db.session.rollback()
+        print(f"❌ Erreur désarchivage: {e}")
+        import traceback
+        traceback.print_exc()
+        flash(f'Erreur lors du désarchivage: {str(e)}', 'error')
+        return redirect(url_for('detail_plan_action_risque', plan_id=plan_id))
+
+
+
+@app.route('/plan-action-risque/<int:plan_id>/supprimer', methods=['DELETE'])
+@login_required
+def supprimer_plan_risque(plan_id):
+    """Supprimer définitivement un plan d'action risque"""
+    plan_action = PlanAction.query.get_or_404(plan_id)
+    
+    if not check_client_access(plan_action):
+        return jsonify({'error': 'Accès non autorisé'}), 403
+    
+    # Vérifier les permissions
+    if current_user.role != 'admin' and current_user.id != plan_action.created_by:
+        return jsonify({'error': 'Vous n\'êtes pas autorisé à supprimer ce plan'}), 403
+    
+    try:
+        # Supprimer d'abord les sous-actions
+        SousAction.query.filter_by(plan_action_id=plan_id).delete()
+        
+        # Supprimer le plan
+        db.session.delete(plan_action)
+        db.session.commit()
+        
+        return jsonify({
+            'success': True,
+            'message': 'Plan supprimé avec succès',
+            'redirect': url_for('voir_plans_action_risque', risque_id=plan_action.risque_id)
+        })
+        
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/dispositif/<int:dispositif_id>')
+@login_required
+def detail_dispositif(dispositif_id):
+    """Détail d'un dispositif de maîtrise"""
+    dispositif = DispositifMaitrise.query.get_or_404(dispositif_id)
+    
+    if not check_client_access(dispositif):
+        flash('Accès non autorisé', 'error')
+        return redirect(url_for('liste_dispositifs_risque', risque_id=dispositif.risque_id))
+    
+    # Récupérer les vérifications triées par date
+    verifications = VerificationDispositif.query\
+        .filter_by(dispositif_id=dispositif_id)\
+        .order_by(VerificationDispositif.date_verification.desc())\
+        .all()
+    
+    # Récupérer les documents
+    documents = DocumentDispositif.query\
+        .filter_by(dispositif_id=dispositif_id)\
+        .order_by(DocumentDispositif.uploaded_at.desc())\
+        .all()
+    
+    # Vérifier si un plan d'action est lié
+    plan_action = None
+    if dispositif.plan_action_id:
+        plan_action = PlanAction.query.get(dispositif.plan_action_id)
+    
+    # Calculer les jours restants avant la prochaine vérification
+    jours_restants = None
+    if dispositif.prochaine_verification:
+        aujourdhui = datetime.now().date()
+        jours_restants = (dispositif.prochaine_verification - aujourdhui).days
+    
+    return render_template('dispositifs/detail.html',
+                         dispositif=dispositif,
+                         verifications=verifications,
+                         documents=documents,
+                         plan_action=plan_action,
+                         jours_restants=jours_restants,
+                         current_user=current_user,
+                         datetime=datetime)
+
+
+@app.route('/dispositif/<int:dispositif_id>/modifier', methods=['GET', 'POST'])
+@login_required
+def modifier_dispositif(dispositif_id):
+    """Modifier un dispositif de maîtrise"""
+    dispositif = DispositifMaitrise.query.get_or_404(dispositif_id)
+    
+    if not check_client_access(dispositif):
+        flash('Accès non autorisé', 'error')
+        return redirect(url_for('detail_dispositif', dispositif_id=dispositif_id))
+    
+    # Vérifier les permissions
+    if (current_user.id != dispositif.created_by and 
+        not current_user.has_permission('can_manage_controls')):
+        flash('Vous n\'êtes pas autorisé à modifier ce dispositif', 'error')
+        return redirect(url_for('detail_dispositif', dispositif_id=dispositif_id))
+    
+    form = DispositifMaitriseForm(obj=dispositif)
+    
+    # Pré-remplir les choix
+    utilisateurs = get_client_filter(User).filter_by(is_active=True).all()
+    form.responsable_id.choices = [(0, 'Non assigné')] + \
+        [(u.id, f"{u.username} - {u.role}") for u in utilisateurs]
+    
+    directions = get_client_filter(Direction).all()
+    form.direction_id.choices = [(0, 'Non spécifié')] + \
+        [(d.id, d.nom) for d in directions]
+    
+    services = get_client_filter(Service).all()
+    form.service_id.choices = [(0, 'Non spécifié')] + \
+        [(s.id, s.nom) for s in services]
+    
+    if form.validate_on_submit():
+        dispositif.nom = form.nom.data
+        dispositif.description = form.description.data
+        dispositif.type_dispositif = form.type_dispositif.data
+        dispositif.nature = form.nature.data
+        dispositif.frequence = form.frequence.data
+        dispositif.responsable_id = form.responsable_id.data if form.responsable_id.data != 0 else None
+        dispositif.direction_id = form.direction_id.data if form.direction_id.data != 0 else None
+        dispositif.service_id = form.service_id.data if form.service_id.data != 0 else None
+        dispositif.efficacite_attendue = form.efficacite_attendue.data if form.efficacite_attendue.data != 0 else None
+        dispositif.date_mise_en_place = form.date_mise_en_place.data
+        dispositif.updated_at = datetime.utcnow()
+        
+        db.session.commit()
+        flash('Dispositif modifié avec succès', 'success')
+        return redirect(url_for('detail_dispositif', dispositif_id=dispositif_id))
+    
+    return render_template('dispositifs/form.html',
+                         form=form,
+                         risque=dispositif.risque,
+                         action='modifier')
+
+@app.route('/dispositif/<int:dispositif_id>/verification/formulaire')
+@csrf.exempt  
+@login_required
+def formulaire_verification_dispositif(dispositif_id):
+    """Retourne le formulaire HTML pour ajouter une vérification"""
+    try:
+        dispositif = DispositifMaitrise.query.get_or_404(dispositif_id)
+        
+        if not check_client_access(dispositif):
+            return '<div class="alert alert-danger">Accès non autorisé</div>'
+        
+        # Générer le token CSRF
+        csrf_token_value = generate_csrf()
+        
+        html = f'''
+        <form method="POST" action="/dispositif/{dispositif_id}/verification/ajouter" id="formVerification">
+            <input type="hidden" name="csrf_token" value="{csrf_token_value}">
+            
+            <div class="mb-3">
+                <label class="form-label">Date de vérification :</label>
+                <input type="date" class="form-control" name="date_verification" 
+                       value="{datetime.now().date().isoformat()}" required>
+            </div>
+            
+            <div class="mb-3">
+                <label class="form-label">Type de vérification :</label>
+                <select class="form-select" name="type_verification" required>
+                    <option value="">-- Sélectionner --</option>
+                    <option value="Test">Test</option>
+                    <option value="Observation">Observation</option>
+                    <option value="Revue documentaire">Revue documentaire</option>
+                    <option value="Entretien">Entretien</option>
+                    <option value="Simulation">Simulation</option>
+                    <option value="Autre">Autre</option>
+                </select>
+            </div>
+            
+            <div class="mb-3">
+                <label class="form-label">Résultat :</label>
+                <select class="form-select" name="resultat" required>
+                    <option value="">-- Sélectionner --</option>
+                    <option value="Conforme">Conforme</option>
+                    <option value="Non conforme">Non conforme</option>
+                    <option value="À corriger">À corriger</option>
+                    <option value="À améliorer">À améliorer</option>
+                </select>
+            </div>
+            
+            <div class="mb-3">
+                <label class="form-label">Commentaire :</label>
+                <textarea class="form-control" name="commentaire" rows="3" 
+                          placeholder="Détails de la vérification, observations, recommandations..."></textarea>
+            </div>
+            
+            <div class="mb-3">
+                <label class="form-label">Vérificateur :</label>
+                <input type="text" class="form-control" name="verificateur" 
+                       value="{current_user.username}" readonly>
+                <small class="text-muted">Vous serez enregistré comme vérificateur</small>
+            </div>
+        </form>
+        '''
+        
+        return html
+        
+    except Exception as e:
+        print(f"❌ Erreur formulaire vérification: {e}")
+        return f'<div class="alert alert-danger">Erreur: {str(e)}</div>'
+    
+@app.route('/risque/<int:risque_id>/plans-action/liste')
+@login_required
+def voir_plans_action_risque(risque_id):
+    """Voir tous les plans d'action d'un risque - VERSION CORRIGÉE"""
+    risque = Risque.query.get_or_404(risque_id)
+    
+    if not check_client_access(risque):
+        flash('Accès non autorisé', 'error')
+        return redirect(url_for('detail_risque', id=risque_id))
+    
+    # Vérifier si on veut voir les archives ou non
+    voir_archives = request.args.get('archives', 'non') == 'oui'
+    
+    # Construire la requête
+    query = get_client_filter(PlanAction)\
+        .filter_by(risque_id=risque_id)
+    
+    # Filtrer selon statut_archive
+    if voir_archives:
+        plans_action = query.filter(PlanAction.statut_archive == 'archive')\
+                           .order_by(PlanAction.updated_at.desc())\
+                           .all()
+    else:
+        plans_action = query.filter(PlanAction.statut_archive == 'actif')\
+                           .order_by(PlanAction.created_at.desc())\
+                           .all()
+    
+    # Préparer les données pour le template
+    plans_with_attrs = []
+    for plan in plans_action:
+        # Assurez-vous que statut_archive existe
+        statut_archive_value = getattr(plan, 'statut_archive', 'actif')
+        plans_with_attrs.append({
+            'plan': plan,
+            'statut_archive': statut_archive_value,
+            'has_statut_archive': hasattr(plan, 'statut_archive')
+        })
+    
+    # Récupérer TOUS les plans pour calculer les statistiques
+    tous_plans = get_client_filter(PlanAction)\
+        .filter_by(risque_id=risque_id)\
+        .all()
+    
+    # Calcul des statistiques
+    plans_actifs = [p for p in tous_plans if getattr(p, 'statut_archive', 'actif') == 'actif']
+    plans_archives = [p for p in tous_plans if getattr(p, 'statut_archive', 'actif') == 'archive']
+    
+    stats = {
+        'total': len(plans_actifs),
+        'en_cours': len([p for p in plans_actifs if p.statut == 'en_cours']),
+        'termines': len([p for p in plans_actifs if p.statut == 'termine']),
+        'en_retard': len([p for p in plans_actifs if getattr(p, 'est_en_retard', False)]),
+        'archives': len(plans_archives)
+    }
+    
+    # Récupérer les responsables uniques
+    responsables_uniques = []
+    for plan in plans_action:
+        if plan.responsable and plan.responsable not in responsables_uniques:
+            responsables_uniques.append(plan.responsable)
+    
+    # Convertir en JSON pour les graphiques
+    plans_action_json = [plan.to_dict() for plan in plans_action]
+    
+    return render_template('plans_action/liste_risque.html',
+                         risque=risque,
+                         plans_with_attrs=plans_with_attrs,  # Changé ici
+                         plans_action=plans_action,  # Garder pour compatibilité
+                         plans_action_json=plans_action_json,
+                         stats=stats,
+                         responsables_uniques=responsables_uniques,
+                         voir_archives=voir_archives)
+
+@app.template_filter('average')
+def average_filter(values):
+    """Calculate average of a list, ignoring None values"""
+    if not values:
+        return 0
+    valid_values = [v for v in values if v is not None]
+    if not valid_values:
+        return 0
+    return sum(valid_values) / len(valid_values)
+
+@app.template_filter('default_if_none')
+def default_if_none(value, default=0):
+    """Return default value if value is None"""
+    return value if value is not None else default
+
+
+@app.route('/dispositif/<int:dispositif_id>/evaluer', methods=['GET', 'POST'])
+@login_required
+def evaluer_dispositif(dispositif_id):
+    """Évaluer l'efficacité d'un dispositif de maîtrise"""
+    dispositif = DispositifMaitrise.query.get_or_404(dispositif_id)
+    
+    if not check_client_access(dispositif):
+        flash('Accès non autorisé', 'error')
+        return redirect(url_for('liste_dispositifs_risque', risque_id=dispositif.risque_id))
+    
+    form = EvaluationDispositifForm()
+    
+    if form.validate_on_submit():
+        # Mettre à jour les valeurs d'évaluation
+        dispositif.efficacite_reelle = form.efficacite_reelle.data
+        dispositif.couverture = form.couverture.data
+        dispositif.date_derniere_verification = datetime.utcnow().date()
+        dispositif.prochaine_verification = form.prochaine_verification.data
+        dispositif.commentaire_evaluation = form.commentaire.data  # Stocker le commentaire
+        dispositif.updated_at = datetime.utcnow()
+        
+        # CORRECTION : Vérifier que les valeurs ne sont pas None avant comparaison
+        efficacite_reelle = dispositif.efficacite_reelle or 0
+        efficacite_attendue = dispositif.efficacite_attendue or 0
+        
+        # Déterminer le résultat
+        if efficacite_attendue == 0:
+            resultat = 'Non évalué'
+        elif efficacite_reelle < efficacite_attendue:
+            resultat = 'À améliorer'
+        else:
+            resultat = 'Conforme'
+        
+        # 1. Créer une vérification d'évaluation
+        verification = VerificationDispositif(
+            dispositif_id=dispositif.id,
+            date_verification=datetime.utcnow().date(),
+            type_verification='Évaluation',
+            resultat=resultat,  # Utiliser la variable calculée
+            commentaire=form.commentaire.data or f"Évaluation: {efficacite_reelle}/5 (attendu: {efficacite_attendue}/5)",
+            verificateur_id=current_user.id,
+            client_id=current_user.client_id
+        )
+        db.session.add(verification)
+        
+        # 2. CALCULER LA RÉDUCTION THÉORIQUE DU RISQUE
+        # Mettre à jour le risque associé avec la nouvelle réduction
+        if dispositif.risque:
+            # Calculer la réduction basée sur l'efficacité réelle et la couverture
+            if dispositif.efficacite_reelle and dispositif.couverture:
+                # Formule : (efficacité + couverture) / 2, puis normalisé à 30% max
+                score_moyen = (dispositif.efficacite_reelle + dispositif.couverture) / 2
+                reduction_pourcentage = (score_moyen / 5) * 30.0  # 30% maximum
+                
+                # Stocker la réduction dans le dispositif
+                dispositif.reduction_risque_pourcentage = reduction_pourcentage
+                
+                # Mettre à jour le risque (optionnel)
+                # Vous pourriez avoir un champ 'reduction_cumulee' dans le modèle Risque
+                # risque.reduction_cumulee = calculer_toutes_reductions()
+        
+        # 3. Si efficacité insuffisante, créer un plan d'action
+        if dispositif.efficacite_reelle and dispositif.efficacite_attendue:
+            if dispositif.efficacite_reelle < dispositif.efficacite_attendue:
+                try:
+                    from services.audit_service import creer_plan_action_automatique
+                    creer_plan_action_automatique(
+                        risque_id=dispositif.risque_id,
+                        dispositif_id=dispositif.id,
+                        titre=f"Amélioration dispositif {dispositif.reference}",
+                        description=f"Dispositif insuffisamment efficace ({dispositif.efficacite_reelle}/5 vs {dispositif.efficacite_attendue}/5 attendus)\n\nCommentaire: {form.commentaire.data}",
+                        responsable_id=dispositif.responsable_id or current_user.id,
+                        echeance=datetime.utcnow().date() + timedelta(days=30)
+                    )
+                except ImportError:
+                    # Si le service n'existe pas, créer un plan d'action simple
+                    plan = PlanAction(
+                        reference=f"PA-{datetime.utcnow().strftime('%Y%m%d')}-{dispositif.id}",
+                        nom=f"Amélioration dispositif {dispositif.reference}",
+                        description=f"Dispositif insuffisamment efficace ({dispositif.efficacite_reelle}/5 vs {dispositif.efficacite_attendue}/5 attendus)",
+                        risque_id=dispositif.risque_id,
+                        dispositif_id=dispositif.id,
+                        responsable_id=dispositif.responsable_id or current_user.id,
+                        date_debut=datetime.utcnow().date(),
+                        date_fin_prevue=datetime.utcnow().date() + timedelta(days=30),
+                        statut='en_cours',
+                        priorite='haute',
+                        client_id=current_user.client_id,
+                        created_by=current_user.id
+                    )
+                    db.session.add(plan)
+        
+        db.session.commit()
+        
+        # 4. Notifier l'utilisateur avec la réduction calculée
+        reduction_msg = ""
+        if hasattr(dispositif, 'reduction_risque_pourcentage') and dispositif.reduction_risque_pourcentage:
+            reduction_msg = f" RÉDUCTION THÉORIQUE DU RISQUE: {dispositif.reduction_risque_pourcentage:.1f}%"
+        
+        flash(f'Évaluation enregistrée avec succès.{reduction_msg}', 'success')
+        return redirect(url_for('detail_dispositif', dispositif_id=dispositif_id))
+    
+    # PRÉ-REMPLIR LE FORMULAIRE (GET request)
+    # CORRECTION : Utiliser getattr avec valeur par défaut pour éviter None
+    form.efficacite_reelle.data = getattr(dispositif, 'efficacite_reelle', None)
+    form.couverture.data = getattr(dispositif, 'couverture', None)
+    form.commentaire.data = getattr(dispositif, 'commentaire_evaluation', None)
+    
+    if dispositif.prochaine_verification:
+        form.prochaine_verification.data = dispositif.prochaine_verification
+    
+    return render_template('dispositifs/evaluation.html',
+                         form=form,
+                         dispositif=dispositif)
+
+@app.route('/api/verification/<int:verification_id>', methods=['PUT', 'DELETE'])
+@login_required
+def api_verification(verification_id):
+    """API pour modifier ou supprimer une vérification"""
+    verification = VerificationDispositif.query.get_or_404(verification_id)
+    
+    if not check_client_access(verification):
+        return jsonify({'error': 'Accès non autorisé'}), 403
+    
+    if request.method == 'PUT':
+        # Modifier la vérification
+        data = request.get_json()
+        
+        if 'commentaire' in data:
+            verification.commentaire = data['commentaire']
+        if 'resultat' in data:
+            verification.resultat = data['resultat']
+        if 'date_verification' in data:
+            verification.date_verification = datetime.strptime(data['date_verification'], '%Y-%m-%d').date()
+        
+        verification.updated_at = datetime.utcnow()
+        db.session.commit()
+        
+        return jsonify({
+            'success': True,
+            'message': 'Vérification modifiée',
+            'verification': {
+                'id': verification.id,
+                'commentaire': verification.commentaire,
+                'resultat': verification.resultat,
+                'date_verification': verification.date_verification.strftime('%Y-%m-%d')
+            }
+        })
+    
+    elif request.method == 'DELETE':
+        # Supprimer la vérification
+        dispositif_id = verification.dispositif_id
+        db.session.delete(verification)
+        db.session.commit()
+        
+        return jsonify({
+            'success': True,
+            'message': 'Vérification supprimée',
+            'redirect': url_for('detail_dispositif', dispositif_id=dispositif_id)
+        })
+
+@app.route('/dispositif/<int:dispositif_id>/lier-plan-action', methods=['POST'])
+@login_required
+def lier_dispositif_plan_action(dispositif_id):
+    """Lier un dispositif à un plan d'action existant"""
+    try:
+        dispositif = DispositifMaitrise.query.get_or_404(dispositif_id)
+        
+        if not check_client_access(dispositif):
+            if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
+                return jsonify({'error': 'Accès non autorisé'}), 403
+            flash('Accès non autorisé', 'error')
+            return redirect(url_for('detail_dispositif', dispositif_id=dispositif_id))
+        
+        plan_action_id = request.form.get('plan_action_id')
+        if not plan_action_id:
+            if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
+                return jsonify({'error': 'Veuillez sélectionner un plan d\'action'}), 400
+            flash('Veuillez sélectionner un plan d\'action', 'error')
+            return redirect(url_for('detail_dispositif', dispositif_id=dispositif_id))
+        
+        plan_action = PlanAction.query.get(plan_action_id)
+        if not plan_action or not check_client_access(plan_action):
+            if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
+                return jsonify({'error': 'Plan d\'action non trouvé ou inaccessible'}), 404
+            flash('Plan d\'action non trouvé ou inaccessible', 'error')
+            return redirect(url_for('detail_dispositif', dispositif_id=dispositif_id))
+        
+        # Vérifier que le plan d'action appartient bien au même risque
+        if plan_action.risque_id != dispositif.risque_id:
+            if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
+                return jsonify({'error': 'Le plan d\'action n\'appartient pas au même risque'}), 400
+            flash('Le plan d\'action n\'appartient pas au même risque', 'error')
+            return redirect(url_for('detail_dispositif', dispositif_id=dispositif_id))
+        
+        # Lier le dispositif au plan d'action
+        dispositif.plan_action_id = plan_action_id
+        dispositif.updated_at = datetime.utcnow()
+        
+        db.session.commit()
+        
+        message = f'Dispositif lié au plan d\'action {plan_action.reference}'
+        
+        if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
+            return jsonify({
+                'success': True,
+                'message': message,
+                'plan_reference': plan_action.reference,
+                'plan_id': plan_action.id
+            })
+        
+        flash(message, 'success')
+        return redirect(url_for('detail_dispositif', dispositif_id=dispositif_id))
+        
+    except Exception as e:
+        db.session.rollback()
+        print(f"❌ Erreur liaison dispositif-plan: {e}")
+        
+        if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
+            return jsonify({'error': str(e)}), 500
+        
+        flash(f'Erreur: {str(e)}', 'error')
+        return redirect(url_for('detail_dispositif', dispositif_id=dispositif_id))
+
+# ============================================================================
+# API DISPOSITIFS DE MAÎTRISE
+# ============================================================================
+
+@app.route('/api/dispositifs/risque/<int:risque_id>')
+@login_required
+def api_dispositifs_par_risque(risque_id):
+    """API: Liste des dispositifs d'un risque (JSON pour AJAX)"""
+    try:
+        risque = Risque.query.get_or_404(risque_id)
+        
+        if not check_client_access(risque):
+            return jsonify({'error': 'Accès non autorisé'}), 403
+        
+        dispositifs = get_client_filter(DispositifMaitrise)\
+            .filter_by(risque_id=risque_id, is_archived=False)\
+            .order_by(DispositifMaitrise.reference.asc())\
+            .all()
+        
+        return jsonify({
+            'success': True,
+            'risque': {
+                'id': risque.id,
+                'reference': risque.reference,
+                'intitule': risque.intitule
+            },
+            'dispositifs': [{
+                'id': d.id,
+                'reference': d.reference,
+                'nom': d.nom,
+                'type': d.type_dispositif,
+                'nature': d.nature,
+                'frequence': d.frequence,
+                'efficacite_reelle': d.efficacite_reelle,
+                'efficacite_attendue': d.efficacite_attendue,
+                'couverture': d.couverture,
+                'statut': d.statut,
+                'responsable': d.responsable.username if d.responsable else None,
+                'date_derniere_verification': d.date_derniere_verification.strftime('%Y-%m-%d') if d.date_derniere_verification else None,
+                'prochaine_verification': d.prochaine_verification.strftime('%Y-%m-%d') if d.prochaine_verification else None,
+                'plan_action_id': d.plan_action_id
+            } for d in dispositifs],
+            'count': len(dispositifs)
+        })
+        
+    except Exception as e:
+        print(f"❌ Erreur API dispositifs: {e}")
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/dispositif/<int:dispositif_id>/statistiques')
+@login_required
+def api_statistiques_dispositif(dispositif_id):
+    """API: Statistiques d'un dispositif pour graphiques"""
+    try:
+        dispositif = DispositifMaitrise.query.get_or_404(dispositif_id)
+        
+        if not check_client_access(dispositif):
+            return jsonify({'error': 'Accès non autorisé'}), 403
+        
+        # Historique des vérifications
+        verifications = VerificationDispositif.query\
+            .filter_by(dispositif_id=dispositif_id)\
+            .order_by(VerificationDispositif.date_verification.asc())\
+            .all()
+        
+        # Calcul des tendances
+        dates = []
+        efficacites = []
+        resultats = {'Conforme': 0, 'Non conforme': 0, 'À corriger': 0}
+        
+        for v in verifications:
+            dates.append(v.date_verification.strftime('%Y-%m-%d'))
+            
+            # Convertir résultat en score
+            if v.resultat == 'Conforme':
+                efficacites.append(4)  # Bon score
+                resultats['Conforme'] += 1
+            elif v.resultat == 'Non conforme':
+                efficacites.append(1)  # Mauvais score
+                resultats['Non conforme'] += 1
+            else:
+                efficacites.append(2)  # Score moyen
+                resultats['À corriger'] += 1
+        
+        return jsonify({
+            'success': True,
+            'dispositif': {
+                'reference': dispositif.reference,
+                'nom': dispositif.nom,
+                'type': dispositif.type_dispositif,
+                'efficacite_reelle': dispositif.efficacite_reelle,
+                'efficacite_attendue': dispositif.efficacite_attendue,
+                'couverture': dispositif.couverture,
+                'niveau_efficacite': dispositif.get_niveau_efficacite(),
+                'statut': dispositif.statut
+            },
+            'historique': {
+                'dates': dates,
+                'efficacites': efficacites,
+                'verifications_count': len(verifications)
+            },
+            'resultats': resultats,
+            'documents_count': len(dispositif.documents),
+            'derniere_verification': dispositif.date_derniere_verification.strftime('%Y-%m-%d') if dispositif.date_derniere_verification else None,
+            'prochaine_verification': dispositif.prochaine_verification.strftime('%Y-%m-%d') if dispositif.prochaine_verification else None
+        })
+        
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/cartographie/<int:cartographie_id>/couverture')
+@login_required
+def api_couverture_cartographie(cartographie_id):
+    """API: Analyse de couverture d'une cartographie"""
+    try:
+        cartographie = Cartographie.query.get_or_404(cartographie_id)
+        
+        if not check_client_access(cartographie):
+            return jsonify({'error': 'Accès non autorisé'}), 403
+        
+        from services.dispositif_service import DispositifService
+        rapport = DispositifService.generer_rapport_couverture(cartographie_id)
+        
+        return jsonify({
+            'success': True,
+            'rapport': rapport
+        })
+        
+    except Exception as e:
+        print(f"❌ Erreur API couverture: {e}")
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/plan-action-risque/<int:plan_id>/progression-detail')
+@login_required
+def progression_detail_plan_risque(plan_id):
+    """API: Détail de la progression d'un plan"""
+    plan_action = PlanAction.query.get_or_404(plan_id)
+    
+    if not check_client_access(plan_action):
+        return jsonify({'error': 'Accès non autorisé'}), 403
+    
+    details = plan_action.get_progression_detail()
+    
+    return jsonify({
+        'success': True,
+        'details': details,
+        'plan': {
+            'reference': plan_action.reference,
+            'nom': plan_action.nom,
+            'statut': plan_action.statut,
+            'progression': plan_action.pourcentage_realisation
+        }
+    })
+
+
+@app.route('/plan-action-risque/<int:plan_id>/changer-statut-rapide', methods=['POST'])
+@login_required
+def changer_statut_plan_risque_rapide(plan_id):
+    """Changer rapidement le statut d'un plan d'action"""
+    plan_action = PlanAction.query.get_or_404(plan_id)
+    
+    if not check_client_access(plan_action):
+        return jsonify({'error': 'Accès non autorisé'}), 403
+    
+    data = request.get_json()
+    nouveau_statut = data.get('statut')
+    ancien_statut = data.get('ancien_statut', plan_action.statut)
+    
+    if not nouveau_statut:
+        return jsonify({'error': 'Statut manquant'}), 400
+    
+    # Valider le statut
+    statuts_valides = ['en_attente', 'en_cours', 'termine', 'suspendu', 'annule']
+    if nouveau_statut not in statuts_valides:
+        return jsonify({'error': 'Statut invalide'}), 400
+    
+    # Enregistrer l'ancien statut
+    ancien_statut_plan = plan_action.statut
+    
+    # Changer le statut
+    plan_action.statut = nouveau_statut
+    plan_action.updated_at = datetime.utcnow()
+    
+    # Journalisation CORRIGÉE - convertir dict en string JSON
+    try:
+        from models import JournalActivite
+        journal = JournalActivite(
+            utilisateur_id=current_user.id,
+            action='changement_statut_plan',
+            details=json.dumps({  # CONVERTIR EN STRING JSON
+                'plan_id': plan_id,
+                'plan_reference': plan_action.reference,
+                'ancien_statut': ancien_statut_plan,
+                'nouveau_statut': nouveau_statut
+            }),
+            entite_type='plan_action',
+            entite_id=plan_id,
+            client_id=current_user.client_id
+        )
+        db.session.add(journal)
+    except Exception as e:
+        print(f"⚠️ Erreur journalisation: {e}")
+        # Ne pas bloquer si le journal échoue
+    
+    db.session.commit()
+    
+    return jsonify({
+        'success': True,
+        'message': f'Statut changé de {ancien_statut_plan} à {nouveau_statut}',
+        'nouveau_statut': nouveau_statut
+    })
+
+@app.route('/plan-action-risque/<int:plan_id>/changer-statut', methods=['POST'])
+@csrf.exempt  
+@login_required
+def changer_statut_plan_risque(plan_id):
+    """Changer le statut d'un plan d'action risque - VERSION CORRIGÉE"""
+    plan_action = PlanAction.query.get_or_404(plan_id)
+    
+    if not check_client_access(plan_action):
+        flash('Accès non autorisé', 'error')
+        return redirect(url_for('detail_plan_action_risque', plan_id=plan_id))
+    
+    # Vérifier les permissions
+    if (current_user.id != plan_action.created_by and 
+        not current_user.has_permission('can_manage_plans')):
+        flash('Vous n\'êtes pas autorisé à modifier ce plan', 'error')
+        return redirect(url_for('detail_plan_action_risque', plan_id=plan_id))
+    
+    # Récupérer les données du formulaire
+    nouveau_statut = request.form.get('statut')
+    commentaire = request.form.get('commentaire', '')
+    
+    if nouveau_statut not in ['en_attente', 'en_cours', 'termine', 'suspendu', 'annule']:
+        flash('Statut invalide', 'error')
+        return redirect(url_for('detail_plan_action_risque', plan_id=plan_id))
+    
+    try:
+        ancien_statut = plan_action.statut
+        plan_action.statut = nouveau_statut
+        plan_action.updated_at = datetime.utcnow()
+        
+        # ============================================================
+        # CALCUL AUTOMATIQUE DE LA PROGRESSION BASÉE SUR LE STATUT
+        # ============================================================
+        if nouveau_statut == 'termine':
+            # Si le plan est marqué comme terminé
+            plan_action.date_fin_reelle = datetime.utcnow().date()
+            plan_action.pourcentage_realisation = 100
+            
+            # Marquer TOUTES les sous-actions comme terminées à 100%
+            for sous_action in plan_action.sous_actions:
+                sous_action.statut = 'termine'
+                sous_action.pourcentage_realisation = 100
+                if not sous_action.date_fin_reelle:
+                    sous_action.date_fin_reelle = datetime.utcnow().date()
+                sous_action.updated_at = datetime.utcnow()
+                
+        elif nouveau_statut == 'en_cours':
+            # Si le plan passe en cours
+            if plan_action.pourcentage_realisation == 0:
+                plan_action.pourcentage_realisation = 10  # Valeur initiale
+            
+            # Marquer les sous-actions sans statut comme "en_cours"
+            for sous_action in plan_action.sous_actions:
+                if sous_action.statut == 'a_faire' or sous_action.statut is None:
+                    sous_action.statut = 'en_cours'
+                    if sous_action.pourcentage_realisation == 0:
+                        sous_action.pourcentage_realisation = 50  # Valeur moyenne
+                    sous_action.updated_at = datetime.utcnow()
+                    
+        elif nouveau_statut == 'en_attente':
+            # Si le plan revient en attente
+            plan_action.pourcentage_realisation = 0
+            plan_action.date_fin_reelle = None
+            
+            # Remettre toutes les sous-actions en attente
+            for sous_action in plan_action.sous_actions:
+                sous_action.statut = 'a_faire'
+                sous_action.pourcentage_realisation = 0
+                sous_action.date_fin_reelle = None
+                sous_action.updated_at = datetime.utcnow()
+                
+        elif nouveau_statut == 'suspendu':
+            # Suspendu : progression inchangée, seulement le statut change
+            # Ne pas toucher à la progression
+            pass
+            
+        elif nouveau_statut == 'annule':
+            # Si le plan est annulé
+            plan_action.pourcentage_realisation = 0
+            
+            # Annuler toutes les sous-actions
+            for sous_action in plan_action.sous_actions:
+                sous_action.statut = 'annule'
+                sous_action.pourcentage_realisation = 0
+                sous_action.updated_at = datetime.utcnow()
+        # ============================================================
+        
+        # Calculer la progression réelle (basée sur les sous-actions)
+        # Cette méthode devrait mettre à jour plan_action.pourcentage_realisation
+        plan_action.progression_reelle
+        
+        # Enregistrer un historique si nécessaire
+        if commentaire:
+            # Vous pourriez stocker ce commentaire dans un champ dédié
+            # ou créer une table d'historique
+            pass
+        
+        db.session.commit()
+        
+        flash(f'Statut changé de "{ancien_statut}" à "{nouveau_statut}". Progression: {plan_action.pourcentage_realisation}%', 'success')
+        
+    except Exception as e:
+        db.session.rollback()
+        flash(f'Erreur: {str(e)}', 'error')
+    
+    return redirect(url_for('detail_plan_action_risque', plan_id=plan_id))
+
+@app.route('/plan-action-risque/<int:plan_id>/changer-progression', methods=['POST'])
+@login_required
+def changer_progression_plan(plan_id):
+    """Changer manuellement la progression d'un plan (0, 25, 50, 75, 100%) - VERSION MULTI-TENANT"""
+    plan = PlanAction.query.get_or_404(plan_id)
+    
+    # VÉRIFICATION MULTI-TENANT
+    if not check_client_access(plan):
+        return jsonify({'success': False, 'error': 'Accès non autorisé'}), 403
+    
+    data = request.get_json()
+    progression = data.get('progression')
+    
+    # Accepter seulement les valeurs fixes
+    if progression not in [0, 25, 50, 75, 100]:
+        return jsonify({'success': False, 'error': 'Progression invalide. Valeurs acceptées: 0, 25, 50, 75, 100%'}), 400
+    
+    # Vérifier les permissions
+    if not (current_user.is_client_admin or 
+            current_user.id == plan.created_by or 
+            current_user.id == plan.responsable_id or
+            current_user.has_permission('can_manage_action_plans')):
+        return jsonify({'success': False, 'error': 'Permission insuffisante'}), 403
+    
+    try:
+        ancienne_progression = plan.pourcentage_realisation
+        plan.pourcentage_realisation = progression
+        plan.updated_at = datetime.utcnow()
+        
+        # Ajuster automatiquement le statut basé sur la progression
+        if progression == 100:
+            plan.statut = 'termine'
+            plan.date_fin_reelle = datetime.utcnow().date()
+        elif progression >= 50 and plan.statut == 'en_attente':
+            plan.statut = 'en_cours'
+        elif progression == 0 and plan.statut != 'en_attente':
+            plan.statut = 'en_attente'
+        
+        db.session.commit()
+        
+        return jsonify({
+            'success': True, 
+            'message': f'Progression changée de {ancienne_progression}% à {progression}%',
+            'progression': progression,
+            'statut': plan.statut
+        })
+        
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
+@app.route('/plan-action-risque/<int:plan_id>/changer-statut-rapide', methods=['POST'])
+@login_required
+def changer_statut_plan_rapide(plan_id):
+    """Changer le statut d'un plan d'action rapidement"""
+    plan = PlanAction.query.get_or_404(plan_id)
+    
+    if not check_client_access(plan):
+        return jsonify({'success': False, 'error': 'Accès non autorisé'}), 403
+    
+    if not current_user.can_edit_plan(plan):
+        return jsonify({'success': False, 'error': 'Permission insuffisante'}), 403
+    
+    data = request.get_json()
+    nouveau_statut = data.get('statut')
+    
+    if nouveau_statut not in ['en_attente', 'en_cours', 'termine', 'suspendu', 'annule']:
+        return jsonify({'success': False, 'error': 'Statut invalide'}), 400
+    
+    ancien_statut = plan.statut
+    plan.statut = nouveau_statut
+    plan.updated_at = datetime.utcnow()
+    
+    # Journaliser le changement
+    journal = JournalActivite(
+        utilisateur_id=current_user.id,
+        action='changement_statut_plan',
+        details={
+            'plan_id': plan.id,
+            'plan_reference': plan.reference,
+            'ancien_statut': ancien_statut,
+            'nouveau_statut': nouveau_statut
+        },
+        entite_type='plan_action',
+        entite_id=plan.id,
+        client_id=current_user.client_id
+    )
+    
+    try:
+        db.session.add(journal)
+        db.session.commit()
+        return jsonify({'success': True, 'message': 'Statut mis à jour'})
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+@app.route('/plan-action-risque/<int:plan_id>/changer-responsable-rapide', methods=['POST'])
+@login_required
+def changer_responsable_plan_rapide(plan_id):
+    """Changer le responsable d'un plan d'action rapidement"""
+    plan = PlanAction.query.get_or_404(plan_id)
+    
+    if not check_client_access(plan):
+        return jsonify({'success': False, 'error': 'Accès non autorisé'}), 403
+    
+    if not current_user.can_edit_plan(plan):
+        return jsonify({'success': False, 'error': 'Permission insuffisante'}), 403
+    
+    data = request.get_json()
+    responsable_id = data.get('responsable_id')
+    
+    # Vérifier que le responsable existe dans le même client
+    responsable = User.query.filter_by(id=responsable_id, client_id=current_user.client_id).first()
+    if not responsable:
+        return jsonify({'success': False, 'error': 'Responsable non trouvé'}), 404
+    
+    ancien_responsable = plan.responsable_id
+    plan.responsable_id = responsable_id
+    plan.updated_at = datetime.utcnow()
+    
+    # Journaliser le changement
+    journal = JournalActivite(
+        utilisateur_id=current_user.id,
+        action='changement_responsable_plan',
+        details={
+            'plan_id': plan.id,
+            'plan_reference': plan.reference,
+            'ancien_responsable': ancien_responsable,
+            'nouveau_responsable': responsable_id
+        },
+        entite_type='plan_action',
+        entite_id=plan.id,
+        client_id=current_user.client_id
+    )
+    
+    try:
+        db.session.add(journal)
+        db.session.commit()
+        return jsonify({'success': True, 'message': 'Responsable mis à jour'})
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
+@app.route('/plan-action-risque/<int:plan_id>/archiver', methods=['POST'])
+@login_required
+def archiver_plan_action_risque(plan_id):
+    """Archiver un plan d'action"""
+    plan = PlanAction.query.get_or_404(plan_id)
+    
+    if not check_client_access(plan):
+        flash('Accès non autorisé', 'error')
+        return redirect(url_for('voir_plans_action_risque', risque_id=plan.risque_id))
+    
+    if not current_user.can_edit_plan(plan):
+        flash('Permission insuffisante pour archiver ce plan', 'error')
+        return redirect(url_for('voir_plans_action_risque', risque_id=plan.risque_id))
+    
+    plan.is_archived = True
+    plan.archived_at = datetime.utcnow()
+    plan.archived_by = current_user.id
+    plan.updated_at = datetime.utcnow()
+    
+    # Journaliser
+    journal = JournalActivite(
+        utilisateur_id=current_user.id,
+        action='archivage_plan_action',
+        details={
+            'plan_id': plan.id,
+            'plan_reference': plan.reference,
+            'risque_id': plan.risque_id,
+            'risque_reference': plan.risque.reference if plan.risque else None
+        },
+        entite_type='plan_action',
+        entite_id=plan.id,
+        client_id=current_user.client_id
+    )
+    
+    try:
+        db.session.add(journal)
+        db.session.commit()
+        flash('Plan d\'action archivé avec succès', 'success')
+    except Exception as e:
+        db.session.rollback()
+        flash(f'Erreur lors de l\'archivage: {str(e)}', 'error')
+    
+    return redirect(url_for('voir_plans_action_risque', risque_id=plan.risque_id))
+
+
+@app.route('/plan-action-risque/<int:plan_id>/supprimer', methods=['DELETE'])
+@login_required
+def supprimer_plan_action_risque(plan_id):
+    """Supprimer définitivement un plan d'action"""
+    plan = PlanAction.query.get_or_404(plan_id)
+    risque_id = plan.risque_id
+    
+    if not check_client_access(plan):
+        return jsonify({'success': False, 'error': 'Accès non autorisé'}), 403
+    
+    # Seuls admin client et super admin peuvent supprimer
+    if not (current_user.role == 'super_admin' or current_user.is_client_admin):
+        return jsonify({'success': False, 'error': 'Permission insuffisante'}), 403
+    
+    try:
+        db.session.delete(plan)
+        db.session.commit()
+        
+        # Déterminer la redirection
+        voir_archives = request.args.get('archives', 'non') == 'oui'
+        if voir_archives:
+            redirect_url = url_for('voir_plans_action_risque', risque_id=risque_id, archives='oui')
+        else:
+            redirect_url = url_for('voir_plans_action_risque', risque_id=risque_id)
+            
+        return jsonify({
+            'success': True, 
+            'message': 'Plan d\'action supprimé',
+            'redirect': redirect_url
+        })
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+@app.route('/plan-action-risque/<int:plan_id>/desarchiver', methods=['POST'])
+@login_required
+def desarchiver_plan_action_risque(plan_id):
+    """Désarchiver un plan d'action"""
+    plan = PlanAction.query.get_or_404(plan_id)
+    
+    if not check_client_access(plan):
+        flash('Accès non autorisé', 'error')
+        return redirect(url_for('voir_plans_action_risque', risque_id=plan.risque_id, archives='oui'))
+    
+    if not current_user.can_edit_plan(plan):
+        flash('Permission insuffisante pour désarchiver ce plan', 'error')
+        return redirect(url_for('voir_plans_action_risque', risque_id=plan.risque_id, archives='oui'))
+    
+    plan.is_archived = False
+    plan.archived_at = None
+    plan.archived_by = None
+    plan.updated_at = datetime.utcnow()
+    
+    # Journaliser
+    journal = JournalActivite(
+        utilisateur_id=current_user.id,
+        action='desarchivage_plan_action',
+        details={
+            'plan_id': plan.id,
+            'plan_reference': plan.reference,
+            'risque_id': plan.risque_id,
+            'risque_reference': plan.risque.reference if plan.risque else None
+        },
+        entite_type='plan_action',
+        entite_id=plan.id,
+        client_id=current_user.client_id
+    )
+    
+    try:
+        db.session.add(journal)
+        db.session.commit()
+        flash('Plan d\'action désarchivé avec succès', 'success')
+    except Exception as e:
+        db.session.rollback()
+        flash(f'Erreur lors du désarchivage: {str(e)}', 'error')
+    
+    return redirect(url_for('voir_plans_action_risque', risque_id=plan.risque_id, archives='oui'))
+
+@app.route('/sous-action-risque/<int:sous_action_id>/modifier', methods=['GET', 'POST'])
+@login_required
+def modifier_sous_action_risque(sous_action_id):
+    """Modifier une sous-action d'un plan risque"""
+    sous_action = SousAction.query.get_or_404(sous_action_id)
+    plan_action = sous_action.plan_action
+    
+    if not check_client_access(plan_action):
+        flash('Accès non autorisé', 'error')
+        return redirect(url_for('detail_plan_action_risque', plan_id=plan_action.id))
+    
+    # Vérifier les permissions
+    if (current_user.id != plan_action.created_by and 
+        current_user.id != sous_action.responsable_id and
+        not current_user.has_permission('can_manage_plans')):
+        flash('Vous n\'êtes pas autorisé à modifier cette sous-action', 'error')
+        return redirect(url_for('detail_plan_action_risque', plan_id=plan_action.id))
+    
+    form = SousActionForm(obj=sous_action)
+    
+    # Pré-remplir les choix
+    utilisateurs = get_client_filter(User).filter_by(is_active=True).all()
+    form.responsable_id.choices = [(0, 'Non assigné')] + \
+        [(u.id, f"{u.username} - {u.role}") for u in utilisateurs]
+    
+    if form.validate_on_submit():
+        sous_action.description = form.description.data
+        sous_action.date_debut = form.date_debut.data
+        sous_action.date_fin_prevue = form.date_fin_prevue.data
+        sous_action.responsable_id = form.responsable_id.data if form.responsable_id.data != 0 else None
+        
+        # Si le formulaire a un champ commentaire
+        if hasattr(form, 'commentaire') and hasattr(sous_action, 'commentaire'):
+            sous_action.commentaire = form.commentaire.data
+            
+        sous_action.updated_at = datetime.utcnow()
+        
+        db.session.commit()
+        flash('Sous-action modifiée avec succès', 'success')
+        return redirect(url_for('detail_plan_action_risque', plan_id=plan_action.id))
+    
+    return render_template('plans_action/form_sous_action.html',
+                         form=form,
+                         plan=plan_action,
+                         action='modifier',
+                         sous_action=sous_action)
+
+@app.route('/plan-action-risque/<int:plan_id>/terminer', methods=['POST'])
+@login_required
+def terminer_plan_complet_risque(plan_id):
+    """Terminer complètement un plan d'action (toutes les sous-actions)"""
+    plan_action = PlanAction.query.get_or_404(plan_id)
+    
+    if not check_client_access(plan_action):
+        flash('Accès non autorisé', 'error')
+        return redirect(url_for('detail_plan_action_risque', plan_id=plan_id))
+    
+    # Vérifier les permissions
+    if (current_user.id != plan_action.created_by and 
+        not current_user.has_permission('can_manage_plans')):
+        flash('Vous n\'êtes pas autorisé à terminer ce plan', 'error')
+        return redirect(url_for('detail_plan_action_risque', plan_id=plan_id))
+    
+    try:
+        # Marquer le plan comme terminé
+        plan_action.statut = 'termine'
+        plan_action.date_fin_reelle = datetime.utcnow().date()
+        plan_action.pourcentage_realisation = 100
+        
+        # Marquer toutes les sous-actions comme terminées
+        sous_actions = SousAction.query.filter_by(plan_action_id=plan_id).all()
+        for sous_action in sous_actions:
+            sous_action.statut = 'termine'
+            sous_action.pourcentage_realisation = 100
+            if not sous_action.date_fin_reelle:
+                sous_action.date_fin_reelle = datetime.utcnow().date()
+        
+        plan_action.updated_at = datetime.utcnow()
+        db.session.commit()
+        
+        flash('Plan d\'action terminé avec succès', 'success')
+        
+    except Exception as e:
+        db.session.rollback()
+        flash(f'Erreur: {str(e)}', 'error')
+    
+    return redirect(url_for('detail_plan_action_risque', plan_id=plan_id))
+
+@app.route('/plan-action-risque/<int:plan_id>/reorganiser-sous-actions', methods=['POST'])
+@login_required
+def reorganiser_sous_actions_risque(plan_id):
+    """Réorganiser l'ordre des sous-actions"""
+    plan_action = PlanAction.query.get_or_404(plan_id)
+    
+    if not check_client_access(plan_action):
+        return jsonify({'error': 'Accès non autorisé'}), 403
+    
+    data = request.get_json()
+    ids = data.get('ids', [])
+    
+    try:
+        # Mettre à jour l'ordre (vous pourriez avoir un champ 'ordre' dans SousAction)
+        for index, sous_action_id in enumerate(ids, 1):
+            sous_action = SousAction.query.get(sous_action_id)
+            if sous_action and sous_action.plan_action_id == plan_id:
+                # Si vous avez un champ 'ordre' dans le modèle
+                if hasattr(sous_action, 'ordre'):
+                    sous_action.ordre = index
+                sous_action.updated_at = datetime.utcnow()
+        
+        db.session.commit()
+        return jsonify({'success': True})
+        
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'error': str(e)}), 500
+
+# ============================================================================
+# ROUTES POUR LES SOUS-ACTIONS (AJAX)
+# ============================================================================
+@app.route('/sous-action-risque/<int:sous_action_id>/changer-statut', methods=['POST'])
+@login_required
+def changer_statut_sous_action(sous_action_id):
+    """Changer le statut d'une sous-action"""
+    sous_action = SousAction.query.get_or_404(sous_action_id)
+    plan = sous_action.plan_action
+    
+    if not check_client_access(plan):
+        return jsonify({'success': False, 'error': 'Accès non autorisé'}), 403
+    
+    data = request.get_json()
+    nouveau_statut = data.get('statut')
+    progression = data.get('progression')
+    
+    if nouveau_statut not in ['a_faire', 'en_cours', 'termine', 'retarde']:
+        return jsonify({'success': False, 'error': 'Statut invalide'}), 400
+    
+    try:
+        ancien_statut = sous_action.statut
+        sous_action.statut = nouveau_statut
+        
+        if progression is not None:
+            sous_action.pourcentage_realisation = progression
+        
+        # Ajuster automatiquement la progression basée sur le statut
+        if nouveau_statut == 'termine' and sous_action.pourcentage_realisation < 100:
+            sous_action.pourcentage_realisation = 100
+            sous_action.date_fin_reelle = datetime.utcnow().date()
+        elif nouveau_statut == 'en_cours' and sous_action.pourcentage_realisation < 50:
+            sous_action.pourcentage_realisation = 50
+        elif nouveau_statut == 'a_faire' and sous_action.pourcentage_realisation > 0:
+            sous_action.pourcentage_realisation = 25
+        
+        sous_action.updated_at = datetime.utcnow()
+        
+        # Recalculer la progression du plan
+        plan.progression_reelle
+        
+        db.session.commit()
+        
+        return jsonify({
+            'success': True,
+            'message': f'Statut changé à {nouveau_statut}',
+            'progression': sous_action.pourcentage_realisation,
+            'statut': sous_action.statut,
+            'couleur': 'success' if sous_action.pourcentage_realisation >= 100 else 
+                      'warning' if sous_action.pourcentage_realisation >= 50 else 'danger',
+            'plan_progression': plan.pourcentage_realisation
+        })
+        
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+@app.route('/sous-action-risque/<int:sous_action_id>/changer-progression', methods=['POST'])
+@login_required
+def changer_progression_sous_action(sous_action_id):
+    """Changer la progression d'une sous-action (0, 25, 50, 75, 100)"""
+    sous_action = SousAction.query.get_or_404(sous_action_id)
+    plan = sous_action.plan_action
+    
+    if not check_client_access(plan):
+        return jsonify({'success': False, 'error': 'Accès non autorisé'}), 403
+    
+    data = request.get_json()
+    progression = data.get('progression')
+    
+    # Accepter seulement les valeurs fixes
+    if progression not in [0, 25, 50, 75, 100]:
+        return jsonify({'success': False, 'error': 'Progression invalide. Valeurs: 0, 25, 50, 75, 100%'}), 400
+    
+    try:
+        ancienne_progression = sous_action.pourcentage_realisation
+        sous_action.pourcentage_realisation = progression
+        
+        # Ajuster automatiquement le statut basé sur la progression
+        if progression == 100:
+            sous_action.statut = 'termine'
+            sous_action.date_fin_reelle = datetime.utcnow().date()
+        elif progression >= 50 and sous_action.statut == 'a_faire':
+            sous_action.statut = 'en_cours'
+        elif progression < 50 and sous_action.statut == 'termine':
+            sous_action.statut = 'a_faire'
+        
+        sous_action.updated_at = datetime.utcnow()
+        
+        # Recalculer la progression du plan
+        plan.progression_reelle
+        
+        db.session.commit()
+        
+        return jsonify({
+            'success': True,
+            'message': f'Progression changée de {ancienne_progression}% à {progression}%',
+            'progression': progression,
+            'statut': sous_action.statut,
+            'plan_progression': plan.pourcentage_realisation
+        })
+        
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+@app.route('/plan-action-risque/<int:plan_id>/progression-detail', methods=['GET'])
+@login_required
+def progression_detail_plan(plan_id):
+    """Obtenir les détails de progression d'un plan"""
+    plan = PlanAction.query.get_or_404(plan_id)
+    
+    if not check_client_access(plan):
+        return jsonify({'success': False, 'error': 'Accès non autorisé'}), 403
+    
+    details = plan.get_progression_detail()
+    
+    return jsonify({
+        'success': True,
+        'details': details
+    })
+
+@app.route('/plan-action-risque/<int:plan_id>/set-progression-fixe', methods=['POST'])
+@login_required
+def set_progression_fixe_plan(plan_id):
+    """Définir une progression fixe pour un plan (0, 25, 50, 75, 100)"""
+    plan = PlanAction.query.get_or_404(plan_id)
+    
+    if not check_client_access(plan):
+        return jsonify({'success': False, 'error': 'Accès non autorisé'}), 403
+    
+    data = request.get_json()
+    progression = data.get('progression')
+    
+    # Accepter seulement les valeurs fixes
+    if progression not in [0, 25, 50, 75, 100]:
+        return jsonify({'success': False, 'error': 'Progression invalide. Valeurs: 0, 25, 50, 75, 100%'}), 400
+    
+    try:
+        ancienne_progression = plan.pourcentage_realisation
+        plan.pourcentage_realisation = progression
+        plan.updated_at = datetime.utcnow()
+        
+        # Ajuster automatiquement le statut basé sur la progression
+        if progression == 100:
+            plan.statut = 'termine'
+            plan.date_fin_reelle = datetime.utcnow().date()
+        elif progression >= 50 and plan.statut in ['en_attente', 'suspendu']:
+            plan.statut = 'en_cours'
+        elif progression == 0 and plan.statut != 'en_attente':
+            plan.statut = 'en_attente'
+        
+        # Ajuster les sous-actions proportionnellement
+        for sous_action in plan.sous_actions:
+            if sous_action.statut != 'annule':
+                sous_action.pourcentage_realisation = progression
+                
+                # Ajuster le statut de la sous-action
+                if progression == 100:
+                    sous_action.statut = 'termine'
+                    if not sous_action.date_fin_reelle:
+                        sous_action.date_fin_reelle = datetime.utcnow().date()
+                elif progression >= 50:
+                    sous_action.statut = 'en_cours'
+                else:
+                    sous_action.statut = 'a_faire'
+                
+                sous_action.updated_at = datetime.utcnow()
+        
+        db.session.commit()
+        
+        return jsonify({
+            'success': True, 
+            'message': f'Progression changée de {ancienne_progression}% à {progression}%',
+            'progression': progression,
+            'statut': plan.statut
+        })
+        
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+@app.route('/api/plans-action/disponibles')
+@login_required
+def api_plans_action_disponibles():
+    """API: Liste des plans d'action disponibles pour liaison"""
+    try:
+        risque_id = request.args.get('risque_id', type=int)
+        
+        if not risque_id:
+            return jsonify({'error': 'risque_id requis'}), 400
+        
+        # Vérifier l'accès au risque
+        risque = Risque.query.get_or_404(risque_id)
+        if not check_client_access(risque):
+            return jsonify({'error': 'Accès non autorisé'}), 403
+        
+        # Récupérer les plans d'action du même risque
+        plans = get_client_filter(PlanAction)\
+            .filter_by(risque_id=risque_id, is_archived=False)\
+            .filter(PlanAction.statut.in_(['en_cours', 'en_retard', 'en_attente']))\
+            .order_by(PlanAction.created_at.desc())\
+            .all()
+        
+        # Convertir les objets PlanAction en dictionnaires
+        plans_data = []
+        for p in plans:
+            plan_dict = {
+                'id': p.id,
+                'reference': p.reference,
+                'nom': p.nom,
+                'statut': p.statut,
+                'priorite': getattr(p, 'priorite', 'moyenne'),
+                'responsable': p.responsable.username if p.responsable else None,
+                'date_echeance': p.date_fin_prevue.strftime('%d/%m/%Y') if p.date_fin_prevue else None,
+                'dispositif_id': p.dispositif_id
+            }
+            plans_data.append(plan_dict)
+        
+        return jsonify({
+            'success': True,
+            'plans': plans_data,  # Utilisez le dictionnaire, pas l'objet
+            'count': len(plans_data)
+        })
+        
+    except Exception as e:
+        print(f"❌ Erreur API plans action disponibles: {e}")
+        import traceback
+        traceback.print_exc()
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/dispositif/<int:dispositif_id>/creer-plan-action', methods=['POST'])
+@login_required
+def api_creer_plan_action_dispositif(dispositif_id):
+    """API: Créer un plan d'action automatiquement pour un dispositif"""
+    try:
+        dispositif = DispositifMaitrise.query.get_or_404(dispositif_id)
+        
+        if not check_client_access(dispositif):
+            return jsonify({'error': 'Accès non autorisé'}), 403
+        
+        # Vérifier si un plan existe déjà
+        if dispositif.plan_action_id:
+            return jsonify({
+                'success': False,
+                'message': 'Un plan d\'action est déjà lié à ce dispositif'
+            })
+        
+        # Vérifier que l'efficacité est insuffisante
+        if not dispositif.efficacite_reelle or not dispositif.efficacite_attendue:
+            return jsonify({
+                'success': False,
+                'message': 'Dispositif non évalué ou efficacité attendue manquante'
+            })
+        
+        if dispositif.efficacite_reelle >= dispositif.efficacite_attendue:
+            return jsonify({
+                'success': False,
+                'message': 'L\'efficacité réelle est suffisante'
+            })
+        
+        # Créer le plan d'action
+        from services.audit_service import creer_plan_action_automatique
+        
+        plan = creer_plan_action_automatique(
+            risque_id=dispositif.risque_id,
+            dispositif_id=dispositif.id,
+            titre=f"Amélioration dispositif {dispositif.reference}",
+            description=f"Dispositif inefficace ({dispositif.efficacite_reelle}/5 vs {dispositif.efficacite_attendue}/5 attendus). {dispositif.nom}",
+            responsable_id=dispositif.responsable_id or current_user.id,
+            echeance=datetime.utcnow().date() + timedelta(days=30)
+        )
+        
+        if plan:
+            return jsonify({
+                'success': True,
+                'message': f'Plan d\'action {plan.reference} créé avec succès',
+                'plan_id': plan.id,
+                'plan_reference': plan.reference
+            })
+        else:
+            return jsonify({
+                'success': False,
+                'message': 'Erreur lors de la création du plan'
+            })
+            
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/dispositifs/a-verifier')
+@login_required
+def api_dispositifs_a_verifier():
+    """API: Liste des dispositifs nécessitant une vérification"""
+    try:
+        jours_alerte = request.args.get('jours', 30, type=int)
+        
+        from services.dispositif_service import DispositifService
+        resultats = DispositifService.detecter_dispositifs_a_verifier(
+            client_id=current_user.client_id,
+            jours_alerte=jours_alerte
+        )
+        
+        return jsonify({
+            'success': True,
+            'dispositifs': [{
+                'id': r['dispositif'].id,
+                'reference': r['dispositif'].reference,
+                'nom': r['dispositif'].nom,
+                'risque_reference': r['dispositif'].risque.reference,
+                'jours_restants': r['jours_restants'],
+                'niveau': r['niveau'],
+                'message': r['message'],
+                'risque_id': r['dispositif'].risque_id
+            } for r in resultats],
+            'count': len(resultats),
+            'critique': len([r for r in resultats if r['niveau'] == 'critique']),
+            'alerte': len([r for r in resultats if r['niveau'] == 'alerte'])
+        })
+        
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/dispositif/<int:dispositif_id>/verification/formulaire')
+@login_required
+def api_formulaire_verification(dispositif_id):
+    """API: Retourne le formulaire HTML pour une nouvelle vérification"""
+    try:
+        dispositif = DispositifMaitrise.query.get_or_404(dispositif_id)
+        
+        if not check_client_access(dispositif):
+            return '<div class="alert alert-danger">Accès non autorisé</div>'
+        
+        # Générer le formulaire HTML
+        html = f'''
+        <form method="POST" action="/dispositif/{dispositif_id}/verification/ajouter" id="formVerification">
+            <input type="hidden" name="csrf_token" value="{csrf_token()}">
+            
+            <div class="mb-3">
+                <label class="form-label">Date de vérification :</label>
+                <input type="date" class="form-control" name="date_verification" 
+                       value="{datetime.now().date().isoformat()}" required>
+            </div>
+            
+            <div class="mb-3">
+                <label class="form-label">Type de vérification :</label>
+                <select class="form-select" name="type_verification" required>
+                    <option value="">-- Sélectionner --</option>
+                    <option value="Test">Test</option>
+                    <option value="Observation">Observation</option>
+                    <option value="Revue documentaire">Revue documentaire</option>
+                    <option value="Entretien">Entretien</option>
+                    <option value="Simulation">Simulation</option>
+                </select>
+            </div>
+            
+            <div class="mb-3">
+                <label class="form-label">Résultat :</label>
+                <select class="form-select" name="resultat" required>
+                    <option value="">-- Sélectionner --</option>
+                    <option value="Conforme">Conforme</option>
+                    <option value="Non conforme">Non conforme</option>
+                    <option value="À corriger">À corriger</option>
+                </select>
+            </div>
+            
+            <div class="mb-3">
+                <label class="form-label">Commentaire :</label>
+                <textarea class="form-control" name="commentaire" rows="3" 
+                          placeholder="Détails de la vérification, observations..."></textarea>
+            </div>
+            
+            <div class="alert alert-info">
+                <i class="fas fa-info-circle"></i>
+                Cette vérification mettra à jour automatiquement :
+                <ul class="mb-0 mt-1">
+                    <li>Date de dernière vérification</li>
+                    <li>Date de prochaine vérification (+6 mois)</li>
+                    <li>Si résultat "Non conforme", suggestion de plan d'action</li>
+                </ul>
+            </div>
+        </form>
+        '''
+        
+        return html
+        
+    except Exception as e:
+        return f'<div class="alert alert-danger">Erreur: {str(e)}</div>'
+
+
+@app.route('/dispositif/<int:dispositif_id>/verification/ajouter', methods=['POST'])
+@login_required
+def ajouter_verification_dispositif(dispositif_id):
+    """Ajouter une vérification à un dispositif"""
+    try:
+        dispositif = DispositifMaitrise.query.get_or_404(dispositif_id)
+        
+        if not check_client_access(dispositif):
+            flash('Accès non autorisé', 'error')
+            return redirect(url_for('detail_dispositif', dispositif_id=dispositif_id))
+        
+        # Créer la vérification
+        verification = VerificationDispositif(
+            dispositif_id=dispositif_id,
+            date_verification=datetime.strptime(request.form['date_verification'], '%Y-%m-%d').date(),
+            type_verification=request.form['type_verification'],
+            resultat=request.form['resultat'],
+            commentaire=request.form.get('commentaire', ''),
+            verificateur_id=current_user.id,
+            client_id=current_user.client_id
+        )
+        
+        db.session.add(verification)
+        
+        # Mettre à jour le dispositif
+        dispositif.date_derniere_verification = verification.date_verification
+        dispositif.prochaine_verification = verification.date_verification + timedelta(days=180)  # +6 mois
+        dispositif.updated_at = datetime.utcnow()
+        
+        # Si non conforme, suggérer un plan d'action
+        if verification.resultat == 'Non conforme':
+            dispositif.statut = 'à_améliorer'
+            
+            # Notification pour création de plan d'action
+            from services.notification_service import NotificationService
+            NotificationService.create(
+                destinataire_id=dispositif.responsable_id or current_user.id,
+                type_notif='warning',
+                titre=f"Dispositif non conforme: {dispositif.reference}",
+                message=f"La vérification du {verification.date_verification.strftime('%d/%m/%Y')} a révélé une non-conformité. Un plan d'action est recommandé.",
+                entite_type='dispositif',
+                entite_id=dispositif.id,
+                actions=[{
+                    'url': f'/dispositif/{dispositif.id}',
+                    'label': 'Voir le dispositif',
+                    'icon': 'eye'
+                }],
+                user_id=current_user.id
+            )
+        
+        db.session.commit()
+        
+        flash('Vérification enregistrée avec succès', 'success')
+        
+        # Redirection selon le contexte
+        if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
+            return jsonify({'success': True, 'redirect': url_for('detail_dispositif', dispositif_id=dispositif_id)})
+        else:
+            return redirect(url_for('detail_dispositif', dispositif_id=dispositif_id))
+            
+    except Exception as e:
+        db.session.rollback()
+        print(f"❌ Erreur ajout vérification: {e}")
+        
+        if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
+            return jsonify({'error': str(e)}), 500
+        else:
+            flash(f'Erreur: {str(e)}', 'error')
+            return redirect(url_for('detail_dispositif', dispositif_id=dispositif_id))
+
+
+@app.route('/api/dispositifs/stats-globales')
+@login_required
+def api_stats_globales_dispositifs():
+    """API: Statistiques globales des dispositifs pour le dashboard"""
+    try:
+        # Stats pour le client courant
+        total = get_client_filter(DispositifMaitrise)\
+            .filter_by(is_archived=False)\
+            .count()
+        
+        actifs = get_client_filter(DispositifMaitrise)\
+            .filter_by(is_archived=False, statut='actif')\
+            .count()
+        
+        a_verifier = get_client_filter(DispositifMaitrise)\
+            .filter_by(is_archived=False)\
+            .filter(
+                (DispositifMaitrise.prochaine_verification <= datetime.now().date()) |
+                (DispositifMaitrise.prochaine_verification.is_(None))
+            )\
+            .count()
+        
+        efficaces = get_client_filter(DispositifMaitrise)\
+            .filter_by(is_archived=False)\
+            .filter(DispositifMaitrise.efficacite_reelle >= 4)\
+            .count()
+        
+        # Répartition par type
+        repartition = db.session.query(
+            DispositifMaitrise.type_dispositif,
+            db.func.count(DispositifMaitrise.id)
+        )\
+        .filter_by(is_archived=False)\
+        .group_by(DispositifMaitrise.type_dispositif)\
+        .all()
+        
+        return jsonify({
+            'success': True,
+            'stats': {
+                'total': total,
+                'actifs': actifs,
+                'a_verifier': a_verifier,
+                'efficaces': efficaces,
+                'taux_efficacite': (efficaces / total * 100) if total > 0 else 0
+            },
+            'repartition': {r[0]: r[1] for r in repartition if r[0]},
+            'derniere_mise_a_jour': datetime.utcnow().isoformat()
+        })
+        
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+@app.route('/dispositif/<int:dispositif_id>/document/formulaire')
+@login_required
+def formulaire_document_dispositif(dispositif_id):
+    """Retourne le formulaire HTML pour ajouter un document"""
+    try:
+        dispositif = DispositifMaitrise.query.get_or_404(dispositif_id)
+        
+        if not check_client_access(dispositif):
+            return '<div class="alert alert-danger">Accès non autorisé</div>'
+        
+        # Générer le token CSRF
+        csrf_token_value = generate_csrf()
+        
+        html = f'''
+        <form method="POST" action="/dispositif/{dispositif_id}/document/upload" 
+              enctype="multipart/form-data" id="formDocument">
+            <input type="hidden" name="csrf_token" value="{csrf_token_value}">
+            
+            <div class="mb-3">
+                <label class="form-label">Fichier :</label>
+                <input type="file" class="form-control" name="fichier" required>
+                <small class="text-muted">Formats autorisés : PDF, Word, Excel, PowerPoint, TXT, JPG, PNG</small>
+            </div>
+            
+            <div class="mb-3">
+                <label class="form-label">Type de document :</label>
+                <select class="form-select" name="type_document" required>
+                    <option value="">-- Sélectionner --</option>
+                    <option value="Procédure">Procédure</option>
+                    <option value="Mode opératoire">Mode opératoire</option>
+                    <option value="Fiche de contrôle">Fiche de contrôle</option>
+                    <option value="Rapport">Rapport</option>
+                    <option value="Documentation">Documentation</option>
+                    <option value="Autre">Autre</option>
+                </select>
+            </div>
+            
+            <div class="mb-3">
+                <label class="form-label">Description :</label>
+                <textarea class="form-control" name="description" rows="2" 
+                          placeholder="Description du document..."></textarea>
+            </div>
+        </form>
+        '''
+        
+        return html
+        
+    except Exception as e:
+        print(f"❌ Erreur formulaire document: {e}")
+        return f'<div class="alert alert-danger">Erreur: {str(e)}</div>'
+
+# ============================================================================
+# ============================================================================
+# ============================================================================
+
+
+
 @app.route('/admin/nettoyer-archives', methods=['POST'])
 @login_required
 def nettoyer_archives():
@@ -22455,16 +25260,18 @@ def api_services_par_direction(direction_id):
 @app.route('/cartographie/<int:id>')
 @login_required
 def detail_cartographie(id):
-    # CORRECTION : Récupérer avec vérification d'accès
+    """Détail d'une cartographie avec intégration des dispositifs de maîtrise"""
+    
+    # 1. Récupérer la cartographie avec vérification d'accès
     cartographie = Cartographie.query.get_or_404(id)
     
-    # Vérifier l'accès
     if not check_client_access(cartographie):
         flash('Accès non autorisé à cette cartographie', 'error')
         return redirect(url_for('liste_cartographies'))
     
-    # ========== GESTION DES CAMPAGNES ==========
-    # CORRECTION : Filtrer les campagnes par client
+    print(f"🔍 Chargement cartographie: {cartographie.nom} (ID: {id})")
+    
+    # 2. Gestion des campagnes
     campagne_active = get_client_filter(CampagneEvaluation)\
         .filter_by(
             cartographie_id=id,
@@ -22472,7 +25279,6 @@ def detail_cartographie(id):
         ).first()
     
     if not campagne_active:
-        # Créer une campagne par défaut avec l'année en cours
         annee_courante = datetime.now().year
         campagne_active = CampagneEvaluation(
             cartographie_id=id,
@@ -22483,7 +25289,6 @@ def detail_cartographie(id):
             created_by=current_user.id
         )
         
-        # Ajouter automatiquement le client_id
         if current_user.role != 'super_admin' and hasattr(current_user, 'client_id'):
             campagne_active.client_id = current_user.client_id
         
@@ -22491,15 +25296,16 @@ def detail_cartographie(id):
         db.session.commit()
         print(f"✅ Campagne par défaut créée: {campagne_active.nom}")
     
-    # Récupérer toutes les campagnes pour le sélecteur
+    # 3. Récupérer toutes les campagnes pour le sélecteur
     campagnes = get_client_filter(CampagneEvaluation)\
         .filter_by(cartographie_id=id)\
         .order_by(CampagneEvaluation.created_at.desc())\
         .all()
     
-    # ========== RÉCUPÉRATION DES ÉVALUATIONS DE LA CAMPAGNE ACTIVE ==========
-    evaluations_campagne = []
+    # 4. Récupérer les risques avec leurs évaluations et dispositifs
     risques_avec_evaluation = []
+    evaluations_campagne = []
+    total_dispositifs = 0
     
     for risque in cartographie.risques:
         # Ignorer les risques archivés
@@ -22511,12 +25317,33 @@ def detail_cartographie(id):
             print(f"⚠️ Risque {risque.reference} inaccessible, ignoré")
             continue
         
-        # CORRECTION : Filtrer l'évaluation par client
+        # Récupérer l'évaluation de la campagne active
         evaluation = get_client_filter(EvaluationRisque)\
             .filter_by(
                 risque_id=risque.id,
                 campagne_id=campagne_active.id
             ).order_by(EvaluationRisque.created_at.desc()).first()
+        
+        # Récupérer les dispositifs de maîtrise du risque (non archivés)
+        dispositifs_risque = []
+        try:
+            dispositifs_risque = get_client_filter(DispositifMaitrise)\
+                .filter_by(
+                    risque_id=risque.id,
+                    is_archived=False
+                )\
+                .order_by(DispositifMaitrise.reference.asc())\
+                .all()
+        except Exception as e:
+            print(f"⚠️ Erreur chargement dispositifs pour risque {risque.id}: {e}")
+            # Si la table n'existe pas encore, on continue
+            dispositifs_risque = []
+        
+        # Ajouter au total global
+        total_dispositifs += len(dispositifs_risque)
+        
+        # Ajouter les dispositifs au risque pour le template
+        risque.dispositifs_maitrise_list = dispositifs_risque
         
         if evaluation:
             # Vérifier que l'évaluation a des valeurs valides
@@ -22528,7 +25355,6 @@ def detail_cartographie(id):
                           evaluation.probabilite_pre)
             
             if impact and probabilite and impact > 0 and probabilite > 0:
-                print(f"📊 Évaluation valide pour {risque.reference} dans campagne {campagne_active.nom}")
                 evaluations_campagne.append(evaluation)
             
             risques_avec_evaluation.append({
@@ -22537,27 +25363,27 @@ def detail_cartographie(id):
                 'est_evalue': True
             })
         else:
-            # Pas d'évaluation dans cette campagne
             risques_avec_evaluation.append({
                 'risque': risque,
                 'evaluation': None,
                 'est_evalue': False
             })
     
-    print(f"📊 Cartographie {cartographie.nom}: {len(evaluations_campagne)} évaluations valides dans la campagne '{campagne_active.nom}'")
+    print(f"📊 Cartographie {cartographie.nom}: {len(evaluations_campagne)} évaluations valides")
+    print(f"🛡️ Total dispositifs de maîtrise: {total_dispositifs}")
     
-    # ========== GÉNÉRATION DES MATRICES ==========
+    # 5. Génération des matrices (si évaluations disponibles)
     if evaluations_campagne:
         try:
             from utils import generer_matrice_risques, generer_matrice_risque_specifique
             
-            print(f"🔄 Génération matrice classique pour campagne {campagne_active.nom}...")
+            print(f"🔄 Génération matrice classique...")
             matrice_classique = generer_matrice_risques(evaluations_campagne, 'classique')
             
-            print(f"🔄 Génération matrice criticité pour campagne {campagne_active.nom}...")
+            print(f"🔄 Génération matrice criticité...")
             matrice_criticite = generer_matrice_risques(evaluations_campagne, 'criticite')
             
-            print(f"🔄 Génération matrice priorisation pour campagne {campagne_active.nom}...")
+            print(f"🔄 Génération matrice priorisation...")
             matrice_priorisation = generer_matrice_risques(evaluations_campagne, 'priorisation')
             
             # Générer une matrice par défaut avec le premier risque en surbrillance
@@ -22568,7 +25394,6 @@ def detail_cartographie(id):
             
             if risques_actifs:
                 risque_surbrillance = risques_actifs[0]
-                # Chercher son évaluation dans la campagne active
                 evaluation_surbrillance = None
                 for eval_item in evaluations_campagne:
                     if eval_item.risque_id == risque_surbrillance.id:
@@ -22587,46 +25412,154 @@ def detail_cartographie(id):
             print(f"❌ Erreur génération matrices: {e}")
             import traceback
             traceback.print_exc()
-            # Matrices vides en cas d'erreur
             matrice_classique = None
             matrice_criticite = None
             matrice_priorisation = None
             matrice_surbrillance = None
     else:
-        # Pas d'évaluations dans cette campagne, matrices vides
-        print(f"⚠️ Aucune évaluation valide trouvée dans la campagne '{campagne_active.nom}'")
+        print(f"⚠️ Aucune évaluation valide trouvée")
         matrice_classique = None
         matrice_criticite = None
         matrice_priorisation = None
         matrice_surbrillance = None
     
-    # ========== TABLEAU DE BORDEAUX (basé sur la campagne active) ==========
+    # 6. Tableau de Bordeaux basé sur la campagne active
     tableau_bordeaux = generer_tableau_bordeaux_campagne(cartographie.risques, campagne_active.id)
     
-    # ========== STATISTIQUES ==========
+    # 7. Statistiques globales
     nb_risques_total = len([r for r in cartographie.risques 
                            if not getattr(r, 'is_archived', False) 
                            and check_client_access(r)])
     nb_risques_evalues = len([r for r in risques_avec_evaluation if r['est_evalue']])
     progression_campagne = int((nb_risques_evalues / nb_risques_total * 100) if nb_risques_total > 0 else 0)
     
+    # 8. Statistiques supplémentaires sur les dispositifs
+    stats_dispositifs = {
+        'total': total_dispositifs,
+        'par_type': {},
+        'efficaces': 0,
+        'a_verifier': 0
+    }
+    
+    # Calculer les statistiques des dispositifs
+    try:
+        # Récupérer tous les dispositifs de la cartographie
+        tous_dispositifs = []
+        for risque in cartographie.risques:
+            if hasattr(risque, 'is_archived') and risque.is_archived:
+                continue
+                
+            if not check_client_access(risque):
+                continue
+                
+            dispositifs = get_client_filter(DispositifMaitrise)\
+                .filter_by(
+                    risque_id=risque.id,
+                    is_archived=False
+                )\
+                .all()
+            
+            for dispositif in dispositifs:
+                # Statistiques par type
+                if dispositif.type_dispositif:
+                    stats_dispositifs['par_type'][dispositif.type_dispositif] = \
+                        stats_dispositifs['par_type'].get(dispositif.type_dispositif, 0) + 1
+                
+                # Dispositifs efficaces (efficacité réelle >= 4)
+                if dispositif.efficacite_reelle and dispositif.efficacite_reelle >= 4:
+                    stats_dispositifs['efficaces'] += 1
+                
+                # Dispositifs à vérifier (date dépassée ou pas de date)
+                aujourdhui = datetime.now().date()
+                if (dispositif.prochaine_verification and 
+                    dispositif.prochaine_verification <= aujourdhui) or \
+                   not dispositif.prochaine_verification:
+                    stats_dispositifs['a_verifier'] += 1
+                
+                tous_dispositifs.append(dispositif)
+                
+    except Exception as e:
+        print(f"⚠️ Erreur calcul stats dispositifs: {e}")
+        # En cas d'erreur, on continue avec les stats de base
+    
+    # 9. Analyse de couverture des risques
+    analyse_couverture = []
+    for item in risques_avec_evaluation:
+        risque = item['risque']
+        try:
+            # Compter les dispositifs du risque
+            nb_dispositifs = len(risque.dispositifs_maitrise_list)
+            
+            # Calculer l'efficacité moyenne si disponible
+            efficacite_moyenne = None
+            if risque.dispositifs_maitrise_list:
+                efficacites = [d.efficacite_reelle for d in risque.dispositifs_maitrise_list 
+                             if d.efficacite_reelle is not None]
+                if efficacites:
+                    efficacite_moyenne = sum(efficacites) / len(efficacites)
+            
+            analyse_couverture.append({
+                'risque_id': risque.id,
+                'reference': risque.reference,
+                'nb_dispositifs': nb_dispositifs,
+                'efficacite_moyenne': efficacite_moyenne,
+                'niveau_risque': item['evaluation'].niveau_risque if item['evaluation'] else None,
+                'score': item['evaluation'].score_risque if item['evaluation'] else None
+            })
+        except Exception as e:
+            print(f"⚠️ Erreur analyse couverture risque {risque.id}: {e}")
+    
+    # 10. Préparer les données pour le template
+    try:
+        # Trier les risques par score décroissant pour l'affichage
+        risques_avec_evaluation_tries = sorted(
+            risques_avec_evaluation,
+            key=lambda x: (
+                x['evaluation'].score_risque if x['evaluation'] and x['evaluation'].score_risque else 0,
+                x['risque'].reference
+            ),
+            reverse=True
+        )
+    except:
+        risques_avec_evaluation_tries = risques_avec_evaluation
+    
+    print(f"✅ Préparation terminée: {len(risques_avec_evaluation)} risques, {total_dispositifs} dispositifs")
+    
+    # 11. Rendu du template
     return render_template('cartographie/detail.html',
+                         # Données principales
                          cartographie=cartographie,
                          campagne_active=campagne_active,
                          campagnes=campagnes,
-                         risques_avec_evaluation=risques_avec_evaluation,
+                         
+                         # Risques et évaluations
+                         risques_avec_evaluation=risques_avec_evaluation_tries,
+                         
+                         # Statistiques
                          nb_risques_total=nb_risques_total,
                          nb_risques_evalues=nb_risques_evalues,
                          progression_campagne=progression_campagne,
+                         
+                         # Matrices
                          matrice_classique=matrice_classique,
                          matrice_criticite=matrice_criticite,
                          matrice_priorisation=matrice_priorisation,
                          matrice_surbrillance=matrice_surbrillance,
-                         tableau_bordeaux=tableau_bordeaux)
+                         
+                         # Tableau de Bordeaux
+                         tableau_bordeaux=tableau_bordeaux,
+                         
+                         # NOUVEAU : Données des dispositifs de maîtrise
+                         total_dispositifs=total_dispositifs,
+                         stats_dispositifs=stats_dispositifs,
+                         analyse_couverture=analyse_couverture,
+                         
+                         # Variables pour le template
+                         current_user=current_user)
 
 
 def generer_tableau_bordeaux_campagne(risques, campagne_id):
-    """Génère le tableau de Bordeaux pour une campagne spécifique avec isolation"""
+    """Génère le tableau de Bordeaux pour une campagne spécifique"""
     tableau = {
         'actions_prioritaires': [],
         'surveillance_renforcee': [],
@@ -22639,7 +25572,7 @@ def generer_tableau_bordeaux_campagne(risques, campagne_id):
         if (hasattr(risque, 'is_archived') and risque.is_archived) or not check_client_access(risque):
             continue
             
-        # CORRECTION : Filtrer l'évaluation par client
+        # Récupérer l'évaluation de la campagne
         evaluation = get_client_filter(EvaluationRisque)\
             .filter_by(
                 risque_id=risque.id,
