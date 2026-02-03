@@ -2571,32 +2571,6 @@ class SousAction(db.Model):
         self.date_fin_reelle = datetime.utcnow().date()
         self.updated_at = datetime.utcnow()
 
-# -------------------- ETAPE PLAN ACTION - CORRIGÉ --------------------
-class EtapePlanAction(db.Model):
-    __tablename__ = 'etapes_plan_action'
-    
-    id = db.Column(db.Integer, primary_key=True)
-    plan_action_id = db.Column(db.Integer, db.ForeignKey('plans_action.id'), nullable=False)  # 'plans_action.id'
-    ordre = db.Column(db.Integer, nullable=False)
-    description = db.Column(db.Text, nullable=False)
-    date_echeance = db.Column(db.Date)
-    statut = db.Column(db.String(50), default='a_faire')
-    responsable_id = db.Column(db.Integer, db.ForeignKey('user.id'))
-    created_at = db.Column(db.DateTime, default=datetime.utcnow)
-    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
-
-    responsable = db.relationship('User', foreign_keys=[responsable_id])
-    
-    @property
-    def couleur_statut(self):
-        """Couleur Bootstrap pour le statut"""
-        couleurs = {
-            'a_faire': 'secondary',
-            'en_cours': 'warning',
-            'termine': 'success',
-            'retarde': 'danger'
-        }
-        return couleurs.get(self.statut, 'light')
 
 # -------------------- ETAPE PLAN ACTION - CORRIGÉ --------------------
 class EtapePlanAction(db.Model):
