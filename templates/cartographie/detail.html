@@ -73,6 +73,12 @@
                                     <i class="fas fa-calendar-plus me-1"></i> Nouvelle
                                 </button>
                                 
+                                <!-- NOUVEAU BOUTON : Voir toutes les campagnes -->
+                                <a href="{{ url_for('liste_campagnes_cartographie', cartographie_id=cartographie.id) }}" 
+                                   class="btn btn-info btn-sm">
+                                    <i class="fas fa-list me-1"></i> Voir toutes
+                                </a>
+                                
                                 {% if campagne_active.statut == 'en_cours' %}
                                 <button class="btn btn-success btn-sm" onclick="cloturerCampagne()">
                                     <i class="fas fa-check-circle me-1"></i> Clôturer
@@ -653,7 +659,146 @@
             </div>
         </div>
     </div>
-
+    <!-- ========== DISPOSITIFS DE MAÎTRISE PAR RISQUE ========== -->
+    <div class="row mb-4">
+        <div class="col-12">
+            <div class="card-modern">
+                <div class="card-header-modern">
+                    <div class="d-flex align-items-center">
+                        <div class="header-icon-sm">
+                            <i class="fas fa-shield-alt"></i>
+                        </div>
+                        <h5 class="mb-0 ms-2">Dispositifs de Maîtrise - Synthèse</h5>
+                        <span class="badge-modern ms-3">{{ total_dispositifs }} dispositifs</span>
+                    </div>
+                </div>
+                <!-- SUPPRIMEZ LES LIGNES ICI - C'EST LE PROBLÈME -->
+                <!-- 
+                {% for item in risques_avec_evaluation %}
+                <a href="{{ url_for('voir_plans_action_risque', risque_id=item.risque.id) }}" 
+                    class="btn btn-sm btn-info" 
+                    title="Voir les plans d'action">
+                    <i class="fas fa-tasks me-1"></i> Plans
+                </a>
+                {% endfor %}
+                -->
+                <div class="card-body">
+                    <div class="row g-4">
+                        {% for risque in risques_avec_evaluation %}
+                        {% set dispositifs_risque = risque.risque.dispositifs_maitrise_list %}
+                        {% if dispositifs_risque %}
+                        <div class="col-md-6">
+                            <div class="risk-controls-card">
+                                <div class="controls-header">
+                                    <div class="d-flex justify-content-between align-items-center">
+                                        <div>
+                                            <a href="{{ url_for('detail_risque', id=risque.risque.id) }}" 
+                                            class="risk-ref-controls">
+                                                {{ risque.risque.reference }}
+                                            </a>
+                                            <span class="badge ms-2 bg-{{ 'danger' if risque.evaluation.niveau_risque == 'Critique' else 'warning' if risque.evaluation.niveau_risque == 'Élevé' else 'info' if risque.evaluation.niveau_risque == 'Moyen' else 'success' }}">
+                                                {{ risque.evaluation.niveau_risque }}
+                                            </span>
+                                        </div>
+                                        <a href="{{ url_for('liste_dispositifs_risque', risque_id=risque.risque.id) }}" 
+                                        class="btn btn-sm btn-outline-primary">
+                                            <i class="fas fa-external-link-alt"></i>
+                                        </a>
+                                    </div>
+                                    <div class="risk-title-controls">{{ risque.risque.intitule|truncate(60) }}</div>
+                                </div>
+                                <div class="controls-body">
+                                    <!-- Indicateur d'efficacité moyenne -->
+                                    {% set efficacite_moyenne = dispositifs_risque|map(attribute='efficacite_reelle')|select|list|average %}
+                                    <div class="efficiency-indicator">
+                                        <div class="efficiency-label">
+                                            <i class="fas fa-chart-line me-1"></i>
+                                            Efficacité moyenne:
+                                        </div>
+                                        <div class="efficiency-value">
+                                            {% if efficacite_moyenne %}
+                                            <span class="badge bg-{% if efficacite_moyenne >= 4 %}success{% elif efficacite_moyenne >= 3 %}warning{% else %}danger{% endif %}">
+                                                {{ efficacite_moyenne|round(1) }}/5
+                                            </span>
+                                            {% else %}
+                                            <span class="badge bg-secondary">Non évalué</span>
+                                            {% endif %}
+                                        </div>
+                                    </div>
+                                    
+                                    <!-- Liste rapide des dispositifs -->
+                                    <div class="controls-list">
+                                        {% for dispositif in dispositifs_risque[:3] %}
+                                        <div class="control-item">
+                                            <div class="control-type">
+                                                <span class="badge bg-{{ 'success' if dispositif.type_dispositif == 'Préventif' else 'warning' if dispositif.type_dispositif == 'Détectif' else 'danger' }}">
+                                                    {{ dispositif.type_dispositif[:1] }}
+                                                </span>
+                                            </div>
+                                            <div class="control-info">
+                                                <div class="control-name">{{ dispositif.nom|truncate(40) }}</div>
+                                                <div class="control-status">
+                                                    {% if dispositif.efficacite_reelle %}
+                                                    <div class="progress" style="height: 5px;">
+                                                        <div class="progress-bar bg-{% if dispositif.efficacite_reelle >= 4 %}success{% elif dispositif.efficacite_reelle >= 3 %}warning{% else %}danger{% endif %}" 
+                                                            style="width: {{ (dispositif.efficacite_reelle / 5) * 100 }}%">
+                                                        </div>
+                                                    </div>
+                                                    {% else %}
+                                                    <span class="text-muted small">Non évalué</span>
+                                                    {% endif %}
+                                                </div>
+                                            </div>
+                                        </div>
+                                        {% endfor %}
+                                        
+                                        {% if dispositifs_risque|length > 3 %}
+                                        <div class="text-center mt-2">
+                                            <small class="text-muted">
+                                                + {{ dispositifs_risque|length - 3 }} autre(s) dispositif(s)
+                                            </small>
+                                        </div>
+                                        {% endif %}
+                                    </div>
+                                    
+                                    <!-- Actions rapides - BOUTON AJOUTÉ ICI -->
+                                    <div class="controls-actions mt-3">
+                                        <a href="{{ url_for('nouveau_dispositif', risque_id=risque.risque.id) }}" 
+                                        class="btn btn-sm btn-outline-success">
+                                            <i class="fas fa-plus"></i> Ajouter
+                                        </a>
+                                        <a href="{{ url_for('evaluer_dispositif', dispositif_id=dispositifs_risque[0].id) }}" 
+                                        class="btn btn-sm btn-outline-warning">
+                                            <i class="fas fa-chart-bar"></i> Évaluer
+                                        </a>
+                                        <!-- BOUTON POUR VOIR LES PLANS D'ACTION -->
+                                        <a href="{{ url_for('voir_plans_action_risque', risque_id=risque.risque.id) }}" 
+                                           class="btn btn-sm btn-outline-info">
+                                            <i class="fas fa-tasks"></i> Plans
+                                        </a>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        {% endif %}
+                        {% endfor %}
+                    </div>
+                    
+                    {% if total_dispositifs == 0 %}
+                    <div class="text-center py-5">
+                        <i class="fas fa-shield-alt fa-4x text-muted mb-3"></i>
+                        <h5 class="text-muted">Aucun dispositif de maîtrise défini</h5>
+                        <p class="text-muted">Les dispositifs de maîtrise renforcent la gestion des risques identifiés</p>
+                        <a href="{{ url_for('nouveau_dispositif', risque_id=risques_avec_evaluation[0].risque.id) if risques_avec_evaluation else '#' }}" 
+                        class="btn btn-primary" {{ 'disabled' if not risques_avec_evaluation }}>
+                            <i class="fas fa-plus me-2"></i>Créer le premier dispositif
+                        </a>
+                    </div>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
     <!-- ========== LISTE DES RISQUES ========== -->
     <div class="row">
         <div class="col-12">
@@ -843,6 +988,18 @@
                                                 <i class="fas fa-chart-bar"></i>
                                             </a>
                                             
+                                            <!-- NOUVEAU BOUTON : Voir les dispositifs - UNIQUEMENT SI DES DISPOSITIFS EXISTENT -->
+                                            {% set dispositifs_risque = risque.dispositifs_maitrise_list %}
+                                            {% if dispositifs_risque and dispositifs_risque|length > 0 %}
+                                            <a href="{{ url_for('liste_dispositifs_risque', risque_id=risque.id) }}" 
+                                            class="btn-action dispositif" 
+                                            title="Voir les {{ dispositifs_risque|length }} dispositif(s) de maîtrise">
+                                                <i class="fas fa-shield-alt"></i>
+                                                {% if dispositifs_risque|length > 0 %}
+                                                <span class="badge badge-notification">{{ dispositifs_risque|length }}</span>
+                                                {% endif %}
+                                            </a>
+                                            {% endif %}
                                             {% if not risque.kri %}
                                             <a href="{{ url_for('nouveau_kri', risque_id=risque.id) }}" 
                                                class="btn-action kri"
@@ -850,7 +1007,8 @@
                                                 <i class="fas fa-chart-line"></i>
                                             </a>
                                             {% endif %}
-                                            
+                                                    <!-- NOUVEAU BOUTON : Voir les dispositifs -->
+        
                                             <!-- Menu déroulant pour actions supplémentaires -->
                                             <div class="btn-group">
                                                 <button type="button" class="btn-action more" title="Plus d'actions" data-bs-toggle="dropdown">
@@ -2490,5 +2648,237 @@ document.addEventListener('DOMContentLoaded', function() {
     50% { background-color: rgba(231, 76, 60, 0.2); }
     100% { background-color: rgba(231, 76, 60, 0.1); }
 }
+/* styles_dispositifs.css */
+
+/* Cartes de dispositifs */
+.risk-controls-card {
+    border: 1px solid #dee2e6;
+    border-radius: 8px;
+    overflow: hidden;
+    transition: all 0.2s ease;
+    height: 100%;
+}
+
+.risk-controls-card:hover {
+    box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+    transform: translateY(-2px);
+}
+
+.controls-header {
+    background: #f8f9fa;
+    padding: 1rem;
+    border-bottom: 1px solid #dee2e6;
+}
+
+.risk-ref-controls {
+    font-weight: 600;
+    color: #2c3e50;
+    text-decoration: none;
+}
+
+.risk-ref-controls:hover {
+    color: #3498db;
+}
+
+.risk-title-controls {
+    font-size: 0.9rem;
+    color: #6c757d;
+    margin-top: 0.5rem;
+    line-height: 1.3;
+}
+
+.controls-body {
+    padding: 1rem;
+}
+
+.efficiency-indicator {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 1rem;
+    padding-bottom: 0.5rem;
+    border-bottom: 1px dashed #dee2e6;
+}
+
+.efficiency-label {
+    font-size: 0.85rem;
+    color: #6c757d;
+}
+
+.controls-list {
+    max-height: 200px;
+    overflow-y: auto;
+}
+
+.control-item {
+    display: flex;
+    align-items: center;
+    padding: 0.5rem 0;
+    border-bottom: 1px solid #f8f9fa;
+}
+
+.control-item:last-child {
+    border-bottom: none;
+}
+
+.control-type {
+    margin-right: 0.75rem;
+}
+
+.control-info {
+    flex: 1;
+}
+
+.control-name {
+    font-size: 0.85rem;
+    font-weight: 500;
+    margin-bottom: 0.2rem;
+}
+
+.control-status {
+    font-size: 0.75rem;
+}
+
+.controls-actions {
+    display: flex;
+    gap: 0.5rem;
+    justify-content: flex-end;
+}
+
+/* Indicateurs de couverture */
+.coverage-indicator {
+    display: inline-flex;
+    align-items: center;
+    padding: 0.25rem 0.75rem;
+    border-radius: 20px;
+    font-size: 0.8rem;
+    font-weight: 500;
+}
+
+.coverage-optimale { background: #d4edda; color: #155724; }
+.coverage-satisfaisante { background: #fff3cd; color: #856404; }
+.coverage-partielle { background: #f8d7da; color: #721c24; }
+.coverage-insuffisante { background: #dc3545; color: white; }
+
+/* Tableau synthèse */
+.table-dispositifs th {
+    font-weight: 600;
+    color: #2c3e50;
+    font-size: 0.85rem;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+.efficiency-bar {
+    height: 6px;
+    border-radius: 3px;
+    background: #e9ecef;
+    overflow: hidden;
+}
+
+.efficiency-fill {
+    height: 100%;
+    transition: width 0.3s ease;
+}
+
+.efficiency-fill.high { background: #28a745; }
+.efficiency-fill.medium { background: #ffc107; }
+.efficiency-fill.low { background: #dc3545; }
+
+/* Graphiques miniatures */
+.mini-chart {
+    height: 40px;
+    width: 100%;
+    position: relative;
+}
+
+.mini-chart-bar {
+    position: absolute;
+    bottom: 0;
+    width: 8px;
+    border-radius: 2px 2px 0 0;
+}
+
+.mini-chart-bar:nth-child(1) { left: 0; background: #28a745; }
+.mini-chart-bar:nth-child(2) { left: 12px; background: #ffc107; }
+.mini-chart-bar:nth-child(3) { left: 24px; background: #dc3545; }
+.mini-chart-bar:nth-child(4) { left: 36px; background: #6c757d; }
+
+/* Badges spécifiques */
+.badge-preventif { background: #28a745; color: white; }
+.badge-detectif { background: #ffc107; color: #212529; }
+.badge-correctif { background: #dc3545; color: white; }
+.badge-directif { background: #17a2b8; color: white; }
+
+/* Alertes de vérification */
+.verification-alert {
+    border-left: 4px solid;
+    padding: 0.75rem 1rem;
+    margin-bottom: 0.5rem;
+    border-radius: 0 4px 4px 0;
+}
+
+.verification-alert.critique { 
+    border-left-color: #dc3545;
+    background: rgba(220, 53, 69, 0.1);
+}
+
+.verification-alert.alerte { 
+    border-left-color: #ffc107;
+    background: rgba(255, 193, 7, 0.1);
+}
+
+.verification-alert.info { 
+    border-left-color: #17a2b8;
+    background: rgba(23, 162, 184, 0.1);
+}
+
+/* Responsive */
+@media (max-width: 768px) {
+    .controls-header {
+        padding: 0.75rem;
+    }
+    
+    .controls-body {
+        padding: 0.75rem;
+    }
+    
+    .control-item {
+        flex-direction: column;
+        align-items: flex-start;
+    }
+    
+    .control-type {
+        margin-right: 0;
+        margin-bottom: 0.5rem;
+    }
+}
+/* Dans la section des styles pour les boutons d'action */
+.btn-action.dispositif { 
+    color: #17a2b8; 
+    position: relative;
+}
+.btn-action.dispositif:hover { 
+    background: #17a2b8; 
+    color: white; 
+}
+
+/* Badge de notification sur les boutons */
+.badge-notification {
+    position: absolute;
+    top: -5px;
+    right: -5px;
+    background: #dc3545;
+    color: white;
+    border-radius: 50%;
+    width: 16px;
+    height: 16px;
+    font-size: 0.6rem;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0;
+}
 </style>
+
 {% endblock %}
