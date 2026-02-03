@@ -1,0 +1,148 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="page-header-modern">
+    <div class="container-fluid">
+        <div class="row align-items-center">
+            <div class="col">
+                <div class="d-flex align-items-center">
+                    <div class="header-icon">
+                        <i class="fas fa-edit"></i>
+                    </div>
+                    <div class="header-content ms-3">
+                        <nav aria-label="breadcrumb">
+                            <ol class="breadcrumb">
+                                <li class="breadcrumb-item"><a href="{{ url_for('liste_cartographies') }}" class="text-white-50">Cartographies</a></li>
+                                <li class="breadcrumb-item"><a href="{{ url_for('detail_cartographie', id=cartographie.id) }}" class="text-white-50">{{ cartographie.nom }}</a></li>
+                                <li class="breadcrumb-item"><a href="{{ url_for('liste_campagnes_cartographie', cartographie_id=cartographie.id) }}" class="text-white-50">Campagnes</a></li>
+                                <li class="breadcrumb-item active text-white" aria-current="page">Modifier</li>
+                            </ol>
+                        </nav>
+                        <h1 class="page-title">
+                            <span class="cartographie-badge">MODIFIER</span>
+                            {{ campagne.nom }}
+                        </h1>
+                        <p class="page-subtitle text-white-50">Modifier les informations de la campagne</p>
+                    </div>
+                </div>
+            </div>
+            <div class="col-auto">
+                <div class="btn-toolbar gap-2">
+                    <a href="{{ url_for('liste_campagnes_cartographie', cartographie_id=cartographie.id) }}" class="btn btn-outline-light btn-modern">
+                        <i class="fas fa-arrow-left me-2"></i> Retour
+                    </a>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="container-fluid mt-4">
+    <div class="row">
+        <div class="col-md-8 offset-md-2">
+            <div class="card-modern">
+                <div class="card-header-modern">
+                    <div class="d-flex align-items-center">
+                        <div class="header-icon-sm">
+                            <i class="fas fa-calendar-alt"></i>
+                        </div>
+                        <h5 class="mb-0 ms-2">Modifier la campagne</h5>
+                    </div>
+                </div>
+                <div class="card-body">
+                    <form method="POST" action="{{ url_for('modifier_campagne', campagne_id=campagne.id) }}">
+                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                        
+                        <div class="mb-3">
+                            <label class="form-label fw-bold">Nom de la campagne *</label>
+                            <input type="text" class="form-control" name="nom" value="{{ campagne.nom }}" required>
+                            <div class="form-text">Identifiant unique de la campagne</div>
+                        </div>
+                        
+                        <div class="mb-3">
+                            <label class="form-label fw-bold">Description</label>
+                            <textarea class="form-control" name="description" rows="3">{{ campagne.description or '' }}</textarea>
+                            <div class="form-text">Objectifs, contexte, périmètre...</div>
+                        </div>
+                        
+                        <div class="row">
+                            <div class="col-md-6 mb-3">
+                                <label class="form-label fw-bold">Date de début</label>
+                                <input type="date" class="form-control" name="date_debut" 
+                                       value="{{ campagne.date_debut.strftime('%Y-%m-%d') if campagne.date_debut else '' }}">
+                            </div>
+                            <div class="col-md-6 mb-3">
+                                <label class="form-label fw-bold">Date de fin</label>
+                                <input type="date" class="form-control" name="date_fin" 
+                                       value="{{ campagne.date_fin.strftime('%Y-%m-%d') if campagne.date_fin else '' }}">
+                            </div>
+                        </div>
+                        
+                        <div class="mb-3">
+                            <label class="form-label fw-bold">Statut</label>
+                            <select class="form-select" name="statut" {% if campagne.statut == 'terminee' %}disabled{% endif %}>
+                                <option value="en_cours" {% if campagne.statut == 'en_cours' %}selected{% endif %}>En cours</option>
+                                <option value="terminee" {% if campagne.statut == 'terminee' %}selected{% endif %}>Terminée</option>
+                                <option value="planifiee" {% if campagne.statut == 'planifiee' %}selected{% endif %}>Planifiée</option>
+                                <option value="suspendue" {% if campagne.statut == 'suspendue' %}selected{% endif %}>Suspendue</option>
+                            </select>
+                            {% if campagne.statut == 'terminee' %}
+                            <div class="form-text text-warning">Le statut ne peut pas être modifié pour une campagne terminée</div>
+                            {% endif %}
+                        </div>
+                        
+                        <!-- Informations sur les évaluations -->
+                        <div class="alert alert-info">
+                            <i class="fas fa-info-circle me-2"></i>
+                            <div>
+                                <strong>Statistiques de la campagne :</strong>
+                                <ul class="mb-0 mt-2">
+                                    <li>Risques évalués : {{ campagnes_data[loop.index0].risques_evalues if campagnes_data else 0 }}/{{ campagnes_data[loop.index0].total_risques if campagnes_data else 0 }}</li>
+                                    <li>Progression : {{ campagnes_data[loop.index0].progression|round|int if campagnes_data else 0 }}%</li>
+                                    <li>Date de création : {{ campagne.created_at.strftime('%d/%m/%Y') if campagne.created_at else 'Non définie' }}</li>
+                                </ul>
+                            </div>
+                        </div>
+                        
+                        <div class="d-flex justify-content-between">
+                            <div>
+                                {% if campagne.is_archived %}
+                                <a href="{{ url_for('desarchiver_campagne', campagne_id=campagne.id) }}" 
+                                   class="btn btn-warning me-2"
+                                   onclick="return confirm('Êtes-vous sûr de vouloir désarchiver cette campagne ?')">
+                                    <i class="fas fa-box-open me-1"></i> Désarchiver
+                                </a>
+                                {% else %}
+                                <a href="{{ url_for('archiver_campagne', campagne_id=campagne.id) }}" 
+                                   class="btn btn-outline-warning me-2"
+                                   onclick="return confirm('Êtes-vous sûr de vouloir archiver cette campagne ?')">
+                                    <i class="fas fa-archive me-1"></i> Archiver
+                                </a>
+                                {% endif %}
+                                
+                                {% if current_user.role == 'admin' or current_user.is_client_admin %}
+                                <a href="{{ url_for('supprimer_campagne', campagne_id=campagne.id) }}" 
+                                   class="btn btn-outline-danger"
+                                   onclick="return confirm('ATTENTION: Cette action est irréversible. Êtes-vous sûr de vouloir supprimer cette campagne ?')">
+                                    <i class="fas fa-trash me-1"></i> Supprimer
+                                </a>
+                                {% endif %}
+                            </div>
+                            
+                            <div>
+                                <a href="{{ url_for('liste_campagnes_cartographie', cartographie_id=cartographie.id) }}" 
+                                   class="btn btn-secondary me-2">
+                                    Annuler
+                                </a>
+                                <button type="submit" class="btn btn-primary">
+                                    <i class="fas fa-save me-1"></i> Enregistrer
+                                </button>
+                            </div>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
