@@ -1,0 +1,535 @@
+<!-- templates/dispositifs/evaluation.html -->
+{% extends "base.html" %}
+
+{% block content %}
+<div class="d-flex justify-content-between flex-wrap flex-md-nowrap align-items-center pt-3 pb-2 mb-3 border-bottom">
+    <h1 class="h2">
+        <i class="fas fa-chart-bar"></i> Évaluer le dispositif : {{ dispositif.reference }}
+    </h1>
+    <div class="btn-toolbar mb-2 mb-md-0">
+        <a href="{{ url_for('detail_dispositif', dispositif_id=dispositif.id) }}" class="btn btn-secondary me-2">
+            <i class="fas fa-arrow-left"></i> Retour
+        </a>
+    </div>
+</div>
+
+<div class="row">
+    <div class="col-md-8">
+        <div class="card shadow">
+            <div class="card-header bg-warning text-dark">
+                <h6 class="mb-0">Évaluation du dispositif</h6>
+            </div>
+            <div class="card-body">
+                <!-- Informations du dispositif -->
+                <div class="alert alert-info">
+                    <div class="d-flex">
+                        <div class="flex-grow-1">
+                            <h6>{{ dispositif.reference }} - {{ dispositif.nom }}</h6>
+                            <p class="mb-0">{{ dispositif.description|truncate(200) if dispositif.description else 'Aucune description' }}</p>
+                        </div>
+                        <div class="text-end">
+                            <span class="badge bg-{{ 'success' if dispositif.type_dispositif == 'Préventif' else 'warning' if dispositif.type_dispositif == 'Détectif' else 'danger' }}">
+                                {{ dispositif.type_dispositif }}
+                            </span>
+                            <br>
+                            <small class="text-muted">{{ dispositif.nature }} - {{ dispositif.frequence }}</small>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- Évaluation actuelle -->
+                {% if dispositif.efficacite_reelle %}
+                <div class="alert alert-light mb-4">
+                    <h6>Évaluation actuelle :</h6>
+                    <div class="row">
+                        <div class="col-md-6">
+                            <strong>Efficacité réelle :</strong>
+                            <div class="progress mt-1" style="height: 10px;">
+                                <div class="progress-bar bg-{{ 'success' if dispositif.efficacite_reelle >= 4 else 'warning' if dispositif.efficacite_reelle >= 3 else 'danger' }}" 
+                                     style="width: {{ (dispositif.efficacite_reelle / 5) * 100 }}%">
+                                </div>
+                            </div>
+                            <small class="text-muted">{{ dispositif.efficacite_reelle }}/5</small>
+                        </div>
+                        <div class="col-md-6">
+                            <strong>Couverture :</strong>
+                            <div class="progress mt-1" style="height: 10px;">
+                                <div class="progress-bar bg-{{ 'success' if dispositif.couverture >= 4 else 'warning' if dispositif.couverture >= 3 else 'danger' }}" 
+                                     style="width: {{ (dispositif.couverture / 5) * 100 }}%">
+                                </div>
+                            </div>
+                            <small class="text-muted">{{ dispositif.couverture }}/5</small>
+                        </div>
+                    </div>
+                    {% if dispositif.efficacite_attendue %}
+                    <div class="mt-2">
+                        <strong>Efficacité attendue :</strong> {{ dispositif.efficacite_attendue }}/5
+                        {% set ecart = dispositif.efficacite_attendue - dispositif.efficacite_reelle %}
+                        {% if ecart > 0 %}
+                        <span class="badge bg-danger ms-2">-{{ ecart }} points</span>
+                        {% elif ecart < 0 %}
+                        <span class="badge bg-success ms-2">+{{ -ecart }} points</span>
+                        {% else %}
+                        <span class="badge bg-success ms-2">Objectif atteint</span>
+                        {% endif %}
+                    </div>
+                    {% endif %}
+                </div>
+                {% endif %}
+                
+                <!-- Formulaire d'évaluation -->
+                <form method="POST" id="evaluationForm">
+                    {{ form.hidden_tag() }}
+                    
+                    <!-- Efficacité réelle -->
+                    <div class="mb-4">
+                        <h6 class="mb-3">
+                            {{ form.efficacite_reelle.label(class="form-label fw-bold") }}
+                            {% if dispositif.efficacite_attendue %}
+                            <span class="badge bg-info ms-2">Objectif : {{ dispositif.efficacite_attendue }}/5</span>
+                            {% endif %}
+                        </h6>
+                        
+                        <div class="row text-center">
+                            {% for value, label in form.efficacite_reelle.choices %}
+                            {% if value > 0 %}
+                            <div class="col">
+                                <div class="card efficiency-card mb-2 
+                                    {% if value == form.efficacite_reelle.data %}selected{% endif %}
+                                    {% if dispositif.efficacite_attendue and value < dispositif.efficacite_attendue %}below-target{% endif %}">
+                                    <label class="card-body py-3" style="cursor: pointer;">
+                                        <input type="radio" name="efficacite_reelle" value="{{ value }}" 
+                                               class="d-none" 
+                                               {% if value == form.efficacite_reelle.data %}checked{% endif %}>
+                                        <div class="efficiency-value 
+                                            {% if value >= 4 %}bg-success text-white
+                                            {% elif value >= 3 %}bg-warning text-dark
+                                            {% else %}bg-danger text-white{% endif %}">
+                                            {{ value }}
+                                        </div>
+                                        <small class="d-block mt-2">{{ label.split(' - ')[1] }}</small>
+                                    </label>
+                                </div>
+                            </div>
+                            {% endif %}
+                            {% endfor %}
+                        </div>
+                        
+                        <div class="mt-3">
+                            <small class="text-muted">
+                                <i class="fas fa-info-circle"></i> 
+                                Évaluez l'efficacité réelle du dispositif dans la maîtrise du risque
+                            </small>
+                        </div>
+                        
+                        {% if form.efficacite_reelle.errors %}
+                        <div class="text-danger small mt-2">
+                            {% for error in form.efficacite_reelle.errors %}
+                            {{ error }}
+                            {% endfor %}
+                        </div>
+                        {% endif %}
+                    </div>
+                    
+                    <!-- Couverture -->
+                    <div class="mb-4">
+                        <h6 class="mb-3">{{ form.couverture.label(class="form-label fw-bold") }}</h6>
+                        
+                        <div class="row text-center">
+                            {% for value, label in form.couverture.choices %}
+                            {% if value > 0 %}
+                            <div class="col">
+                                <div class="card coverage-card mb-2 
+                                    {% if value == form.couverture.data %}selected{% endif %}">
+                                    <label class="card-body py-3" style="cursor: pointer;">
+                                        <input type="radio" name="couverture" value="{{ value }}" 
+                                               class="d-none" 
+                                               {% if value == form.couverture.data %}checked{% endif %}>
+                                        <div class="coverage-value 
+                                            {% if value >= 4 %}bg-success text-white
+                                            {% elif value >= 3 %}bg-warning text-dark
+                                            {% else %}bg-danger text-white{% endif %}">
+                                            {{ value }}
+                                        </div>
+                                        <small class="d-block mt-2">{{ label.split(' - ')[1] }}</small>
+                                    </label>
+                                </div>
+                            </div>
+                            {% endif %}
+                            {% endfor %}
+                        </div>
+                        
+                        <div class="mt-3">
+                            <small class="text-muted">
+                                <i class="fas fa-info-circle"></i> 
+                                Évaluez la couverture du dispositif (étendue, périmètre, fréquence)
+                            </small>
+                        </div>
+                        
+                        {% if form.couverture.errors %}
+                        <div class="text-danger small mt-2">
+                            {% for error in form.couverture.errors %}
+                            {{ error }}
+                            {% endfor %}
+                        </div>
+                        {% endif %}
+                    </div>
+                    
+                    <!-- Prochaine vérification -->
+                    <div class="mb-4">
+                        <h6 class="mb-3">{{ form.prochaine_verification.label(class="form-label fw-bold") }}</h6>
+                        
+                        <div class="row">
+                            <div class="col-md-6">
+                                {{ form.prochaine_verification(class="form-control", type="date") }}
+                            </div>
+                            <div class="col-md-6">
+                                <div class="alert alert-light">
+                                    <small>
+                                        <i class="fas fa-calendar-alt"></i>
+                                        {% if dispositif.prochaine_verification %}
+                                        Dernière vérification : {{ dispositif.date_derniere_verification.strftime('%d/%m/%Y') if dispositif.date_derniere_verification else 'Jamais' }}
+                                        {% else %}
+                                        Aucune vérification planifiée
+                                        {% endif %}
+                                    </small>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <div class="mt-2">
+                            <small class="text-muted">
+                                <i class="fas fa-info-circle"></i> 
+                                Planifiez la prochaine vérification du dispositif
+                            </small>
+                        </div>
+                        
+                        {% if form.prochaine_verification.errors %}
+                        <div class="text-danger small mt-2">
+                            {% for error in form.prochaine_verification.errors %}
+                            {{ error }}
+                            {% endfor %}
+                        </div>
+                        {% endif %}
+                    </div>
+                    
+                    <!-- Commentaire -->
+                    <div class="mb-4">
+                        <h6 class="mb-3">{{ form.commentaire.label(class="form-label fw-bold") }}</h6>
+                        {{ form.commentaire(class="form-control", rows="4", 
+                                          placeholder="Décrivez les observations, les points forts, les écarts constatés, les éléments probants...") }}
+                        
+                        <div class="mt-2">
+                            <small class="text-muted">
+                                <i class="fas fa-info-circle"></i> 
+                                Documentez les éléments d'appréciation de l'évaluation
+                            </small>
+                        </div>
+                        
+                        {% if form.commentaire.errors %}
+                        <div class="text-danger small mt-2">
+                            {% for error in form.commentaire.errors %}
+                            {{ error }}
+                            {% endfor %}
+                        </div>
+                        {% endif %}
+                    </div>
+                    
+                    <!-- Analyse d'impact -->
+                    {% if dispositif.efficacite_attendue and form.efficacite_reelle.data and form.efficacite_reelle.data > 0 %}
+                    <div class="card mb-4" id="impactAnalysis">
+                        <div class="card-header bg-light">
+                            <h6 class="mb-0"><i class="fas fa-chart-line"></i> Analyse d'impact</h6>
+                        </div>
+                        <div class="card-body">
+                            {% set ecart = dispositif.efficacite_attendue - form.efficacite_reelle.data %}
+                            {% if ecart > 0 %}
+                            <div class="alert alert-warning">
+                                <i class="fas fa-exclamation-triangle"></i>
+                                <strong>Dispositif sous-performant</strong>
+                                <p class="mb-0">
+                                    L'efficacité réelle ({{ form.efficacite_reelle.data }}/5) est inférieure à l'efficacité attendue ({{ dispositif.efficacite_attendue }}/5).
+                                    <br>
+                                    <small>Écart : -{{ ecart }} point(s)</small>
+                                </p>
+                            </div>
+                            
+                            <div class="form-check mb-3">
+                                <input class="form-check-input" type="checkbox" id="creerPlanAction">
+                                <label class="form-check-label" for="creerPlanAction">
+                                    <strong>Créer automatiquement un plan d'action d'amélioration</strong>
+                                </label>
+                                <small class="form-text text-muted d-block">
+                                    Un plan d'action sera créé avec comme responsable {{ dispositif.responsable.username if dispositif.responsable else 'le créateur du dispositif' }}
+                                </small>
+                            </div>
+                            {% elif ecart < 0 %}
+                            <div class="alert alert-success">
+                                <i class="fas fa-check-circle"></i>
+                                <strong>Dispositif performant</strong>
+                                <p class="mb-0">
+                                    L'efficacité réelle ({{ form.efficacite_reelle.data }}/5) dépasse l'efficacité attendue ({{ dispositif.efficacite_attendue }}/5).
+                                    <br>
+                                    <small>Surperformance : +{{ -ecart }} point(s)</small>
+                                </p>
+                            </div>
+                            {% else %}
+                            <div class="alert alert-info">
+                                <i class="fas fa-check"></i>
+                                <strong>Objectif atteint</strong>
+                                <p class="mb-0">
+                                    L'efficacité réelle ({{ form.efficacite_reelle.data }}/5) correspond exactement à l'efficacité attendue ({{ dispositif.efficacite_attendue }}/5).
+                                </p>
+                            </div>
+                            {% endif %}
+                        </div>
+                    </div>
+                    {% endif %}
+                    
+                    <div class="d-grid gap-2 d-md-flex justify-content-md-end mt-4">
+                        <a href="{{ url_for('detail_dispositif', dispositif_id=dispositif.id) }}" 
+                           class="btn btn-secondary me-md-2">
+                            Annuler
+                        </a>
+                        <button type="submit" class="btn btn-primary">
+                            <i class="fas fa-save me-1"></i> Enregistrer l'évaluation
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+    
+    <div class="col-md-4">
+        <!-- Guide d'évaluation -->
+        <div class="card shadow mb-4">
+            <div class="card-header bg-info text-white">
+                <h6 class="mb-0"><i class="fas fa-graduation-cap"></i> Guide d'évaluation</h6>
+            </div>
+            <div class="card-body">
+                <h6>Échelle d'efficacité :</h6>
+                <ul class="small">
+                    <li><strong>5 - Excellente :</strong> Le dispositif est totalement efficace</li>
+                    <li><strong>4 - Bonne :</strong> Le dispositif est efficace avec de légères améliorations possibles</li>
+                    <li><strong>3 - Moyenne :</strong> Le dispositif est partiellement efficace</li>
+                    <li><strong>2 - Faible :</strong> Le dispositif présente des lacunes importantes</li>
+                    <li><strong>1 - Très faible :</strong> Le dispositif est inefficace</li>
+                </ul>
+                
+                <h6 class="mt-3">Échelle de couverture :</h6>
+                <ul class="small">
+                    <li><strong>5 - Totale :</strong> Couvre l'ensemble du périmètre à risque</li>
+                    <li><strong>4 - Bonne :</strong> Couvre la majorité du périmètre</li>
+                    <li><strong>3 - Partielle :</strong> Couvre une partie significative</li>
+                    <li><strong>2 - Limitée :</strong> Couverture insuffisante</li>
+                    <li><strong>1 - Très limitée :</strong> Couverture très réduite</li>
+                </ul>
+                
+                <div class="alert alert-warning mt-3">
+                    <small>
+                        <i class="fas fa-lightbulb"></i>
+                        <strong>Conseil :</strong> Basez votre évaluation sur des éléments probants (tests, observations, documents)
+                    </small>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Historique des évaluations -->
+        <div class="card shadow">
+            <div class="card-header bg-light">
+                <h6 class="mb-0"><i class="fas fa-history"></i> Dernières évaluations</h6>
+            </div>
+            <div class="card-body" style="max-height: 300px; overflow-y: auto;">
+                {% if dispositif.verifications %}
+                <div class="list-group list-group-flush">
+                    {% set sorted_verifications = dispositif.verifications|sort(attribute='date_verification', reverse=true) %}
+                    {% for verification in sorted_verifications[:5] %}
+                    <div class="list-group-item border-0 px-0 py-2">
+                        <div class="d-flex justify-content-between">
+                            <div>
+                                <strong>{{ verification.date_verification.strftime('%d/%m/%Y') }}</strong>
+                                <br>
+                                <small class="text-muted">{{ verification.type_verification }}</small>
+                            </div>
+                            <div class="text-end">
+                                <span class="badge 
+                                    {% if verification.resultat == 'Conforme' %}bg-success
+                                    {% elif verification.resultat == 'Non conforme' %}bg-danger
+                                    {% else %}bg-warning text-dark{% endif %}">
+                                    {{ verification.resultat }}
+                                </span>
+                            </div>
+                        </div>
+                    </div>
+                    {% endfor %}
+                </div>
+                {% else %}
+                <div class="text-center text-muted py-3">
+                    <i class="fas fa-history fa-2x mb-2"></i>
+                    <p>Aucune évaluation antérieure</p>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    // Gestion des cartes de sélection
+    document.querySelectorAll('.efficiency-card label').forEach(card => {
+        card.addEventListener('click', function() {
+            // Désélectionner toutes les cartes
+            document.querySelectorAll('.efficiency-card').forEach(c => {
+                c.classList.remove('selected');
+            });
+            // Sélectionner cette carte
+            this.closest('.efficiency-card').classList.add('selected');
+            // Cocher le radio correspondant
+            const radio = this.querySelector('input[type="radio"]');
+            if (radio) {
+                radio.checked = true;
+                // Déclencher l'analyse d'impact si nécessaire
+                updateImpactAnalysis();
+            }
+        });
+    });
+    
+    document.querySelectorAll('.coverage-card label').forEach(card => {
+        card.addEventListener('click', function() {
+            // Désélectionner toutes les cartes
+            document.querySelectorAll('.coverage-card').forEach(c => {
+                c.classList.remove('selected');
+            });
+            // Sélectionner cette carte
+            this.closest('.coverage-card').classList.add('selected');
+            // Cocher le radio correspondant
+            const radio = this.querySelector('input[type="radio"]');
+            if (radio) {
+                radio.checked = true;
+            }
+        });
+    });
+    
+    // Mise à jour de l'analyse d'impact
+    function updateImpactAnalysis() {
+        const efficaciteInput = document.querySelector('input[name="efficacite_reelle"]:checked');
+        if (efficaciteInput) {
+            const efficaciteValue = parseInt(efficaciteInput.value);
+            const efficaciteAttendue = {{ dispositif.efficacite_attendue or 0 }};
+            
+            if (efficaciteAttendue > 0) {
+                // Forcer l'affichage de l'analyse
+                const impactAnalysis = document.getElementById('impactAnalysis');
+                if (impactAnalysis) {
+                    impactAnalysis.style.display = 'block';
+                }
+            }
+        }
+    }
+    
+    // Initialiser l'analyse d'impact
+    updateImpactAnalysis();
+    
+    // Validation du formulaire
+    const form = document.getElementById('evaluationForm');
+    if (form) {
+        form.addEventListener('submit', function(e) {
+            const efficacite = document.querySelector('input[name="efficacite_reelle"]:checked');
+            const couverture = document.querySelector('input[name="couverture"]:checked');
+            
+            if (!efficacite || efficacite.value == '0') {
+                e.preventDefault();
+                alert('Veuillez sélectionner une efficacité réelle');
+                return false;
+            }
+            
+            if (!couverture || couverture.value == '0') {
+                e.preventDefault();
+                alert('Veuillez sélectionner une couverture');
+                return false;
+            }
+            
+            // Vérifier si on doit créer un plan d'action
+            const creerPlanCheckbox = document.getElementById('creerPlanAction');
+            if (creerPlanCheckbox && creerPlanCheckbox.checked) {
+                const efficaciteValue = parseInt(efficacite.value);
+                const efficaciteAttendue = {{ dispositif.efficacite_attendue or 0 }};
+                
+                if (efficaciteValue < efficaciteAttendue) {
+                    if (!confirm('Un plan d\'action d\'amélioration sera créé automatiquement. Confirmez-vous ?')) {
+                        e.preventDefault();
+                        return false;
+                    }
+                }
+            }
+            
+            return true;
+        });
+    }
+});
+</script>
+
+<style>
+.efficiency-card, .coverage-card {
+    border: 2px solid transparent;
+    transition: all 0.2s ease;
+    cursor: pointer;
+}
+
+.efficiency-card:hover, .coverage-card:hover {
+    border-color: #6c757d;
+    transform: translateY(-2px);
+}
+
+.efficiency-card.selected, .coverage-card.selected {
+    border-color: #0d6efd;
+    box-shadow: 0 0 0 0.2rem rgba(13, 110, 253, 0.25);
+}
+
+.efficiency-card.below-target {
+    border-color: #dc3545;
+}
+
+.efficiency-value, .coverage-value {
+    width: 40px;
+    height: 40px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-weight: bold;
+    margin: 0 auto;
+}
+
+/* Styles pour les niveaux d'efficacité */
+.efficiency-value.bg-success { background-color: #198754 !important; }
+.efficiency-value.bg-warning { background-color: #ffc107 !important; }
+.efficiency-value.bg-danger { background-color: #dc3545 !important; }
+
+.coverage-value.bg-success { background-color: #198754 !important; }
+.coverage-value.bg-warning { background-color: #ffc107 !important; }
+.coverage-value.bg-danger { background-color: #dc3545 !important; }
+
+/* Alertes colorées */
+.alert-success { border-left: 4px solid #198754; }
+.alert-warning { border-left: 4px solid #ffc107; }
+.alert-danger { border-left: 4px solid #dc3545; }
+.alert-info { border-left: 4px solid #0dcaf0; }
+
+/* Ajustements responsive */
+@media (max-width: 768px) {
+    .efficiency-value, .coverage-value {
+        width: 30px;
+        height: 30px;
+        font-size: 0.9rem;
+    }
+    
+    .card-body.py-3 {
+        padding: 1rem 0.5rem !important;
+    }
+}
+</style>
+{% endblock %}

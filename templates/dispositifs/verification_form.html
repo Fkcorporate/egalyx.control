@@ -1,0 +1,235 @@
+<!-- templates/dispositifs/verification_form.html -->
+<form method="POST" action="{{ url_for('ajouter_verification_dispositif', dispositif_id=dispositif.id) }}" 
+      id="verificationForm" class="needs-validation" novalidate>
+    {{ form.hidden_tag() }}
+    
+    <!-- Date de vérification -->
+    <div class="mb-3">
+        {{ form.date_verification.label(class="form-label fw-bold") }}
+        <div class="input-group">
+            {{ form.date_verification(class="form-control", type="date", required=true) }}
+            <span class="input-group-text">
+                <i class="fas fa-calendar-alt"></i>
+            </span>
+        </div>
+        <div class="invalid-feedback">
+            La date de vérification est obligatoire
+        </div>
+        <small class="form-text text-muted">
+            Date à laquelle la vérification a été effectuée
+        </small>
+    </div>
+    
+    <!-- Type de vérification -->
+    <div class="mb-3">
+        {{ form.type_verification.label(class="form-label fw-bold") }}
+        {{ form.type_verification(class="form-select", required=true) }}
+        <div class="invalid-feedback">
+            Le type de vérification est obligatoire
+        </div>
+        <small class="form-text text-muted">
+            Sélectionnez le type de vérification réalisée
+        </small>
+    </div>
+    
+    <!-- Résultat -->
+    <div class="mb-3">
+        {{ form.resultat.label(class="form-label fw-bold") }}
+        {{ form.resultat(class="form-select", required=true) }}
+        <div class="invalid-feedback">
+            Le résultat est obligatoire
+        </div>
+    </div>
+    
+    <!-- Commentaire -->
+    <div class="mb-3">
+        {{ form.commentaire.label(class="form-label fw-bold") }}
+        {{ form.commentaire(class="form-control", rows="4", 
+                          placeholder="Décrivez les observations, les éléments probants, les écarts constatés...") }}
+        <small class="form-text text-muted">
+            Maximum 2000 caractères. Soyez précis dans vos observations.
+        </small>
+    </div>
+    
+    <!-- Éléments probants (optionnel - fichiers) -->
+    <div class="mb-3">
+        <label class="form-label fw-bold">Éléments probants (optionnel)</label>
+        <div class="input-group">
+            <input type="file" class="form-control" id="preuvesFiles" multiple 
+                   accept=".pdf,.doc,.docx,.xls,.xlsx,.jpg,.jpeg,.png,.txt">
+            <button class="btn btn-outline-secondary" type="button" id="btnUploadPreuves">
+                <i class="fas fa-upload"></i>
+            </button>
+        </div>
+        <small class="form-text text-muted">
+            Vous pourrez ajouter des fichiers après l'enregistrement
+        </small>
+        <div id="preuvesList" class="mt-2"></div>
+    </div>
+    
+    <!-- Analyse de conformité -->
+    <div class="mb-3" id="conformiteAnalysis" style="display: none;">
+        <h6 class="fw-bold">Analyse de conformité</h6>
+        <div class="alert alert-light">
+            <div class="form-check">
+                <input class="form-check-input" type="checkbox" id="identifieEcart">
+                <label class="form-check-label" for="identifieEcart">
+                    <strong>Écart identifié</strong>
+                </label>
+            </div>
+            <div class="mt-2" id="ecartDetails" style="display: none;">
+                <textarea class="form-control" rows="2" 
+                         placeholder="Décrivez l'écart identifié..."></textarea>
+                <small class="form-text text-muted">
+                    Cet écart sera enregistré et pourra faire l'objet d'un plan d'action
+                </small>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Actions -->
+    <div class="d-flex justify-content-end gap-2">
+        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">
+            Annuler
+        </button>
+        <button type="submit" class="btn btn-primary">
+            <i class="fas fa-save me-1"></i> Enregistrer la vérification
+        </button>
+    </div>
+</form>
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    const form = document.getElementById('verificationForm');
+    const resultatSelect = document.getElementById('resultat');
+    const identifieEcartCheckbox = document.getElementById('identifieEcart');
+    const ecartDetails = document.getElementById('ecartDetails');
+    const conformiteAnalysis = document.getElementById('conformiteAnalysis');
+    
+    // Afficher/masquer l'analyse de conformité selon le résultat
+    if (resultatSelect) {
+        resultatSelect.addEventListener('change', function() {
+            const resultat = this.value;
+            
+            if (resultat === 'Non conforme' || resultat === 'À corriger' || resultat === 'À améliorer') {
+                conformiteAnalysis.style.display = 'block';
+            } else {
+                conformiteAnalysis.style.display = 'none';
+                if (identifieEcartCheckbox) {
+                    identifieEcartCheckbox.checked = false;
+                }
+                if (ecartDetails) {
+                    ecartDetails.style.display = 'none';
+                }
+            }
+        });
+        
+        // Déclencher l'événement au chargement
+        resultatSelect.dispatchEvent(new Event('change'));
+    }
+    
+    // Afficher/masquer les détails d'écart
+    if (identifieEcartCheckbox) {
+        identifieEcartCheckbox.addEventListener('change', function() {
+            if (this.checked) {
+                ecartDetails.style.display = 'block';
+            } else {
+                ecartDetails.style.display = 'none';
+            }
+        });
+    }
+    
+    // Gestion des fichiers d'éléments probants
+    const preuvesFiles = document.getElementById('preuvesFiles');
+    const preuvesList = document.getElementById('preuvesList');
+    
+    if (preuvesFiles) {
+        preuvesFiles.addEventListener('change', function() {
+            preuvesList.innerHTML = '';
+            
+            if (this.files.length > 0) {
+                let html = '<div class="alert alert-info p-2">';
+                html += '<strong>Fichiers sélectionnés :</strong><br>';
+                
+                for (let file of this.files) {
+                    const sizeMB = (file.size / (1024 * 1024)).toFixed(2);
+                    html += `<div class="d-flex justify-content-between small mt-1">
+                               <span>${file.name}</span>
+                               <span>${sizeMB} Mo</span>
+                             </div>`;
+                }
+                
+                html += `<small class="text-muted d-block mt-2">
+                           ${this.files.length} fichier(s) - Ils seront téléversés après l'enregistrement
+                         </small>`;
+                html += '</div>';
+                
+                preuvesList.innerHTML = html;
+            }
+        });
+    }
+    
+    // Validation Bootstrap
+    if (form) {
+        form.addEventListener('submit', function(event) {
+            if (!form.checkValidity()) {
+                event.preventDefault();
+                event.stopPropagation();
+            }
+            
+            form.classList.add('was-validated');
+            
+            // Vérification supplémentaire pour les écarts
+            if (resultatSelect.value === 'Non conforme' && identifieEcartCheckbox && identifieEcartCheckbox.checked) {
+                const ecartTextarea = ecartDetails.querySelector('textarea');
+                if (ecartTextarea && !ecartTextarea.value.trim()) {
+                    event.preventDefault();
+                    alert('Veuillez décrire l\'écart identifié');
+                    ecartTextarea.focus();
+                    return false;
+                }
+            }
+            
+            return true;
+        });
+    }
+    
+    // Définir la date d'aujourd'hui par défaut
+    const dateField = document.getElementById('date_verification');
+    if (dateField && !dateField.value) {
+        const today = new Date().toISOString().split('T')[0];
+        dateField.value = today;
+    }
+});
+</script>
+
+<style>
+/* Styles spécifiques pour le formulaire de vérification */
+.needs-validation .form-control:invalid,
+.needs-validation .form-select:invalid {
+    border-color: #dc3545;
+}
+
+.needs-validation .form-control:valid,
+.needs-validation .form-select:valid {
+    border-color: #198754;
+}
+
+/* Animation pour les détails d'écart */
+#ecartDetails {
+    transition: all 0.3s ease;
+}
+
+/* Style pour la liste des fichiers */
+#preuvesList .alert {
+    border-radius: 6px;
+    border-left: 4px solid #0dcaf0;
+}
+
+/* Responsive adjustments */
+@media (max-width: 576px) {
+    .input-group .btn {
+        padding: 0.375rem 0.75rem;
+    }
+}
+</style>

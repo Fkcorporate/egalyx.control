@@ -1,0 +1,1151 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="d-flex justify-content-between flex-wrap flex-md-nowrap align-items-center pt-3 pb-2 mb-3 border-bottom">
+    <h1 class="h2">
+        <i class="fas fa-shield-alt"></i> {{ dispositif.reference }} - {{ dispositif.nom }}
+    </h1>
+    <div class="btn-toolbar mb-2 mb-md-0">
+        <a href="{{ url_for('liste_dispositifs_risque', risque_id=dispositif.risque_id) }}" class="btn btn-secondary me-2">
+            <i class="fas fa-arrow-left"></i> Retour aux dispositifs
+        </a>
+        <a href="{{ url_for('evaluer_dispositif', dispositif_id=dispositif.id) }}" class="btn btn-warning me-2">
+            <i class="fas fa-chart-bar"></i> Évaluer
+        </a>
+        <a href="{{ url_for('modifier_dispositif', dispositif_id=dispositif.id) }}" class="btn btn-outline-warning me-2">
+            <i class="fas fa-edit"></i> Modifier
+        </a>
+        <div class="btn-group">
+            <button type="button" class="btn btn-outline-secondary dropdown-toggle" data-bs-toggle="dropdown">
+                <i class="fas fa-ellipsis-v"></i>
+            </button>
+            <ul class="dropdown-menu dropdown-menu-end">
+                <li>
+                    <a class="dropdown-item" href="#" onclick="ajouterVerification()">
+                        <i class="fas fa-clipboard-check me-2"></i>Ajouter vérification
+                    </a>
+                </li>
+                <li>
+                    <a class="dropdown-item" href="#" data-bs-toggle="modal" data-bs-target="#modalUploadDocument">
+                        <i class="fas fa-file-upload me-2"></i>Ajouter document
+                    </a>
+                </li>
+                <li><hr class="dropdown-divider"></li>
+                {% if not dispositif.plan_action_id %}
+                <li>
+                    <a class="dropdown-item" href="#" onclick="lierPlanAction({{ dispositif.id }})">
+                        <i class="fas fa-link me-2"></i>Lier un plan d'action
+                    </a>
+                </li>
+                {% endif %}
+                {% if current_user.has_permission('can_archive_data') %}
+                <li><hr class="dropdown-divider"></li>
+                <li>
+                    <form action="{{ url_for('archiver_dispositif', dispositif_id=dispositif.id) }}" method="POST" class="d-inline">
+                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                        <button type="submit" class="dropdown-item text-warning" 
+                                onclick="return confirm('Archiver ce dispositif ? Il ne sera plus visible dans les listes.')">
+                            <i class="fas fa-archive me-2"></i>Archiver
+                        </button>
+                    </form>
+                </li>
+                {% endif %}
+            </ul>
+        </div>
+    </div>
+</div>
+
+<div class="row">
+    <!-- Colonne gauche - Informations principales -->
+    <div class="col-md-8">
+        <!-- Carte informations -->
+        <div class="card shadow mb-4">
+            <div class="card-header bg-primary text-white">
+                <h6 class="mb-0"><i class="fas fa-info-circle me-2"></i>Informations générales</h6>
+            </div>
+            <div class="card-body">
+                <div class="row">
+                    <div class="col-md-6">
+                        <table class="table table-sm table-borderless">
+                            <tr>
+                                <th width="40%">Risque associé:</th>
+                                <td>
+                                    <a href="{{ url_for('detail_risque', id=dispositif.risque_id) }}" class="text-decoration-none">
+                                        {{ dispositif.risque.reference }} - {{ dispositif.risque.intitule|truncate(40) }}
+                                    </a>
+                                </td>
+                            </tr>
+                            <tr>
+                                <th>Type:</th>
+                                <td>
+                                    {% if dispositif.type_dispositif == 'Préventif' %}
+                                    <span class="badge bg-success">{{ dispositif.type_dispositif }}</span>
+                                    {% elif dispositif.type_dispositif == 'Détectif' %}
+                                    <span class="badge bg-warning text-dark">{{ dispositif.type_dispositif }}</span>
+                                    {% elif dispositif.type_dispositif == 'Correctif' %}
+                                    <span class="badge bg-danger">{{ dispositif.type_dispositif }}</span>
+                                    {% else %}
+                                    <span class="badge bg-secondary">{{ dispositif.type_dispositif }}</span>
+                                    {% endif %}
+                                </td>
+                            </tr>
+                            <tr>
+                                <th>Nature:</th>
+                                <td>{{ dispositif.nature or 'Non spécifiée' }}</td>
+                            </tr>
+                            <tr>
+                                <th>Fréquence:</th>
+                                <td>{{ dispositif.frequence or 'Non spécifiée' }}</td>
+                            </tr>
+                            <tr>
+                                <th>Responsable:</th>
+                                <td>
+                                    {% if dispositif.responsable %}
+                                    {{ dispositif.responsable.username }}
+                                    {% else %}
+                                    <span class="text-muted">Non assigné</span>
+                                    {% endif %}
+                                </td>
+                            </tr>
+                        </table>
+                    </div>
+                    <div class="col-md-6">
+                        <table class="table table-sm table-borderless">
+                            <tr>
+                                <th width="40%">Direction:</th>
+                                <td>{{ dispositif.direction.nom if dispositif.direction else 'Non spécifiée' }}</td>
+                            </tr>
+                            <tr>
+                                <th>Service:</th>
+                                <td>{{ dispositif.service.nom if dispositif.service else 'Non spécifié' }}</td>
+                            </tr>
+                            <tr>
+                                <th>Date mise en place:</th>
+                                <td>
+                                    {% if dispositif.date_mise_en_place %}
+                                    {{ dispositif.date_mise_en_place.strftime('%d/%m/%Y') }}
+                                    {% else %}
+                                    <span class="text-muted">Non renseignée</span>
+                                    {% endif %}
+                                </td>
+                            </tr>
+                            <tr>
+                                <th>Statut:</th>
+                                <td>
+                                    {% if dispositif.statut == 'actif' %}
+                                    <span class="badge bg-success">Actif</span>
+                                    {% elif dispositif.statut == 'inactif' %}
+                                    <span class="badge bg-secondary">Inactif</span>
+                                    {% elif dispositif.statut == 'en_cours' %}
+                                    <span class="badge bg-warning text-dark">En cours</span>
+                                    {% else %}
+                                    <span class="badge bg-danger">Obsolète</span>
+                                    {% endif %}
+                                </td>
+                            </tr>
+                            <tr>
+                                <th>Plan d'action:</th>
+                                <td>
+                                    {% if dispositif.plan_action %}
+                                    <!-- Utilisez la bonne route pour les plans d'action liés aux risques -->
+                                    <a href="{{ url_for('detail_plan_action_risque', plan_id=dispositif.plan_action.id) }}" 
+                                    class="badge bg-info text-decoration-none">
+                                        {{ dispositif.plan_action.reference }}
+                                    </a>
+                                    {% else %}
+                                    <button class="btn btn-sm btn-outline-primary" 
+                                            onclick="lierPlanAction({{ dispositif.id }})">
+                                        <i class="fas fa-link"></i> Lier un plan
+                                    </button>
+                                    {% endif %}
+                                </td>
+                            </tr>
+                        </table>
+                    </div>
+                </div>
+                
+                {% if dispositif.description %}
+                <div class="mt-3">
+                    <h6>Description:</h6>
+                    <div class="border rounded p-3 bg-light">
+                        {{ dispositif.description|nl2br|safe }}
+                    </div>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+        
+        <!-- Carte évaluation -->
+        <div class="card shadow mb-4">
+            <div class="card-header bg-warning text-dark">
+                <h6 class="mb-0"><i class="fas fa-chart-bar me-2"></i>Évaluation d'efficacité</h6>
+            </div>
+            <div class="card-body">
+                <div class="row text-center">
+                    <div class="col-md-4">
+                        <div class="card border-primary">
+                            <div class="card-body">
+                                <h3 class="text-primary mb-1">
+                                    {{ dispositif.efficacite_attendue or 'N/A' }}/5
+                                </h3>
+                                <small class="text-muted">Efficacité attendue</small>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-md-4">
+                        <div class="card 
+                            {% if dispositif.efficacite_reelle and dispositif.efficacite_reelle >= 4 %}border-success
+                            {% elif dispositif.efficacite_reelle and dispositif.efficacite_reelle >= 3 %}border-warning
+                            {% elif dispositif.efficacite_reelle %}border-danger
+                            {% else %}border-secondary{% endif %}">
+                            <div class="card-body">
+                                <h3 class="mb-1 
+                                    {% if dispositif.efficacite_reelle and dispositif.efficacite_reelle >= 4 %}text-success
+                                    {% elif dispositif.efficacite_reelle and dispositif.efficacite_reelle >= 3 %}text-warning
+                                    {% elif dispositif.efficacite_reelle %}text-danger
+                                    {% else %}text-secondary{% endif %}">
+                                    {{ dispositif.efficacite_reelle or 'N/A' }}/5
+                                </h3>
+                                <small class="text-muted">Efficacité réelle</small>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-md-4">
+                        <div class="card border-info">
+                            <div class="card-body">
+                                <h3 class="text-info mb-1">{{ dispositif.couverture or 'N/A' }}/5</h3>
+                                <small class="text-muted">Couverture</small>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- Indicateur visuel -->
+                {% if dispositif.efficacite_attendue and dispositif.efficacite_reelle %}
+                <div class="mt-4">
+                    <h6>Niveau d'efficacité: 
+                        <span class="badge bg-{% if dispositif.efficacite_reelle >= dispositif.efficacite_attendue %}success
+                        {% elif dispositif.efficacite_attendue - dispositif.efficacite_reelle == 1 %}warning
+                        {% else %}danger{% endif %}">
+                            {{ dispositif.get_niveau_efficacite() }}
+                        </span>
+                    </h6>
+                    <div class="progress" style="height: 25px;">
+                        <div class="progress-bar bg-success" 
+                             style="width: {{ (dispositif.efficacite_reelle / 5) * 100 }}%">
+                            Efficacité réelle: {{ dispositif.efficacite_reelle }}/5
+                        </div>
+                    </div>
+                    <div class="mt-2 text-center">
+                        <small class="text-muted">Attendu: {{ dispositif.efficacite_attendue }}/5</small>
+                    </div>
+                    
+                    {% if dispositif.efficacite_reelle < dispositif.efficacite_attendue %}
+                    <div class="alert alert-warning mt-3">
+                        <i class="fas fa-exclamation-triangle me-2"></i>
+                        L'efficacité réelle est inférieure à l'efficacité attendue.
+                        {% if not dispositif.plan_action_id %}
+                        <button onclick="creerPlanActionAutomatique({{ dispositif.id }})" class="btn btn-sm btn-warning ms-2">
+                            <i class="fas fa-magic me-1"></i> Créer un plan d'action automatique
+                        </button>
+                        {% endif %}
+                    </div>
+                    {% endif %}
+                    
+                    <!-- COMMENTAIRE D'ÉVALUATION -->
+                    {% if dispositif.commentaire_evaluation %}
+                    <div class="alert alert-info mt-3">
+                        <h6><i class="fas fa-comment me-2"></i>Commentaire d'évaluation :</h6>
+                        <p class="mb-0">{{ dispositif.commentaire_evaluation|nl2br|safe }}</p>
+                        <small class="text-muted d-block mt-2">
+                            <i class="fas fa-calendar-alt me-1"></i>
+                            Dernière évaluation : {{ dispositif.date_derniere_verification.strftime('%d/%m/%Y') if dispositif.date_derniere_verification else 'Non spécifiée' }}
+                        </small>
+                    </div>
+                    {% endif %}
+                </div>
+                {% else %}
+                <div class="alert alert-info mt-3 text-center">
+                    <i class="fas fa-info-circle me-2"></i>
+                    Ce dispositif n'a pas encore été évalué.
+                    <a href="{{ url_for('evaluer_dispositif', dispositif_id=dispositif.id) }}" class="alert-link ms-2">
+                        Effectuer une première évaluation
+                    </a>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+        
+        <!-- Vérifications -->
+        <div class="card shadow mb-4">
+            <div class="card-header bg-info text-white d-flex justify-content-between align-items-center">
+                <h6 class="mb-0"><i class="fas fa-clipboard-check me-2"></i>Vérifications</h6>
+                <button class="btn btn-sm btn-light" onclick="ajouterVerification()">
+                    <i class="fas fa-plus"></i> Nouvelle
+                </button>
+            </div>
+            <div class="card-body">
+                {% if verifications %}
+                <div class="list-group" id="listeVerifications">
+                    {% for verification in verifications %}
+                    <div class="list-group-item verification-item" id="verification-{{ verification.id }}">
+                        <div class="d-flex justify-content-between align-items-center">
+                            <div>
+                                <strong>{{ verification.date_verification.strftime('%d/%m/%Y') }}</strong>
+                                <span class="badge ms-2 
+                                    {% if verification.resultat == 'Conforme' %}bg-success
+                                    {% elif verification.resultat == 'Non conforme' %}bg-danger
+                                    {% else %}bg-warning text-dark{% endif %}">
+                                    {{ verification.resultat }}
+                                </span>
+                                <br>
+                                <small class="text-muted">{{ verification.type_verification }}</small>
+                            </div>
+                            <div class="btn-group">
+                                <button class="btn btn-sm btn-outline-secondary" 
+                                        onclick="modifierVerification({{ verification.id }})"
+                                        title="Modifier">
+                                    <i class="fas fa-edit"></i>
+                                </button>
+                                <button class="btn btn-sm btn-outline-danger" 
+                                        onclick="supprimerVerification({{ verification.id }})"
+                                        title="Supprimer">
+                                    <i class="fas fa-trash"></i>
+                                </button>
+                            </div>
+                        </div>
+                        <div class="mt-2">
+                            <small class="text-muted">
+                                <i class="fas fa-user me-1"></i>Par {{ verification.verificateur.username if verification.verificateur else 'Système' }}
+                            </small>
+                        </div>
+                        {% if verification.commentaire %}
+                        <div class="mt-2 p-2 bg-light rounded" id="commentaire-{{ verification.id }}">
+                            <small>{{ verification.commentaire|nl2br|safe }}</small>
+                        </div>
+                        {% endif %}
+                    </div>
+                    {% endfor %}
+                </div>
+                {% else %}
+                <div class="text-center py-4 text-muted">
+                    <i class="fas fa-clipboard-check fa-3x mb-3"></i>
+                    <p>Aucune vérification enregistrée</p>
+                    <button class="btn btn-sm btn-primary" onclick="ajouterVerification()">
+                        <i class="fas fa-plus me-1"></i>Ajouter la première vérification
+                    </button>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+    
+    <!-- Colonne droite - Documents et métriques -->
+    <div class="col-md-4">
+        <!-- Documents -->
+        <div class="card shadow mb-4">
+            <div class="card-header bg-secondary text-white d-flex justify-content-between align-items-center">
+                <h6 class="mb-0"><i class="fas fa-file-alt me-2"></i>Documents associés</h6>
+                <button class="btn btn-sm btn-light" data-bs-toggle="modal" data-bs-target="#modalUploadDocument">
+                    <i class="fas fa-upload"></i>
+                </button>
+            </div>
+            <div class="card-body">
+                {% if documents %}
+                <div class="list-group">
+                    {% for doc in documents %}
+                    <div class="list-group-item">
+                        <div class="d-flex justify-content-between align-items-center">
+                            <div>
+                                <i class="fas fa-file 
+                                    {% if 'pdf' in doc.nom_fichier|lower %}text-danger
+                                    {% elif 'doc' in doc.nom_fichier|lower %}text-primary
+                                    {% elif 'xls' in doc.nom_fichier|lower %}text-success
+                                    {% else %}text-secondary{% endif %} me-2">
+                                </i>
+                                <a href="{{ url_for('telecharger_document_dispositif', doc_id=doc.id) }}" 
+                                   class="text-decoration-none" target="_blank">
+                                    {{ doc.nom_fichier|truncate(30) }}
+                                </a>
+                            </div>
+                            <small class="text-muted">{{ (doc.taille / 1024)|round(1) }} Ko</small>
+                        </div>
+                        {% if doc.type_document %}
+                        <small class="badge bg-info mt-1">{{ doc.type_document }}</small>
+                        {% endif %}
+                        {% if doc.description %}
+                        <div class="mt-1">
+                            <small class="text-muted">{{ doc.description|truncate(50) }}</small>
+                        </div>
+                        {% endif %}
+                        <div class="mt-2">
+                            <small class="text-muted">
+                                <i class="fas fa-calendar-alt me-1"></i>
+                                {{ doc.uploaded_at.strftime('%d/%m/%Y') if doc.uploaded_at else '' }}
+                            </small>
+                        </div>
+                    </div>
+                    {% endfor %}
+                </div>
+                {% else %}
+                <div class="text-center py-3 text-muted">
+                    <i class="fas fa-file-alt fa-2x mb-2"></i>
+                    <p>Aucun document associé</p>
+                    <button class="btn btn-sm btn-primary" data-bs-toggle="modal" data-bs-target="#modalUploadDocument">
+                        <i class="fas fa-upload me-1"></i>Ajouter un document
+                    </button>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+        
+        <!-- Métriques temporelles -->
+        <div class="card shadow mb-4">
+            <div class="card-header bg-light">
+                <h6 class="mb-0"><i class="fas fa-calendar-alt me-2"></i>Calendrier</h6>
+            </div>
+            <div class="card-body">
+                <table class="table table-sm table-borderless">
+                    <tr>
+                        <th>Mise en place:</th>
+                        <td>
+                            {% if dispositif.date_mise_en_place %}
+                            {{ dispositif.date_mise_en_place.strftime('%d/%m/%Y') }}
+                            {% else %}
+                            <span class="text-muted">Non renseignée</span>
+                            {% endif %}
+                        </td>
+                    </tr>
+                    <tr>
+                        <th>Dernière vérif:</th>
+                        <td>
+                            {% if dispositif.date_derniere_verification %}
+                            {{ dispositif.date_derniere_verification.strftime('%d/%m/%Y') }}
+                            <br>
+                            <small class="text-success">Effectuée</small>
+                            {% else %}
+                            <span class="badge bg-warning text-dark">Jamais</span>
+                            {% endif %}
+                        </td>
+                    </tr>
+                    <tr>
+                        <th>Prochaine vérif:</th>
+                        <td>
+                            {% if dispositif.prochaine_verification %}
+                            {% set jours_restants = (dispositif.prochaine_verification - datetime.now().date()).days %}
+                            {{ dispositif.prochaine_verification.strftime('%d/%m/%Y') }}
+                            <br>
+                            <span class="text-{% if jours_restants <= 7 %}danger{% elif jours_restants <= 30 %}warning{% else %}success{% endif %}">
+                                {% if jours_restants > 0 %}
+                                {{ jours_restants }} jour(s) restant(s)
+                                {% elif jours_restants == 0 %}
+                                <strong>Aujourd'hui!</strong>
+                                {% else %}
+                                <strong>En retard de {{ -jours_restants }} jour(s)</strong>
+                                {% endif %}
+                            </span>
+                            {% else %}
+                            <span class="text-muted">Non planifiée</span>
+                            {% endif %}
+                        </td>
+                    </tr>
+                </table>
+            </div>
+        </div>
+        
+        <!-- Impact sur le risque - VERSION RÉALISTE -->
+<div class="card shadow">
+    <div class="card-header bg-light">
+        <h6 class="mb-0"><i class="fas fa-chart-line me-2"></i>Impact sur le risque (Approche réaliste)</h6>
+    </div>
+    <div class="card-body">
+        {% if dispositif.efficacite_reelle is not none and dispositif.couverture is not none %}
+            {% set details = dispositif.get_reduction_risque_detaille() %}
+            
+            <!-- Visualisation claire -->
+            <div class="text-center mb-4">
+                <div class="d-flex justify-content-center align-items-center mb-3">
+                    <div class="text-center me-4">
+                        <div class="display-4 fw-bold 
+                            {% if details.reduction_finale >= details.reduction_max_type * 0.8 %}text-success
+                            {% elif details.reduction_finale >= details.reduction_max_type * 0.6 %}text-warning
+                            {% else %}text-danger{% endif %}">
+                            {{ "%.1f"|format(details.reduction_finale) }}%
+                        </div>
+                        <small class="text-muted">Réduction théorique</small>
+                    </div>
+                    <div class="vr mx-3"></div>
+                    <div class="text-start">
+                        <div class="small">
+                            <span class="badge bg-{% if details.type == 'Préventif' %}success
+                                                 {% elif details.type == 'Détectif' %}warning
+                                                 {% elif details.type == 'Correctif' %}info
+                                                 {% else %}secondary{% endif %} mb-1">
+                                {{ details.type }}
+                            </span>
+                            <div>Max: <strong>{{ details.reduction_max_type }}%</strong></div>
+                            <div class="text-muted">Nature: {{ details.nature }}</div>
+                            <div class="text-muted">Fréquence: {{ details.frequence }}</div>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- Barre de progression intuitive -->
+                <div class="mb-3">
+                    <div class="d-flex justify-content-between small mb-1">
+                        <span>0%</span>
+                        <span class="fw-bold">Réduction atteinte</span>
+                        <span>{{ details.reduction_max_type }}%</span>
+                    </div>
+                    <div class="progress" style="height: 20px;">
+                        <div class="progress-bar 
+                            {% if details.reduction_finale >= details.reduction_max_type * 0.8 %}bg-success
+                            {% elif details.reduction_finale >= details.reduction_max_type * 0.6 %}bg-warning
+                            {% else %}bg-danger{% endif %}"
+                             style="width: {{ (details.reduction_finale / details.reduction_max_type) * 100 }}%"
+                             role="progressbar">
+                            <span class="fw-bold">{{ "%.1f"|format(details.reduction_finale) }}%</span>
+                        </div>
+                    </div>
+                    <div class="text-end small text-muted mt-1">
+                        {{ "%.0f"|format((details.reduction_finale / details.reduction_max_type) * 100) }}% du potentiel max
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Interprétation simple -->
+            <div class="alert 
+                {% if details.reduction_finale >= details.reduction_max_type * 0.8 %}alert-success
+                {% elif details.reduction_finale >= details.reduction_max_type * 0.6 %}alert-warning
+                {% else %}alert-danger{% endif %} mb-3">
+                <div class="d-flex">
+                    <div class="flex-shrink-0">
+                        <i class="fas fa-{% if details.reduction_finale >= details.reduction_max_type * 0.8 %}check-circle
+                                       {% elif details.reduction_finale >= details.reduction_max_type * 0.6 %}exclamation-triangle
+                                       {% else %}times-circle{% endif %} fa-2x"></i>
+                    </div>
+                    <div class="flex-grow-1 ms-3">
+                        <h6 class="alert-heading">
+                            {% if details.reduction_finale >= details.reduction_max_type * 0.8 %}
+                            IMPACT ÉLEVÉ
+                            {% elif details.reduction_finale >= details.reduction_max_type * 0.6 %}
+                            IMPACT MODÉRÉ
+                            {% else %}
+                            IMPACT LIMITÉ
+                            {% endif %}
+                        </h6>
+                        <p class="mb-0">
+                            {% if details.type == 'Préventif' %}
+                            Ce dispositif préventif {{ 'est très efficace' if details.reduction_finale >= 60 else 'peut être amélioré' }}
+                            pour éviter la survenance du risque.
+                            {% elif details.type == 'Détectif' %}
+                            Ce dispositif détectif {{ 'permet une détection rapide' if details.reduction_finale >= 48 else 'nécessite des ajustements' }}
+                            pour limiter l'impact.
+                            {% elif details.type == 'Correctif' %}
+                            Ce dispositif correctif {{ 'est suffisamment réactif' if details.reduction_finale >= 36 else 'pourrait être plus rapide' }}
+                            pour contenir les conséquences.
+                            {% endif %}
+                        </p>
+                        {% if details.garantie_minimum %}
+                        <small class="text-muted mt-2 d-block">
+                            <i class="fas fa-star text-warning"></i> Dispositif parfait (5/5 + 5/5) - Impact optimal garanti
+                        </small>
+                        {% endif %}
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Détails du calcul (optionnel) -->
+            <div class="accordion" id="accordionCalcul">
+                <div class="accordion-item border-0">
+                    <h2 class="accordion-header">
+                        <button class="accordion-button collapsed" type="button" 
+                                data-bs-toggle="collapse" data-bs-target="#collapseDetails">
+                            <i class="fas fa-calculator me-2"></i>
+                            Voir le calcul détaillé
+                        </button>
+                    </h2>
+                    <div id="collapseDetails" class="accordion-collapse collapse" 
+                         data-bs-parent="#accordionCalcul">
+                        <div class="accordion-body pt-0">
+                            <table class="table table-sm">
+                                <tr>
+                                    <td width="40%"><strong>Type:</strong></td>
+                                    <td>{{ details.type }} (max théorique: {{ details.reduction_max_type }}%)</td>
+                                </tr>
+                                <tr>
+                                    <td><strong>Scores:</strong></td>
+                                    <td>Efficacité: {{ details.efficacite }}/5, Couverture: {{ details.couverture }}/5</td>
+                                </tr>
+                                <tr>
+                                    <td><strong>Score pondéré:</strong></td>
+                                    <td>({{ details.efficacite }}/5×60%) + ({{ details.couverture }}/5×40%) = {{ details.score_pondere|round(1) }}/100</td>
+                                </tr>
+                                <tr>
+                                    <td><strong>Base réduction:</strong></td>
+                                    <td>{{ details.score_pondere|round(1) }}/100 × {{ details.reduction_max_type }}% = {{ details.reduction_calcul|round(1) }}%</td>
+                                </tr>
+                                <tr>
+                                    <td><strong>Facteurs:</strong></td>
+                                    <td>
+                                        Nature ({{ details.nature }}): ×{{ details.facteur_nature }}<br>
+                                        Fréquence ({{ details.frequence }}): ×{{ details.facteur_frequence }}
+                                    </td>
+                                </tr>
+                                {% if details.garantie_minimum %}
+                                <tr class="table-warning">
+                                    <td><strong>Garantie minimum:</strong></td>
+                                    <td>Dispositif parfait → minimum {{ details.reduction_max_type * 0.8 }}%</td>
+                                </tr>
+                                {% endif %}
+                                <tr class="table-primary fw-bold">
+                                    <td><strong>RÉDUCTION FINALE:</strong></td>
+                                    <td>{{ details.reduction_calcul|round(1) }}% × {{ details.facteur_nature }} × {{ details.facteur_frequence }}
+                                        = <span class="text-primary">{{ details.reduction_finale }}%</span>
+                                    </td>
+                                </tr>
+                            </table>
+                            
+                            <div class="alert alert-light small mt-2">
+                                <i class="fas fa-info-circle me-1"></i>
+                                <strong>Logique:</strong> Un dispositif <strong>parfait (5+5)</strong> donne ~90% de la réduction max du type,
+                                ajusté par sa nature et fréquence.
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+        {% else %}
+            <div class="alert alert-info text-center">
+                <i class="fas fa-chart-line fa-2x mb-3 text-muted"></i>
+                <h6>Évaluation requise</h6>
+                <p class="small mb-3">Évaluez le dispositif pour calculer son impact théorique</p>
+                <a href="{{ url_for('evaluer_dispositif', dispositif_id=dispositif.id) }}" 
+                   class="btn btn-sm btn-primary">
+                    <i class="fas fa-chart-bar me-1"></i>Évaluer maintenant
+                </a>
+            </div>
+        {% endif %}
+    </div>
+</div>
+
+<!-- Modal pour upload de document -->
+<div class="modal fade" id="modalUploadDocument" tabindex="-1" aria-labelledby="modalUploadDocumentLabel" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="modalUploadDocumentLabel">Ajouter un document</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <form method="POST" action="{{ url_for('uploader_document_dispositif', dispositif_id=dispositif.id) }}" 
+                  enctype="multipart/form-data" id="formUploadDocument">
+                <div class="modal-body">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                    
+                    <div class="mb-3">
+                        <label class="form-label">Fichier :</label>
+                        <input type="file" class="form-control" name="fichier" id="fichierInput" required
+                               accept=".pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt,.jpg,.jpeg,.png">
+                        <div class="form-text">
+                            Formats acceptés : PDF, Word, Excel, PowerPoint, TXT, JPG, PNG
+                        </div>
+                    </div>
+                    
+                    <div class="mb-3">
+                        <label class="form-label">Type de document :</label>
+                        <select class="form-select" name="type_document" required>
+                            <option value="">-- Sélectionner --</option>
+                            <option value="Procédure">Procédure</option>
+                            <option value="Mode opératoire">Mode opératoire</option>
+                            <option value="Fiche de contrôle">Fiche de contrôle</option>
+                            <option value="Rapport">Rapport</option>
+                            <option value="Documentation">Documentation</option>
+                            <option value="Autre">Autre</option>
+                        </select>
+                    </div>
+                    
+                    <div class="mb-3">
+                        <label class="form-label">Description :</label>
+                        <textarea class="form-control" name="description" rows="3" 
+                                  placeholder="Description du document..."></textarea>
+                    </div>
+                    
+                    <div id="uploadProgress" style="display: none;">
+                        <div class="progress">
+                            <div class="progress-bar progress-bar-striped progress-bar-animated" 
+                                 role="progressbar" style="width: 0%"></div>
+                        </div>
+                        <div class="text-center mt-2" id="uploadStatus"></div>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Annuler</button>
+                    <button type="submit" class="btn btn-primary" id="btnUpload">
+                        <i class="fas fa-upload me-1"></i>Uploader
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<!-- Modal générique -->
+<div class="modal fade" id="genericModal" tabindex="-1" aria-labelledby="genericModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="genericModalTitle">Modal title</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body" id="genericModalBody">
+                <!-- Le contenu sera injecté ici -->
+            </div>
+            <div class="modal-footer" id="genericModalFooter">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Fermer</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+{% endblock %}
+
+{% block scripts %}
+<script>
+// Fonction pour lier un plan d'action
+function lierPlanAction(dispositifId) {
+    const modal = new bootstrap.Modal(document.getElementById('genericModal'));
+    document.getElementById('genericModalTitle').innerHTML = 'Lier à un plan d\'action';
+    document.getElementById('genericModalBody').innerHTML = `
+        <div class="text-center py-4">
+            <div class="spinner-border text-primary" role="status">
+                <span class="visually-hidden">Chargement...</span>
+            </div>
+            <p class="mt-2">Chargement des plans d'action...</p>
+        </div>
+    `;
+    document.getElementById('genericModalFooter').innerHTML = '';
+    modal.show();
+    
+    const csrfToken = document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') || '{{ csrf_token() }}';
+    
+    fetch(`/api/plans-action/disponibles?risque_id={{ dispositif.risque_id }}`, {
+        headers: {
+            'X-CSRFToken': csrfToken,
+            'Accept': 'application/json'
+        }
+    })
+    .then(response => {
+        if (!response.ok) {
+            throw new Error(`Erreur HTTP: ${response.status}`);
+        }
+        return response.json();
+    })
+    .then(data => {
+        console.log('API Response:', data);
+        
+        if (data.success && data.plans && data.plans.length > 0) {
+            let options = '<option value="">-- Choisir un plan d\'action --</option>';
+            
+            data.plans.forEach(plan => {
+                if (!plan.dispositif_id || plan.dispositif_id == dispositifId) {
+                    const statutBadge = plan.statut === 'en_cours' ? '🟡' : 
+                                      plan.statut === 'en_retard' ? '🔴' : 
+                                      plan.statut === 'termine' ? '🟢' : '⚪';
+                    
+                    const alreadyLinked = plan.dispositif_id == dispositifId ? ' (déjà lié)' : '';
+                    
+                    options += `<option value="${plan.id}">
+                        ${statutBadge} ${plan.reference} - ${plan.nom}
+                        ${plan.date_echeance ? `(échéance: ${plan.date_echeance})` : ''}
+                        ${alreadyLinked}
+                    </option>`;
+                }
+            });
+            
+            const html = `
+                <form method="POST" action="/dispositif/${dispositifId}/lier-plan-action" id="formLiaison">
+                    <input type="hidden" name="csrf_token" value="${csrfToken}">
+                    
+                    <div class="mb-3">
+                        <label class="form-label fw-bold">Sélectionner un plan d'action :</label>
+                        <select class="form-select" name="plan_action_id" required>
+                            ${options}
+                        </select>
+                        <small class="text-muted">
+                            Seuls les plans disponibles (non liés à d'autres dispositifs) sont affichés.
+                        </small>
+                    </div>
+                    
+                    <div class="alert alert-info">
+                        <i class="fas fa-info-circle me-2"></i>
+                        <strong>Information :</strong> Vous pouvez également 
+                        <a href="{{ url_for('nouveau_plan_action_pour_risque', risque_id=dispositif.risque_id) }}?dispositif_id=${dispositifId}" 
+                           class="alert-link" target="_blank">
+                            créer un nouveau plan d'action
+                        </a>
+                    </div>
+                </form>
+            `;
+            
+            document.getElementById('genericModalBody').innerHTML = html;
+            document.getElementById('genericModalFooter').innerHTML = `
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Annuler</button>
+                <button type="submit" class="btn btn-primary" form="formLiaison">
+                    Lier le plan
+                </button>
+            `;
+            
+        } else {
+            const html = `
+                <div class="alert alert-warning">
+                    <i class="fas fa-exclamation-triangle me-2"></i>
+                    <strong>Aucun plan d'action disponible</strong>
+                    <p class="mb-0 mt-2">Il n'y a pas de plan d'action disponible pour ce risque, ou tous les plans sont déjà liés à d'autres dispositifs.</p>
+                </div>
+                
+                <div class="text-center mt-3">
+                    <a href="{{ url_for('nouveau_plan_action_pour_risque', risque_id=dispositif.risque_id) }}?dispositif_id=${dispositifId}" 
+                       class="btn btn-primary">
+                        <i class="fas fa-plus me-1"></i> Créer un nouveau plan d'action
+                    </a>
+                </div>
+            `;
+            
+            document.getElementById('genericModalBody').innerHTML = html;
+            document.getElementById('genericModalFooter').innerHTML = `
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Fermer</button>
+            `;
+        }
+    })
+    .catch(error => {
+        console.error('Erreur:', error);
+        
+        document.getElementById('genericModalBody').innerHTML = `
+            <div class="alert alert-danger">
+                <i class="fas fa-exclamation-triangle me-2"></i>
+                <strong>Erreur de chargement</strong>
+                <p class="mb-0 mt-2">Impossible de charger la liste des plans d'action.</p>
+                <small>${error.message}</small>
+            </div>
+            
+            <div class="text-center mt-3">
+                <a href="{{ url_for('nouveau_plan_action_pour_risque', risque_id=dispositif.risque_id) }}?dispositif_id=${dispositifId}" 
+                   class="btn btn-primary">
+                    <i class="fas fa-plus me-1"></i> Créer un nouveau plan d'action
+                </a>
+            </div>
+        `;
+        document.getElementById('genericModalFooter').innerHTML = `
+            <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Fermer</button>
+        `;
+    });
+}
+
+// Fonction pour ajouter une vérification
+function ajouterVerification() {
+    console.log('Tentative d\'ajout de vérification');
+    
+    if (typeof bootstrap === 'undefined') {
+        alert('Erreur: Bootstrap JS n\'est pas chargé. Rechargez la page.');
+        return;
+    }
+    
+    const modal = new bootstrap.Modal(document.getElementById('genericModal'));
+    document.getElementById('genericModalTitle').innerHTML = 'Nouvelle vérification';
+    document.getElementById('genericModalBody').innerHTML = `
+        <div class="text-center py-4">
+            <div class="spinner-border text-primary" role="status">
+                <span class="visually-hidden">Chargement...</span>
+            </div>
+            <p class="mt-2">Chargement du formulaire...</p>
+        </div>
+    `;
+    document.getElementById('genericModalFooter').innerHTML = `
+        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Annuler</button>
+    `;
+    modal.show();
+    
+    fetch(`/dispositif/{{ dispositif.id }}/verification/formulaire`)
+        .then(response => {
+            if (!response.ok) {
+                throw new Error(`Erreur ${response.status}: ${response.statusText}`);
+            }
+            return response.text();
+        })
+        .then(html => {
+            document.getElementById('genericModalBody').innerHTML = html;
+            document.getElementById('genericModalFooter').innerHTML = `
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Annuler</button>
+                <button type="submit" class="btn btn-primary" form="formVerification">Enregistrer</button>
+            `;
+        })
+        .catch(error => {
+            console.error('Erreur:', error);
+            document.getElementById('genericModalBody').innerHTML = `
+                <div class="alert alert-danger">
+                    <i class="fas fa-exclamation-triangle me-2"></i>
+                    <strong>Erreur de chargement</strong>
+                    <p class="mb-0 mt-2">Impossible de charger le formulaire de vérification.</p>
+                    <small>${error.message}</small>
+                </div>
+            `;
+        });
+}
+
+// Fonction pour modifier une vérification
+function modifierVerification(verificationId) {
+    const modal = new bootstrap.Modal(document.getElementById('genericModal'));
+    document.getElementById('genericModalTitle').innerHTML = 'Modifier la vérification';
+    
+    const verificationElement = document.getElementById(`verification-${verificationId}`);
+    const commentaireElement = document.getElementById(`commentaire-${verificationId}`);
+    const badgeElement = verificationElement.querySelector('.badge');
+    
+    const commentaire = commentaireElement ? commentaireElement.innerText.trim() : '';
+    const resultat = badgeElement ? badgeElement.innerText.trim() : '';
+    
+    const csrfToken = document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') || '{{ csrf_token() }}';
+    
+    const html = `
+        <form id="formModifVerification">
+            <input type="hidden" name="csrf_token" value="${csrfToken}">
+            <input type="hidden" name="verification_id" value="${verificationId}">
+            
+            <div class="mb-3">
+                <label class="form-label">Commentaire :</label>
+                <textarea class="form-control" name="commentaire" rows="4">${commentaire}</textarea>
+            </div>
+            
+            <div class="mb-3">
+                <label class="form-label">Résultat :</label>
+                <select class="form-select" name="resultat">
+                    <option value="Conforme" ${resultat === 'Conforme' ? 'selected' : ''}>Conforme</option>
+                    <option value="Non conforme" ${resultat === 'Non conforme' ? 'selected' : ''}>Non conforme</option>
+                    <option value="À corriger" ${resultat === 'À corriger' ? 'selected' : ''}>À corriger</option>
+                    <option value="À améliorer" ${resultat === 'À améliorer' ? 'selected' : ''}>À améliorer</option>
+                </select>
+            </div>
+        </form>
+    `;
+    
+    document.getElementById('genericModalBody').innerHTML = html;
+    document.getElementById('genericModalFooter').innerHTML = `
+        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Annuler</button>
+        <button type="button" class="btn btn-danger" onclick="supprimerVerification(${verificationId})">
+            <i class="fas fa-trash"></i> Supprimer
+        </button>
+        <button type="button" class="btn btn-primary" onclick="sauvegarderModification(${verificationId})">
+            <i class="fas fa-save"></i> Enregistrer
+        </button>
+    `;
+    
+    modal.show();
+}
+
+// Sauvegarder modification de vérification
+function sauvegarderModification(verificationId) {
+    const form = document.getElementById('formModifVerification');
+    const formData = new FormData(form);
+    const data = {
+        commentaire: formData.get('commentaire'),
+        resultat: formData.get('resultat')
+    };
+    
+    const csrfToken = formData.get('csrf_token');
+    
+    fetch(`/api/verification/${verificationId}`, {
+        method: 'PUT',
+        headers: {
+            'Content-Type': 'application/json',
+            'X-CSRFToken': csrfToken
+        },
+        body: JSON.stringify(data)
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            location.reload();
+        } else {
+            alert('Erreur: ' + (data.error || 'Modification échouée'));
+        }
+    })
+    .catch(error => {
+        console.error('Error:', error);
+        alert('Erreur lors de la modification');
+    });
+}
+
+// Supprimer une vérification
+function supprimerVerification(verificationId) {
+    if (confirm('Supprimer cette vérification ? Cette action est irréversible.')) {
+        const csrfToken = document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') || '{{ csrf_token() }}';
+        
+        fetch(`/api/verification/${verificationId}`, {
+            method: 'DELETE',
+            headers: {
+                'X-CSRFToken': csrfToken
+            }
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                // Supprimer l'élément de la liste sans recharger toute la page
+                const element = document.getElementById(`verification-${verificationId}`);
+                if (element) {
+                    element.remove();
+                }
+                
+                // Mettre à jour le message si plus de vérifications
+                const liste = document.getElementById('listeVerifications');
+                if (liste && liste.children.length === 0) {
+                    liste.innerHTML = `
+                        <div class="text-center py-4 text-muted">
+                            <i class="fas fa-clipboard-check fa-3x mb-3"></i>
+                            <p>Aucune vérification enregistrée</p>
+                            <button class="btn btn-sm btn-primary" onclick="ajouterVerification()">
+                                <i class="fas fa-plus me-1"></i>Ajouter la première vérification
+                            </button>
+                        </div>
+                    `;
+                }
+                
+                // Fermer la modal si elle est ouverte
+                const modal = bootstrap.Modal.getInstance(document.getElementById('genericModal'));
+                if (modal) modal.hide();
+                
+                alert('Vérification supprimée avec succès');
+            } else {
+                alert('Erreur: ' + data.error);
+            }
+        })
+        .catch(error => {
+            console.error('Error:', error);
+            alert('Erreur lors de la suppression');
+        });
+    }
+}
+
+// Créer un plan d'action automatique
+function creerPlanActionAutomatique(dispositifId) {
+    if (confirm('Créer automatiquement un plan d\'action pour améliorer ce dispositif ?\n\nUn plan basique sera généré avec une échéance dans 30 jours.')) {
+        const csrfToken = document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') || '{{ csrf_token() }}';
+        
+        fetch(`/api/dispositif/${dispositifId}/creer-plan-action`, {
+            method: 'POST',
+            headers: {
+                'X-CSRFToken': csrfToken,
+                'Content-Type': 'application/json'
+            }
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                alert(data.message);
+                location.reload(); // Recharger pour voir le nouveau plan lié
+            } else {
+                alert('Erreur: ' + data.message);
+            }
+        })
+        .catch(error => {
+            console.error('Error:', error);
+            alert('Erreur lors de la création du plan d\'action');
+        });
+    }
+}
+
+// Gestion de l'upload de document
+document.addEventListener('DOMContentLoaded', function() {
+    const formUpload = document.getElementById('formUploadDocument');
+    const fichierInput = document.getElementById('fichierInput');
+    const uploadProgress = document.getElementById('uploadProgress');
+    const uploadStatus = document.getElementById('uploadStatus');
+    const btnUpload = document.getElementById('btnUpload');
+    
+    if (formUpload) {
+        formUpload.addEventListener('submit', function(e) {
+            e.preventDefault();
+            
+            const formData = new FormData(this);
+            const file = fichierInput.files[0];
+            
+            if (!file) {
+                alert('Veuillez sélectionner un fichier');
+                return;
+            }
+            
+            // Vérifier la taille du fichier (max 16MB)
+            if (file.size > 16 * 1024 * 1024) {
+                alert('Le fichier est trop volumineux. Maximum 16MB.');
+                return;
+            }
+            
+            // Afficher la progression
+            uploadProgress.style.display = 'block';
+            uploadStatus.innerHTML = 'Upload en cours...';
+            btnUpload.disabled = true;
+            
+            // Simulation de progression (pour les petits fichiers)
+            const progressBar = uploadProgress.querySelector('.progress-bar');
+            let progress = 0;
+            const interval = setInterval(() => {
+                progress += 10;
+                progressBar.style.width = progress + '%';
+                if (progress >= 90) clearInterval(interval);
+            }, 100);
+            
+            // Envoi réel
+            fetch(this.action, {
+                method: 'POST',
+                body: formData
+            })
+            .then(response => {
+                clearInterval(interval);
+                progressBar.style.width = '100%';
+                
+                if (response.redirected) {
+                    // Flask a redirigé (généralement après succès)
+                    uploadStatus.innerHTML = '<span class="text-success">Upload réussi ! Redirection...</span>';
+                    setTimeout(() => {
+                        window.location.href = response.url;
+                    }, 1000);
+                } else {
+                    return response.text().then(text => {
+                        // Essayer de parser comme JSON
+                        try {
+                            const data = JSON.parse(text);
+                            if (data.success) {
+                                uploadStatus.innerHTML = '<span class="text-success">' + data.message + '</span>';
+                                setTimeout(() => {
+                                    location.reload();
+                                }, 1500);
+                            } else {
+                                throw new Error(data.error || 'Erreur inconnue');
+                            }
+                        } catch (e) {
+                            // Ce n'est pas du JSON, afficher le texte
+                            uploadStatus.innerHTML = '<span class="text-danger">Erreur: ' + text + '</span>';
+                            btnUpload.disabled = false;
+                        }
+                    });
+                }
+            })
+            .catch(error => {
+                clearInterval(interval);
+                console.error('Upload error:', error);
+                uploadStatus.innerHTML = '<span class="text-danger">Erreur: ' + error.message + '</span>';
+                btnUpload.disabled = false;
+            });
+        });
+    }
+    
+    // Débogage
+    console.log('Dispositif ID:', {{ dispositif.id }});
+    console.log('Risque ID:', {{ dispositif.risque_id }});
+    
+    // Exposer les fonctions pour débogage
+    window.testLierPlanAction = lierPlanAction;
+    window.testAjouterVerification = ajouterVerification;
+});
+</script>
+{% endblock %}
