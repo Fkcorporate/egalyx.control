@@ -2420,7 +2420,6 @@ class PlanAction(db.Model):
     createur = db.relationship('User', foreign_keys=[created_by])
     sous_actions = db.relationship('SousAction', backref='plan_action', lazy=True, cascade='all, delete-orphan')
     
-    # REMARQUE : N'ÉCRIVEZ PAS @property pour is_archived car c'est une vraie colonne
     
     @property
     def progression_reelle(self):
@@ -2444,6 +2443,78 @@ class PlanAction(db.Model):
                 db.session.rollback()
         
         return progression_calculee
+
+    @property
+    def etapes(self):
+        """Propriété pour compatibilité - retourne les sous-actions"""
+        return self.sous_actions
+    
+    @property
+    def ordre(self):
+        """Propriété pour compatibilité - retourne l'ID comme ordre"""
+        return self.id
+    
+    @property
+    def get_etapes_ordonnees(self):
+        """Retourne les étapes/sous-actions triées"""
+        if self.sous_actions:
+            # Trier par date_fin_prevue, puis par création
+            return sorted(self.sous_actions, 
+                         key=lambda x: (x.date_fin_prevue or date.max, x.created_at))
+        return []
+    
+    def get_progression_detaillee(self):
+        """Calcule la progression détaillée"""
+        if not self.sous_actions:
+            return {
+                'pourcentage': 0,
+                'terminees': 0,
+                'total': 0,
+                'en_cours': 0,
+                'a_faire': 0
+            }
+        
+        total = len(self.sous_actions)
+        terminees = len([sa for sa in self.sous_actions if sa.statut == 'termine'])
+        en_cours = len([sa for sa in self.sous_actions if sa.statut == 'en_cours'])
+        a_faire = len([sa for sa in self.sous_actions if sa.statut == 'a_faire'])
+        
+        return {
+            'pourcentage': round((terminees / total) * 100) if total > 0 else 0,
+            'terminees': terminees,
+            'total': total,
+            'en_cours': en_cours,
+            'a_faire': a_faire
+        }
+    
+    @property
+    def type_plan(self):
+        """Détermine le type de plan (risque ou audit)"""
+        if self.risque_id:
+            return 'risque'
+        elif self.audit_id:
+            return 'audit'
+        else:
+            return 'autre'
+    
+    @property
+    def source_info(self):
+        """Retourne les informations sur la source du plan"""
+        if self.risque_id and self.risque:
+            return {
+                'type': 'risque',
+                'reference': self.risque.reference,
+                'intitule': self.risque.intitule,
+                'url': url_for('detail_risque', id=self.risque_id)
+            }
+        elif self.audit_id and self.audit:
+            return {
+                'type': 'audit',
+                'reference': self.audit.reference,
+                'titre': self.audit.titre,
+                'url': url_for('detail_audit', id=self.audit_id)
+            }
+        return {'type': 'autre', 'reference': 'N/A'}
     
     @property
     def est_en_retard(self):
