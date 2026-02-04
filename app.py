@@ -22858,67 +22858,103 @@ def uploader_document_dispositif(dispositif_id):
 @app.route('/risque/<int:risque_id>/plan-action/nouveau', methods=['GET', 'POST'])
 @login_required
 def nouveau_plan_action_pour_risque(risque_id):
-    """Créer un nouveau plan d'action pour un risque"""
+    """Créer un nouveau plan d'action pour un risque - VERSION CORRIGÉE"""
+    
+    print(f"\n📝 CRÉATION PLAN D'ACTION POUR RISQUE {risque_id}")
+    print(f"   Utilisateur: {current_user.username}")
+    print(f"   Rôle: {current_user.role}")
+    print(f"   Client ID: {current_user.client_id}")
+    
+    # 1. Vérifier l'accès au risque
     risque = Risque.query.get_or_404(risque_id)
     
     if not check_client_access(risque):
+        print(f"   ❌ Accès non autorisé au risque {risque_id}")
         flash('Accès non autorisé', 'error')
         return redirect(url_for('detail_risque', id=risque_id))
     
+    print(f"   ✅ Risque accédé: {risque.reference}")
+    
+    # 2. Vérifier les permissions utilisateur
+    if not current_user.has_permission('can_manage_action_plans'):
+        print(f"   ❌ Permission 'can_manage_action_plans' manquante")
+        
+        # Autoriser les admins et managers automatiquement
+        if current_user.role in ['admin', 'super_admin', 'manager']:
+            print(f"   🔧 Forçage de la permission pour {current_user.role}")
+            if current_user.permissions is None:
+                current_user.permissions = {}
+            current_user.permissions['can_manage_action_plans'] = True
+            current_user.permissions['can_view_action_plans'] = True
+            try:
+                db.session.commit()
+                flash('🔧 Permissions ajustées automatiquement', 'info')
+            except:
+                db.session.rollback()
+        else:
+            flash('Permission "Gérer les plans d\'action" requise', 'error')
+            return redirect(url_for('detail_risque', id=risque_id))
+    
+    # 3. Vérifier l'accès au module plans d'action
+    if current_user.role != 'super_admin' and current_user.client and current_user.client.formule:
+        formule = current_user.client.formule
+        
+        # Vérifier l'accès au module plans d'action
+        module_names_to_check = ['plans_action', 'audit_interne', 'audit']
+        has_access = False
+        
+        for module_name in module_names_to_check:
+            if module_name in formule.modules:
+                if formule.modules[module_name]:
+                    has_access = True
+                    print(f"   ✅ Module trouvé: '{module_name}'")
+                    break
+        
+        if not has_access:
+            print(f"   ❌ Aucun module plans d'action activé")
+            flash('Le module "Plans d\'action" n\'est pas inclus dans votre formule', 'error')
+            return redirect(url_for('detail_risque', id=risque_id))
+    
+    # 4. Initialiser le formulaire
     form = SimplePlanActionForm()
     
-    # Pré-remplir les choix
+    # 5. Pré-remplir les choix des utilisateurs
     utilisateurs = get_client_filter(User).filter_by(is_active=True).all()
     form.responsable_id.choices = [(0, 'Non assigné')] + \
         [(u.id, f"{u.username} - {u.role}") for u in utilisateurs]
     
-    # Pré-remplir les valeurs par défaut
+    # 6. Pré-remplir les valeurs par défaut (GET request)
     if request.method == 'GET':
         dispositif_id = request.args.get('dispositif_id')
+        
         if dispositif_id:
             form.dispositif_id.data = dispositif_id
-            
             dispositif = DispositifMaitrise.query.get(dispositif_id)
+            
             if dispositif and check_client_access(dispositif):
                 form.nom.data = f"Amélioration dispositif {dispositif.reference}"
                 form.description.data = f"Plan d'action pour améliorer le dispositif de maîtrise {dispositif.reference}: {dispositif.nom}\n\nObjectif: Augmenter l'efficacité du dispositif."
         
         # Pré-remplir l'ID du risque
         form.risque_id.data = risque_id
-    
-    if form.validate_on_submit():
-        # 1. Créer ou récupérer un audit par défaut
-        try:
-            audit_par_defaut = get_client_filter(Audit)\
-                .filter_by(reference='AUDIT-DEFAULT')\
-                .first()
-            
-            if not audit_par_defaut:
-                audit_par_defaut = Audit(
-                    reference='AUDIT-DEFAULT',
-                    nom='Audit Général (Plans Action Risques)',
-                    description='Audit par défaut pour les plans d\'action liés aux risques',
-                    date_debut=datetime.utcnow().date(),
-                    date_fin_prevue=datetime.utcnow().date(),
-                    statut='termine',
-                    type_audit='interne',
-                    portee='Générale',
-                    created_by=current_user.id,
-                    client_id=current_user.client_id
-                )
-                db.session.add(audit_par_defaut)
-                db.session.commit()
-        except Exception as e:
-            print(f"⚠️ Erreur création audit par défaut: {e}")
-            # Essayer de prendre le premier audit existant
-            audit_par_defaut = get_client_filter(Audit).first()
-            if not audit_par_defaut:
-                flash('Impossible de créer un plan d\'action. Aucun audit disponible.', 'error')
-                return redirect(url_for('voir_plans_action_risque', risque_id=risque_id))
         
-        # 2. Générer une référence automatique
+        # Définir les dates par défaut
+        aujourdhui = datetime.now().date()
+        form.date_debut.data = aujourdhui
+        form.date_echeance.data = aujourdhui + timedelta(days=30)  # 30 jours par défaut
+    
+    # 7. Traiter la soumission du formulaire (POST request)
+    if form.validate_on_submit():
+        print(f"\n✅ FORMULAIRE VALIDÉ")
+        print(f"   Nom: {form.nom.data}")
+        print(f"   Risque ID: {form.risque_id.data}")
+        print(f"   Responsable ID: {form.responsable_id.data}")
+        print(f"   Date début: {form.date_debut.data}")
+        print(f"   Date échéance: {form.date_echeance.data}")
+        
+        # 7.1 Générer une référence automatique
         try:
-            dernier_plan = PlanAction.query\
+            dernier_plan = get_client_filter(PlanAction)\
                 .filter(PlanAction.reference.like(f'PA-{risque.reference}-%'))\
                 .order_by(PlanAction.reference.desc())\
                 .first()
@@ -22930,55 +22966,112 @@ def nouveau_plan_action_pour_risque(risque_id):
                     num = 1
             else:
                 num = 1
-        except:
+        except Exception as e:
+            print(f"   ⚠️ Erreur génération référence: {e}")
             num = 1
         
         reference = f"PA-{risque.reference}-{num:03d}"
+        print(f"   📝 Référence générée: {reference}")
         
-        # 3. Créer le plan d'action avec l'audit par défaut
+        # 7.2 Créer le plan d'action - IMPORTANT: audit_id = NULL
         plan_action = PlanAction(
             reference=reference,
             nom=form.nom.data,
             description=form.description.data,
-            risque_id=risque_id,
-            audit_id=audit_par_defaut.id,  # Utiliser l'audit par défaut
+            risque_id=risque_id,  # ✅ Directement lié au risque
             dispositif_id=form.dispositif_id.data if form.dispositif_id.data else None,
             responsable_id=form.responsable_id.data if form.responsable_id.data != 0 else None,
             date_debut=form.date_debut.data,
             date_fin_prevue=form.date_echeance.data,
             date_fin_reelle=None,
             statut='en_cours',
-            priorite=form.priorite.data,
+            priorite=form.priorite.data if hasattr(form, 'priorite') else 'moyenne',
             pourcentage_realisation=0,
             created_by=current_user.id,
             client_id=current_user.client_id
+            # ✅ audit_id reste NULL - c'est autorisé par votre modèle
         )
         
+        print(f"   🏗️ Plan d'action créé (sans audit)")
+        
         try:
+            # 7.3 Sauvegarder le plan d'action
             db.session.add(plan_action)
             db.session.commit()
+            print(f"   💾 Plan d'action sauvegardé: ID {plan_action.id}")
             
-            # 4. Lier le dispositif au plan créé
+            # 7.4 Lier le dispositif au plan créé (si spécifié)
             dispositif_id = form.dispositif_id.data
             if dispositif_id:
                 dispositif = DispositifMaitrise.query.get(dispositif_id)
                 if dispositif and check_client_access(dispositif):
                     dispositif.plan_action_id = plan_action.id
                     db.session.commit()
+                    print(f"   🔗 Dispositif lié: {dispositif.reference}")
             
-            flash('Plan d\'action créé avec succès', 'success')
-            # REDIRECTION VERS LA LISTE DES PLANS D'ACTION
-            return redirect(url_for('voir_plans_action_risque', risque_id=risque_id))
+            # 7.5 Créer une notification pour le responsable
+            try:
+                if plan_action.responsable_id and plan_action.responsable_id != current_user.id:
+                    notification = Notification(
+                        type_notification=Notification.TYPE_PLAN,
+                        titre=f"Nouveau plan d'action: {plan_action.nom}",
+                        message=f"Vous avez été assigné comme responsable du plan d'action '{plan_action.nom}' pour le risque {risque.reference}",
+                        destinataire_id=plan_action.responsable_id,
+                        entite_type='plan_action',
+                        entite_id=plan_action.id,
+                        urgence=Notification.URGENCE_NORMAL,
+                        client_id=current_user.client_id
+                    )
+                    db.session.add(notification)
+                    db.session.commit()
+                    print(f"   🔔 Notification créée pour responsable")
+            except Exception as e:
+                print(f"   ⚠️ Erreur création notification: {e}")
+            
+            # 7.6 Journaliser l'action
+            try:
+                journal = JournalActivite(
+                    utilisateur_id=current_user.id,
+                    action=f"Création plan d'action risque: {plan_action.reference}",
+                    details={
+                        'plan_id': plan_action.id,
+                        'plan_nom': plan_action.nom,
+                        'risque_id': risque.id,
+                        'risque_reference': risque.reference,
+                        'dispositif_id': dispositif_id
+                    },
+                    entite_type='plan_action',
+                    entite_id=plan_action.id,
+                    ip_address=request.remote_addr,
+                    user_agent=request.user_agent.string,
+                    client_id=current_user.client_id
+                )
+                db.session.add(journal)
+                db.session.commit()
+                print(f"   📝 Journal d'activité créé")
+            except Exception as e:
+                print(f"   ⚠️ Erreur journal: {e}")
+            
+            flash(f'✅ Plan d\'action "{plan_action.nom}" créé avec succès', 'success')
+            print(f"   🎉 REDIRECTION vers détails du plan")
+            
+            # 7.7 Rediriger vers le détail du nouveau plan
+            return redirect(url_for('detail_plan_action_risque', plan_id=plan_action.id))
             
         except Exception as e:
             db.session.rollback()
-            print(f"❌ Erreur création plan: {e}")
-            flash(f'Erreur: {str(e)}', 'error')
+            print(f"   ❌ ERREUR CRITIQUE lors de la création: {str(e)}")
+            print(f"   Traceback: {traceback.format_exc()}")
+            flash(f'❌ Erreur lors de la création du plan d\'action: {str(e)}', 'error')
+    
+    # 8. Afficher le formulaire (GET ou formulaire invalide)
+    print(f"\n📋 AFFICHAGE FORMULAIRE")
     
     return render_template('plans_action/form_simple.html',
                          form=form,
                          risque=risque,
-                         action='creer')
+                         action='creer',
+                         current_user=current_user)
 
 @app.route('/plan-action-risque/<int:plan_id>')
 @login_required
@@ -34269,160 +34362,189 @@ def ajouter_audit():
 @csrf.exempt
 @login_required
 def liste_plans_action():
-    """Liste de tous les plans d'action d'audit avec isolation - VERSION CORRIGÉE"""
+    """Liste de tous les plans d'action avec distinction risque/audit - VERSION CORRIGÉE"""
     
     print(f"\n🔍 ACCÈS PLANS D'ACTION - Utilisateur: {current_user.username}")
     print(f"   Rôle: {current_user.role}")
+    print(f"   Client ID: {current_user.client_id}")
     
-    # 1. SUPER ADMIN : TOUJOURS AUTORISÉ
-    if current_user.role == 'super_admin':
-        print("   ✅ Super admin - accès immédiat")
-        # Continue...
-    
-    # 2. VÉRIFICATION SIMPLIFIÉE
-    elif current_user.client and current_user.client.formule:
-        formule = current_user.client.formule
-        
-        print(f"   📦 Formule: {formule.nom}")
-        print(f"   Modules: {list(formule.modules.keys())}")
-        
-        # Vérifier avec PLUSIEURS noms possibles
-        module_names_to_check = [
-            'audit_interne',  # Nom dans la base
-            'audit',          # Nom possible
-            'plans_action',   # Module spécifique
-            'audit_plans'     # Autre nom possible
-        ]
-        
-        has_access = False
-        found_module = None
-        
-        for module_name in module_names_to_check:
-            if module_name in formule.modules:
-                if formule.modules[module_name]:
-                    has_access = True
-                    found_module = module_name
-                    print(f"   ✅ Module trouvé: '{module_name}' = {formule.modules[module_name]}")
-                    break
-                else:
-                    print(f"   ❌ Module '{module_name}' existe mais désactivé")
-        
-        if not has_access:
-            print(f"   ❌ Aucun module d'audit/plans activé")
+    # Vérifier l'accès au module plans d'action
+    if current_user.role != 'super_admin':
+        if current_user.client and current_user.client.formule:
+            formule = current_user.client.formule
             
-            # Message clair
-            flash(f'Le module "Plans d\'action" n\'est pas inclus dans votre formule {formule.nom}', 'error')
+            # Vérifier l'accès au module plans d'action
+            module_names_to_check = ['plans_action', 'audit_interne', 'audit']
+            has_access = False
             
-            # Redirection simple
-            return redirect(url_for('dashboard'))
+            for module_name in module_names_to_check:
+                if module_name in formule.modules:
+                    if formule.modules[module_name]:
+                        has_access = True
+                        print(f"   ✅ Module trouvé: '{module_name}'")
+                        break
+            
+            if not has_access:
+                print(f"   ❌ Aucun module plans d'action activé")
+                flash('Le module "Plans d\'action" n\'est pas inclus dans votre formule', 'error')
+                return redirect(url_for('dashboard'))
     
-    # 3. VÉRIFICATION PERMISSION UTILISATEUR
-    # Même si le module existe, vérifier si l'utilisateur a la permission
-    if not current_user.has_permission('can_manage_action_plans'):
-        print(f"   ❌ Permission 'can_manage_action_plans' manquante")
+    # Vérifier la permission utilisateur
+    if not current_user.has_permission('can_view_action_plans'):
+        print(f"   ❌ Permission 'can_view_action_plans' manquante")
         
-        # FORCER la permission si c'est un admin
+        # Autoriser les admins automatiquement
         if current_user.role in ['admin', 'super_admin']:
             print(f"   🔧 Forçage de la permission pour admin")
             if current_user.permissions is None:
                 current_user.permissions = {}
-            current_user.permissions['can_manage_action_plans'] = True
             current_user.permissions['can_view_action_plans'] = True
             db.session.commit()
-            flash('🔧 Permissions ajustées automatiquement', 'info')
         else:
-            flash('Permission "can_manage_action_plans" requise', 'error')
+            flash('Permission "Voir les plans d\'action" requise', 'error')
             return redirect(url_for('dashboard'))
     
-    print(f"   🎉 ACCÈS AUTORISÉ - continuation...")
+    print(f"   🎉 ACCÈS AUTORISÉ")
     
-    # ============================================
-    # LE RESTE DE VOTRE CODE EXISTANT (inchangé)
-    # ============================================
+    # Récupérer le filtre par type
+    type_filtre = request.args.get('type', 'tous')
+    filtre_statut = request.args.get('statut', 'tous')
+    tri = request.args.get('tri', 'date_desc')
     
-    # CORRECTION : Utiliser get_client_filter
-    plans_action = get_client_filter(PlanAction)\
-        .order_by(PlanAction.created_at.desc())\
-        .all()
+    # Construire la requête de base
+    query = get_client_filter(PlanAction)
     
-    # Vérifier l'accès pour chaque plan
+    # Appliquer le filtre par type
+    if type_filtre == 'audit':
+        query = query.filter(PlanAction.audit_id.isnot(None))
+        print(f"   📋 Filtre: Plans d'audit uniquement")
+    elif type_filtre == 'risque':
+        query = query.filter(PlanAction.risque_id.isnot(None))
+        print(f"   📋 Filtre: Plans de risque uniquement")
+    else:
+        print(f"   📋 Filtre: Tous les plans")
+    
+    # Appliquer le filtre par statut
+    if filtre_statut != 'tous':
+        query = query.filter(PlanAction.statut == filtre_statut)
+        print(f"   📋 Statut: {filtre_statut}")
+    
+    # Récupérer tous les plans
+    plans_action = query.all()
+    
+    # Vérifier l'accès pour chaque plan et préparer les données
     accessible_plans = []
     for plan in plans_action:
         if check_client_access(plan):
-            accessible_plans.append(plan)
+            # Créer un dictionnaire avec les données du plan
+            plan_data = {
+                'obj': plan,  # L'objet original
+                'type_plan': 'audit' if plan.audit_id else 'risque' if plan.risque_id else 'autre',
+                'jours_restants': None,
+                'etat_delai': 'non_defini',
+                'jours_retard': 0,
+                'pourcentage_global': 0,
+                'source': None
+            }
+            
+            # Récupérer la source (audit ou risque)
+            if plan.audit_id:
+                plan_data['source'] = get_client_filter(Audit).get(plan.audit_id)
+            elif plan.risque_id:
+                plan_data['source'] = get_client_filter(Risque).get(plan.risque_id)
+            
+            accessible_plans.append(plan_data)
     
-    # Calculer les dates d'échéance et retards
+    # Calculer les statistiques
     aujourdhui = datetime.now().date()
-    for plan in accessible_plans:
+    stats = {
+        'total': len(accessible_plans),
+        'audit': len([p for p in accessible_plans if p['type_plan'] == 'audit']),
+        'risque': len([p for p in accessible_plans if p['type_plan'] == 'risque']),
+        'autre': len([p for p in accessible_plans if p['type_plan'] == 'autre']),
+        'en_attente': len([p for p in accessible_plans if p['obj'].statut == 'en_attente']),
+        'en_cours': len([p for p in accessible_plans if p['obj'].statut == 'en_cours']),
+        'termines': len([p for p in accessible_plans if p['obj'].statut == 'termine']),
+        'suspendus': len([p for p in accessible_plans if p['obj'].statut == 'suspendu']),
+        'annules': len([p for p in accessible_plans if p['obj'].statut == 'annule']),
+        'urgences': 0,
+        'en_retard': 0,
+        'moyenne_realisation': 0
+    }
+    
+    # Calculer les dates d'échéance et progression pour chaque plan
+    total_realisation = 0
+    
+    for plan_data in accessible_plans:
+        plan = plan_data['obj']
+        
         # Calculer les jours restants avant échéance
         if plan.date_fin_prevue:
             jours_restants = (plan.date_fin_prevue - aujourdhui).days
-            plan.jours_restants = jours_restants
+            plan_data['jours_restants'] = jours_restants
             
-            # Déterminer le statut de délai
+            # Déterminer l'état de délai
             if jours_restants < 0:
-                plan.etat_delai = 'retarde'
-                plan.jours_retard = abs(jours_restants)
+                plan_data['etat_delai'] = 'retarde'
+                plan_data['jours_retard'] = abs(jours_restants)
+                stats['en_retard'] += 1
             elif jours_restants <= 7:
-                plan.etat_delai = 'urgence'
+                plan_data['etat_delai'] = 'urgence'
+                stats['urgences'] += 1
             elif jours_restants <= 30:
-                plan.etat_delai = 'a_suivre'
+                plan_data['etat_delai'] = 'a_suivre'
             else:
-                plan.etat_delai = 'ok'
+                plan_data['etat_delai'] = 'ok'
         else:
-            plan.jours_restants = None
-            plan.etat_delai = 'non_defini'
+            plan_data['jours_restants'] = None
+            plan_data['etat_delai'] = 'non_defini'
         
-        # Calculer le pourcentage de réalisation basé sur les sous-actions
+        # Calculer la progression
         if hasattr(plan, 'sous_actions') and plan.sous_actions:
             total_sous_actions = len(plan.sous_actions)
-            sous_actions_terminees = len([sa for sa in plan.sous_actions 
-                                         if sa.pourcentage_realisation == 100])
             if total_sous_actions > 0:
-                plan.pourcentage_global = round((sous_actions_terminees / total_sous_actions) * 100)
+                sous_actions_terminees = len([sa for sa in plan.sous_actions 
+                                             if sa.statut == 'termine'])
+                plan_data['pourcentage_global'] = round((sous_actions_terminees / total_sous_actions) * 100)
             else:
-                plan.pourcentage_global = 0
+                plan_data['pourcentage_global'] = 0
         else:
-            plan.pourcentage_global = 0
+            plan_data['pourcentage_global'] = plan.pourcentage_realisation or 0
+        
+        total_realisation += plan_data['pourcentage_global']
     
-    # Statistiques pour le dashboard
-    stats = {
-        'total': len(accessible_plans),
-        'en_attente': len([p for p in accessible_plans if p.statut == 'en_attente']),
-        'en_cours': len([p for p in accessible_plans if p.statut == 'en_cours']),
-        'termines': len([p for p in accessible_plans if p.statut == 'termine']),
-        'retardes': len([p for p in accessible_plans if p.statut == 'retarde']),
-        'suspendus': len([p for p in accessible_plans if p.statut == 'suspendu']),
-        'urgences': len([p for p in accessible_plans if getattr(p, 'etat_delai', '') == 'urgence']),
-        'en_retard': len([p for p in accessible_plans if getattr(p, 'etat_delai', '') == 'retarde']),
-        'moyenne_realisation': round(sum(getattr(p, 'pourcentage_global', 0) for p in accessible_plans) / max(len(accessible_plans), 1))
-    }
+    # Calculer la moyenne de réalisation
+    if accessible_plans:
+        stats['moyenne_realisation'] = round(total_realisation / len(accessible_plans))
     
-    # Filtrer les plans par statut si demandé
-    filtre_statut = request.args.get('statut')
-    if filtre_statut and filtre_statut != 'tous':
-        accessible_plans = [p for p in accessible_plans if p.statut == filtre_statut]
-    
-    # Trier par priorité
-    tri = request.args.get('tri', 'date_desc')
+    # Appliquer le tri
     if tri == 'urgence':
-        # Trier par urgence (retardés d'abord, puis urgences, puis autres)
+        # Trier par urgence (retardés d'abord, puis urgences)
         accessible_plans.sort(key=lambda p: (
-            0 if getattr(p, 'etat_delai', '') == 'retarde' else 
-            1 if getattr(p, 'etat_delai', '') == 'urgence' else 2,
-            p.date_fin_prevue or datetime.max.date()
+            0 if p['etat_delai'] == 'retarde' else 
+            1 if p['etat_delai'] == 'urgence' else 2,
+            p['obj'].date_fin_prevue or datetime.max.date()
         ))
-    elif tri == 'realisation':
-        accessible_plans.sort(key=lambda p: getattr(p, 'pourcentage_global', 0))
+    elif tri == 'realisation_asc':
+        accessible_plans.sort(key=lambda p: p['pourcentage_global'])
+    elif tri == 'realisation_desc':
+        accessible_plans.sort(key=lambda p: p['pourcentage_global'], reverse=True)
     elif tri == 'date_asc':
-        accessible_plans.sort(key=lambda p: p.date_fin_prevue or datetime.min.date())
-    else:  # date_desc par défaut
-        accessible_plans.sort(key=lambda p: p.date_fin_prevue or datetime.min.date(), reverse=True)
+        accessible_plans.sort(key=lambda p: p['obj'].date_fin_prevue or datetime.min.date())
+    elif tri == 'date_desc':
+        accessible_plans.sort(key=lambda p: p['obj'].date_fin_prevue or datetime.min.date(), reverse=True)
+    elif tri == 'priorite':
+        # Trier par priorité (si le champ existe)
+        accessible_plans.sort(key=lambda p: (
+            {'critique': 0, 'haute': 1, 'moyenne': 2, 'faible': 3}.get(getattr(p['obj'], 'priorite', 'moyenne'), 2),
+            p['obj'].date_fin_prevue or datetime.min.date()
+        ))
     
     return render_template('audit/plans_action.html', 
-                         plans_action=accessible_plans,
+                         plans_action=accessible_plans,  # Maintenant c'est une liste de dictionnaires
                          stats=stats,
-                         filtre_statut=filtre_statut or 'tous',
+                         type_filtre=type_filtre,
+                         filtre_statut=filtre_statut,
                          tri=tri,
                          aujourdhui=aujourdhui,
                          current_user=current_user)
@@ -40173,11 +40295,10 @@ def supprimer_sous_action(sous_action_id):
 
 from datetime import datetime  # Ajoutez ceci en haut du fichier app.py
 
-
 @app.route('/audit/<int:audit_id>/rapport-complet')
 @login_required
 def rapport_audit_complet(audit_id):
-    """Générer un rapport complet de l'audit avec gestion des fichiers"""
+    """Générer un rapport complet de l'audit avec gestion des fichiers - VERSION CORRIGÉE"""
     
     # Récupérer l'audit avec vérification d'accès client
     audit = get_client_object_or_404(Audit, audit_id)
@@ -40195,6 +40316,8 @@ def rapport_audit_complet(audit_id):
         flash('Vous n\'avez pas les permissions pour voir ce rapport', 'error')
         return redirect(url_for('liste_audits'))
     
+    print(f"\n📊 GÉNÉRATION RAPPORT AUDIT {audit.reference}")
+    
     # Récupérer toutes les données de l'audit
     constatations = get_client_filter(Constatation)\
         .filter_by(audit_id=audit.id, is_archived=False)\
@@ -40204,9 +40327,29 @@ def rapport_audit_complet(audit_id):
         .filter_by(audit_id=audit.id)\
         .order_by(Recommandation.created_at.desc()).all()
     
-    plans_action = get_client_filter(PlanAction)\
+    # Récupérer les plans d'action liés à cet audit
+    plans_action_audit = get_client_filter(PlanAction)\
         .filter_by(audit_id=audit.id)\
         .order_by(PlanAction.created_at.desc()).all()
+    
+    # Récupérer les risques liés à cet audit
+    risques_lies = []
+    for recommandation in recommandations:
+        if recommandation.risque_id:
+            risque = get_client_filter(Risque).get(recommandation.risque_id)
+            if risque and risque not in risques_lies:
+                risques_lies.append(risque)
+    
+    # Récupérer les plans d'action liés aux risques de cet audit
+    plans_action_risque = []
+    risque_ids = [r.id for r in risques_lies]
+    if risque_ids:
+        plans_action_risque = get_client_filter(PlanAction)\
+            .filter(PlanAction.risque_id.in_(risque_ids))\
+            .order_by(PlanAction.created_at.desc()).all()
+    
+    # Combiner tous les plans d'action
+    tous_plans_action = list(plans_action_audit) + list(plans_action_risque)
     
     # Récupérer les utilisateurs pour les relations
     createur_audit = User.query.get(audit.created_by) if audit.created_by else None
@@ -40257,58 +40400,6 @@ def rapport_audit_complet(audit_id):
         (audit.equipe_audit_ids and str(current_user.id) in audit.equipe_audit_ids.split(','))
     )
     
-    peut_uploader = peut_modifier or (
-        audit.observateurs_ids and str(current_user.id) in audit.observateurs_ids.split(',')
-    )
-    
-    # Récupérer les recommandations globales dynamiques
-    recommandations_globales = []
-    try:
-        from models import RecommandationGlobale
-        recommandations_globales = RecommandationGlobale.query.filter_by(est_actif=True).all()
-        
-        if recommandations_globales and audit.type_audit:
-            recommandations_filtrees = [r for r in recommandations_globales 
-                                       if r.type_audit is None or r.type_audit == audit.type_audit]
-            if recommandations_filtrees:
-                recommandations_globales = recommandations_filtrees
-        
-        recommandations_globales = sorted(recommandations_globales, 
-                                         key=lambda x: (x.priorite or 1), 
-                                         reverse=True)
-        
-        recommandations_globales = [r.texte for r in recommandations_globales[:10]]
-    except ImportError:
-        recommandations_globales = [
-            "Mettre en place un suivi régulier des plans d'action avec des points de contrôle mensuels",
-            "Établir des indicateurs de performance pour mesurer l'efficacité des actions correctives",
-            "Planifier des audits de suivi dans les 6 mois pour vérifier la pérennité des corrections",
-            "Renforcer la formation des équipes sur les procédures identifiées comme critiques",
-            "Développer un système d'alerte pour les recommandations approchant leur échéance"
-        ]
-    
-    # Récupérer les métadonnées des fichiers pour les constatations
-    metadata_dict = {}
-    try:
-        from models import FichierMetadata
-        fichiers_metadata = FichierMetadata.query.filter(
-            FichierMetadata.entite_type == 'constatation',
-            FichierMetadata.entite_id.in_([c.id for c in constatations])
-        ).all()
-        
-        for meta in fichiers_metadata:
-            if meta.entite_id not in metadata_dict:
-                metadata_dict[meta.entite_id] = []
-            metadata_dict[meta.entite_id].append({
-                'nom_fichier': meta.nom_fichier,
-                'commentaire': meta.commentaire,
-                'responsable': meta.responsable.username if meta.responsable else None,
-                'date_upload': meta.created_at
-            })
-    except:
-        metadata_dict = {}
-        print("Table FichierMetadata non disponible")
-    
     # Préparer les données pour le rapport
     rapport_data = {
         'audit': {
@@ -40327,22 +40418,25 @@ def rapport_audit_complet(audit_id):
             'responsable': audit.responsable.username if audit.responsable else None,
             'responsable_obj': audit.responsable,
             'processus': audit.processus.nom if audit.processus else None,
-            'processus_audite_display': audit.processus_audite_display if hasattr(audit, 'processus_audite_display') else None,
+            'processus_audite_display': getattr(audit, 'processus_audite_display', None),
             'created_at': audit.created_at,
             'created_by': createur_audit.username if createur_audit else None,
             'createur': createur_audit,
-            'score_global': audit.score_global if hasattr(audit, 'score_global') else 0,
-            'progression_globale': audit.progression_globale if hasattr(audit, 'progression_globale') else 0,
-            'taux_realisation_recommandations': audit.taux_realisation_recommandations if hasattr(audit, 'taux_realisation_recommandations') else 0,
-            'taux_realisation_plans': audit.taux_realisation_plans if hasattr(audit, 'taux_realisation_plans') else 0,
-            'couleur_progression': audit.couleur_progression if hasattr(audit, 'couleur_progression') else 'secondary'
+            'score_global': getattr(audit, 'score_global', 0),
+            'progression_globale': getattr(audit, 'progression_globale', 0),
+            'taux_realisation_recommandations': getattr(audit, 'taux_realisation_recommandations', 0),
+            'taux_realisation_plans': getattr(audit, 'taux_realisation_plans', 0),
+            'couleur_progression': getattr(audit, 'couleur_progression', 'secondary')
         },
         'constatations': [],
         'recommandations': [],
-        'plans_action': [],
+        'plans_action': {
+            'tous': [],
+            'audit': [],
+            'risque': []
+        },
         'fichiers_rapport': fichiers_rapport,
         'stats_fichiers': stats_fichiers,
-        'recommandations_globales': recommandations_globales,
         'statistiques': {
             'total_constatations': len(constatations),
             'constatations_par_type': {},
@@ -40351,14 +40445,13 @@ def rapport_audit_complet(audit_id):
             'total_recommandations': len(recommandations),
             'recommandations_par_type': {},
             'recommandations_par_statut': {},
-            'total_plans_action': len(plans_action),
+            'total_plans_action': len(tous_plans_action),
+            'plans_action_audit': len(plans_action_audit),
+            'plans_action_risque': len(plans_action_risque),
             'plans_action_par_statut': {},
-            'plans_action_actifs': len([p for p in plans_action if p.statut in ['en_cours', 'a_demarrer', 'planifie']]),
+            'plans_action_actifs': len([p for p in tous_plans_action if p.statut in ['en_cours', 'a_demarrer', 'planifie']]),
             'taux_avancement_moyen': 0,
-            'progression_globale': audit.progression_globale if hasattr(audit, 'progression_globale') else 0,
-            'score_global': audit.score_global if hasattr(audit, 'score_global') else 0,
-            'taux_realisation_recommandations': audit.taux_realisation_recommandations if hasattr(audit, 'taux_realisation_recommandations') else 0,
-            'taux_realisation_plans': audit.taux_realisation_plans if hasattr(audit, 'taux_realisation_plans') else 0
+            'progression_globale': getattr(audit, 'progression_globale', 0)
         }
     }
     
@@ -40378,16 +40471,15 @@ def rapport_audit_complet(audit_id):
             'statut_display': constatation.statut.replace('_', ' ').title() if constatation.statut else '',
             'processus_concerne': constatation.processus_concerne,
             'cause_racine': constatation.cause_racine,
-            'conclusion': constatation.conclusion or '',
-            'commentaires': constatation.commentaires or '',
-            'recommandations_immediates': constatation.recommandations_immediates or '',
-            'documents_justificatifs': constatation.documents_justificatifs or '',
+            'conclusion': getattr(constatation, 'conclusion', ''),
+            'commentaires': getattr(constatation, 'commentaires', ''),
+            'recommandations_immediates': getattr(constatation, 'recommandations_immediates', ''),
+            'documents_justificatifs': getattr(constatation, 'documents_justificatifs', ''),
             'created_at': constatation.created_at,
             'updated_at': constatation.updated_at,
             'createur': createur_constatation.username if createur_constatation else None,
             'createur_obj': createur_constatation,
             'risque': None,
-            'preuves': [],
             'recommandations_liees': []
         }
         
@@ -40404,42 +40496,8 @@ def rapport_audit_complet(audit_id):
                     'score': derniere_eval.score_risque if derniere_eval else 0
                 }
         
-        # Ajouter les preuves
-        if constatation.preuves:
-            preuves_list = constatation.get_preuves_list if hasattr(constatation, 'get_preuves_list') else []
-            for preuve in preuves_list:
-                try:
-                    # Essayer de récupérer les métadonnées
-                    metadata_info = {
-                        'nom': preuve,
-                        'commentaire': '',
-                        'responsable': '',
-                        'date_upload': '',
-                        'taille': 'N/A'
-                    }
-                    
-                    if constatation.id in metadata_dict:
-                        for meta in metadata_dict[constatation.id]:
-                            if meta['nom_fichier'] == preuve:
-                                metadata_info['commentaire'] = meta['commentaire'] or ''
-                                metadata_info['responsable'] = meta['responsable'] or 'Non défini'
-                                metadata_info['date_upload'] = meta['date_upload']
-                                metadata_info['date_upload_str'] = meta['date_upload'].strftime('%d/%m/%Y') if meta['date_upload'] else ''
-                                break
-                    
-                    constatation_data['preuves'].append(metadata_info)
-                except:
-                    constatation_data['preuves'].append({
-                        'nom': preuve,
-                        'commentaire': 'Fichier joint',
-                        'responsable': 'Non spécifié',
-                        'date_upload': None,
-                        'date_upload_str': 'Date inconnue',
-                        'taille': 'N/A'
-                    })
-        
         # Ajouter les recommandations liées
-        for reco in constatation.recommandations:
+        for reco in getattr(constatation, 'recommandations', []):
             responsable_reco = User.query.get(reco.responsable_id) if reco.responsable_id else None
             constatation_data['recommandations_liees'].append({
                 'id': reco.id,
@@ -40526,7 +40584,7 @@ def rapport_audit_complet(audit_id):
                 }
         
         # Ajouter le plan d'action lié
-        if recommandation.plan_action:
+        if getattr(recommandation, 'plan_action', None):
             responsable_plan = User.query.get(recommandation.plan_action.responsable_id) if recommandation.plan_action.responsable_id else None
             recommandation_data['plan_action'] = {
                 'nom': recommandation.plan_action.nom,
@@ -40549,11 +40607,46 @@ def rapport_audit_complet(audit_id):
     
     # Traiter les plans d'action
     taux_avancement_total = 0
-    for plan in plans_action:
+    plans_traites_count = 0
+    
+    # Plans d'action d'audit
+    for plan in plans_action_audit:
         createur_plan = User.query.get(plan.created_by) if plan.created_by else None
+        
+        # Calculer la progression
+        progression = 0
+        sous_actions_data = []
+        
+        if hasattr(plan, 'sous_actions') and plan.sous_actions:
+            sous_actions = plan.sous_actions
+            total_sous_actions = len(sous_actions)
+            sous_actions_terminees = len([sa for sa in sous_actions if sa.statut == 'termine'])
+            
+            if total_sous_actions > 0:
+                progression = round((sous_actions_terminees / total_sous_actions) * 100)
+            
+            # Préparer les données des sous-actions
+            for sous_action in sous_actions:
+                responsable_sous_action = User.query.get(sous_action.responsable_id) if sous_action.responsable_id else None
+                
+                sous_actions_data.append({
+                    'id': sous_action.id,
+                    'reference': sous_action.reference or f"SA-{sous_action.id}",
+                    'description': sous_action.description,
+                    'statut': sous_action.statut,
+                    'statut_display': sous_action.statut.replace('_', ' ').title() if sous_action.statut else '',
+                    'date_debut': sous_action.date_debut,
+                    'date_fin_prevue': sous_action.date_fin_prevue,
+                    'pourcentage_realisation': sous_action.pourcentage_realisation or 0,
+                    'responsable': responsable_sous_action.username if responsable_sous_action else None,
+                    'created_at': sous_action.created_at
+                })
+        else:
+            progression = plan.pourcentage_realisation or 0
         
         plan_data = {
             'id': plan.id,
+            'type': 'audit',
             'reference': plan.reference,
             'nom': plan.nom,
             'description': plan.description,
@@ -40565,7 +40658,7 @@ def rapport_audit_complet(audit_id):
             'date_fin_prevue_str': plan.date_fin_prevue.strftime('%d/%m/%Y') if plan.date_fin_prevue else '',
             'date_fin_reelle': plan.date_fin_reelle,
             'date_fin_reelle_str': plan.date_fin_reelle.strftime('%d/%m/%Y') if plan.date_fin_reelle else '',
-            'pourcentage_realisation': plan.pourcentage_realisation or 0,
+            'pourcentage_realisation': progression,
             'responsable': plan.responsable.username if plan.responsable else None,
             'responsable_obj': plan.responsable,
             'created_at': plan.created_at,
@@ -40573,93 +40666,104 @@ def rapport_audit_complet(audit_id):
             'createur_obj': createur_plan,
             'recommandation': None,
             'risque': None,
-            'taches': [],
-            'etapes': []
+            'sous_actions': sous_actions_data,
+            'sous_actions_count': len(sous_actions_data)
         }
         
-        # Ajouter la recommandation liée
-        if plan.recommandation:
-            plan_data['recommandation'] = {
-                'reference': plan.recommandation.reference,
-                'description': plan.recommandation.description[:100] + '...' if len(plan.recommandation.description) > 100 else plan.recommandation.description,
-                'id': plan.recommandation.id
-            }
-        
-        # Ajouter le risque associé
-        if plan.risque_id:
-            risque = Risque.query.get(plan.risque_id)
-            if risque and check_client_access(risque):
-                derniere_eval = risque.evaluations[-1] if risque.evaluations else None
-                plan_data['risque'] = {
-                    'reference': risque.reference,
-                    'intitule': risque.intitule,
-                    'niveau': derniere_eval.niveau_risque if derniere_eval else 'Non évalué',
-                    'id': risque.id
-                }
-        
-        # Ajouter les sous-actions
-        for sous_action in plan.sous_actions:
-            responsable_sous_action = User.query.get(sous_action.responsable_id) if sous_action.responsable_id else None
-            
-            # Vérifier si la sous-action est en retard
-            est_en_retard_sa = False
-            if sous_action.date_fin_prevue and sous_action.statut != 'termine':
-                est_en_retard_sa = datetime.utcnow().date() > sous_action.date_fin_prevue
-            
-            plan_data['taches'].append({
-                'id': sous_action.id,
-                'reference': sous_action.reference or f"SA-{sous_action.id}",
-                'description': sous_action.description,
-                'statut': sous_action.statut,
-                'statut_display': sous_action.statut.replace('_', ' ').title() if sous_action.statut else '',
-                'date_debut': sous_action.date_debut,
-                'date_debut_str': sous_action.date_debut.strftime('%d/%m/%Y') if sous_action.date_debut else '',
-                'date_fin_prevue': sous_action.date_fin_prevue,
-                'date_fin_prevue_str': sous_action.date_fin_prevue.strftime('%d/%m/%Y') if sous_action.date_fin_prevue else '',
-                'date_fin_reelle': sous_action.date_fin_reelle,
-                'date_fin_reelle_str': sous_action.date_fin_reelle.strftime('%d/%m/%Y') if sous_action.date_fin_reelle else '',
-                'pourcentage_realisation': sous_action.pourcentage_realisation or 0,
-                'responsable': responsable_sous_action.username if responsable_sous_action else None,
-                'responsable_obj': responsable_sous_action,
-                'est_en_retard': est_en_retard_sa,
-                'created_at': sous_action.created_at
-            })
-        
-        # Ajouter les étapes
-        for etape in plan.etapes:
-            responsable_etape = User.query.get(etape.responsable_id) if etape.responsable_id else None
-            plan_data['etapes'].append({
-                'id': etape.id,
-                'ordre': etape.ordre,
-                'description': etape.description,
-                'statut': etape.statut,
-                'statut_display': etape.statut.replace('_', ' ').title() if etape.statut else '',
-                'date_echeance': etape.date_echeance,
-                'date_echeance_str': etape.date_echeance.strftime('%d/%m/%Y') if etape.date_echeance else '',
-                'responsable': responsable_etape.username if responsable_etape else None,
-                'responsable_obj': responsable_etape,
-                'created_at': etape.created_at
-            })
-        
-        rapport_data['plans_action'].append(plan_data)
+        rapport_data['plans_action']['audit'].append(plan_data)
+        rapport_data['plans_action']['tous'].append(plan_data)
+        taux_avancement_total += progression
+        plans_traites_count += 1
         
         # Mettre à jour les statistiques
         if plan.statut:
             rapport_data['statistiques']['plans_action_par_statut'][plan.statut] = \
                 rapport_data['statistiques']['plans_action_par_statut'].get(plan.statut, 0) + 1
+    
+    # Plans d'action de risque
+    for plan in plans_action_risque:
+        createur_plan = User.query.get(plan.created_by) if plan.created_by else None
         
-        # Calculer le taux d'avancement pour ce plan
-        if plan.sous_actions:
-            taux_avancement_sous_actions = sum([sa.pourcentage_realisation or 0 for sa in plan.sous_actions])
-            taux_plan = taux_avancement_sous_actions / len(plan.sous_actions) if plan.sous_actions else plan.pourcentage_realisation or 0
+        # Calculer la progression
+        progression = 0
+        sous_actions_data = []
+        
+        if hasattr(plan, 'sous_actions') and plan.sous_actions:
+            sous_actions = plan.sous_actions
+            total_sous_actions = len(sous_actions)
+            sous_actions_terminees = len([sa for sa in sous_actions if sa.statut == 'termine'])
+            
+            if total_sous_actions > 0:
+                progression = round((sous_actions_terminees / total_sous_actions) * 100)
+            
+            # Préparer les données des sous-actions
+            for sous_action in sous_actions:
+                responsable_sous_action = User.query.get(sous_action.responsable_id) if sous_action.responsable_id else None
+                
+                sous_actions_data.append({
+                    'id': sous_action.id,
+                    'reference': sous_action.reference or f"SA-{sous_action.id}",
+                    'description': sous_action.description,
+                    'statut': sous_action.statut,
+                    'statut_display': sous_action.statut.replace('_', ' ').title() if sous_action.statut else '',
+                    'date_debut': sous_action.date_debut,
+                    'date_fin_prevue': sous_action.date_fin_prevue,
+                    'pourcentage_realisation': sous_action.pourcentage_realisation or 0,
+                    'responsable': responsable_sous_action.username if responsable_sous_action else None,
+                    'created_at': sous_action.created_at
+                })
         else:
-            taux_plan = plan.pourcentage_realisation or 0
+            progression = plan.pourcentage_realisation or 0
         
-        taux_avancement_total += taux_plan
+        # Récupérer le risque associé
+        risque_info = None
+        if plan.risque_id:
+            risque = Risque.query.get(plan.risque_id)
+            if risque:
+                risque_info = {
+                    'reference': risque.reference,
+                    'intitule': risque.intitule,
+                    'url': url_for('detail_risque', id=risque.id)
+                }
+        
+        plan_data = {
+            'id': plan.id,
+            'type': 'risque',
+            'reference': plan.reference,
+            'nom': plan.nom,
+            'description': plan.description,
+            'statut': plan.statut,
+            'statut_display': plan.statut.replace('_', ' ').title() if plan.statut else '',
+            'date_debut': plan.date_debut,
+            'date_debut_str': plan.date_debut.strftime('%d/%m/%Y') if plan.date_debut else '',
+            'date_fin_prevue': plan.date_fin_prevue,
+            'date_fin_prevue_str': plan.date_fin_prevue.strftime('%d/%m/%Y') if plan.date_fin_prevue else '',
+            'date_fin_reelle': plan.date_fin_reelle,
+            'date_fin_reelle_str': plan.date_fin_reelle.strftime('%d/%m/%Y') if plan.date_fin_reelle else '',
+            'pourcentage_realisation': progression,
+            'responsable': plan.responsable.username if plan.responsable else None,
+            'responsable_obj': plan.responsable,
+            'created_at': plan.created_at,
+            'createur': createur_plan.username if createur_plan else None,
+            'createur_obj': createur_plan,
+            'risque': risque_info,
+            'sous_actions': sous_actions_data,
+            'sous_actions_count': len(sous_actions_data)
+        }
+        
+        rapport_data['plans_action']['risque'].append(plan_data)
+        rapport_data['plans_action']['tous'].append(plan_data)
+        taux_avancement_total += progression
+        plans_traites_count += 1
+        
+        # Mettre à jour les statistiques
+        if plan.statut:
+            rapport_data['statistiques']['plans_action_par_statut'][plan.statut] = \
+                rapport_data['statistiques']['plans_action_par_statut'].get(plan.statut, 0) + 1
     
     # Calculer le taux d'avancement moyen global
-    if plans_action:
-        rapport_data['statistiques']['taux_avancement_moyen'] = round(taux_avancement_total / len(plans_action), 2)
+    if plans_traites_count > 0:
+        rapport_data['statistiques']['taux_avancement_moyen'] = round(taux_avancement_total / plans_traites_count, 2)
     
     # Récupérer l'historique de l'audit
     historique_audit = []
@@ -40671,52 +40775,14 @@ def rapport_audit_complet(audit_id):
     except:
         pass
     
-    # Récupérer les analyses IA associées
-    analyses_ia = []
-    try:
-        if hasattr(app, 'service_ia') or SERVICE_IA_IMPORTED:
-            analyses_ia = get_client_filter(AnalyseIA)\
-                .filter_by(audit_id=audit_id)\
-                .order_by(AnalyseIA.date_analyse.desc())\
-                .limit(5)\
-                .all()
-    except:
-        pass
-    
-    # Récupérer les matrices de maturité
-    matrices_maturite = []
-    try:
-        matrices_maturite = get_client_filter(MatriceMaturite)\
-            .filter_by(audit_id=audit_id)\
-            .order_by(MatriceMaturite.created_at.desc())\
-            .all()
-    except:
-        pass
-    
-    # Récupérer les échéances à venir
-    echeances_a_venir = []
-    aujourdhui = datetime.utcnow().date()
-    sept_jours = aujourdhui + timedelta(days=7)
-    
-    for recommandation in recommandations:
-        if recommandation.date_echeance and recommandation.statut not in ['termine', 'annule']:
-            if aujourdhui <= recommandation.date_echeance <= sept_jours:
-                echeances_a_venir.append({
-                    'type': 'recommandation',
-                    'objet': recommandation,
-                    'jours_restants': (recommandation.date_echeance - aujourdhui).days
-                })
-    
-    for plan in plans_action:
-        if plan.date_fin_prevue and plan.statut not in ['termine', 'suspendu']:
-            if aujourdhui <= plan.date_fin_prevue <= sept_jours:
-                echeances_a_venir.append({
-                    'type': 'plan_action',
-                    'objet': plan,
-                    'jours_restants': (plan.date_fin_prevue - aujourdhui).days
-                })
-    
-    echeances_a_venir.sort(key=lambda x: x['jours_restants'])
+    # Récupérer les recommandations globales
+    recommandations_globales = [
+        "Mettre en place un suivi régulier des plans d'action avec des points de contrôle mensuels",
+        "Établir des indicateurs de performance pour mesurer l'efficacité des actions correctives",
+        "Planifier des audits de suivi dans les 6 mois pour vérifier la pérennité des corrections",
+        "Renforcer la formation des équipes sur les procédures identifiées comme critiques",
+        "Développer un système d'alerte pour les recommandations approchant leur échéance"
+    ]
     
     return render_template(
         'audit/rapport_complet.html',
@@ -40726,16 +40792,13 @@ def rapport_audit_complet(audit_id):
         fichiers_rapport=fichiers_rapport,
         stats_fichiers=stats_fichiers,
         peut_modifier=peut_modifier,
-        peut_uploader=peut_uploader,
         historique_audit=historique_audit,
-        analyses_ia=analyses_ia,
-        matrices_maturite=matrices_maturite,
-        echeances_a_venir=echeances_a_venir,
+        recommandations_globales=recommandations_globales,
         current_datetime=datetime.utcnow(),
-        get_fichier_metadata=lambda x, y: {},
         current_user=current_user,
         format_taille=format_taille
     )
+
 
 @app.route('/admin/recommandations-globales')
 @login_required
