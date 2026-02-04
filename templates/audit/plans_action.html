@@ -1,122 +1,508 @@
 {% extends "base.html" %}
 
 {% block content %}
-<div class="d-flex justify-content-between align-items-center mb-4">
-    <h2><i class="fas fa-tasks me-2"></i>Plans d'Action d'Audit</h2>
-    <div>
-        <a href="{{ url_for('liste_audits') }}" class="btn btn-outline-secondary me-2">
-            <i class="fas fa-arrow-left me-1"></i>Retour aux audits</a>
+<div class="container-fluid">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <h2><i class="fas fa-tasks me-2"></i> Plans d'Action</h2>
+        <div>
+            <a href="{{ url_for('liste_audits') }}" class="btn btn-outline-secondary me-2">
+                <i class="fas fa-arrow-left me-1"></i> Retour aux audits
+            </a>
+            {% if current_user.has_permission('can_manage_action_plans') %}
+            <button class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#nouveauPlanModal">
+                <i class="fas fa-plus me-1"></i> Nouveau Plan
+            </button>
+            {% endif %}
+        </div>
+    </div>
+
+    <!-- Statistiques -->
+    <div class="row mb-4">
+        <div class="col-md-2">
+            <div class="card text-center border-start border-primary border-4">
+                <div class="card-body">
+                    <h3 class="text-primary">{{ stats.total }}</h3>
+                    <p class="text-muted mb-0">Total Plans</p>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-2">
+            <div class="card text-center border-start border-info border-4">
+                <div class="card-body">
+                    <h3 class="text-info">{{ stats.audit }}</h3>
+                    <p class="text-muted mb-0">Plans Audit</p>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-2">
+            <div class="card text-center border-start border-warning border-4">
+                <div class="card-body">
+                    <h3 class="text-warning">{{ stats.risque }}</h3>
+                    <p class="text-muted mb-0">Plans Risque</p>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-2">
+            <div class="card text-center border-start border-success border-4">
+                <div class="card-body">
+                    <h3 class="text-success">{{ stats.termines }}</h3>
+                    <p class="text-muted mb-0">Terminés</p>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-2">
+            <div class="card text-center border-start border-danger border-4">
+                <div class="card-body">
+                    <h3 class="text-danger">{{ stats.en_retard }}</h3>
+                    <p class="text-muted mb-0">En Retard</p>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-2">
+            <div class="card text-center">
+                <div class="card-body">
+                    <h3>{{ stats.moyenne_realisation }}%</h3>
+                    <p class="text-muted mb-0">Progression</p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Filtres -->
+    <div class="card mb-4">
+        <div class="card-body">
+            <div class="row">
+                <div class="col-md-4">
+                    <div class="btn-group w-100" role="group">
+                        <a href="{{ url_for('liste_plans_action') }}?type=tous&statut={{ filtre_statut }}&tri={{ tri }}" 
+                           class="btn btn-outline-primary {% if type_filtre == 'tous' %}active{% endif %}">
+                            Tous ({{ stats.total }})
+                        </a>
+                        <a href="{{ url_for('liste_plans_action') }}?type=audit&statut={{ filtre_statut }}&tri={{ tri }}" 
+                           class="btn btn-outline-info {% if type_filtre == 'audit' %}active{% endif %}">
+                            Audit ({{ stats.audit }})
+                        </a>
+                        <a href="{{ url_for('liste_plans_action') }}?type=risque&statut={{ filtre_statut }}&tri={{ tri }}" 
+                           class="btn btn-outline-warning {% if type_filtre == 'risque' %}active{% endif %}">
+                            Risque ({{ stats.risque }})
+                        </a>
+                    </div>
+                </div>
+                <div class="col-md-4">
+                    <select class="form-select" onchange="window.location.href=this.value">
+                        <option value="{{ url_for('liste_plans_action') }}?type={{ type_filtre }}&statut=tous&tri={{ tri }}" 
+                                {% if filtre_statut == 'tous' %}selected{% endif %}>
+                            Tous les statuts
+                        </option>
+                        <option value="{{ url_for('liste_plans_action') }}?type={{ type_filtre }}&statut=en_attente&tri={{ tri }}" 
+                                {% if filtre_statut == 'en_attente' %}selected{% endif %}>
+                            En attente ({{ stats.en_attente }})
+                        </option>
+                        <option value="{{ url_for('liste_plans_action') }}?type={{ type_filtre }}&statut=en_cours&tri={{ tri }}" 
+                                {% if filtre_statut == 'en_cours' %}selected{% endif %}>
+                            En cours ({{ stats.en_cours }})
+                        </option>
+                        <option value="{{ url_for('liste_plans_action') }}?type={{ type_filtre }}&statut=termine&tri={{ tri }}" 
+                                {% if filtre_statut == 'termine' %}selected{% endif %}>
+                            Terminés ({{ stats.termines }})
+                        </option>
+                        <option value="{{ url_for('liste_plans_action') }}?type={{ type_filtre }}&statut=suspendu&tri={{ tri }}" 
+                                {% if filtre_statut == 'suspendu' %}selected{% endif %}>
+                            Suspendus ({{ stats.suspendus }})
+                        </option>
+                        <option value="{{ url_for('liste_plans_action') }}?type={{ type_filtre }}&statut=annule&tri={{ tri }}" 
+                                {% if filtre_statut == 'annule' %}selected{% endif %}>
+                            Annulés ({{ stats.annules }})
+                        </option>
+                    </select>
+                </div>
+                <div class="col-md-4">
+                    <select class="form-select" onchange="window.location.href=this.value">
+                        <option value="{{ url_for('liste_plans_action') }}?type={{ type_filtre }}&statut={{ filtre_statut }}&tri=urgence" 
+                                {% if tri == 'urgence' %}selected{% endif %}>
+                            Trier par urgence
+                        </option>
+                        <option value="{{ url_for('liste_plans_action') }}?type={{ type_filtre }}&statut={{ filtre_statut }}&tri=date_desc" 
+                                {% if tri == 'date_desc' %}selected{% endif %}>
+                            Trier par date (récent)
+                        </option>
+                        <option value="{{ url_for('liste_plans_action') }}?type={{ type_filtre }}&statut={{ filtre_statut }}&tri=date_asc" 
+                                {% if tri == 'date_asc' %}selected{% endif %}>
+                            Trier par date (ancien)
+                        </option>
+                        <option value="{{ url_for('liste_plans_action') }}?type={{ type_filtre }}&statut={{ filtre_statut }}&tri=realisation_desc" 
+                                {% if tri == 'realisation_desc' %}selected{% endif %}>
+                            Trier par réalisation (élevé)
+                        </option>
+                        <option value="{{ url_for('liste_plans_action') }}?type={{ type_filtre }}&statut={{ filtre_statut }}&tri=realisation_asc" 
+                                {% if tri == 'realisation_asc' %}selected{% endif %}>
+                            Trier par réalisation (bas)
+                        </option>
+                        <option value="{{ url_for('liste_plans_action') }}?type={{ type_filtre }}&statut={{ filtre_statut }}&tri=priorite" 
+                                {% if tri == 'priorite' %}selected{% endif %}>
+                            Trier par priorité
+                        </option>
+                    </select>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Tableau des plans -->
+    <div class="card">
+        <div class="card-body">
+            {% if plans_action %}
+            <div class="table-responsive">
+                <table class="table table-hover">
+                    <thead>
+                        <tr>
+                            <th width="80">Type</th>
+                            <th>Plan d'Action</th>
+                            <th>Source</th>
+                            <th width="150">Responsable</th>
+                            <th width="150">Dates</th>
+                            <th width="120">Progression</th>
+                            <th width="100">Statut</th>
+                            <th width="120">Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for plan_data in plans_action %}
+                        {% set plan = plan_data.obj %}
+                        {% set type_plan = plan_data.type_plan %}
+                        {% set source = plan_data.source %}
+                        {% set jours_restants = plan_data.jours_restants %}
+                        {% set etat_delai = plan_data.etat_delai %}
+                        {% set jours_retard = plan_data.jours_retard %}
+                        {% set pourcentage_global = plan_data.pourcentage_global %}
+                        
+                        <tr>
+                            <!-- Type -->
+                            <td>
+                                {% if type_plan == 'audit' %}
+                                <span class="badge bg-info">
+                                    <i class="fas fa-clipboard-check"></i> Audit
+                                </span>
+                                {% elif type_plan == 'risque' %}
+                                <span class="badge bg-warning">
+                                    <i class="fas fa-exclamation-triangle"></i> Risque
+                                </span>
+                                {% else %}
+                                <span class="badge bg-secondary">
+                                    <i class="fas fa-question"></i> Autre
+                                </span>
+                                {% endif %}
+                            </td>
+                            
+                            <!-- Plan -->
+                            <td>
+                                <strong>{{ plan.nom }}</strong>
+                                <div class="text-muted small">
+                                    {{ plan.reference }}
+                                    {% if plan.description %}
+                                    <br>{{ plan.description|truncate(100) }}
+                                    {% endif %}
+                                </div>
+                            </td>
+                            
+                            <!-- Source -->
+                            <td>
+                                {% if type_plan == 'audit' and source %}
+                                <a href="{{ url_for('detail_audit', id=source.id) }}" 
+                                   class="text-decoration-none">
+                                    <i class="fas fa-clipboard-list text-info me-1"></i>
+                                    {{ source.reference }}
+                                </a>
+                                <div class="text-muted small">
+                                    {{ source.titre|truncate(50) }}
+                                </div>
+                                {% elif type_plan == 'risque' and source %}
+                                <a href="{{ url_for('detail_risque', id=source.id) }}" 
+                                   class="text-decoration-none">
+                                    <i class="fas fa-exclamation-triangle text-warning me-1"></i>
+                                    {{ source.reference }}
+                                </a>
+                                <div class="text-muted small">
+                                    {{ source.intitule|truncate(50) }}
+                                </div>
+                                {% else %}
+                                <span class="text-muted">N/A</span>
+                                {% endif %}
+                            </td>
+                            
+                            <!-- Responsable -->
+                            <td>
+                                {% if plan.responsable %}
+                                <div class="d-flex align-items-center">
+                                    <div class="avatar-sm bg-primary rounded-circle text-white d-flex align-items-center justify-content-center me-2" 
+                                         style="width: 30px; height: 30px;">
+                                        {{ plan.responsable.username[0].upper() }}
+                                    </div>
+                                    <div>
+                                        <div>{{ plan.responsable.username }}</div>
+                                        <small class="text-muted">{{ plan.responsable.role }}</small>
+                                    </div>
+                                </div>
+                                {% else %}
+                                <span class="text-muted">Non assigné</span>
+                                {% endif %}
+                            </td>
+                            
+                            <!-- Dates -->
+                            <td>
+                                <div class="small">
+                                    {% if plan.date_debut %}
+                                    <div><strong>Début:</strong> {{ plan.date_debut.strftime('%d/%m/%Y') }}</div>
+                                    {% endif %}
+                                    {% if plan.date_fin_prevue %}
+                                    <div>
+                                        <strong>Fin prévue:</strong> 
+                                        {{ plan.date_fin_prevue.strftime('%d/%m/%Y') }}
+                                        {% if etat_delai == 'retarde' %}
+                                        <br><span class="badge bg-danger">
+                                            Retard: {{ jours_retard }}j
+                                        </span>
+                                        {% elif etat_delai == 'urgence' %}
+                                        <br><span class="badge bg-warning">
+                                            Urgent: {{ jours_restants }}j
+                                        </span>
+                                        {% endif %}
+                                    </div>
+                                    {% endif %}
+                                </div>
+                            </td>
+                            
+                            <!-- Progression -->
+                            <td>
+                                <div class="progress" style="height: 20px;">
+                                    <div class="progress-bar 
+                                        {% if pourcentage_global >= 80 %}bg-success
+                                        {% elif pourcentage_global >= 50 %}bg-info
+                                        {% elif pourcentage_global >= 30 %}bg-warning
+                                        {% else %}bg-danger{% endif %}" 
+                                         role="progressbar" 
+                                         style="width: {{ pourcentage_global }}%;"
+                                         aria-valuenow="{{ pourcentage_global }}" 
+                                         aria-valuemin="0" 
+                                         aria-valuemax="100">
+                                        {{ pourcentage_global }}%
+                                    </div>
+                                </div>
+                                <small class="text-muted">
+                                    {% if plan.sous_actions %}
+                                    {% set sous_actions_terminees = plan.sous_actions|selectattr('statut', 'equalto', 'termine')|list|length %}
+                                    {{ sous_actions_terminees }}/{{ plan.sous_actions|length }} tâches
+                                    {% else %}
+                                    Pas de sous-tâches
+                                    {% endif %}
+                                </small>
+                            </td>
+                            
+                            <!-- Statut -->
+                            <td>
+                                {% if plan.statut == 'en_attente' %}
+                                <span class="badge bg-secondary">
+                                    <i class="fas fa-clock"></i> En attente
+                                </span>
+                                {% elif plan.statut == 'en_cours' %}
+                                <span class="badge bg-warning">
+                                    <i class="fas fa-play-circle"></i> En cours
+                                </span>
+                                {% elif plan.statut == 'termine' %}
+                                <span class="badge bg-success">
+                                    <i class="fas fa-check-circle"></i> Terminé
+                                </span>
+                                {% elif plan.statut == 'suspendu' %}
+                                <span class="badge bg-info">
+                                    <i class="fas fa-pause-circle"></i> Suspendu
+                                </span>
+                                {% elif plan.statut == 'annule' %}
+                                <span class="badge bg-danger">
+                                    <i class="fas fa-times-circle"></i> Annulé
+                                </span>
+                                {% else %}
+                                <span class="badge bg-light text-dark">
+                                    {{ plan.statut }}
+                                </span>
+                                {% endif %}
+                            </td>
+                            
+                            <!-- Actions -->
+                            <td>
+                                <div class="btn-group btn-group-sm">
+                                    {% if type_plan == 'audit' %}
+                                    <a href="{{ url_for('detail_plan_action', plan_id=plan.id) }}" 
+                                       class="btn btn-outline-primary" title="Voir">
+                                        <i class="fas fa-eye"></i>
+                                    </a>
+                                    {% if current_user.has_permission('can_manage_action_plans') %}
+                                    <a href="{{ url_for('modifier_plan_action', plan_id=plan.id) }}" 
+                                       class="btn btn-outline-warning" title="Modifier">
+                                        <i class="fas fa-edit"></i>
+                                    </a>
+                                    {% endif %}
+                                    {% elif type_plan == 'risque' %}
+                                    <a href="{{ url_for('detail_plan_action_risque', plan_id=plan.id) }}" 
+                                       class="btn btn-outline-primary" title="Voir">
+                                        <i class="fas fa-eye"></i>
+                                    </a>
+                                    {% if current_user.has_permission('can_manage_action_plans') %}
+                                    <a href="{{ url_for('modifier_plan_action_risque', plan_id=plan.id) }}" 
+                                       class="btn btn-outline-warning" title="Modifier">
+                                        <i class="fas fa-edit"></i>
+                                    </a>
+                                    {% endif %}
+                                    {% else %}
+                                    <a href="#" class="btn btn-outline-secondary" title="Non disponible">
+                                        <i class="fas fa-eye"></i>
+                                    </a>
+                                    {% endif %}
+                                </div>
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+            
+            <!-- Message si aucun résultat après filtrage -->
+            {% if plans_action|length == 0 and (filtre_statut != 'tous' or type_filtre != 'tous') %}
+            <div class="text-center py-5">
+                <i class="fas fa-search fa-4x text-muted mb-3"></i>
+                <h4 class="text-muted">Aucun résultat trouvé</h4>
+                <p class="text-muted">
+                    Aucun plan d'action ne correspond aux filtres sélectionnés.
+                </p>
+                <a href="{{ url_for('liste_plans_action') }}" class="btn btn-primary">
+                    <i class="fas fa-times me-1"></i> Réinitialiser les filtres
+                </a>
+            </div>
+            {% endif %}
+            
+            {% else %}
+            <div class="text-center py-5">
+                <i class="fas fa-tasks fa-4x text-muted mb-3"></i>
+                <h4 class="text-muted">Aucun plan d'action créé</h4>
+                <p class="text-muted">
+                    Les plans d'action peuvent être créés à partir des audits ou des risques.
+                </p>
+                <div class="mt-3">
+                    <a href="{{ url_for('liste_audits') }}" class="btn btn-primary me-2">
+                        <i class="fas fa-clipboard-list me-1"></i> Voir les audits
+                    </a>
+                    <a href="{{ url_for('liste_risques') }}" class="btn btn-warning">
+                        <i class="fas fa-exclamation-triangle me-1"></i> Voir les risques
+                    </a>
+                </div>
+            </div>
+            {% endif %}
+        </div>
     </div>
 </div>
 
-<div class="row mb-4">
-    <div class="col-md-3">
-        <div class="card text-center">
-            <div class="card-body">
-                <h3 class="text-primary">{{ stats.total }}</h3>
-                <p class="text-muted mb-0">Plans Totaux</p>
+<!-- Modal pour nouveau plan -->
+{% if current_user.has_permission('can_manage_action_plans') %}
+<div class="modal fade" id="nouveauPlanModal" tabindex="-1" aria-labelledby="nouveauPlanModalLabel" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="nouveauPlanModalLabel">Créer un nouveau plan d'action</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
             </div>
-        </div>
-    </div>
-    <div class="col-md-3">
-        <div class="card text-center">
-            <div class="card-body">
-                <h3 class="text-warning">{{ stats.en_cours }}</h3>
-                <p class="text-muted mb-0">En Cours</p>
+            <div class="modal-body">
+                <div class="list-group">
+                    <a href="{{ url_for('liste_audits') }}?creer_plan=true" class="list-group-item list-group-item-action">
+                        <div class="d-flex w-100 justify-content-between">
+                            <h6 class="mb-1">
+                                <i class="fas fa-clipboard-check text-info me-2"></i>
+                                Plan lié à un audit
+                            </h6>
+                        </div>
+                        <p class="mb-1">Créer un plan d'action pour un audit existant</p>
+                        <small>Vous serez redirigé vers la liste des audits</small>
+                    </a>
+                    <a href="{{ url_for('liste_risques') }}?creer_plan=true" class="list-group-item list-group-item-action">
+                        <div class="d-flex w-100 justify-content-between">
+                            <h6 class="mb-1">
+                                <i class="fas fa-exclamation-triangle text-warning me-2"></i>
+                                Plan lié à un risque
+                            </h6>
+                        </div>
+                        <p class="mb-1">Créer un plan d'action pour un risque existant</p>
+                        <small>Vous serez redirigé vers la liste des risques</small>
+                    </a>
+                </div>
             </div>
-        </div>
-    </div>
-    <div class="col-md-3">
-        <div class="card text-center">
-            <div class="card-body">
-                <h3 class="text-success">{{ stats.termines }}</h3>
-                <p class="text-muted mb-0">Terminés</p>
-            </div>
-        </div>
-    </div>
-    <div class="col-md-3">
-        <div class="card text-center">
-            <div class="card-body">
-                <h3 class="text-danger">{{ stats.retardes }}</h3>
-                <p class="text-muted mb-0">En Retard</p>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Annuler</button>
             </div>
         </div>
     </div>
 </div>
+{% endif %}
 
-<div class="card">
-    <div class="card-body">
-        {% if plans_action %}
-        <div class="table-responsive">
-            <table class="table table-striped">
-                <thead>
-                    <tr>
-                        <th>Nom du Plan</th>
-                        <th>Audit</th>
-                        <th>Responsable</th>
-                        <th>Dates</th>
-                        <th>Statut</th>
-                        <th>Actions</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    {% for plan in plans_action %}
-                    <tr>
-                        <td>
-                            <strong>{{ plan.nom }}</strong>
-                            {% if plan.description %}
-                            <br><small class="text-muted">{{ plan.description|truncate(100) }}</small>
-                            {% endif %}
-                        </td>
-                        <td>
-                            <a href="{{ url_for('detail_audit', id=plan.audit.id) }}" class="text-decoration-none">
-                                {{ plan.audit.reference }} - {{ plan.audit.titre|truncate(50) }}
-                            </a>
-                        </td>
-                        <td>
-                            {% if plan.responsable %}
-                            {{ plan.responsable.username }}
-                            {% else %}
-                            <span class="text-muted">Non assigné</span>
-                            {% endif %}
-                        </td>
-                        <td>
-                            {% if plan.date_debut %}
-                            Début: {{ plan.date_debut.strftime('%d/%m/%Y') }}<br>
-                            {% endif %}
-                            {% if plan.date_fin_prevue %}
-                            Fin prévue: {{ plan.date_fin_prevue.strftime('%d/%m/%Y') }}
-                            {% endif %}
-                        </td>
-                        <td>
-                            {% if plan.statut == 'en_attente' %}
-                            <span class="badge bg-secondary">En attente</span>
-                            {% elif plan.statut == 'en_cours' %}
-                            <span class="badge bg-warning">En cours</span>
-                            {% elif plan.statut == 'termine' %}
-                            <span class="badge bg-success">Terminé</span>
-                            {% elif plan.statut == 'retarde' %}
-                            <span class="badge bg-danger">Retardé</span>
-                            {% endif %}
-                        </td>
-                        <td>
-                            <a href="{{ url_for('detail_plan_action', plan_id=plan.id) }}" class="btn btn-sm btn-outline-primary">
-                                <i class="fas fa-eye"></i> Voir</a>
-                        </td>
-                    </tr>
-                    {% endfor %}
-                </tbody>
-            </table>
-        </div>
-        {% else %}
-        <div class="text-center py-4">
-            <i class="fas fa-tasks fa-3x text-muted mb-3"></i>
-            <p class="text-muted">Aucun plan d'action créé pour le moment.</p>
-            <p class="text-muted">Les plans d'action sont créés depuis les détails d'un audit.</p>
-            <a href="{{ url_for('liste_audits') }}" class="btn btn-primary">
-                <i class="fas fa-clipboard-list me-1"></i> Voir les audits</a>
-        </div>
-        {% endif %}
-    </div>
-</div>
+<style>
+.avatar-sm {
+    font-size: 12px;
+    font-weight: bold;
+}
+.progress {
+    border-radius: 10px;
+    overflow: hidden;
+}
+.progress-bar {
+    transition: width 0.6s ease;
+}
+.table-hover tbody tr:hover {
+    background-color: rgba(0, 123, 255, 0.05);
+}
+</style>
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    // Mettre à jour l'URL avec les filtres
+    function updateUrl(params) {
+        const url = new URL(window.location.href);
+        Object.keys(params).forEach(key => {
+            if (params[key]) {
+                url.searchParams.set(key, params[key]);
+            } else {
+                url.searchParams.delete(key);
+            }
+        });
+        window.location.href = url.toString();
+    }
+    
+    // Gérer les changements de filtre
+    const selectElements = document.querySelectorAll('select[onchange]');
+    selectElements.forEach(select => {
+        const originalOnChange = select.getAttribute('onchange');
+        select.removeAttribute('onchange');
+        select.addEventListener('change', function() {
+            const value = this.value;
+            if (value) {
+                window.location.href = value;
+            }
+        });
+    });
+    
+    // Gérer les boutons de filtre type
+    const typeButtons = document.querySelectorAll('.btn-group[role="group"] a');
+    typeButtons.forEach(btn => {
+        btn.addEventListener('click', function(e) {
+            e.preventDefault();
+            const href = this.getAttribute('href');
+            if (href) {
+                window.location.href = href;
+            }
+        });
+    });
+    
+    // Tooltips
+    const tooltipTriggerList = [].slice.call(document.querySelectorAll('[title]'));
+    tooltipTriggerList.map(function (tooltipTriggerEl) {
+        return new bootstrap.Tooltip(tooltipTriggerEl);
+    });
+});
+</script>
 {% endblock %}
