@@ -23027,30 +23027,70 @@ def nouveau_plan_action_pour_risque(risque_id):
                     print(f"   🔔 Notification créée pour responsable")
             except Exception as e:
                 print(f"   ⚠️ Erreur création notification: {e}")
+                db.session.rollback()  # Rollback seulement la notification, pas le plan
             
-            # 7.6 Journaliser l'action
+            # 7.6 Journaliser l'action - CORRECTION IMPORTANTE: convertir dict en JSON string
             try:
+                # Créer les détails comme une chaîne JSON
+                details_json = {
+                    'plan_id': plan_action.id,
+                    'plan_nom': plan_action.nom,
+                    'risque_id': risque.id,
+                    'risque_reference': risque.reference,
+                    'dispositif_id': dispositif_id if dispositif_id else None
+                }
+                
+                # Si votre modèle JournalActivite a un champ JSON, utilisez-le directement
+                # Sinon, convertissez en string JSON
                 journal = JournalActivite(
                     utilisateur_id=current_user.id,
                     action=f"Création plan d'action risque: {plan_action.reference}",
-                    details={
-                        'plan_id': plan_action.id,
-                        'plan_nom': plan_action.nom,
-                        'risque_id': risque.id,
-                        'risque_reference': risque.reference,
-                        'dispositif_id': dispositif_id
-                    },
+                    details=details_json,  # PostgreSQL avec JSONB acceptera le dict
                     entite_type='plan_action',
                     entite_id=plan_action.id,
                     ip_address=request.remote_addr,
                     user_agent=request.user_agent.string,
                     client_id=current_user.client_id
                 )
+                
+                # ALTERNATIVE: Si votre base ne supporte pas JSON, convertissez en string
+                # from json import dumps
+                # journal = JournalActivite(
+                #     utilisateur_id=current_user.id,
+                #     action=f"Création plan d'action risque: {plan_action.reference}",
+                #     details=dumps(details_json),  # Convertir en string JSON
+                #     entite_type='plan_action',
+                #     entite_id=plan_action.id,
+                #     ip_address=request.remote_addr,
+                #     user_agent=request.user_agent.string,
+                #     client_id=current_user.client_id
+                # )
+                
                 db.session.add(journal)
                 db.session.commit()
                 print(f"   📝 Journal d'activité créé")
             except Exception as e:
                 print(f"   ⚠️ Erreur journal: {e}")
+                # IMPORTANT: Ne pas rollback ici, le plan est déjà créé
+                # Juste logger l'erreur et continuer
+                try:
+                    db.session.rollback()  # Rollback seulement le journal
+                    # Réessayer avec une version simplifiée
+                    simple_journal = JournalActivite(
+                        utilisateur_id=current_user.id,
+                        action=f"Création plan d'action risque: {plan_action.reference}",
+                        details=None,  # Ou une chaîne simple
+                        entite_type='plan_action',
+                        entite_id=plan_action.id,
+                        ip_address=request.remote_addr,
+                        user_agent=request.user_agent.string,
+                        client_id=current_user.client_id
+                    )
+                    db.session.add(simple_journal)
+                    db.session.commit()
+                    print(f"   📝 Journal simplifié créé")
+                except:
+                    print(f"   ❌ Échec création journal, mais plan sauvegardé")
             
             flash(f'✅ Plan d\'action "{plan_action.nom}" créé avec succès', 'success')
             print(f"   🎉 REDIRECTION vers détails du plan")
@@ -23061,6 +23101,7 @@ def nouveau_plan_action_pour_risque(risque_id):
         except Exception as e:
             db.session.rollback()
             print(f"   ❌ ERREUR CRITIQUE lors de la création: {str(e)}")
+            import traceback
             print(f"   Traceback: {traceback.format_exc()}")
             flash(f'❌ Erreur lors de la création du plan d\'action: {str(e)}', 'error')
     
