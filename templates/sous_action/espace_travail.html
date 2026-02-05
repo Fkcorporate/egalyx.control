@@ -1,0 +1,792 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="container-fluid">
+    <!-- En-tête -->
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <div>
+            <h2>
+                <i class="fas fa-comments me-2"></i> 
+                Espace de travail - {{ sous_action.reference if sous_action.reference else "SA-%03d"|format(sous_action.id) }}
+            </h2>
+            <nav aria-label="breadcrumb">
+                <ol class="breadcrumb">
+                    {% if is_risque_plan %}
+                    <li class="breadcrumb-item">
+                        <a href="{{ url_for('voir_plans_action_risque', risque_id=sous_action.plan_action.risque_id) }}">
+                            Plans d'action
+                        </a>
+                    </li>
+                    <li class="breadcrumb-item">
+                        <a href="{{ url_for('detail_plan_action_risque', plan_id=sous_action.plan_action.id) }}">
+                            {{ sous_action.plan_action.reference }}
+                        </a>
+                    </li>
+                    {% else %}
+                    <li class="breadcrumb-item">
+                        <a href="{{ url_for('detail_audit', id=sous_action.plan_action.audit.id) }}">
+                            Audit: {{ sous_action.plan_action.audit.reference }}
+                        </a>
+                    </li>
+                    <li class="breadcrumb-item">
+                        <a href="{{ url_for('detail_plan_action', plan_id=sous_action.plan_action.id) }}">
+                            {{ sous_action.plan_action.nom|truncate(30) }}
+                        </a>
+                    </li>
+                    {% endif %}
+                    <li class="breadcrumb-item active">Espace travail</li>
+                </ol>
+            </nav>
+        </div>
+        <div class="btn-group">
+            {% if is_risque_plan %}
+            <a href="{{ url_for('detail_plan_action_risque', plan_id=sous_action.plan_action.id) }}" 
+               class="btn btn-outline-primary">
+                <i class="fas fa-arrow-left me-1"></i> Retour au plan
+            </a>
+            {% else %}
+            <a href="{{ url_for('detail_plan_action', plan_id=sous_action.plan_action.id) }}" 
+               class="btn btn-outline-primary">
+                <i class="fas fa-arrow-left me-1"></i> Retour au plan
+            </a>
+            {% endif %}
+        </div>
+    </div>
+
+    <div class="row">
+        <!-- Colonne gauche : Infos sous-action -->
+        <div class="col-lg-4">
+            <div class="card mb-4">
+                <div class="card-header bg-primary text-white">
+                    <h5 class="mb-0"><i class="fas fa-info-circle me-2"></i> Informations</h5>
+                </div>
+                <div class="card-body">
+                    <table class="table table-sm table-borderless">
+                        <tr>
+                            <th width="40%">Référence:</th>
+                            <!-- LIGNE 68 CORRIGÉE -->
+                            <td><strong class="text-primary">{{ sous_action.reference if sous_action.reference else "SA-%03d"|format(sous_action.id) }}</strong></td>
+                        </tr>
+                        <tr>
+                            <th>Description:</th>
+                            <td>{{ sous_action.description|truncate(100) }}</td>
+                        </tr>
+                        <tr>
+                            <th>Statut:</th>
+                            <td>
+                                <span class="badge bg-{{ 'success' if sous_action.statut == 'termine' else 'warning' if sous_action.statut == 'en_cours' else 'secondary' }}">
+                                    {{ sous_action.statut|replace('_', ' ')|title }}
+                                </span>
+                            </td>
+                        </tr>
+                        <tr>
+                            <th>Progression:</th>
+                            <td>
+                                <div class="progress" style="height: 10px;">
+                                    <div class="progress-bar 
+                                        {% if sous_action.pourcentage_realisation >= 100 %}bg-success
+                                        {% elif sous_action.pourcentage_realisation >= 50 %}bg-warning
+                                        {% else %}bg-danger{% endif %}" 
+                                         style="width: {{ sous_action.pourcentage_realisation }}%">
+                                    </div>
+                                </div>
+                                <small>{{ sous_action.pourcentage_realisation }}%</small>
+                            </td>
+                        </tr>
+                        <tr>
+                            <th>Responsable:</th>
+                            <td>
+                                {% if sous_action.responsable %}
+                                <i class="fas fa-user me-1"></i>{{ sous_action.responsable.username }}
+                                {% else %}
+                                <span class="text-muted">Non assigné</span>
+                                {% endif %}
+                            </td>
+                        </tr>
+                        <tr>
+                            <th>Dates:</th>
+                            <td>
+                                {% if sous_action.date_debut %}
+                                <div>Début: {{ sous_action.date_debut.strftime('%d/%m/%Y') }}</div>
+                                {% endif %}
+                                {% if sous_action.date_fin_prevue %}
+                                <div>Échéance: {{ sous_action.date_fin_prevue.strftime('%d/%m/%Y') }}</div>
+                                {% endif %}
+                                {% if sous_action.est_en_retard %}
+                                <div class="text-danger">
+                                    <i class="fas fa-exclamation-triangle"></i> En retard
+                                </div>
+                                {% endif %}
+                            </td>
+                        </tr>
+                    </table>
+                    
+                    <!-- Actions rapides -->
+                    <div class="mt-3">
+                        <div class="d-grid gap-2">
+                            <button class="btn btn-sm btn-outline-primary" onclick="changerStatutSousAction()">
+                                <i class="fas fa-flag me-1"></i> Changer statut
+                            </button>
+                            <button class="btn btn-sm btn-outline-success" onclick="terminerSousAction()">
+                                <i class="fas fa-check me-1"></i> Terminer la tâche
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Fichiers attachés -->
+            <div class="card mb-4">
+                <div class="card-header">
+                    <h5 class="mb-0"><i class="fas fa-paperclip me-2"></i> Fichiers ({{ fichiers|length }})</h5>
+                </div>
+                <div class="card-body">
+                    {% if fichiers %}
+                    <div class="list-group list-group-flush">
+                        {% for fichier in fichiers %}
+                        <div class="list-group-item px-0">
+                            <div class="d-flex align-items-center">
+                                <div class="me-3">
+                                    <i class="{{ fichier.icon_class }} fa-2x"></i>
+                                </div>
+                                <div class="flex-grow-1">
+                                    <div class="fw-bold small text-truncate" title="{{ fichier.nom_fichier }}">
+                                        {{ fichier.nom_fichier|truncate(25) }}
+                                    </div>
+                                    <div class="text-muted smaller">
+                                        {{ fichier.taille_formatee }}
+                                        <i class="fas fa-user ms-2 me-1"></i>{{ fichier.uploader.username }}
+                                    </div>
+                                </div>
+                                <div class="dropdown">
+                                    <button class="btn btn-sm btn-outline-secondary border-0" 
+                                            type="button" data-bs-toggle="dropdown">
+                                        <i class="fas fa-ellipsis-v"></i>
+                                    </button>
+                                    <ul class="dropdown-menu">
+                                        <li>
+                                            <a class="dropdown-item" 
+                                               href="{{ url_for('telecharger_fichier_plan_action', fichier_id=fichier.id) }}">
+                                                <i class="fas fa-download me-2"></i>Télécharger
+                                            </a>
+                                        </li>
+                                        {% if fichier.get_preview_url() %}
+                                        <li>
+                                            <a class="dropdown-item" href="{{ fichier.get_preview_url() }}" target="_blank">
+                                                <i class="fas fa-eye me-2"></i>Voir
+                                            </a>
+                                        </li>
+                                        {% endif %}
+                                        {% if current_user.id == fichier.uploaded_by or current_user.is_client_admin %}
+                                        <li>
+                                            <a class="dropdown-item text-danger" 
+                                               href="{{ url_for('supprimer_fichier_plan_action', fichier_id=fichier.id) }}"
+                                               onclick="return confirm('Supprimer ce fichier ?')">
+                                                <i class="fas fa-trash me-2"></i>Supprimer
+                                            </a>
+                                        </li>
+                                        {% endif %}
+                                    </ul>
+                                </div>
+                            </div>
+                        </div>
+                        {% endfor %}
+                    </div>
+                    {% else %}
+                    <div class="text-center py-3 text-muted">
+                        <i class="fas fa-paperclip fa-3x mb-2"></i>
+                        <p>Aucun fichier joint</p>
+                    </div>
+                    {% endif %}
+                    
+                    <!-- Upload rapide -->
+                    <div class="mt-3">
+                        <form id="formUploadRapide" enctype="multipart/form-data">
+                            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                            <div class="input-group">
+                                <input type="file" class="form-control" id="fichierRapide" name="fichiers" 
+                                       multiple style="display: none;" 
+                                       onchange="uploadFichiersRapides(this)">
+                                <button type="button" class="btn btn-outline-primary w-100" 
+                                        onclick="document.getElementById('fichierRapide').click()">
+                                    <i class="fas fa-plus me-1"></i> Ajouter des fichiers
+                                </button>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Colonne droite : Commentaires -->
+        <div class="col-lg-8">
+            <!-- Formulaire de commentaire -->
+            <div class="card mb-4">
+                <div class="card-body">
+                    <form method="POST" action="{{ url_for('ajouter_commentaire_sous_action', sous_action_id=sous_action.id) }}" 
+                          enctype="multipart/form-data" id="formCommentaire">
+                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                        
+                        <div class="mb-3">
+                            <textarea class="form-control" name="contenu" rows="3" 
+                                      placeholder="Partagez une mise à jour, posez une question, signalez un blocage..."
+                                      required></textarea>
+                        </div>
+                        
+                        <div class="d-flex justify-content-between align-items-center">
+                            <div class="btn-group">
+                                <button type="button" class="btn btn-outline-secondary btn-sm" 
+                                        onclick="document.getElementById('fichiersCommentaire').click()">
+                                    <i class="fas fa-paperclip me-1"></i> Fichiers
+                                </button>
+                                <input type="file" id="fichiersCommentaire" name="fichiers" 
+                                       multiple style="display: none;" 
+                                       onchange="afficherFichiersSelectionnes(this)">
+                                <button type="button" class="btn btn-outline-secondary btn-sm" 
+                                        data-bs-toggle="collapse" data-bs-target="#optionsAvancees">
+                                    <i class="fas fa-cog me-1"></i> Options
+                                </button>
+                            </div>
+                            <button type="submit" class="btn btn-primary">
+                                <i class="fas fa-paper-plane me-1"></i> Publier
+                            </button>
+                        </div>
+                        
+                        <!-- Options avancées -->
+                        <div class="collapse mt-3" id="optionsAvancees">
+                            <div class="border rounded p-3 bg-light">
+                                <div class="row">
+                                    <div class="col-md-6">
+                                        <div class="mb-3">
+                                            <label class="form-label">Type</label>
+                                            <select class="form-select" name="type_contenu">
+                                                <option value="commentaire">Commentaire général</option>
+                                                <option value="note">Note importante</option>
+                                                <option value="mise_a_jour">Mise à jour de progression</option>
+                                                <option value="question">Question</option>
+                                                <option value="blocage">Signalement de blocage</option>
+                                                <option value="reussite">Succès accompli</option>
+                                            </select>
+                                        </div>
+                                    </div>
+                                    <div class="col-md-6">
+                                        <div class="mb-3">
+                                            <label class="form-label">Tags (séparés par des virgules)</label>
+                                            <input type="text" class="form-control" name="tags" 
+                                                   placeholder="important, question, blocage...">
+                                        </div>
+                                    </div>
+                                </div>
+                                <div class="form-check">
+                                    <input type="checkbox" class="form-check-input" name="est_prive" id="est_prive">
+                                    <label class="form-check-label" for="est_prive">
+                                        Commentaire privé (admin/responsable seulement)
+                                    </label>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <!-- Aperçu fichiers -->
+                        <div id="apercuFichiers" class="mt-2" style="display: none;">
+                            <small class="text-muted">Fichiers sélectionnés :</small>
+                            <div id="listeFichiers" class="mt-1"></div>
+                        </div>
+                    </form>
+                </div>
+            </div>
+
+            <!-- Liste des commentaires -->
+            <div class="card">
+                <div class="card-header d-flex justify-content-between align-items-center">
+                    <h5 class="mb-0"><i class="fas fa-comments me-2"></i> Discussions ({{ commentaires|length }})</h5>
+                    <div class="btn-group">
+                        <button class="btn btn-sm btn-outline-secondary" onclick="filtrerCommentaires('tous')">Tous</button>
+                        <button class="btn btn-sm btn-outline-primary" onclick="filtrerCommentaires('note')">Notes</button>
+                        <button class="btn btn-sm btn-outline-success" onclick="filtrerCommentaires('mise_a_jour')">Mises à jour</button>
+                    </div>
+                </div>
+                <div class="card-body">
+                    {% if commentaires %}
+                    <div class="timeline" id="commentairesList">
+                        {% for commentaire in commentaires %}
+                        {% if not commentaire.est_prive or current_user.is_client_admin or current_user.id == sous_action.responsable_id %}
+                        <div class="timeline-item commentaire-item" data-type="{{ commentaire.type_contenu }}">
+                            <div class="timeline-marker 
+                                {% if commentaire.type_contenu == 'note' %}bg-primary
+                                {% elif commentaire.type_contenu == 'mise_a_jour' %}bg-success
+                                {% elif commentaire.type_contenu == 'question' %}bg-warning
+                                {% elif commentaire.type_contenu == 'blocage' %}bg-danger
+                                {% elif commentaire.type_contenu == 'reussite' %}bg-info
+                                {% else %}bg-secondary{% endif %}">
+                            </div>
+                            <div class="timeline-content">
+                                <div class="card {% if commentaire.est_prive %}border-warning{% endif %} mb-3">
+                                    <div class="card-body">
+                                        <!-- En-tête -->
+                                        <div class="d-flex justify-content-between align-items-start mb-3">
+                                            <div class="d-flex align-items-center">
+                                                <div class="avatar-sm bg-primary rounded-circle text-white d-flex align-items-center justify-content-center me-3"
+                                                     style="width: 40px; height: 40px;">
+                                                    {{ commentaire.utilisateur.username[0].upper() }}
+                                                </div>
+                                                <div>
+                                                    <h6 class="mb-0">{{ commentaire.utilisateur.username }}</h6>
+                                                    <div class="text-muted small">
+                                                        <i class="far fa-clock me-1"></i> {{ commentaire.created_at.strftime('%d/%m/%Y à %H:%M') }}
+                                                        {% if commentaire.est_prive %}
+                                                        <span class="badge bg-warning ms-2">
+                                                            <i class="fas fa-lock me-1"></i> Privé
+                                                        </span>
+                                                        {% endif %}
+                                                        <span class="badge bg-{% if commentaire.type_contenu == 'note' %}primary
+                                                        {% elif commentaire.type_contenu == 'mise_a_jour' %}success
+                                                        {% elif commentaire.type_contenu == 'question' %}warning
+                                                        {% elif commentaire.type_contenu == 'blocage' %}danger
+                                                        {% elif commentaire.type_contenu == 'reussite' %}info
+                                                        {% else %}secondary{% endif %} ms-1">
+                                                            {{ commentaire.type_contenu|replace('_', ' ')|title }}
+                                                        </span>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                            <div class="dropdown">
+                                                <button class="btn btn-sm btn-outline-secondary" type="button" 
+                                                        data-bs-toggle="dropdown">
+                                                    <i class="fas fa-ellipsis-v"></i>
+                                                </button>
+                                                <ul class="dropdown-menu">
+                                                    <li>
+                                                        <form method="POST" 
+                                                              action="{{ url_for('supprimer_commentaire_sous_action', sous_action_id=sous_action.id, commentaire_id=commentaire.id) }}" 
+                                                              class="d-inline">
+                                                            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                                                            <button type="submit" class="dropdown-item text-danger" 
+                                                                    onclick="return confirm('Supprimer ce commentaire ?')">
+                                                                <i class="fas fa-trash me-2"></i>Supprimer
+                                                            </button>
+                                                        </form>
+                                                    </li>
+                                                </ul>
+                                            </div>
+                                        </div>
+                                        
+                                        <!-- Tags -->
+                                        {% if commentaire.tags %}
+                                        <div class="mb-3">
+                                            {% for tag in commentaire.tags %}
+                                            <span class="badge bg-light text-dark border me-1">
+                                                <i class="fas fa-tag me-1"></i>{{ tag }}
+                                            </span>
+                                            {% endfor %}
+                                        </div>
+                                        {% endif %}
+                                        
+                                        <!-- Contenu -->
+                                        <div class="commentaire-contenu mb-3">
+                                            {{ commentaire.contenu|nl2br|safe }}
+                                        </div>
+                                        
+                                        <!-- Fichiers joints -->
+                                        {% if commentaire.fichiers %}
+                                        <div class="fichiers-joints mb-3">
+                                            <h6 class="mb-2">
+                                                <i class="fas fa-paperclip me-2"></i>Fichiers joints ({{ commentaire.fichiers|length }})
+                                            </h6>
+                                            <div class="row">
+                                                {% for fichier in commentaire.fichiers %}
+                                                <div class="col-md-4 mb-2">
+                                                    <div class="card fichier-card">
+                                                        <div class="card-body p-2">
+                                                            <div class="d-flex align-items-center">
+                                                                <div class="me-2">
+                                                                    <i class="{{ fichier.icon_class }} fa-2x"></i>
+                                                                </div>
+                                                                <div class="flex-grow-1">
+                                                                    <div class="small text-truncate" title="{{ fichier.nom_fichier }}">
+                                                                        {{ fichier.nom_fichier|truncate(20) }}
+                                                                    </div>
+                                                                    <div class="text-muted smaller">
+                                                                        {{ fichier.taille_formatee }}
+                                                                        {% if fichier.extension %}
+                                                                        <span class="badge bg-light text-dark ms-1">
+                                                                            .{{ fichier.extension|upper }}
+                                                                        </span>
+                                                                        {% endif %}
+                                                                    </div>
+                                                                </div>
+                                                                <div class="dropdown">
+                                                                    <button class="btn btn-sm btn-outline-secondary border-0" 
+                                                                            type="button" data-bs-toggle="dropdown">
+                                                                        <i class="fas fa-ellipsis-v"></i>
+                                                                    </button>
+                                                                    <ul class="dropdown-menu">
+                                                                        <li>
+                                                                            <a class="dropdown-item" 
+                                                                               href="{{ url_for('telecharger_fichier_plan_action', fichier_id=fichier.id) }}">
+                                                                                <i class="fas fa-download me-2"></i>Télécharger
+                                                                            </a>
+                                                                        </li>
+                                                                        {% if fichier.get_preview_url() %}
+                                                                        <li>
+                                                                            <a class="dropdown-item" href="{{ fichier.get_preview_url() }}" target="_blank">
+                                                                                <i class="fas fa-eye me-2"></i>Voir
+                                                                            </a>
+                                                                        </li>
+                                                                        {% endif %}
+                                                                    </ul>
+                                                                </div>
+                                                            </div>
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                                {% endfor %}
+                                            </div>
+                                        </div>
+                                        {% endif %}
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        {% endif %}
+                        {% endfor %}
+                    </div>
+                    {% else %}
+                    <div class="text-center py-5">
+                        <i class="fas fa-comments fa-4x text-muted mb-3"></i>
+                        <h4 class="text-muted">Aucun commentaire</h4>
+                        <p class="text-muted">Soyez le premier à commenter cette sous-action !</p>
+                    </div>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Modal pour changer statut -->
+<div class="modal fade" id="modalChangerStatut" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Changer le statut</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <select class="form-select" id="selectStatut">
+                    <option value="a_faire" {% if sous_action.statut == 'a_faire' %}selected{% endif %}>À faire</option>
+                    <option value="en_cours" {% if sous_action.statut == 'en_cours' %}selected{% endif %}>En cours</option>
+                    <option value="termine" {% if sous_action.statut == 'termine' %}selected{% endif %}>Terminé</option>
+                </select>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Annuler</button>
+                <button type="button" class="btn btn-primary" onclick="appliquerChangementStatut()">Appliquer</button>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+// Variables globales
+let fichiersSelectionnes = [];
+
+// Afficher les fichiers sélectionnés
+function afficherFichiersSelectionnes(input) {
+    const listeFichiers = document.getElementById('listeFichiers');
+    const apercuDiv = document.getElementById('apercuFichiers');
+    
+    listeFichiers.innerHTML = '';
+    fichiersSelectionnes = Array.from(input.files);
+    
+    if (fichiersSelectionnes.length > 0) {
+        apercuDiv.style.display = 'block';
+        
+        fichiersSelectionnes.forEach((file, index) => {
+            const div = document.createElement('div');
+            div.className = 'd-flex justify-content-between align-items-center border rounded p-2 mb-1';
+            div.innerHTML = `
+                <div class="d-flex align-items-center">
+                    <i class="fas fa-file me-2 text-secondary"></i>
+                    <div>
+                        <div class="small">${file.name}</div>
+                        <div class="text-muted smaller">${formatTaille(file.size)}</div>
+                    </div>
+                </div>
+                <button type="button" class="btn btn-sm btn-outline-danger border-0" 
+                        onclick="supprimerFichierSelectionne(${index})">
+                    <i class="fas fa-times"></i>
+                </button>
+            `;
+            listeFichiers.appendChild(div);
+        });
+    } else {
+        apercuDiv.style.display = 'none';
+    }
+}
+
+// Supprimer un fichier sélectionné
+function supprimerFichierSelectionne(index) {
+    const input = document.querySelector('input[name="fichiers"]');
+    const dt = new DataTransfer();
+    
+    fichiersSelectionnes.forEach((file, i) => {
+        if (i !== index) {
+            dt.items.add(file);
+        }
+    });
+    
+    fichiersSelectionnes = Array.from(dt.files);
+    input.files = dt.files;
+    afficherFichiersSelectionnes(input);
+}
+
+// Formater la taille des fichiers
+function formatTaille(bytes) {
+    if (bytes === 0) return '0 B';
+    const k = 1024;
+    const sizes = ['B', 'KB', 'MB', 'GB'];
+    const i = Math.floor(Math.log(bytes) / Math.log(k));
+    return parseFloat((bytes / Math.pow(k, i)).toFixed(1)) + ' ' + sizes[i];
+}
+
+// Upload de fichiers rapides
+function uploadFichiersRapides(input) {
+    if (input.files.length === 0) return;
+    
+    const formData = new FormData();
+    formData.append('csrf_token', '{{ csrf_token() }}');
+    
+    Array.from(input.files).forEach(file => {
+        formData.append('fichiers', file);
+    });
+    
+    fetch('/sous-action/{{ sous_action.id }}/fichier/upload', {
+        method: 'POST',
+        body: formData
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            showToast('success', `✅ ${data.message}`);
+            setTimeout(() => location.reload(), 1000);
+        } else {
+            showToast('error', `❌ ${data.error}`);
+        }
+    })
+    .catch(error => {
+        console.error('Error:', error);
+        showToast('error', '❌ Erreur réseau');
+    });
+}
+
+// Filtrer les commentaires
+function filtrerCommentaires(type) {
+    const commentaires = document.querySelectorAll('.commentaire-item');
+    
+    commentaires.forEach(com => {
+        if (type === 'tous' || com.dataset.type === type) {
+            com.style.display = 'block';
+        } else {
+            com.style.display = 'none';
+        }
+    });
+    
+    // Mettre à jour les boutons actifs
+    document.querySelectorAll('.btn-group .btn').forEach(btn => {
+        btn.classList.remove('active');
+    });
+    event.target.classList.add('active');
+}
+
+// Changer le statut
+function changerStatutSousAction() {
+    const modal = new bootstrap.Modal(document.getElementById('modalChangerStatut'));
+    modal.show();
+}
+
+function appliquerChangementStatut() {
+    const nouveauStatut = document.getElementById('selectStatut').value;
+    
+    fetch(`/sous-action-risque/{{ sous_action.id }}/changer-statut`, {
+        method: 'POST',
+        headers: {
+            'X-CSRFToken': '{{ csrf_token() }}',
+            'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ 
+            statut: nouveauStatut,
+            progression: nouveauStatut === 'termine' ? 100 : 
+                        nouveauStatut === 'en_cours' ? 50 : 25
+        })
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            showToast('success', '✅ Statut mis à jour');
+            setTimeout(() => location.reload(), 1000);
+        } else {
+            showToast('error', '❌ Erreur: ' + data.error);
+        }
+    })
+    .catch(error => {
+        console.error('Error:', error);
+        showToast('error', '❌ Erreur réseau');
+    });
+}
+
+// Terminer la sous-action
+function terminerSousAction() {
+    if (confirm('Terminer cette sous-action à 100% ?')) {
+        fetch(`/sous-action-risque/{{ sous_action.id }}/terminer`, {
+            method: 'POST',
+            headers: {
+                'X-CSRFToken': '{{ csrf_token() }}'
+            }
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                showToast('success', '✅ Sous-action terminée');
+                setTimeout(() => location.reload(), 1000);
+            } else {
+                showToast('error', '❌ Erreur: ' + data.error);
+            }
+        })
+    }
+}
+
+// Fonction pour afficher des toasts
+function showToast(type, message) {
+    const toastContainer = document.getElementById('toastContainer') || createToastContainer();
+    
+    const toastId = 'toast-' + Date.now();
+    const toast = document.createElement('div');
+    toast.className = `toast align-items-center text-white bg-${type === 'success' ? 'success' : 'danger'} border-0`;
+    toast.id = toastId;
+    toast.setAttribute('role', 'alert');
+    toast.setAttribute('aria-live', 'assertive');
+    toast.setAttribute('aria-atomic', 'true');
+    
+    toast.innerHTML = `
+        <div class="d-flex">
+            <div class="toast-body">
+                ${message}
+            </div>
+            <button type="button" class="btn-close btn-close-white me-2 m-auto" 
+                    data-bs-dismiss="toast"></button>
+        </div>
+    `;
+    
+    toastContainer.appendChild(toast);
+    const bsToast = new bootstrap.Toast(toast);
+    bsToast.show();
+    
+    toast.addEventListener('hidden.bs.toast', function () {
+        toast.remove();
+    });
+}
+
+function createToastContainer() {
+    const container = document.createElement('div');
+    container.id = 'toastContainer';
+    container.className = 'toast-container position-fixed bottom-0 end-0 p-3';
+    container.style.zIndex = '9999';
+    document.body.appendChild(container);
+    return container;
+}
+
+// Initialisation
+document.addEventListener('DOMContentLoaded', function() {
+    if (!document.getElementById('toastContainer')) {
+        createToastContainer();
+    }
+    
+    // Tooltips
+    const tooltips = document.querySelectorAll('[data-bs-toggle="tooltip"]');
+    tooltips.forEach(tooltip => new bootstrap.Tooltip(tooltip));
+});
+</script>
+
+<style>
+.timeline {
+    position: relative;
+    padding-left: 30px;
+}
+
+.timeline::before {
+    content: '';
+    position: absolute;
+    left: 15px;
+    top: 0;
+    bottom: 0;
+    width: 2px;
+    background-color: #dee2e6;
+}
+
+.timeline-item {
+    position: relative;
+    margin-bottom: 20px;
+}
+
+.timeline-marker {
+    position: absolute;
+    left: -30px;
+    top: 20px;
+    width: 15px;
+    height: 15px;
+    border-radius: 50%;
+    border: 3px solid #fff;
+    box-shadow: 0 0 0 3px #dee2e6;
+    z-index: 1;
+}
+
+.timeline-content {
+    padding-left: 20px;
+}
+
+.avatar-sm {
+    display: flex;
+    align-items-center;
+    justify-content: center;
+    font-weight: bold;
+}
+
+.fichier-card {
+    transition: all 0.3s ease;
+    cursor: pointer;
+}
+
+.fichier-card:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+}
+
+.commentaire-contenu {
+    line-height: 1.6;
+    white-space: pre-wrap;
+    word-break: break-word;
+}
+
+.badge.bg-success { background-color: #198754 !important; }
+.badge.bg-warning { background-color: #ffc107 !important; color: #000 !important; }
+.badge.bg-danger { background-color: #dc3545 !important; }
+.badge.bg-secondary { background-color: #6c757d !important; }
+.badge.bg-info { background-color: #0dcaf0 !important; }
+
+@media (max-width: 768px) {
+    .timeline {
+        padding-left: 20px;
+    }
+    
+    .timeline::before {
+        left: 10px;
+    }
+    
+    .timeline-marker {
+        left: -20px;
+    }
+}
+</style>
+{% endblock %}
