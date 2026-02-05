@@ -82,7 +82,9 @@ try:
         Questionnaire, QuestionnaireCategorie, Question, OptionQuestion, ConditionQuestion,
         ReponseQuestionnaire, ReponseQuestion, ReponseOption, CampagneEvaluation,
         AnalyseIA, FichierMetadata, RecommandationGlobale, JournalActiviteClient, EnvironnementClient, Client,
-        FormuleAbonnement, AbonnementClient, FichierRapport, VerificationDispositif, DocumentDispositif, DispositifMaitrise
+        FormuleAbonnement, AbonnementClient, FichierRapport, VerificationDispositif, 
+        DocumentDispositif, DispositifMaitrise,CommentairePlanAction, FichierPlanAction, 
+        CommentairePlanAction, FichierPlanAction
     )
     
     MODELS_IMPORTED = True
@@ -418,7 +420,7 @@ try:
     # FORMULAIRES POUR LES QUESTIONNAIRES
     QuestionnaireForm, CategorieQuestionnaireForm, QuestionForm,
     OptionQuestionForm, ConditionQuestionForm, ImportQuestionnaireForm, ExportQuestionnaireForm, 
-    LienLogigrammeForm, ElementLogigrammeForm
+    LienLogigrammeForm, ElementLogigrammeForm, CommentaireSousActionForm
 )
 
     
