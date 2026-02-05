@@ -23495,70 +23495,7 @@ def save_fichier_plan_action(fichier, plan_id, commentaire_id=None, uploaded_by=
 
 
     
-@app.route('/plan-action-risque/<int:plan_id>/sous-action/nouveau', methods=['GET', 'POST'])
-@login_required
-def nouveau_sous_action_risque(plan_id):
-    """Ajouter une sous-action à un plan d'action risque"""
-    plan_action = PlanAction.query.get_or_404(plan_id)
-    
-    if not check_client_access(plan_action):
-        flash('Accès non autorisé', 'error')
-        return redirect(url_for('detail_plan_action_risque', plan_id=plan_id))
-    
-    # Vérifier les permissions
-    if (current_user.id != plan_action.created_by and 
-        not current_user.has_permission('can_manage_plans')):
-        flash('Vous n\'êtes pas autorisé à ajouter des sous-actions', 'error')
-        return redirect(url_for('detail_plan_action_risque', plan_id=plan_id))
-    
-    # Utilisez le formulaire AVEC commentaire
-    form = SousActionForm()
-    
-    # Pré-remplir les choix
-    utilisateurs = get_client_filter(User).filter_by(is_active=True).all()
-    form.responsable_id.choices = [(0, 'Non assigné')] + \
-        [(u.id, f"{u.username} - {u.role}") for u in utilisateurs]
-    
-    if request.method == 'GET':
-        # Définir les dates par défaut
-        form.date_debut.data = datetime.now().date()
-        form.date_fin_prevue.data = (datetime.now() + timedelta(days=14)).date()
-    
-    if form.validate_on_submit():
-        # Trouver le prochain ordre
-        dernier_sous_action = SousAction.query\
-            .filter_by(plan_action_id=plan_id)\
-            .order_by(SousAction.created_at.desc())\
-            .first()
-        
-        # Générer une référence
-        reference = f"SA-{plan_action.reference}-{(dernier_sous_action.id + 1) if dernier_sous_action else 1:03d}"
-        
-        # Créer la sous-action - UTILISEZ SEULEMENT LES CHAMPS DISPONIBLES
-        sous_action = SousAction(
-            plan_action_id=plan_id,
-            reference=reference,
-            description=form.description.data,
-            # Ne pas utiliser form.commentaire.data si le champ n'existe pas
-            # commentaire=form.commentaire.data if hasattr(form, 'commentaire') else None,
-            date_debut=form.date_debut.data,
-            date_fin_prevue=form.date_fin_prevue.data,
-            responsable_id=form.responsable_id.data if form.responsable_id.data != 0 else None,
-            statut='a_faire',
-            pourcentage_realisation=0,
-            client_id=current_user.client_id
-        )
-        
-        db.session.add(sous_action)
-        db.session.commit()
-        
-        flash('Sous-action ajoutée avec succès', 'success')
-        return redirect(url_for('detail_plan_action_risque', plan_id=plan_id))
-    
-    return render_template('plans_action/form_sous_action.html',
-                         form=form,
-                         plan=plan_action,
-                         action='creer')
+
 
 
 # ============================================================================
