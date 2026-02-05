@@ -42669,6 +42669,30 @@ def admin_analyses_ia():
                          stats=stats,
                          recent_analyses=recent)
 
+
+@app.route('/plan-action/<int:plan_id>/modifier', methods=['GET'])
+@login_required
+def afficher_modifier_plan_action(plan_id):
+    """Afficher le formulaire de modification d'un plan d'action"""
+    plan_action = PlanAction.query.get_or_404(plan_id)
+    
+    if not check_client_access(plan_action):
+        flash('Accès non autorisé', 'error')
+        return redirect(url_for('liste_plans_action'))
+    
+    # Créer le formulaire
+    form = PlanActionForm(obj=plan_action)
+    
+    # Pré-remplir les choix
+    utilisateurs = get_client_filter(User).filter_by(is_active=True).all()
+    form.responsable_id.choices = [(0, 'Non assigné')] + \
+        [(u.id, f"{u.username} - {u.role}") for u in utilisateurs]
+    
+    return render_template('plans_action/form_modifier.html',
+                         form=form,
+                         plan=plan_action,
+                         action='modifier')
+
 @app.route('/plan-action/<int:plan_id>/modifier', methods=['POST'])
 @csrf.exempt
 @login_required
