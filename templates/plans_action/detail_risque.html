@@ -33,6 +33,11 @@
                         <i class="fas fa-archive me-2"></i>Archiver
                     </a>
                 </li>
+                <!-- Ajoutez ce bouton à côté des autres boutons d'action -->
+                    <a href="{{ url_for('espace_travail_plan_action', plan_id=plan.id) }}" 
+                    class="btn btn-info me-2">
+                        <i class="fas fa-comments me-1"></i> Espace de travail
+                    </a>
             </ul>
         </div>
     </div>
@@ -459,6 +464,10 @@
                         </td>
                         <td>
                             <div class="btn-group btn-group-sm">
+                                <a href="{{ url_for('espace_travail_sous_action', sous_action_id=action.id) }}" 
+                                class="btn btn-outline-info" title="Espace de travail">
+                                    <i class="fas fa-comments"></i>
+                                </a>
                                 <button class="btn btn-outline-primary" 
                                         onclick="modifierSousAction({{ action.id }})"
                                         title="Modifier">
@@ -469,8 +478,9 @@
                                         title="Terminer" {% if action.statut == 'termine' %}disabled{% endif %}>
                                     <i class="fas fa-check"></i>
                                 </button>
+                                <!-- Dans la boucle des sous-actions, modifiez le bouton : -->
                                 <button class="btn btn-outline-danger" 
-                                        onclick="supprimerSousAction({{ action.id }})"
+                                        onclick="supprimerSousActionTableau({{ action.id }})"
                                         title="Supprimer">
                                     <i class="fas fa-trash"></i>
                                 </button>
@@ -637,6 +647,33 @@ function terminerSousAction(sousActionId) {
     }
 }
 
+function supprimerCommentaire(sousActionId, commentaireId, element) {
+    if (confirm('Supprimer ce commentaire ?')) {
+        // Créer un formulaire dynamique
+        const form = document.createElement('form');
+        form.method = 'POST';
+        form.action = `/sous-action/${sousActionId}/commentaire/${commentaireId}/supprimer`;
+        
+        // Ajouter le token CSRF
+        const csrfInput = document.createElement('input');
+        csrfInput.type = 'hidden';
+        csrfInput.name = 'csrf_token';
+        csrfInput.value = '{{ csrf_token() }}';
+        form.appendChild(csrfInput);
+        
+        // Soumettre le formulaire
+        document.body.appendChild(form);
+        form.submit();
+        
+        // Fermer le dropdown
+        const dropdown = element.closest('.dropdown');
+        const dropdownInstance = bootstrap.Dropdown.getInstance(dropdown.querySelector('[data-bs-toggle="dropdown"]'));
+        if (dropdownInstance) {
+            dropdownInstance.hide();
+        }
+    }
+    return false;
+}
 // Fonction pour changer le statut d'une sous-action
 function changerStatutSousAction(sousActionId, statut) {
     console.log(`Changer statut ${sousActionId} à ${statut}`);
@@ -676,6 +713,36 @@ function changerStatutSousAction(sousActionId, statut) {
     });
 }
 
+// Fonction pour supprimer depuis le tableau - VERSION CORRIGÉE
+function supprimerSousActionTableau(sousActionId) {
+    if (confirm('Supprimer cette sous-action ?')) {
+        fetch(`/sous-action-risque/${sousActionId}/supprimer`, {
+            method: 'DELETE',
+            headers: {
+                'X-CSRFToken': '{{ csrf_token() }}',
+                'Content-Type': 'application/json'
+            }
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                showToast('success', '✅ Sous-action supprimée');
+                // Supprimer la ligne du tableau
+                const row = document.getElementById(`sous-action-${sousActionId}`);
+                if (row) {
+                    row.remove();
+                    rafraichirProgression();
+                }
+            } else {
+                showToast('error', '❌ Erreur: ' + data.error);
+            }
+        })
+        .catch(error => {
+            console.error('Error:', error);
+            showToast('error', '❌ Erreur réseau');
+        });
+    }
+}
 // Fonction pour changer la progression d'une sous-action
 function changerProgressionSousAction(sousActionId, progression) {
     // Arrondir à la valeur fixe la plus proche
