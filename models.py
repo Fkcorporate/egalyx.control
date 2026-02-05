@@ -2390,6 +2390,8 @@ class PlanAction(db.Model):
     score_efficacite = db.Column(db.Integer)
     commentaire_evaluation = db.Column(db.Text)
     priorite = db.Column(db.String(20), default='moyenne')
+    espace_travail_actif = db.Column(db.Boolean, default=True)
+
     
     # Colonnes d'archivage - LA NOUVELLE COLONNE EST AJOUTÉE
     is_archived = db.Column(db.Boolean, default=False)
@@ -2453,6 +2455,17 @@ class PlanAction(db.Model):
     def ordre(self):
         """Propriété pour compatibilité - retourne l'ID comme ordre"""
         return self.id
+
+    @property
+    def commentaires_recentes(self):
+        """Retourne les 10 derniers commentaires"""
+        return sorted(self.commentaires, key=lambda x: x.created_at, reverse=True)[:10]
+    
+    @property
+    def fichiers_recentes(self):
+        """Retourne les 10 derniers fichiers"""
+        return sorted(self.fichiers, key=lambda x: x.created_at, reverse=True)[:10]
+
     
     @property
     def get_etapes_ordonnees(self):
@@ -2634,6 +2647,11 @@ class SousAction(db.Model):
             'retarde': 'danger'
         }
         return couleurs.get(self.statut, 'light')
+
+    @property
+    def commentaires_recentes(self):
+        """Retourne les commentaires spécifiques à cette sous-action"""
+        return sorted(self.commentaires, key=lambda x: x.created_at, reverse=True)[:10]
     
     def terminer(self):
         """Termine la sous-action"""
@@ -2641,7 +2659,6 @@ class SousAction(db.Model):
         self.pourcentage_realisation = 100
         self.date_fin_reelle = datetime.utcnow().date()
         self.updated_at = datetime.utcnow()
-
 
 # -------------------- ETAPE PLAN ACTION - CORRIGÉ --------------------
 class EtapePlanAction(db.Model):
@@ -2669,6 +2686,7 @@ class EtapePlanAction(db.Model):
             'retarde': 'danger'
         }
         return couleurs.get(self.statut, 'light')
+
 
 # -------------------- MATRICE MATURITE - CORRIGÉ --------------------
 class MatriceMaturite(db.Model):
