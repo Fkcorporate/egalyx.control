@@ -24372,7 +24372,49 @@ def progression_detail_plan_risque(plan_id):
     if not check_client_access(plan_action):
         return jsonify({'error': 'Accès non autorisé'}), 403
     
-    details = plan_action.get_progression_detail()
+    # CORRECTION : Utilisez get_progression_detaillee() si c'est le bon nom
+    # OU créez une méthode qui calcule les détails
+    try:
+        if hasattr(plan_action, 'get_progression_detaillee'):
+            details = plan_action.get_progression_detaillee()
+        else:
+            # Calcul manuel des détails
+            sous_actions = plan_action.sous_actions
+            total = len(sous_actions)
+            terminees = len([sa for sa in sous_actions if sa.statut == 'termine'])
+            en_cours = len([sa for sa in sous_actions if sa.statut == 'en_cours'])
+            a_faire = len([sa for sa in sous_actions if sa.statut == 'a_faire'])
+            retardees = len([sa for sa in sous_actions if sa.est_en_retard])
+            
+            details = {
+                'total': total,
+                'terminees': terminees,
+                'en_cours': en_cours,
+                'a_faire': a_faire,
+                'retardees': retardees,
+                'progression': plan_action.pourcentage_realisation,
+                'sous_actions': [
+                    {
+                        'id': sa.id,
+                        'reference': sa.reference,
+                        'description': sa.description,
+                        'statut': sa.statut,
+                        'progression': sa.pourcentage_realisation
+                    }
+                    for sa in sous_actions
+                ]
+            }
+    except Exception as e:
+        details = {
+            'total': 0,
+            'terminees': 0,
+            'en_cours': 0,
+            'a_faire': 0,
+            'retardees': 0,
+            'progression': 0,
+            'sous_actions': [],
+            'error': str(e)
+        }
     
     return jsonify({
         'success': True,
