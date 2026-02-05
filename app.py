@@ -23269,6 +23269,295 @@ def nouveau_sous_action_risque(plan_id):
                          plan=plan_action,
                          action='creer')
 
+@app.route('/plan-action/<int:plan_id>/espace-travail', methods=['GET', 'POST'])
+@login_required
+def espace_travail_plan_action(plan_id):
+    """Espace de travail collaboratif pour un plan d'action"""
+    plan = PlanAction.query.get_or_404(plan_id)
+    
+    if not check_client_access(plan):
+        flash('Accès non autorisé', 'error')
+        return redirect(url_for('dashboard'))
+    
+    # Récupérer les sous-actions
+    sous_actions = SousAction.query.filter_by(plan_action_id=plan_id).all()
+    
+    # Récupérer les commentaires récents
+    commentaires_recentes = CommentairePlanAction.query\
+        .filter_by(plan_action_id=plan_id)\
+        .order_by(CommentairePlanAction.created_at.desc())\
+        .limit(50)\
+        .all()
+    
+    # Récupérer les fichiers récents
+    fichiers_recentes = FichierPlanAction.query\
+        .filter_by(plan_action_id=plan_id)\
+        .order_by(FichierPlanAction.created_at.desc())\
+        .limit(20)\
+        .all()
+    
+    # Form pour ajouter un commentaire
+    form_commentaire = CommentaireForm()
+    form_commentaire.sous_action_id.choices = [(0, 'Plan général')] + \
+        [(sa.id, f"{sa.reference or f'SA-{sa.id}'}: {sa.description[:50]}...") 
+         for sa in sous_actions]
+    
+    if request.method == 'POST' and form_commentaire.validate_on_submit():
+        # Créer un nouveau commentaire
+        commentaire = CommentairePlanAction(
+            plan_action_id=plan_id,
+            sous_action_id=form_commentaire.sous_action_id.data if form_commentaire.sous_action_id.data != 0 else None,
+            utilisateur_id=current_user.id,
+            contenu=form_commentaire.contenu.data,
+            type_contenu=form_commentaire.type_contenu.data,
+            est_prive=form_commentaire.est_prive.data,
+            tags=form_commentaire.tags.data.split(',') if form_commentaire.tags.data else [],
+            client_id=current_user.client_id
+        )
+        
+        try:
+            db.session.add(commentaire)
+            db.session.commit()
+            
+            # Gérer les fichiers uploadés
+            fichiers = request.files.getlist('fichiers')
+            for fichier in fichiers:
+                if fichier and fichier.filename:
+                    save_fichier_plan_action(fichier, plan_id, commentaire.id, current_user.id)
+            
+            flash('Commentaire ajouté avec succès', 'success')
+            return redirect(url_for('espace_travail_plan_action', plan_id=plan_id))
+            
+        except Exception as e:
+            db.session.rollback()
+            flash(f'Erreur: {str(e)}', 'error')
+    
+    return render_template('plans_action/espace_travail.html',
+                         plan=plan,
+                         sous_actions=sous_actions,
+                         commentaires=commentaires_recentes,
+                         fichiers=fichiers_recentes,
+                         form_commentaire=form_commentaire,
+                         current_user=current_user)
+
+@app.route('/plan-action/<int:plan_id>/commentaire/<int:commentaire_id>/supprimer', methods=['POST'])
+@login_required
+def supprimer_commentaire_plan_action(plan_id, commentaire_id):
+    """Supprimer un commentaire de l'espace de travail"""
+    commentaire = CommentairePlanAction.query.get_or_404(commentaire_id)
+    
+    if not check_client_access(commentaire):
+        flash('Accès non autorisé', 'error')
+        return redirect(url_for('espace_travail_plan_action', plan_id=plan_id))
+    
+    # Vérifier que l'utilisateur est l'auteur ou admin
+    if commentaire.utilisateur_id != current_user.id and not current_user.is_client_admin:
+        flash('Vous ne pouvez supprimer que vos propres commentaires', 'error')
+        return redirect(url_for('espace_travail_plan_action', plan_id=plan_id))
+    
+    try:
+        # Supprimer les fichiers associés
+        for fichier in commentaire.fichiers:
+            supprimer_fichier_plan_action(fichier.id)
+        
+        db.session.delete(commentaire)
+        db.session.commit()
+        flash('Commentaire supprimé avec succès', 'success')
+    except Exception as e:
+        db.session.rollback()
+        flash(f'Erreur: {str(e)}', 'error')
+    
+    return redirect(url_for('espace_travail_plan_action', plan_id=plan_id))
+
+@app.route('/plan-action/fichier/upload', methods=['POST'])
+@login_required
+def upload_fichier_plan_action():
+    """Uploader un fichier vers un plan d'action"""
+    plan_id = request.form.get('plan_id')
+    sous_action_id = request.form.get('sous_action_id')
+    commentaire_id = request.form.get('commentaire_id')
+    
+    plan = PlanAction.query.get_or_404(plan_id)
+    
+    if not check_client_access(plan):
+        return jsonify({'success': False, 'error': 'Accès non autorisé'})
+    
+    fichiers = request.files.getlist('fichiers')
+    fichiers_uploades = []
+    
+    for fichier in fichiers:
+        if fichier and fichier.filename:
+            fichier_id = save_fichier_plan_action(fichier, plan_id, commentaire_id, current_user.id, sous_action_id)
+            if fichier_id:
+                fichier_obj = FichierPlanAction.query.get(fichier_id)
+                fichiers_uploades.append(fichier_obj.to_dict())
+    
+    return jsonify({
+        'success': True,
+        'fichiers': fichiers_uploades,
+        'message': f'{len(fichiers_uploades)} fichier(s) uploadé(s)'
+    })
+
+@app.route('/plan-action/fichier/<int:fichier_id>/telecharger')
+@login_required
+def telecharger_fichier_plan_action(fichier_id):
+    """Télécharger un fichier d'un plan d'action"""
+    fichier = FichierPlanAction.query.get_or_404(fichier_id)
+    
+    if not check_client_access(fichier):
+        flash('Accès non autorisé', 'error')
+        return redirect(url_for('dashboard'))
+    
+    # Vérifier l'accès au plan d'action
+    plan = PlanAction.query.get(fichier.plan_action_id)
+    if not check_client_access(plan):
+        flash('Accès non autorisé', 'error')
+        return redirect(url_for('dashboard'))
+    
+    return send_file(fichier.chemin, as_attachment=True, download_name=fichier.nom_fichier)
+
+@app.route('/plan-action/fichier/<int:fichier_id>/supprimer', methods=['POST'])
+@login_required
+def supprimer_fichier_plan_action(fichier_id):
+    """Supprimer un fichier d'un plan d'action"""
+    fichier = FichierPlanAction.query.get_or_404(fichier_id)
+    plan_id = fichier.plan_action_id
+    
+    if not check_client_access(fichier):
+        flash('Accès non autorisé', 'error')
+        return redirect(url_for('espace_travail_plan_action', plan_id=plan_id))
+    
+    # Vérifier que l'utilisateur est l'uploader ou admin
+    if fichier.uploaded_by != current_user.id and not current_user.is_client_admin:
+        flash('Vous ne pouvez supprimer que vos propres fichiers', 'error')
+        return redirect(url_for('espace_travail_plan_action', plan_id=plan_id))
+    
+    try:
+        # Supprimer le fichier physique
+        import os
+        if os.path.exists(fichier.chemin):
+            os.remove(fichier.chemin)
+        
+        # Supprimer de la base
+        db.session.delete(fichier)
+        db.session.commit()
+        flash('Fichier supprimé avec succès', 'success')
+    except Exception as e:
+        db.session.rollback()
+        flash(f'Erreur: {str(e)}', 'error')
+    
+    return redirect(url_for('espace_travail_plan_action', plan_id=plan_id))
+
+# Fonctions utilitaires pour les fichiers
+def save_fichier_plan_action(fichier, plan_id, commentaire_id=None, uploaded_by=None, sous_action_id=None):
+    """Sauvegarder un fichier pour un plan d'action"""
+    import os
+    from werkzeug.utils import secure_filename
+    
+    try:
+        # Créer le dossier si nécessaire
+        upload_dir = f"static/uploads/plans_action/{plan_id}"
+        os.makedirs(upload_dir, exist_ok=True)
+        
+        # Sécuriser le nom du fichier
+        nom_fichier = secure_filename(fichier.filename)
+        timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+        nom_unique = f"{timestamp}_{nom_fichier}"
+        chemin = os.path.join(upload_dir, nom_unique)
+        
+        # Sauvegarder le fichier
+        fichier.save(chemin)
+        
+        # Créer l'entrée en base
+        nouveau_fichier = FichierPlanAction(
+            plan_action_id=plan_id,
+            commentaire_id=commentaire_id,
+            sous_action_id=sous_action_id,
+            nom_fichier=nom_fichier,
+            chemin=chemin,
+            type_fichier=fichier.content_type,
+            taille=os.path.getsize(chemin),
+            uploaded_by=uploaded_by or current_user.id,
+            client_id=current_user.client_id
+        )
+        
+        db.session.add(nouveau_fichier)
+        db.session.commit()
+        
+        return nouveau_fichier.id
+        
+    except Exception as e:
+        print(f"Erreur sauvegarde fichier: {e}")
+        db.session.rollback()
+        return None
+
+
+    
+@app.route('/plan-action-risque/<int:plan_id>/sous-action/nouveau', methods=['GET', 'POST'])
+@login_required
+def nouveau_sous_action_risque(plan_id):
+    """Ajouter une sous-action à un plan d'action risque"""
+    plan_action = PlanAction.query.get_or_404(plan_id)
+    
+    if not check_client_access(plan_action):
+        flash('Accès non autorisé', 'error')
+        return redirect(url_for('detail_plan_action_risque', plan_id=plan_id))
+    
+    # Vérifier les permissions
+    if (current_user.id != plan_action.created_by and 
+        not current_user.has_permission('can_manage_plans')):
+        flash('Vous n\'êtes pas autorisé à ajouter des sous-actions', 'error')
+        return redirect(url_for('detail_plan_action_risque', plan_id=plan_id))
+    
+    # Utilisez le formulaire AVEC commentaire
+    form = SousActionForm()
+    
+    # Pré-remplir les choix
+    utilisateurs = get_client_filter(User).filter_by(is_active=True).all()
+    form.responsable_id.choices = [(0, 'Non assigné')] + \
+        [(u.id, f"{u.username} - {u.role}") for u in utilisateurs]
+    
+    if request.method == 'GET':
+        # Définir les dates par défaut
+        form.date_debut.data = datetime.now().date()
+        form.date_fin_prevue.data = (datetime.now() + timedelta(days=14)).date()
+    
+    if form.validate_on_submit():
+        # Trouver le prochain ordre
+        dernier_sous_action = SousAction.query\
+            .filter_by(plan_action_id=plan_id)\
+            .order_by(SousAction.created_at.desc())\
+            .first()
+        
+        # Générer une référence
+        reference = f"SA-{plan_action.reference}-{(dernier_sous_action.id + 1) if dernier_sous_action else 1:03d}"
+        
+        # Créer la sous-action - UTILISEZ SEULEMENT LES CHAMPS DISPONIBLES
+        sous_action = SousAction(
+            plan_action_id=plan_id,
+            reference=reference,
+            description=form.description.data,
+            # Ne pas utiliser form.commentaire.data si le champ n'existe pas
+            # commentaire=form.commentaire.data if hasattr(form, 'commentaire') else None,
+            date_debut=form.date_debut.data,
+            date_fin_prevue=form.date_fin_prevue.data,
+            responsable_id=form.responsable_id.data if form.responsable_id.data != 0 else None,
+            statut='a_faire',
+            pourcentage_realisation=0,
+            client_id=current_user.client_id
+        )
+        
+        db.session.add(sous_action)
+        db.session.commit()
+        
+        flash('Sous-action ajoutée avec succès', 'success')
+        return redirect(url_for('detail_plan_action_risque', plan_id=plan_id))
+    
+    return render_template('plans_action/form_sous_action.html',
+                         form=form,
+                         plan=plan_action,
+                         action='creer')
+
 
 # ============================================================================
 # ROUTES POUR LES PLANS D'ACTION RISQUE
