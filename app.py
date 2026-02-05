@@ -25498,6 +25498,285 @@ def formulaire_document_dispositif(dispositif_id):
         print(f"❌ Erreur formulaire document: {e}")
         return f'<div class="alert alert-danger">Erreur: {str(e)}</div>'
 
+
+
+# ============================================================================
+# ESPACE DE TRAVAIL DES SOUS-ACTIONS
+# ============================================================================
+
+@app.route('/sous-action/<int:sous_action_id>/espace-travail')
+@login_required
+def espace_travail_sous_action(sous_action_id):
+    """Espace de travail individuel pour une sous-action"""
+    sous_action = SousAction.query.get_or_404(sous_action_id)
+    
+    if not check_client_access(sous_action):
+        flash('Accès non autorisé', 'error')
+        return redirect(url_for('dashboard'))
+    
+    # Récupérer le plan d'action parent
+    plan_action = sous_action.plan_action
+    
+    # Récupérer les commentaires spécifiques à cette sous-action
+    commentaires = CommentairePlanAction.query\
+        .filter_by(sous_action_id=sous_action_id)\
+        .order_by(CommentairePlanAction.created_at.desc())\
+        .all()
+    
+    # Récupérer les fichiers spécifiques à cette sous-action
+    fichiers = FichierPlanAction.query\
+        .filter_by(sous_action_id=sous_action_id)\
+        .order_by(FichierPlanAction.created_at.desc())\
+        .all()
+    
+    # Form pour ajouter un commentaire
+    form_commentaire = CommentaireSousActionForm()
+    
+    # Vérifier si c'est un plan risque ou audit
+    is_risque_plan = (plan_action.risque_id is not None)
+    
+    return render_template('sous_action/espace_travail.html',
+                         sous_action=sous_action,
+                         plan_action=plan_action,
+                         commentaires=commentaires,
+                         fichiers=fichiers,
+                         form_commentaire=form_commentaire,
+                         is_risque_plan=is_risque_plan,
+                         current_user=current_user)
+
+@app.route('/sous-action/<int:sous_action_id>/commentaire/ajouter', methods=['POST'])
+@login_required
+def ajouter_commentaire_sous_action(sous_action_id):
+    """Ajouter un commentaire dans l'espace de travail d'une sous-action"""
+    sous_action = SousAction.query.get_or_404(sous_action_id)
+    
+    if not check_client_access(sous_action):
+        flash('Accès non autorisé', 'error')
+        return redirect(url_for('dashboard'))
+    
+    form = CommentaireSousActionForm()
+    
+    if form.validate_on_submit():
+        commentaire = CommentairePlanAction(
+            plan_action_id=sous_action.plan_action_id,
+            sous_action_id=sous_action_id,
+            utilisateur_id=current_user.id,
+            contenu=form.contenu.data,
+            type_contenu=form.type_contenu.data,
+            est_prive=form.est_prive.data,
+            tags=[tag.strip() for tag in form.tags.data.split(',')] if form.tags.data else [],
+            client_id=current_user.client_id
+        )
+        
+        try:
+            db.session.add(commentaire)
+            db.session.commit()
+            
+            # Gérer les fichiers uploadés
+            fichiers = request.files.getlist('fichiers')
+            for fichier in fichiers:
+                if fichier and fichier.filename:
+                    save_fichier_sous_action(fichier, sous_action_id, commentaire.id, current_user.id)
+            
+            flash('Commentaire ajouté avec succès', 'success')
+            
+        except Exception as e:
+            db.session.rollback()
+            flash(f'Erreur: {str(e)}', 'error')
+    
+    return redirect(url_for('espace_travail_sous_action', sous_action_id=sous_action_id))
+
+@app.route('/sous-action/<int:sous_action_id>/fichier/upload', methods=['POST'])
+@login_required
+def upload_fichier_sous_action(sous_action_id):
+    """Uploader un fichier vers une sous-action"""
+    sous_action = SousAction.query.get_or_404(sous_action_id)
+    
+    if not check_client_access(sous_action):
+        return jsonify({'success': False, 'error': 'Accès non autorisé'})
+    
+    fichiers = request.files.getlist('fichiers')
+    fichiers_uploades = []
+    
+    for fichier in fichiers:
+        if fichier and fichier.filename:
+            fichier_id = save_fichier_sous_action(fichier, sous_action_id, None, current_user.id)
+            if fichier_id:
+                fichier_obj = FichierPlanAction.query.get(fichier_id)
+                fichiers_uploades.append(fichier_obj.to_dict())
+    
+    return jsonify({
+        'success': True,
+        'fichiers': fichiers_uploades,
+        'message': f'{len(fichiers_uploades)} fichier(s) uploadé(s)'
+    })
+
+def save_fichier_sous_action(fichier, sous_action_id, commentaire_id=None, uploaded_by=None):
+    """Sauvegarder un fichier pour une sous-action"""
+    import os
+    from werkzeug.utils import secure_filename
+    
+    try:
+        # Récupérer la sous-action
+        sous_action = SousAction.query.get(sous_action_id)
+        
+        # Créer le dossier
+        upload_dir = f"static/uploads/sous_actions/{sous_action_id}"
+        os.makedirs(upload_dir, exist_ok=True)
+        
+        # Sécuriser le nom du fichier
+        nom_fichier = secure_filename(fichier.filename)
+        timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+        nom_unique = f"{timestamp}_{nom_fichier}"
+        chemin = os.path.join(upload_dir, nom_unique)
+        
+        # Sauvegarder le fichier
+        fichier.save(chemin)
+        
+        # Créer l'entrée en base
+        nouveau_fichier = FichierPlanAction(
+            plan_action_id=sous_action.plan_action_id,
+            sous_action_id=sous_action_id,
+            commentaire_id=commentaire_id,
+            nom_fichier=nom_fichier,
+            chemin=chemin,
+            type_fichier=fichier.content_type,
+            taille=os.path.getsize(chemin),
+            uploaded_by=uploaded_by,
+            client_id=current_user.client_id
+        )
+        
+        db.session.add(nouveau_fichier)
+        db.session.commit()
+        
+        return nouveau_fichier.id
+        
+    except Exception as e:
+        print(f"Erreur sauvegarde fichier sous-action: {e}")
+        db.session.rollback()
+        return None
+
+# ============================================================================
+# API POUR SOUS-ACTIONS (AJAX)
+# ============================================================================
+
+@app.route('/api/sous-action/<int:sous_action_id>/details-complets')
+@login_required
+def api_details_sous_action_complets(sous_action_id):
+    """API: Détails complets d'une sous-action pour affichage modal"""
+    try:
+        sous_action = SousAction.query.get_or_404(sous_action_id)
+        
+        if not check_client_access(sous_action):
+            return jsonify({'success': False, 'error': 'Accès interdit'}), 403
+        
+        # Récupérer les commentaires
+        commentaires = CommentairePlanAction.query\
+            .filter_by(sous_action_id=sous_action_id)\
+            .order_by(CommentairePlanAction.created_at.desc())\
+            .limit(50)\
+            .all()
+        
+        # Récupérer les fichiers
+        fichiers = FichierPlanAction.query\
+            .filter_by(sous_action_id=sous_action_id)\
+            .order_by(FichierPlanAction.created_at.desc())\
+            .limit(20)\
+            .all()
+        
+        data = {
+            'success': True,
+            'sous_action': {
+                'id': sous_action.id,
+                'reference': sous_action.reference or f"SA-{sous_action.id:03d}",
+                'description': sous_action.description,
+                'statut': sous_action.statut,
+                'statut_display': sous_action.statut.replace('_', ' ').title(),
+                'pourcentage_realisation': sous_action.pourcentage_realisation,
+                'date_debut': sous_action.date_debut.strftime('%Y-%m-%d') if sous_action.date_debut else None,
+                'date_fin_prevue': sous_action.date_fin_prevue.strftime('%Y-%m-%d') if sous_action.date_fin_prevue else None,
+                'date_fin_reelle': sous_action.date_fin_reelle.strftime('%Y-%m-%d') if sous_action.date_fin_reelle else None,
+                'responsable': sous_action.responsable.username if sous_action.responsable else None,
+                'responsable_id': sous_action.responsable_id,
+                'est_en_retard': sous_action.est_en_retard,
+                'created_at': sous_action.created_at.strftime('%Y-%m-%d %H:%M') if sous_action.created_at else None,
+                'plan_action': {
+                    'id': sous_action.plan_action.id,
+                    'reference': sous_action.plan_action.reference,
+                    'nom': sous_action.plan_action.nom,
+                    'is_risque_plan': (sous_action.plan_action.risque_id is not None)
+                }
+            },
+            'commentaires': [
+                {
+                    'id': c.id,
+                    'contenu': c.contenu,
+                    'utilisateur': c.utilisateur.username if c.utilisateur else 'Inconnu',
+                    'utilisateur_id': c.utilisateur_id,
+                    'avatar': f"https://ui-avatars.com/api/?name={c.utilisateur.username}&background=random",
+                    'type_contenu': c.type_contenu,
+                    'type_display': c.type_contenu.replace('_', ' ').title(),
+                    'est_prive': c.est_prive,
+                    'tags': c.tags or [],
+                    'date_formatee': c.created_at.strftime('%d/%m/%Y à %H:%M'),
+                    'created_at': c.created_at.isoformat(),
+                    'fichiers': [f.to_dict() for f in c.fichiers]
+                }
+                for c in commentaires
+            ],
+            'fichiers': [f.to_dict() for f in fichiers],
+            'stats': {
+                'total_commentaires': len(commentaires),
+                'total_fichiers': len(fichiers)
+            },
+            'current_user': {
+                'id': current_user.id,
+                'username': current_user.username,
+                'is_admin': current_user.is_client_admin,
+                'can_edit': (current_user.id == sous_action.responsable_id) or current_user.is_client_admin
+            }
+        }
+        
+        return jsonify(data)
+        
+    except Exception as e:
+        print(f"Erreur dans api_details_sous_action_complets: {e}")
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+@app.route('/sous-action/<int:sous_action_id>/commentaire/<int:commentaire_id>/supprimer', methods=['POST'])
+@login_required
+def supprimer_commentaire_sous_action(sous_action_id, commentaire_id):
+    """Supprimer un commentaire d'une sous-action"""
+    commentaire = CommentairePlanAction.query.get_or_404(commentaire_id)
+    
+    # Vérifier que le commentaire appartient à cette sous-action
+    if commentaire.sous_action_id != sous_action_id:
+        flash('Commentaire non trouvé pour cette sous-action', 'error')
+        return redirect(url_for('espace_travail_sous_action', sous_action_id=sous_action_id))
+    
+    if not check_client_access(commentaire):
+        flash('Accès non autorisé', 'error')
+        return redirect(url_for('espace_travail_sous_action', sous_action_id=sous_action_id))
+    
+    # Vérifier que l'utilisateur est l'auteur ou admin
+    if commentaire.utilisateur_id != current_user.id and not current_user.is_client_admin:
+        flash('Vous ne pouvez supprimer que vos propres commentaires', 'error')
+        return redirect(url_for('espace_travail_sous_action', sous_action_id=sous_action_id))
+    
+    try:
+        # Supprimer les fichiers associés
+        for fichier in commentaire.fichiers:
+            supprimer_fichier_plan_action(fichier.id)
+        
+        db.session.delete(commentaire)
+        db.session.commit()
+        flash('Commentaire supprimé avec succès', 'success')
+    except Exception as e:
+        db.session.rollback()
+        flash(f'Erreur: {str(e)}', 'error')
+    
+    return redirect(url_for('espace_travail_sous_action', sous_action_id=sous_action_id))
+
 # ============================================================================
 # ============================================================================
 # ============================================================================
