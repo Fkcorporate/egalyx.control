@@ -5,7 +5,7 @@ from wtforms import (
     FileField, FieldList, FormField, HiddenField, DecimalField, DateTimeField, URLField
 )
 from wtforms.validators import DataRequired, Email, Length, EqualTo, NumberRange, Optional, ValidationError, URL, Regexp
-from flask_wtf.file import FileAllowed, FileRequired
+from flask_wtf.file import FileAllowed, FileRequired, MultipleFileField 
 from wtforms.widgets import TextArea, CheckboxInput, ListWidget
 import json
 from datetime import datetime
@@ -2614,3 +2614,20 @@ class UploadFichierRapportForm(FlaskForm):
         Length(max=500, message="Description trop longue (max 500 caractères)")
     ])
     submit = SubmitField('Uploader le fichier')
+    
+class CommentaireSousActionForm(FlaskForm):
+    contenu = TextAreaField('Commentaire', validators=[DataRequired()], 
+                           render_kw={"rows": 4, "placeholder": "Ajouter un commentaire, une note ou une mise à jour..."})
+    type_contenu = SelectField('Type', choices=[
+        ('commentaire', 'Commentaire général'),
+        ('note', 'Note importante'),
+        ('mise_a_jour', 'Mise à jour de progression'),
+        ('question', 'Question'),
+        ('blocage', 'Signalement de blocage'),
+        ('reussite', 'Succès accompli')
+    ], default='commentaire')
+    est_prive = BooleanField('Commentaire privé (visible seulement pour les administrateurs et le responsable)')
+    tags = StringField('Tags (séparés par des virgules)', 
+                      render_kw={"placeholder": "important, question, blocage..."})
+    fichiers = MultipleFileField('Fichiers joints')
+    submit = SubmitField('Publier')
