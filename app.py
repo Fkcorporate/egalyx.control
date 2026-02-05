@@ -24865,6 +24865,7 @@ def modifier_sous_action_risque(sous_action_id):
                          action='modifier',
                          sous_action=sous_action)
 
+
 @app.route('/plan-action-risque/<int:plan_id>/terminer', methods=['POST'])
 @login_required
 def terminer_plan_complet_risque(plan_id):
@@ -24905,6 +24906,89 @@ def terminer_plan_complet_risque(plan_id):
         flash(f'Erreur: {str(e)}', 'error')
     
     return redirect(url_for('detail_plan_action_risque', plan_id=plan_id))
+
+@app.route('/sous-action-risque/<int:sous_action_id>/terminer', methods=['POST'])
+@login_required
+def terminer_sous_action_risque(sous_action_id):
+    """Terminer une sous-action d'un plan risque"""
+    sous_action = SousAction.query.get_or_404(sous_action_id)
+    
+    if not check_client_access(sous_action):
+        return jsonify({'success': False, 'error': 'Accès non autorisé'}), 403
+    
+    try:
+        from datetime import timezone
+        
+        # Marquer comme terminé
+        sous_action.statut = 'termine'
+        sous_action.pourcentage_realisation = 100
+        sous_action.date_fin_reelle = datetime.now(timezone.utc).date()
+        sous_action.updated_at = datetime.now(timezone.utc)
+        
+        # Recalculer la progression du plan
+        if sous_action.plan_action:
+            sous_action.plan_action.progression_reelle
+        
+        db.session.commit()
+        
+        return jsonify({
+            'success': True,
+            'message': 'Sous-action terminée avec succès'
+        })
+        
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+@app.route('/sous-action-risque/<int:sous_action_id>/supprimer', methods=['DELETE', 'POST'])
+@login_required
+def supprimer_sous_action_risque(sous_action_id):
+    """Supprimer une sous-action d'un plan risque"""
+    sous_action = SousAction.query.get_or_404(sous_action_id)
+    plan_action = sous_action.plan_action
+    
+    if not check_client_access(sous_action):
+        return jsonify({'success': False, 'error': 'Accès non autorisé'}), 403
+    
+    # Vérifier les permissions
+    if (current_user.id != plan_action.created_by and 
+        not current_user.has_permission('can_manage_plans')):
+        return jsonify({'success': False, 'error': 'Permission insuffisante'}), 403
+    
+    try:
+        # Sauvegarder l'ID du plan pour la redirection
+        plan_id = plan_action.id
+        
+        # Supprimer les commentaires associés
+        CommentairePlanAction.query.filter_by(sous_action_id=sous_action_id).delete()
+        
+        # Supprimer les fichiers associés
+        fichiers = FichierPlanAction.query.filter_by(sous_action_id=sous_action_id).all()
+        for fichier in fichiers:
+            # Supprimer le fichier physique
+            import os
+            if os.path.exists(fichier.chemin):
+                os.remove(fichier.chemin)
+            db.session.delete(fichier)
+        
+        # Supprimer la sous-action
+        db.session.delete(sous_action)
+        db.session.commit()
+        
+        # Recalculer la progression du plan
+        if plan_action:
+            plan_action.progression_reelle
+            db.session.commit()
+        
+        return jsonify({
+            'success': True,
+            'message': 'Sous-action supprimée avec succès',
+            'plan_id': plan_id
+        })
+        
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'success': False, 'error': str(e)}), 500
 
 @app.route('/plan-action-risque/<int:plan_id>/reorganiser-sous-actions', methods=['POST'])
 @login_required
