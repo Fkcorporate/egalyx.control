@@ -5428,3 +5428,129 @@ class VerificationDispositif(db.Model):
     dispositif = db.relationship('DispositifMaitrise', back_populates='verifications')
     verificateur = db.relationship('User')
 
+
+class CommentairePlanAction(db.Model):
+    __tablename__ = 'commentaires_plan_action'
+    
+    id = db.Column(db.Integer, primary_key=True)
+    plan_action_id = db.Column(db.Integer, db.ForeignKey('plans_action.id'), nullable=False)
+    sous_action_id = db.Column(db.Integer, db.ForeignKey('sous_actions.id'), nullable=True)
+    utilisateur_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
+    contenu = db.Column(db.Text, nullable=False)
+    type_contenu = db.Column(db.String(20), default='commentaire')  # commentaire, note, mise_a_jour
+    est_prive = db.Column(db.Boolean, default=False)
+    tags = db.Column(db.JSON)  # ['important', 'question', 'blocage', 'réussite']
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    client_id = db.Column(db.Integer, db.ForeignKey('clients.id'), nullable=True)
+    
+    # Relations
+    plan_action = db.relationship('PlanAction', backref=db.backref('commentaires', lazy=True, cascade='all, delete-orphan'))
+    sous_action = db.relationship('SousAction', backref=db.backref('commentaires', lazy=True))
+    utilisateur = db.relationship('User')
+    
+    def to_dict(self):
+        return {
+            'id': self.id,
+            'plan_action_id': self.plan_action_id,
+            'sous_action_id': self.sous_action_id,
+            'utilisateur': {
+                'id': self.utilisateur.id,
+                'username': self.utilisateur.username,
+                'email': self.utilisateur.email,
+                'avatar': f"https://ui-avatars.com/api/?name={self.utilisateur.username}&background=random"
+            },
+            'contenu': self.contenu,
+            'type_contenu': self.type_contenu,
+            'est_prive': self.est_prive,
+            'tags': self.tags or [],
+            'created_at': self.created_at.isoformat(),
+            'updated_at': self.updated_at.isoformat(),
+            'date_formatee': self.created_at.strftime('%d/%m/%Y à %H:%M'),
+            'fichiers': [f.to_dict() for f in self.fichiers]
+        }
+
+class FichierPlanAction(db.Model):
+    __tablename__ = 'fichiers_plan_action'
+    
+    id = db.Column(db.Integer, primary_key=True)
+    commentaire_id = db.Column(db.Integer, db.ForeignKey('commentaires_plan_action.id'), nullable=True)
+    plan_action_id = db.Column(db.Integer, db.ForeignKey('plans_action.id'), nullable=False)
+    sous_action_id = db.Column(db.Integer, db.ForeignKey('sous_actions.id'), nullable=True)
+    nom_fichier = db.Column(db.String(255), nullable=False)
+    chemin = db.Column(db.String(500), nullable=False)
+    type_fichier = db.Column(db.String(50))
+    taille = db.Column(db.Integer)  # en octets
+    description = db.Column(db.Text)
+    uploaded_by = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    client_id = db.Column(db.Integer, db.ForeignKey('clients.id'), nullable=True)
+    
+    # Relations
+    commentaire = db.relationship('CommentairePlanAction', backref=db.backref('fichiers', lazy=True, cascade='all, delete-orphan'))
+    plan_action = db.relationship('PlanAction', backref=db.backref('fichiers', lazy=True))
+    sous_action = db.relationship('SousAction', backref=db.backref('fichiers', lazy=True))
+    uploader = db.relationship('User')
+    
+    def to_dict(self):
+        return {
+            'id': self.id,
+            'nom_fichier': self.nom_fichier,
+            'type_fichier': self.type_fichier,
+            'taille': self.taille_formatee,
+            'description': self.description,
+            'uploaded_by': self.uploader.username,
+            'uploaded_by_id': self.uploaded_by,
+            'created_at': self.created_at.isoformat(),
+            'date_formatee': self.created_at.strftime('%d/%m/%Y %H:%M'),
+            'url_download': f"/plan-action/fichier/{self.id}/telecharger",
+            'url_preview': self.get_preview_url(),
+            'icon_class': self.icon_class,
+            'extension': self.extension
+        }
+    
+    @property
+    def taille_formatee(self):
+        if not self.taille:
+            return "0 B"
+        size = float(self.taille)
+        units = ['B', 'KB', 'MB', 'GB', 'TB']
+        unit_index = 0
+        while size >= 1024 and unit_index < len(units) - 1:
+            size /= 1024.0
+            unit_index += 1
+        return f"{size:.1f} {units[unit_index]}"
+    
+    @property
+    def extension(self):
+        if self.nom_fichier and '.' in self.nom_fichier:
+            return self.nom_fichier.split('.')[-1].lower()
+        return ''
+    
+    @property
+    def icon_class(self):
+        icons = {
+            'pdf': 'fa-file-pdf text-danger',
+            'doc': 'fa-file-word text-primary',
+            'docx': 'fa-file-word text-primary',
+            'xls': 'fa-file-excel text-success',
+            'xlsx': 'fa-file-excel text-success',
+            'ppt': 'fa-file-powerpoint text-warning',
+            'pptx': 'fa-file-powerpoint text-warning',
+            'jpg': 'fa-file-image text-info',
+            'jpeg': 'fa-file-image text-info',
+            'png': 'fa-file-image text-info',
+            'gif': 'fa-file-image text-info',
+            'txt': 'fa-file-alt text-secondary',
+            'csv': 'fa-file-csv text-success',
+            'zip': 'fa-file-archive text-dark',
+            'rar': 'fa-file-archive text-dark',
+            '7z': 'fa-file-archive text-dark'
+        }
+        return icons.get(self.extension, 'fa-file text-secondary')
+    
+    def get_preview_url(self):
+        if self.extension in ['jpg', 'jpeg', 'png', 'gif']:
+            return f"/static/uploads/plans_action/{self.plan_action_id}/{self.nom_fichier}"
+        return None
+
