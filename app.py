@@ -32896,6 +32896,19 @@ def detail_risque(id):
         else:
             champs_par_section['personnalise'].append(champ)
     
+    # ========== DISPOSITIFS DE MAÎTRISE ==========
+    
+    try:
+        # Récupérer les dispositifs de maîtrise (non archivés)
+        dispositifs = DispositifMaitrise.query\
+            .filter_by(risque_id=id, is_archived=False)\
+            .order_by(DispositifMaitrise.reference.asc())\
+            .all()
+    except Exception as e:
+        # Si la table n'existe pas encore
+        print(f"⚠️ Table dispositifs_maitrise non disponible: {e}")
+        dispositifs = []
+    
     # ========== DONNÉES EXISTANTES ==========
     
     # Récupérer TOUTES les évaluations pour l'historique
@@ -33013,6 +33026,7 @@ def detail_risque(id):
                          campagne_info=campagne_info,
                          statut_evaluation=statut_evaluation,
                          peut_modifier_evaluation=peut_modifier_evaluation,
+                         
                          # Nouvelles données pour le paramétrage
                          champs_personnalises=champs_personnalises,
                          champs_par_section=champs_par_section,
@@ -33021,12 +33035,19 @@ def detail_risque(id):
                          config_fichiers=config_fichiers,
                          categories_liste=categories_liste,
                          types_risque_liste=types_risque_liste,
+                         
                          # Variables calculées pour l'évaluation triphasée
                          impact_final=impact_final,
                          probabilite_final=probabilite_final,
                          niveau_maitrise_final=niveau_maitrise_final,
                          score_final=score_final,
-                         niveau_risque_final=niveau_risque_final)
+                         niveau_risque_final=niveau_risque_final,
+                         
+                         # NOUVEAU : Dispositifs de maîtrise
+                         dispositifs=dispositifs,
+                         
+                         # Import de datetime pour les calculs dans le template
+                         datetime=datetime)
 
 @app.route('/profil/update', methods=['POST'])
 @csrf.exempt
