@@ -130,12 +130,12 @@ class EvaluationForm(FlaskForm):
         (2, '2 - Rare'),
         (3, '3 - Possible'),
         (4, '4 - Probable'),
-        (5, '5 - Très probable')
+        (5, '5 - Certain')
     ], coerce=int, validators=[DataRequired()])
     niveau_maitrise = SelectField('Niveau de maîtrise', choices=[
         (0, 'Sélectionnez un niveau'),
         (1, '1 - Insuffisant'),
-        (2, '2 - Partiel'),
+        (2, '2 - Faible'),
         (3, '3 - Adéquat'),
         (4, '4 - Bon'),
         (5, '5 - Excellent')
