@@ -29478,21 +29478,35 @@ def creer_kri_ia_depuis_risque(id):
 @login_required
 def evaluer_risque_triphase(id):
     """
-    Évaluation triphasée d'un risque - Version robuste avec gestion des sessions
+    Évaluation triphasée d'un risque - Version ULTRA ROBUSTE
     """
     print(f"🚀 Début évaluation triphasée pour risque ID: {id}")
     
-    # IMPORTANT: NE PAS fermer la session globale ici
-    # Juste faire un rollback pour nettoyer les transactions
+    # ========== PHASE 1 : NETTOYAGE COMPLET ==========
     try:
+        # 1. Rollback explicite
         db.session.rollback()
-    except:
-        pass
+        # 2. Fermer la session pour libérer les ressources
+        db.session.close()
+        # 3. Supprimer la session du registre
+        db.session.remove()
+        # 4. Créer une NOUVELLE session
+        db.session = db.create_scoped_session()
+    except Exception as e:
+        print(f"⚠️ Erreur nettoyage session: {e}")
+        # Continuer malgré l'erreur
     
-    # ========== RÉCUPÉRATION SÉCURISÉE DU RISQUE ==========
+    # Démarrer une nouvelle transaction PROPRE
+    db.session.begin()
+    
+    # ========== PHASE 2 : RÉCUPÉRATION SANS LAZY LOADING ==========
     try:
-        # Utiliser with_for_update() pour verrouiller la ligne si nécessaire
-        risque = Risque.query.filter_by(id=id).first()
+        # Récupérer le risque AVEC ses relations pour éviter le lazy loading
+        risque = db.session.query(Risque)\
+            .options(db.joinedload(Risque.cartographie))\
+            .filter(Risque.id == id)\
+            .first()
+        
         if not risque:
             flash(f'Risque avec ID {id} non trouvé', 'error')
             return redirect(url_for('dashboard'))
@@ -29500,9 +29514,30 @@ def evaluer_risque_triphase(id):
         print(f"✅ Risque trouvé: {risque.reference}")
         
     except Exception as e:
-        print(f"❌ Erreur récupération risque: {e}")
-        flash('Erreur lors de la récupération du risque', 'error')
-        return redirect(url_for('dashboard'))
+        print(f"❌ Erreur critique récupération risque: {e}")
+        
+        # Tentative de récupération d'urgence
+        try:
+            db.session.rollback()
+            # Réessayer avec une requête simple
+            from sqlalchemy import text
+            result = db.engine.execute(
+                text("SELECT id, reference FROM risque WHERE id = :id"),
+                {'id': id}
+            ).first()
+            
+            if not result:
+                flash('Risque non trouvé', 'error')
+                return redirect(url_for('dashboard'))
+            
+            # Créer un objet risque minimal
+            risque = Risque(id=result[0], reference=result[1])
+            print(f"⚠️ Risque récupéré en mode dégradé: {result[1]}")
+            
+        except Exception as e2:
+            print(f"❌ Échec récupération d'urgence: {e2}")
+            flash('Erreur de connexion à la base de données', 'error')
+            return redirect(url_for('dashboard'))
     
     # ========== VÉRIFICATION DES ACCÈS ==========
     try:
@@ -29514,76 +29549,103 @@ def evaluer_risque_triphase(id):
         flash('Erreur de vérification des accès', 'error')
         return redirect(url_for('dashboard'))
     
-    # ========== RÉCUPÉRATION DES DONNÉES ==========
-    # 1. Dispositifs
+    # ========== PHASE 3 : PRÉ-CHARGEMENT DES DONNÉES ==========
+    # Charger explicitement les données nécessaires pour éviter le lazy loading
+    dispositifs = []
+    users = []
+    risques_cartographie = []
+    campagne_active = None
+    evaluation_en_cours = None
+    
     try:
-        dispositifs = DispositifMaitrise.query\
+        # 1. Dispositifs
+        dispositifs = db.session.query(DispositifMaitrise)\
             .filter_by(risque_id=id, is_archived=False)\
             .order_by(DispositifMaitrise.created_at.desc())\
             .all()
+        print(f"✅ {len(dispositifs)} dispositifs chargés")
+        
     except Exception as e:
-        print(f"⚠️ Erreur récupération dispositifs: {e}")
+        print(f"⚠️ Erreur chargement dispositifs: {e}")
         dispositifs = []
     
-    # 2. Formulaire et utilisateurs
+    # Formulaire
     form = EvaluationTriPhaseForm()
     
-    # Récupérer les utilisateurs avec la session ACTUELLE (pas une nouvelle)
     try:
+        # 2. Utilisateurs
         if current_user.role == 'super_admin':
-            # Recharger current_user pour s'assurer qu'il est attaché à la session
-            db.session.add(current_user)
-            users = User.query.filter(User.is_active == True).all()
+            users = db.session.query(User)\
+                .filter(User.is_active == True)\
+                .all()
         else:
-            # S'assurer que current_user est attaché
-            db.session.add(current_user)
-            users = get_client_filter(User).filter(User.is_active == True).all()
+            # Utiliser get_client_filter mais avec la session actuelle
+            users_query = get_client_filter(User)
+            users = users_query.filter(User.is_active == True).all()
         
+        print(f"✅ {len(users)} utilisateurs chargés")
+        
+        # Préparer les choix du formulaire
         form.referent_pre_evaluation_id.choices = [(0, 'Sélectionnez un référent...')] + [
             (u.id, f"{u.username} - {u.role}") for u in users
         ]
         
     except Exception as e:
-        print(f"⚠️ Erreur récupération utilisateurs: {e}")
+        print(f"⚠️ Erreur chargement utilisateurs: {e}")
         users = []
         form.referent_pre_evaluation_id.choices = [(0, 'Sélectionnez un référent...')]
     
-    # 3. Risques de la même cartographie
     try:
+        # 3. Risques de la même cartographie
         if hasattr(risque, 'cartographie_id') and risque.cartographie_id:
             risques_cartographie = get_client_filter(Risque)\
                 .filter_by(cartographie_id=risque.cartographie_id)\
                 .order_by(Risque.is_archived.asc(), Risque.reference.asc())\
                 .all()
+            print(f"✅ {len(risques_cartographie)} risques dans la cartographie")
         else:
             risques_cartographie = []
+            
     except Exception as e:
-        print(f"⚠️ Erreur récupération risques cartographie: {e}")
+        print(f"⚠️ Erreur chargement risques cartographie: {e}")
         risques_cartographie = []
     
-    # ========== GESTION DE LA CAMPAGNE ==========
-    campagne_active = None
-    
+    # ========== PHASE 4 : GESTION DE LA CAMPAGNE ==========
     try:
-        # Vérifier si le risque a une cartographie
+        # Vérifier que le risque a une cartographie
         if not hasattr(risque, 'cartographie_id') or not risque.cartographie_id:
-            flash('Le risque n\'est pas associé à une cartographie', 'error')
-            return redirect(url_for('detail_risque', id=id))
+            # Charger la cartographie si nécessaire
+            if hasattr(risque, 'cartographie'):
+                cartographie = risque.cartographie
+            else:
+                # Tentative de chargement
+                from sqlalchemy import text
+                result = db.engine.execute(
+                    text("SELECT cartographie_id FROM risque WHERE id = :id"),
+                    {'id': id}
+                ).first()
+                
+                if result and result[0]:
+                    risque.cartographie_id = result[0]
+                else:
+                    flash('Le risque n\'est pas associé à une cartographie', 'error')
+                    return redirect(url_for('detail_risque', id=id))
         
-        # Chercher une campagne existante
-        campagnes = CampagneEvaluation.query.filter_by(
-            cartographie_id=risque.cartographie_id,
-            statut='en_cours'
-        ).all()
+        # Chercher une campagne existante avec requête OPTIMISÉE
+        campagnes = db.session.query(CampagneEvaluation)\
+            .filter_by(
+                cartographie_id=risque.cartographie_id,
+                statut='en_cours'
+            )\
+            .all()
         
-        # Filtrer par client si nécessaire
+        # Filtrer par client
         if current_user.role != 'super_admin' and hasattr(current_user, 'client_id'):
             for camp in campagnes:
                 if hasattr(camp, 'client_id') and camp.client_id == current_user.client_id:
                     campagne_active = camp
                     break
         
-        # Sinon prendre la première
         if not campagne_active and campagnes:
             campagne_active = campagnes[0]
         
@@ -29591,10 +29653,10 @@ def evaluer_risque_triphase(id):
         if not campagne_active:
             print("📝 Création d'une nouvelle campagne...")
             
-            # Utiliser une transaction SAVEPOINT pour isoler
-            db.session.begin_nested()
-            
             try:
+                # Utiliser un SAVEPOINT pour isoler
+                db.session.begin_nested()
+                
                 annee_courante = datetime.now().year
                 campagne_active = CampagneEvaluation(
                     cartographie_id=risque.cartographie_id,
@@ -29606,30 +29668,32 @@ def evaluer_risque_triphase(id):
                     created_at=datetime.utcnow()
                 )
                 
-                # Définir client_id
+                # Client ID
                 if current_user.role != 'super_admin' and hasattr(current_user, 'client_id'):
                     campagne_active.client_id = current_user.client_id
                 elif hasattr(risque, 'client_id') and risque.client_id:
                     campagne_active.client_id = risque.client_id
                 else:
-                    campagne_active.client_id = 1  # Valeur par défaut
+                    campagne_active.client_id = 1
                 
                 db.session.add(campagne_active)
                 db.session.flush()  # Générer ID
-                db.session.commit()  # Commit du savepoint
                 
-                print(f"✅ Campagne créée: {campagne_active.nom}")
+                # Commit du SAVEPOINT
+                db.session.commit()
+                print(f"✅ Campagne créée: {campagne_active.nom} (ID: {campagne_active.id})")
                 
             except Exception as e:
-                db.session.rollback()  # Rollback du savepoint seulement
+                # Rollback du SAVEPOINT seulement
+                db.session.rollback()
                 print(f"❌ Erreur création campagne: {e}")
                 
-                # Deuxième tentative plus simple
+                # Fallback: création directe
                 try:
                     campagne_active = CampagneEvaluation(
                         cartographie_id=risque.cartographie_id,
-                        nom="Campagne d'évaluation",
-                        description="Évaluation en cours",
+                        nom="Évaluation en cours",
+                        description="Campagne créée automatiquement",
                         date_debut=datetime.now().date(),
                         statut='en_cours',
                         created_by=current_user.id,
@@ -29641,70 +29705,48 @@ def evaluer_risque_triphase(id):
                 except Exception as e2:
                     db.session.rollback()
                     print(f"❌ Erreur critique création campagne: {e2}")
-                    flash('Impossible de créer la campagne', 'error')
-                    return redirect(url_for('detail_risque', id=id))
-                    
+                    # Continuer sans campagne
+                    campagne_active = None
+        
+        # Charger l'évaluation en cours si elle existe
+        if campagne_active and hasattr(campagne_active, 'id'):
+            evaluation_en_cours = db.session.query(EvaluationRisque)\
+                .filter_by(
+                    risque_id=id,
+                    campagne_id=campagne_active.id
+                )\
+                .first()
+                
     except Exception as e:
         print(f"❌ Erreur gestion campagne: {e}")
         db.session.rollback()
-        flash('Erreur lors de la gestion de la campagne', 'error')
-        return redirect(url_for('detail_risque', id=id))
+        # Continuer sans campagne
+        campagne_active = None
     
-    # ========== ÉVALUATION EN COURS ==========
-    evaluation_en_cours = None
-    
-    try:
-        if campagne_active and hasattr(campagne_active, 'id'):
-            evaluation_en_cours = EvaluationRisque.query.filter_by(
-                risque_id=id,
-                campagne_id=campagne_active.id
-            ).first()
-    except Exception as e:
-        print(f"⚠️ Erreur récupération évaluation: {e}")
-        evaluation_en_cours = None
-    
-    # ========== GESTION POST ==========
+    # ========== PHASE 5 : GESTION DES REQUÊTES POST ==========
     if request.method == 'POST':
-        print(f"📨 Formulaire POST reçu")
+        print(f"📨 Traitement requête POST")
         
         try:
             # Identifier la phase
             if 'submit_phase1' in request.form:
-                phase = 1
+                return traiter_phase1_soumission(id, request, current_user, campagne_active, evaluation_en_cours)
             elif 'submit_phase2' in request.form:
-                phase = 2
+                return traiter_phase2_soumission(id, request, current_user, evaluation_en_cours)
             elif 'submit_phase3' in request.form:
-                phase = 3
+                return traiter_phase3_soumission(id, request, current_user, evaluation_en_cours, risque)
             else:
                 flash('Action non reconnue', 'error')
                 return redirect(url_for('evaluer_risque_triphase', id=id))
-            
-            # PHASE 1
-            if phase == 1:
-                return traiter_phase1(id, request, current_user, campagne_active, evaluation_en_cours)
-            
-            # PHASE 2
-            elif phase == 2:
-                if not evaluation_en_cours:
-                    flash('Veuillez d\'abord compléter la phase 1', 'error')
-                    return redirect(url_for('evaluer_risque_triphase', id=id))
-                return traiter_phase2(id, request, current_user, evaluation_en_cours)
-            
-            # PHASE 3
-            elif phase == 3:
-                if not evaluation_en_cours:
-                    flash('Veuillez d\'abord compléter les phases 1 et 2', 'error')
-                    return redirect(url_for('evaluer_risque_triphase', id=id))
-                return traiter_phase3(id, request, current_user, evaluation_en_cours, risque)
                 
         except Exception as e:
-            db.session.rollback()
             print(f"❌ Erreur traitement POST: {e}")
-            flash(f'Erreur lors du traitement: {str(e)[:100]}', 'error')
+            db.session.rollback()
+            flash('Erreur lors du traitement du formulaire', 'error')
             return redirect(url_for('evaluer_risque_triphase', id=id))
     
-    # ========== PRÉPARATION AFFICHAGE ==========
-    # Déterminer la phase
+    # ========== PHASE 6 : PRÉPARATION POUR L'AFFICHAGE ==========
+    # Déterminer la phase actuelle
     phase_actuelle = 'phase1'
     if evaluation_en_cours:
         if evaluation_en_cours.date_confirmation:
@@ -29722,15 +29764,40 @@ def evaluer_risque_triphase(id):
         form.niveau_maitrise_pre.data = evaluation_en_cours.niveau_maitrise_pre or 0
         form.commentaire_pre_evaluation.data = evaluation_en_cours.commentaire_pre_evaluation or ''
     
-    print(f"✅ Prêt pour affichage - Phase: {phase_actuelle}")
-    
-    # ========== RENDU ==========
-    # IMPORTANT: Attacher current_user à la session avant le rendu
+    # ========== PHASE 7 : PRÉ-CHARGEMENT POUR LE TEMPLATE ==========
+    # S'assurer que toutes les données sont chargées AVANT le rendu du template
     try:
-        db.session.add(current_user)
-    except:
-        pass
+        # Charger explicitement la cartographie pour éviter le lazy loading
+        if hasattr(risque, 'cartographie_id') and risque.cartographie_id:
+            if not hasattr(risque, 'cartographie') or risque.cartographie is None:
+                # Charger la cartographie
+                cartographie = db.session.query(Cartographie)\
+                    .filter_by(id=risque.cartographie_id)\
+                    .first()
+                if cartographie:
+                    risque.cartographie = cartographie
+        
+        # Charger d'autres relations si nécessaires
+        if campagne_active and hasattr(campagne_active, 'created_by'):
+            # Charger l'utilisateur créateur si nécessaire
+            pass
+            
+    except Exception as e:
+        print(f"⚠️ Erreur pré-chargement: {e}")
+        # Continuer sans pré-chargement
     
+    # ========== PHASE 8 : COMMIT ET RENDU ==========
+    try:
+        # Commit pour valider la transaction de lecture
+        db.session.commit()
+        print(f"✅ Transaction validée, prêt pour le rendu")
+        
+    except Exception as e:
+        print(f"⚠️ Erreur commit final: {e}")
+        db.session.rollback()
+        # Continuer malgré l'erreur
+    
+    # Rendu du template
     return render_template('cartographie/evaluation_triphase.html',
                           form=form,
                           risque=risque,
@@ -29742,12 +29809,12 @@ def evaluer_risque_triphase(id):
                           risques_cartographie=risques_cartographie)
 
 
-# ========== FONCTIONS DE TRAITEMENT ==========
+# ========== FONCTIONS DE TRAITEMENT DES SOUMISSIONS ==========
 
-def traiter_phase1(id, request, current_user, campagne_active, evaluation_en_cours):
-    """Traiter la soumission de la phase 1"""
+def traiter_phase1_soumission(id, request, current_user, campagne_active, evaluation_en_cours):
+    """Traiter la phase 1"""
     try:
-        # Récupérer les données
+        # Récupération des données
         impact_pre = int(request.form.get('impact_pre', 0))
         probabilite_pre = int(request.form.get('probabilite_pre', 0))
         niveau_maitrise_pre = int(request.form.get('niveau_maitrise_pre', 3))
@@ -29763,7 +29830,7 @@ def traiter_phase1(id, request, current_user, campagne_active, evaluation_en_cou
         score_risque = impact_pre * probabilite_pre
         niveau_risque, couleur = calculer_niveau_risque(impact_pre, probabilite_pre)
         
-        # Mise à jour ou création
+        # Créer ou mettre à jour
         if evaluation_en_cours:
             evaluation_en_cours.referent_pre_evaluation_id = int(referent_id) if referent_id != '0' else None
             evaluation_en_cours.date_pre_evaluation = datetime.utcnow()
@@ -29794,7 +29861,7 @@ def traiter_phase1(id, request, current_user, campagne_active, evaluation_en_cou
             db.session.add(evaluation)
         
         db.session.commit()
-        flash('✅ Pré-évaluation enregistrée avec succès', 'success')
+        flash('✅ Pré-évaluation enregistrée', 'success')
         return redirect(url_for('evaluer_risque_triphase', id=id))
         
     except Exception as e:
@@ -29803,10 +29870,14 @@ def traiter_phase1(id, request, current_user, campagne_active, evaluation_en_cou
         flash('Erreur lors de l\'enregistrement', 'error')
         return redirect(url_for('evaluer_risque_triphase', id=id))
 
-def traiter_phase2(id, request, current_user, evaluation_en_cours):
-    """Traiter la soumission de la phase 2"""
+def traiter_phase2_soumission(id, request, current_user, evaluation_en_cours):
+    """Traiter la phase 2"""
     try:
-        # Récupérer les données
+        if not evaluation_en_cours:
+            flash('Phase 1 requise', 'error')
+            return redirect(url_for('evaluer_risque_triphase', id=id))
+        
+        # Récupération des données
         impact_val = int(request.form.get('impact_val', 0))
         probabilite_val = int(request.form.get('probabilite_val', 0))
         niveau_maitrise_val = int(request.form.get('niveau_maitrise_val', 0))
@@ -29834,7 +29905,7 @@ def traiter_phase2(id, request, current_user, evaluation_en_cours):
         evaluation_en_cours.updated_at = datetime.utcnow()
         
         db.session.commit()
-        flash('✅ Évaluation validée avec succès', 'success')
+        flash('✅ Évaluation validée', 'success')
         return redirect(url_for('evaluer_risque_triphase', id=id))
         
     except Exception as e:
@@ -29843,10 +29914,14 @@ def traiter_phase2(id, request, current_user, evaluation_en_cours):
         flash('Erreur lors de la validation', 'error')
         return redirect(url_for('evaluer_risque_triphase', id=id))
 
-def traiter_phase3(id, request, current_user, evaluation_en_cours, risque):
-    """Traiter la soumission de la phase 3"""
+def traiter_phase3_soumission(id, request, current_user, evaluation_en_cours, risque):
+    """Traiter la phase 3"""
     try:
-        # Récupérer les données
+        if not evaluation_en_cours:
+            flash('Phases 1 et 2 requises', 'error')
+            return redirect(url_for('evaluer_risque_triphase', id=id))
+        
+        # Récupération des données
         impact_conf = int(request.form.get('impact_conf', 0))
         probabilite_conf = int(request.form.get('probabilite_conf', 0))
         niveau_maitrise_conf = int(request.form.get('niveau_maitrise_conf', 0))
@@ -29882,7 +29957,7 @@ def traiter_phase3(id, request, current_user, evaluation_en_cours, risque):
         risque.dernier_niveau_risque = niveau_risque
         
         db.session.commit()
-        flash('✅ Évaluation confirmée avec succès', 'success')
+        flash('✅ Évaluation confirmée', 'success')
         return redirect(url_for('detail_risque', id=id))
         
     except Exception as e:
@@ -29890,8 +29965,6 @@ def traiter_phase3(id, request, current_user, evaluation_en_cours, risque):
         print(f"❌ Erreur phase 3: {e}")
         flash('Erreur lors de la confirmation', 'error')
         return redirect(url_for('evaluer_risque_triphase', id=id))
-
-
 @app.before_request
 def before_request():
     """Nettoyer les transactions avant chaque requête"""
