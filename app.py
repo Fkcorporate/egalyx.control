@@ -25235,10 +25235,12 @@ def api_plans_action_disponibles():
 def api_creer_plan_action_dispositif(dispositif_id):
     """API: Créer un plan d'action automatiquement pour un dispositif"""
     try:
+        from datetime import datetime, timezone, timedelta
+        
         dispositif = DispositifMaitrise.query.get_or_404(dispositif_id)
         
         if not check_client_access(dispositif):
-            return jsonify({'error': 'Accès non autorisé'}), 403
+            return jsonify({'success': False, 'error': 'Accès non autorisé'}), 403
         
         # Vérifier si un plan existe déjà
         if dispositif.plan_action_id:
@@ -25260,33 +25262,93 @@ def api_creer_plan_action_dispositif(dispositif_id):
                 'message': 'L\'efficacité réelle est suffisante'
             })
         
-        # Créer le plan d'action
-        from services.audit_service import creer_plan_action_automatique
+        # ========== CRÉATION DU PLAN D'ACTION ==========
         
-        plan = creer_plan_action_automatique(
+        # 1. Générer une référence
+        dernier_plan = PlanAction.query\
+            .filter(PlanAction.reference.like(f'PA-{dispositif.risque.reference}-%'))\
+            .order_by(PlanAction.reference.desc())\
+            .first()
+        
+        num = 1
+        if dernier_plan:
+            try:
+                num = int(dernier_plan.reference.split('-')[-1]) + 1
+            except:
+                num = 1
+        
+        reference = f"PA-{dispositif.risque.reference}-{num:03d}"
+        
+        # 2. Créer le plan d'action
+        plan_action = PlanAction(
+            reference=reference,
+            nom=f"Amélioration dispositif {dispositif.reference}",
+            description=f"Dispositif inefficace ({dispositif.efficacite_reelle}/5 vs {dispositif.efficacite_attendue}/5 attendus). {dispositif.nom}",
             risque_id=dispositif.risque_id,
             dispositif_id=dispositif.id,
-            titre=f"Amélioration dispositif {dispositif.reference}",
-            description=f"Dispositif inefficace ({dispositif.efficacite_reelle}/5 vs {dispositif.efficacite_attendue}/5 attendus). {dispositif.nom}",
             responsable_id=dispositif.responsable_id or current_user.id,
-            echeance=datetime.utcnow().date() + timedelta(days=30)
+            date_debut=datetime.now(timezone.utc).date(),
+            date_fin_prevue=datetime.now(timezone.utc).date() + timedelta(days=30),
+            statut='en_cours',
+            priorite='haute',
+            pourcentage_realisation=0,
+            created_by=current_user.id,
+            client_id=current_user.client_id
         )
         
-        if plan:
-            return jsonify({
-                'success': True,
-                'message': f'Plan d\'action {plan.reference} créé avec succès',
-                'plan_id': plan.id,
-                'plan_reference': plan.reference
-            })
-        else:
-            return jsonify({
-                'success': False,
-                'message': 'Erreur lors de la création du plan'
-            })
+        db.session.add(plan_action)
+        db.session.flush()  # Pour obtenir l'ID sans commit
+        
+        # 3. Lier le dispositif au plan
+        dispositif.plan_action_id = plan_action.id
+        
+        # 4. Ajouter une sous-action par défaut
+        sous_action = SousAction(
+            plan_action_id=plan_action.id,
+            description=f"Améliorer l'efficacité du dispositif {dispositif.reference} de {dispositif.efficacite_reelle}/5 à {dispositif.efficacite_attendue}/5",
+            statut='a_faire',
+            pourcentage_realisation=0,
+            date_debut=datetime.now(timezone.utc).date(),
+            date_fin_prevue=datetime.now(timezone.utc).date() + timedelta(days=30),
+            client_id=current_user.client_id
+        )
+        
+        db.session.add(sous_action)
+        
+        # 5. Commit toutes les modifications
+        db.session.commit()
+        
+        # 6. Journaliser l'action
+        try:
+            from models import JournalActivite
+            journal = JournalActivite(
+                utilisateur_id=current_user.id,
+                action='creation_plan_action_automatique',
+                details=f"Plan {reference} créé automatiquement pour dispositif {dispositif.reference}",
+                entite_type='plan_action',
+                entite_id=plan_action.id,
+                client_id=current_user.client_id
+            )
+            db.session.add(journal)
+            db.session.commit()
+        except Exception as e:
+            print(f"⚠️ Erreur journalisation: {e}")
+            db.session.rollback()  # Annuler seulement le journal, pas le plan
+        
+        return jsonify({
+            'success': True,
+            'message': f'Plan d\'action {plan_action.reference} créé avec succès',
+            'plan_id': plan_action.id,
+            'plan_reference': plan_action.reference,
+            'redirect_url': url_for('detail_plan_action_risque', plan_id=plan_action.id)
+        })
             
     except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        db.session.rollback()
+        print(f"❌ Erreur création plan automatique: {str(e)}")
+        import traceback
+        traceback.print_exc()
+        return jsonify({'success': False, 'error': str(e)}), 500
 
 
 @app.route('/api/dispositifs/a-verifier')
