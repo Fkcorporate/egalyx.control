@@ -107,7 +107,7 @@ class RisqueForm(FlaskForm):
     ], validators=[DataRequired()])
     type_risque = SelectField('Type de risque', choices=[
         ('', 'Sélectionnez un type'),
-        ('inne', 'Inné'),
+        ('inne', 'Inhérent'),
         ('residuel', 'Résiduel'),
         ('speculatif', 'Spéculatif')
     ], validators=[DataRequired()])
