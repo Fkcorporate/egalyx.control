@@ -29478,13 +29478,16 @@ def creer_kri_ia_depuis_risque(id):
 @login_required
 def evaluer_risque_triphase(id):
     try:
+        # CORRECTION : Ajouter un rollback au début pour nettoyer toute transaction en échec
+        db.session.rollback()
+        
         # CORRECTION : Récupérer avec vérification d'accès
         risque = Risque.query.get_or_404(id)
         
         # Vérifier l'accès
         if not check_client_access(risque):
             flash('Accès non autorisé à ce risque', 'error')
-            return redirect(url_for('dashboard'))  # CHANGÉ ICI
+            return redirect(url_for('dashboard'))
         
         # Récupérer les dispositifs de maîtrise non archivés
         dispositifs = DispositifMaitrise.query\
@@ -29517,27 +29520,34 @@ def evaluer_risque_triphase(id):
             ).first()
         
         if not campagne_active:
-            # Créer une campagne par défaut avec le bon client_id
-            annee_courante = datetime.now().year
-            campagne_active = CampagneEvaluation(
-                cartographie_id=risque.cartographie_id,
-                nom=f"Campagne {annee_courante}",
-                description=f"Évaluation annuelle {annee_courante}",
-                date_debut=datetime.now().date(),
-                statut='en_cours',
-                created_by=current_user.id
-            )
-            
-            # CORRECTION CRITIQUE : Ajouter le client_id selon l'utilisateur
-            if current_user.role != 'super_admin' and hasattr(current_user, 'client_id'):
-                campagne_active.client_id = current_user.client_id
-            elif current_user.role == 'super_admin':
-                # Super admin peut ne pas avoir de client_id ou utiliser celui du risque
-                campagne_active.client_id = risque.client_id
-            
-            db.session.add(campagne_active)
-            db.session.commit()
-            print(f"✅ Campagne créée pour client {campagne_active.client_id}: {campagne_active.nom}")
+            try:
+                # Créer une campagne par défaut avec le bon client_id
+                annee_courante = datetime.now().year
+                campagne_active = CampagneEvaluation(
+                    cartographie_id=risque.cartographie_id,
+                    nom=f"Campagne {annee_courante}",
+                    description=f"Évaluation annuelle {annee_courante}",
+                    date_debut=datetime.now().date(),
+                    statut='en_cours',
+                    created_by=current_user.id
+                )
+                
+                # CORRECTION CRITIQUE : Ajouter le client_id selon l'utilisateur
+                if current_user.role != 'super_admin' and hasattr(current_user, 'client_id'):
+                    campagne_active.client_id = current_user.client_id
+                elif current_user.role == 'super_admin':
+                    # Super admin peut ne pas avoir de client_id ou utiliser celui du risque
+                    campagne_active.client_id = risque.client_id
+                
+                db.session.add(campagne_active)
+                db.session.commit()
+                print(f"✅ Campagne créée pour client {campagne_active.client_id}: {campagne_active.nom}")
+                
+            except Exception as e:
+                db.session.rollback()  # Rollback en cas d'erreur
+                print(f"❌ Erreur création campagne: {e}")
+                flash('Erreur lors de la création de la campagne', 'error')
+                return redirect(url_for('dashboard'))
         
         # CORRECTION : Récupérer l'évaluation avec filtre client
         evaluation_en_cours = get_client_filter(EvaluationRisque)\
@@ -29738,10 +29748,14 @@ def evaluer_risque_triphase(id):
                     db.session.commit()
                     
                     # CORRECTION : Mettre à jour le risque aussi
-                    risque.derniere_evaluation_date = datetime.utcnow()
-                    risque.dernier_score_risque = score_risque
-                    risque.dernier_niveau_risque = niveau_risque
-                    db.session.commit()
+                    try:
+                        risque.derniere_evaluation_date = datetime.utcnow()
+                        risque.dernier_score_risque = score_risque
+                        risque.dernier_niveau_risque = niveau_risque
+                        db.session.commit()
+                    except:
+                        db.session.rollback()
+                        print("⚠️ Erreur mise à jour risque, mais évaluation sauvegardée")
                     
                     flash(f'🎉 Évaluation confirmée dans la campagne "{campagne_active.nom}" !', 'success')
                     return redirect(url_for('detail_risque', id=id))
@@ -29778,7 +29792,7 @@ def evaluer_risque_triphase(id):
         return render_template('cartographie/evaluation_triphase.html',
                             form=form,
                             risque=risque,
-                            dispositifs=dispositifs,  # <-- AJOUT IMPORTANT ICI
+                            dispositifs=dispositifs,
                             campagne_active=campagne_active,
                             evaluation_en_cours=evaluation_en_cours,
                             phase_actuelle=phase_actuelle,
@@ -29793,7 +29807,14 @@ def evaluer_risque_triphase(id):
         flash(f'❌ Erreur: {str(e)}', 'error')
         return redirect(url_for('dashboard'))
 
-
+@app.before_request
+def before_request():
+    """Nettoyer les transactions avant chaque requête"""
+    try:
+        # Tenter un rollback pour nettoyer toute transaction en échec
+        db.session.rollback()
+    except:
+        pass
 
 @app.before_request
 def handle_transaction():
