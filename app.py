@@ -23946,116 +23946,130 @@ def default_if_none(value, default=0):
 @login_required
 def evaluer_dispositif(dispositif_id):
     """Évaluer l'efficacité d'un dispositif de maîtrise"""
-    dispositif = DispositifMaitrise.query.get_or_404(dispositif_id)
     
-    if not check_client_access(dispositif):
-        flash('Accès non autorisé', 'error')
+    # TEST INITIAL DE LA CONNEXION BD
+    try:
+        db.session.execute(text('SELECT 1'))
+    except Exception as e:
+        print(f"⚠️ Session DB corrompue détectée, réinitialisation...")
+        db.session.rollback()
+    
+    try:
+        dispositif = DispositifMaitrise.query.get_or_404(dispositif_id)
+        
+        if not check_client_access(dispositif):
+            flash('Accès non autorisé', 'error')
+            return redirect(url_for('liste_dispositifs_risque', risque_id=dispositif.risque_id))
+        
+        form = EvaluationDispositifForm()
+        
+        if form.validate_on_submit():
+            try:
+                # Mettre à jour les valeurs d'évaluation
+                dispositif.efficacite_reelle = form.efficacite_reelle.data
+                dispositif.couverture = form.couverture.data
+                dispositif.date_derniere_verification = datetime.utcnow().date()
+                dispositif.prochaine_verification = form.prochaine_verification.data
+                dispositif.commentaire_evaluation = form.commentaire.data
+                dispositif.updated_at = datetime.utcnow()
+                
+                # CORRECTION : Vérifier que les valeurs ne sont pas None avant comparaison
+                efficacite_reelle = dispositif.efficacite_reelle or 0
+                efficacite_attendue = dispositif.efficacite_attendue or 0
+                
+                # Déterminer le résultat
+                if efficacite_attendue == 0:
+                    resultat = 'Non évalué'
+                elif efficacite_reelle < efficacite_attendue:
+                    resultat = 'À améliorer'
+                else:
+                    resultat = 'Conforme'
+                
+                # 1. Créer une vérification d'évaluation
+                verification = VerificationDispositif(
+                    dispositif_id=dispositif.id,
+                    date_verification=datetime.utcnow().date(),
+                    type_verification='Évaluation',
+                    resultat=resultat,
+                    commentaire=form.commentaire.data or f"Évaluation: {efficacite_reelle}/5 (attendu: {efficacite_attendue}/5)",
+                    verificateur_id=current_user.id,
+                    client_id=current_user.client_id
+                )
+                db.session.add(verification)
+                
+                # 2. CALCULER LA RÉDUCTION THÉORIQUE DU RISQUE
+                if dispositif.risque:
+                    if dispositif.efficacite_reelle and dispositif.couverture:
+                        # Formule : (efficacité + couverture) / 2, puis normalisé à 30% max
+                        score_moyen = (dispositif.efficacite_reelle + dispositif.couverture) / 2
+                        reduction_pourcentage = (score_moyen / 5) * 30.0  # 30% maximum
+                        dispositif.reduction_risque_pourcentage = reduction_pourcentage
+                
+                # 3. Si efficacité insuffisante, créer un plan d'action
+                if dispositif.efficacite_reelle and dispositif.efficacite_attendue:
+                    if dispositif.efficacite_reelle < dispositif.efficacite_attendue:
+                        try:
+                            from services.audit_service import creer_plan_action_automatique
+                            creer_plan_action_automatique(
+                                risque_id=dispositif.risque_id,
+                                dispositif_id=dispositif.id,
+                                titre=f"Amélioration dispositif {dispositif.reference}",
+                                description=f"Dispositif insuffisamment efficace ({dispositif.efficacite_reelle}/5 vs {dispositif.efficacite_attendue}/5 attendus)\n\nCommentaire: {form.commentaire.data}",
+                                responsable_id=dispositif.responsable_id or current_user.id,
+                                echeance=datetime.utcnow().date() + timedelta(days=30)
+                            )
+                        except ImportError:
+                            # Si le service n'existe pas, créer un plan d'action simple
+                            plan = PlanAction(
+                                reference=f"PA-{datetime.utcnow().strftime('%Y%m%d')}-{dispositif.id}",
+                                nom=f"Amélioration dispositif {dispositif.reference}",
+                                description=f"Dispositif insuffisamment efficace ({dispositif.efficacite_reelle}/5 vs {dispositif.efficacite_attendue}/5 attendus)",
+                                risque_id=dispositif.risque_id,
+                                dispositif_id=dispositif.id,
+                                responsable_id=dispositif.responsable_id or current_user.id,
+                                date_debut=datetime.utcnow().date(),
+                                date_fin_prevue=datetime.utcnow().date() + timedelta(days=30),
+                                statut='en_cours',
+                                priorite='haute',
+                                client_id=current_user.client_id,
+                                created_by=current_user.id
+                            )
+                            db.session.add(plan)
+                
+                # COMMIT À LA FIN
+                db.session.commit()
+                
+                # 4. Notifier l'utilisateur avec la réduction calculée
+                reduction_msg = ""
+                if hasattr(dispositif, 'reduction_risque_pourcentage') and dispositif.reduction_risque_pourcentage:
+                    reduction_msg = f" RÉDUCTION THÉORIQUE DU RISQUE: {dispositif.reduction_risque_pourcentage:.1f}%"
+                
+                flash(f'Évaluation enregistrée avec succès.{reduction_msg}', 'success')
+                return redirect(url_for('detail_dispositif', dispositif_id=dispositif_id))
+                
+            except Exception as e:
+                db.session.rollback()
+                print(f"❌ Erreur lors de l'enregistrement de l'évaluation: {str(e)}")
+                flash(f'Erreur lors de l\'enregistrement: {str(e)}', 'error')
+                return redirect(url_for('evaluer_dispositif', dispositif_id=dispositif_id))
+        
+        # PRÉ-REMPLIR LE FORMULAIRE (GET request)
+        form.efficacite_reelle.data = getattr(dispositif, 'efficacite_reelle', None)
+        form.couverture.data = getattr(dispositif, 'couverture', None)
+        form.commentaire.data = getattr(dispositif, 'commentaire_evaluation', None)
+        
+        if dispositif.prochaine_verification:
+            form.prochaine_verification.data = dispositif.prochaine_verification
+        
+        return render_template('dispositifs/evaluation.html',
+                             form=form,
+                             dispositif=dispositif)
+                             
+    except Exception as e:
+        db.session.rollback()
+        print(f"❌ Erreur globale dans evaluer_dispositif: {str(e)}")
+        flash(f'Erreur: {str(e)}', 'error')
         return redirect(url_for('liste_dispositifs_risque', risque_id=dispositif.risque_id))
-    
-    form = EvaluationDispositifForm()
-    
-    if form.validate_on_submit():
-        # Mettre à jour les valeurs d'évaluation
-        dispositif.efficacite_reelle = form.efficacite_reelle.data
-        dispositif.couverture = form.couverture.data
-        dispositif.date_derniere_verification = datetime.utcnow().date()
-        dispositif.prochaine_verification = form.prochaine_verification.data
-        dispositif.commentaire_evaluation = form.commentaire.data  # Stocker le commentaire
-        dispositif.updated_at = datetime.utcnow()
-        
-        # CORRECTION : Vérifier que les valeurs ne sont pas None avant comparaison
-        efficacite_reelle = dispositif.efficacite_reelle or 0
-        efficacite_attendue = dispositif.efficacite_attendue or 0
-        
-        # Déterminer le résultat
-        if efficacite_attendue == 0:
-            resultat = 'Non évalué'
-        elif efficacite_reelle < efficacite_attendue:
-            resultat = 'À améliorer'
-        else:
-            resultat = 'Conforme'
-        
-        # 1. Créer une vérification d'évaluation
-        verification = VerificationDispositif(
-            dispositif_id=dispositif.id,
-            date_verification=datetime.utcnow().date(),
-            type_verification='Évaluation',
-            resultat=resultat,  # Utiliser la variable calculée
-            commentaire=form.commentaire.data or f"Évaluation: {efficacite_reelle}/5 (attendu: {efficacite_attendue}/5)",
-            verificateur_id=current_user.id,
-            client_id=current_user.client_id
-        )
-        db.session.add(verification)
-        
-        # 2. CALCULER LA RÉDUCTION THÉORIQUE DU RISQUE
-        # Mettre à jour le risque associé avec la nouvelle réduction
-        if dispositif.risque:
-            # Calculer la réduction basée sur l'efficacité réelle et la couverture
-            if dispositif.efficacite_reelle and dispositif.couverture:
-                # Formule : (efficacité + couverture) / 2, puis normalisé à 30% max
-                score_moyen = (dispositif.efficacite_reelle + dispositif.couverture) / 2
-                reduction_pourcentage = (score_moyen / 5) * 30.0  # 30% maximum
-                
-                # Stocker la réduction dans le dispositif
-                dispositif.reduction_risque_pourcentage = reduction_pourcentage
-                
-                # Mettre à jour le risque (optionnel)
-                # Vous pourriez avoir un champ 'reduction_cumulee' dans le modèle Risque
-                # risque.reduction_cumulee = calculer_toutes_reductions()
-        
-        # 3. Si efficacité insuffisante, créer un plan d'action
-        if dispositif.efficacite_reelle and dispositif.efficacite_attendue:
-            if dispositif.efficacite_reelle < dispositif.efficacite_attendue:
-                try:
-                    from services.audit_service import creer_plan_action_automatique
-                    creer_plan_action_automatique(
-                        risque_id=dispositif.risque_id,
-                        dispositif_id=dispositif.id,
-                        titre=f"Amélioration dispositif {dispositif.reference}",
-                        description=f"Dispositif insuffisamment efficace ({dispositif.efficacite_reelle}/5 vs {dispositif.efficacite_attendue}/5 attendus)\n\nCommentaire: {form.commentaire.data}",
-                        responsable_id=dispositif.responsable_id or current_user.id,
-                        echeance=datetime.utcnow().date() + timedelta(days=30)
-                    )
-                except ImportError:
-                    # Si le service n'existe pas, créer un plan d'action simple
-                    plan = PlanAction(
-                        reference=f"PA-{datetime.utcnow().strftime('%Y%m%d')}-{dispositif.id}",
-                        nom=f"Amélioration dispositif {dispositif.reference}",
-                        description=f"Dispositif insuffisamment efficace ({dispositif.efficacite_reelle}/5 vs {dispositif.efficacite_attendue}/5 attendus)",
-                        risque_id=dispositif.risque_id,
-                        dispositif_id=dispositif.id,
-                        responsable_id=dispositif.responsable_id or current_user.id,
-                        date_debut=datetime.utcnow().date(),
-                        date_fin_prevue=datetime.utcnow().date() + timedelta(days=30),
-                        statut='en_cours',
-                        priorite='haute',
-                        client_id=current_user.client_id,
-                        created_by=current_user.id
-                    )
-                    db.session.add(plan)
-        
-        db.session.commit()
-        
-        # 4. Notifier l'utilisateur avec la réduction calculée
-        reduction_msg = ""
-        if hasattr(dispositif, 'reduction_risque_pourcentage') and dispositif.reduction_risque_pourcentage:
-            reduction_msg = f" RÉDUCTION THÉORIQUE DU RISQUE: {dispositif.reduction_risque_pourcentage:.1f}%"
-        
-        flash(f'Évaluation enregistrée avec succès.{reduction_msg}', 'success')
-        return redirect(url_for('detail_dispositif', dispositif_id=dispositif_id))
-    
-    # PRÉ-REMPLIR LE FORMULAIRE (GET request)
-    # CORRECTION : Utiliser getattr avec valeur par défaut pour éviter None
-    form.efficacite_reelle.data = getattr(dispositif, 'efficacite_reelle', None)
-    form.couverture.data = getattr(dispositif, 'couverture', None)
-    form.commentaire.data = getattr(dispositif, 'commentaire_evaluation', None)
-    
-    if dispositif.prochaine_verification:
-        form.prochaine_verification.data = dispositif.prochaine_verification
-    
-    return render_template('dispositifs/evaluation.html',
-                         form=form,
-                         dispositif=dispositif)
 
 @app.route('/api/verification/<int:verification_id>', methods=['PUT', 'DELETE'])
 @login_required
