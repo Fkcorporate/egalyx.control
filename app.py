@@ -29500,6 +29500,24 @@ def creer_kri_ia_depuis_risque(id):
     
     # Rediriger vers le formulaire avec pré-remplissage IA
     return redirect(url_for('nouveau_kri', risque_id=id))
+
+
+@app.before_request
+def ensure_db_session():
+    """S'assure qu'une session DB propre est disponible"""
+    try:
+        # Tester la session
+        db.session.execute(text('SELECT 1'))
+    except Exception as e:
+        if "is not bound to a Session" in str(e) or "current transaction is aborted" in str(e):
+            print("⚠️ Session DB problématique détectée, nettoyage...")
+            # Fermer proprement
+            db.session.close()
+            # Annuler les transactions
+            db.session.rollback()
+            # Forcer une nouvelle session
+            db.session.remove()
+            print("✅ Session DB nettoyée")
     
 @app.route('/risque/<int:id>/evaluation-triphase', methods=['GET', 'POST'])
 @login_required
