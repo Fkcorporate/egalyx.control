@@ -1607,7 +1607,7 @@ def check_client_access(entity):
         print(f"⚠️ Erreur dans check_client_access: {e}")
         # En cas d'erreur, refuser par sécurité
         return False
-
+        
 @app.route('/fix_audits_client_id')
 @login_required
 def fix_audits_client_id():
