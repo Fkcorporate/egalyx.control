@@ -29506,27 +29506,23 @@ def creer_kri_ia_depuis_risque(id):
 def evaluer_risque_triphase(id):
     """Évaluation triphasée d'un risque avec gestion robuste des erreurs SQL"""
     
-    # ÉTAPE CRITIQUE : Réinitialiser la connexion DB si elle est corrompue
+    # RÉINITIALISER COMPLÈTEMENT LA SESSION
     try:
+        db.session.rollback()
+        db.session.remove()
+        # Tester la connexion
         db.session.execute(text('SELECT 1'))
+        print("✅ Session DB réinitialisée")
     except Exception as e:
-        if "current transaction is aborted" in str(e):
-            print("⚠️ Session DB corrompue détectée, réinitialisation...")
-            db.session.rollback()
-            db.session.remove()
-            db.session.close_all()
-            print("✅ Session DB réinitialisée")
+        print(f"⚠️ Échec réinitialisation DB: {e}")
+        # Forcer une nouvelle session
+        db.session.remove()
+        db.session.close_all()
     
     try:
-        # Récupérer le risque AVEC toutes les relations
+        # Récupérer le risque SANS relations pour commencer
         try:
-            # Charger explicitement toutes les relations nécessaires
-            risque = Risque.query\
-                .options(
-                    joinedload(Risque.cartographie),
-                    joinedload(Risque.kri).joinedload(KRI.mesures)
-                )\
-                .get(id)
+            risque = Risque.query.filter_by(id=id).first()
             
             if not risque:
                 flash('Risque non trouvé', 'error')
@@ -29544,16 +29540,23 @@ def evaluer_risque_triphase(id):
         
         # ========== CHARGEMENT SÉCURISÉ DES DONNÉES ==========
         
-        # Récupérer les utilisateurs
+        # Récupérer les utilisateurs avec une nouvelle session
         users = []
         try:
+            # Nouvelle requête avec session propre
+            from sqlalchemy.orm import sessionmaker
+            from sqlalchemy import create_engine
+            
+            # Utiliser une session séparée pour éviter la contamination
             if current_user.role == 'super_admin':
                 users = User.query.filter(User.is_active == True).all()
             else:
                 users = get_client_filter(User).filter(User.is_active == True).all()
+            print(f"✅ {len(users)} utilisateurs chargés")
         except Exception as e:
             print(f"⚠️ Erreur récupération utilisateurs: {e}")
             users = []
+            db.session.rollback()
         
         # Préparer le formulaire
         form = EvaluationTriPhaseForm()
@@ -29571,57 +29574,97 @@ def evaluer_risque_triphase(id):
             print(f"⚠️ Erreur récupération risques cartographie: {e}")
             risques_cartographie = []
         
+        # ========== CHARGEMENT SÉCURISÉ DES DISPOSITIFS ==========
+        
+        dispositifs_risque = []
+        try:
+            # IMPORTANT: Charger les dispositifs avec une requête directe
+            # plutôt qu'à travers la relation pour éviter les problèmes de session
+            dispositifs_risque = DispositifMaitrise.query\
+                .filter_by(
+                    risque_id=risque.id,
+                    is_archived=False
+                )\
+                .all()
+            print(f"✅ {len(dispositifs_risque)} dispositifs chargés")
+            
+            # Calculer les moyennes pour la synthèse
+            efficacite_moyenne = None
+            couverture_moyenne = None
+            
+            efficacites = [d.efficacite_reelle for d in dispositifs_risque if d.efficacite_reelle]
+            couvertures = [d.couverture for d in dispositifs_risque if d.couverture]
+            
+            if efficacites:
+                efficacite_moyenne = sum(efficacites) / len(efficacites)
+            if couvertures:
+                couverture_moyenne = sum(couvertures) / len(couvertures)
+                
+        except Exception as e:
+            print(f"⚠️ Erreur chargement dispositifs: {e}")
+            dispositifs_risque = []
+            efficacite_moyenne = None
+            couverture_moyenne = None
+        
         # ========== GESTION DE LA CAMPAGNE ==========
         
         campagne_active = None
         try:
-            campagne_active = get_client_filter(CampagneEvaluation)\
-                .filter_by(
-                    cartographie_id=risque.cartographie_id,
-                    statut='en_cours'
-                ).first()
-            
-            if not campagne_active:
-                # Créer une campagne par défaut
-                annee_courante = datetime.now().year
-                campagne_active = CampagneEvaluation(
-                    cartographie_id=risque.cartographie_id,
-                    nom=f"Campagne {annee_courante}",
-                    description=f"Évaluation annuelle {annee_courante}",
-                    date_debut=datetime.now().date(),
-                    statut='en_cours',
-                    created_by=current_user.id
-                )
+            # Utiliser une nouvelle session pour la campagne
+            with db.session.no_autoflush:
+                campagne_active = get_client_filter(CampagneEvaluation)\
+                    .filter_by(
+                        cartographie_id=risque.cartographie_id,
+                        statut='en_cours'
+                    ).first()
                 
-                # Ajouter client_id
-                if current_user.role != 'super_admin' and hasattr(current_user, 'client_id'):
-                    campagne_active.client_id = current_user.client_id
-                elif current_user.role == 'super_admin' and hasattr(risque, 'client_id'):
-                    campagne_active.client_id = risque.client_id
-                
-                db.session.add(campagne_active)
-                db.session.commit()
-                print(f"✅ Campagne créée: {campagne_active.nom}")
-                
+                if not campagne_active:
+                    # Créer une campagne par défaut
+                    annee_courante = datetime.now().year
+                    campagne_active = CampagneEvaluation(
+                        cartographie_id=risque.cartographie_id,
+                        nom=f"Campagne {annee_courante}",
+                        description=f"Évaluation annuelle {annee_courante}",
+                        date_debut=datetime.now().date(),
+                        statut='en_cours',
+                        created_by=current_user.id
+                    )
+                    
+                    if current_user.role != 'super_admin' and hasattr(current_user, 'client_id'):
+                        campagne_active.client_id = current_user.client_id
+                    elif current_user.role == 'super_admin' and hasattr(risque, 'client_id'):
+                        campagne_active.client_id = risque.client_id
+                    
+                    db.session.add(campagne_active)
+                    db.session.commit()
+                    print(f"✅ Campagne créée: {campagne_active.nom}")
+                    
         except Exception as e:
             print(f"⚠️ Erreur gestion campagne: {e}")
             db.session.rollback()
             campagne_active = None
         
-        # Récupérer l'évaluation en cours
+        # ========== RÉCUPÉRATION DE L'ÉVALUATION ==========
+        
         evaluation_en_cours = None
         if campagne_active:
             try:
                 evaluation_en_cours = get_client_filter(EvaluationRisque)\
-                    .options(
-                        joinedload(EvaluationRisque.referent_pre_evaluation),
-                        joinedload(EvaluationRisque.validateur),
-                        joinedload(EvaluationRisque.evaluateur_final)
-                    )\
                     .filter_by(
                         risque_id=id,
                         campagne_id=campagne_active.id
                     ).first()
+                    
+                # Charger manuellement les relations pour éviter les problèmes
+                if evaluation_en_cours:
+                    # Pré-charger les relations
+                    if evaluation_en_cours.referent_pre_evaluation_id:
+                        evaluation_en_cours._referent = User.query.get(evaluation_en_cours.referent_pre_evaluation_id)
+                    if evaluation_en_cours.validateur_id:
+                        evaluation_en_cours._validateur = User.query.get(evaluation_en_cours.validateur_id)
+                    if evaluation_en_cours.evaluateur_final_id:
+                        evaluation_en_cours._evaluateur_final = User.query.get(evaluation_en_cours.evaluateur_final_id)
+                        
             except Exception as e:
                 print(f"⚠️ Erreur récupération évaluation: {e}")
                 evaluation_en_cours = None
@@ -29805,7 +29848,7 @@ def evaluer_risque_triphase(id):
                 print(f"❌ Erreur POST: {str(e)}")
                 flash(f'Erreur: {str(e)}', 'error')
         
-        # ========== PRÉPARATION DE LA RÉPONSE ==========
+        # ========== PRÉPARATION DES DONNÉES POUR LE TEMPLATE ==========
         
         # Déterminer la phase
         phase_actuelle = 'phase1'
@@ -29825,39 +29868,23 @@ def evaluer_risque_triphase(id):
             form.niveau_maitrise_pre.data = evaluation_en_cours.niveau_maitrise_pre or 0
             form.commentaire_pre_evaluation.data = evaluation_en_cours.commentaire_pre_evaluation or ''
         
-        # PRÉVENTION CRITIQUE : S'assurer que les relations sont chargées
-        # et créer des attributs sécurisés pour le template
-        
-        # 1. Cartographie
-        if hasattr(risque, 'cartographie_id') and risque.cartographie_id:
-            try:
-                # Charger explicitement la cartographie
-                cartographie = Cartographie.query.get(risque.cartographie_id)
-                risque._cartographie = cartographie if cartographie else None
-            except Exception:
-                risque._cartographie = None
-        else:
+        # Charger la cartographie
+        try:
+            cartographie = Cartographie.query.get(risque.cartographie_id)
+            risque._cartographie = cartographie
+        except:
             risque._cartographie = None
         
-        # 2. KRI - CORRECTION IMPORTANTE
-        # Le modèle Risque peut avoir plusieurs KRI, pas un seul
+        # Charger les KRI
         try:
-            # Récupérer tous les KRI associés
-            kris_associes = KRI.query.filter_by(risque_id=risque.id).all()
-            # Prendre le premier KRI actif s'il existe
-            risque._kri = kris_associes[0] if kris_associes else None
-            
-            # Si un KRI existe, charger ses mesures
-            if risque._kri:
-                try:
-                    mesures = MesureKRI.query.filter_by(kri_id=risque._kri.id)\
-                        .order_by(MesureKRI.date_mesure.desc())\
-                        .all()
-                    risque._kri._mesures = mesures
-                except Exception:
-                    risque._kri._mesures = []
-        except Exception as e:
-            print(f"⚠️ Erreur chargement KRI: {e}")
+            kri = KRI.query.filter_by(risque_id=risque.id).first()
+            risque._kri = kri
+            if kri:
+                mesures = MesureKRI.query.filter_by(kri_id=kri.id).order_by(MesureKRI.date_mesure.desc()).limit(5).all()
+                risque._kri._mesures = mesures
+            else:
+                risque._kri = None
+        except:
             risque._kri = None
         
         # ========== RENDU DU TEMPLATE ==========
@@ -29869,11 +29896,16 @@ def evaluer_risque_triphase(id):
                             evaluation_en_cours=evaluation_en_cours,
                             phase_actuelle=phase_actuelle,
                             referents=users,
-                            risques_cartographie=risques_cartographie)
+                            risques_cartographie=risques_cartographie,
+                            dispositifs_risque=dispositifs_risque,  # Passé explicitement
+                            efficacite_moyenne=efficacite_moyenne,
+                            couverture_moyenne=couverture_moyenne)
                             
     except Exception as e:
         db.session.rollback()
-        print(f"❌ Erreur globale: {str(e)}")
+        print(f"❌ Erreur globale dans evaluer_risque_triphase: {str(e)}")
+        import traceback
+        traceback.print_exc()
         flash(f'Erreur: {str(e)}', 'error')
         return redirect(url_for('dashboard'))
 
