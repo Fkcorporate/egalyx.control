@@ -1529,68 +1529,84 @@ print("   - permission_required")
 
 def check_client_access(entity):
     """
-    Vérifie l'accès à une entité spécifique - VERSION ULTRA FLEXIBLE
+    Vérifie l'accès à une entité spécifique - VERSION COMPLÈTEMENT SÉCURISÉE
+    NE DÉCLENCHE PAS de chargement SQLAlchemy depuis current_user
     """
-    if not current_user.is_authenticated:
+    # 1. Vérifier l'authentification de base (sans accès DB)
+    if not current_user or not current_user.is_authenticated:
         return False
     
-    # 1. SUPER ADMIN a toujours accès
-    if current_user.role == 'super_admin':
-        return True
+    # 2. Utiliser Flask-Login pour récupérer l'ID sans session DB
+    from flask_login import current_user as flask_user
     
-    user_client_id = current_user.client_id
-    
-    if not user_client_id:
-        print(f"⚠️ {current_user.username} n'a pas de client_id")
+    # Récupérer l'ID utilisateur SANS accéder aux attributs SQLAlchemy
+    user_id = None
+    try:
+        # Méthode sécurisée : utiliser get_id() de Flask-Login
+        user_id = flask_user.get_id()
+        if user_id:
+            user_id = int(user_id)
+    except (AttributeError, ValueError, TypeError):
         return False
     
-    # 2. Si l'entité est un Audit
-    if isinstance(entity, Audit):
-        audit = entity
-        
-        # Si l'audit n'a pas de client_id
-        if audit.client_id is None:
-            # Vérifier si l'utilisateur est le créateur
-            if hasattr(audit, 'created_by') and audit.created_by == current_user.id:
-                return True
-            # Vérifier si l'utilisateur est le responsable
-            if hasattr(audit, 'responsable_id') and audit.responsable_id == current_user.id:
-                return True
-            # Vérifier si l'utilisateur est dans l'équipe
-            if audit.equipe_audit_ids:
-                try:
-                    equipe_ids = [int(id.strip()) for id in audit.equipe_audit_ids.split(',') if id.strip()]
-                    if current_user.id in equipe_ids:
-                        return True
-                except:
-                    pass
+    if not user_id:
+        return False
+    
+    # 3. Récupérer l'utilisateur depuis la base POUR CETTE REQUÊTE SEULEMENT
+    from app import db
+    from models import User
+    
+    try:
+        # Charger l'utilisateur avec une nouvelle requête
+        user = db.session.query(User).filter_by(id=user_id).first()
+        if not user:
             return False
         
-        # Si l'audit a un client_id, vérifier la correspondance
-        return audit.client_id == user_client_id
-    
-    # 3. Pour les autres entités
-    if hasattr(entity, 'client_id'):
-        entity_client_id = entity.client_id
+        # 4. SUPER ADMIN a toujours accès
+        if user.role == 'super_admin':
+            return True
         
+        user_client_id = user.client_id
+        if not user_client_id:
+            print(f"⚠️ {user.username} n'a pas de client_id")
+            return False
+        
+        # 5. Vérifier l'entité
+        entity_client_id = None
+        
+        # Essayer plusieurs méthodes pour récupérer le client_id
+        if hasattr(entity, 'client_id'):
+            entity_client_id = entity.client_id
+        elif hasattr(entity, '_client_id'):
+            entity_client_id = entity._client_id
+        
+        # Si l'entité n'a pas de client_id, utiliser des règles de secours
         if entity_client_id is None:
-            # Pour les entités sans client_id, vérifier par created_by
-            if hasattr(entity, 'created_by') and entity.created_by:
-                creator = User.query.get(entity.created_by)
-                if creator:
-                    return creator.client_id == user_client_id
-            return True  # Ou False selon votre politique
+            # Règle 1: Vérifier si l'utilisateur est le créateur
+            if hasattr(entity, 'created_by'):
+                return entity.created_by == user.id
+            
+            # Règle 2: Pour les audits spécifiques
+            if hasattr(entity, '__class__') and entity.__class__.__name__ == 'Audit':
+                if hasattr(entity, 'responsable_id') and entity.responsable_id == user.id:
+                    return True
+                if hasattr(entity, 'equipe_audit_ids') and entity.equipe_audit_ids:
+                    try:
+                        equipe_ids = [int(id.strip()) for id in entity.equipe_audit_ids.split(',') if id.strip()]
+                        return user.id in equipe_ids
+                    except:
+                        pass
+            
+            # Par défaut, refuser pour plus de sécurité
+            return False
         
+        # Comparer les client_id
         return entity_client_id == user_client_id
-    
-    # 4. Vérifier par created_by
-    if hasattr(entity, 'created_by') and entity.created_by:
-        creator = User.query.get(entity.created_by)
-        if creator and hasattr(creator, 'client_id'):
-            return creator.client_id == user_client_id
-    
-    # 5. Par défaut, refuser (sécurité)
-    return False
+        
+    except Exception as e:
+        print(f"⚠️ Erreur dans check_client_access: {e}")
+        # En cas d'erreur, refuser par sécurité
+        return False
 
 @app.route('/fix_audits_client_id')
 @login_required
