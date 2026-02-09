@@ -683,7 +683,221 @@
                     {% endif %}
                 </div>
             </div>
-
+            
+            <!-- ========== DISPOSITIFS DE MAÎTRISE EXISTANTS ========== -->
+            {# Solution simplifiée et robuste #}
+            {% set dispositifs_risque = [] %}
+            {% set has_dispositifs_access = false %}
+            
+            {# 1. Vérification très simple - on essaie d'accéder avec un try implicite #}
+            {% if risque and not risque.is_archived %}
+                {# 2. Utiliser un attribut temporaire pour vérifier #}
+                {% set temp_dispositifs = [] %}
+                
+                {# 3. Boucle sécurisée #}
+                {% for dispositif in (risque.dispositifs_maitrise or []) %}
+                    {% if not dispositif.is_archived %}
+                        {% set _ = temp_dispositifs.append(dispositif) %}
+                    {% endif %}
+                {% endfor %}
+                
+                {# 4. Si pas d'erreur, on assigne #}
+                {% set dispositifs_risque = temp_dispositifs %}
+            {% endif %}
+            
+            {% if dispositifs_risque and dispositifs_risque|length > 0 %}
+            <div class="card shadow mt-4">
+                <div class="card-header bg-info text-white">
+                    <h6 class="mb-0">
+                        <i class="fas fa-shield-alt me-2"></i>Dispositifs de Maîtrise Existants
+                        <span class="badge bg-light text-dark ms-2">{{ dispositifs_risque|length }}</span>
+                    </h6>
+                </div>
+                <div class="card-body">
+                    <div class="alert alert-info">
+                        <i class="fas fa-info-circle me-2"></i>
+                        Les dispositifs de maîtrise ci-dessous peuvent influencer l'évaluation du risque.
+                        Consultez leur efficacité pour affiner votre jugement.
+                    </div>
+                    
+                    <div class="row g-3">
+                        {% for dispositif in dispositifs_risque %}
+                        <div class="col-md-6">
+                            <div class="card dispositif-evaluation-card 
+                                {% if dispositif.efficacite_reelle and dispositif.efficacite_reelle >= 4 %}border-success
+                                {% elif dispositif.efficacite_reelle and dispositif.efficacite_reelle >= 3 %}border-warning
+                                {% elif dispositif.efficacite_reelle %}border-danger
+                                {% else %}border-secondary{% endif %}">
+                                <div class="card-body">
+                                    <div class="d-flex justify-content-between align-items-start">
+                                        <div>
+                                            <h6 class="mb-1">
+                                                <a href="{{ url_for('detail_dispositif', dispositif_id=dispositif.id) }}" 
+                                                class="text-decoration-none" target="_blank">
+                                                    {{ dispositif.reference }}
+                                                </a>
+                                            </h6>
+                                            <p class="mb-2 small">{{ dispositif.nom|truncate(60) }}</p>
+                                        </div>
+                                        <div>
+                                            {% if dispositif.type_dispositif == 'Préventif' %}
+                                            <span class="badge bg-success">{{ dispositif.type_dispositif }}</span>
+                                            {% elif dispositif.type_dispositif == 'Détectif' %}
+                                            <span class="badge bg-warning text-dark">{{ dispositif.type_dispositif }}</span>
+                                            {% else %}
+                                            <span class="badge bg-danger">{{ dispositif.type_dispositif }}</span>
+                                            {% endif %}
+                                        </div>
+                                    </div>
+                                    
+                                    <!-- Informations d'évaluation -->
+                                    <div class="mt-3">
+                                        <div class="row text-center">
+                                            <div class="col-4">
+                                                <div class="small text-muted">Efficacité</div>
+                                                <div class="fw-bold 
+                                                    {% if dispositif.efficacite_reelle and dispositif.efficacite_reelle >= 4 %}text-success
+                                                    {% elif dispositif.efficacite_reelle and dispositif.efficacite_reelle >= 3 %}text-warning
+                                                    {% elif dispositif.efficacite_reelle %}text-danger
+                                                    {% else %}text-secondary{% endif %}">
+                                                    {{ dispositif.efficacite_reelle or 'N/A' }}/5
+                                                </div>
+                                            </div>
+                                            <div class="col-4">
+                                                <div class="small text-muted">Couverture</div>
+                                                <div class="fw-bold 
+                                                    {% if dispositif.couverture and dispositif.couverture >= 4 %}text-success
+                                                    {% elif dispositif.couverture and dispositif.couverture >= 3 %}text-warning
+                                                    {% elif dispositif.couverture %}text-danger
+                                                    {% else %}text-secondary{% endif %}">
+                                                    {{ dispositif.couverture or 'N/A' }}/5
+                                                </div>
+                                            </div>
+                                            <div class="col-4">
+                                                <div class="small text-muted">Statut</div>
+                                                <div>
+                                                    {% if dispositif.statut == 'actif' %}
+                                                    <span class="badge bg-success">Actif</span>
+                                                    {% else %}
+                                                    <span class="badge bg-secondary">{{ dispositif.statut }}</span>
+                                                    {% endif %}
+                                                </div>
+                                            </div>
+                                        </div>
+                                        
+                                        <!-- Barre de progression -->
+                                        {% if dispositif.efficacite_reelle %}
+                                        <div class="mt-2">
+                                            <div class="small text-muted mb-1">Efficacité réelle</div>
+                                            <div class="progress" style="height: 8px;">
+                                                <div class="progress-bar 
+                                                    {% if dispositif.efficacite_reelle >= 4 %}bg-success
+                                                    {% elif dispositif.efficacite_reelle >= 3 %}bg-warning
+                                                    {% else %}bg-danger{% endif %}" 
+                                                    style="width: {{ (dispositif.efficacite_reelle / 5) * 100 }}%">
+                                                </div>
+                                            </div>
+                                            {% if dispositif.efficacite_attendue %}
+                                            <small class="text-muted">Attendu: {{ dispositif.efficacite_attendue }}/5</small>
+                                            {% endif %}
+                                        </div>
+                                        {% endif %}
+                                        
+                                        <!-- Commentaire d'évaluation -->
+                                        {% if dispositif.commentaire_evaluation %}
+                                        <div class="mt-2">
+                                            <div class="small text-muted">Commentaire d'évaluation :</div>
+                                            <div class="small p-2 bg-light rounded">
+                                                {{ dispositif.commentaire_evaluation|truncate(120) }}
+                                            </div>
+                                        </div>
+                                        {% endif %}
+                                        
+                                        <!-- Dernière vérification -->
+                                        {% if dispositif.date_derniere_verification %}
+                                        <div class="mt-2">
+                                            <small class="text-muted">
+                                                <i class="fas fa-calendar-check me-1"></i>
+                                                Dernière vérification : {{ dispositif.date_derniere_verification.strftime('%d/%m/%Y') }}
+                                            </small>
+                                        </div>
+                                        {% endif %}
+                                    </div>
+                                    
+                                    <!-- Actions rapides -->
+                                    <div class="mt-3 pt-2 border-top">
+                                        <div class="btn-group btn-group-sm">
+                                            <a href="{{ url_for('detail_dispositif', dispositif_id=dispositif.id) }}" 
+                                            class="btn btn-outline-info" target="_blank">
+                                                <i class="fas fa-eye"></i> Voir
+                                            </a>
+                                            <a href="{{ url_for('evaluer_dispositif', dispositif_id=dispositif.id) }}" 
+                                            class="btn btn-outline-warning" target="_blank">
+                                                <i class="fas fa-chart-bar"></i> Évaluer
+                                            </a>
+                                            {% if not dispositif.plan_action_id %}
+                                            <a href="{{ url_for('nouveau_plan_action_pour_risque', risque_id=risque.id) }}?dispositif_id={{ dispositif.id }}" 
+                                            class="btn btn-outline-primary" target="_blank">
+                                                <i class="fas fa-tasks"></i> Plan
+                                            </a>
+                                            {% endif %}
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        {% endfor %}
+                    </div>
+                    
+                    <!-- Synthèse des dispositifs -->
+                    {% set efficacite_total = 0 %}
+                    {% set couverture_total = 0 %}
+                    {% set count_eff = 0 %}
+                    {% set count_couv = 0 %}
+                    
+                    {% for dispositif in dispositifs_risque %}
+                        {% if dispositif.efficacite_reelle %}
+                            {% set efficacite_total = efficacite_total + dispositif.efficacite_reelle %}
+                            {% set count_eff = count_eff + 1 %}
+                        {% endif %}
+                        {% if dispositif.couverture %}
+                            {% set couverture_total = couverture_total + dispositif.couverture %}
+                            {% set count_couv = count_couv + 1 %}
+                        {% endif %}
+                    {% endfor %}
+                    
+                    {% set efficacite_moyenne = (efficacite_total / count_eff) if count_eff > 0 else none %}
+                    {% set couverture_moyenne = (couverture_total / count_couv) if count_couv > 0 else none %}
+                    
+                    {% if efficacite_moyenne is not none %}
+                    <div class="alert 
+                        {% if efficacite_moyenne >= 4 %}alert-success
+                        {% elif efficacite_moyenne >= 3 %}alert-warning
+                        {% else %}alert-danger{% endif %} mt-4">
+                        <div class="d-flex align-items-center">
+                            <div class="me-3">
+                                <i class="fas fa-chart-line fa-2x"></i>
+                            </div>
+                            <div>
+                                <h6 class="alert-heading mb-1">Synthèse des dispositifs</h6>
+                                <p class="mb-0">
+                                    <strong>Efficacité moyenne : {{ "%.1f"|format(efficacite_moyenne) }}/5</strong>
+                                    {% if couverture_moyenne is not none %}
+                                    • <strong>Couverture moyenne : {{ "%.1f"|format(couverture_moyenne) }}/5</strong>
+                                    {% endif %}
+                                </p>
+                                <small>
+                                    Ces indicateurs peuvent vous aider à estimer le niveau de maîtrise du risque.
+                                    Une efficacité élevée (>4/5) peut justifier un niveau de maîtrise plus favorable.
+                                </small>
+                            </div>
+                        </div>
+                    </div>
+                    {% endif %}
+                </div>
+            </div>
+            {% endif %}
+            
             <!-- Visualisation Matrice -->
             <div class="card border-0 shadow-sm mb-4">
                 <div class="card-header bg-white">
@@ -1409,8 +1623,8 @@ function exporterEvaluationCourante() {
     printWindow.document.close();
     printWindow.print();
 }
- // Configuration du zoom
-const ZOOM_LEVEL = 0.8; // 80%
+// Configuration du zoom
+const ZOOM_LEVEL = 0.9; // 90%
 
 // Fonction pour appliquer le zoom
 function applyZoom() {
@@ -1424,7 +1638,7 @@ function applyZoom() {
     // Ajuster les dimensions pour compenser le scale
     const scaleFactor = 1 / ZOOM_LEVEL;
     document.body.style.width = `${scaleFactor * 100}%`;
-    document.body.style.height = `${scaleFactor * 100}%`;
+    document.body.style.minHeight = `${scaleFactor * 100}vh`;
     
     // Ajuster les conteneurs principaux
     const mainContainers = document.querySelectorAll('.container, .container-fluid, .row');
@@ -1463,6 +1677,15 @@ function adjustElementsAfterZoom() {
             canvas.style.height = `${originalHeight * ZOOM_LEVEL}px`;
         }
     });
+    
+    // Ajuster les tailles de police si nécessaire
+    const smallTexts = document.querySelectorAll('small, .small, .form-text');
+    smallTexts.forEach(text => {
+        const currentSize = parseFloat(window.getComputedStyle(text).fontSize);
+        if (currentSize < 11) {
+            text.style.fontSize = `${currentSize / ZOOM_LEVEL}px`;
+        }
+    });
 }
 
 // Appliquer le zoom au chargement
@@ -1487,12 +1710,24 @@ document.addEventListener('DOMContentLoaded', function() {
     // Réappliquer après que tout le contenu soit chargé
     setTimeout(applyZoom, 200);
     setTimeout(adjustElementsAfterZoom, 300);
+    
+    // Vérifier périodiquement que le zoom est toujours appliqué
+    setInterval(() => {
+        const currentTransform = window.getComputedStyle(document.body).transform;
+        if (currentTransform === 'none' || !currentTransform.includes('0.9')) {
+            applyZoom();
+        }
+    }, 1000);
 });
 
 // Gérer le redimensionnement
+let resizeTimeout;
 window.addEventListener('resize', function() {
-    applyZoom();
-    setTimeout(adjustElementsAfterZoom, 100);
+    clearTimeout(resizeTimeout);
+    resizeTimeout = setTimeout(function() {
+        applyZoom();
+        setTimeout(adjustElementsAfterZoom, 100);
+    }, 250);
 });
 
 // Gérer l'impression (désactiver le zoom pour l'impression)
@@ -1500,26 +1735,32 @@ window.addEventListener('beforeprint', function() {
     document.body.style.zoom = '100%';
     document.body.style.transform = 'scale(1)';
     document.body.style.width = '100%';
-    document.body.style.height = '100%';
+    document.body.style.minHeight = '100vh';
 });
 
 window.addEventListener('afterprint', function() {
     // Rétablir le zoom après impression
-    setTimeout(applyZoom, 100);
-    setTimeout(adjustElementsAfterZoom, 200);
+    setTimeout(() => {
+        applyZoom();
+        setTimeout(adjustElementsAfterZoom, 200);
+    }, 100);
 });
 
 // Ajouter une fonction pour désactiver/activer le zoom si nécessaire
 function toggleZoom(enabled) {
     if (enabled) {
         applyZoom();
+        setTimeout(adjustElementsAfterZoom, 100);
     } else {
         document.body.style.zoom = '100%';
         document.body.style.transform = 'scale(1)';
         document.body.style.width = '100%';
-        document.body.style.height = '100%';
+        document.body.style.minHeight = '100vh';
     }
 }
+
+// Exposer la fonction globalement pour un contrôle manuel
+window.toggleZoom = toggleZoom;
 </script>
 
 <style>
@@ -1683,6 +1924,49 @@ function toggleZoom(enabled) {
         min-width: 45%;
         margin-bottom: 10px;
     }
+}
+/* Styles pour les cartes de dispositifs */
+.dispositif-evaluation-card {
+    transition: all 0.2s ease;
+    height: 100%;
+}
+
+.dispositif-evaluation-card:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+}
+
+.dispositif-evaluation-card.border-success:hover {
+    box-shadow: 0 4px 12px rgba(40, 167, 69, 0.1);
+}
+
+.dispositif-evaluation-card.border-warning:hover {
+    box-shadow: 0 4px 12px rgba(255, 193, 7, 0.1);
+}
+
+.dispositif-evaluation-card.border-danger:hover {
+    box-shadow: 0 4px 12px rgba(220, 53, 69, 0.1);
+}/* Styles pour les cartes de dispositifs */
+.dispositif-evaluation-card {
+    transition: all 0.2s ease;
+    height: 100%;
+}
+
+.dispositif-evaluation-card:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+}
+
+.dispositif-evaluation-card.border-success:hover {
+    box-shadow: 0 4px 12px rgba(40, 167, 69, 0.1);
+}
+
+.dispositif-evaluation-card.border-warning:hover {
+    box-shadow: 0 4px 12px rgba(255, 193, 7, 0.1);
+}
+
+.dispositif-evaluation-card.border-danger:hover {
+    box-shadow: 0 4px 12px rgba(220, 53, 69, 0.1);
 }
 </style>
 {% endblock %}
