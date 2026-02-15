@@ -99,7 +99,7 @@ class RisqueForm(FlaskForm):
         ('financier', 'Financier'),
         ('juridique', 'Juridique'),
         ('compliance', 'Compliance'),
-        ('reputation', 'Répuration'),
+        ('reputation', 'Réputation'),
         ('strategique', 'Stratégique'),
         ('technologique', 'Technologique'),
         ('humain', 'Ressources Humaines'),
