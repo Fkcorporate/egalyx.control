@@ -3641,77 +3641,6 @@ def get_client_filter(model_class, **filters):
         # Par défaut : aucun résultat pour la sécurité
         return query.filter_by(id=-1)
 
-def check_client_access(entity):
-    """
-    Vérifie l'accès à une entité spécifique - VERSION SÉCURISÉE
-    """
-    # Vérifier l'authentification SANS accéder aux attributs SQLAlchemy
-    if not hasattr(current_user, 'is_authenticated') or not current_user.is_authenticated:
-        return False
-    
-    # Accéder aux attributs de manière sécurisée
-    try:
-        # 1. SUPER ADMIN a toujours accès
-        # Utiliser getattr avec valeur par défaut pour éviter l'accès à la session
-        user_role = getattr(current_user, 'role', None)
-        
-        if user_role == 'super_admin':
-            return True
-    except Exception as e:
-        print(f"⚠️ Erreur accès au rôle utilisateur: {e}")
-        return False
-    
-    # Récupérer le client_id de manière sécurisée
-    try:
-        user_client_id = getattr(current_user, 'client_id', None)
-    except Exception:
-        user_client_id = None
-    
-    if not user_client_id:
-        print(f"⚠️ {getattr(current_user, 'username', 'Utilisateur inconnu')} n'a pas de client_id")
-        return False
-    
-    # Vérifier l'entité
-    try:
-        # Si l'entité est un Audit
-        if isinstance(entity, Audit):
-            audit = entity
-            entity_client_id = getattr(audit, 'client_id', None)
-            
-            if entity_client_id is None:
-                # Logique flexible pour les audits sans client_id
-                if hasattr(audit, 'created_by') and audit.created_by == current_user.id:
-                    return True
-                if hasattr(audit, 'responsable_id') and audit.responsable_id == current_user.id:
-                    return True
-                if hasattr(audit, 'equipe_audit_ids') and audit.equipe_audit_ids:
-                    try:
-                        equipe_ids = [int(id.strip()) for id in audit.equipe_audit_ids.split(',') if id.strip()]
-                        if current_user.id in equipe_ids:
-                            return True
-                    except:
-                        pass
-                return False
-            
-            return entity_client_id == user_client_id
-        
-        # Pour les autres entités
-        entity_client_id = getattr(entity, 'client_id', None)
-        
-        if entity_client_id is None:
-            # Pour les entités sans client_id, vérifier par created_by
-            if hasattr(entity, 'created_by') and entity.created_by:
-                # Éviter User.query.get() qui peut causer des problèmes
-                # Vérifier directement l'ID
-                return entity.created_by == current_user.id
-            return True  # Ou False selon votre politique
-        
-        return entity_client_id == user_client_id
-        
-    except Exception as e:
-        print(f"⚠️ Erreur dans check_client_access: {e}")
-        # En cas d'erreur, refuser par sécurité
-        return False
 
 def get_super_admin_access():
     """
@@ -4446,50 +4375,7 @@ def filter_by_client(query, model_class):
         return query
 
 
-def check_client_access(entite):
-    """Vérifie que l'utilisateur a accès à l'entité"""
-    
-    # SUPER ADMIN : ACCÈS UNIVERSEL
-    if current_user.role == 'super_admin':
-        return True
-    
-    # Si l'entité n'existe pas
-    if not entite:
-        return False
-    
-    # Vérifier client_id direct
-    if hasattr(entite, 'client_id') and entite.client_id:
-        return entite.client_id == current_user.client_id
-    
-    # Vérifier par created_by
-    if hasattr(entite, 'created_by') and entite.created_by:
-        createur = User.query.get(entite.created_by)
-        if createur and hasattr(createur, 'client_id'):
-            return createur.client_id == current_user.client_id
-    
-    # Vérifier les relations
-    if hasattr(entite, 'audit_id'):
-        audit = Audit.query.get(entite.audit_id)
-        return check_client_access(audit) if audit else False
-    
-    if hasattr(entite, 'risque_id'):
-        risque = Risque.query.get(entite.risque_id)
-        return check_client_access(risque) if risque else False
-    
-    if hasattr(entite, 'constatation_id'):
-        constatation = Constatation.query.get(entite.constatation_id)
-        return check_client_access(constatation) if constatation else False
-    
-    if hasattr(entite, 'cartographie_id'):
-        cartographie = Cartographie.query.get(entite.cartographie_id)
-        return check_client_access(cartographie) if cartographie else False
-    
-    # Pour les User, vérifier directement
-    if isinstance(entite, User):
-        return entite.client_id == current_user.client_id
-    
-    # Par défaut, refuser
-    return False
+
 
 
 # ========================
@@ -16221,80 +16107,108 @@ def filter_client_data():
             g.client_id = current_user.client_id
 
 # Dans chaque route qui manipule des données, ajoutez ce filtre :
-def check_client_access(entite):
-    """Vérifie que l'utilisateur a accès à l'entité"""
-    
-    # SUPER ADMIN : ACCÈS UNIVERSEL (sauf aux autres super admin)
-    if current_user.role == 'super_admin':
-        # Un super admin ne peut pas accéder à un autre super admin
-        if isinstance(entite, User) and entite.role == 'super_admin':
-            return current_user.id == entite.id  # Seulement son propre compte
-        return True
-    
-    # Si l'entité n'existe pas
-    if not entite:
+def check_client_access(entity):
+    """
+    Vérifie l'accès à une entité spécifique - VERSION UNIQUE ET ROBUSTE
+    """
+    # Vérification rapide de l'authentification
+    if not current_user.is_authenticated:
         return False
     
-    # Vérifier client_id direct
-    if hasattr(entite, 'client_id') and entite.client_id:
-        return entite.client_id == current_user.client_id
-    
-    # Vérifier par created_by
-    if hasattr(entite, 'created_by') and entite.created_by:
-        createur = User.query.get(entite.created_by)
-        if createur:
-            # Un utilisateur normal ne peut pas accéder aux données créées par un super admin
-            if createur.role == 'super_admin':
-                return False
-            if hasattr(createur, 'client_id'):
-                return createur.client_id == current_user.client_id
-    
-    # Pour les User, vérifier directement
-    if isinstance(entite, User):
-        # Ne pas permettre l'accès aux super admin
-        if entite.role == 'super_admin':
+    # Récupérer l'ID utilisateur de façon sécurisée
+    try:
+        user_id = current_user.get_id()
+        if not user_id:
             return False
-        return entite.client_id == current_user.client_id
-    
-    # Par défaut, refuser
-    return False
-
-def check_client_access(entite):
-    """Vérifie que l'utilisateur a accès à l'entité"""
-    
-    # SUPER ADMIN : ACCÈS UNIVERSEL (sauf aux autres super admin)
-    if current_user.role == 'super_admin':
-        # Un super admin ne peut pas accéder à un autre super admin
-        if isinstance(entite, User) and entite.role == 'super_admin':
-            return current_user.id == entite.id  # Seulement son propre compte
-        return True
-    
-    # Si l'entité n'existe pas
-    if not entite:
+    except:
         return False
     
-    # Vérifier client_id direct
-    if hasattr(entite, 'client_id') and entite.client_id:
-        return entite.client_id == current_user.client_id
-    
-    # Vérifier par created_by
-    if hasattr(entite, 'created_by') and entite.created_by:
-        createur = User.query.get(entite.created_by)
-        if createur:
-            # Un utilisateur normal ne peut pas accéder aux données créées par un super admin
-            if createur.role == 'super_admin':
-                return False
-            if hasattr(createur, 'client_id'):
-                return createur.client_id == current_user.client_id
-    
-    # Pour les User, vérifier directement
-    if isinstance(entite, User):
-        # Ne pas permettre l'accès aux super admin
-        if entite.role == 'super_admin':
+    # Faire une requête FRAÎCHE pour obtenir l'utilisateur
+    # C'est la clé ! On ne fait pas confiance à l'objet current_user potentiellement détaché
+    try:
+        # Requête directe à la base de données
+        user = db.session.get(User, int(user_id))
+        if not user:
             return False
-        return entite.client_id == current_user.client_id
+        
+        # Maintenant on utilise 'user' qui est FRAÎCHEMENT attaché à la session
+        user_role = user.role
+        user_client_id = user.client_id
+        user_id_val = user.id
+        
+    except Exception as e:
+        print(f"⚠️ Erreur récupération utilisateur: {e}")
+        return False
     
-    # Par défaut, refuser
+    # 1. SUPER ADMIN a toujours accès
+    if user_role == 'super_admin':
+        # Protection pour les autres super admin
+        if isinstance(entity, User) and entity.role == 'super_admin':
+            return user_id_val == entity.id
+        return True
+    
+    # 2. Si l'utilisateur n'a pas de client_id
+    if not user_client_id:
+        print(f"⚠️ Utilisateur {user.username} n'a pas de client_id")
+        return False
+    
+    # 3. Cas spécial : Audit
+    if hasattr(entity, '__class__') and entity.__class__.__name__ == 'Audit':
+        # Récupérer le client_id de l'audit de façon sécurisée
+        audit_client_id = getattr(entity, 'client_id', None)
+        
+        if audit_client_id is None:
+            # Logique pour audits sans client_id
+            if hasattr(entity, 'created_by') and entity.created_by == user_id_val:
+                return True
+            if hasattr(entity, 'responsable_id') and entity.responsable_id == user_id_val:
+                return True
+            if hasattr(entity, 'equipe_audit_ids') and entity.equipe_audit_ids:
+                try:
+                    equipe_ids = [int(id.strip()) for id in entity.equipe_audit_ids.split(',') if id.strip()]
+                    if user_id_val in equipe_ids:
+                        return True
+                except:
+                    pass
+            return False
+        
+        return audit_client_id == user_client_id
+    
+    # 4. Pour les entités avec client_id
+    if hasattr(entity, 'client_id'):
+        entity_client_id = entity.client_id
+        
+        if entity_client_id is None:
+            # Entités sans client_id : vérifier par created_by
+            if hasattr(entity, 'created_by') and entity.created_by:
+                try:
+                    # Requête pour le créateur
+                    creator = db.session.get(User, entity.created_by)
+                    if creator and creator.client_id == user_client_id:
+                        return True
+                except:
+                    pass
+            return False  # Par défaut, refuser
+        
+        return entity_client_id == user_client_id
+    
+    # 5. Pour les objets User
+    if isinstance(entity, User):
+        # Ne pas permettre l'accès aux super admin
+        if entity.role == 'super_admin':
+            return False
+        return entity.client_id == user_client_id
+    
+    # 6. Vérification par created_by en dernier recours
+    if hasattr(entity, 'created_by') and entity.created_by:
+        try:
+            creator = db.session.get(User, entity.created_by)
+            if creator and creator.client_id == user_client_id:
+                return True
+        except:
+            pass
+    
+    # 7. Par défaut, refuser
     return False
 
 # ========================
