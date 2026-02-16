@@ -976,6 +976,7 @@ class Service(db.Model):
 # -------------------- CARTOGRAPHIE --------------------
 # Dans models.py, dans la classe Cartographie, ajoutez :
 
+
 class Cartographie(db.Model):
     __tablename__ = 'cartographie'
     
@@ -987,7 +988,7 @@ class Cartographie(db.Model):
     type_cartographie = db.Column(db.String(50), default='direction')
     created_by = db.Column(db.Integer, db.ForeignKey('user.id'))
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
-    
+    processus_id = db.Column(db.Integer, db.ForeignKey('processus.id')) 
     # NOUVEAUX CHAMPS POUR L'ARCHIVAGE
     is_archived = db.Column(db.Boolean, default=False)
     archived_at = db.Column(db.DateTime)
@@ -1002,7 +1003,7 @@ class Cartographie(db.Model):
     risques = db.relationship('Risque', back_populates='cartographie')
     campagnes = db.relationship('CampagneEvaluation', back_populates='cartographie', cascade='all, delete-orphan')
     client_id = db.Column(db.Integer, db.ForeignKey('clients.id'), nullable=True)
-
+    processus = db.relationship('Processus', backref='cartographies')
 # -------------------- RISQUE --------------------
 class Risque(db.Model):
     __tablename__ = 'risques'
@@ -1708,7 +1709,8 @@ class Audit(db.Model):
     archived_by = db.Column(db.Integer, db.ForeignKey('user.id'))
     processus_concerne = db.Column(db.String(500))
     client_id = db.Column(db.Integer, db.ForeignKey('clients.id'), nullable=True)
-    
+    mission_associee = db.relationship('MissionAudit', backref='audit_lie', uselist=False)
+
     # Membres externes
     membres_externes = db.Column(db.JSON, nullable=True, default=list)
     
@@ -1792,7 +1794,12 @@ class Audit(db.Model):
                 })
         
         return equipe
-    
+
+    @property
+    def programme_associe(self):
+        if self.mission_associee:
+            return self.mission_associee.programme
+        return None
     
     def ajouter_membre_externe(self, nom, prenom, email, fonction='', organisation=''):
         """Ajoute un membre externe"""
@@ -5584,4 +5591,678 @@ class FichierPlanAction(db.Model):
         if self.extension in ['jpg', 'jpeg', 'png', 'gif']:
             return f"/static/uploads/plans_action/{self.plan_action_id}/{self.nom_fichier}"
         return None
+# ==================== MODÈLES PROGRAMME AUDIT CORRIGÉS ====================
 
+class ProgrammeAudit(db.Model):
+    __tablename__ = 'programmes_audit'
+    
+    # ===== IDENTIFICATION =====
+    id = db.Column(db.Integer, primary_key=True)
+    reference = db.Column(db.String(50), unique=True, nullable=False)
+    nom = db.Column(db.String(200), nullable=False)
+    description = db.Column(db.Text)
+    
+    # ===== PÉRIODE =====
+    periode = db.Column(db.String(20), nullable=False)  # annuel, triennal
+    annee_debut = db.Column(db.Integer, nullable=False)
+    annee_fin = db.Column(db.Integer, nullable=False)
+    
+    # ===== STATUT =====
+    statut = db.Column(db.String(20), default='en_elaboration')
+    
+    # ===== MÉTHODE DE GÉNÉRATION =====
+    methode_generation = db.Column(db.String(50), nullable=False)  # manuel, auto_risques, hybride
+    
+    # ===== CRITÈRES DE GÉNÉRATION (JSON) =====
+    criteres_generation = db.Column(db.JSON)
+    
+    # ===== CONFIGURATION RESSOURCES =====
+    frequence_audit = db.Column(db.String(20))  # annuelle, semestrielle, trimestrielle
+    duree_moyenne_mission = db.Column(db.Integer)  # en jours
+    ressources_disponibles = db.Column(db.Integer)  # Jours/homme disponibles par an
+    
+    # ===== CONFIGURATION AVANCÉE =====
+    capacite_max_trimestre = db.Column(db.Integer, default=30)
+    alerte_depassement = db.Column(db.Boolean, default=True)
+    auto_repartition = db.Column(db.Boolean, default=True)
+    
+    # ===== DATES CLÉS =====
+    date_approbation = db.Column(db.Date)
+    date_mise_en_oeuvre = db.Column(db.Date)
+    date_cloture = db.Column(db.Date)
+    
+    # ===== MÉTADONNÉES =====
+    client_id = db.Column(db.Integer, db.ForeignKey('clients.id'), nullable=True)
+    created_by = db.Column(db.Integer, db.ForeignKey('user.id'))
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    
+    # ===== ARCHIVAGE =====
+    is_archived = db.Column(db.Boolean, default=False)
+    archived_at = db.Column(db.DateTime)
+    archived_by = db.Column(db.Integer, db.ForeignKey('user.id'))
+    archive_reason = db.Column(db.Text)
+    
+    # ===== RELATIONS =====
+    createur = db.relationship('User', foreign_keys=[created_by], backref='programmes_crees')
+    archiveur = db.relationship('User', foreign_keys=[archived_by], backref='programmes_archives')
+    missions = db.relationship(
+        'MissionAudit', 
+        back_populates='programme', 
+        cascade='all, delete-orphan',
+        lazy='dynamic'  # Permet d'utiliser .filter() et .count()
+    )
+    client = db.relationship('Client', backref='programmes_audit')
+    
+    # ===== PROPRIÉTÉS CALCULÉES =====
+    
+    @property
+    def nb_missions(self):
+        """Nombre total de missions non archivées"""
+        return self.missions.filter_by(is_archived=False).count()
+    
+    @property
+    def nb_missions_realisees(self):
+        """Nombre de missions terminées"""
+        return self.missions.filter_by(
+            statut='termine', 
+            is_archived=False
+        ).count()
+    
+    @property
+    def nb_missions_en_cours(self):
+        """Nombre de missions en cours"""
+        return self.missions.filter_by(
+            statut='en_cours',
+            is_archived=False
+        ).count()
+    
+    @property
+    def nb_missions_planifiees(self):
+        """Nombre de missions planifiées"""
+        return self.missions.filter_by(
+            statut='planifie',
+            is_archived=False
+        ).count()
+    
+    @property
+    def nb_missions_reportees(self):
+        """Nombre de missions reportées"""
+        return self.missions.filter_by(
+            statut='reporte',
+            is_archived=False
+        ).count()
+    
+    @property
+    def progression(self):
+        """Progression globale du programme (0-100%)"""
+        total = self.nb_missions
+        if total == 0:
+            return 0
+        return int((self.nb_missions_realisees / total) * 100)
+    
+    @property
+    def jours_audit_planifies(self):
+        """Total des jours planifiés"""
+        missions = self.missions.filter_by(is_archived=False).all()
+        return sum(m.duree_estimee or 0 for m in missions)
+    
+    @property
+    def jours_audit_realises(self):
+        """Total des jours réellement travaillés"""
+        missions = self.missions.filter(
+            MissionAudit.duree_reelle.isnot(None),
+            MissionAudit.is_archived == False
+        ).all()
+        return sum(m.duree_reelle or 0 for m in missions)
+    
+    @property
+    def charge_par_annee(self):
+        """Dictionnaire {année: charge}"""
+        charge = {}
+        for mission in self.missions.filter_by(is_archived=False).all():
+            annee = mission.annee_prevue
+            charge[annee] = charge.get(annee, 0) + (mission.duree_estimee or 0)
+        return charge
+    
+    @property
+    def charge_par_trimestre(self):
+        """Dictionnaire {'année-Ttrimestre': charge}"""
+        charge = {}
+        for mission in self.missions.filter_by(is_archived=False).all():
+            if mission.annee_prevue and mission.trimestre_prevue:
+                key = f"{mission.annee_prevue}-T{mission.trimestre_prevue}"
+                charge[key] = charge.get(key, 0) + (mission.duree_estimee or 0)
+        return charge
+    
+    @property
+    def charge_par_mois(self):
+        """Dictionnaire {'année-mm': charge}"""
+        charge = {}
+        for mission in self.missions.filter_by(is_archived=False).all():
+            if mission.annee_prevue and mission.mois_prevue:
+                key = f"{mission.annee_prevue}-{mission.mois_prevue:02d}"
+                charge[key] = charge.get(key, 0) + (mission.duree_estimee or 0)
+        return charge
+    
+    @property
+    def charge_par_semaine(self):
+        """Dictionnaire {'année-Ssemaine': charge}"""
+        charge = {}
+        for mission in self.missions.filter_by(is_archived=False).all():
+            if mission.annee_prevue and mission.semaine_prevue:
+                key = f"{mission.annee_prevue}-S{mission.semaine_prevue:02d}"
+                charge[key] = charge.get(key, 0) + (mission.duree_estimee or 0)
+        return charge
+    
+    @property
+    def depassement_capacite(self):
+        """Liste des années où la capacité est dépassée"""
+        if not self.ressources_disponibles:
+            return []
+        
+        depassements = []
+        for annee, charge in self.charge_par_annee.items():
+            if charge > self.ressources_disponibles:
+                depassements.append({
+                    'annee': annee,
+                    'charge': charge,
+                    'capacite': self.ressources_disponibles,
+                    'depassement': charge - self.ressources_disponibles,
+                    'taux': int((charge / self.ressources_disponibles) * 100)
+                })
+        return depassements
+    
+    @property
+    def depassement_trimestre(self):
+        """Liste des trimestres où la capacité max est dépassée"""
+        if not self.capacite_max_trimestre:
+            return []
+        
+        depassements = []
+        for mission in self.missions.filter_by(is_archived=False).all():
+            if (mission.annee_prevue and mission.trimestre_prevue and 
+                mission.duree_estimee and mission.duree_estimee > self.capacite_max_trimestre):
+                depassements.append({
+                    'mission': mission,
+                    'annee': mission.annee_prevue,
+                    'trimestre': mission.trimestre_prevue,
+                    'duree': mission.duree_estimee,
+                    'capacite': self.capacite_max_trimestre,
+                    'depassement': mission.duree_estimee - self.capacite_max_trimestre
+                })
+        return depassements
+    
+    @property
+    def missions_par_priorite(self):
+        """Dictionnaire {priorite: count}"""
+        missions = self.missions.filter_by(is_archived=False).all()
+        return {
+            'critique': len([m for m in missions if m.priorite == 'critique']),
+            'elevee': len([m for m in missions if m.priorite == 'elevee']),
+            'moyenne': len([m for m in missions if m.priorite == 'moyenne']),
+            'faible': len([m for m in missions if m.priorite == 'faible'])
+        }
+    
+    @property
+    def missions_par_statut(self):
+        """Dictionnaire {statut: count}"""
+        return {
+            'planifie': self.nb_missions_planifiees,
+            'en_cours': self.nb_missions_en_cours,
+            'termine': self.nb_missions_realisees,
+            'reporte': self.nb_missions_reportees
+        }
+    
+    @property
+    def missions_liste(self):
+        """Liste de toutes les missions non archivées (utile pour les templates)"""
+        return self.missions.filter_by(is_archived=False).all()
+    
+    @property
+    def missions_avec_retard(self):
+        """Liste des missions en retard"""
+        return [m for m in self.missions_liste if m.est_en_retard]
+    
+    @property
+    def taux_retard(self):
+        """Pourcentage de missions en retard"""
+        total = self.nb_missions
+        if total == 0:
+            return 0
+        return int((len(self.missions_avec_retard) / total) * 100)
+    
+    @property
+    def budget_total_estime(self):
+        """Budget total estimé"""
+        missions = self.missions.filter_by(is_archived=False).all()
+        return sum(m.budget_estime or 0 for m in missions)
+    
+    @property
+    def budget_total_reel(self):
+        """Budget total réel"""
+        missions = self.missions.filter_by(is_archived=False).all()
+        return sum(m.budget_reel or 0 for m in missions)
+    
+    @property
+    def ecart_budget(self):
+        """Écart entre budget réel et estimé"""
+        return self.budget_total_reel - self.budget_total_estime
+    
+    @property
+    def peut_etre_approuve(self):
+        """Vérifie si le programme peut être approuvé"""
+        if self.statut != 'en_elaboration':
+            return False
+        if self.nb_missions == 0:
+            return False
+        return True
+    
+    @property
+    def peut_etre_archive(self):
+        """Vérifie si le programme peut être archivé"""
+        if self.is_archived:
+            return False
+        if self.statut == 'actif' and self.nb_missions_realisees == self.nb_missions:
+            return True
+        return True
+    
+    @property
+    def duree_totale_annees(self):
+        """Durée totale du programme en années"""
+        return self.annee_fin - self.annee_debut + 1
+    
+    @property
+    def progression_par_annee(self):
+        """Dictionnaire {annee: progression}"""
+        progression = {}
+        for annee in range(self.annee_debut, self.annee_fin + 1):
+            missions_annee = [m for m in self.missions_liste if m.annee_prevue == annee]
+            total = len(missions_annee)
+            if total > 0:
+                terminees = len([m for m in missions_annee if m.statut == 'termine'])
+                progression[annee] = int((terminees / total) * 100)
+            else:
+                progression[annee] = 0
+        return progression
+    
+    # ===== MÉTHODES D'INSTANCE =====
+    
+    def approuver(self, date_approbation=None, commentaire=None):
+        """Approuve le programme"""
+        self.statut = 'actif'
+        self.date_approbation = date_approbation or datetime.now().date()
+        self.date_mise_en_oeuvre = datetime.now().date()
+        self.updated_at = datetime.now()
+    
+    def desapprouver(self, raison=None):
+        """Désapprouve le programme"""
+        self.statut = 'en_elaboration'
+        self.date_approbation = None
+        self.date_mise_en_oeuvre = None
+        self.archive_reason = raison
+        self.updated_at = datetime.now()
+    
+    def archiver(self, raison=None, user_id=None):
+        """Archive le programme"""
+        self.is_archived = True
+        self.statut = 'archive'
+        self.archived_at = datetime.now()
+        self.archived_by = user_id
+        self.archive_reason = raison
+        self.updated_at = datetime.now()
+    
+    def restaurer(self):
+        """Restaure un programme archivé"""
+        self.is_archived = False
+        self.statut = 'en_elaboration'
+        self.archived_at = None
+        self.archived_by = None
+        self.archive_reason = None
+        self.updated_at = datetime.now()
+    
+    def mettre_a_jour_criteres(self, criteres):
+        """Met à jour les critères de génération"""
+        self.criteres_generation = criteres
+        self.updated_at = datetime.now()
+    
+    def dupliquer(self, nouveau_nom=None, nouvel_utilisateur_id=None):
+        """Crée une copie du programme"""
+        from copy import deepcopy
+        
+        nouveau_programme = ProgrammeAudit(
+            reference=f"{self.reference}-COPY",
+            nom=nouveau_nom or f"Copie de {self.nom}",
+            description=self.description,
+            periode=self.periode,
+            annee_debut=self.annee_debut + 1,
+            annee_fin=self.annee_fin + 1,
+            methode_generation=self.methode_generation,
+            criteres_generation=deepcopy(self.criteres_generation) if self.criteres_generation else None,
+            frequence_audit=self.frequence_audit,
+            duree_moyenne_mission=self.duree_moyenne_mission,
+            ressources_disponibles=self.ressources_disponibles,
+            capacite_max_trimestre=self.capacite_max_trimestre,
+            alerte_depassement=self.alerte_depassement,
+            auto_repartition=self.auto_repartition,
+            statut='en_elaboration',
+            client_id=self.client_id,
+            created_by=nouvel_utilisateur_id or self.created_by
+        )
+        
+        return nouveau_programme
+    
+    def obtenir_charge_maximale(self):
+        """Retourne la charge maximale sur une période"""
+        charges = list(self.charge_par_annee.values())
+        return max(charges) if charges else 0
+    
+    def obtenir_periode_plus_chargee(self):
+        """Retourne la période (année) la plus chargée"""
+        if not self.charge_par_annee:
+            return None
+        return max(self.charge_par_annee, key=self.charge_par_annee.get)
+    
+    def obtenir_statistiques_completes(self):
+        """Retourne un dictionnaire avec toutes les statistiques"""
+        return {
+            'general': {
+                'reference': self.reference,
+                'nom': self.nom,
+                'statut': self.statut,
+                'periode': self.periode,
+                'annees': f"{self.annee_debut}-{self.annee_fin}",
+                'methode': self.methode_generation
+            },
+            'missions': {
+                'total': self.nb_missions,
+                'planifiees': self.nb_missions_planifiees,
+                'en_cours': self.nb_missions_en_cours,
+                'terminees': self.nb_missions_realisees,
+                'reportees': self.nb_missions_reportees,
+                'en_retard': len(self.missions_avec_retard)
+            },
+            'progression': {
+                'globale': self.progression,
+                'par_annee': self.progression_par_annee,
+                'taux_retard': self.taux_retard
+            },
+            'ressources': {
+                'jours_planifies': self.jours_audit_planifies,
+                'jours_realises': self.jours_audit_realises,
+                'ressources_disponibles': self.ressources_disponibles,
+                'depassements': self.depassement_capacite
+            },
+            'priorites': self.missions_par_priorite,
+            'budget': {
+                'estime': self.budget_total_estime,
+                'reel': self.budget_total_reel,
+                'ecart': self.ecart_budget
+            }
+        }
+    
+    def __repr__(self):
+        return f'<ProgrammeAudit {self.reference}: {self.nom} [{self.annee_debut}-{self.annee_fin}]>'
+
+class MissionAudit(db.Model):
+    __tablename__ = 'missions_audit'
+    
+    id = db.Column(db.Integer, primary_key=True)
+    reference = db.Column(db.String(50), nullable=False)
+    titre = db.Column(db.String(200), nullable=False)
+    description = db.Column(db.Text)
+    
+    # Liens
+    risque_id = db.Column(db.Integer, db.ForeignKey('risques.id'), nullable=True)
+    cartographie_id = db.Column(db.Integer, db.ForeignKey('cartographie.id'), nullable=True)
+    programme_id = db.Column(db.Integer, db.ForeignKey('programmes_audit.id'), nullable=False)
+    audit_id = db.Column(db.Integer, db.ForeignKey('audits.id'), nullable=True)
+    
+    # Priorité et risque
+    priorite = db.Column(db.String(20))
+    niveau_risque_associe = db.Column(db.String(20))
+    score_risque = db.Column(db.Integer)
+    
+    # Planification
+    annee_prevue = db.Column(db.Integer, nullable=False)
+    trimestre_prevue = db.Column(db.Integer)
+    mois_prevue = db.Column(db.Integer)
+    semaine_prevue = db.Column(db.Integer)
+    date_debut_prevue = db.Column(db.Date)
+    date_fin_prevue = db.Column(db.Date)
+    duree_estimee = db.Column(db.Integer)
+    
+    # Exécution
+    date_debut_reelle = db.Column(db.Date)
+    date_fin_reelle = db.Column(db.Date)
+    duree_reelle = db.Column(db.Integer)
+    
+    # Statut
+    statut = db.Column(db.String(20), default='planifie')
+    progression = db.Column(db.Integer, default=0)
+    
+    # Ressources
+    responsable_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=True)
+    equipe_ids = db.Column(db.Text)
+    budget_estime = db.Column(db.Float, nullable=True)
+    budget_reel = db.Column(db.Float, nullable=True)
+    
+    # Commentaires
+    commentaire_repli = db.Column(db.Text)
+    notes_internes = db.Column(db.Text)
+    contraintes = db.Column(db.Text)
+    
+    # Archivage
+    is_archived = db.Column(db.Boolean, default=False)
+    archived_at = db.Column(db.DateTime)
+    archived_by = db.Column(db.Integer, db.ForeignKey('user.id'))
+    archive_reason = db.Column(db.Text)
+    
+    # Métadonnées
+    created_by = db.Column(db.Integer, db.ForeignKey('user.id'))
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    client_id = db.Column(db.Integer, db.ForeignKey('clients.id'), nullable=True)
+    
+    # ========== RELATIONS SIMPLIFIÉES ==========
+    # Relations principales
+    programme = db.relationship('ProgrammeAudit', back_populates='missions')
+    risque = db.relationship('Risque', backref='missions_audit_simple')
+    cartographie = db.relationship('Cartographie', backref='missions_audit_simple')
+    audit = db.relationship('Audit', backref='mission_origine_simple', foreign_keys=[audit_id])
+    
+    # Relations utilisateurs
+    responsable = db.relationship('User', foreign_keys=[responsable_id], 
+                                 backref='missions_responsable_simple')
+    createur = db.relationship('User', foreign_keys=[created_by],
+                              backref='missions_crees_simple')
+    archiveur = db.relationship('User', foreign_keys=[archived_by],
+                               backref='missions_archivees_simple')
+    
+    # ========== RELATIONS PLANS DE REPLI - CORRIGÉES ==========
+    # Une mission peut être mission PRINCIPALE de plusieurs plans
+    plans_repli_principaux = db.relationship(
+        'PlanPluieAudit',
+        foreign_keys='PlanPluieAudit.mission_principale_id',
+        back_populates='mission_principale',
+        cascade='all, delete-orphan',
+        lazy='dynamic'
+    )
+    
+    # Une mission peut être mission de REMPLACEMENT de plusieurs plans
+    plans_repli_remplacement = db.relationship(
+        'PlanPluieAudit',
+        foreign_keys='PlanPluieAudit.mission_remplacement_id',
+        back_populates='mission_remplacement',
+        cascade='all, delete-orphan',
+        lazy='dynamic'
+    )
+    
+    # ========== PROPRIÉTÉS ==========
+    @property
+    def est_en_retard(self):
+        if self.date_fin_prevue and self.statut not in ['termine', 'annule', 'reporte']:
+            return datetime.now().date() > self.date_fin_prevue
+        return False
+    
+    @property
+    def jours_restants(self):
+        if self.date_fin_prevue and self.statut not in ['termine', 'annule', 'reporte']:
+            return max(0, (self.date_fin_prevue - datetime.now().date()).days)
+        return 0
+    
+    @property
+    def couleur_priorite(self):
+        return {
+            'critique': 'danger',
+            'elevee': 'warning',
+            'moyenne': 'info',
+            'faible': 'secondary'
+        }.get(self.priorite, 'secondary')
+    
+    @property
+    def icone_statut(self):
+        return {
+            'planifie': 'fa-clock',
+            'en_cours': 'fa-play-circle',
+            'termine': 'fa-check-circle',
+            'reporte': 'fa-calendar-times',
+            'annule': 'fa-ban'
+        }.get(self.statut, 'fa-question-circle')
+    
+    @property
+    def plan_repli_actif(self):
+        """Retourne le plan de repli actif si existant"""
+        return self.plans_repli_principaux.filter_by(
+            statut='actif',
+            is_archived=False
+        ).first()
+    
+    def __repr__(self):
+        return f'<MissionAudit {self.reference}: {self.titre[:30]}>'
+    
+
+class PlanPluieAudit(db.Model):
+    __tablename__ = 'plans_pluie_audit'
+    
+    id = db.Column(db.Integer, primary_key=True)
+    nom = db.Column(db.String(200), nullable=False)
+    description = db.Column(db.Text)
+    
+    # Missions liées - clés étrangères explicites
+    mission_principale_id = db.Column(
+        db.Integer, 
+        db.ForeignKey('missions_audit.id', name='fk_plan_mission_principale'),
+        nullable=True
+    )
+    mission_remplacement_id = db.Column(
+        db.Integer, 
+        db.ForeignKey('missions_audit.id', name='fk_plan_mission_remplacement'),
+        nullable=True
+    )
+    
+    # Conditions de déclenchement
+    condition_type = db.Column(db.String(50))  # retard, indisponibilite, urgence
+    condition_seuil = db.Column(db.Integer)
+    condition_description = db.Column(db.Text)
+    
+    # Statut
+    statut = db.Column(db.String(20), default='actif')  # actif, declenche, archive
+    
+    # Déclenchement
+    date_declenchement = db.Column(db.DateTime)
+    raison_declenchement = db.Column(db.String(100))
+    commentaires_declenchement = db.Column(db.Text)
+    
+    # Archivage
+    is_archived = db.Column(db.Boolean, default=False)
+    archived_at = db.Column(db.DateTime)
+    archived_by = db.Column(db.Integer, db.ForeignKey('user.id'))
+    archive_reason = db.Column(db.Text)
+    
+    # Métadonnées
+    created_by = db.Column(db.Integer, db.ForeignKey('user.id'))
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    client_id = db.Column(db.Integer, db.ForeignKey('clients.id'), nullable=True)
+    
+    # ========== RELATIONS CORRIGÉES ==========
+    # Relations avec MissionAudit - back_populates explicite
+    mission_principale = db.relationship(
+        'MissionAudit',
+        foreign_keys=[mission_principale_id],
+        back_populates='plans_repli_principaux',
+        lazy='joined'
+    )
+    
+    mission_remplacement = db.relationship(
+        'MissionAudit',
+        foreign_keys=[mission_remplacement_id],
+        back_populates='plans_repli_remplacement',
+        lazy='joined'
+    )
+    
+    # Relations utilisateurs
+    createur = db.relationship(
+        'User',
+        foreign_keys=[created_by],
+        backref='plans_pluie_crees'
+    )
+    
+    archiveur = db.relationship(
+        'User',
+        foreign_keys=[archived_by],
+        backref='plans_pluie_archives'
+    )
+    
+    client = db.relationship('Client', backref='plans_repli_audit_simple')
+    
+    # ========== PROPRIÉTÉS ==========
+    @property
+    def est_declenchable(self):
+        """Vérifie si le plan peut être déclenché"""
+        if self.statut != 'actif':
+            return False
+        if not self.mission_principale:
+            return False
+        if self.mission_principale.statut in ['termine', 'annule', 'archive']:
+            return False
+        return True
+    
+    @property
+    def jours_retard_actuel(self):
+        """Calcule le retard actuel de la mission principale"""
+        if not self.mission_principale or not self.mission_principale.date_fin_prevue:
+            return 0
+        if self.mission_principale.statut in ['termine', 'annule']:
+            return 0
+        retard = (datetime.now().date() - self.mission_principale.date_fin_prevue).days
+        return max(0, retard)
+    
+    @property
+    def doit_etre_declenche(self):
+        """Vérifie si les conditions de déclenchement sont remplies"""
+        if not self.est_declenchable:
+            return False
+        
+        if self.condition_type == 'retard':
+            return self.jours_retard_actuel >= (self.condition_seuil or 15)
+        
+        return False
+    
+    def __repr__(self):
+        return f'<PlanPluieAudit {self.id}: {self.nom}>'
+    
+class JournalAuditProgramme(db.Model):
+    __tablename__ = 'journal_audit_programme'
+    
+    id = db.Column(db.Integer, primary_key=True)
+    programme_id = db.Column(db.Integer, db.ForeignKey('programmes_audit.id'), nullable=False)
+    action = db.Column(db.String(255), nullable=False)
+    details = db.Column(db.Text)
+    user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=True)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    
+    # Relations
+    programme = db.relationship('ProgrammeAudit', backref='journal_audit')
+    utilisateur = db.relationship('User', foreign_keys=[user_id])
