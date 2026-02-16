@@ -1158,7 +1158,7 @@ class KRI(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     
     # TYPE D'INDICATEUR : 'kri' ou 'kpi'
-    type_indicateur = db.Column(db.String(50), nullable=True)  # Ajoutez cette ligne si manquante
+    type_indicateur = db.Column(db.String(50), nullable=True)
     
     # RISQUE ASSOCIÉ (optionnel, surtout pour les KPI)
     risque_id = db.Column(db.Integer, db.ForeignKey('risques.id'), nullable=True)
@@ -1170,9 +1170,11 @@ class KRI(db.Model):
     unite_mesure = db.Column(db.String(50))
     client_id = db.Column(db.Integer, db.ForeignKey('clients.id'), nullable=True)
     
-    # SEUILS D'ALERTE
+    # SEUILS D'ALERTE ET CIBLE
     seuil_alerte = db.Column(db.Float)
     seuil_critique = db.Column(db.Float)
+    # NOUVEAU : Seuil cible (spécifique aux KPI)
+    seuil_cible = db.Column(db.Float, nullable=True)
     
     # SENS D'ÉVALUATION DES SEUILS
     sens_evaluation_seuil = db.Column(db.String(20), default='superieur')
@@ -1217,6 +1219,7 @@ class KRI(db.Model):
             'unite_mesure': self.unite_mesure,
             'seuil_alerte': self.seuil_alerte,
             'seuil_critique': self.seuil_critique,
+            'seuil_cible': self.seuil_cible,  # NOUVEAU
             'sens_evaluation_seuil': self.sens_evaluation_seuil,
             'frequence_mesure': self.frequence_mesure,
             'responsable_mesure_id': self.responsable_mesure_id,
@@ -1270,7 +1273,8 @@ class KRI(db.Model):
         if valeur is None:
             return 'inconnu'
         
-        # Pour les KPI, on utilise aussi la logique des seuils mais avec des libellés différents
+        # Pour les KPI, on peut avoir une logique légèrement différente
+        # mais on garde la même structure pour la compatibilité
         if self.sens_evaluation_seuil == 'inferieur':
             # Risque/alerte si valeur < seuil
             if self.seuil_critique is not None and valeur <= self.seuil_critique:
@@ -1287,6 +1291,12 @@ class KRI(db.Model):
                 return 'alerte' if self.type_indicateur == 'kri' else 'sous_performance'
             else:
                 return 'normal' if self.type_indicateur == 'kri' else 'dans_cible'
+    
+    def get_ecart_par_rapport_cible(self, valeur):
+        """Calcule l'écart en pourcentage par rapport à la cible (pour KPI)"""
+        if self.type_indicateur != 'kpi' or self.seuil_cible is None or self.seuil_cible == 0 or valeur is None:
+            return None
+        return ((valeur - self.seuil_cible) / self.seuil_cible) * 100
     
     def get_couleur_etat(self, valeur):
         """Retourne la couleur Bootstrap correspondant à l'état"""
@@ -1359,7 +1369,7 @@ class KRI(db.Model):
     
     def get_icon_type(self):
         """Retourne l'icône FontAwesome selon le type"""
-        return 'exclamation-triangle' if self.type_indicateur == 'kri' else 'chart-line'
+        return 'fa-exclamation-triangle' if self.type_indicateur == 'kri' else 'fa-chart-line'
     
     def est_associe_risque(self):
         """Vérifie si l'indicateur est associé à un risque"""
@@ -1391,6 +1401,7 @@ class KRI(db.Model):
             unite_mesure=self.unite_mesure,
             seuil_alerte=self.seuil_alerte,
             seuil_critique=self.seuil_critique,
+            seuil_cible=self.seuil_cible,  # NOUVEAU
             sens_evaluation_seuil=self.sens_evaluation_seuil,
             frequence_mesure=self.frequence_mesure,
             responsable_mesure_id=self.responsable_mesure_id,
@@ -1454,6 +1465,7 @@ class KRI(db.Model):
             'pourcentage_kris': (kris / total * 100) if total > 0 else 0,
             'pourcentage_kpis': (kpis / total * 100) if total > 0 else 0
         }
+
 
 # -------------------- MESURE KRI --------------------
 class MesureKRI(db.Model):
