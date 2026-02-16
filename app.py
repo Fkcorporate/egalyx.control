@@ -16016,39 +16016,43 @@ def filter_client_data():
 
 def check_client_access(entity):
     """
-    Vérifie l'accès multi-tenant à une entité.
-    Compatible production (Render / PostgreSQL).
+    Vérifie l'accès multi-tenant de manière 100% safe
+    Compatible Render + Gunicorn + PostgreSQL
     """
 
-    # 🔒 Vérification authentification minimale
-    if not current_user or not current_user.is_authenticated:
+    # 🔒 Vérification authentification
+    if not current_user.is_authenticated:
         return False
 
-    # 🔥 Toujours recharger l'utilisateur depuis la session ACTIVE
-    user = db.session.get(User, current_user.id)
+    # 🔥 Récupérer l'ID SANS toucher à l'objet SQLAlchemy
+    user_id = current_user.get_id()
+
+    if not user_id:
+        return False
+
+    # 🔥 Recharger un utilisateur attaché à la session ACTIVE
+    user = db.session.get(User, int(user_id))
 
     if not user:
         return False
 
-    # 👑 Super Admin → accès total
+    # 👑 Super Admin
     if user.role == 'super_admin':
         return True
 
-    # 🚫 Si l'utilisateur n'a pas de client associé
     if not user.client_id:
         return False
 
-    # ✅ Cas 1 : l'entité possède un client_id direct
+    # Cas 1 : client_id direct
     if hasattr(entity, 'client_id') and entity.client_id is not None:
         return entity.client_id == user.client_id
 
-    # ✅ Cas 2 : l'entité possède un created_by
+    # Cas 2 : via created_by
     if hasattr(entity, 'created_by') and entity.created_by:
         creator = db.session.get(User, entity.created_by)
         if creator:
             return creator.client_id == user.client_id
 
-    # ❌ Par défaut → accès refusé
     return False
 
 
