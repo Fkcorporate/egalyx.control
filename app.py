@@ -1529,10 +1529,33 @@ print("   - permission_required")
 
 def check_client_access(entity):
     """
-    Vérifie l'accès à une entité spécifique - VERSION ULTRA FLEXIBLE
+    Vérifie l'accès à une entité spécifique - VERSION CORRIGÉE avec gestion des sessions détachées
     """
+    # S'assurer que current_user est attaché à une session
     if not current_user.is_authenticated:
         return False
+    
+    # Forcer le rafraîchissement des attributs si nécessaire
+    try:
+        # Tenter d'accéder à un attribut pour vérifier si la session est active
+        _ = current_user.role
+    except Exception as e:
+        # Si erreur de session détachée, ré-attacher l'utilisateur
+        if 'DetachedInstanceError' in str(e):
+            try:
+                # Rafraîchir l'utilisateur depuis la base de données
+                user_id = current_user.id
+                fresh_user = User.query.get(user_id)
+                if fresh_user:
+                    # Remplacer l'objet détaché
+                    from flask_login import login_user
+                    login_user(fresh_user)
+                    # Utiliser le nouvel objet
+                    current_user = fresh_user
+                else:
+                    return False
+            except:
+                return False
     
     # 1. SUPER ADMIN a toujours accès
     if current_user.role == 'super_admin':
@@ -1576,18 +1599,24 @@ def check_client_access(entity):
         if entity_client_id is None:
             # Pour les entités sans client_id, vérifier par created_by
             if hasattr(entity, 'created_by') and entity.created_by:
-                creator = User.query.get(entity.created_by)
-                if creator:
-                    return creator.client_id == user_client_id
+                try:
+                    creator = User.query.get(entity.created_by)
+                    if creator and hasattr(creator, 'client_id'):
+                        return creator.client_id == user_client_id
+                except:
+                    pass
             return True  # Ou False selon votre politique
         
         return entity_client_id == user_client_id
     
     # 4. Vérifier par created_by
     if hasattr(entity, 'created_by') and entity.created_by:
-        creator = User.query.get(entity.created_by)
-        if creator and hasattr(creator, 'client_id'):
-            return creator.client_id == user_client_id
+        try:
+            creator = User.query.get(entity.created_by)
+            if creator and hasattr(creator, 'client_id'):
+                return creator.client_id == user_client_id
+        except:
+            pass
     
     # 5. Par défaut, refuser (sécurité)
     return False
