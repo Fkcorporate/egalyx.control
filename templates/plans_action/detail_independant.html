@@ -1,0 +1,1111 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <h2>
+        <i class="fas fa-tasks me-2" style="color: #28a745;"></i> Plan d'action indépendant : {{ plan.reference }}
+    </h2>
+    <div class="btn-toolbar">
+        <a href="{{ url_for('liste_plans_action_independants') }}" class="btn btn-secondary me-2">
+            <i class="fas fa-arrow-left me-1"></i> Retour aux plans
+        </a>
+        <a href="{{ url_for('modifier_plan_action_independant', plan_id=plan.id) }}" class="btn btn-warning me-2">
+            <i class="fas fa-edit me-1"></i> Modifier
+        </a>
+        <a href="{{ url_for('espace_travail_plan_action_independant', plan_id=plan.id) }}" 
+           class="btn btn-info me-2">
+            <i class="fas fa-comments me-1"></i> Espace de travail
+        </a>
+        <div class="btn-group">
+            <button type="button" class="btn btn-success dropdown-toggle" data-bs-toggle="dropdown">
+                <i class="fas fa-cog me-1"></i> Actions
+            </button>
+            <ul class="dropdown-menu">
+                <li>
+                    <a class="dropdown-item" href="#" onclick="ajouterSousAction()">
+                        <i class="fas fa-plus me-2"></i>Ajouter sous-action
+                    </a>
+                </li>
+                <li>
+                    <a class="dropdown-item" href="#" onclick="changerStatutPlan()">
+                        <i class="fas fa-flag me-2"></i>Changer statut
+                    </a>
+                </li>
+                <li><hr class="dropdown-divider"></li>
+                <li>
+                    <a class="dropdown-item text-warning" href="#" onclick="archiverPlan()">
+                        <i class="fas fa-archive me-2"></i>Archiver
+                    </a>
+                </li>
+            </ul>
+        </div>
+    </div>
+</div>
+
+<!-- Messages flash -->
+{% with messages = get_flashed_messages(with_categories=true) %}
+    {% if messages %}
+        {% for category, message in messages %}
+            <div class="alert alert-{{ category if category != 'message' else 'info' }} alert-dismissible fade show" role="alert">
+                <i class="fas fa-{{ 'check-circle' if category == 'success' else 'exclamation-triangle' if category == 'warning' else 'info-circle' }} me-2"></i>
+                {{ message }}
+                <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+            </div>
+        {% endfor %}
+    {% endif %}
+{% endwith %}
+
+<!-- Cartes d'information -->
+<div class="row mb-4">
+    <!-- Informations principales -->
+    <div class="col-md-8">
+        <div class="card shadow">
+            <div class="card-header bg-success text-white">
+                <h6 class="mb-0"><i class="fas fa-info-circle me-2"></i> Informations</h6>
+            </div>
+            <div class="card-body">
+                <div class="row">
+                    <div class="col-md-6">
+                        <table class="table table-sm table-borderless">
+                            <tr>
+                                <th width="40%">Référence:</th>
+                                <td><strong class="text-success">{{ plan.reference }}</strong></td>
+                            </tr>
+                            <tr>
+                                <th>Nom:</th>
+                                <td>{{ plan.nom }}</td>
+                            </tr>
+                            <tr>
+                                <th>Type:</th>
+                                <td>
+                                    <span class="badge bg-success">
+                                        <i class="fas fa-star me-1"></i> Plan indépendant
+                                    </span>
+                                </td>
+                            </tr>
+                            <tr>
+                                <th>Statut:</th>
+                                <td>
+                                    <span class="badge bg-{{ plan.couleur_statut }} fs-6">
+                                        {{ plan.statut|replace('_', ' ')|title }}
+                                    </span>
+                                    {% if plan.est_en_retard %}
+                                    <span class="badge bg-danger ms-1">EN RETARD</span>
+                                    {% endif %}
+                                </td>
+                            </tr>
+                        </table>
+                    </div>
+                    <div class="col-md-6">
+                        <table class="table table-sm table-borderless">
+                            <tr>
+                                <th width="40%">Responsable:</th>
+                                <td>
+                                    {% if plan.responsable %}
+                                    <div class="d-flex align-items-center">
+                                        <i class="fas fa-user me-2 text-success"></i>
+                                        <div>
+                                            <div>{{ plan.responsable.username }}</div>
+                                            <small class="text-muted">{{ plan.responsable.email }}</small>
+                                        </div>
+                                    </div>
+                                    {% else %}
+                                    <span class="text-muted"><i class="fas fa-user-slash me-1"></i>Non assigné</span>
+                                    {% endif %}
+                                </td>
+                            </tr>
+                            <tr>
+                                <th>Date début:</th>
+                                <td>
+                                    <i class="fas fa-calendar-alt me-1"></i>
+                                    {{ plan.date_debut.strftime('%d/%m/%Y') if plan.date_debut else '-' }}
+                                </td>
+                            </tr>
+                            <tr>
+                                <th>Date échéance:</th>
+                                <td>
+                                    <i class="fas fa-flag-checkered me-1"></i>
+                                    {{ plan.date_fin_prevue.strftime('%d/%m/%Y') if plan.date_fin_prevue else '-' }}
+                                </td>
+                            </tr>
+                            <tr>
+                                <th>Créé par:</th>
+                                <td>
+                                    <i class="fas fa-user-plus me-1"></i>
+                                    {{ plan.createur.username if plan.createur else 'Système' }}
+                                    <small class="text-muted">le {{ plan.created_at.strftime('%d/%m/%Y') }}</small>
+                                </td>
+                            </tr>
+                        </table>
+                    </div>
+                </div>
+                
+                {% if plan.description %}
+                <div class="mt-3">
+                    <h6><i class="fas fa-align-left me-2"></i>Description:</h6>
+                    <div class="border rounded p-3 bg-light">
+                        {{ plan.description|nl2br|safe }}
+                    </div>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+    
+    <!-- Cartes de progression -->
+    <div class="col-md-4">
+        <!-- Progression principale -->
+        <div class="card shadow mb-4">
+            <div class="card-header bg-info text-white">
+                <h6 class="mb-0"><i class="fas fa-chart-line me-2"></i> Progression</h6>
+            </div>
+            <div class="card-body text-center">
+                <div class="display-4 text-success mb-2" id="progressionGlobale">
+                    {{ pourcentage_avancement }}%
+                </div>
+                <div class="progress" style="height: 20px;">
+                    <div class="progress-bar bg-success" id="progressionBar" 
+                         style="width: {{ pourcentage_avancement }}%">
+                    </div>
+                </div>
+                <p class="mt-2 mb-1">
+                    <span id="sousActionsTerminees">{{ sous_actions_terminees }}</span>
+                    sur 
+                    <span id="totalSousActions">{{ total_sous_actions }}</span> 
+                    sous-actions terminées
+                </p>
+                <small class="text-muted">
+                    Dernière mise à jour: {{ plan.updated_at.strftime('%d/%m/%Y %H:%M') }}
+                </small>
+            </div>
+        </div>
+        
+        <!-- Contrôle de progression rapide -->
+        <div class="card shadow mb-4">
+            <div class="card-header bg-warning text-dark">
+                <h6 class="mb-0"><i class="fas fa-sliders-h me-2"></i> Progression rapide</h6>
+            </div>
+            <div class="card-body">
+                <p class="mb-2">Définir la progression globale:</p>
+                <div class="btn-group w-100 mb-2" role="group">
+                    <button type="button" class="btn btn-sm btn-outline-danger" onclick="setProgressionFixe(0)">
+                        0%
+                    </button>
+                    <button type="button" class="btn btn-sm btn-outline-warning" onclick="setProgressionFixe(25)">
+                        25%
+                    </button>
+                    <button type="button" class="btn btn-sm btn-outline-info" onclick="setProgressionFixe(50)">
+                        50%
+                    </button>
+                    <button type="button" class="btn btn-sm btn-outline-primary" onclick="setProgressionFixe(75)">
+                        75%
+                    </button>
+                    <button type="button" class="btn btn-sm btn-outline-success" onclick="setProgressionFixe(100)">
+                        100%
+                    </button>
+                </div>
+                
+                <div class="d-grid gap-2 mt-3">
+                    <button class="btn btn-sm btn-success" onclick="ajouterSousAction()">
+                        <i class="fas fa-plus me-1"></i> Nouvelle sous-action
+                    </button>
+                    <button class="btn btn-sm btn-warning" onclick="changerStatutPlan()">
+                        <i class="fas fa-flag me-1"></i> Changer statut
+                    </button>
+                    {% if plan.statut != 'termine' %}
+                    <button class="btn btn-sm btn-primary" onclick="terminerPlan()">
+                        <i class="fas fa-check-circle me-1"></i> Terminer le plan
+                    </button>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+        
+        <!-- Dates importantes -->
+        <div class="card shadow">
+            <div class="card-header bg-light">
+                <h6 class="mb-0"><i class="fas fa-calendar-alt me-2"></i> Calendrier</h6>
+            </div>
+            <div class="card-body">
+                <table class="table table-sm table-borderless">
+                    <tr>
+                        <th>Début:</th>
+                        <td>{{ plan.date_debut.strftime('%d/%m/%Y') if plan.date_debut else '-' }}</td>
+                    </tr>
+                    <tr>
+                        <th>Échéance:</th>
+                        <td>{{ plan.date_fin_prevue.strftime('%d/%m/%Y') if plan.date_fin_prevue else '-' }}</td>
+                    </tr>
+                    <tr>
+                        <th>Terminé le:</th>
+                        <td>{{ plan.date_fin_reelle.strftime('%d/%m/%Y') if plan.date_fin_reelle else '-' }}</td>
+                    </tr>
+                    <tr>
+                        <th>Jours restants:</th>
+                        <td>
+                            {% if plan.date_fin_prevue and plan.statut != 'termine' %}
+                                {% set jours_restants = (plan.date_fin_prevue - datetime.now().date()).days %}
+                                <span class="text-{% if jours_restants <= 7 %}danger{% elif jours_restants <= 30 %}warning{% else %}success{% endif %} fw-bold">
+                                    {% if jours_restants > 0 %}
+                                        {{ jours_restants }} jour(s)
+                                    {% elif jours_restants == 0 %}
+                                        <i class="fas fa-exclamation-triangle"></i> Aujourd'hui!
+                                    {% else %}
+                                        <i class="fas fa-exclamation-circle"></i> Retard de {{ -jours_restants }} jour(s)
+                                    {% endif %}
+                                </span>
+                            {% else %}
+                                -
+                            {% endif %}
+                        </td>
+                    </tr>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Détail de la progression -->
+<div class="card shadow mb-4">
+    <div class="card-header bg-success text-white d-flex justify-content-between align-items-center">
+        <h6 class="mb-0"><i class="fas fa-chart-bar me-2"></i> Détail de la progression</h6>
+        <div class="btn-group">
+            <button class="btn btn-sm btn-light" onclick="rafraichirProgression()">
+                <i class="fas fa-sync-alt me-1"></i> Recalculer
+            </button>
+        </div>
+    </div>
+    <div class="card-body">
+        <div class="row text-center">
+            <div class="col-md-3">
+                <div class="display-6 text-success" id="countTerminees">
+                    {{ sous_actions|selectattr('statut', 'equalto', 'termine')|list|length }}
+                </div>
+                <small>Terminées</small>
+                <div class="progress mt-2" style="height: 5px;">
+                    <div class="progress-bar bg-success" id="barTerminees"
+                         style="width: {{ (sous_actions|selectattr('statut', 'equalto', 'termine')|list|length / total_sous_actions * 100) if total_sous_actions > 0 else 0 }}%">
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-3">
+                <div class="display-6 text-warning" id="countEnCours">
+                    {{ sous_actions|selectattr('statut', 'equalto', 'en_cours')|list|length }}
+                </div>
+                <small>En cours</small>
+                <div class="progress mt-2" style="height: 5px;">
+                    <div class="progress-bar bg-warning" id="barEnCours"
+                         style="width: {{ (sous_actions|selectattr('statut', 'equalto', 'en_cours')|list|length / total_sous_actions * 100) if total_sous_actions > 0 else 0 }}%">
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-3">
+                <div class="display-6 text-secondary" id="countAFaire">
+                    {{ sous_actions|selectattr('statut', 'equalto', 'a_faire')|list|length }}
+                </div>
+                <small>À faire</small>
+                <div class="progress mt-2" style="height: 5px;">
+                    <div class="progress-bar bg-secondary" id="barAFaire"
+                         style="width: {{ (sous_actions|selectattr('statut', 'equalto', 'a_faire')|list|length / total_sous_actions * 100) if total_sous_actions > 0 else 0 }}%">
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-3">
+                <div class="display-6 text-danger" id="countRetardees">
+                    {{ sous_actions|selectattr('statut', 'equalto', 'retarde')|list|length }}
+                </div>
+                <small>Retardées</small>
+                <div class="progress mt-2" style="height: 5px;">
+                    <div class="progress-bar bg-danger" id="barRetardees"
+                         style="width: {{ (sous_actions|selectattr('statut', 'equalto', 'retarde')|list|length / total_sous_actions * 100) if total_sous_actions > 0 else 0 }}%">
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Légende -->
+        <div class="row mt-3">
+            <div class="col-md-12">
+                <div class="d-flex justify-content-center gap-3">
+                    <span class="badge bg-success">Terminées (100%)</span>
+                    <span class="badge bg-warning">En cours (50-99%)</span>
+                    <span class="badge bg-secondary">À faire (0-49%)</span>
+                    <span class="badge bg-danger">Retardées</span>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Sous-actions -->
+<div class="card shadow mb-4">
+    <div class="card-header bg-success text-white d-flex justify-content-between align-items-center">
+        <h6 class="mb-0"><i class="fas fa-list-check me-2"></i> Sous-actions ({{ sous_actions|length }})</h6>
+        <div class="btn-group">
+            <button class="btn btn-sm btn-light" onclick="ajouterSousAction()">
+                <i class="fas fa-plus"></i> Ajouter
+            </button>
+            <button class="btn btn-sm btn-light" onclick="reorganiserSousActions()">
+                <i class="fas fa-sort"></i> Réorganiser
+            </button>
+        </div>
+    </div>
+    <div class="card-body">
+        {% if sous_actions %}
+        <div class="table-responsive">
+            <table class="table table-hover" id="sousActionsTable">
+                <thead>
+                    <tr>
+                        <th width="5%">#</th>
+                        <th width="30%">Description</th>
+                        <th width="15%">Statut</th>
+                        <th width="15%">Dates</th>
+                        <th width="20%">Progression</th>
+                        <th width="15%">Actions</th>
+                    </tr>
+                </thead>
+                <tbody id="sousActionsBody">
+                    {% for action in sous_actions %}
+                    <tr id="sous-action-{{ action.id }}" data-id="{{ action.id }}" draggable="true">
+                        <td class="drag-handle" style="cursor: move;">
+                            <i class="fas fa-grip-vertical text-muted"></i>
+                            {{ loop.index }}
+                        </td>
+                        <td>
+                            {% if action.reference %}
+                            <div class="fw-bold text-success">{{ action.reference }}</div>
+                            {% endif %}
+                            <div class="sous-action-description">{{ action.description|truncate(100) }}</div>
+                            {% if action.responsable %}
+                            <small class="text-muted">
+                                <i class="fas fa-user"></i> {{ action.responsable.username }}
+                            </small>
+                            {% endif %}
+                        </td>
+                        <td>
+                            <select class="form-select form-select-sm statut-select" 
+                                    data-id="{{ action.id }}"
+                                    onchange="changerStatutSousAction({{ action.id }}, this.value)">
+                                <option value="a_faire" {% if action.statut == 'a_faire' %}selected{% endif %}>
+                                    À faire (0-49%)
+                                </option>
+                                <option value="en_cours" {% if action.statut == 'en_cours' %}selected{% endif %}>
+                                    En cours (50-99%)
+                                </option>
+                                <option value="termine" {% if action.statut == 'termine' %}selected{% endif %}>
+                                    Terminé (100%)
+                                </option>
+                                <option value="retarde" {% if action.statut == 'retarde' %}selected{% endif %}>
+                                    Retardé
+                                </option>
+                            </select>
+                        </td>
+                        <td>
+                            <div class="small">
+                                {% if action.date_debut %}
+                                <div>Début: {{ action.date_debut.strftime('%d/%m/%y') }}</div>
+                                {% endif %}
+                                {% if action.date_fin_prevue %}
+                                <div>Fin: {{ action.date_fin_prevue.strftime('%d/%m/%y') }}</div>
+                                {% endif %}
+                                {% if action.est_en_retard and action.statut != 'termine' %}
+                                <div class="text-danger">
+                                    <i class="fas fa-exclamation-triangle"></i> En retard
+                                </div>
+                                {% endif %}
+                            </div>
+                        </td>
+                        <td>
+                            <div class="d-flex align-items-center">
+                                <div class="progress flex-grow-1" style="height: 10px;">
+                                    <div class="progress-bar 
+                                        {% if action.pourcentage_realisation >= 100 %}bg-success
+                                        {% elif action.pourcentage_realisation >= 50 %}bg-warning
+                                        {% else %}bg-danger{% endif %}" 
+                                         id="progress-bar-{{ action.id }}"
+                                         style="width: {{ action.pourcentage_realisation }}%">
+                                    </div>
+                                </div>
+                                <span class="ms-2 small" id="percentage-{{ action.id }}">
+                                    {{ action.pourcentage_realisation }}%
+                                </span>
+                            </div>
+                            <div class="d-flex align-items-center mt-1">
+                                <input type="range" class="form-range progression-slider" 
+                                       min="0" max="100" step="25"
+                                       value="{{ action.pourcentage_realisation }}"
+                                       data-id="{{ action.id }}"
+                                       onchange="changerProgressionSousAction({{ action.id }}, this.value)">
+                                <button class="btn btn-sm btn-outline-secondary ms-2" 
+                                        onclick="appliquerProgressionFixe({{ action.id }}, 100)"
+                                        title="Terminer à 100%">
+                                    <i class="fas fa-check"></i>
+                                </button>
+                            </div>
+                        </td>
+                        <td>
+                            <div class="btn-group btn-group-sm">
+                                <a href="{{ url_for('espace_travail_sous_action', sous_action_id=action.id) }}" 
+                                   class="btn btn-outline-info" title="Espace de travail">
+                                    <i class="fas fa-comments"></i>
+                                </a>
+                                <button class="btn btn-outline-primary" 
+                                        onclick="modifierSousAction({{ action.id }})"
+                                        title="Modifier">
+                                    <i class="fas fa-edit"></i>
+                                </button>
+                                <button class="btn btn-outline-success" 
+                                        onclick="terminerSousAction({{ action.id }})"
+                                        title="Terminer" {% if action.statut == 'termine' %}disabled{% endif %}>
+                                    <i class="fas fa-check"></i>
+                                </button>
+                                <button class="btn btn-outline-danger" 
+                                        onclick="supprimerSousActionTableau({{ action.id }})"
+                                        title="Supprimer">
+                                    <i class="fas fa-trash"></i>
+                                </button>
+                            </div>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        {% else %}
+        <div class="text-center py-5 text-muted">
+            <i class="fas fa-list-check fa-4x mb-3"></i>
+            <h5>Aucune sous-action définie</h5>
+            <p class="mb-4">Commencez par ajouter des sous-actions à ce plan</p>
+            <button class="btn btn-lg btn-success" onclick="ajouterSousAction()">
+                <i class="fas fa-plus me-2"></i>Ajouter la première sous-action
+            </button>
+        </div>
+        {% endif %}
+    </div>
+</div>
+
+<!-- Commentaires récents -->
+<div class="card shadow mb-4">
+    <div class="card-header bg-info text-white">
+        <h6 class="mb-0"><i class="fas fa-comments me-2"></i> Commentaires récents</h6>
+    </div>
+    <div class="card-body">
+        {% if commentaires %}
+        <div class="list-group">
+            {% for commentaire in commentaires[:5] %}
+            <div class="list-group-item">
+                <div class="d-flex justify-content-between">
+                    <div class="fw-bold">
+                        <i class="fas fa-user-circle me-1"></i>
+                        {{ commentaire.utilisateur.username if commentaire.utilisateur else 'Système' }}
+                    </div>
+                    <small class="text-muted">{{ commentaire.created_at.strftime('%d/%m/%Y %H:%M') }}</small>
+                </div>
+                <div class="mt-2">{{ commentaire.contenu|truncate(200) }}</div>
+                {% if commentaire.fichiers %}
+                <div class="mt-2">
+                    <i class="fas fa-paperclip me-1"></i>
+                    {{ commentaire.fichiers|length }} fichier(s) joint(s)
+                </div>
+                {% endif %}
+            </div>
+            {% endfor %}
+        </div>
+        <div class="text-center mt-3">
+            <a href="{{ url_for('espace_travail_plan_action_independant', plan_id=plan.id) }}" 
+               class="btn btn-sm btn-outline-info">
+                Voir tous les commentaires ({{ commentaires|length }})
+            </a>
+        </div>
+        {% else %}
+        <div class="text-center py-3 text-muted">
+            <i class="fas fa-comments fa-3x mb-2"></i>
+            <p>Aucun commentaire pour le moment</p>
+            <a href="{{ url_for('espace_travail_plan_action_independant', plan_id=plan.id) }}" 
+               class="btn btn-sm btn-outline-info">
+                Aller à l'espace de travail
+            </a>
+        </div>
+        {% endif %}
+    </div>
+</div>
+
+<!-- Évènements/Historique -->
+<div class="card shadow">
+    <div class="card-header bg-secondary text-white">
+        <h6 class="mb-0"><i class="fas fa-history me-2"></i> Historique récent</h6>
+    </div>
+    <div class="card-body">
+        <div class="timeline">
+            <div class="timeline-item">
+                <div class="timeline-marker bg-success"></div>
+                <div class="timeline-content">
+                    <h6 class="mb-1">Plan créé</h6>
+                    <p class="text-muted mb-1">Créé par {{ plan.createur.username if plan.createur else 'Système' }}</p>
+                    <small>{{ plan.created_at.strftime('%d/%m/%Y à %H:%M') }}</small>
+                </div>
+            </div>
+            
+            {% if plan.statut == 'termine' and plan.date_fin_reelle %}
+            <div class="timeline-item">
+                <div class="timeline-marker bg-success"></div>
+                <div class="timeline-content">
+                    <h6 class="mb-1">Plan terminé</h6>
+                    <p class="text-muted mb-1">Marqué comme terminé</p>
+                    <small>{{ plan.date_fin_reelle.strftime('%d/%m/%Y') }}</small>
+                </div>
+            </div>
+            {% endif %}
+            
+            {% if plan.est_en_retard %}
+            <div class="timeline-item">
+                <div class="timeline-marker bg-danger"></div>
+                <div class="timeline-content">
+                    <h6 class="mb-1">En retard</h6>
+                    <p class="text-muted mb-1">La date d'échéance est dépassée</p>
+                    <small>Échéance: {{ plan.date_fin_prevue.strftime('%d/%m/%Y') }}</small>
+                </div>
+            </div>
+            {% endif %}
+            
+            {% if sous_actions|selectattr('statut', 'equalto', 'termine')|list|length > 0 %}
+            <div class="timeline-item">
+                <div class="timeline-marker bg-info"></div>
+                <div class="timeline-content">
+                    <h6 class="mb-1">Sous-actions terminées</h6>
+                    <p class="text-muted mb-1">
+                        {{ sous_actions|selectattr('statut', 'equalto', 'termine')|list|length }} 
+                        sous-action(s) terminée(s)
+                    </p>
+                    <small>Progression: {{ pourcentage_avancement }}%</small>
+                </div>
+            </div>
+            {% endif %}
+        </div>
+    </div>
+</div>
+
+<!-- Debug info (admin only) -->
+{% if current_user.role == 'super_admin' or current_user.is_client_admin %}
+<div class="card shadow mt-4 border-warning">
+    <div class="card-header bg-warning text-dark">
+        <h6 class="mb-0"><i class="fas fa-bug me-2"></i> Debug Info (Admin only)</h6>
+    </div>
+    <div class="card-body">
+        <div class="row">
+            <div class="col-md-6">
+                <table class="table table-sm">
+                    <tr><th>Plan ID:</th><td>{{ plan.id }}</td></tr>
+                    <tr><th>Plan Client ID:</th><td>{{ plan.client_id }}</td></tr>
+                    <tr><th>Created By:</th><td>{{ plan.created_by }}</td></tr>
+                    <tr><th>Responsable:</th><td>{{ plan.responsable_id }}</td></tr>
+                </table>
+            </div>
+            <div class="col-md-6">
+                <table class="table table-sm">
+                    <tr><th>Your Client ID:</th><td>{{ current_user.client_id }}</td></tr>
+                    <tr><th>Your Role:</th><td>{{ current_user.role }}</td></tr>
+                    <tr><th>Is Client Admin:</th><td>{{ current_user.is_client_admin }}</td></tr>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>
+{% endif %}
+
+<!-- Modal générique -->
+<div class="modal fade" id="genericModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="genericModalTitle">Modal title</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body" id="genericModalBody">
+                ...
+            </div>
+            <div class="modal-footer" id="genericModalFooter">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Annuler</button>
+                <button type="button" class="btn btn-primary">Valider</button>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+// Fonction pour ajouter une sous-action
+function ajouterSousAction() {
+    window.location.href = "{{ url_for('nouveau_sous_action_independant', plan_id=plan.id) }}";
+}
+
+// Fonction pour modifier une sous-action
+function modifierSousAction(sousActionId) {
+    window.location.href = `/sous-action-independant/${sousActionId}/modifier`;
+}
+
+// Fonction pour terminer une sous-action
+function terminerSousAction(sousActionId) {
+    if (confirm('Marquer cette sous-action comme terminée à 100% ?')) {
+        fetch(`/sous-action-independant/${sousActionId}/terminer`, {
+            method: 'POST',
+            headers: {
+                'X-CSRFToken': '{{ csrf_token() }}',
+                'Content-Type': 'application/json'
+            }
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                updateSousActionUI(sousActionId, 100, 'termine');
+                rafraichirProgression();
+            } else {
+                alert('Erreur: ' + data.error);
+            }
+        })
+        .catch(error => {
+            console.error('Error:', error);
+            alert('Erreur réseau');
+        });
+    }
+}
+
+// Fonction pour supprimer une sous-action
+function supprimerSousActionTableau(sousActionId) {
+    if (confirm('Supprimer cette sous-action ?')) {
+        fetch(`/sous-action-independant/${sousActionId}/supprimer`, {
+            method: 'DELETE',
+            headers: {
+                'X-CSRFToken': '{{ csrf_token() }}',
+                'Content-Type': 'application/json'
+            }
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                const row = document.getElementById(`sous-action-${sousActionId}`);
+                if (row) {
+                    row.remove();
+                    rafraichirProgression();
+                }
+            } else {
+                alert('Erreur: ' + data.error);
+            }
+        })
+        .catch(error => {
+            console.error('Error:', error);
+            alert('Erreur réseau');
+        });
+    }
+}
+
+// Fonction pour changer le statut d'une sous-action
+function changerStatutSousAction(sousActionId, statut) {
+    let progression = 0;
+    if (statut === 'termine') progression = 100;
+    else if (statut === 'en_cours') progression = 50;
+    else if (statut === 'a_faire') progression = 25;
+    else if (statut === 'retarde') progression = 25;
+    
+    fetch(`/sous-action-independant/${sousActionId}/changer-statut`, {
+        method: 'POST',
+        headers: {
+            'X-CSRFToken': '{{ csrf_token() }}',
+            'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ 
+            statut: statut,
+            progression: progression 
+        })
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            updateSousActionUI(sousActionId, progression, statut);
+            rafraichirProgression();
+        } else {
+            alert('Erreur: ' + data.error);
+        }
+    })
+    .catch(error => {
+        console.error('Error:', error);
+        alert('Erreur réseau');
+    });
+}
+
+// Fonction pour changer la progression d'une sous-action
+function changerProgressionSousAction(sousActionId, progression) {
+    progression = Math.round(progression / 25) * 25;
+    
+    fetch(`/sous-action-independant/${sousActionId}/changer-progression`, {
+        method: 'POST',
+        headers: {
+            'X-CSRFToken': '{{ csrf_token() }}',
+            'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ progression: parseInt(progression) })
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            updateSousActionUI(sousActionId, progression, data.statut);
+            rafraichirProgression();
+        }
+    })
+    .catch(error => {
+        console.error('Error:', error);
+    });
+}
+
+// Appliquer une progression fixe
+function appliquerProgressionFixe(sousActionId, progression) {
+    if (confirm(`Définir cette sous-action à ${progression}% ?`)) {
+        fetch(`/sous-action-independant/${sousActionId}/changer-progression`, {
+            method: 'POST',
+            headers: {
+                'X-CSRFToken': '{{ csrf_token() }}',
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({ progression: progression })
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                updateSousActionUI(sousActionId, progression, data.statut);
+                rafraichirProgression();
+            }
+        })
+        .catch(error => {
+            console.error('Error:', error);
+        });
+    }
+}
+
+// Mettre à jour l'interface d'une sous-action
+function updateSousActionUI(sousActionId, progression, statut) {
+    const row = document.getElementById(`sous-action-${sousActionId}`);
+    if (!row) return;
+    
+    const progressBar = row.querySelector(`#progress-bar-${sousActionId}`);
+    if (progressBar) {
+        progressBar.style.width = progression + '%';
+        progressBar.className = `progress-bar ${
+            progression >= 100 ? 'bg-success' :
+            progression >= 50 ? 'bg-warning' : 'bg-danger'
+        }`;
+    }
+    
+    const percentageSpan = row.querySelector(`#percentage-${sousActionId}`);
+    if (percentageSpan) {
+        percentageSpan.textContent = progression + '%';
+    }
+    
+    const slider = row.querySelector('.progression-slider');
+    if (slider) {
+        slider.value = progression;
+    }
+    
+    const select = row.querySelector('.statut-select');
+    if (select) {
+        select.value = statut;
+    }
+}
+
+// Changer le statut du plan
+function changerStatutPlan() {
+    const html = `
+        <form method="POST" action="/plan-action-independant/{{ plan.id }}/changer-statut" id="formStatutPlan">
+            <div class="mb-3">
+                <label class="form-label">Nouveau statut :</label>
+                <select class="form-select" name="statut" required>
+                    <option value="en_attente" {% if plan.statut == 'en_attente' %}selected{% endif %}>En attente (0%)</option>
+                    <option value="en_cours" {% if plan.statut == 'en_cours' %}selected{% endif %}>En cours (50%)</option>
+                    <option value="termine" {% if plan.statut == 'termine' %}selected{% endif %}>Terminé (100%)</option>
+                    <option value="suspendu" {% if plan.statut == 'suspendu' %}selected{% endif %}>Suspendu</option>
+                    <option value="annule" {% if plan.statut == 'annule' %}selected{% endif %}>Annulé (0%)</option>
+                </select>
+            </div>
+            <div class="mb-3">
+                <label class="form-label">Commentaire (optionnel) :</label>
+                <textarea class="form-control" name="commentaire" rows="3" placeholder="Raison du changement de statut..."></textarea>
+            </div>
+        </form>
+    `;
+    
+    const modal = new bootstrap.Modal(document.getElementById('genericModal'));
+    document.getElementById('genericModalTitle').innerHTML = 'Changer le statut du plan';
+    document.getElementById('genericModalBody').innerHTML = html;
+    document.getElementById('genericModalFooter').innerHTML = `
+        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Annuler</button>
+        <button type="submit" class="btn btn-success" form="formStatutPlan">Enregistrer</button>
+    `;
+    modal.show();
+}
+
+// Terminer le plan complet
+function terminerPlan() {
+    if (confirm('Terminer ce plan d\'action ? Toutes les sous-actions seront marquées comme terminées à 100%.')) {
+        fetch(`/plan-action-independant/{{ plan.id }}/terminer`, {
+            method: 'POST',
+            headers: {
+                'X-CSRFToken': '{{ csrf_token() }}',
+                'Content-Type': 'application/json'
+            }
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                location.reload();
+            } else {
+                alert('Erreur: ' + data.error);
+            }
+        })
+        .catch(error => {
+            console.error('Error:', error);
+            alert('Erreur réseau');
+        });
+    }
+}
+
+// Archiver le plan
+function archiverPlan() {
+    if (confirm('Archiver ce plan d\'action ? Il sera déplacé dans les archives.')) {
+        fetch(`/plan-action-independant/{{ plan.id }}/archiver`, {
+            method: 'POST',
+            headers: {
+                'X-CSRFToken': '{{ csrf_token() }}'
+            }
+        })
+        .then(response => {
+            if (response.ok) {
+                window.location.href = "{{ url_for('liste_plans_action_independants') }}";
+            } else {
+                alert('Erreur lors de l\'archivage');
+            }
+        })
+        .catch(error => {
+            console.error('Error:', error);
+            alert('Erreur réseau');
+        });
+    }
+}
+
+// Définir une progression fixe globale
+function setProgressionFixe(percentage) {
+    if (confirm(`Définir la progression globale à ${percentage}% ? Toutes les sous-actions seront ajustées proportionnellement.`)) {
+        fetch(`/plan-action-independant/{{ plan.id }}/set-progression-fixe`, {
+            method: 'POST',
+            headers: {
+                'X-CSRFToken': '{{ csrf_token() }}',
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({ progression: percentage })
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                alert(`✅ ${data.message}\nNouveau statut: ${data.statut}`);
+                location.reload();
+            } else {
+                alert('❌ Erreur: ' + data.error);
+            }
+        })
+        .catch(error => {
+            console.error('Error:', error);
+            alert('❌ Erreur réseau');
+        });
+    }
+}
+
+// Rafraîchir la progression
+function rafraichirProgression() {
+    fetch(`/plan-action-independant/{{ plan.id }}/progression-detail`)
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            document.getElementById('progressionGlobale').textContent = data.details.progression + '%';
+            document.getElementById('progressionBar').style.width = data.details.progression + '%';
+            
+            document.getElementById('sousActionsTerminees').textContent = data.details.terminees;
+            document.getElementById('totalSousActions').textContent = data.details.total;
+            document.getElementById('countTerminees').textContent = data.details.terminees;
+            document.getElementById('countEnCours').textContent = data.details.en_cours;
+            document.getElementById('countAFaire').textContent = data.details.a_faire;
+            document.getElementById('countRetardees').textContent = data.details.retardees;
+            
+            const total = data.details.total || 1;
+            document.getElementById('barTerminees').style.width = (data.details.terminees / total * 100) + '%';
+            document.getElementById('barEnCours').style.width = (data.details.en_cours / total * 100) + '%';
+            document.getElementById('barAFaire').style.width = (data.details.a_faire / total * 100) + '%';
+            document.getElementById('barRetardees').style.width = (data.details.retardees / total * 100) + '%';
+        }
+    })
+    .catch(error => {
+        console.error('Error:', error);
+    });
+}
+
+// Drag & drop pour réorganiser
+let draggedRow = null;
+
+function reorganiserSousActions() {
+    const rows = document.querySelectorAll('#sousActionsBody tr');
+    rows.forEach(row => {
+        row.setAttribute('draggable', 'true');
+        row.addEventListener('dragstart', handleDragStart);
+        row.addEventListener('dragover', handleDragOver);
+        row.addEventListener('drop', handleDrop);
+        row.addEventListener('dragend', handleDragEnd);
+    });
+    alert('Mode réorganisation activé. Glissez-déposez les sous-actions pour les réorganiser.');
+}
+
+function handleDragStart(e) {
+    draggedRow = this;
+    e.dataTransfer.effectAllowed = 'move';
+    e.dataTransfer.setData('text/html', this.innerHTML);
+    this.classList.add('dragging');
+}
+
+function handleDragOver(e) {
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'move';
+}
+
+function handleDrop(e) {
+    e.preventDefault();
+    if (draggedRow !== this) {
+        const allRows = Array.from(document.querySelectorAll('#sousActionsBody tr'));
+        const draggedIndex = allRows.indexOf(draggedRow);
+        const targetIndex = allRows.indexOf(this);
+        
+        if (draggedIndex < targetIndex) {
+            this.parentNode.insertBefore(draggedRow, this.nextSibling);
+        } else {
+            this.parentNode.insertBefore(draggedRow, this);
+        }
+        
+        updateRowNumbers();
+    }
+}
+
+function handleDragEnd() {
+    this.classList.remove('dragging');
+    sauvegarderOrdreSousActions();
+}
+
+function updateRowNumbers() {
+    const rows = document.querySelectorAll('#sousActionsBody tr');
+    rows.forEach((row, index) => {
+        const td = row.querySelector('.drag-handle');
+        if (td) {
+            td.innerHTML = `<i class="fas fa-grip-vertical text-muted"></i> ${index + 1}`;
+        }
+    });
+}
+
+function sauvegarderOrdreSousActions() {
+    const rows = document.querySelectorAll('#sousActionsBody tr');
+    const ids = Array.from(rows).map(row => row.getAttribute('data-id'));
+    
+    fetch(`/plan-action-independant/{{ plan.id }}/reorganiser-sous-actions`, {
+        method: 'POST',
+        headers: {
+            'X-CSRFToken': '{{ csrf_token() }}',
+            'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ ids: ids })
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            console.log('Ordre sauvegardé');
+        }
+    });
+}
+
+// Initialisation
+document.addEventListener('DOMContentLoaded', function() {
+    const sliders = document.querySelectorAll('.progression-slider');
+    sliders.forEach(slider => {
+        slider.addEventListener('input', function() {
+            const value = Math.round(this.value / 25) * 25;
+            const sousActionId = this.getAttribute('data-id');
+            const percentageSpan = document.getElementById(`percentage-${sousActionId}`);
+            if (percentageSpan) {
+                percentageSpan.textContent = value + '%';
+            }
+        });
+    });
+});
+</script>
+
+<style>
+.timeline {
+    position: relative;
+    padding-left: 30px;
+}
+
+.timeline-item {
+    position: relative;
+    margin-bottom: 20px;
+}
+
+.timeline-marker {
+    position: absolute;
+    left: -30px;
+    top: 0;
+    width: 15px;
+    height: 15px;
+    border-radius: 50%;
+    border: 3px solid #fff;
+    box-shadow: 0 0 0 3px #dee2e6;
+}
+
+.timeline-content {
+    padding-left: 10px;
+}
+
+.dragging {
+    opacity: 0.5;
+    background-color: #f8f9fa !important;
+}
+
+.drag-handle {
+    cursor: move;
+}
+
+.progression-slider {
+    width: 120px;
+}
+
+.sous-action-description {
+    min-height: 24px;
+}
+
+.badge.bg-success { background-color: #28a745 !important; }
+.badge.bg-warning { background-color: #ffc107 !important; color: #000 !important; }
+.badge.bg-danger { background-color: #dc3545 !important; }
+.badge.bg-secondary { background-color: #6c757d !important; }
+.badge.bg-info { background-color: #17a2b8 !important; }
+
+.card {
+    border: 1px solid #dee2e6;
+    border-radius: 0.5rem;
+}
+
+.card-header {
+    border-bottom: 1px solid rgba(0,0,0,.125);
+}
+
+@keyframes highlightUpdate {
+    0% { background-color: #e7f4ff; }
+    100% { background-color: transparent; }
+}
+
+.highlight-update {
+    animation: highlightUpdate 1s ease;
+}
+</style>
+{% endblock %}
