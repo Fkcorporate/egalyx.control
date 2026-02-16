@@ -16016,31 +16016,39 @@ def filter_client_data():
 
 def check_client_access(entity):
     """
-    Vérifie l'accès à une entité spécifique (multi-tenant sécurisé)
+    Vérifie l'accès multi-tenant à une entité.
+    Compatible production (Render / PostgreSQL).
     """
 
-    if not current_user.is_authenticated:
+    # 🔒 Vérification authentification minimale
+    if not current_user or not current_user.is_authenticated:
         return False
 
-    # SUPER ADMIN : accès total
-    if current_user.role == 'super_admin':
+    # 🔥 Toujours recharger l'utilisateur depuis la session ACTIVE
+    user = db.session.get(User, current_user.id)
+
+    if not user:
+        return False
+
+    # 👑 Super Admin → accès total
+    if user.role == 'super_admin':
         return True
 
-    user_client_id = current_user.client_id
-
-    if not user_client_id:
+    # 🚫 Si l'utilisateur n'a pas de client associé
+    if not user.client_id:
         return False
 
-    # 🔎 Si l'entité a un client_id → comparaison directe
+    # ✅ Cas 1 : l'entité possède un client_id direct
     if hasattr(entity, 'client_id') and entity.client_id is not None:
-        return entity.client_id == user_client_id
+        return entity.client_id == user.client_id
 
-    # 🔎 Sinon vérifier via created_by
+    # ✅ Cas 2 : l'entité possède un created_by
     if hasattr(entity, 'created_by') and entity.created_by:
         creator = db.session.get(User, entity.created_by)
         if creator:
-            return creator.client_id == user_client_id
+            return creator.client_id == user.client_id
 
+    # ❌ Par défaut → accès refusé
     return False
 
 
