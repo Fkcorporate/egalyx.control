@@ -39046,6 +39046,5424 @@ def dashboard_audit(audit_id):
                          current_user=current_user)
 
 
+
+# ==================== ROUTES PROGRAMME AUDIT ====================
+# ==================== ROUTES PROGRAMME AUDIT ====================
+
+@app.route('/programme-audit')
+@login_required
+def liste_programmes_audit():
+    """Liste des programmes d'audit"""
+    # Vérification formule
+    if current_user.client and current_user.client.formule:
+        formule = current_user.client.formule
+        if not formule.can_access_module('audit_interne'):
+            return render_formule_restricted('Programme d\'Audit', formule)
+    
+    # Vérification permission
+    if not current_user.has_permission('can_manage_audit'):
+        flash('Permission requise', 'error')
+        return redirect(url_for('dashboard'))
+    
+    # Récupération avec isolation
+    programmes = get_client_filter(ProgrammeAudit)\
+        .filter_by(is_archived=False)\
+        .order_by(ProgrammeAudit.annee_debut.desc())\
+        .all()
+    
+    # Statistiques
+    stats = {
+        'total': len(programmes),
+        'actifs': len([p for p in programmes if p.statut == 'actif']),
+        'en_elaboration': len([p for p in programmes if p.statut == 'en_elaboration']),
+        'missions_total': sum(p.nb_missions for p in programmes),
+        'missions_terminees': sum(p.nb_missions_realisees for p in programmes)
+    }
+    
+    return render_template('programme_audit/liste.html',
+                         programmes=programmes,
+                         stats=stats)
+
+
+@app.route('/programme-audit/nouveau', methods=['GET', 'POST'])
+@csrf.exempt
+@login_required
+def nouveau_programme_audit():
+    """Créer un nouveau programme d'audit"""
+    
+    if not current_user.has_permission('can_manage_audit'):
+        flash('Permission requise', 'error')
+        return redirect(url_for('liste_programmes_audit'))
+    
+    from flask_wtf import FlaskForm
+    from wtforms import StringField, TextAreaField, SelectField, BooleanField, IntegerField, SubmitField
+    from wtforms.validators import DataRequired, Optional, NumberRange
+    
+    class ProgrammeAuditForm(FlaskForm):
+        nom = StringField('Nom du programme', validators=[DataRequired()])
+        description = TextAreaField('Description')
+        periode = SelectField('Période', choices=[
+            ('annuel', 'Annuel'),
+            ('triennal', 'Triennal (3 ans)')
+        ], validators=[DataRequired()])
+        annee_debut = SelectField('Année de début', choices=[], validators=[DataRequired()])
+        annee_fin = SelectField('Année de fin', choices=[], validators=[DataRequired()])
+        
+        methode_generation = SelectField('Méthode de génération', choices=[
+            ('manuel', 'Manuel - Je créerai les missions moi-même'),
+            ('auto_risques', 'Automatique - Basé sur la cartographie des risques'),
+            ('hybride', 'Hybride - Automatique avec ajustements manuels')
+        ], validators=[DataRequired()])
+        
+        seuil_critique = BooleanField('Inclure les risques Critiques', default=True)
+        seuil_eleve = BooleanField('Inclure les risques Élevés', default=True)
+        inclure_risques_moyens = BooleanField('Inclure les risques Moyens', default=False)
+        frequence_audit_risque = SelectField('Fréquence d\'audit par niveau', choices=[
+            ('annuelle_critique', 'Annuelle pour risques critiques'),
+            ('semestrielle_critique', 'Semestrielle pour risques critiques'),
+            ('triennal_tous', 'Tous les 3 ans pour tous les risques')
+        ])
+        prioriser_processus_critiques = BooleanField('Prioriser les processus critiques', default=True)
+        
+        frequence_audit = SelectField('Fréquence générale d\'audit', choices=[
+            ('annuelle', 'Annuelle'),
+            ('semestrielle', 'Semestrielle'),
+            ('trimestrielle', 'Trimestrielle')
+        ])
+        duree_moyenne_mission = IntegerField('Durée moyenne d\'une mission (jours)', 
+                                             default=5, validators=[NumberRange(min=1, max=30)])
+        ressources_disponibles = IntegerField('Ressources disponibles (jours/homme par an)', 
+                                             default=100, validators=[NumberRange(min=10, max=1000)])
+        
+        submit = SubmitField('Créer le programme')
+    
+    form = ProgrammeAuditForm()
+    
+    # Initialisation des années
+    annee_courante = datetime.now().year
+    form.annee_debut.choices = [(str(y), str(y)) for y in range(annee_courante, annee_courante + 6)]
+    form.annee_fin.choices = [(str(y), str(y)) for y in range(annee_courante, annee_courante + 11)]
+    
+    if form.validate_on_submit():
+        try:
+            # Générer référence
+            def generer_reference_programme(client_id=None):
+                base_ref = "PROGAUD-"
+                
+                if client_id:
+                    dernier = ProgrammeAudit.query.filter_by(client_id=client_id)\
+                        .order_by(ProgrammeAudit.id.desc()).first()
+                else:
+                    dernier = ProgrammeAudit.query.order_by(ProgrammeAudit.id.desc()).first()
+                
+                if dernier and dernier.reference:
+                    try:
+                        if dernier.reference.startswith(base_ref):
+                            dernier_num = int(dernier.reference.split('-')[1])
+                            nouveau_num = dernier_num + 1
+                        else:
+                            count = ProgrammeAudit.query.filter_by(client_id=client_id).count() if client_id else ProgrammeAudit.query.count()
+                            nouveau_num = count + 1
+                    except:
+                        count = ProgrammeAudit.query.filter_by(client_id=client_id).count() if client_id else ProgrammeAudit.query.count()
+                        nouveau_num = count + 1
+                else:
+                    nouveau_num = 1
+                
+                return f"{base_ref}{nouveau_num:04d}"
+            
+            reference = generer_reference_programme(current_user.client_id)
+            
+            programme = ProgrammeAudit(
+                reference=reference,
+                nom=form.nom.data,
+                description=form.description.data,
+                periode=form.periode.data,
+                annee_debut=int(form.annee_debut.data),
+                annee_fin=int(form.annee_fin.data),
+                methode_generation=form.methode_generation.data,
+                statut='en_elaboration',
+                client_id=current_user.client_id,
+                created_by=current_user.id,
+                frequence_audit=form.frequence_audit.data,
+                duree_moyenne_mission=form.duree_moyenne_mission.data,
+                ressources_disponibles=form.ressources_disponibles.data
+            )
+            
+            # Critères de génération automatisée
+            if form.methode_generation.data in ['auto_risques', 'hybride']:
+                programme.criteres_generation = {
+                    'seuil_critique': form.seuil_critique.data,
+                    'seuil_eleve': form.seuil_eleve.data,
+                    'inclure_risques_moyens': form.inclure_risques_moyens.data,
+                    'frequence_audit_risque': form.frequence_audit_risque.data,
+                    'prioriser_processus_critiques': form.prioriser_processus_critiques.data
+                }
+            
+            db.session.add(programme)
+            db.session.commit()
+            
+            # Générer les missions si méthode automatisée
+            if form.methode_generation.data in ['auto_risques', 'hybride']:
+                missions_crees = generer_missions_auto(programme.id, current_user.id)
+                flash(f'Programme créé avec {missions_crees} missions générées automatiquement', 'success')
+            else:
+                flash('Programme créé - Ajoutez maintenant les missions manuellement', 'info')
+            
+            return redirect(url_for('detail_programme_audit', id=programme.id))
+            
+        except Exception as e:
+            db.session.rollback()
+            flash(f'Erreur: {str(e)}', 'error')
+    
+    return render_template('programme_audit/form.html', form=form, title="Nouveau Programme")
+
+@app.route('/programme-audit/<int:id>')
+@login_required
+def detail_programme_audit(id):
+    """Détail d'un programme d'audit"""
+    
+    programme = ProgrammeAudit.query.get_or_404(id)
+    
+    if not check_client_access(programme):
+        flash('Accès non autorisé', 'error')
+        return redirect(url_for('liste_programmes_audit'))
+    
+    # Récupérer les risques disponibles pour ce client
+    risques_disponibles = get_client_filter(Risque)\
+        .filter_by(is_archived=False)\
+        .order_by(Risque.reference.asc())\
+        .all()
+    
+    # Récupérer les utilisateurs disponibles
+    if current_user.role == 'super_admin':
+        utilisateurs = User.query.filter_by(is_active=True).order_by(User.username).all()
+    else:
+        utilisateurs = get_client_filter(User).filter_by(is_active=True).order_by(User.username).all()
+    
+    # ===== CORRECTION : FILTRER LES MISSIONS NON ARCHIVÉES =====
+    missions_non_archivees = programme.missions.filter_by(is_archived=False).all()
+    
+    # Convertir les missions en dictionnaires pour le template
+    missions_data = []
+    for mission in missions_non_archivees:  # ← UTILISER LES MISSIONS FILTRÉES
+        # Récupérer l'audit associé si existe
+        audit_info = None
+        if mission.audit_id:
+            audit = Audit.query.get(mission.audit_id)
+            if audit:
+                audit_info = {
+                    'id': audit.id,
+                    'reference': audit.reference or '',
+                    'titre': audit.titre or ''
+                }
+        
+        mission_dict = {
+            'id': mission.id,
+            'reference': mission.reference,
+            'titre': mission.titre,
+            'description': mission.description or '',
+            'priorite': mission.priorite or '',
+            'niveau_risque_associe': mission.niveau_risque_associe or '',
+            'annee_prevue': mission.annee_prevue,
+            'trimestre_prevue': mission.trimestre_prevue,
+            'duree_estimee': mission.duree_estimee or 0,
+            'duree_reelle': mission.duree_reelle or 0,
+            'statut': mission.statut or 'planifie',
+            'date_debut_prevue': mission.date_debut_prevue.strftime('%Y-%m-%d') if mission.date_debut_prevue else None,
+            'date_fin_prevue': mission.date_fin_prevue.strftime('%Y-%m-%d') if mission.date_fin_prevue else None,
+            'date_debut_reelle': mission.date_debut_reelle.strftime('%Y-%m-%d') if mission.date_debut_reelle else None,
+            'date_fin_reelle': mission.date_fin_reelle.strftime('%Y-%m-%d') if mission.date_fin_reelle else None,
+            'audit_id': mission.audit_id,
+            'audit': audit_info,
+            'risque_id': mission.risque_id,
+            'responsable_id': mission.responsable_id,
+            'jours_restants': mission.jours_restants if hasattr(mission, 'jours_restants') else 0,
+            'est_en_retard': mission.est_en_retard if hasattr(mission, 'est_en_retard') else False
+        }
+        
+        if mission.risque:
+            mission_dict['risque'] = {
+                'id': mission.risque.id,
+                'reference': mission.risque.reference or '',
+                'intitule': mission.risque.intitule or '',
+                'description': mission.risque.description or '',
+                'categorie': mission.risque.categorie or ''
+            }
+        
+        if mission.responsable:
+            mission_dict['responsable'] = {
+                'id': mission.responsable.id,
+                'username': mission.responsable.username or '',
+                'role': mission.responsable.role or ''
+            }
+        
+        missions_data.append(mission_dict)
+    
+    return render_template('programme_audit/detail.html',
+                         programme=programme,
+                         missions_data=missions_data,  # ← MAINTENANT SANS ARCHIVÉES
+                         risques_disponibles=risques_disponibles,
+                         utilisateurs=utilisateurs)
+
+
+# ============================================================================
+# ROUTES POUR LA MANIPULATION MANUELLE DU CHRONOGRAMME
+# ============================================================================
+
+@app.route('/programme-audit/<int:id>/chronogramme')
+@login_required
+def chronogramme_programme(id):
+    """Chronogramme interactif avec manipulation manuelle"""
+    
+    programme = ProgrammeAudit.query.get_or_404(id)
+    
+    if not check_client_access(programme):
+        flash('Accès non autorisé', 'error')
+        return redirect(url_for('liste_programmes_audit'))
+    
+    # ✅ CORRECTION : Utiliser .all() pour obtenir une liste
+    missions = programme.missions.filter_by(is_archived=False).all()
+    
+    # Organisation des missions
+    missions_par_annee = {}
+    ressources_par_periode = {}
+    
+    for mission in missions:  # ✅ Maintenant c'est une LISTE
+        annee = mission.annee_prevue
+        trimestre = mission.trimestre_prevue or 1
+        
+        if annee not in missions_par_annee:
+            missions_par_annee[annee] = {1: [], 2: [], 3: [], 4: []}
+        if trimestre not in missions_par_annee[annee]:
+            missions_par_annee[annee][trimestre] = []
+        
+        missions_par_annee[annee][trimestre].append(mission)
+        
+        if annee not in ressources_par_periode:
+            ressources_par_periode[annee] = {1: 0, 2: 0, 3: 0, 4: 0}
+        ressources_par_periode[annee][trimestre] += mission.duree_estimee or 0
+    
+    # ✅ CORRECTION : ICI LE FAMEUX len() qui plantait
+    stats = {
+        'total_charge': programme.jours_audit_planifies,
+        'charge_moyenne': programme.jours_audit_planifies / max(1, len(missions)),  # ✅ missions est une LISTE
+        'missions_par_priorite': {
+            'critique': len([m for m in missions if m.priorite == 'critique']),
+            'elevee': len([m for m in missions if m.priorite == 'elevee']),
+            'moyenne': len([m for m in missions if m.priorite == 'moyenne']),
+            'faible': len([m for m in missions if m.priorite == 'faible'])
+        }
+    }
+    
+    return render_template('programme_audit/chronogramme.html',
+                         programme=programme,
+                         missions_par_annee=missions_par_annee,
+                         ressources_par_periode=ressources_par_periode,
+                         missions=missions,  # ✅ Passer la liste au template
+                         stats=stats,
+                         now=datetime.now)
+
+
+
+
+
+
+
+
+# ============================================================================
+# ROUTES API POUR LE CHRONOGRAMME INTERACTIF
+# ============================================================================
+
+
+
+@app.route('/api/chronogramme/programme/<int:programme_id>/repartition-auto', methods=['POST'])
+@login_required
+def repartition_auto_chronogramme(programme_id):
+    """Répartir automatiquement les missions pour équilibrer la charge"""
+    programme = ProgrammeAudit.query.get_or_404(programme_id)
+    
+    if not check_client_access(programme):
+        return jsonify({'success': False, 'message': 'Accès non autorisé'}), 403
+    
+    try:
+        # Récupérer les missions planifiées
+        missions = programme.missions.filter_by(
+            statut='planifie',
+            is_archived=False
+        ).all()
+        
+        if not missions:
+            return jsonify({'success': True, 'message': 'Aucune mission à répartir'})
+        
+        # Répartition par priorité
+        missions_critique = [m for m in missions if m.priorite == 'critique']
+        missions_elevee = [m for m in missions if m.priorite == 'elevee']
+        missions_moyenne = [m for m in missions if m.priorite == 'moyenne']
+        missions_faible = [m for m in missions if m.priorite == 'faible']
+        
+        # Répartition sur les années
+        annees = list(range(programme.annee_debut, programme.annee_fin + 1))
+        modifications = 0
+        
+        # Année 1 : missions critiques
+        if annees:
+            for i, mission in enumerate(missions_critique):
+                mission.annee_prevue = annees[0]
+                mission.trimestre_prevue = (i % 4) + 1
+                modifications += 1
+        
+        # Année 2 : missions élevées
+        if len(annees) > 1:
+            for i, mission in enumerate(missions_elevee):
+                mission.annee_prevue = annees[1]
+                mission.trimestre_prevue = (i % 4) + 1
+                modifications += 1
+        else:
+            for i, mission in enumerate(missions_elevee):
+                mission.annee_prevue = annees[0]
+                mission.trimestre_prevue = (i % 4) + 1
+                modifications += 1
+        
+        # Année 3 : missions moyennes
+        if len(annees) > 2:
+            for i, mission in enumerate(missions_moyenne):
+                mission.annee_prevue = annees[2]
+                mission.trimestre_prevue = (i % 4) + 1
+                modifications += 1
+        else:
+            for i, mission in enumerate(missions_moyenne):
+                mission.annee_prevue = annees[-1]
+                mission.trimestre_prevue = (i % 4) + 1
+                modifications += 1
+        
+        # Répartition des missions faibles sur les années restantes
+        for i, mission in enumerate(missions_faible):
+            annee_index = i % len(annees)
+            mission.annee_prevue = annees[annee_index]
+            mission.trimestre_prevue = (i % 4) + 1
+            modifications += 1
+        
+        db.session.commit()
+        
+        return jsonify({
+            'success': True,
+            'message': f'{modifications} missions réparties automatiquement'
+        })
+        
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'success': False, 'message': str(e)}), 500
+
+
+@app.route('/mission-audit/<int:mission_id>/modifier', methods=['GET', 'POST'])
+@csrf.exempt
+@login_required
+def modifier_mission_audit(mission_id):
+    """Modifier une mission d'audit"""
+    mission = MissionAudit.query.get_or_404(mission_id)
+    programme = mission.programme
+    
+    if not check_client_access(mission):
+        flash('Accès non autorisé', 'error')
+        return redirect(url_for('detail_programme_audit', id=programme.id))
+    
+    if request.method == 'POST':
+        try:
+            # Mise à jour des champs
+            mission.titre = request.form.get('titre', mission.titre)
+            mission.description = request.form.get('description', mission.description)
+            mission.priorite = request.form.get('priorite', mission.priorite)
+            
+            annee_prevue = request.form.get('annee_prevue')
+            if annee_prevue:
+                mission.annee_prevue = int(annee_prevue)
+            
+            trimestre_prevue = request.form.get('trimestre_prevue')
+            if trimestre_prevue:
+                mission.trimestre_prevue = int(trimestre_prevue)
+            else:
+                mission.trimestre_prevue = None
+            
+            duree_estimee = request.form.get('duree_estimee')
+            if duree_estimee:
+                mission.duree_estimee = int(duree_estimee)
+            
+            date_debut_prevue = request.form.get('date_debut_prevue')
+            if date_debut_prevue:
+                mission.date_debut_prevue = datetime.strptime(date_debut_prevue, '%Y-%m-%d').date()
+            
+            date_fin_prevue = request.form.get('date_fin_prevue')
+            if date_fin_prevue:
+                mission.date_fin_prevue = datetime.strptime(date_fin_prevue, '%Y-%m-%d').date()
+            
+            risque_id = request.form.get('risque_id')
+            if risque_id:
+                mission.risque_id = int(risque_id) if risque_id else None
+            
+            responsable_id = request.form.get('responsable_id')
+            if responsable_id:
+                mission.responsable_id = int(responsable_id) if responsable_id else None
+            
+            statut = request.form.get('statut')
+            if statut:
+                mission.statut = statut
+            
+            progression = request.form.get('progression')
+            if progression:
+                mission.progression = int(progression)
+            
+            mission.commentaire_repli = request.form.get('commentaire_repli', mission.commentaire_repli)
+            mission.updated_at = datetime.now()
+            
+            db.session.commit()
+            flash('Mission modifiée avec succès', 'success')
+            
+        except Exception as e:
+            db.session.rollback()
+            flash(f'Erreur: {str(e)}', 'error')
+        
+        return redirect(url_for('detail_programme_audit', id=programme.id))
+    
+    # GET - Afficher le formulaire
+    risques_disponibles = get_client_filter(Risque).filter_by(is_archived=False).all()
+    
+    if current_user.role == 'super_admin':
+        utilisateurs = User.query.filter_by(is_active=True).all()
+    else:
+        utilisateurs = get_client_filter(User).filter_by(is_active=True).all()
+    
+    return render_template('programme_audit/edit_mission.html',
+                         mission=mission,
+                         programme=programme,
+                         risques_disponibles=risques_disponibles,
+                         utilisateurs=utilisateurs)
+
+
+
+@app.route('/programme-audit/<int:id>/generer-auto')
+@login_required
+def generer_missions_auto_programme(id):  # Garder id pour la cohérence
+    """Générer automatiquement les missions basées sur les risques"""
+    programme = ProgrammeAudit.query.get_or_404(id)
+    
+    if not check_client_access(programme):
+        flash('Accès non autorisé', 'error')
+        return redirect(url_for('liste_programmes_audit'))
+    
+    try:
+        missions_crees = generer_missions_auto(programme.id, current_user.id)
+        flash(f'{missions_crees} missions générées automatiquement', 'success')
+        
+    except Exception as e:
+        flash(f'Erreur lors de la génération: {str(e)}', 'error')
+    
+    return redirect(url_for('detail_programme_audit', id=id))
+
+
+def generer_missions_auto(programme_id, user_id):
+    """Génère automatiquement les missions avec répartition intelligente"""
+    
+    programme = ProgrammeAudit.query.get(programme_id)
+    if not programme:
+        return 0
+    
+    # Récupérer les critères
+    criteres = programme.criteres_generation or {}
+    
+    # ===== 1. FILTRAGE DES RISQUES =====
+    query = get_client_filter(Risque).filter_by(is_archived=False)
+    
+    # Filtrer par niveau de risque
+    niveaux = []
+    if criteres.get('seuil_critique', True):
+        niveaux.append('Critique')
+    if criteres.get('seuil_eleve', True):
+        niveaux.append('Élevé')
+    if criteres.get('inclure_risques_moyens', False):
+        niveaux.append('Moyen')
+    
+    if niveaux:
+        # Sous-query pour la dernière évaluation
+        subquery = db.session.query(
+            EvaluationRisque.risque_id,
+            db.func.max(EvaluationRisque.created_at).label('max_date')
+        ).group_by(EvaluationRisque.risque_id).subquery()
+        
+        query = query.join(subquery, Risque.id == subquery.c.risque_id)\
+                    .join(EvaluationRisque, 
+                         db.and_(
+                             EvaluationRisque.risque_id == Risque.id,
+                             EvaluationRisque.created_at == subquery.c.max_date
+                         ))\
+                    .filter(EvaluationRisque.niveau_risque.in_(niveaux))
+    
+    # Filtrer par score minimum
+    score_min = criteres.get('score_minimum', 0)
+    if score_min > 0:
+        query = query.filter(EvaluationRisque.score_risque >= score_min)
+    
+    risques = query.all()
+    
+    # ===== 2. RÉPARTITION STRATÉGIQUE =====
+    missions_crees = 0
+    annees_programme = list(range(programme.annee_debut, programme.annee_fin + 1))
+    
+    # Initialiser le compteur de charge par trimestre pour chaque année
+    charge_par_trimestre = {}
+    for annee in annees_programme:
+        charge_par_trimestre[annee] = {1: 0, 2: 0, 3: 0, 4: 0}
+        
+        # Ajouter les missions existantes
+        for mission in programme.missions:
+            if mission.annee_prevue == annee and mission.trimestre_prevue:
+                charge_par_trimestre[annee][mission.trimestre_prevue] += mission.duree_estimee or 0
+    
+    # Compter les missions par priorité pour la répartition
+    missions_critique = []
+    missions_elevee = []
+    missions_moyenne = []
+    missions_faible = []
+    
+    for risque in risques:
+        if not risque.evaluations:
+            continue
+            
+        derniere_eval = sorted(
+            risque.evaluations, 
+            key=lambda x: x.created_at, 
+            reverse=True
+        )[0]
+        
+        if derniere_eval.niveau_risque == 'Critique':
+            missions_critique.append(risque)
+        elif derniere_eval.niveau_risque == 'Élevé':
+            missions_elevee.append(risque)
+        elif derniere_eval.niveau_risque == 'Moyen':
+            missions_moyenne.append(risque)
+        else:
+            missions_faible.append(risque)
+    
+    # ===== 3. RÉPARTITION DES MISSIONS CRITIQUES =====
+    # Répartir sur TOUS les trimestres de l'année 1
+    if annees_programme:
+        annee_critique = annees_programme[0]
+        for i, risque in enumerate(missions_critique):
+            # Choisir le trimestre le moins chargé
+            trimestre = min(charge_par_trimestre[annee_critique], 
+                           key=charge_par_trimestre[annee_critique].get)
+            
+            # Créer la mission
+            mission = creer_mission_depuis_risque(risque, programme, annee_critique, trimestre, user_id, criteres)
+            db.session.add(mission)
+            missions_crees += 1
+            
+            # Mettre à jour la charge
+            duree = criteres.get('duree_par_priorite', {}).get('critique', programme.duree_moyenne_mission * 1.5 or 10)
+            charge_par_trimestre[annee_critique][trimestre] += duree
+    
+    # ===== 4. RÉPARTITION DES MISSIONS ÉLEVÉES =====
+    # Répartir sur TOUS les trimestres de l'année 2 (ou année 1 si pas assez d'années)
+    if len(annees_programme) > 1:
+        annee_elevee = annees_programme[1]
+    else:
+        annee_elevee = annees_programme[0]
+    
+    for i, risque in enumerate(missions_elevee):
+        trimestre = min(charge_par_trimestre[annee_elevee], 
+                       key=charge_par_trimestre[annee_elevee].get)
+        
+        mission = creer_mission_depuis_risque(risque, programme, annee_elevee, trimestre, user_id, criteres)
+        db.session.add(mission)
+        missions_crees += 1
+        
+        duree = criteres.get('duree_par_priorite', {}).get('elevee', programme.duree_moyenne_mission * 1.2 or 7)
+        charge_par_trimestre[annee_elevee][trimestre] += duree
+    
+    # ===== 5. RÉPARTITION DES MISSIONS MOYENNES =====
+    # Répartir sur TOUS les trimestres de l'année 3 (ou dernière année)
+    if len(annees_programme) > 2:
+        annee_moyenne = annees_programme[2]
+    else:
+        annee_moyenne = annees_programme[-1]
+    
+    for i, risque in enumerate(missions_moyenne):
+        trimestre = min(charge_par_trimestre[annee_moyenne], 
+                       key=charge_par_trimestre[annee_moyenne].get)
+        
+        mission = creer_mission_depuis_risque(risque, programme, annee_moyenne, trimestre, user_id, criteres)
+        db.session.add(mission)
+        missions_crees += 1
+        
+        duree = criteres.get('duree_par_priorite', {}).get('moyenne', programme.duree_moyenne_mission or 5)
+        charge_par_trimestre[annee_moyenne][trimestre] += duree
+    
+    # ===== 6. RÉPARTITION DES MISSIONS FAIBLES =====
+    # Répartir sur toutes les années et tous les trimestres
+    for i, risque in enumerate(missions_faible):
+        annee_index = i % len(annees_programme)
+        annee_faible = annees_programme[annee_index]
+        
+        trimestre = min(charge_par_trimestre[annee_faible], 
+                       key=charge_par_trimestre[annee_faible].get)
+        
+        mission = creer_mission_depuis_risque(risque, programme, annee_faible, trimestre, user_id, criteres)
+        db.session.add(mission)
+        missions_crees += 1
+        
+        duree = criteres.get('duree_par_priorite', {}).get('faible', programme.duree_moyenne_mission * 0.8 or 3)
+        charge_par_trimestre[annee_faible][trimestre] += duree
+    
+    db.session.commit()
+    
+    return missions_crees
+
+
+def creer_mission_depuis_risque(risque, programme, annee, trimestre, user_id, criteres):
+    """Fonction utilitaire pour créer une mission"""
+    from datetime import datetime
+    
+    # Récupérer la dernière évaluation
+    derniere_eval = sorted(risque.evaluations, key=lambda x: x.created_at, reverse=True)[0]
+    
+    # Déterminer la priorité et la durée
+    if derniere_eval.niveau_risque == 'Critique':
+        priorite = 'critique'
+        duree = criteres.get('duree_par_priorite', {}).get('critique', programme.duree_moyenne_mission * 1.5 or 10)
+    elif derniere_eval.niveau_risque == 'Élevé':
+        priorite = 'elevee'
+        duree = criteres.get('duree_par_priorite', {}).get('elevee', programme.duree_moyenne_mission * 1.2 or 7)
+    elif derniere_eval.niveau_risque == 'Moyen':
+        priorite = 'moyenne'
+        duree = criteres.get('duree_par_priorite', {}).get('moyenne', programme.duree_moyenne_mission or 5)
+    else:
+        priorite = 'faible'
+        duree = criteres.get('duree_par_priorite', {}).get('faible', programme.duree_moyenne_mission * 0.8 or 3)
+    
+    # Générer référence
+    ref_count = programme.missions.filter_by(is_archived=False).count() + 1
+    reference = f"MIS-{programme.reference}-{ref_count:03d}"
+    
+    # Titre
+    if risque.processus_concerne:
+        titre = f"Audit {risque.reference} - {risque.intitule[:50]} ({risque.processus_concerne})"
+    else:
+        titre = f"Audit {risque.reference} - {risque.intitule[:50]}"
+    
+    return MissionAudit(
+        reference=reference,
+        titre=titre.strip(),
+        description=f"Audit du risque {risque.reference}: {risque.intitule}",
+        risque_id=risque.id,
+        cartographie_id=risque.cartographie_id,
+        priorite=priorite,
+        niveau_risque_associe=derniere_eval.niveau_risque,
+        score_risque=derniere_eval.score_risque,
+        programme_id=programme.id,
+        annee_prevue=annee,
+        trimestre_prevue=trimestre,
+        duree_estimee=int(duree),
+        statut='planifie',
+        created_by=user_id,
+        client_id=programme.client_id
+    )
+
+
+# ============================================================================
+# ROUTES POUR LES PLANS DE REPLI (PLAN PLUIE) - CORRIGÉES
+# ============================================================================
+
+@app.route('/programme-audit/<int:programme_id>/plan-pluie')
+@login_required
+def plan_pluie_programme(programme_id):
+    """Gestion du plan de repli (plan pluie)"""
+    
+    programme = ProgrammeAudit.query.get_or_404(programme_id)
+    
+    if not check_client_access(programme):
+        flash('Accès non autorisé', 'error')
+        return redirect(url_for('liste_programmes_audit'))
+    
+    # ========== MISSIONS REPORTABLES ==========
+    missions_reportables = []
+    for mission in programme.missions:
+        # Une mission peut être reportée si :
+        # - Elle est planifiée ou en cours
+        # - Elle n'est pas archivée
+        # - Elle n'a pas déjà un plan de repli actif
+        if (mission.statut in ['planifie', 'en_cours'] and 
+            not mission.is_archived):
+            
+            # Vérifier si elle a déjà un plan de repli
+            plan_existant = PlanPluieAudit.query.filter_by(
+                mission_principale_id=mission.id,
+                statut='actif',
+                is_archived=False
+            ).first()
+            
+            if not plan_existant:
+                missions_reportables.append(mission)
+    
+    # ========== MISSIONS DE REMPLACEMENT ==========
+    missions_remplacement = []
+    annee_courante = datetime.now().year
+    trimestre_actuel = (datetime.now().month - 1) // 3 + 1
+    
+    for mission in programme.missions:
+        # Une mission peut servir de remplacement si :
+        # - Elle est planifiée (pas en cours, pas terminée)
+        # - Elle n'est pas archivée
+        # - Elle n'est pas déjà utilisée comme mission principale d'un plan actif
+        # - Elle est dans le futur (année > année courante OU même année mais trimestre futur)
+        
+        if (mission.statut == 'planifie' and 
+            not mission.is_archived):
+            
+            # Exclure les missions qui sont déjà des missions principales
+            est_mission_principale = PlanPluieAudit.query.filter_by(
+                mission_principale_id=mission.id,
+                statut='actif',
+                is_archived=False
+            ).first() is not None
+            
+            if not est_mission_principale:
+                # Vérifier si c'est une mission future
+                if mission.annee_prevue > annee_courante:
+                    missions_remplacement.append(mission)
+                elif mission.annee_prevue == annee_courante:
+                    if mission.trimestre_prevue and mission.trimestre_prevue > trimestre_actuel:
+                        missions_remplacement.append(mission)
+                    elif not mission.trimestre_prevue:
+                        # Si pas de trimestre, on l'inclut quand même
+                        missions_remplacement.append(mission)
+    
+    # ========== PLANS DE REPLI EXISTANTS ==========
+    plans_pluie = PlanPluieAudit.query.filter(
+        PlanPluieAudit.mission_principale_id.in_([m.id for m in programme.missions])
+    ).filter_by(is_archived=False).all()
+    
+    return render_template('programme_audit/plan_pluie.html',
+                         programme=programme,
+                         missions_reportables=missions_reportables,
+                         missions_remplacement=missions_remplacement,
+                         plans_pluie=plans_pluie,
+                         datetime=datetime,
+                         now=datetime.now(),
+                         annee_courante=annee_courante,
+                         trimestre_actuel=trimestre_actuel)
+
+@app.route('/programme-audit/<int:programme_id>/plan-pluie/creer', methods=['POST'])
+@csrf.exempt 
+@login_required
+def creer_plan_pluie(programme_id):  # Paramètre: programme_id
+    """Créer un plan de repli"""
+    programme = ProgrammeAudit.query.get_or_404(programme_id)
+    
+    if not check_client_access(programme):
+        return jsonify({'success': False, 'message': 'Accès non autorisé'}), 403
+    
+    try:
+        # Validation des données
+        nom = request.form.get('nom', '').strip()
+        if not nom:
+            return jsonify({'success': False, 'message': 'Le nom du plan est requis'}), 400
+        
+        mission_principale_id = request.form.get('mission_principale_id')
+        mission_remplacement_id = request.form.get('mission_remplacement_id')
+        
+        if not mission_principale_id or not mission_remplacement_id:
+            return jsonify({'success': False, 'message': 'Les missions principale et de remplacement sont requises'}), 400
+        
+        # Vérifier que les missions existent et appartiennent au programme
+        mission_principale = MissionAudit.query.get_or_404(mission_principale_id)
+        mission_remplacement = MissionAudit.query.get_or_404(mission_remplacement_id)
+        
+        if mission_principale.programme_id != programme.id or mission_remplacement.programme_id != programme.id:
+            return jsonify({'success': False, 'message': 'Les missions doivent appartenir au même programme'}), 400
+        
+        if mission_principale_id == mission_remplacement_id:
+            return jsonify({'success': False, 'message': 'La mission de remplacement doit être différente de la mission principale'}), 400
+        
+        # Vérifier qu'un plan n'existe pas déjà
+        plan_existant = PlanPluieAudit.query.filter_by(
+            mission_principale_id=mission_principale_id,
+            is_archived=False
+        ).first()
+        
+        if plan_existant:
+            return jsonify({'success': False, 'message': 'Un plan de repli existe déjà pour cette mission'}), 400
+        
+        # Créer le plan
+        plan = PlanPluieAudit(
+            nom=nom,
+            description=request.form.get('description', '').strip(),
+            mission_principale_id=int(mission_principale_id),
+            mission_remplacement_id=int(mission_remplacement_id),
+            condition_type=request.form.get('condition_type', 'retard'),
+            condition_seuil=int(request.form.get('condition_seuil', 15)) if request.form.get('condition_seuil') else None,
+            condition_description=request.form.get('condition_description', '').strip(),
+            statut='actif',
+            created_by=current_user.id,
+            client_id=programme.client_id
+        )
+        
+        db.session.add(plan)
+        db.session.commit()
+        
+        if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
+            return jsonify({'success': True, 'message': 'Plan de repli créé avec succès', 'plan_id': plan.id})
+        else:
+            flash('Plan de repli créé avec succès', 'success')
+            return redirect(url_for('plan_pluie_programme', programme_id=programme_id))
+        
+    except Exception as e:
+        db.session.rollback()
+        if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
+            return jsonify({'success': False, 'message': str(e)}), 500
+        else:
+            flash(f'Erreur: {str(e)}', 'error')
+            return redirect(url_for('plan_pluie_programme', programme_id=programme_id))
+
+
+@app.route('/plan-pluie/<int:plan_id>/modifier', methods=['POST'])
+@csrf.exempt 
+@login_required
+def modifier_plan_pluie(plan_id):
+    """Modifier un plan de repli existant"""
+    plan = PlanPluieAudit.query.get_or_404(plan_id)
+    
+    if not check_client_access(plan):
+        return jsonify({'success': False, 'message': 'Accès non autorisé'}), 403
+    
+    try:
+        programme_id = plan.mission_principale.programme_id
+        
+        # Mise à jour des champs
+        if request.form.get('nom'):
+            plan.nom = request.form.get('nom').strip()
+        if request.form.get('description') is not None:
+            plan.description = request.form.get('description').strip()
+        if request.form.get('condition_type'):
+            plan.condition_type = request.form.get('condition_type')
+        if request.form.get('condition_seuil'):
+            plan.condition_seuil = int(request.form.get('condition_seuil'))
+        if request.form.get('condition_description') is not None:
+            plan.condition_description = request.form.get('condition_description').strip()
+        if request.form.get('statut') and current_user.has_permission('can_manage_audit'):
+            plan.statut = request.form.get('statut')
+        
+        plan.updated_at = datetime.now()
+        
+        # Mise à jour des missions si fournies
+        if request.form.get('mission_remplacement_id'):
+            mission_remplacement_id = int(request.form.get('mission_remplacement_id'))
+            if mission_remplacement_id != plan.mission_principale_id:
+                plan.mission_remplacement_id = mission_remplacement_id
+        
+        db.session.commit()
+        
+        if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
+            return jsonify({'success': True, 'message': 'Plan de repli modifié avec succès'})
+        else:
+            flash('Plan de repli modifié avec succès', 'success')
+            return redirect(url_for('plan_pluie_programme', programme_id=programme_id))
+        
+    except Exception as e:
+        db.session.rollback()
+        if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
+            return jsonify({'success': False, 'message': str(e)}), 500
+        else:
+            flash(f'Erreur: {str(e)}', 'error')
+            return redirect(url_for('plan_pluie_programme', programme_id=programme_id))
+
+
+@app.route('/plan-pluie/<int:plan_id>/activer', methods=['POST'])
+@csrf.exempt 
+@login_required
+def activer_plan_pluie(plan_id):
+    """Activer un plan de repli"""
+    plan = PlanPluieAudit.query.get_or_404(plan_id)
+    
+    if not check_client_access(plan):
+        return jsonify({'success': False, 'message': 'Accès non autorisé'}), 403
+    
+    if plan.statut != 'actif':
+        return jsonify({'success': False, 'message': 'Seuls les plans actifs peuvent être activés'}), 400
+    
+    try:
+        programme_id = plan.mission_principale.programme_id
+        mission_principale = plan.mission_principale
+        mission_remplacement = plan.mission_remplacement
+        
+        if mission_principale.statut not in ['planifie', 'en_cours']:
+            return jsonify({'success': False, 'message': 'La mission principale n\'est pas dans un état permettant le repli'}), 400
+        
+        if mission_remplacement.statut != 'planifie':
+            return jsonify({'success': False, 'message': 'La mission de remplacement doit être planifiée'}), 400
+        
+        raison = request.form.get('raison', 'activation_manuelle')
+        commentaires = request.form.get('commentaires', '')
+        
+        # Reporter la mission principale
+        date_originale = mission_principale.annee_prevue
+        mission_principale.statut = 'reporte'
+        mission_principale.commentaire_repli = f"Mission reportée suite à l'activation du plan {plan.nom}"
+        mission_principale.date_report = datetime.now().date()
+        
+        # Avancer la mission de remplacement
+        mission_remplacement.annee_prevue = mission_principale.annee_prevue
+        mission_remplacement.trimestre_prevue = mission_principale.trimestre_prevue
+        mission_remplacement.date_debut_prevue = mission_principale.date_debut_prevue
+        mission_remplacement.date_fin_prevue = mission_principale.date_fin_prevue
+        mission_remplacement.commentaire_repli = f"Mission avancée depuis {date_originale} suite à l'activation du plan {plan.nom}"
+        
+        # Marquer le plan comme déclenché
+        plan.statut = 'declenche'
+        plan.date_declenchement = datetime.now()
+        plan.raison_declenchement = raison
+        plan.commentaires_declenchement = commentaires
+        
+        db.session.commit()
+        
+        if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
+            return jsonify({'success': True, 'message': 'Plan de repli activé avec succès'})
+        else:
+            flash('Plan de repli activé avec succès', 'success')
+            return redirect(url_for('plan_pluie_programme', programme_id=programme_id))
+        
+    except Exception as e:
+        db.session.rollback()
+        if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
+            return jsonify({'success': False, 'message': str(e)}), 500
+        else:
+            flash(f'Erreur: {str(e)}', 'error')
+            return redirect(url_for('plan_pluie_programme', programme_id=programme_id))
+
+
+@app.route('/plan-pluie/<int:plan_id>/reprogrammer', methods=['POST'])
+@csrf.exempt 
+@login_required
+def reprogrammer_plan_pluie(plan_id):
+    """Reprogrammer un plan de repli"""
+    plan = PlanPluieAudit.query.get_or_404(plan_id)
+    
+    if not check_client_access(plan):
+        return jsonify({'success': False, 'message': 'Accès non autorisé'}), 403
+    
+    try:
+        programme_id = plan.mission_principale.programme_id
+        mission_principale = plan.mission_principale
+        mission_remplacement = plan.mission_remplacement
+        
+        nouvelle_annee_principale = request.form.get('nouvelle_annee_principale')
+        nouveau_trimestre_principal = request.form.get('nouveau_trimestre_principal')
+        nouvelle_annee_remplacement = request.form.get('nouvelle_annee_remplacement')
+        nouveau_trimestre_remplacement = request.form.get('nouveau_trimestre_remplacement')
+        
+        if nouvelle_annee_principale:
+            mission_principale.annee_prevue = int(nouvelle_annee_principale)
+        if nouveau_trimestre_principal:
+            mission_principale.trimestre_prevue = int(nouveau_trimestre_principal)
+        
+        if nouvelle_annee_remplacement:
+            mission_remplacement.annee_prevue = int(nouvelle_annee_remplacement)
+        if nouveau_trimestre_remplacement:
+            mission_remplacement.trimestre_prevue = int(nouveau_trimestre_remplacement)
+        
+        if mission_principale.statut == 'reporte':
+            mission_principale.statut = 'planifie'
+        
+        plan.updated_at = datetime.now()
+        
+        db.session.commit()
+        
+        if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
+            return jsonify({'success': True, 'message': 'Plan de repli reprogrammé avec succès'})
+        else:
+            flash('Plan de repli reprogrammé avec succès', 'success')
+            return redirect(url_for('plan_pluie_programme', programme_id=programme_id))
+        
+    except Exception as e:
+        db.session.rollback()
+        if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
+            return jsonify({'success': False, 'message': str(e)}), 500
+        else:
+            flash(f'Erreur: {str(e)}', 'error')
+            return redirect(url_for('plan_pluie_programme', programme_id=programme_id))
+
+
+@app.route('/plan-pluie/<int:plan_id>/supprimer', methods=['POST'])
+@csrf.exempt 
+@login_required
+def supprimer_plan_pluie(plan_id):
+    """Supprimer (archiver) un plan de repli"""
+    plan = PlanPluieAudit.query.get_or_404(plan_id)
+    
+    if not check_client_access(plan):
+        return jsonify({'success': False, 'message': 'Accès non autorisé'}), 403
+    
+    try:
+        programme_id = plan.mission_principale.programme_id
+        
+        plan.is_archived = True
+        plan.statut = 'archive'
+        plan.archived_at = datetime.now()
+        plan.archived_by = current_user.id
+        plan.archive_reason = request.form.get('raison', 'Suppression manuelle')
+        
+        db.session.commit()
+        
+        if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
+            return jsonify({'success': True, 'message': 'Plan de repli supprimé avec succès'})
+        else:
+            flash('Plan de repli supprimé avec succès', 'success')
+            return redirect(url_for('plan_pluie_programme', programme_id=programme_id))
+        
+    except Exception as e:
+        db.session.rollback()
+        if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
+            return jsonify({'success': False, 'message': str(e)}), 500
+        else:
+            flash(f'Erreur: {str(e)}', 'error')
+            return redirect(url_for('plan_pluie_programme', programme_id=programme_id))
+
+@app.route('/programme-audit/<int:programme_id>/simuler-retard', methods=['POST'])
+@login_required
+@csrf.exempt  # ← SOLUTION LA PLUS SIMPLE
+def simuler_retard(programme_id):
+    """Simuler un retard pour tester les plans de repli"""
+    try:
+        programme = ProgrammeAudit.query.get_or_404(programme_id)
+        
+        if not check_client_access(programme):
+            return jsonify({'success': False, 'message': 'Accès non autorisé'}), 403
+        
+        # DEBUG - Afficher ce qui est reçu
+        print(f"=== SIMULATION RETARD ===")
+        print(f"Programme ID: {programme_id}")
+        print(f"Form data: {dict(request.form)}")
+        print(f"Headers: {dict(request.headers)}")
+        
+        # Récupérer le paramètre 'jours'
+        jours_str = request.form.get('jours', '15')
+        print(f"Jours reçus: '{jours_str}'")
+        
+        try:
+            jours_retard = int(jours_str)
+        except ValueError:
+            return jsonify({'success': False, 'message': f'Le paramètre jours doit être un nombre valide, reçu: {jours_str}'}), 400
+        
+        if jours_retard <= 0 or jours_retard > 365:
+            return jsonify({'success': False, 'message': 'Le nombre de jours doit être entre 1 et 365'}), 400
+        
+        date_limite = datetime.now().date() - timedelta(days=jours_retard)
+        
+        alertes_generes = 0
+        missions_retard = []
+        plans_declenchables = []
+        
+        for mission in programme.missions:
+            if (mission.date_fin_prevue and 
+                mission.date_fin_prevue < date_limite and 
+                mission.statut == 'planifie'):
+                
+                missions_retard.append({
+                    'id': mission.id,
+                    'reference': mission.reference,
+                    'titre': mission.titre,
+                    'retard_jours': (date_limite - mission.date_fin_prevue).days if mission.date_fin_prevue else jours_retard
+                })
+                
+                plan = PlanPluieAudit.query.filter_by(
+                    mission_principale_id=mission.id,
+                    statut='actif',
+                    is_archived=False
+                ).first()
+                
+                if plan:
+                    alertes_generes += 1
+                    plans_declenchables.append({
+                        'id': plan.id,
+                        'nom': plan.nom,
+                        'mission_remplacement': plan.mission_remplacement.reference if plan.mission_remplacement else 'N/A'
+                    })
+        
+        message = f"Simulation de {jours_retard} jours de retard : {len(missions_retard)} mission(s) concernée(s), {alertes_generes} plan(s) de repli déclenchable(s)"
+        
+        return jsonify({
+            'success': True,
+            'alertes': alertes_generes,
+            'missions_retard': len(missions_retard),
+            'missions_liste': missions_retard[:5],
+            'plans_declenchables': plans_declenchables[:5],
+            'message': message,
+            'debug': {
+                'programme_id': programme_id,
+                'jours': jours_retard,
+                'date_limite': date_limite.isoformat()
+            }
+        })
+        
+    except Exception as e:
+        print(f"Erreur dans simuler_retard: {str(e)}")
+        import traceback
+        traceback.print_exc()
+        return jsonify({'success': False, 'message': str(e)}), 500
+
+
+# ============================================================================
+# ROUTES POUR LES MISSIONS D'AUDIT
+# ============================================================================
+
+
+
+
+@app.route('/mission-audit/<int:mission_id>/reprogrammer', methods=['POST'])
+@csrf.exempt
+@login_required
+def reprogrammer_mission_audit(mission_id):
+    """Reprogrammer une mission d'audit (changer les dates)"""
+    mission = MissionAudit.query.get_or_404(mission_id)
+    programme = mission.programme
+    
+    if not check_client_access(mission):
+        return jsonify({'success': False, 'message': 'Accès non autorisé'}), 403
+    
+    try:
+        # Récupérer les nouvelles dates
+        nouvelle_annee = request.form.get('nouvelle_annee')
+        nouveau_trimestre = request.form.get('nouveau_trimestre')
+        nouvelle_date_debut = request.form.get('nouvelle_date_debut')
+        nouvelle_date_fin = request.form.get('nouvelle_date_fin')
+        raison = request.form.get('raison', '')
+        
+        # Mettre à jour la mission
+        if nouvelle_annee:
+            mission.annee_prevue = int(nouvelle_annee)
+        if nouveau_trimestre:
+            mission.trimestre_prevue = int(nouveau_trimestre)
+        if nouvelle_date_debut:
+            mission.date_debut_prevue = datetime.strptime(nouvelle_date_debut, '%Y-%m-%d').date()
+        if nouvelle_date_fin:
+            mission.date_fin_prevue = datetime.strptime(nouvelle_date_fin, '%Y-%m-%d').date()
+        
+        # Si la mission était reportée, la remettre en planifié
+        if mission.statut == 'reporte':
+            mission.statut = 'planifie'
+        
+        mission.updated_at = datetime.now()
+        
+        # Ajouter un commentaire sur la reprogrammation
+        if raison:
+            if mission.commentaire_repli:
+                mission.commentaire_repli += f"\n[{datetime.now().strftime('%d/%m/%Y')}] Reprogrammation: {raison}"
+            else:
+                mission.commentaire_repli = f"[{datetime.now().strftime('%d/%m/%Y')}] Reprogrammation: {raison}"
+        
+        db.session.commit()
+        
+        if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
+            return jsonify({'success': True, 'message': 'Mission reprogrammée avec succès'})
+        else:
+            flash('Mission reprogrammée avec succès', 'success')
+            return redirect(url_for('detail_programme_audit', id=programme.id))
+        
+    except Exception as e:
+        db.session.rollback()
+        if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
+            return jsonify({'success': False, 'message': str(e)}), 500
+        else:
+            flash(f'Erreur: {str(e)}', 'error')
+            return redirect(url_for('detail_programme_audit', id=programme.id))
+# ============================================================================
+# ===== ROUTES API CHRONOGRAMME V2 - VERSION FINALE 100% FONCTIONNELLE =====
+# ===== À COLLER À LA FIN DE app.py, AVANT if __name__ == '__main__' =====
+# ============================================================================
+
+@app.route('/api/chronogramme/v2/mission/<int:mid>/deplacer', methods=['POST'])
+@csrf.exempt 
+@login_required
+def chrono_deplacer(mid):
+    """Déplacer une mission - VERSION FINALE"""
+    print(f"\n{'='*50}")
+    print(f"🚀 API DEPLACER V2 - Mission {mid}")
+    print(f"{'='*50}")
+    
+    try:
+        # 1. Récupérer la mission
+        mission = MissionAudit.query.get_or_404(mid)
+        if not check_client_access(mission):
+            return jsonify({'success': False, 'message': 'Accès non autorisé'}), 403
+        
+        # 2. Parser le JSON
+        data = request.get_json()
+        if not data:
+            return jsonify({'success': False, 'message': 'Données JSON requises'}), 400
+        
+        print(f"📦 Données reçues: {data}")
+        
+        # 3. Valider l'année
+        annee = data.get('annee')
+        if annee is None:
+            return jsonify({'success': False, 'message': 'Année requise'}), 400
+        
+        try:
+            annee = int(annee)
+        except (ValueError, TypeError):
+            return jsonify({'success': False, 'message': 'Année invalide'}), 400
+        
+        programme = mission.programme
+        if annee < programme.annee_debut or annee > programme.annee_fin:
+            return jsonify({
+                'success': False, 
+                'message': f'Année hors programme ({programme.annee_debut}-{programme.annee_fin})'
+            }), 400
+        
+        # 4. Valider le trimestre (optionnel)
+        trimestre = data.get('trimestre')
+        if trimestre is not None:
+            try:
+                trimestre = int(trimestre)
+                if 1 <= trimestre <= 4:
+                    mission.trimestre_prevue = trimestre
+                else:
+                    print(f"⚠️ Trimestre {trimestre} hors limites, ignoré")
+            except (ValueError, TypeError):
+                print(f"⚠️ Trimestre invalide: {trimestre}, ignoré")
+        
+        # 5. Mettre à jour
+        mission.annee_prevue = annee
+        mission.updated_at = datetime.now()
+        db.session.commit()
+        
+        print(f"✅ Mission {mid} déplacée vers {annee}-T{mission.trimestre_prevue}")
+        return jsonify({
+            'success': True, 
+            'message': f'Mission déplacée en {annee}',
+            'mission': {
+                'id': mission.id,
+                'annee': mission.annee_prevue,
+                'trimestre': mission.trimestre_prevue
+            }
+        })
+        
+    except Exception as e:
+        db.session.rollback()
+        print(f"❌ Erreur: {str(e)}")
+        return jsonify({'success': False, 'message': str(e)}), 500
+
+
+@app.route('/api/chronogramme/v2/mission/<int:mid>/duree', methods=['POST'])
+@csrf.exempt 
+@login_required
+def chrono_duree(mid):
+    """Modifier la durée - VERSION FINALE"""
+    print(f"\n{'='*50}")
+    print(f"🚀 API DUREE V2 - Mission {mid}")
+    print(f"{'='*50}")
+    
+    try:
+        mission = MissionAudit.query.get_or_404(mid)
+        if not check_client_access(mission):
+            return jsonify({'success': False, 'message': 'Accès non autorisé'}), 403
+        
+        data = request.get_json()
+        if not data:
+            return jsonify({'success': False, 'message': 'Données JSON requises'}), 400
+        
+        print(f"📦 Données reçues: {data}")
+        
+        duree = data.get('duree')
+        if duree is None:
+            return jsonify({'success': False, 'message': 'Durée requise'}), 400
+        
+        try:
+            duree = int(duree)
+            if duree < 1:
+                return jsonify({'success': False, 'message': 'La durée doit être > 0'}), 400
+            if duree > 365:
+                return jsonify({'success': False, 'message': 'La durée ne peut pas dépasser 365 jours'}), 400
+        except (ValueError, TypeError):
+            return jsonify({'success': False, 'message': 'Durée invalide'}), 400
+        
+        mission.duree_estimee = duree
+        mission.updated_at = datetime.now()
+        db.session.commit()
+        
+        print(f"✅ Mission {mid} durée modifiée: {duree}j")
+        return jsonify({'success': True, 'message': f'Durée modifiée à {duree} jours'})
+        
+    except Exception as e:
+        db.session.rollback()
+        print(f"❌ Erreur: {str(e)}")
+        return jsonify({'success': False, 'message': str(e)}), 500
+
+
+@app.route('/api/chronogramme/v2/mission/<int:mid>/statut', methods=['POST'])
+@csrf.exempt 
+@login_required
+def chrono_statut(mid):
+    """Changer le statut - VERSION FINALE"""
+    print(f"\n{'='*50}")
+    print(f"🚀 API STATUT V2 - Mission {mid}")
+    print(f"{'='*50}")
+    
+    try:
+        mission = MissionAudit.query.get_or_404(mid)
+        if not check_client_access(mission):
+            return jsonify({'success': False, 'message': 'Accès non autorisé'}), 403
+        
+        data = request.get_json()
+        if not data:
+            return jsonify({'success': False, 'message': 'Données JSON requises'}), 400
+        
+        print(f"📦 Données reçues: {data}")
+        
+        statut = data.get('statut')
+        statuts_valides = ['planifie', 'en_cours', 'termine', 'reporte', 'annule']
+        
+        if not statut or statut not in statuts_valides:
+            return jsonify({'success': False, 'message': 'Statut invalide'}), 400
+        
+        ancien_statut = mission.statut
+        mission.statut = statut
+        
+        # Gestion automatique des dates
+        aujourdhui = datetime.now().date()
+        
+        if statut == 'termine':
+            mission.progression = 100
+            if not mission.date_fin_reelle:
+                mission.date_fin_reelle = aujourdhui
+        elif statut == 'en_cours':
+            if not mission.date_debut_reelle:
+                mission.date_debut_reelle = aujourdhui
+            mission.progression = max(mission.progression or 0, 25)
+        elif statut == 'planifie':
+            mission.progression = 0
+        
+        mission.updated_at = datetime.now()
+        db.session.commit()
+        
+        print(f"✅ Mission {mid}: {ancien_statut} → {statut}")
+        return jsonify({'success': True, 'message': f'Statut changé en {statut}'})
+        
+    except Exception as e:
+        db.session.rollback()
+        print(f"❌ Erreur: {str(e)}")
+        return jsonify({'success': False, 'message': str(e)}), 500
+
+
+@app.route('/api/chronogramme/v2/mission/<int:mid>/assigner', methods=['POST'])
+@csrf.exempt 
+@login_required
+def chrono_assigner(mid):
+    """Assigner un responsable - VERSION FINALE"""
+    print(f"\n{'='*50}")
+    print(f"🚀 API ASSIGNER V2 - Mission {mid}")
+    print(f"{'='*50}")
+    
+    try:
+        mission = MissionAudit.query.get_or_404(mid)
+        if not check_client_access(mission):
+            return jsonify({'success': False, 'message': 'Accès non autorisé'}), 403
+        
+        data = request.get_json()
+        if not data:
+            return jsonify({'success': False, 'message': 'Données JSON requises'}), 400
+        
+        print(f"📦 Données reçues: {data}")
+        
+        responsable_id = data.get('responsable_id')
+        
+        if responsable_id is None or responsable_id == 0:
+            mission.responsable_id = None
+            message = "Responsable retiré"
+            print(f"✅ Responsable retiré")
+        else:
+            try:
+                responsable_id = int(responsable_id)
+                user = User.query.get(responsable_id)
+                if not user:
+                    return jsonify({'success': False, 'message': 'Utilisateur non trouvé'}), 404
+                
+                if not check_client_access(user):
+                    return jsonify({'success': False, 'message': 'Accès non autorisé à cet utilisateur'}), 403
+                
+                mission.responsable_id = responsable_id
+                message = f"Responsable: {user.username}"
+                print(f"✅ {message}")
+                
+            except (ValueError, TypeError):
+                return jsonify({'success': False, 'message': 'ID responsable invalide'}), 400
+        
+        mission.updated_at = datetime.now()
+        db.session.commit()
+        
+        return jsonify({'success': True, 'message': message})
+        
+    except Exception as e:
+        db.session.rollback()
+        print(f"❌ Erreur: {str(e)}")
+        return jsonify({'success': False, 'message': str(e)}), 500
+
+
+@app.route('/api/chronogramme/v2/programme/<int:pid>/repartition-auto', methods=['POST'])
+@csrf.exempt 
+@login_required
+def chrono_repartition(pid):
+    """Répartition automatique - VERSION FINALE"""
+    print(f"\n{'='*50}")
+    print(f"🚀 API REPARTITION V2 - Programme {pid}")
+    print(f"{'='*50}")
+    
+    try:
+        programme = ProgrammeAudit.query.get_or_404(pid)
+        if not check_client_access(programme):
+            return jsonify({'success': False, 'message': 'Accès non autorisé'}), 403
+        
+        missions = programme.missions.filter_by(
+            statut='planifie', 
+            is_archived=False
+        ).all()
+        
+        if not missions:
+            return jsonify({'success': True, 'message': 'Aucune mission à répartir'})
+        
+        modifications = 0
+        annees = list(range(programme.annee_debut, programme.annee_fin + 1))
+        
+        if not annees:
+            return jsonify({'success': False, 'message': 'Programme sans année'}), 400
+        
+        for i, mission in enumerate(missions):
+            # Répartition par priorité
+            if mission.priorite == 'critique' and annees:
+                mission.annee_prevue = annees[0]
+            elif mission.priorite == 'elevee' and len(annees) > 1:
+                mission.annee_prevue = annees[1]
+            elif mission.priorite == 'moyenne' and len(annees) > 2:
+                mission.annee_prevue = annees[2]
+            else:
+                mission.annee_prevue = annees[i % len(annees)]
+            
+            # Répartition trimestrielle équilibrée
+            mission.trimestre_prevue = (i % 4) + 1
+            modifications += 1
+        
+        db.session.commit()
+        
+        print(f"✅ {modifications} missions réparties")
+        return jsonify({
+            'success': True, 
+            'message': f'{modifications} missions réparties automatiquement'
+        })
+        
+    except Exception as e:
+        db.session.rollback()
+        print(f"❌ Erreur: {str(e)}")
+        return jsonify({'success': False, 'message': str(e)}), 500
+
+
+@app.route('/api/chronogramme/v2/utilisateurs', methods=['GET'])
+@login_required
+def api_chronogramme_utilisateurs():
+    """API pour récupérer la liste des utilisateurs éligibles comme responsables"""
+    print(f"\n🔵 API UTILISATEURS - Chargement de la liste")
+    
+    try:
+        # Récupérer les utilisateurs en fonction des permissions
+        if current_user.role == 'super_admin':
+            utilisateurs = User.query.filter_by(is_active=True, is_blocked=False).all()
+        else:
+            utilisateurs = get_client_filter(User).filter_by(
+                is_active=True, 
+                is_blocked=False
+            ).all()
+        
+        # Formater les données
+        data = []
+        for user in utilisateurs:
+            # Déterminer le nom d'affichage
+            display_name = user.username
+            if hasattr(user, 'prenom') and user.prenom and hasattr(user, 'nom') and user.nom:
+                display_name = f"{user.prenom} {user.nom}"
+            elif hasattr(user, 'full_name') and user.full_name:
+                display_name = user.full_name
+            
+            data.append({
+                'id': user.id,
+                'username': user.username,
+                'display_name': display_name,
+                'email': user.email,
+                'role': user.role,
+                'role_display': user.get_role_display_name() if hasattr(user, 'get_role_display_name') else user.role,
+                'department': user.department or '',
+                'is_client_admin': user.is_client_admin
+            })
+        
+        # Trier par nom d'affichage
+        data.sort(key=lambda x: x['display_name'].lower())
+        
+        return jsonify({
+            'success': True,
+            'utilisateurs': data,
+            'total': len(data)
+        })
+        
+    except Exception as e:
+        print(f"❌ Erreur: {e}")
+        return jsonify({'success': False, 'message': str(e)}), 500
+
+
+@app.route('/api/chronogramme/v2/test')
+def chrono_test_v2():
+    """Test des routes API V2"""
+    routes = []
+    for rule in app.url_map.iter_rules():
+        if '/api/chronogramme/v2' in str(rule):
+            routes.append({
+                'route': str(rule),
+                'methods': list(rule.methods)
+            })
+    
+    # Supprimer les doublons
+    routes_uniques = {}
+    for route in routes:
+        routes_uniques[route['route']] = route
+    
+    return jsonify({
+        'status': '✅ API CHRONOGRAMME V2 ACTIVE',
+        'routes': sorted(list(routes_uniques.keys())),
+        'count': len(routes_uniques),
+        'debug': True
+    })
+
+
+@app.route('/api/chronogramme/v2/programme/<int:pid>/stats')
+@login_required
+def chrono_stats(pid):
+    """Statistiques pour le chronogramme"""
+    try:
+        programme = ProgrammeAudit.query.get_or_404(pid)
+        if not check_client_access(programme):
+            return jsonify({'success': False, 'message': 'Accès non autorisé'}), 403
+        
+        missions = programme.missions.filter_by(is_archived=False).all()
+        
+        stats = {
+            'total_missions': len(missions),
+            'missions_terminees': len([m for m in missions if m.statut == 'termine']),
+            'progression': programme.progression,
+            'charge_totale': programme.jours_audit_planifies,
+            'charge_realisee': programme.jours_audit_realises,
+            'par_priorite': {
+                'critique': len([m for m in missions if m.priorite == 'critique']),
+                'elevee': len([m for m in missions if m.priorite == 'elevee']),
+                'moyenne': len([m for m in missions if m.priorite == 'moyenne']),
+                'faible': len([m for m in missions if m.priorite == 'faible'])
+            },
+            'par_statut': {
+                'planifie': len([m for m in missions if m.statut == 'planifie']),
+                'en_cours': len([m for m in missions if m.statut == 'en_cours']),
+                'termine': len([m for m in missions if m.statut == 'termine']),
+                'reporte': len([m for m in missions if m.statut == 'reporte'])
+            }
+        }
+        
+        return jsonify({'success': True, 'stats': stats})
+        
+    except Exception as e:
+        return jsonify({'success': False, 'message': str(e)}), 500
+
+
+# ============================================================================
+# ===== CORRECTION ROUTE AJOUTER MISSION (SINGULIER) =====
+# ============================================================================
+
+@app.route('/programme-audit/<int:programme_id>/mission/ajouter', methods=['GET', 'POST'])
+@csrf.exempt
+@login_required
+def ajouter_mission_programme(programme_id):
+    """Ajouter une mission manuellement au programme (SINGULIER)"""
+    programme = ProgrammeAudit.query.get_or_404(programme_id)
+    
+    if not check_client_access(programme):
+        flash('Accès non autorisé', 'error')
+        return redirect(url_for('liste_programmes_audit'))
+    
+    # GET - Afficher le formulaire d'ajout rapide
+    if request.method == 'GET':
+        annee = request.args.get('annee', programme.annee_debut, type=int)
+        trimestre = request.args.get('trimestre', None, type=int)
+        
+        risques_disponibles = get_client_filter(Risque).filter_by(is_archived=False).all()
+        
+        if current_user.role == 'super_admin':
+            utilisateurs = User.query.filter_by(is_active=True).all()
+        else:
+            utilisateurs = get_client_filter(User).filter_by(is_active=True).all()
+        
+        return render_template('programme_audit/ajouter_mission_rapide.html',
+                             programme=programme,
+                             annee=annee,
+                             trimestre=trimestre,
+                             risques_disponibles=risques_disponibles,
+                             utilisateurs=utilisateurs)
+    
+    # POST - Créer la mission
+    try:
+        # Générer référence
+        ref_count = programme.missions.filter_by(is_archived=False).count() + 1
+        reference = f"MIS-{programme.reference}-{ref_count:03d}"
+        
+        mission = MissionAudit(
+            reference=reference,
+            titre=request.form.get('titre'),
+            description=request.form.get('description'),
+            priorite=request.form.get('priorite'),
+            annee_prevue=int(request.form.get('annee_prevue', programme.annee_debut)),
+            trimestre_prevue=int(request.form.get('trimestre_prevue')) if request.form.get('trimestre_prevue') else None,
+            duree_estimee=int(request.form.get('duree_estimee', programme.duree_moyenne_mission or 5)),
+            risque_id=int(request.form.get('risque_id')) if request.form.get('risque_id') else None,
+            responsable_id=int(request.form.get('responsable_id')) if request.form.get('responsable_id') else None,
+            programme_id=programme.id,
+            statut='planifie',
+            created_by=current_user.id,
+            client_id=programme.client_id
+        )
+        
+        db.session.add(mission)
+        db.session.commit()
+        
+        flash(f'Mission {reference} ajoutée avec succès', 'success')
+        
+        # Rediriger vers le chronogramme si demandé
+        if request.args.get('redirect') == 'chronogramme':
+            return redirect(url_for('chronogramme_programme', id=programme.id))
+        
+        return redirect(url_for('detail_programme_audit', id=programme.id))
+        
+    except Exception as e:
+        db.session.rollback()
+        flash(f'Erreur: {str(e)}', 'error')
+        return redirect(url_for('detail_programme_audit', id=programme.id))
+
+
+# ============================================================================
+# ===== SUPPRIMER L'ANCIENNE ROUTE PLURIELLE POUR ÉVITER LES CONFLITS =====
+# ============================================================================
+
+
+@app.route('/programme-audit/<int:programme_id>/missions/supprimer-bloc', methods=['POST'])
+@csrf.exempt
+@login_required
+def supprimer_missions_bloc(programme_id):
+    """Supprimer plusieurs missions en une fois"""
+    programme = ProgrammeAudit.query.get_or_404(programme_id)
+    
+    if not check_client_access(programme):
+        return jsonify({'success': False, 'message': 'Accès non autorisé'}), 403
+    
+    try:
+        data = request.get_json()
+        mission_ids = data.get('mission_ids', [])
+        raison = data.get('raison', 'Suppression en bloc')
+        
+        if not mission_ids:
+            return jsonify({'success': False, 'message': 'Aucune mission sélectionnée'}), 400
+        
+        missions = MissionAudit.query.filter(MissionAudit.id.in_(mission_ids)).all()
+        count = 0
+        erreurs = []
+        
+        for mission in missions:
+            # Vérifier que la mission appartient au programme
+            if mission.programme_id != programme_id:
+                continue
+            
+            # Vérifier que la mission n'est pas en cours
+            if mission.statut in ['en_cours', 'termine']:
+                erreurs.append(f"{mission.reference}: mission en cours")
+                continue
+            
+            # Vérifier qu'aucun plan de repli n'est actif
+            plan_actif = PlanPluieAudit.query.filter_by(
+                mission_principale_id=mission.id,
+                statut='actif',
+                is_archived=False
+            ).first()
+            
+            if plan_actif:
+                erreurs.append(f"{mission.reference}: plan de repli actif")
+                continue
+            
+            # Archiver la mission
+            mission.is_archived = True
+            mission.statut = 'archive'
+            mission.archived_at = datetime.now()
+            mission.archived_by = current_user.id
+            mission.archive_reason = raison
+            count += 1
+        
+        db.session.commit()
+        
+        message = f'{count} mission(s) supprimée(s) avec succès'
+        if erreurs:
+            message += f' ({len(erreurs)} ignorée(s): {", ".join(erreurs[:3])})'
+        
+        return jsonify({
+            'success': True, 
+            'message': message
+        })
+        
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'success': False, 'message': str(e)}), 500
+    
+@app.route('/mission-audit/<int:mission_id>/supprimer', methods=['POST'])
+@csrf.exempt
+@login_required
+def supprimer_mission_audit(mission_id):
+    """Supprimer (archiver) une mission d'audit"""
+    mission = MissionAudit.query.get_or_404(mission_id)
+    programme = mission.programme
+    
+    if not check_client_access(mission):
+        return jsonify({'success': False, 'message': 'Accès non autorisé'}), 403
+    
+    try:
+        # Vérifier que la mission n'est pas en cours
+        if mission.statut in ['en_cours', 'termine']:
+            return jsonify({'success': False, 'message': 'Impossible de supprimer une mission en cours ou terminée'}), 400
+        
+        # Vérifier qu'aucun plan de repli n'est actif
+        plan_actif = PlanPluieAudit.query.filter_by(
+            mission_principale_id=mission.id,
+            statut='actif',
+            is_archived=False
+        ).first()
+        
+        if plan_actif:
+            return jsonify({'success': False, 'message': 'Supprimez d\'abord le plan de repli associé'}), 400
+        
+        # Récupérer la raison de suppression (JSON ou form-data)
+        raison = 'Suppression manuelle'
+        
+        # Si c'est du JSON
+        if request.is_json:
+            data = request.get_json()
+            raison = data.get('raison', 'Suppression manuelle')
+        else:
+            # Si c'est du form-data
+            raison = request.form.get('raison', 'Suppression manuelle')
+        
+        # Archiver la mission
+        mission.is_archived = True
+        mission.statut = 'archive'
+        mission.archived_at = datetime.now()
+        mission.archived_by = current_user.id
+        mission.archive_reason = raison
+        mission.updated_at = datetime.now()
+        
+        db.session.commit()
+        
+        return jsonify({'success': True, 'message': 'Mission supprimée avec succès'})
+        
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'success': False, 'message': str(e)}), 500
+
+
+@app.route('/mission-audit/<int:mission_id>/restaurer', methods=['POST'])
+@login_required
+def restaurer_mission_audit(mission_id):
+    """Restaurer une mission archivée"""
+    mission = MissionAudit.query.get_or_404(mission_id)
+    programme = mission.programme
+    
+    if not check_client_access(mission):
+        return jsonify({'success': False, 'message': 'Accès non autorisé'}), 403
+    
+    try:
+        mission.is_archived = False
+        mission.statut = 'planifie'
+        mission.archived_at = None
+        mission.archived_by = None
+        mission.archive_reason = None
+        mission.updated_at = datetime.now()
+        
+        db.session.commit()
+        
+        flash('Mission restaurée avec succès', 'success')
+        return redirect(url_for('detail_programme_audit', id=programme.id))
+        
+    except Exception as e:
+        db.session.rollback()
+        flash(f'Erreur: {str(e)}', 'error')
+        return redirect(url_for('detail_programme_audit', id=programme.id))
+
+
+@app.route('/mission-audit/<int:mission_id>/dupliquer', methods=['POST'])
+@login_required
+def dupliquer_mission_audit(mission_id):
+    """Dupliquer une mission d'audit"""
+    mission_originale = MissionAudit.query.get_or_404(mission_id)
+    programme = mission_originale.programme
+    
+    if not check_client_access(mission_originale):
+        return jsonify({'success': False, 'message': 'Accès non autorisé'}), 403
+    
+    try:
+        # Générer une nouvelle référence
+        ref_count = len(programme.missions) + 1
+        nouvelle_reference = f"MIS-{programme.reference}-{ref_count:03d}"
+        
+        # Créer la nouvelle mission
+        nouvelle_mission = MissionAudit(
+            reference=nouvelle_reference,
+            titre=f"COPIE - {mission_originale.titre}",
+            description=mission_originale.description,
+            priorite=mission_originale.priorite,
+            niveau_risque_associe=mission_originale.niveau_risque_associe,
+            annee_prevue=mission_originale.annee_prevue + 1,  # Année suivante
+            trimestre_prevue=mission_originale.trimestre_prevue,
+            duree_estimee=mission_originale.duree_estimee,
+            risque_id=mission_originale.risque_id,
+            programme_id=programme.id,
+            statut='planifie',
+            created_by=current_user.id,
+            client_id=programme.client_id
+        )
+        
+        db.session.add(nouvelle_mission)
+        db.session.commit()
+        
+        flash(f'Mission dupliquée avec succès - {nouvelle_reference}', 'success')
+        return redirect(url_for('detail_programme_audit', id=programme.id))
+        
+    except Exception as e:
+        db.session.rollback()
+        flash(f'Erreur: {str(e)}', 'error')
+        return redirect(url_for('detail_programme_audit', id=programme.id))
+    
+
+
+
+
+
+# Route pour convertir une mission en audit
+@app.route('/mission-audit/<int:id>/convertir-audit')
+@login_required
+def convertir_mission_audit(id):
+    """Convertir une mission d'audit planifiée en audit effectif"""
+    mission = MissionAudit.query.get_or_404(id)
+    
+    if not check_client_access(mission):
+        flash('Accès non autorisé', 'error')
+        return redirect(url_for('liste_programmes_audit'))
+    
+    try:
+        # Récupérer les informations du processus si disponible
+        processus_id = None
+        if mission.risque and mission.risque.cartographie:
+            processus_id = mission.risque.cartographie.processus_id
+        
+        # Créer l'audit à partir de la mission
+        audit = Audit(
+            reference=f"AUD-{mission.reference}",
+            titre=mission.titre,
+            description=mission.description,
+            type_audit='interne',
+            date_debut_prevue=mission.date_debut_prevue or datetime.now().date(),
+            date_fin_prevue=mission.date_fin_prevue,
+            statut='planifie',
+            sous_statut='planification',
+            processus_id=processus_id,
+            responsable_id=mission.responsable_id,
+            equipe_audit_ids=mission.equipe_ids,
+            created_by=current_user.id,
+            client_id=mission.client_id
+        )
+        
+        db.session.add(audit)
+        db.session.flush()
+        
+        # Lier l'audit à la mission
+        mission.audit_id = audit.id
+        mission.statut = 'en_cours'
+        mission.date_debut_reelle = datetime.now().date()
+        
+        # Lier l'audit au risque
+        if mission.risque_id:
+            audit_risque = AuditRisque(
+                audit_id=audit.id,
+                risque_id=mission.risque_id,
+                impact_audit='a_evaluer',
+                commentaire=f"Audit généré à partir de la mission {mission.reference}"
+            )
+            db.session.add(audit_risque)
+        
+        db.session.commit()
+        
+        flash(f'Audit {audit.reference} créé à partir de la mission', 'success')
+        return redirect(url_for('detail_audit', id=audit.id))
+        
+    except Exception as e:
+        db.session.rollback()
+        flash(f'Erreur: {str(e)}', 'error')
+        return redirect(url_for('detail_programme_audit', id=mission.programme_id))
+
+
+
+@app.route('/programme-audit/<int:id>/exporter')
+@login_required
+def exporter_programme(id):
+    """Exporter le programme en Excel, CSV ou PDF"""
+    programme = ProgrammeAudit.query.get_or_404(id)
+    
+    if not check_client_access(programme):
+        flash('Accès non autorisé', 'error')
+        return redirect(url_for('liste_programmes_audit'))
+    
+    format_export = request.args.get('format', 'excel')
+    
+    try:
+        # ========== EXPORT EXCEL ==========
+        if format_export == 'excel':
+            return exporter_programme_excel(programme)
+        
+        # ========== EXPORT CSV ==========
+        elif format_export == 'csv':
+            return exporter_programme_csv(programme)
+        
+        # ========== EXPORT PDF ==========
+        elif format_export == 'pdf':
+            return exporter_programme_pdf(programme)
+        
+        else:
+            flash('Format d\'export non supporté', 'error')
+            return redirect(url_for('detail_programme_audit', id=id))
+            
+    except Exception as e:
+        flash(f'Erreur lors de l\'export: {str(e)}', 'error')
+        return redirect(url_for('detail_programme_audit', id=id))
+
+
+def exporter_programme_excel(programme):
+    """Export du programme au format Excel sans pandas"""
+    try:
+        wb = Workbook()
+        
+        # ========== SHEET 1 : MISSIONS ==========
+        ws1 = wb.active
+        ws1.title = "Missions"
+        
+        # Style des en-têtes
+        header_font = Font(bold=True, color="FFFFFF")
+        header_fill = PatternFill(start_color="0D6EFD", end_color="0D6EFD", fill_type="solid")
+        header_alignment = Alignment(horizontal="center", vertical="center")
+        border = Border(
+            left=Side(style='thin'), 
+            right=Side(style='thin'),
+            top=Side(style='thin'), 
+            bottom=Side(style='thin')
+        )
+        
+        # En-têtes de colonnes
+        headers = [
+            'Référence', 'Titre', 'Description', 'Priorité', 'Niveau Risque',
+            'Année', 'Trimestre', 'Date début', 'Date fin', 'Durée (j)',
+            'Statut', 'Progression %', 'Responsable', 'Risque associé', 'Audit lié'
+        ]
+        
+        for col, header in enumerate(headers, 1):
+            cell = ws1.cell(row=1, column=col, value=header)
+            cell.font = header_font
+            cell.fill = header_fill
+            cell.alignment = header_alignment
+            cell.border = border
+        
+        # Données des missions
+        row = 2
+        for mission in programme.missions:
+            ws1.cell(row, 1, mission.reference)
+            ws1.cell(row, 2, mission.titre)
+            ws1.cell(row, 3, mission.description or '')
+            ws1.cell(row, 4, mission.priorite.capitalize() if mission.priorite else '')
+            ws1.cell(row, 5, mission.niveau_risque_associe or '')
+            ws1.cell(row, 6, mission.annee_prevue)
+            ws1.cell(row, 7, f"T{mission.trimestre_prevue}" if mission.trimestre_prevue else '')
+            ws1.cell(row, 8, mission.date_debut_prevue.strftime('%d/%m/%Y') if mission.date_debut_prevue else '')
+            ws1.cell(row, 9, mission.date_fin_prevue.strftime('%d/%m/%Y') if mission.date_fin_prevue else '')
+            ws1.cell(row, 10, mission.duree_estimee or 0)
+            ws1.cell(row, 11, mission.statut.replace('_', ' ').title() if mission.statut else '')
+            ws1.cell(row, 12, mission.progression or 0)
+            ws1.cell(row, 13, mission.responsable.username if mission.responsable else 'Non assigné')
+            ws1.cell(row, 14, mission.risque.reference if mission.risque else '')
+            ws1.cell(row, 15, mission.audit.reference if mission.audit else '')
+            
+            # Colorer la ligne selon la priorité
+            if mission.priorite == 'critique':
+                for col in range(1, 16):
+                    ws1.cell(row, col).fill = PatternFill(start_color="FFE5E5", end_color="FFE5E5", fill_type="solid")
+            elif mission.priorite == 'elevee':
+                for col in range(1, 16):
+                    ws1.cell(row, col).fill = PatternFill(start_color="FFF3CD", end_color="FFF3CD", fill_type="solid")
+            
+            row += 1
+        
+        # Ajuster la largeur des colonnes
+        for col in range(1, 16):
+            ws1.column_dimensions[openpyxl.utils.get_column_letter(col)].width = 18
+        
+        # ========== SHEET 2 : RÉSUMÉ ==========
+        ws2 = wb.create_sheet("Résumé")
+        
+        resume_data = [
+            ('Programme', programme.nom),
+            ('Référence', programme.reference),
+            ('Description', programme.description or ''),
+            ('Période', f"{programme.annee_debut} - {programme.annee_fin} ({programme.periode})"),
+            ('Statut', programme.statut.replace('_', ' ').title()),
+            ('Méthode de génération', programme.methode_generation.replace('_', ' ').title()),
+            ('Fréquence d\'audit', programme.frequence_audit.capitalize() if programme.frequence_audit else 'Non spécifiée'),
+            ('Durée moyenne mission', f"{programme.duree_moyenne_mission or 0} jours"),
+            ('Ressources disponibles', f"{programme.ressources_disponibles or 0} jours/homme/an"),
+            ('Total missions', programme.nb_missions),
+            ('Missions terminées', programme.nb_missions_realisees),
+            ('Progression', f"{programme.progression}%"),
+            ('Jours audit planifiés', programme.jours_audit_planifies),
+            ('Jours audit réalisés', programme.jours_audit_realises),
+            ('Créé par', programme.createur.username if programme.createur else 'N/A'),
+            ('Date création', programme.created_at.strftime('%d/%m/%Y') if programme.created_at else ''),
+        ]
+        
+        if programme.date_approbation:
+            resume_data.append(('Date approbation', programme.date_approbation.strftime('%d/%m/%Y')))
+        
+        for row, (label, value) in enumerate(resume_data, 1):
+            cell_label = ws2.cell(row, 1, label)
+            cell_label.font = Font(bold=True)
+            cell_label.border = border
+            cell_value = ws2.cell(row, 2, str(value))
+            cell_value.border = border
+        
+        ws2.column_dimensions['A'].width = 25
+        ws2.column_dimensions['B'].width = 40
+        
+        # ========== SHEET 3 : STATISTIQUES ==========
+        ws3 = wb.create_sheet("Statistiques")
+        
+        # Statistiques par priorité
+        ws3.cell(1, 1, "RÉPARTITION PAR PRIORITÉ").font = Font(bold=True, size=14)
+        
+        stats_headers = ['Priorité', 'Nombre', 'Pourcentage']
+        for col, header in enumerate(stats_headers, 1):
+            cell = ws3.cell(3, col, header)
+            cell.font = Font(bold=True)
+            cell.fill = PatternFill(start_color="0D6EFD", end_color="0D6EFD", fill_type="solid")
+            cell.font = Font(bold=True, color="FFFFFF")
+        
+        # Compter les missions par priorité
+        priorites = {
+            'critique': {'nom': 'Critique', 'count': 0, 'color': 'FFE5E5'},
+            'elevee': {'nom': 'Élevée', 'count': 0, 'color': 'FFF3CD'},
+            'moyenne': {'nom': 'Moyenne', 'count': 0, 'color': 'E5F6FF'},
+            'faible': {'nom': 'Faible', 'count': 0, 'color': 'F0F0F0'}
+        }
+        
+        for mission in programme.missions:
+            if mission.priorite in priorites:
+                priorites[mission.priorite]['count'] += 1
+        
+        row = 4
+        total = programme.nb_missions or 1
+        for p_key, p_data in priorites.items():
+            if p_data['count'] > 0:
+                ws3.cell(row, 1, p_data['nom'])
+                ws3.cell(row, 2, p_data['count'])
+                pourcentage = (p_data['count'] / total * 100)
+                ws3.cell(row, 3, f"{pourcentage:.1f}%")
+                
+                # Colorer la ligne
+                for col in range(1, 4):
+                    ws3.cell(row, col).fill = PatternFill(start_color=p_data['color'], end_color=p_data['color'], fill_type="solid")
+                row += 1
+        
+        # Statistiques par statut
+        row += 2
+        ws3.cell(row, 1, "RÉPARTITION PAR STATUT").font = Font(bold=True, size=14)
+        row += 1
+        
+        statuts = {}
+        for mission in programme.missions:
+            statut = mission.statut or 'non_defini'
+            statuts[statut] = statuts.get(statut, 0) + 1
+        
+        row += 1
+        for statut, count in statuts.items():
+            ws3.cell(row, 1, statut.replace('_', ' ').title())
+            ws3.cell(row, 2, count)
+            row += 1
+        
+        # ========== SAUVEGARDE ==========
+        output = BytesIO()
+        wb.save(output)
+        output.seek(0)
+        
+        return send_file(
+            output,
+            mimetype='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+            as_attachment=True,
+            download_name=f'programme_audit_{programme.reference}_{datetime.now().strftime("%Y%m%d_%H%M")}.xlsx'
+        )
+        
+    except Exception as e:
+        flash(f'Erreur export Excel: {str(e)}', 'error')
+        return redirect(url_for('detail_programme_audit', id=programme.id))
+
+
+def exporter_programme_csv(programme):
+    """Export du programme au format CSV"""
+    try:
+        output = StringIO()
+        writer = csv.writer(output, delimiter=';', quoting=csv.QUOTE_ALL)
+        
+        # En-tête
+        writer.writerow([
+            'Référence', 'Titre', 'Priorité', 'Année', 'Trimestre', 
+            'Date début', 'Date fin', 'Durée (j)', 'Statut', 'Responsable',
+            'Niveau Risque', 'Progression %'
+        ])
+        
+        # Données
+        for mission in programme.missions:
+            writer.writerow([
+                mission.reference,
+                mission.titre,
+                mission.priorite.capitalize() if mission.priorite else '',
+                mission.annee_prevue,
+                mission.trimestre_prevue or '',
+                mission.date_debut_prevue.strftime('%d/%m/%Y') if mission.date_debut_prevue else '',
+                mission.date_fin_prevue.strftime('%d/%m/%Y') if mission.date_fin_prevue else '',
+                mission.duree_estimee or 0,
+                mission.statut.replace('_', ' ').title() if mission.statut else '',
+                mission.responsable.username if mission.responsable else '',
+                mission.niveau_risque_associe or '',
+                mission.progression or 0
+            ])
+        
+        output.seek(0)
+        
+        return send_file(
+            BytesIO(output.getvalue().encode('utf-8-sig')),
+            mimetype='text/csv; charset=utf-8',
+            as_attachment=True,
+            download_name=f'programme_audit_{programme.reference}_{datetime.now().strftime("%Y%m%d_%H%M")}.csv'
+        )
+        
+    except Exception as e:
+        flash(f'Erreur export CSV: {str(e)}', 'error')
+        return redirect(url_for('detail_programme_audit', id=programme.id))
+
+
+def exporter_programme_pdf(programme):
+    """Export du programme au format PDF"""
+    try:
+        from reportlab.lib.pagesizes import letter, landscape
+        from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle
+        from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+        from reportlab.lib.units import inch
+        from reportlab.lib import colors
+        
+        buffer = BytesIO()
+        doc = SimpleDocTemplate(buffer, pagesize=landscape(letter))
+        story = []
+        styles = getSampleStyleSheet()
+        
+        # Style personnalisé
+        title_style = ParagraphStyle(
+            'CustomTitle',
+            parent=styles['Heading1'],
+            fontSize=18,
+            spaceAfter=20,
+            textColor=colors.HexColor('#0d6efd')
+        )
+        
+        # Titre
+        story.append(Paragraph(f"Programme d'Audit : {programme.nom}", title_style))
+        story.append(Paragraph(f"Référence: {programme.reference}", styles['Normal']))
+        story.append(Spacer(1, 20))
+        
+        # Informations générales
+        story.append(Paragraph("Informations Générales", styles['Heading2']))
+        
+        info_data = [
+            ['Période', f"{programme.annee_debut} - {programme.annee_fin} ({programme.periode})"],
+            ['Statut', programme.statut.replace('_', ' ').title()],
+            ['Méthode', programme.methode_generation.replace('_', ' ').title()],
+            ['Progression', f"{programme.progression}%"],
+            ['Missions', f"{programme.nb_missions_realisees}/{programme.nb_missions}"],
+            ['Jours audit', f"{programme.jours_audit_realises}/{programme.jours_audit_planifies}j"],
+            ['Créé par', programme.createur.username if programme.createur else 'N/A'],
+            ['Date création', programme.created_at.strftime('%d/%m/%Y') if programme.created_at else '']
+        ]
+        
+        info_table = Table(info_data, colWidths=[2*inch, 4*inch])
+        info_table.setStyle(TableStyle([
+            ('GRID', (0,0), (-1,-1), 0.5, colors.grey),
+            ('BACKGROUND', (0,0), (0,-1), colors.lightgrey),
+            ('VALIGN', (0,0), (-1,-1), 'MIDDLE'),
+        ]))
+        story.append(info_table)
+        story.append(Spacer(1, 20))
+        
+        # Missions
+        story.append(Paragraph("Missions d'Audit", styles['Heading2']))
+        
+        if programme.missions:
+            mission_data = [['Réf.', 'Titre', 'Priorité', 'Année', 'Durée', 'Statut']]
+            
+            for mission in programme.missions[:20]:  # Limiter à 20 missions pour le PDF
+                mission_data.append([
+                    mission.reference,
+                    mission.titre[:30] + '...' if len(mission.titre) > 30 else mission.titre,
+                    mission.priorite.capitalize() if mission.priorite else '',
+                    str(mission.annee_prevue),
+                    f"{mission.duree_estimee or 0}j",
+                    mission.statut.replace('_', ' ').title() if mission.statut else ''
+                ])
+            
+            mission_table = Table(mission_data, colWidths=[0.8*inch, 2.5*inch, 0.6*inch, 0.5*inch, 0.4*inch, 0.8*inch])
+            mission_table.setStyle(TableStyle([
+                ('GRID', (0,0), (-1,-1), 0.5, colors.grey),
+                ('BACKGROUND', (0,0), (-1,0), colors.HexColor('#0d6efd')),
+                ('TEXTCOLOR', (0,0), (-1,0), colors.white),
+                ('ALIGN', (0,0), (-1,-1), 'CENTER'),
+                ('VALIGN', (0,0), (-1,-1), 'MIDDLE'),
+                ('FONTSIZE', (0,0), (-1,-1), 8),
+            ]))
+            story.append(mission_table)
+        
+        # Pied de page
+        story.append(Spacer(1, 30))
+        story.append(Paragraph(
+            f"Généré le {datetime.now().strftime('%d/%m/%Y à %H:%M')} - Egalyx Audit",
+            ParagraphStyle('Footer', parent=styles['Normal'], fontSize=8, alignment=1, textColor=colors.grey)
+        ))
+        
+        doc.build(story)
+        buffer.seek(0)
+        
+        return send_file(
+            buffer,
+            mimetype='application/pdf',
+            as_attachment=True,
+            download_name=f'programme_audit_{programme.reference}_{datetime.now().strftime("%Y%m%d_%H%M")}.pdf'
+        )
+        
+    except ImportError:
+        flash('Export PDF nécessite ReportLab: pip install reportlab', 'error')
+        return redirect(url_for('detail_programme_audit', id=programme.id))
+    except Exception as e:
+        flash(f'Erreur export PDF: {str(e)}', 'error')
+        return redirect(url_for('detail_programme_audit', id=programme.id))
+
+
+@app.route('/api/programme-audit/<int:id>/statistiques')
+@login_required
+def api_statistiques_programme(id):
+    """API pour les statistiques du programme"""
+    programme = ProgrammeAudit.query.get_or_404(id)
+    
+    if not check_client_access(programme):
+        return jsonify({'error': 'Accès non autorisé'}), 403
+    
+    # Statistiques par priorité
+    stats_priorite = {
+        'critique': 0,
+        'elevee': 0,
+        'moyenne': 0,
+        'faible': 0
+    }
+    
+    for mission in programme.missions:
+        if mission.priorite in stats_priorite:
+            stats_priorite[mission.priorite] += 1
+    
+    # Statistiques par statut
+    stats_statut = {
+        'planifie': 0,
+        'en_cours': 0,
+        'termine': 0,
+        'suspendu': 0,
+        'annule': 0
+    }
+    
+    for mission in programme.missions:
+        if mission.statut in stats_statut:
+            stats_statut[mission.statut] += 1
+    
+    # Charge par année
+    charge_annee = {}
+    for mission in programme.missions:
+        if mission.annee_prevue not in charge_annee:
+            charge_annee[mission.annee_prevue] = 0
+        charge_annee[mission.annee_prevue] += mission.duree_estimee or 0
+    
+    return jsonify({
+        'priorite': stats_priorite,
+        'statut': stats_statut,
+        'charge_annee': charge_annee,
+        'progression': programme.progression,
+        'jours_planifies': programme.jours_audit_planifies,
+        'jours_realises': programme.jours_audit_realises
+    })
+
+
+@app.route('/api/programme-audit/<int:programme_id>/stats-plans')
+@login_required
+def api_stats_plans_pluie(programme_id):
+    """API pour obtenir les statistiques des plans de repli"""
+    programme = ProgrammeAudit.query.get_or_404(programme_id)
+    
+    if not check_client_access(programme):
+        return jsonify({'error': 'Accès non autorisé'}), 403
+    
+    mission_ids = [m.id for m in programme.missions]
+    plans = PlanPluieAudit.query.filter(
+        PlanPluieAudit.mission_principale_id.in_(mission_ids)
+    ).filter_by(is_archived=False).all()
+    
+    stats = {
+        'total': len(plans),
+        'actifs': len([p for p in plans if p.statut == 'actif']),
+        'declenches': len([p for p in plans if p.statut == 'declenche']),
+        'par_type': {
+            'retard': len([p for p in plans if p.condition_type == 'retard']),
+            'indisponibilite': len([p for p in plans if p.condition_type == 'indisponibilite']),
+            'urgence': len([p for p in plans if p.condition_type == 'urgence'])
+        }
+    }
+    
+    return jsonify(stats)
+
+
+# ============================================================================
+# ROUTES POUR LA MODIFICATION DES PROGRAMMES
+# ============================================================================
+
+@app.route('/programme-audit/<int:id>/modifier', methods=['POST'])
+@csrf.exempt 
+@login_required
+def modifier_programme_audit(id):
+    """Modifier un programme d'audit"""
+    programme = ProgrammeAudit.query.get_or_404(id)
+    
+    if not check_client_access(programme):
+        flash('Accès non autorisé', 'error')
+        return redirect(url_for('liste_programmes_audit'))
+    
+    try:
+        ancienne_annee_debut = programme.annee_debut
+        ancienne_annee_fin = programme.annee_fin
+        
+        # Mise à jour des champs
+        programme.nom = request.form.get('nom', programme.nom)
+        programme.description = request.form.get('description', programme.description)
+        programme.periode = request.form.get('periode', programme.periode)
+        programme.annee_debut = int(request.form.get('annee_debut', programme.annee_debut))
+        programme.annee_fin = int(request.form.get('annee_fin', programme.annee_fin))
+        programme.methode_generation = request.form.get('methode_generation', programme.methode_generation)
+        programme.frequence_audit = request.form.get('frequence_audit') or None
+        programme.duree_moyenne_mission = int(request.form.get('duree_moyenne_mission')) if request.form.get('duree_moyenne_mission') else None
+        programme.ressources_disponibles = int(request.form.get('ressources_disponibles')) if request.form.get('ressources_disponibles') else None
+        programme.updated_at = datetime.now()
+        
+        # ========== GESTION DES MISSIONS APRÈS CHANGEMENT DE PÉRIODE ==========
+        if ancienne_annee_debut != programme.annee_debut or ancienne_annee_fin != programme.annee_fin:
+            # Ajuster les missions qui sont hors de la nouvelle période
+            for mission in programme.missions:
+                if mission.annee_prevue < programme.annee_debut:
+                    mission.annee_prevue = programme.annee_debut
+                    mission.commentaire_repli = f"Mission ajustée automatiquement (année début programme modifiée)"
+                elif mission.annee_prevue > programme.annee_fin:
+                    mission.annee_prevue = programme.annee_fin
+                    mission.commentaire_repli = f"Mission ajustée automatiquement (année fin programme modifiée)"
+        
+        db.session.commit()
+        
+        flash('Programme modifié avec succès', 'success')
+        
+    except Exception as e:
+        db.session.rollback()
+        flash(f'Erreur: {str(e)}', 'error')
+    
+    return redirect(url_for('detail_programme_audit', id=programme.id))
+
+
+@app.route('/programme-audit/<int:id>/desapprouver', methods=['POST'])
+@csrf.exempt 
+@login_required
+def desapprouver_programme_audit(id):
+    """Désapprouver un programme d'audit (remettre en élaboration)"""
+    programme = ProgrammeAudit.query.get_or_404(id)
+    
+    if not check_client_access(programme):
+        flash('Accès non autorisé', 'error')
+        return redirect(url_for('liste_programmes_audit'))
+    
+    try:
+        raison = request.form.get('raison', 'Désapprobation manuelle')
+        
+        programme.statut = 'en_elaboration'
+        programme.date_approbation = None
+        programme.date_mise_en_oeuvre = None
+        programme.updated_at = datetime.now()
+        programme.archive_reason = raison  # Réutiliser pour la raison de désapprobation
+        
+        db.session.commit()
+        
+        flash(f'Programme {programme.reference} désapprouvé avec succès', 'warning')
+        
+    except Exception as e:
+        db.session.rollback()
+        flash(f'Erreur: {str(e)}', 'error')
+    
+    return redirect(url_for('detail_programme_audit', id=programme.id))
+
+
+@app.route('/programme-audit/<int:id>/dupliquer', methods=['POST'])
+@login_required
+def dupliquer_programme_audit(id):
+    """Dupliquer un programme d'audit"""
+    programme_original = ProgrammeAudit.query.get_or_404(id)
+    
+    if not check_client_access(programme_original):
+        flash('Accès non autorisé', 'error')
+        return redirect(url_for('liste_programmes_audit'))
+    
+    try:
+        # Générer nouvelle référence
+        def generer_reference_programme(client_id=None):
+            base_ref = "PROGAUD-"
+            dernier = ProgrammeAudit.query.filter_by(client_id=client_id)\
+                .order_by(ProgrammeAudit.id.desc()).first()
+            
+            if dernier and dernier.reference:
+                try:
+                    dernier_num = int(dernier.reference.split('-')[1])
+                    nouveau_num = dernier_num + 1
+                except:
+                    count = ProgrammeAudit.query.filter_by(client_id=client_id).count()
+                    nouveau_num = count + 1
+            else:
+                nouveau_num = 1
+            
+            return f"{base_ref}{nouveau_num:04d}"
+        
+        # Créer nouveau programme
+        nouveau_programme = ProgrammeAudit(
+            reference=generer_reference_programme(programme_original.client_id),
+            nom=f"COPIE - {programme_original.nom}",
+            description=programme_original.description,
+            periode=programme_original.periode,
+            annee_debut=programme_original.annee_debut + 1,
+            annee_fin=programme_original.annee_fin + 1,
+            methode_generation=programme_original.methode_generation,
+            criteres_generation=programme_original.criteres_generation,
+            frequence_audit=programme_original.frequence_audit,
+            duree_moyenne_mission=programme_original.duree_moyenne_mission,
+            ressources_disponibles=programme_original.ressources_disponibles,
+            statut='en_elaboration',
+            client_id=programme_original.client_id,
+            created_by=current_user.id
+        )
+        
+        db.session.add(nouveau_programme)
+        db.session.commit()
+        
+        flash(f'Programme dupliqué avec succès - {nouveau_programme.reference}', 'success')
+        return redirect(url_for('detail_programme_audit', id=nouveau_programme.id))
+        
+    except Exception as e:
+        db.session.rollback()
+        flash(f'Erreur: {str(e)}', 'error')
+        return redirect(url_for('detail_programme_audit', id=programme_original.id))
+# ============================================================================
+# ROUTES POUR L'ARCHIVAGE DES PROGRAMMES D'AUDIT
+# ============================================================================
+
+@app.route('/programme-audit/<int:id>/archiver', methods=['POST'])
+@csrf.exempt
+@login_required
+def archiver_programme_audit(id):
+    """Archiver un programme d'audit"""
+    programme = ProgrammeAudit.query.get_or_404(id)
+    
+    if not check_client_access(programme):
+        flash('Accès non autorisé', 'error')
+        return redirect(url_for('liste_programmes_audit'))
+    
+    if request.method == 'POST':
+        try:
+            raison = request.form.get('raison', 'Archivage manuel')
+            commentaire = request.form.get('commentaire', '')
+            
+            programme.is_archived = True
+            programme.statut = 'archive'
+            programme.archived_at = datetime.now()
+            programme.archived_by = current_user.id
+            programme.archive_reason = f"{raison} - {commentaire}" if commentaire else raison
+            
+            db.session.commit()
+            
+            flash(f'Programme {programme.reference} archivé avec succès', 'success')
+            
+        except Exception as e:
+            db.session.rollback()
+            flash(f'Erreur lors de l\'archivage: {str(e)}', 'error')
+    
+    return redirect(url_for('programmes_archives'))
+
+
+@app.route('/programme-audit/<int:id>/restaurer', methods=['POST'])
+@csrf.exempt 
+@login_required
+def restaurer_programme_audit(id):
+    """Restaurer un programme d'audit archivé"""
+    programme = ProgrammeAudit.query.get_or_404(id)
+    
+    if not check_client_access(programme):
+        flash('Accès non autorisé', 'error')
+        return redirect(url_for('programmes_archives'))
+    
+    try:
+        programme.is_archived = False
+        programme.statut = 'en_elaboration'  # Remettre en élaboration
+        programme.archived_at = None
+        programme.archived_by = None
+        programme.archive_reason = None
+        
+        db.session.commit()
+        
+        flash(f'Programme {programme.reference} restauré avec succès', 'success')
+        
+    except Exception as e:
+        db.session.rollback()
+        flash(f'Erreur lors de la restauration: {str(e)}', 'error')
+    
+    return redirect(url_for('programmes_archives'))
+
+
+@app.route('/programme-audit/<int:id>/supprimer-definitivement', methods=['POST'])
+@login_required
+def supprimer_programme_audit_definitif(id):
+    """Supprimer définitivement un programme archivé"""
+    programme = ProgrammeAudit.query.get_or_404(id)
+    
+    if not check_client_access(programme):
+        flash('Accès non autorisé', 'error')
+        return redirect(url_for('programmes_archives'))
+    
+    # Vérifier que le programme est bien archivé
+    if not programme.is_archived:
+        flash('Seuls les programmes archivés peuvent être supprimés définitivement', 'error')
+        return redirect(url_for('liste_programmes_audit'))
+    
+    try:
+        confirmation = request.form.get('confirmation', '')
+        
+        if confirmation != programme.reference:
+            flash('La confirmation ne correspond pas à la référence du programme', 'error')
+            return redirect(url_for('programmes_archives'))
+        
+        # Supprimer les missions associées
+        for mission in programme.missions:
+            # Supprimer les plans de repli associés
+            PlanPluieAudit.query.filter(
+                (PlanPluieAudit.mission_principale_id == mission.id) |
+                (PlanPluieAudit.mission_remplacement_id == mission.id)
+            ).delete()
+            
+            db.session.delete(mission)
+        
+        # Supprimer le programme
+        db.session.delete(programme)
+        db.session.commit()
+        
+        flash(f'Programme {programme.reference} supprimé définitivement', 'success')
+        
+    except Exception as e:
+        db.session.rollback()
+        flash(f'Erreur lors de la suppression: {str(e)}', 'error')
+    
+    return redirect(url_for('programmes_archives'))
+
+
+@app.route('/programmes-archives')
+@csrf.exempt
+@login_required
+def programmes_archives():
+    """Liste des programmes d'audit archivés"""
+    
+    # Vérification permission
+    if not current_user.has_permission('can_manage_audit'):
+        flash('Permission requise', 'error')
+        return redirect(url_for('dashboard'))
+    
+    # Récupération des programmes archivés
+    programmes = get_client_filter(ProgrammeAudit)\
+        .filter_by(is_archived=True)\
+        .order_by(ProgrammeAudit.archived_at.desc())\
+        .all()
+    
+    return render_template('programme_audit/archives.html',
+                         programmes=programmes)
+
+@app.route('/programme-audit/<int:id>/approuver', methods=['POST'])
+@csrf.exempt
+@login_required
+def approuver_programme_audit(id):
+    """Approuver un programme d'audit"""
+    programme = ProgrammeAudit.query.get_or_404(id)
+    
+    if not check_client_access(programme):
+        flash('Accès non autorisé', 'error')
+        return redirect(url_for('liste_programmes_audit'))
+    
+    try:
+        programme.statut = 'actif'
+        programme.date_approbation = datetime.strptime(
+            request.form.get('date_approbation', datetime.now().strftime('%Y-%m-%d')), 
+            '%Y-%m-%d'
+        ).date()
+        programme.date_mise_en_oeuvre = datetime.now().date()
+        programme.updated_at = datetime.now()
+        
+        db.session.commit()
+        
+        flash(f'Programme {programme.reference} approuvé avec succès', 'success')
+        
+    except Exception as e:
+        db.session.rollback()
+        flash(f'Erreur lors de l\'approbation: {str(e)}', 'error')
+    
+    return redirect(url_for('detail_programme_audit', id=id))
+
+
+# ==================== ROUTES PROGRAMME AUDIT ====================
+# ==================== ROUTES PROGRAMME AUDIT ====================
+
+@app.route('/programme-audit')
+@login_required
+def liste_programmes_audit():
+    """Liste des programmes d'audit"""
+    # Vérification formule
+    if current_user.client and current_user.client.formule:
+        formule = current_user.client.formule
+        if not formule.can_access_module('audit_interne'):
+            return render_formule_restricted('Programme d\'Audit', formule)
+    
+    # Vérification permission
+    if not current_user.has_permission('can_manage_audit'):
+        flash('Permission requise', 'error')
+        return redirect(url_for('dashboard'))
+    
+    # Récupération avec isolation
+    programmes = get_client_filter(ProgrammeAudit)\
+        .filter_by(is_archived=False)\
+        .order_by(ProgrammeAudit.annee_debut.desc())\
+        .all()
+    
+    # Statistiques
+    stats = {
+        'total': len(programmes),
+        'actifs': len([p for p in programmes if p.statut == 'actif']),
+        'en_elaboration': len([p for p in programmes if p.statut == 'en_elaboration']),
+        'missions_total': sum(p.nb_missions for p in programmes),
+        'missions_terminees': sum(p.nb_missions_realisees for p in programmes)
+    }
+    
+    return render_template('programme_audit/liste.html',
+                         programmes=programmes,
+                         stats=stats)
+
+
+@app.route('/programme-audit/nouveau', methods=['GET', 'POST'])
+@csrf.exempt
+@login_required
+def nouveau_programme_audit():
+    """Créer un nouveau programme d'audit"""
+    
+    if not current_user.has_permission('can_manage_audit'):
+        flash('Permission requise', 'error')
+        return redirect(url_for('liste_programmes_audit'))
+    
+    from flask_wtf import FlaskForm
+    from wtforms import StringField, TextAreaField, SelectField, BooleanField, IntegerField, SubmitField
+    from wtforms.validators import DataRequired, Optional, NumberRange
+    
+    class ProgrammeAuditForm(FlaskForm):
+        nom = StringField('Nom du programme', validators=[DataRequired()])
+        description = TextAreaField('Description')
+        periode = SelectField('Période', choices=[
+            ('annuel', 'Annuel'),
+            ('triennal', 'Triennal (3 ans)')
+        ], validators=[DataRequired()])
+        annee_debut = SelectField('Année de début', choices=[], validators=[DataRequired()])
+        annee_fin = SelectField('Année de fin', choices=[], validators=[DataRequired()])
+        
+        methode_generation = SelectField('Méthode de génération', choices=[
+            ('manuel', 'Manuel - Je créerai les missions moi-même'),
+            ('auto_risques', 'Automatique - Basé sur la cartographie des risques'),
+            ('hybride', 'Hybride - Automatique avec ajustements manuels')
+        ], validators=[DataRequired()])
+        
+        seuil_critique = BooleanField('Inclure les risques Critiques', default=True)
+        seuil_eleve = BooleanField('Inclure les risques Élevés', default=True)
+        inclure_risques_moyens = BooleanField('Inclure les risques Moyens', default=False)
+        frequence_audit_risque = SelectField('Fréquence d\'audit par niveau', choices=[
+            ('annuelle_critique', 'Annuelle pour risques critiques'),
+            ('semestrielle_critique', 'Semestrielle pour risques critiques'),
+            ('triennal_tous', 'Tous les 3 ans pour tous les risques')
+        ])
+        prioriser_processus_critiques = BooleanField('Prioriser les processus critiques', default=True)
+        
+        frequence_audit = SelectField('Fréquence générale d\'audit', choices=[
+            ('annuelle', 'Annuelle'),
+            ('semestrielle', 'Semestrielle'),
+            ('trimestrielle', 'Trimestrielle')
+        ])
+        duree_moyenne_mission = IntegerField('Durée moyenne d\'une mission (jours)', 
+                                             default=5, validators=[NumberRange(min=1, max=30)])
+        ressources_disponibles = IntegerField('Ressources disponibles (jours/homme par an)', 
+                                             default=100, validators=[NumberRange(min=10, max=1000)])
+        
+        submit = SubmitField('Créer le programme')
+    
+    form = ProgrammeAuditForm()
+    
+    # Initialisation des années
+    annee_courante = datetime.now().year
+    form.annee_debut.choices = [(str(y), str(y)) for y in range(annee_courante, annee_courante + 6)]
+    form.annee_fin.choices = [(str(y), str(y)) for y in range(annee_courante, annee_courante + 11)]
+    
+    if form.validate_on_submit():
+        try:
+            # Générer référence
+            def generer_reference_programme(client_id=None):
+                base_ref = "PROGAUD-"
+                
+                if client_id:
+                    dernier = ProgrammeAudit.query.filter_by(client_id=client_id)\
+                        .order_by(ProgrammeAudit.id.desc()).first()
+                else:
+                    dernier = ProgrammeAudit.query.order_by(ProgrammeAudit.id.desc()).first()
+                
+                if dernier and dernier.reference:
+                    try:
+                        if dernier.reference.startswith(base_ref):
+                            dernier_num = int(dernier.reference.split('-')[1])
+                            nouveau_num = dernier_num + 1
+                        else:
+                            count = ProgrammeAudit.query.filter_by(client_id=client_id).count() if client_id else ProgrammeAudit.query.count()
+                            nouveau_num = count + 1
+                    except:
+                        count = ProgrammeAudit.query.filter_by(client_id=client_id).count() if client_id else ProgrammeAudit.query.count()
+                        nouveau_num = count + 1
+                else:
+                    nouveau_num = 1
+                
+                return f"{base_ref}{nouveau_num:04d}"
+            
+            reference = generer_reference_programme(current_user.client_id)
+            
+            programme = ProgrammeAudit(
+                reference=reference,
+                nom=form.nom.data,
+                description=form.description.data,
+                periode=form.periode.data,
+                annee_debut=int(form.annee_debut.data),
+                annee_fin=int(form.annee_fin.data),
+                methode_generation=form.methode_generation.data,
+                statut='en_elaboration',
+                client_id=current_user.client_id,
+                created_by=current_user.id,
+                frequence_audit=form.frequence_audit.data,
+                duree_moyenne_mission=form.duree_moyenne_mission.data,
+                ressources_disponibles=form.ressources_disponibles.data
+            )
+            
+            # Critères de génération automatisée
+            if form.methode_generation.data in ['auto_risques', 'hybride']:
+                programme.criteres_generation = {
+                    'seuil_critique': form.seuil_critique.data,
+                    'seuil_eleve': form.seuil_eleve.data,
+                    'inclure_risques_moyens': form.inclure_risques_moyens.data,
+                    'frequence_audit_risque': form.frequence_audit_risque.data,
+                    'prioriser_processus_critiques': form.prioriser_processus_critiques.data
+                }
+            
+            db.session.add(programme)
+            db.session.commit()
+            
+            # Générer les missions si méthode automatisée
+            if form.methode_generation.data in ['auto_risques', 'hybride']:
+                missions_crees = generer_missions_auto(programme.id, current_user.id)
+                flash(f'Programme créé avec {missions_crees} missions générées automatiquement', 'success')
+            else:
+                flash('Programme créé - Ajoutez maintenant les missions manuellement', 'info')
+            
+            return redirect(url_for('detail_programme_audit', id=programme.id))
+            
+        except Exception as e:
+            db.session.rollback()
+            flash(f'Erreur: {str(e)}', 'error')
+    
+    return render_template('programme_audit/form.html', form=form, title="Nouveau Programme")
+
+@app.route('/programme-audit/<int:id>')
+@login_required
+def detail_programme_audit(id):
+    """Détail d'un programme d'audit"""
+    
+    programme = ProgrammeAudit.query.get_or_404(id)
+    
+    if not check_client_access(programme):
+        flash('Accès non autorisé', 'error')
+        return redirect(url_for('liste_programmes_audit'))
+    
+    # Récupérer les risques disponibles pour ce client
+    risques_disponibles = get_client_filter(Risque)\
+        .filter_by(is_archived=False)\
+        .order_by(Risque.reference.asc())\
+        .all()
+    
+    # Récupérer les utilisateurs disponibles
+    if current_user.role == 'super_admin':
+        utilisateurs = User.query.filter_by(is_active=True).order_by(User.username).all()
+    else:
+        utilisateurs = get_client_filter(User).filter_by(is_active=True).order_by(User.username).all()
+    
+    # ===== CORRECTION : FILTRER LES MISSIONS NON ARCHIVÉES =====
+    missions_non_archivees = programme.missions.filter_by(is_archived=False).all()
+    
+    # Convertir les missions en dictionnaires pour le template
+    missions_data = []
+    for mission in missions_non_archivees:  # ← UTILISER LES MISSIONS FILTRÉES
+        # Récupérer l'audit associé si existe
+        audit_info = None
+        if mission.audit_id:
+            audit = Audit.query.get(mission.audit_id)
+            if audit:
+                audit_info = {
+                    'id': audit.id,
+                    'reference': audit.reference or '',
+                    'titre': audit.titre or ''
+                }
+        
+        mission_dict = {
+            'id': mission.id,
+            'reference': mission.reference,
+            'titre': mission.titre,
+            'description': mission.description or '',
+            'priorite': mission.priorite or '',
+            'niveau_risque_associe': mission.niveau_risque_associe or '',
+            'annee_prevue': mission.annee_prevue,
+            'trimestre_prevue': mission.trimestre_prevue,
+            'duree_estimee': mission.duree_estimee or 0,
+            'duree_reelle': mission.duree_reelle or 0,
+            'statut': mission.statut or 'planifie',
+            'date_debut_prevue': mission.date_debut_prevue.strftime('%Y-%m-%d') if mission.date_debut_prevue else None,
+            'date_fin_prevue': mission.date_fin_prevue.strftime('%Y-%m-%d') if mission.date_fin_prevue else None,
+            'date_debut_reelle': mission.date_debut_reelle.strftime('%Y-%m-%d') if mission.date_debut_reelle else None,
+            'date_fin_reelle': mission.date_fin_reelle.strftime('%Y-%m-%d') if mission.date_fin_reelle else None,
+            'audit_id': mission.audit_id,
+            'audit': audit_info,
+            'risque_id': mission.risque_id,
+            'responsable_id': mission.responsable_id,
+            'jours_restants': mission.jours_restants if hasattr(mission, 'jours_restants') else 0,
+            'est_en_retard': mission.est_en_retard if hasattr(mission, 'est_en_retard') else False
+        }
+        
+        if mission.risque:
+            mission_dict['risque'] = {
+                'id': mission.risque.id,
+                'reference': mission.risque.reference or '',
+                'intitule': mission.risque.intitule or '',
+                'description': mission.risque.description or '',
+                'categorie': mission.risque.categorie or ''
+            }
+        
+        if mission.responsable:
+            mission_dict['responsable'] = {
+                'id': mission.responsable.id,
+                'username': mission.responsable.username or '',
+                'role': mission.responsable.role or ''
+            }
+        
+        missions_data.append(mission_dict)
+    
+    return render_template('programme_audit/detail.html',
+                         programme=programme,
+                         missions_data=missions_data,  # ← MAINTENANT SANS ARCHIVÉES
+                         risques_disponibles=risques_disponibles,
+                         utilisateurs=utilisateurs)
+
+
+# ============================================================================
+# ROUTES POUR LA MANIPULATION MANUELLE DU CHRONOGRAMME
+# ============================================================================
+
+@app.route('/programme-audit/<int:id>/chronogramme')
+@login_required
+def chronogramme_programme(id):
+    """Chronogramme interactif avec manipulation manuelle"""
+    
+    programme = ProgrammeAudit.query.get_or_404(id)
+    
+    if not check_client_access(programme):
+        flash('Accès non autorisé', 'error')
+        return redirect(url_for('liste_programmes_audit'))
+    
+    # ✅ CORRECTION : Utiliser .all() pour obtenir une liste
+    missions = programme.missions.filter_by(is_archived=False).all()
+    
+    # Organisation des missions
+    missions_par_annee = {}
+    ressources_par_periode = {}
+    
+    for mission in missions:  # ✅ Maintenant c'est une LISTE
+        annee = mission.annee_prevue
+        trimestre = mission.trimestre_prevue or 1
+        
+        if annee not in missions_par_annee:
+            missions_par_annee[annee] = {1: [], 2: [], 3: [], 4: []}
+        if trimestre not in missions_par_annee[annee]:
+            missions_par_annee[annee][trimestre] = []
+        
+        missions_par_annee[annee][trimestre].append(mission)
+        
+        if annee not in ressources_par_periode:
+            ressources_par_periode[annee] = {1: 0, 2: 0, 3: 0, 4: 0}
+        ressources_par_periode[annee][trimestre] += mission.duree_estimee or 0
+    
+    # ✅ CORRECTION : ICI LE FAMEUX len() qui plantait
+    stats = {
+        'total_charge': programme.jours_audit_planifies,
+        'charge_moyenne': programme.jours_audit_planifies / max(1, len(missions)),  # ✅ missions est une LISTE
+        'missions_par_priorite': {
+            'critique': len([m for m in missions if m.priorite == 'critique']),
+            'elevee': len([m for m in missions if m.priorite == 'elevee']),
+            'moyenne': len([m for m in missions if m.priorite == 'moyenne']),
+            'faible': len([m for m in missions if m.priorite == 'faible'])
+        }
+    }
+    
+    return render_template('programme_audit/chronogramme.html',
+                         programme=programme,
+                         missions_par_annee=missions_par_annee,
+                         ressources_par_periode=ressources_par_periode,
+                         missions=missions,  # ✅ Passer la liste au template
+                         stats=stats,
+                         now=datetime.now)
+
+
+
+
+
+
+
+
+# ============================================================================
+# ROUTES API POUR LE CHRONOGRAMME INTERACTIF
+# ============================================================================
+
+
+
+@app.route('/api/chronogramme/programme/<int:programme_id>/repartition-auto', methods=['POST'])
+@login_required
+def repartition_auto_chronogramme(programme_id):
+    """Répartir automatiquement les missions pour équilibrer la charge"""
+    programme = ProgrammeAudit.query.get_or_404(programme_id)
+    
+    if not check_client_access(programme):
+        return jsonify({'success': False, 'message': 'Accès non autorisé'}), 403
+    
+    try:
+        # Récupérer les missions planifiées
+        missions = programme.missions.filter_by(
+            statut='planifie',
+            is_archived=False
+        ).all()
+        
+        if not missions:
+            return jsonify({'success': True, 'message': 'Aucune mission à répartir'})
+        
+        # Répartition par priorité
+        missions_critique = [m for m in missions if m.priorite == 'critique']
+        missions_elevee = [m for m in missions if m.priorite == 'elevee']
+        missions_moyenne = [m for m in missions if m.priorite == 'moyenne']
+        missions_faible = [m for m in missions if m.priorite == 'faible']
+        
+        # Répartition sur les années
+        annees = list(range(programme.annee_debut, programme.annee_fin + 1))
+        modifications = 0
+        
+        # Année 1 : missions critiques
+        if annees:
+            for i, mission in enumerate(missions_critique):
+                mission.annee_prevue = annees[0]
+                mission.trimestre_prevue = (i % 4) + 1
+                modifications += 1
+        
+        # Année 2 : missions élevées
+        if len(annees) > 1:
+            for i, mission in enumerate(missions_elevee):
+                mission.annee_prevue = annees[1]
+                mission.trimestre_prevue = (i % 4) + 1
+                modifications += 1
+        else:
+            for i, mission in enumerate(missions_elevee):
+                mission.annee_prevue = annees[0]
+                mission.trimestre_prevue = (i % 4) + 1
+                modifications += 1
+        
+        # Année 3 : missions moyennes
+        if len(annees) > 2:
+            for i, mission in enumerate(missions_moyenne):
+                mission.annee_prevue = annees[2]
+                mission.trimestre_prevue = (i % 4) + 1
+                modifications += 1
+        else:
+            for i, mission in enumerate(missions_moyenne):
+                mission.annee_prevue = annees[-1]
+                mission.trimestre_prevue = (i % 4) + 1
+                modifications += 1
+        
+        # Répartition des missions faibles sur les années restantes
+        for i, mission in enumerate(missions_faible):
+            annee_index = i % len(annees)
+            mission.annee_prevue = annees[annee_index]
+            mission.trimestre_prevue = (i % 4) + 1
+            modifications += 1
+        
+        db.session.commit()
+        
+        return jsonify({
+            'success': True,
+            'message': f'{modifications} missions réparties automatiquement'
+        })
+        
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'success': False, 'message': str(e)}), 500
+
+
+@app.route('/mission-audit/<int:mission_id>/modifier', methods=['GET', 'POST'])
+@csrf.exempt
+@login_required
+def modifier_mission_audit(mission_id):
+    """Modifier une mission d'audit"""
+    mission = MissionAudit.query.get_or_404(mission_id)
+    programme = mission.programme
+    
+    if not check_client_access(mission):
+        flash('Accès non autorisé', 'error')
+        return redirect(url_for('detail_programme_audit', id=programme.id))
+    
+    if request.method == 'POST':
+        try:
+            # Mise à jour des champs
+            mission.titre = request.form.get('titre', mission.titre)
+            mission.description = request.form.get('description', mission.description)
+            mission.priorite = request.form.get('priorite', mission.priorite)
+            
+            annee_prevue = request.form.get('annee_prevue')
+            if annee_prevue:
+                mission.annee_prevue = int(annee_prevue)
+            
+            trimestre_prevue = request.form.get('trimestre_prevue')
+            if trimestre_prevue:
+                mission.trimestre_prevue = int(trimestre_prevue)
+            else:
+                mission.trimestre_prevue = None
+            
+            duree_estimee = request.form.get('duree_estimee')
+            if duree_estimee:
+                mission.duree_estimee = int(duree_estimee)
+            
+            date_debut_prevue = request.form.get('date_debut_prevue')
+            if date_debut_prevue:
+                mission.date_debut_prevue = datetime.strptime(date_debut_prevue, '%Y-%m-%d').date()
+            
+            date_fin_prevue = request.form.get('date_fin_prevue')
+            if date_fin_prevue:
+                mission.date_fin_prevue = datetime.strptime(date_fin_prevue, '%Y-%m-%d').date()
+            
+            risque_id = request.form.get('risque_id')
+            if risque_id:
+                mission.risque_id = int(risque_id) if risque_id else None
+            
+            responsable_id = request.form.get('responsable_id')
+            if responsable_id:
+                mission.responsable_id = int(responsable_id) if responsable_id else None
+            
+            statut = request.form.get('statut')
+            if statut:
+                mission.statut = statut
+            
+            progression = request.form.get('progression')
+            if progression:
+                mission.progression = int(progression)
+            
+            mission.commentaire_repli = request.form.get('commentaire_repli', mission.commentaire_repli)
+            mission.updated_at = datetime.now()
+            
+            db.session.commit()
+            flash('Mission modifiée avec succès', 'success')
+            
+        except Exception as e:
+            db.session.rollback()
+            flash(f'Erreur: {str(e)}', 'error')
+        
+        return redirect(url_for('detail_programme_audit', id=programme.id))
+    
+    # GET - Afficher le formulaire
+    risques_disponibles = get_client_filter(Risque).filter_by(is_archived=False).all()
+    
+    if current_user.role == 'super_admin':
+        utilisateurs = User.query.filter_by(is_active=True).all()
+    else:
+        utilisateurs = get_client_filter(User).filter_by(is_active=True).all()
+    
+    return render_template('programme_audit/edit_mission.html',
+                         mission=mission,
+                         programme=programme,
+                         risques_disponibles=risques_disponibles,
+                         utilisateurs=utilisateurs)
+
+
+
+@app.route('/programme-audit/<int:id>/generer-auto')
+@login_required
+def generer_missions_auto_programme(id):  # Garder id pour la cohérence
+    """Générer automatiquement les missions basées sur les risques"""
+    programme = ProgrammeAudit.query.get_or_404(id)
+    
+    if not check_client_access(programme):
+        flash('Accès non autorisé', 'error')
+        return redirect(url_for('liste_programmes_audit'))
+    
+    try:
+        missions_crees = generer_missions_auto(programme.id, current_user.id)
+        flash(f'{missions_crees} missions générées automatiquement', 'success')
+        
+    except Exception as e:
+        flash(f'Erreur lors de la génération: {str(e)}', 'error')
+    
+    return redirect(url_for('detail_programme_audit', id=id))
+
+
+def generer_missions_auto(programme_id, user_id):
+    """Génère automatiquement les missions avec répartition intelligente"""
+    
+    programme = ProgrammeAudit.query.get(programme_id)
+    if not programme:
+        return 0
+    
+    # Récupérer les critères
+    criteres = programme.criteres_generation or {}
+    
+    # ===== 1. FILTRAGE DES RISQUES =====
+    query = get_client_filter(Risque).filter_by(is_archived=False)
+    
+    # Filtrer par niveau de risque
+    niveaux = []
+    if criteres.get('seuil_critique', True):
+        niveaux.append('Critique')
+    if criteres.get('seuil_eleve', True):
+        niveaux.append('Élevé')
+    if criteres.get('inclure_risques_moyens', False):
+        niveaux.append('Moyen')
+    
+    if niveaux:
+        # Sous-query pour la dernière évaluation
+        subquery = db.session.query(
+            EvaluationRisque.risque_id,
+            db.func.max(EvaluationRisque.created_at).label('max_date')
+        ).group_by(EvaluationRisque.risque_id).subquery()
+        
+        query = query.join(subquery, Risque.id == subquery.c.risque_id)\
+                    .join(EvaluationRisque, 
+                         db.and_(
+                             EvaluationRisque.risque_id == Risque.id,
+                             EvaluationRisque.created_at == subquery.c.max_date
+                         ))\
+                    .filter(EvaluationRisque.niveau_risque.in_(niveaux))
+    
+    # Filtrer par score minimum
+    score_min = criteres.get('score_minimum', 0)
+    if score_min > 0:
+        query = query.filter(EvaluationRisque.score_risque >= score_min)
+    
+    risques = query.all()
+    
+    # ===== 2. RÉPARTITION STRATÉGIQUE =====
+    missions_crees = 0
+    annees_programme = list(range(programme.annee_debut, programme.annee_fin + 1))
+    
+    # Initialiser le compteur de charge par trimestre pour chaque année
+    charge_par_trimestre = {}
+    for annee in annees_programme:
+        charge_par_trimestre[annee] = {1: 0, 2: 0, 3: 0, 4: 0}
+        
+        # Ajouter les missions existantes
+        for mission in programme.missions:
+            if mission.annee_prevue == annee and mission.trimestre_prevue:
+                charge_par_trimestre[annee][mission.trimestre_prevue] += mission.duree_estimee or 0
+    
+    # Compter les missions par priorité pour la répartition
+    missions_critique = []
+    missions_elevee = []
+    missions_moyenne = []
+    missions_faible = []
+    
+    for risque in risques:
+        if not risque.evaluations:
+            continue
+            
+        derniere_eval = sorted(
+            risque.evaluations, 
+            key=lambda x: x.created_at, 
+            reverse=True
+        )[0]
+        
+        if derniere_eval.niveau_risque == 'Critique':
+            missions_critique.append(risque)
+        elif derniere_eval.niveau_risque == 'Élevé':
+            missions_elevee.append(risque)
+        elif derniere_eval.niveau_risque == 'Moyen':
+            missions_moyenne.append(risque)
+        else:
+            missions_faible.append(risque)
+    
+    # ===== 3. RÉPARTITION DES MISSIONS CRITIQUES =====
+    # Répartir sur TOUS les trimestres de l'année 1
+    if annees_programme:
+        annee_critique = annees_programme[0]
+        for i, risque in enumerate(missions_critique):
+            # Choisir le trimestre le moins chargé
+            trimestre = min(charge_par_trimestre[annee_critique], 
+                           key=charge_par_trimestre[annee_critique].get)
+            
+            # Créer la mission
+            mission = creer_mission_depuis_risque(risque, programme, annee_critique, trimestre, user_id, criteres)
+            db.session.add(mission)
+            missions_crees += 1
+            
+            # Mettre à jour la charge
+            duree = criteres.get('duree_par_priorite', {}).get('critique', programme.duree_moyenne_mission * 1.5 or 10)
+            charge_par_trimestre[annee_critique][trimestre] += duree
+    
+    # ===== 4. RÉPARTITION DES MISSIONS ÉLEVÉES =====
+    # Répartir sur TOUS les trimestres de l'année 2 (ou année 1 si pas assez d'années)
+    if len(annees_programme) > 1:
+        annee_elevee = annees_programme[1]
+    else:
+        annee_elevee = annees_programme[0]
+    
+    for i, risque in enumerate(missions_elevee):
+        trimestre = min(charge_par_trimestre[annee_elevee], 
+                       key=charge_par_trimestre[annee_elevee].get)
+        
+        mission = creer_mission_depuis_risque(risque, programme, annee_elevee, trimestre, user_id, criteres)
+        db.session.add(mission)
+        missions_crees += 1
+        
+        duree = criteres.get('duree_par_priorite', {}).get('elevee', programme.duree_moyenne_mission * 1.2 or 7)
+        charge_par_trimestre[annee_elevee][trimestre] += duree
+    
+    # ===== 5. RÉPARTITION DES MISSIONS MOYENNES =====
+    # Répartir sur TOUS les trimestres de l'année 3 (ou dernière année)
+    if len(annees_programme) > 2:
+        annee_moyenne = annees_programme[2]
+    else:
+        annee_moyenne = annees_programme[-1]
+    
+    for i, risque in enumerate(missions_moyenne):
+        trimestre = min(charge_par_trimestre[annee_moyenne], 
+                       key=charge_par_trimestre[annee_moyenne].get)
+        
+        mission = creer_mission_depuis_risque(risque, programme, annee_moyenne, trimestre, user_id, criteres)
+        db.session.add(mission)
+        missions_crees += 1
+        
+        duree = criteres.get('duree_par_priorite', {}).get('moyenne', programme.duree_moyenne_mission or 5)
+        charge_par_trimestre[annee_moyenne][trimestre] += duree
+    
+    # ===== 6. RÉPARTITION DES MISSIONS FAIBLES =====
+    # Répartir sur toutes les années et tous les trimestres
+    for i, risque in enumerate(missions_faible):
+        annee_index = i % len(annees_programme)
+        annee_faible = annees_programme[annee_index]
+        
+        trimestre = min(charge_par_trimestre[annee_faible], 
+                       key=charge_par_trimestre[annee_faible].get)
+        
+        mission = creer_mission_depuis_risque(risque, programme, annee_faible, trimestre, user_id, criteres)
+        db.session.add(mission)
+        missions_crees += 1
+        
+        duree = criteres.get('duree_par_priorite', {}).get('faible', programme.duree_moyenne_mission * 0.8 or 3)
+        charge_par_trimestre[annee_faible][trimestre] += duree
+    
+    db.session.commit()
+    
+    return missions_crees
+
+
+def creer_mission_depuis_risque(risque, programme, annee, trimestre, user_id, criteres):
+    """Fonction utilitaire pour créer une mission"""
+    from datetime import datetime
+    
+    # Récupérer la dernière évaluation
+    derniere_eval = sorted(risque.evaluations, key=lambda x: x.created_at, reverse=True)[0]
+    
+    # Déterminer la priorité et la durée
+    if derniere_eval.niveau_risque == 'Critique':
+        priorite = 'critique'
+        duree = criteres.get('duree_par_priorite', {}).get('critique', programme.duree_moyenne_mission * 1.5 or 10)
+    elif derniere_eval.niveau_risque == 'Élevé':
+        priorite = 'elevee'
+        duree = criteres.get('duree_par_priorite', {}).get('elevee', programme.duree_moyenne_mission * 1.2 or 7)
+    elif derniere_eval.niveau_risque == 'Moyen':
+        priorite = 'moyenne'
+        duree = criteres.get('duree_par_priorite', {}).get('moyenne', programme.duree_moyenne_mission or 5)
+    else:
+        priorite = 'faible'
+        duree = criteres.get('duree_par_priorite', {}).get('faible', programme.duree_moyenne_mission * 0.8 or 3)
+    
+    # Générer référence
+    ref_count = programme.missions.filter_by(is_archived=False).count() + 1
+    reference = f"MIS-{programme.reference}-{ref_count:03d}"
+    
+    # Titre
+    if risque.processus_concerne:
+        titre = f"Audit {risque.reference} - {risque.intitule[:50]} ({risque.processus_concerne})"
+    else:
+        titre = f"Audit {risque.reference} - {risque.intitule[:50]}"
+    
+    return MissionAudit(
+        reference=reference,
+        titre=titre.strip(),
+        description=f"Audit du risque {risque.reference}: {risque.intitule}",
+        risque_id=risque.id,
+        cartographie_id=risque.cartographie_id,
+        priorite=priorite,
+        niveau_risque_associe=derniere_eval.niveau_risque,
+        score_risque=derniere_eval.score_risque,
+        programme_id=programme.id,
+        annee_prevue=annee,
+        trimestre_prevue=trimestre,
+        duree_estimee=int(duree),
+        statut='planifie',
+        created_by=user_id,
+        client_id=programme.client_id
+    )
+
+
+# ============================================================================
+# ROUTES POUR LES PLANS DE REPLI (PLAN PLUIE) - CORRIGÉES
+# ============================================================================
+
+@app.route('/programme-audit/<int:programme_id>/plan-pluie')
+@login_required
+def plan_pluie_programme(programme_id):
+    """Gestion du plan de repli (plan pluie)"""
+    
+    programme = ProgrammeAudit.query.get_or_404(programme_id)
+    
+    if not check_client_access(programme):
+        flash('Accès non autorisé', 'error')
+        return redirect(url_for('liste_programmes_audit'))
+    
+    # ========== MISSIONS REPORTABLES ==========
+    missions_reportables = []
+    for mission in programme.missions:
+        # Une mission peut être reportée si :
+        # - Elle est planifiée ou en cours
+        # - Elle n'est pas archivée
+        # - Elle n'a pas déjà un plan de repli actif
+        if (mission.statut in ['planifie', 'en_cours'] and 
+            not mission.is_archived):
+            
+            # Vérifier si elle a déjà un plan de repli
+            plan_existant = PlanPluieAudit.query.filter_by(
+                mission_principale_id=mission.id,
+                statut='actif',
+                is_archived=False
+            ).first()
+            
+            if not plan_existant:
+                missions_reportables.append(mission)
+    
+    # ========== MISSIONS DE REMPLACEMENT ==========
+    missions_remplacement = []
+    annee_courante = datetime.now().year
+    trimestre_actuel = (datetime.now().month - 1) // 3 + 1
+    
+    for mission in programme.missions:
+        # Une mission peut servir de remplacement si :
+        # - Elle est planifiée (pas en cours, pas terminée)
+        # - Elle n'est pas archivée
+        # - Elle n'est pas déjà utilisée comme mission principale d'un plan actif
+        # - Elle est dans le futur (année > année courante OU même année mais trimestre futur)
+        
+        if (mission.statut == 'planifie' and 
+            not mission.is_archived):
+            
+            # Exclure les missions qui sont déjà des missions principales
+            est_mission_principale = PlanPluieAudit.query.filter_by(
+                mission_principale_id=mission.id,
+                statut='actif',
+                is_archived=False
+            ).first() is not None
+            
+            if not est_mission_principale:
+                # Vérifier si c'est une mission future
+                if mission.annee_prevue > annee_courante:
+                    missions_remplacement.append(mission)
+                elif mission.annee_prevue == annee_courante:
+                    if mission.trimestre_prevue and mission.trimestre_prevue > trimestre_actuel:
+                        missions_remplacement.append(mission)
+                    elif not mission.trimestre_prevue:
+                        # Si pas de trimestre, on l'inclut quand même
+                        missions_remplacement.append(mission)
+    
+    # ========== PLANS DE REPLI EXISTANTS ==========
+    plans_pluie = PlanPluieAudit.query.filter(
+        PlanPluieAudit.mission_principale_id.in_([m.id for m in programme.missions])
+    ).filter_by(is_archived=False).all()
+    
+    return render_template('programme_audit/plan_pluie.html',
+                         programme=programme,
+                         missions_reportables=missions_reportables,
+                         missions_remplacement=missions_remplacement,
+                         plans_pluie=plans_pluie,
+                         datetime=datetime,
+                         now=datetime.now(),
+                         annee_courante=annee_courante,
+                         trimestre_actuel=trimestre_actuel)
+
+@app.route('/programme-audit/<int:programme_id>/plan-pluie/creer', methods=['POST'])
+@csrf.exempt 
+@login_required
+def creer_plan_pluie(programme_id):  # Paramètre: programme_id
+    """Créer un plan de repli"""
+    programme = ProgrammeAudit.query.get_or_404(programme_id)
+    
+    if not check_client_access(programme):
+        return jsonify({'success': False, 'message': 'Accès non autorisé'}), 403
+    
+    try:
+        # Validation des données
+        nom = request.form.get('nom', '').strip()
+        if not nom:
+            return jsonify({'success': False, 'message': 'Le nom du plan est requis'}), 400
+        
+        mission_principale_id = request.form.get('mission_principale_id')
+        mission_remplacement_id = request.form.get('mission_remplacement_id')
+        
+        if not mission_principale_id or not mission_remplacement_id:
+            return jsonify({'success': False, 'message': 'Les missions principale et de remplacement sont requises'}), 400
+        
+        # Vérifier que les missions existent et appartiennent au programme
+        mission_principale = MissionAudit.query.get_or_404(mission_principale_id)
+        mission_remplacement = MissionAudit.query.get_or_404(mission_remplacement_id)
+        
+        if mission_principale.programme_id != programme.id or mission_remplacement.programme_id != programme.id:
+            return jsonify({'success': False, 'message': 'Les missions doivent appartenir au même programme'}), 400
+        
+        if mission_principale_id == mission_remplacement_id:
+            return jsonify({'success': False, 'message': 'La mission de remplacement doit être différente de la mission principale'}), 400
+        
+        # Vérifier qu'un plan n'existe pas déjà
+        plan_existant = PlanPluieAudit.query.filter_by(
+            mission_principale_id=mission_principale_id,
+            is_archived=False
+        ).first()
+        
+        if plan_existant:
+            return jsonify({'success': False, 'message': 'Un plan de repli existe déjà pour cette mission'}), 400
+        
+        # Créer le plan
+        plan = PlanPluieAudit(
+            nom=nom,
+            description=request.form.get('description', '').strip(),
+            mission_principale_id=int(mission_principale_id),
+            mission_remplacement_id=int(mission_remplacement_id),
+            condition_type=request.form.get('condition_type', 'retard'),
+            condition_seuil=int(request.form.get('condition_seuil', 15)) if request.form.get('condition_seuil') else None,
+            condition_description=request.form.get('condition_description', '').strip(),
+            statut='actif',
+            created_by=current_user.id,
+            client_id=programme.client_id
+        )
+        
+        db.session.add(plan)
+        db.session.commit()
+        
+        if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
+            return jsonify({'success': True, 'message': 'Plan de repli créé avec succès', 'plan_id': plan.id})
+        else:
+            flash('Plan de repli créé avec succès', 'success')
+            return redirect(url_for('plan_pluie_programme', programme_id=programme_id))
+        
+    except Exception as e:
+        db.session.rollback()
+        if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
+            return jsonify({'success': False, 'message': str(e)}), 500
+        else:
+            flash(f'Erreur: {str(e)}', 'error')
+            return redirect(url_for('plan_pluie_programme', programme_id=programme_id))
+
+
+@app.route('/plan-pluie/<int:plan_id>/modifier', methods=['POST'])
+@csrf.exempt 
+@login_required
+def modifier_plan_pluie(plan_id):
+    """Modifier un plan de repli existant"""
+    plan = PlanPluieAudit.query.get_or_404(plan_id)
+    
+    if not check_client_access(plan):
+        return jsonify({'success': False, 'message': 'Accès non autorisé'}), 403
+    
+    try:
+        programme_id = plan.mission_principale.programme_id
+        
+        # Mise à jour des champs
+        if request.form.get('nom'):
+            plan.nom = request.form.get('nom').strip()
+        if request.form.get('description') is not None:
+            plan.description = request.form.get('description').strip()
+        if request.form.get('condition_type'):
+            plan.condition_type = request.form.get('condition_type')
+        if request.form.get('condition_seuil'):
+            plan.condition_seuil = int(request.form.get('condition_seuil'))
+        if request.form.get('condition_description') is not None:
+            plan.condition_description = request.form.get('condition_description').strip()
+        if request.form.get('statut') and current_user.has_permission('can_manage_audit'):
+            plan.statut = request.form.get('statut')
+        
+        plan.updated_at = datetime.now()
+        
+        # Mise à jour des missions si fournies
+        if request.form.get('mission_remplacement_id'):
+            mission_remplacement_id = int(request.form.get('mission_remplacement_id'))
+            if mission_remplacement_id != plan.mission_principale_id:
+                plan.mission_remplacement_id = mission_remplacement_id
+        
+        db.session.commit()
+        
+        if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
+            return jsonify({'success': True, 'message': 'Plan de repli modifié avec succès'})
+        else:
+            flash('Plan de repli modifié avec succès', 'success')
+            return redirect(url_for('plan_pluie_programme', programme_id=programme_id))
+        
+    except Exception as e:
+        db.session.rollback()
+        if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
+            return jsonify({'success': False, 'message': str(e)}), 500
+        else:
+            flash(f'Erreur: {str(e)}', 'error')
+            return redirect(url_for('plan_pluie_programme', programme_id=programme_id))
+
+
+@app.route('/plan-pluie/<int:plan_id>/activer', methods=['POST'])
+@csrf.exempt 
+@login_required
+def activer_plan_pluie(plan_id):
+    """Activer un plan de repli"""
+    plan = PlanPluieAudit.query.get_or_404(plan_id)
+    
+    if not check_client_access(plan):
+        return jsonify({'success': False, 'message': 'Accès non autorisé'}), 403
+    
+    if plan.statut != 'actif':
+        return jsonify({'success': False, 'message': 'Seuls les plans actifs peuvent être activés'}), 400
+    
+    try:
+        programme_id = plan.mission_principale.programme_id
+        mission_principale = plan.mission_principale
+        mission_remplacement = plan.mission_remplacement
+        
+        if mission_principale.statut not in ['planifie', 'en_cours']:
+            return jsonify({'success': False, 'message': 'La mission principale n\'est pas dans un état permettant le repli'}), 400
+        
+        if mission_remplacement.statut != 'planifie':
+            return jsonify({'success': False, 'message': 'La mission de remplacement doit être planifiée'}), 400
+        
+        raison = request.form.get('raison', 'activation_manuelle')
+        commentaires = request.form.get('commentaires', '')
+        
+        # Reporter la mission principale
+        date_originale = mission_principale.annee_prevue
+        mission_principale.statut = 'reporte'
+        mission_principale.commentaire_repli = f"Mission reportée suite à l'activation du plan {plan.nom}"
+        mission_principale.date_report = datetime.now().date()
+        
+        # Avancer la mission de remplacement
+        mission_remplacement.annee_prevue = mission_principale.annee_prevue
+        mission_remplacement.trimestre_prevue = mission_principale.trimestre_prevue
+        mission_remplacement.date_debut_prevue = mission_principale.date_debut_prevue
+        mission_remplacement.date_fin_prevue = mission_principale.date_fin_prevue
+        mission_remplacement.commentaire_repli = f"Mission avancée depuis {date_originale} suite à l'activation du plan {plan.nom}"
+        
+        # Marquer le plan comme déclenché
+        plan.statut = 'declenche'
+        plan.date_declenchement = datetime.now()
+        plan.raison_declenchement = raison
+        plan.commentaires_declenchement = commentaires
+        
+        db.session.commit()
+        
+        if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
+            return jsonify({'success': True, 'message': 'Plan de repli activé avec succès'})
+        else:
+            flash('Plan de repli activé avec succès', 'success')
+            return redirect(url_for('plan_pluie_programme', programme_id=programme_id))
+        
+    except Exception as e:
+        db.session.rollback()
+        if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
+            return jsonify({'success': False, 'message': str(e)}), 500
+        else:
+            flash(f'Erreur: {str(e)}', 'error')
+            return redirect(url_for('plan_pluie_programme', programme_id=programme_id))
+
+
+@app.route('/plan-pluie/<int:plan_id>/reprogrammer', methods=['POST'])
+@csrf.exempt 
+@login_required
+def reprogrammer_plan_pluie(plan_id):
+    """Reprogrammer un plan de repli"""
+    plan = PlanPluieAudit.query.get_or_404(plan_id)
+    
+    if not check_client_access(plan):
+        return jsonify({'success': False, 'message': 'Accès non autorisé'}), 403
+    
+    try:
+        programme_id = plan.mission_principale.programme_id
+        mission_principale = plan.mission_principale
+        mission_remplacement = plan.mission_remplacement
+        
+        nouvelle_annee_principale = request.form.get('nouvelle_annee_principale')
+        nouveau_trimestre_principal = request.form.get('nouveau_trimestre_principal')
+        nouvelle_annee_remplacement = request.form.get('nouvelle_annee_remplacement')
+        nouveau_trimestre_remplacement = request.form.get('nouveau_trimestre_remplacement')
+        
+        if nouvelle_annee_principale:
+            mission_principale.annee_prevue = int(nouvelle_annee_principale)
+        if nouveau_trimestre_principal:
+            mission_principale.trimestre_prevue = int(nouveau_trimestre_principal)
+        
+        if nouvelle_annee_remplacement:
+            mission_remplacement.annee_prevue = int(nouvelle_annee_remplacement)
+        if nouveau_trimestre_remplacement:
+            mission_remplacement.trimestre_prevue = int(nouveau_trimestre_remplacement)
+        
+        if mission_principale.statut == 'reporte':
+            mission_principale.statut = 'planifie'
+        
+        plan.updated_at = datetime.now()
+        
+        db.session.commit()
+        
+        if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
+            return jsonify({'success': True, 'message': 'Plan de repli reprogrammé avec succès'})
+        else:
+            flash('Plan de repli reprogrammé avec succès', 'success')
+            return redirect(url_for('plan_pluie_programme', programme_id=programme_id))
+        
+    except Exception as e:
+        db.session.rollback()
+        if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
+            return jsonify({'success': False, 'message': str(e)}), 500
+        else:
+            flash(f'Erreur: {str(e)}', 'error')
+            return redirect(url_for('plan_pluie_programme', programme_id=programme_id))
+
+
+@app.route('/plan-pluie/<int:plan_id>/supprimer', methods=['POST'])
+@csrf.exempt 
+@login_required
+def supprimer_plan_pluie(plan_id):
+    """Supprimer (archiver) un plan de repli"""
+    plan = PlanPluieAudit.query.get_or_404(plan_id)
+    
+    if not check_client_access(plan):
+        return jsonify({'success': False, 'message': 'Accès non autorisé'}), 403
+    
+    try:
+        programme_id = plan.mission_principale.programme_id
+        
+        plan.is_archived = True
+        plan.statut = 'archive'
+        plan.archived_at = datetime.now()
+        plan.archived_by = current_user.id
+        plan.archive_reason = request.form.get('raison', 'Suppression manuelle')
+        
+        db.session.commit()
+        
+        if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
+            return jsonify({'success': True, 'message': 'Plan de repli supprimé avec succès'})
+        else:
+            flash('Plan de repli supprimé avec succès', 'success')
+            return redirect(url_for('plan_pluie_programme', programme_id=programme_id))
+        
+    except Exception as e:
+        db.session.rollback()
+        if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
+            return jsonify({'success': False, 'message': str(e)}), 500
+        else:
+            flash(f'Erreur: {str(e)}', 'error')
+            return redirect(url_for('plan_pluie_programme', programme_id=programme_id))
+
+@app.route('/programme-audit/<int:programme_id>/simuler-retard', methods=['POST'])
+@login_required
+@csrf.exempt  # ← SOLUTION LA PLUS SIMPLE
+def simuler_retard(programme_id):
+    """Simuler un retard pour tester les plans de repli"""
+    try:
+        programme = ProgrammeAudit.query.get_or_404(programme_id)
+        
+        if not check_client_access(programme):
+            return jsonify({'success': False, 'message': 'Accès non autorisé'}), 403
+        
+        # DEBUG - Afficher ce qui est reçu
+        print(f"=== SIMULATION RETARD ===")
+        print(f"Programme ID: {programme_id}")
+        print(f"Form data: {dict(request.form)}")
+        print(f"Headers: {dict(request.headers)}")
+        
+        # Récupérer le paramètre 'jours'
+        jours_str = request.form.get('jours', '15')
+        print(f"Jours reçus: '{jours_str}'")
+        
+        try:
+            jours_retard = int(jours_str)
+        except ValueError:
+            return jsonify({'success': False, 'message': f'Le paramètre jours doit être un nombre valide, reçu: {jours_str}'}), 400
+        
+        if jours_retard <= 0 or jours_retard > 365:
+            return jsonify({'success': False, 'message': 'Le nombre de jours doit être entre 1 et 365'}), 400
+        
+        date_limite = datetime.now().date() - timedelta(days=jours_retard)
+        
+        alertes_generes = 0
+        missions_retard = []
+        plans_declenchables = []
+        
+        for mission in programme.missions:
+            if (mission.date_fin_prevue and 
+                mission.date_fin_prevue < date_limite and 
+                mission.statut == 'planifie'):
+                
+                missions_retard.append({
+                    'id': mission.id,
+                    'reference': mission.reference,
+                    'titre': mission.titre,
+                    'retard_jours': (date_limite - mission.date_fin_prevue).days if mission.date_fin_prevue else jours_retard
+                })
+                
+                plan = PlanPluieAudit.query.filter_by(
+                    mission_principale_id=mission.id,
+                    statut='actif',
+                    is_archived=False
+                ).first()
+                
+                if plan:
+                    alertes_generes += 1
+                    plans_declenchables.append({
+                        'id': plan.id,
+                        'nom': plan.nom,
+                        'mission_remplacement': plan.mission_remplacement.reference if plan.mission_remplacement else 'N/A'
+                    })
+        
+        message = f"Simulation de {jours_retard} jours de retard : {len(missions_retard)} mission(s) concernée(s), {alertes_generes} plan(s) de repli déclenchable(s)"
+        
+        return jsonify({
+            'success': True,
+            'alertes': alertes_generes,
+            'missions_retard': len(missions_retard),
+            'missions_liste': missions_retard[:5],
+            'plans_declenchables': plans_declenchables[:5],
+            'message': message,
+            'debug': {
+                'programme_id': programme_id,
+                'jours': jours_retard,
+                'date_limite': date_limite.isoformat()
+            }
+        })
+        
+    except Exception as e:
+        print(f"Erreur dans simuler_retard: {str(e)}")
+        import traceback
+        traceback.print_exc()
+        return jsonify({'success': False, 'message': str(e)}), 500
+
+
+# ============================================================================
+# ROUTES POUR LES MISSIONS D'AUDIT
+# ============================================================================
+
+
+
+
+@app.route('/mission-audit/<int:mission_id>/reprogrammer', methods=['POST'])
+@csrf.exempt
+@login_required
+def reprogrammer_mission_audit(mission_id):
+    """Reprogrammer une mission d'audit (changer les dates)"""
+    mission = MissionAudit.query.get_or_404(mission_id)
+    programme = mission.programme
+    
+    if not check_client_access(mission):
+        return jsonify({'success': False, 'message': 'Accès non autorisé'}), 403
+    
+    try:
+        # Récupérer les nouvelles dates
+        nouvelle_annee = request.form.get('nouvelle_annee')
+        nouveau_trimestre = request.form.get('nouveau_trimestre')
+        nouvelle_date_debut = request.form.get('nouvelle_date_debut')
+        nouvelle_date_fin = request.form.get('nouvelle_date_fin')
+        raison = request.form.get('raison', '')
+        
+        # Mettre à jour la mission
+        if nouvelle_annee:
+            mission.annee_prevue = int(nouvelle_annee)
+        if nouveau_trimestre:
+            mission.trimestre_prevue = int(nouveau_trimestre)
+        if nouvelle_date_debut:
+            mission.date_debut_prevue = datetime.strptime(nouvelle_date_debut, '%Y-%m-%d').date()
+        if nouvelle_date_fin:
+            mission.date_fin_prevue = datetime.strptime(nouvelle_date_fin, '%Y-%m-%d').date()
+        
+        # Si la mission était reportée, la remettre en planifié
+        if mission.statut == 'reporte':
+            mission.statut = 'planifie'
+        
+        mission.updated_at = datetime.now()
+        
+        # Ajouter un commentaire sur la reprogrammation
+        if raison:
+            if mission.commentaire_repli:
+                mission.commentaire_repli += f"\n[{datetime.now().strftime('%d/%m/%Y')}] Reprogrammation: {raison}"
+            else:
+                mission.commentaire_repli = f"[{datetime.now().strftime('%d/%m/%Y')}] Reprogrammation: {raison}"
+        
+        db.session.commit()
+        
+        if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
+            return jsonify({'success': True, 'message': 'Mission reprogrammée avec succès'})
+        else:
+            flash('Mission reprogrammée avec succès', 'success')
+            return redirect(url_for('detail_programme_audit', id=programme.id))
+        
+    except Exception as e:
+        db.session.rollback()
+        if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
+            return jsonify({'success': False, 'message': str(e)}), 500
+        else:
+            flash(f'Erreur: {str(e)}', 'error')
+            return redirect(url_for('detail_programme_audit', id=programme.id))
+# ============================================================================
+# ===== ROUTES API CHRONOGRAMME V2 - VERSION FINALE 100% FONCTIONNELLE =====
+# ===== À COLLER À LA FIN DE app.py, AVANT if __name__ == '__main__' =====
+# ============================================================================
+
+@app.route('/api/chronogramme/v2/mission/<int:mid>/deplacer', methods=['POST'])
+@csrf.exempt 
+@login_required
+def chrono_deplacer(mid):
+    """Déplacer une mission - VERSION FINALE"""
+    print(f"\n{'='*50}")
+    print(f"🚀 API DEPLACER V2 - Mission {mid}")
+    print(f"{'='*50}")
+    
+    try:
+        # 1. Récupérer la mission
+        mission = MissionAudit.query.get_or_404(mid)
+        if not check_client_access(mission):
+            return jsonify({'success': False, 'message': 'Accès non autorisé'}), 403
+        
+        # 2. Parser le JSON
+        data = request.get_json()
+        if not data:
+            return jsonify({'success': False, 'message': 'Données JSON requises'}), 400
+        
+        print(f"📦 Données reçues: {data}")
+        
+        # 3. Valider l'année
+        annee = data.get('annee')
+        if annee is None:
+            return jsonify({'success': False, 'message': 'Année requise'}), 400
+        
+        try:
+            annee = int(annee)
+        except (ValueError, TypeError):
+            return jsonify({'success': False, 'message': 'Année invalide'}), 400
+        
+        programme = mission.programme
+        if annee < programme.annee_debut or annee > programme.annee_fin:
+            return jsonify({
+                'success': False, 
+                'message': f'Année hors programme ({programme.annee_debut}-{programme.annee_fin})'
+            }), 400
+        
+        # 4. Valider le trimestre (optionnel)
+        trimestre = data.get('trimestre')
+        if trimestre is not None:
+            try:
+                trimestre = int(trimestre)
+                if 1 <= trimestre <= 4:
+                    mission.trimestre_prevue = trimestre
+                else:
+                    print(f"⚠️ Trimestre {trimestre} hors limites, ignoré")
+            except (ValueError, TypeError):
+                print(f"⚠️ Trimestre invalide: {trimestre}, ignoré")
+        
+        # 5. Mettre à jour
+        mission.annee_prevue = annee
+        mission.updated_at = datetime.now()
+        db.session.commit()
+        
+        print(f"✅ Mission {mid} déplacée vers {annee}-T{mission.trimestre_prevue}")
+        return jsonify({
+            'success': True, 
+            'message': f'Mission déplacée en {annee}',
+            'mission': {
+                'id': mission.id,
+                'annee': mission.annee_prevue,
+                'trimestre': mission.trimestre_prevue
+            }
+        })
+        
+    except Exception as e:
+        db.session.rollback()
+        print(f"❌ Erreur: {str(e)}")
+        return jsonify({'success': False, 'message': str(e)}), 500
+
+
+@app.route('/api/chronogramme/v2/mission/<int:mid>/duree', methods=['POST'])
+@csrf.exempt 
+@login_required
+def chrono_duree(mid):
+    """Modifier la durée - VERSION FINALE"""
+    print(f"\n{'='*50}")
+    print(f"🚀 API DUREE V2 - Mission {mid}")
+    print(f"{'='*50}")
+    
+    try:
+        mission = MissionAudit.query.get_or_404(mid)
+        if not check_client_access(mission):
+            return jsonify({'success': False, 'message': 'Accès non autorisé'}), 403
+        
+        data = request.get_json()
+        if not data:
+            return jsonify({'success': False, 'message': 'Données JSON requises'}), 400
+        
+        print(f"📦 Données reçues: {data}")
+        
+        duree = data.get('duree')
+        if duree is None:
+            return jsonify({'success': False, 'message': 'Durée requise'}), 400
+        
+        try:
+            duree = int(duree)
+            if duree < 1:
+                return jsonify({'success': False, 'message': 'La durée doit être > 0'}), 400
+            if duree > 365:
+                return jsonify({'success': False, 'message': 'La durée ne peut pas dépasser 365 jours'}), 400
+        except (ValueError, TypeError):
+            return jsonify({'success': False, 'message': 'Durée invalide'}), 400
+        
+        mission.duree_estimee = duree
+        mission.updated_at = datetime.now()
+        db.session.commit()
+        
+        print(f"✅ Mission {mid} durée modifiée: {duree}j")
+        return jsonify({'success': True, 'message': f'Durée modifiée à {duree} jours'})
+        
+    except Exception as e:
+        db.session.rollback()
+        print(f"❌ Erreur: {str(e)}")
+        return jsonify({'success': False, 'message': str(e)}), 500
+
+
+@app.route('/api/chronogramme/v2/mission/<int:mid>/statut', methods=['POST'])
+@csrf.exempt 
+@login_required
+def chrono_statut(mid):
+    """Changer le statut - VERSION FINALE"""
+    print(f"\n{'='*50}")
+    print(f"🚀 API STATUT V2 - Mission {mid}")
+    print(f"{'='*50}")
+    
+    try:
+        mission = MissionAudit.query.get_or_404(mid)
+        if not check_client_access(mission):
+            return jsonify({'success': False, 'message': 'Accès non autorisé'}), 403
+        
+        data = request.get_json()
+        if not data:
+            return jsonify({'success': False, 'message': 'Données JSON requises'}), 400
+        
+        print(f"📦 Données reçues: {data}")
+        
+        statut = data.get('statut')
+        statuts_valides = ['planifie', 'en_cours', 'termine', 'reporte', 'annule']
+        
+        if not statut or statut not in statuts_valides:
+            return jsonify({'success': False, 'message': 'Statut invalide'}), 400
+        
+        ancien_statut = mission.statut
+        mission.statut = statut
+        
+        # Gestion automatique des dates
+        aujourdhui = datetime.now().date()
+        
+        if statut == 'termine':
+            mission.progression = 100
+            if not mission.date_fin_reelle:
+                mission.date_fin_reelle = aujourdhui
+        elif statut == 'en_cours':
+            if not mission.date_debut_reelle:
+                mission.date_debut_reelle = aujourdhui
+            mission.progression = max(mission.progression or 0, 25)
+        elif statut == 'planifie':
+            mission.progression = 0
+        
+        mission.updated_at = datetime.now()
+        db.session.commit()
+        
+        print(f"✅ Mission {mid}: {ancien_statut} → {statut}")
+        return jsonify({'success': True, 'message': f'Statut changé en {statut}'})
+        
+    except Exception as e:
+        db.session.rollback()
+        print(f"❌ Erreur: {str(e)}")
+        return jsonify({'success': False, 'message': str(e)}), 500
+
+
+@app.route('/api/chronogramme/v2/mission/<int:mid>/assigner', methods=['POST'])
+@csrf.exempt 
+@login_required
+def chrono_assigner(mid):
+    """Assigner un responsable - VERSION FINALE"""
+    print(f"\n{'='*50}")
+    print(f"🚀 API ASSIGNER V2 - Mission {mid}")
+    print(f"{'='*50}")
+    
+    try:
+        mission = MissionAudit.query.get_or_404(mid)
+        if not check_client_access(mission):
+            return jsonify({'success': False, 'message': 'Accès non autorisé'}), 403
+        
+        data = request.get_json()
+        if not data:
+            return jsonify({'success': False, 'message': 'Données JSON requises'}), 400
+        
+        print(f"📦 Données reçues: {data}")
+        
+        responsable_id = data.get('responsable_id')
+        
+        if responsable_id is None or responsable_id == 0:
+            mission.responsable_id = None
+            message = "Responsable retiré"
+            print(f"✅ Responsable retiré")
+        else:
+            try:
+                responsable_id = int(responsable_id)
+                user = User.query.get(responsable_id)
+                if not user:
+                    return jsonify({'success': False, 'message': 'Utilisateur non trouvé'}), 404
+                
+                if not check_client_access(user):
+                    return jsonify({'success': False, 'message': 'Accès non autorisé à cet utilisateur'}), 403
+                
+                mission.responsable_id = responsable_id
+                message = f"Responsable: {user.username}"
+                print(f"✅ {message}")
+                
+            except (ValueError, TypeError):
+                return jsonify({'success': False, 'message': 'ID responsable invalide'}), 400
+        
+        mission.updated_at = datetime.now()
+        db.session.commit()
+        
+        return jsonify({'success': True, 'message': message})
+        
+    except Exception as e:
+        db.session.rollback()
+        print(f"❌ Erreur: {str(e)}")
+        return jsonify({'success': False, 'message': str(e)}), 500
+
+
+@app.route('/api/chronogramme/v2/programme/<int:pid>/repartition-auto', methods=['POST'])
+@csrf.exempt 
+@login_required
+def chrono_repartition(pid):
+    """Répartition automatique - VERSION FINALE"""
+    print(f"\n{'='*50}")
+    print(f"🚀 API REPARTITION V2 - Programme {pid}")
+    print(f"{'='*50}")
+    
+    try:
+        programme = ProgrammeAudit.query.get_or_404(pid)
+        if not check_client_access(programme):
+            return jsonify({'success': False, 'message': 'Accès non autorisé'}), 403
+        
+        missions = programme.missions.filter_by(
+            statut='planifie', 
+            is_archived=False
+        ).all()
+        
+        if not missions:
+            return jsonify({'success': True, 'message': 'Aucune mission à répartir'})
+        
+        modifications = 0
+        annees = list(range(programme.annee_debut, programme.annee_fin + 1))
+        
+        if not annees:
+            return jsonify({'success': False, 'message': 'Programme sans année'}), 400
+        
+        for i, mission in enumerate(missions):
+            # Répartition par priorité
+            if mission.priorite == 'critique' and annees:
+                mission.annee_prevue = annees[0]
+            elif mission.priorite == 'elevee' and len(annees) > 1:
+                mission.annee_prevue = annees[1]
+            elif mission.priorite == 'moyenne' and len(annees) > 2:
+                mission.annee_prevue = annees[2]
+            else:
+                mission.annee_prevue = annees[i % len(annees)]
+            
+            # Répartition trimestrielle équilibrée
+            mission.trimestre_prevue = (i % 4) + 1
+            modifications += 1
+        
+        db.session.commit()
+        
+        print(f"✅ {modifications} missions réparties")
+        return jsonify({
+            'success': True, 
+            'message': f'{modifications} missions réparties automatiquement'
+        })
+        
+    except Exception as e:
+        db.session.rollback()
+        print(f"❌ Erreur: {str(e)}")
+        return jsonify({'success': False, 'message': str(e)}), 500
+
+
+@app.route('/api/chronogramme/v2/utilisateurs', methods=['GET'])
+@login_required
+def api_chronogramme_utilisateurs():
+    """API pour récupérer la liste des utilisateurs éligibles comme responsables"""
+    print(f"\n🔵 API UTILISATEURS - Chargement de la liste")
+    
+    try:
+        # Récupérer les utilisateurs en fonction des permissions
+        if current_user.role == 'super_admin':
+            utilisateurs = User.query.filter_by(is_active=True, is_blocked=False).all()
+        else:
+            utilisateurs = get_client_filter(User).filter_by(
+                is_active=True, 
+                is_blocked=False
+            ).all()
+        
+        # Formater les données
+        data = []
+        for user in utilisateurs:
+            # Déterminer le nom d'affichage
+            display_name = user.username
+            if hasattr(user, 'prenom') and user.prenom and hasattr(user, 'nom') and user.nom:
+                display_name = f"{user.prenom} {user.nom}"
+            elif hasattr(user, 'full_name') and user.full_name:
+                display_name = user.full_name
+            
+            data.append({
+                'id': user.id,
+                'username': user.username,
+                'display_name': display_name,
+                'email': user.email,
+                'role': user.role,
+                'role_display': user.get_role_display_name() if hasattr(user, 'get_role_display_name') else user.role,
+                'department': user.department or '',
+                'is_client_admin': user.is_client_admin
+            })
+        
+        # Trier par nom d'affichage
+        data.sort(key=lambda x: x['display_name'].lower())
+        
+        return jsonify({
+            'success': True,
+            'utilisateurs': data,
+            'total': len(data)
+        })
+        
+    except Exception as e:
+        print(f"❌ Erreur: {e}")
+        return jsonify({'success': False, 'message': str(e)}), 500
+
+
+@app.route('/api/chronogramme/v2/test')
+def chrono_test_v2():
+    """Test des routes API V2"""
+    routes = []
+    for rule in app.url_map.iter_rules():
+        if '/api/chronogramme/v2' in str(rule):
+            routes.append({
+                'route': str(rule),
+                'methods': list(rule.methods)
+            })
+    
+    # Supprimer les doublons
+    routes_uniques = {}
+    for route in routes:
+        routes_uniques[route['route']] = route
+    
+    return jsonify({
+        'status': '✅ API CHRONOGRAMME V2 ACTIVE',
+        'routes': sorted(list(routes_uniques.keys())),
+        'count': len(routes_uniques),
+        'debug': True
+    })
+
+
+@app.route('/api/chronogramme/v2/programme/<int:pid>/stats')
+@login_required
+def chrono_stats(pid):
+    """Statistiques pour le chronogramme"""
+    try:
+        programme = ProgrammeAudit.query.get_or_404(pid)
+        if not check_client_access(programme):
+            return jsonify({'success': False, 'message': 'Accès non autorisé'}), 403
+        
+        missions = programme.missions.filter_by(is_archived=False).all()
+        
+        stats = {
+            'total_missions': len(missions),
+            'missions_terminees': len([m for m in missions if m.statut == 'termine']),
+            'progression': programme.progression,
+            'charge_totale': programme.jours_audit_planifies,
+            'charge_realisee': programme.jours_audit_realises,
+            'par_priorite': {
+                'critique': len([m for m in missions if m.priorite == 'critique']),
+                'elevee': len([m for m in missions if m.priorite == 'elevee']),
+                'moyenne': len([m for m in missions if m.priorite == 'moyenne']),
+                'faible': len([m for m in missions if m.priorite == 'faible'])
+            },
+            'par_statut': {
+                'planifie': len([m for m in missions if m.statut == 'planifie']),
+                'en_cours': len([m for m in missions if m.statut == 'en_cours']),
+                'termine': len([m for m in missions if m.statut == 'termine']),
+                'reporte': len([m for m in missions if m.statut == 'reporte'])
+            }
+        }
+        
+        return jsonify({'success': True, 'stats': stats})
+        
+    except Exception as e:
+        return jsonify({'success': False, 'message': str(e)}), 500
+
+
+# ============================================================================
+# ===== CORRECTION ROUTE AJOUTER MISSION (SINGULIER) =====
+# ============================================================================
+
+@app.route('/programme-audit/<int:programme_id>/mission/ajouter', methods=['GET', 'POST'])
+@csrf.exempt
+@login_required
+def ajouter_mission_programme(programme_id):
+    """Ajouter une mission manuellement au programme (SINGULIER)"""
+    programme = ProgrammeAudit.query.get_or_404(programme_id)
+    
+    if not check_client_access(programme):
+        flash('Accès non autorisé', 'error')
+        return redirect(url_for('liste_programmes_audit'))
+    
+    # GET - Afficher le formulaire d'ajout rapide
+    if request.method == 'GET':
+        annee = request.args.get('annee', programme.annee_debut, type=int)
+        trimestre = request.args.get('trimestre', None, type=int)
+        
+        risques_disponibles = get_client_filter(Risque).filter_by(is_archived=False).all()
+        
+        if current_user.role == 'super_admin':
+            utilisateurs = User.query.filter_by(is_active=True).all()
+        else:
+            utilisateurs = get_client_filter(User).filter_by(is_active=True).all()
+        
+        return render_template('programme_audit/ajouter_mission_rapide.html',
+                             programme=programme,
+                             annee=annee,
+                             trimestre=trimestre,
+                             risques_disponibles=risques_disponibles,
+                             utilisateurs=utilisateurs)
+    
+    # POST - Créer la mission
+    try:
+        # Générer référence
+        ref_count = programme.missions.filter_by(is_archived=False).count() + 1
+        reference = f"MIS-{programme.reference}-{ref_count:03d}"
+        
+        mission = MissionAudit(
+            reference=reference,
+            titre=request.form.get('titre'),
+            description=request.form.get('description'),
+            priorite=request.form.get('priorite'),
+            annee_prevue=int(request.form.get('annee_prevue', programme.annee_debut)),
+            trimestre_prevue=int(request.form.get('trimestre_prevue')) if request.form.get('trimestre_prevue') else None,
+            duree_estimee=int(request.form.get('duree_estimee', programme.duree_moyenne_mission or 5)),
+            risque_id=int(request.form.get('risque_id')) if request.form.get('risque_id') else None,
+            responsable_id=int(request.form.get('responsable_id')) if request.form.get('responsable_id') else None,
+            programme_id=programme.id,
+            statut='planifie',
+            created_by=current_user.id,
+            client_id=programme.client_id
+        )
+        
+        db.session.add(mission)
+        db.session.commit()
+        
+        flash(f'Mission {reference} ajoutée avec succès', 'success')
+        
+        # Rediriger vers le chronogramme si demandé
+        if request.args.get('redirect') == 'chronogramme':
+            return redirect(url_for('chronogramme_programme', id=programme.id))
+        
+        return redirect(url_for('detail_programme_audit', id=programme.id))
+        
+    except Exception as e:
+        db.session.rollback()
+        flash(f'Erreur: {str(e)}', 'error')
+        return redirect(url_for('detail_programme_audit', id=programme.id))
+
+
+# ============================================================================
+# ===== SUPPRIMER L'ANCIENNE ROUTE PLURIELLE POUR ÉVITER LES CONFLITS =====
+# ============================================================================
+
+
+@app.route('/programme-audit/<int:programme_id>/missions/supprimer-bloc', methods=['POST'])
+@csrf.exempt
+@login_required
+def supprimer_missions_bloc(programme_id):
+    """Supprimer plusieurs missions en une fois"""
+    programme = ProgrammeAudit.query.get_or_404(programme_id)
+    
+    if not check_client_access(programme):
+        return jsonify({'success': False, 'message': 'Accès non autorisé'}), 403
+    
+    try:
+        data = request.get_json()
+        mission_ids = data.get('mission_ids', [])
+        raison = data.get('raison', 'Suppression en bloc')
+        
+        if not mission_ids:
+            return jsonify({'success': False, 'message': 'Aucune mission sélectionnée'}), 400
+        
+        missions = MissionAudit.query.filter(MissionAudit.id.in_(mission_ids)).all()
+        count = 0
+        erreurs = []
+        
+        for mission in missions:
+            # Vérifier que la mission appartient au programme
+            if mission.programme_id != programme_id:
+                continue
+            
+            # Vérifier que la mission n'est pas en cours
+            if mission.statut in ['en_cours', 'termine']:
+                erreurs.append(f"{mission.reference}: mission en cours")
+                continue
+            
+            # Vérifier qu'aucun plan de repli n'est actif
+            plan_actif = PlanPluieAudit.query.filter_by(
+                mission_principale_id=mission.id,
+                statut='actif',
+                is_archived=False
+            ).first()
+            
+            if plan_actif:
+                erreurs.append(f"{mission.reference}: plan de repli actif")
+                continue
+            
+            # Archiver la mission
+            mission.is_archived = True
+            mission.statut = 'archive'
+            mission.archived_at = datetime.now()
+            mission.archived_by = current_user.id
+            mission.archive_reason = raison
+            count += 1
+        
+        db.session.commit()
+        
+        message = f'{count} mission(s) supprimée(s) avec succès'
+        if erreurs:
+            message += f' ({len(erreurs)} ignorée(s): {", ".join(erreurs[:3])})'
+        
+        return jsonify({
+            'success': True, 
+            'message': message
+        })
+        
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'success': False, 'message': str(e)}), 500
+    
+@app.route('/mission-audit/<int:mission_id>/supprimer', methods=['POST'])
+@csrf.exempt
+@login_required
+def supprimer_mission_audit(mission_id):
+    """Supprimer (archiver) une mission d'audit"""
+    mission = MissionAudit.query.get_or_404(mission_id)
+    programme = mission.programme
+    
+    if not check_client_access(mission):
+        return jsonify({'success': False, 'message': 'Accès non autorisé'}), 403
+    
+    try:
+        # Vérifier que la mission n'est pas en cours
+        if mission.statut in ['en_cours', 'termine']:
+            return jsonify({'success': False, 'message': 'Impossible de supprimer une mission en cours ou terminée'}), 400
+        
+        # Vérifier qu'aucun plan de repli n'est actif
+        plan_actif = PlanPluieAudit.query.filter_by(
+            mission_principale_id=mission.id,
+            statut='actif',
+            is_archived=False
+        ).first()
+        
+        if plan_actif:
+            return jsonify({'success': False, 'message': 'Supprimez d\'abord le plan de repli associé'}), 400
+        
+        # Récupérer la raison de suppression (JSON ou form-data)
+        raison = 'Suppression manuelle'
+        
+        # Si c'est du JSON
+        if request.is_json:
+            data = request.get_json()
+            raison = data.get('raison', 'Suppression manuelle')
+        else:
+            # Si c'est du form-data
+            raison = request.form.get('raison', 'Suppression manuelle')
+        
+        # Archiver la mission
+        mission.is_archived = True
+        mission.statut = 'archive'
+        mission.archived_at = datetime.now()
+        mission.archived_by = current_user.id
+        mission.archive_reason = raison
+        mission.updated_at = datetime.now()
+        
+        db.session.commit()
+        
+        return jsonify({'success': True, 'message': 'Mission supprimée avec succès'})
+        
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'success': False, 'message': str(e)}), 500
+
+
+@app.route('/mission-audit/<int:mission_id>/restaurer', methods=['POST'])
+@login_required
+def restaurer_mission_audit(mission_id):
+    """Restaurer une mission archivée"""
+    mission = MissionAudit.query.get_or_404(mission_id)
+    programme = mission.programme
+    
+    if not check_client_access(mission):
+        return jsonify({'success': False, 'message': 'Accès non autorisé'}), 403
+    
+    try:
+        mission.is_archived = False
+        mission.statut = 'planifie'
+        mission.archived_at = None
+        mission.archived_by = None
+        mission.archive_reason = None
+        mission.updated_at = datetime.now()
+        
+        db.session.commit()
+        
+        flash('Mission restaurée avec succès', 'success')
+        return redirect(url_for('detail_programme_audit', id=programme.id))
+        
+    except Exception as e:
+        db.session.rollback()
+        flash(f'Erreur: {str(e)}', 'error')
+        return redirect(url_for('detail_programme_audit', id=programme.id))
+
+
+@app.route('/mission-audit/<int:mission_id>/dupliquer', methods=['POST'])
+@login_required
+def dupliquer_mission_audit(mission_id):
+    """Dupliquer une mission d'audit"""
+    mission_originale = MissionAudit.query.get_or_404(mission_id)
+    programme = mission_originale.programme
+    
+    if not check_client_access(mission_originale):
+        return jsonify({'success': False, 'message': 'Accès non autorisé'}), 403
+    
+    try:
+        # Générer une nouvelle référence
+        ref_count = len(programme.missions) + 1
+        nouvelle_reference = f"MIS-{programme.reference}-{ref_count:03d}"
+        
+        # Créer la nouvelle mission
+        nouvelle_mission = MissionAudit(
+            reference=nouvelle_reference,
+            titre=f"COPIE - {mission_originale.titre}",
+            description=mission_originale.description,
+            priorite=mission_originale.priorite,
+            niveau_risque_associe=mission_originale.niveau_risque_associe,
+            annee_prevue=mission_originale.annee_prevue + 1,  # Année suivante
+            trimestre_prevue=mission_originale.trimestre_prevue,
+            duree_estimee=mission_originale.duree_estimee,
+            risque_id=mission_originale.risque_id,
+            programme_id=programme.id,
+            statut='planifie',
+            created_by=current_user.id,
+            client_id=programme.client_id
+        )
+        
+        db.session.add(nouvelle_mission)
+        db.session.commit()
+        
+        flash(f'Mission dupliquée avec succès - {nouvelle_reference}', 'success')
+        return redirect(url_for('detail_programme_audit', id=programme.id))
+        
+    except Exception as e:
+        db.session.rollback()
+        flash(f'Erreur: {str(e)}', 'error')
+        return redirect(url_for('detail_programme_audit', id=programme.id))
+    
+
+
+
+
+
+# Route pour convertir une mission en audit
+@app.route('/mission-audit/<int:id>/convertir-audit')
+@login_required
+def convertir_mission_audit(id):
+    """Convertir une mission d'audit planifiée en audit effectif"""
+    mission = MissionAudit.query.get_or_404(id)
+    
+    if not check_client_access(mission):
+        flash('Accès non autorisé', 'error')
+        return redirect(url_for('liste_programmes_audit'))
+    
+    try:
+        # Récupérer les informations du processus si disponible
+        processus_id = None
+        if mission.risque and mission.risque.cartographie:
+            processus_id = mission.risque.cartographie.processus_id
+        
+        # Créer l'audit à partir de la mission
+        audit = Audit(
+            reference=f"AUD-{mission.reference}",
+            titre=mission.titre,
+            description=mission.description,
+            type_audit='interne',
+            date_debut_prevue=mission.date_debut_prevue or datetime.now().date(),
+            date_fin_prevue=mission.date_fin_prevue,
+            statut='planifie',
+            sous_statut='planification',
+            processus_id=processus_id,
+            responsable_id=mission.responsable_id,
+            equipe_audit_ids=mission.equipe_ids,
+            created_by=current_user.id,
+            client_id=mission.client_id
+        )
+        
+        db.session.add(audit)
+        db.session.flush()
+        
+        # Lier l'audit à la mission
+        mission.audit_id = audit.id
+        mission.statut = 'en_cours'
+        mission.date_debut_reelle = datetime.now().date()
+        
+        # Lier l'audit au risque
+        if mission.risque_id:
+            audit_risque = AuditRisque(
+                audit_id=audit.id,
+                risque_id=mission.risque_id,
+                impact_audit='a_evaluer',
+                commentaire=f"Audit généré à partir de la mission {mission.reference}"
+            )
+            db.session.add(audit_risque)
+        
+        db.session.commit()
+        
+        flash(f'Audit {audit.reference} créé à partir de la mission', 'success')
+        return redirect(url_for('detail_audit', id=audit.id))
+        
+    except Exception as e:
+        db.session.rollback()
+        flash(f'Erreur: {str(e)}', 'error')
+        return redirect(url_for('detail_programme_audit', id=mission.programme_id))
+
+
+
+@app.route('/programme-audit/<int:id>/exporter')
+@login_required
+def exporter_programme(id):
+    """Exporter le programme en Excel, CSV ou PDF"""
+    programme = ProgrammeAudit.query.get_or_404(id)
+    
+    if not check_client_access(programme):
+        flash('Accès non autorisé', 'error')
+        return redirect(url_for('liste_programmes_audit'))
+    
+    format_export = request.args.get('format', 'excel')
+    
+    try:
+        # ========== EXPORT EXCEL ==========
+        if format_export == 'excel':
+            return exporter_programme_excel(programme)
+        
+        # ========== EXPORT CSV ==========
+        elif format_export == 'csv':
+            return exporter_programme_csv(programme)
+        
+        # ========== EXPORT PDF ==========
+        elif format_export == 'pdf':
+            return exporter_programme_pdf(programme)
+        
+        else:
+            flash('Format d\'export non supporté', 'error')
+            return redirect(url_for('detail_programme_audit', id=id))
+            
+    except Exception as e:
+        flash(f'Erreur lors de l\'export: {str(e)}', 'error')
+        return redirect(url_for('detail_programme_audit', id=id))
+
+
+def exporter_programme_excel(programme):
+    """Export du programme au format Excel sans pandas"""
+    try:
+        wb = Workbook()
+        
+        # ========== SHEET 1 : MISSIONS ==========
+        ws1 = wb.active
+        ws1.title = "Missions"
+        
+        # Style des en-têtes
+        header_font = Font(bold=True, color="FFFFFF")
+        header_fill = PatternFill(start_color="0D6EFD", end_color="0D6EFD", fill_type="solid")
+        header_alignment = Alignment(horizontal="center", vertical="center")
+        border = Border(
+            left=Side(style='thin'), 
+            right=Side(style='thin'),
+            top=Side(style='thin'), 
+            bottom=Side(style='thin')
+        )
+        
+        # En-têtes de colonnes
+        headers = [
+            'Référence', 'Titre', 'Description', 'Priorité', 'Niveau Risque',
+            'Année', 'Trimestre', 'Date début', 'Date fin', 'Durée (j)',
+            'Statut', 'Progression %', 'Responsable', 'Risque associé', 'Audit lié'
+        ]
+        
+        for col, header in enumerate(headers, 1):
+            cell = ws1.cell(row=1, column=col, value=header)
+            cell.font = header_font
+            cell.fill = header_fill
+            cell.alignment = header_alignment
+            cell.border = border
+        
+        # Données des missions
+        row = 2
+        for mission in programme.missions:
+            ws1.cell(row, 1, mission.reference)
+            ws1.cell(row, 2, mission.titre)
+            ws1.cell(row, 3, mission.description or '')
+            ws1.cell(row, 4, mission.priorite.capitalize() if mission.priorite else '')
+            ws1.cell(row, 5, mission.niveau_risque_associe or '')
+            ws1.cell(row, 6, mission.annee_prevue)
+            ws1.cell(row, 7, f"T{mission.trimestre_prevue}" if mission.trimestre_prevue else '')
+            ws1.cell(row, 8, mission.date_debut_prevue.strftime('%d/%m/%Y') if mission.date_debut_prevue else '')
+            ws1.cell(row, 9, mission.date_fin_prevue.strftime('%d/%m/%Y') if mission.date_fin_prevue else '')
+            ws1.cell(row, 10, mission.duree_estimee or 0)
+            ws1.cell(row, 11, mission.statut.replace('_', ' ').title() if mission.statut else '')
+            ws1.cell(row, 12, mission.progression or 0)
+            ws1.cell(row, 13, mission.responsable.username if mission.responsable else 'Non assigné')
+            ws1.cell(row, 14, mission.risque.reference if mission.risque else '')
+            ws1.cell(row, 15, mission.audit.reference if mission.audit else '')
+            
+            # Colorer la ligne selon la priorité
+            if mission.priorite == 'critique':
+                for col in range(1, 16):
+                    ws1.cell(row, col).fill = PatternFill(start_color="FFE5E5", end_color="FFE5E5", fill_type="solid")
+            elif mission.priorite == 'elevee':
+                for col in range(1, 16):
+                    ws1.cell(row, col).fill = PatternFill(start_color="FFF3CD", end_color="FFF3CD", fill_type="solid")
+            
+            row += 1
+        
+        # Ajuster la largeur des colonnes
+        for col in range(1, 16):
+            ws1.column_dimensions[openpyxl.utils.get_column_letter(col)].width = 18
+        
+        # ========== SHEET 2 : RÉSUMÉ ==========
+        ws2 = wb.create_sheet("Résumé")
+        
+        resume_data = [
+            ('Programme', programme.nom),
+            ('Référence', programme.reference),
+            ('Description', programme.description or ''),
+            ('Période', f"{programme.annee_debut} - {programme.annee_fin} ({programme.periode})"),
+            ('Statut', programme.statut.replace('_', ' ').title()),
+            ('Méthode de génération', programme.methode_generation.replace('_', ' ').title()),
+            ('Fréquence d\'audit', programme.frequence_audit.capitalize() if programme.frequence_audit else 'Non spécifiée'),
+            ('Durée moyenne mission', f"{programme.duree_moyenne_mission or 0} jours"),
+            ('Ressources disponibles', f"{programme.ressources_disponibles or 0} jours/homme/an"),
+            ('Total missions', programme.nb_missions),
+            ('Missions terminées', programme.nb_missions_realisees),
+            ('Progression', f"{programme.progression}%"),
+            ('Jours audit planifiés', programme.jours_audit_planifies),
+            ('Jours audit réalisés', programme.jours_audit_realises),
+            ('Créé par', programme.createur.username if programme.createur else 'N/A'),
+            ('Date création', programme.created_at.strftime('%d/%m/%Y') if programme.created_at else ''),
+        ]
+        
+        if programme.date_approbation:
+            resume_data.append(('Date approbation', programme.date_approbation.strftime('%d/%m/%Y')))
+        
+        for row, (label, value) in enumerate(resume_data, 1):
+            cell_label = ws2.cell(row, 1, label)
+            cell_label.font = Font(bold=True)
+            cell_label.border = border
+            cell_value = ws2.cell(row, 2, str(value))
+            cell_value.border = border
+        
+        ws2.column_dimensions['A'].width = 25
+        ws2.column_dimensions['B'].width = 40
+        
+        # ========== SHEET 3 : STATISTIQUES ==========
+        ws3 = wb.create_sheet("Statistiques")
+        
+        # Statistiques par priorité
+        ws3.cell(1, 1, "RÉPARTITION PAR PRIORITÉ").font = Font(bold=True, size=14)
+        
+        stats_headers = ['Priorité', 'Nombre', 'Pourcentage']
+        for col, header in enumerate(stats_headers, 1):
+            cell = ws3.cell(3, col, header)
+            cell.font = Font(bold=True)
+            cell.fill = PatternFill(start_color="0D6EFD", end_color="0D6EFD", fill_type="solid")
+            cell.font = Font(bold=True, color="FFFFFF")
+        
+        # Compter les missions par priorité
+        priorites = {
+            'critique': {'nom': 'Critique', 'count': 0, 'color': 'FFE5E5'},
+            'elevee': {'nom': 'Élevée', 'count': 0, 'color': 'FFF3CD'},
+            'moyenne': {'nom': 'Moyenne', 'count': 0, 'color': 'E5F6FF'},
+            'faible': {'nom': 'Faible', 'count': 0, 'color': 'F0F0F0'}
+        }
+        
+        for mission in programme.missions:
+            if mission.priorite in priorites:
+                priorites[mission.priorite]['count'] += 1
+        
+        row = 4
+        total = programme.nb_missions or 1
+        for p_key, p_data in priorites.items():
+            if p_data['count'] > 0:
+                ws3.cell(row, 1, p_data['nom'])
+                ws3.cell(row, 2, p_data['count'])
+                pourcentage = (p_data['count'] / total * 100)
+                ws3.cell(row, 3, f"{pourcentage:.1f}%")
+                
+                # Colorer la ligne
+                for col in range(1, 4):
+                    ws3.cell(row, col).fill = PatternFill(start_color=p_data['color'], end_color=p_data['color'], fill_type="solid")
+                row += 1
+        
+        # Statistiques par statut
+        row += 2
+        ws3.cell(row, 1, "RÉPARTITION PAR STATUT").font = Font(bold=True, size=14)
+        row += 1
+        
+        statuts = {}
+        for mission in programme.missions:
+            statut = mission.statut or 'non_defini'
+            statuts[statut] = statuts.get(statut, 0) + 1
+        
+        row += 1
+        for statut, count in statuts.items():
+            ws3.cell(row, 1, statut.replace('_', ' ').title())
+            ws3.cell(row, 2, count)
+            row += 1
+        
+        # ========== SAUVEGARDE ==========
+        output = BytesIO()
+        wb.save(output)
+        output.seek(0)
+        
+        return send_file(
+            output,
+            mimetype='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+            as_attachment=True,
+            download_name=f'programme_audit_{programme.reference}_{datetime.now().strftime("%Y%m%d_%H%M")}.xlsx'
+        )
+        
+    except Exception as e:
+        flash(f'Erreur export Excel: {str(e)}', 'error')
+        return redirect(url_for('detail_programme_audit', id=programme.id))
+
+
+def exporter_programme_csv(programme):
+    """Export du programme au format CSV"""
+    try:
+        output = StringIO()
+        writer = csv.writer(output, delimiter=';', quoting=csv.QUOTE_ALL)
+        
+        # En-tête
+        writer.writerow([
+            'Référence', 'Titre', 'Priorité', 'Année', 'Trimestre', 
+            'Date début', 'Date fin', 'Durée (j)', 'Statut', 'Responsable',
+            'Niveau Risque', 'Progression %'
+        ])
+        
+        # Données
+        for mission in programme.missions:
+            writer.writerow([
+                mission.reference,
+                mission.titre,
+                mission.priorite.capitalize() if mission.priorite else '',
+                mission.annee_prevue,
+                mission.trimestre_prevue or '',
+                mission.date_debut_prevue.strftime('%d/%m/%Y') if mission.date_debut_prevue else '',
+                mission.date_fin_prevue.strftime('%d/%m/%Y') if mission.date_fin_prevue else '',
+                mission.duree_estimee or 0,
+                mission.statut.replace('_', ' ').title() if mission.statut else '',
+                mission.responsable.username if mission.responsable else '',
+                mission.niveau_risque_associe or '',
+                mission.progression or 0
+            ])
+        
+        output.seek(0)
+        
+        return send_file(
+            BytesIO(output.getvalue().encode('utf-8-sig')),
+            mimetype='text/csv; charset=utf-8',
+            as_attachment=True,
+            download_name=f'programme_audit_{programme.reference}_{datetime.now().strftime("%Y%m%d_%H%M")}.csv'
+        )
+        
+    except Exception as e:
+        flash(f'Erreur export CSV: {str(e)}', 'error')
+        return redirect(url_for('detail_programme_audit', id=programme.id))
+
+
+def exporter_programme_pdf(programme):
+    """Export du programme au format PDF"""
+    try:
+        from reportlab.lib.pagesizes import letter, landscape
+        from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle
+        from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+        from reportlab.lib.units import inch
+        from reportlab.lib import colors
+        
+        buffer = BytesIO()
+        doc = SimpleDocTemplate(buffer, pagesize=landscape(letter))
+        story = []
+        styles = getSampleStyleSheet()
+        
+        # Style personnalisé
+        title_style = ParagraphStyle(
+            'CustomTitle',
+            parent=styles['Heading1'],
+            fontSize=18,
+            spaceAfter=20,
+            textColor=colors.HexColor('#0d6efd')
+        )
+        
+        # Titre
+        story.append(Paragraph(f"Programme d'Audit : {programme.nom}", title_style))
+        story.append(Paragraph(f"Référence: {programme.reference}", styles['Normal']))
+        story.append(Spacer(1, 20))
+        
+        # Informations générales
+        story.append(Paragraph("Informations Générales", styles['Heading2']))
+        
+        info_data = [
+            ['Période', f"{programme.annee_debut} - {programme.annee_fin} ({programme.periode})"],
+            ['Statut', programme.statut.replace('_', ' ').title()],
+            ['Méthode', programme.methode_generation.replace('_', ' ').title()],
+            ['Progression', f"{programme.progression}%"],
+            ['Missions', f"{programme.nb_missions_realisees}/{programme.nb_missions}"],
+            ['Jours audit', f"{programme.jours_audit_realises}/{programme.jours_audit_planifies}j"],
+            ['Créé par', programme.createur.username if programme.createur else 'N/A'],
+            ['Date création', programme.created_at.strftime('%d/%m/%Y') if programme.created_at else '']
+        ]
+        
+        info_table = Table(info_data, colWidths=[2*inch, 4*inch])
+        info_table.setStyle(TableStyle([
+            ('GRID', (0,0), (-1,-1), 0.5, colors.grey),
+            ('BACKGROUND', (0,0), (0,-1), colors.lightgrey),
+            ('VALIGN', (0,0), (-1,-1), 'MIDDLE'),
+        ]))
+        story.append(info_table)
+        story.append(Spacer(1, 20))
+        
+        # Missions
+        story.append(Paragraph("Missions d'Audit", styles['Heading2']))
+        
+        if programme.missions:
+            mission_data = [['Réf.', 'Titre', 'Priorité', 'Année', 'Durée', 'Statut']]
+            
+            for mission in programme.missions[:20]:  # Limiter à 20 missions pour le PDF
+                mission_data.append([
+                    mission.reference,
+                    mission.titre[:30] + '...' if len(mission.titre) > 30 else mission.titre,
+                    mission.priorite.capitalize() if mission.priorite else '',
+                    str(mission.annee_prevue),
+                    f"{mission.duree_estimee or 0}j",
+                    mission.statut.replace('_', ' ').title() if mission.statut else ''
+                ])
+            
+            mission_table = Table(mission_data, colWidths=[0.8*inch, 2.5*inch, 0.6*inch, 0.5*inch, 0.4*inch, 0.8*inch])
+            mission_table.setStyle(TableStyle([
+                ('GRID', (0,0), (-1,-1), 0.5, colors.grey),
+                ('BACKGROUND', (0,0), (-1,0), colors.HexColor('#0d6efd')),
+                ('TEXTCOLOR', (0,0), (-1,0), colors.white),
+                ('ALIGN', (0,0), (-1,-1), 'CENTER'),
+                ('VALIGN', (0,0), (-1,-1), 'MIDDLE'),
+                ('FONTSIZE', (0,0), (-1,-1), 8),
+            ]))
+            story.append(mission_table)
+        
+        # Pied de page
+        story.append(Spacer(1, 30))
+        story.append(Paragraph(
+            f"Généré le {datetime.now().strftime('%d/%m/%Y à %H:%M')} - Egalyx Audit",
+            ParagraphStyle('Footer', parent=styles['Normal'], fontSize=8, alignment=1, textColor=colors.grey)
+        ))
+        
+        doc.build(story)
+        buffer.seek(0)
+        
+        return send_file(
+            buffer,
+            mimetype='application/pdf',
+            as_attachment=True,
+            download_name=f'programme_audit_{programme.reference}_{datetime.now().strftime("%Y%m%d_%H%M")}.pdf'
+        )
+        
+    except ImportError:
+        flash('Export PDF nécessite ReportLab: pip install reportlab', 'error')
+        return redirect(url_for('detail_programme_audit', id=programme.id))
+    except Exception as e:
+        flash(f'Erreur export PDF: {str(e)}', 'error')
+        return redirect(url_for('detail_programme_audit', id=programme.id))
+
+
+@app.route('/api/programme-audit/<int:id>/statistiques')
+@login_required
+def api_statistiques_programme(id):
+    """API pour les statistiques du programme"""
+    programme = ProgrammeAudit.query.get_or_404(id)
+    
+    if not check_client_access(programme):
+        return jsonify({'error': 'Accès non autorisé'}), 403
+    
+    # Statistiques par priorité
+    stats_priorite = {
+        'critique': 0,
+        'elevee': 0,
+        'moyenne': 0,
+        'faible': 0
+    }
+    
+    for mission in programme.missions:
+        if mission.priorite in stats_priorite:
+            stats_priorite[mission.priorite] += 1
+    
+    # Statistiques par statut
+    stats_statut = {
+        'planifie': 0,
+        'en_cours': 0,
+        'termine': 0,
+        'suspendu': 0,
+        'annule': 0
+    }
+    
+    for mission in programme.missions:
+        if mission.statut in stats_statut:
+            stats_statut[mission.statut] += 1
+    
+    # Charge par année
+    charge_annee = {}
+    for mission in programme.missions:
+        if mission.annee_prevue not in charge_annee:
+            charge_annee[mission.annee_prevue] = 0
+        charge_annee[mission.annee_prevue] += mission.duree_estimee or 0
+    
+    return jsonify({
+        'priorite': stats_priorite,
+        'statut': stats_statut,
+        'charge_annee': charge_annee,
+        'progression': programme.progression,
+        'jours_planifies': programme.jours_audit_planifies,
+        'jours_realises': programme.jours_audit_realises
+    })
+
+
+@app.route('/api/programme-audit/<int:programme_id>/stats-plans')
+@login_required
+def api_stats_plans_pluie(programme_id):
+    """API pour obtenir les statistiques des plans de repli"""
+    programme = ProgrammeAudit.query.get_or_404(programme_id)
+    
+    if not check_client_access(programme):
+        return jsonify({'error': 'Accès non autorisé'}), 403
+    
+    mission_ids = [m.id for m in programme.missions]
+    plans = PlanPluieAudit.query.filter(
+        PlanPluieAudit.mission_principale_id.in_(mission_ids)
+    ).filter_by(is_archived=False).all()
+    
+    stats = {
+        'total': len(plans),
+        'actifs': len([p for p in plans if p.statut == 'actif']),
+        'declenches': len([p for p in plans if p.statut == 'declenche']),
+        'par_type': {
+            'retard': len([p for p in plans if p.condition_type == 'retard']),
+            'indisponibilite': len([p for p in plans if p.condition_type == 'indisponibilite']),
+            'urgence': len([p for p in plans if p.condition_type == 'urgence'])
+        }
+    }
+    
+    return jsonify(stats)
+
+
+# ============================================================================
+# ROUTES POUR LA MODIFICATION DES PROGRAMMES
+# ============================================================================
+
+@app.route('/programme-audit/<int:id>/modifier', methods=['POST'])
+@csrf.exempt 
+@login_required
+def modifier_programme_audit(id):
+    """Modifier un programme d'audit"""
+    programme = ProgrammeAudit.query.get_or_404(id)
+    
+    if not check_client_access(programme):
+        flash('Accès non autorisé', 'error')
+        return redirect(url_for('liste_programmes_audit'))
+    
+    try:
+        ancienne_annee_debut = programme.annee_debut
+        ancienne_annee_fin = programme.annee_fin
+        
+        # Mise à jour des champs
+        programme.nom = request.form.get('nom', programme.nom)
+        programme.description = request.form.get('description', programme.description)
+        programme.periode = request.form.get('periode', programme.periode)
+        programme.annee_debut = int(request.form.get('annee_debut', programme.annee_debut))
+        programme.annee_fin = int(request.form.get('annee_fin', programme.annee_fin))
+        programme.methode_generation = request.form.get('methode_generation', programme.methode_generation)
+        programme.frequence_audit = request.form.get('frequence_audit') or None
+        programme.duree_moyenne_mission = int(request.form.get('duree_moyenne_mission')) if request.form.get('duree_moyenne_mission') else None
+        programme.ressources_disponibles = int(request.form.get('ressources_disponibles')) if request.form.get('ressources_disponibles') else None
+        programme.updated_at = datetime.now()
+        
+        # ========== GESTION DES MISSIONS APRÈS CHANGEMENT DE PÉRIODE ==========
+        if ancienne_annee_debut != programme.annee_debut or ancienne_annee_fin != programme.annee_fin:
+            # Ajuster les missions qui sont hors de la nouvelle période
+            for mission in programme.missions:
+                if mission.annee_prevue < programme.annee_debut:
+                    mission.annee_prevue = programme.annee_debut
+                    mission.commentaire_repli = f"Mission ajustée automatiquement (année début programme modifiée)"
+                elif mission.annee_prevue > programme.annee_fin:
+                    mission.annee_prevue = programme.annee_fin
+                    mission.commentaire_repli = f"Mission ajustée automatiquement (année fin programme modifiée)"
+        
+        db.session.commit()
+        
+        flash('Programme modifié avec succès', 'success')
+        
+    except Exception as e:
+        db.session.rollback()
+        flash(f'Erreur: {str(e)}', 'error')
+    
+    return redirect(url_for('detail_programme_audit', id=programme.id))
+
+
+@app.route('/programme-audit/<int:id>/desapprouver', methods=['POST'])
+@csrf.exempt 
+@login_required
+def desapprouver_programme_audit(id):
+    """Désapprouver un programme d'audit (remettre en élaboration)"""
+    programme = ProgrammeAudit.query.get_or_404(id)
+    
+    if not check_client_access(programme):
+        flash('Accès non autorisé', 'error')
+        return redirect(url_for('liste_programmes_audit'))
+    
+    try:
+        raison = request.form.get('raison', 'Désapprobation manuelle')
+        
+        programme.statut = 'en_elaboration'
+        programme.date_approbation = None
+        programme.date_mise_en_oeuvre = None
+        programme.updated_at = datetime.now()
+        programme.archive_reason = raison  # Réutiliser pour la raison de désapprobation
+        
+        db.session.commit()
+        
+        flash(f'Programme {programme.reference} désapprouvé avec succès', 'warning')
+        
+    except Exception as e:
+        db.session.rollback()
+        flash(f'Erreur: {str(e)}', 'error')
+    
+    return redirect(url_for('detail_programme_audit', id=programme.id))
+
+
+@app.route('/programme-audit/<int:id>/dupliquer', methods=['POST'])
+@login_required
+def dupliquer_programme_audit(id):
+    """Dupliquer un programme d'audit"""
+    programme_original = ProgrammeAudit.query.get_or_404(id)
+    
+    if not check_client_access(programme_original):
+        flash('Accès non autorisé', 'error')
+        return redirect(url_for('liste_programmes_audit'))
+    
+    try:
+        # Générer nouvelle référence
+        def generer_reference_programme(client_id=None):
+            base_ref = "PROGAUD-"
+            dernier = ProgrammeAudit.query.filter_by(client_id=client_id)\
+                .order_by(ProgrammeAudit.id.desc()).first()
+            
+            if dernier and dernier.reference:
+                try:
+                    dernier_num = int(dernier.reference.split('-')[1])
+                    nouveau_num = dernier_num + 1
+                except:
+                    count = ProgrammeAudit.query.filter_by(client_id=client_id).count()
+                    nouveau_num = count + 1
+            else:
+                nouveau_num = 1
+            
+            return f"{base_ref}{nouveau_num:04d}"
+        
+        # Créer nouveau programme
+        nouveau_programme = ProgrammeAudit(
+            reference=generer_reference_programme(programme_original.client_id),
+            nom=f"COPIE - {programme_original.nom}",
+            description=programme_original.description,
+            periode=programme_original.periode,
+            annee_debut=programme_original.annee_debut + 1,
+            annee_fin=programme_original.annee_fin + 1,
+            methode_generation=programme_original.methode_generation,
+            criteres_generation=programme_original.criteres_generation,
+            frequence_audit=programme_original.frequence_audit,
+            duree_moyenne_mission=programme_original.duree_moyenne_mission,
+            ressources_disponibles=programme_original.ressources_disponibles,
+            statut='en_elaboration',
+            client_id=programme_original.client_id,
+            created_by=current_user.id
+        )
+        
+        db.session.add(nouveau_programme)
+        db.session.commit()
+        
+        flash(f'Programme dupliqué avec succès - {nouveau_programme.reference}', 'success')
+        return redirect(url_for('detail_programme_audit', id=nouveau_programme.id))
+        
+    except Exception as e:
+        db.session.rollback()
+        flash(f'Erreur: {str(e)}', 'error')
+        return redirect(url_for('detail_programme_audit', id=programme_original.id))
+# ============================================================================
+# ROUTES POUR L'ARCHIVAGE DES PROGRAMMES D'AUDIT
+# ============================================================================
+
+@app.route('/programme-audit/<int:id>/archiver', methods=['POST'])
+@csrf.exempt
+@login_required
+def archiver_programme_audit(id):
+    """Archiver un programme d'audit"""
+    programme = ProgrammeAudit.query.get_or_404(id)
+    
+    if not check_client_access(programme):
+        flash('Accès non autorisé', 'error')
+        return redirect(url_for('liste_programmes_audit'))
+    
+    if request.method == 'POST':
+        try:
+            raison = request.form.get('raison', 'Archivage manuel')
+            commentaire = request.form.get('commentaire', '')
+            
+            programme.is_archived = True
+            programme.statut = 'archive'
+            programme.archived_at = datetime.now()
+            programme.archived_by = current_user.id
+            programme.archive_reason = f"{raison} - {commentaire}" if commentaire else raison
+            
+            db.session.commit()
+            
+            flash(f'Programme {programme.reference} archivé avec succès', 'success')
+            
+        except Exception as e:
+            db.session.rollback()
+            flash(f'Erreur lors de l\'archivage: {str(e)}', 'error')
+    
+    return redirect(url_for('programmes_archives'))
+
+
+@app.route('/programme-audit/<int:id>/restaurer', methods=['POST'])
+@csrf.exempt 
+@login_required
+def restaurer_programme_audit(id):
+    """Restaurer un programme d'audit archivé"""
+    programme = ProgrammeAudit.query.get_or_404(id)
+    
+    if not check_client_access(programme):
+        flash('Accès non autorisé', 'error')
+        return redirect(url_for('programmes_archives'))
+    
+    try:
+        programme.is_archived = False
+        programme.statut = 'en_elaboration'  # Remettre en élaboration
+        programme.archived_at = None
+        programme.archived_by = None
+        programme.archive_reason = None
+        
+        db.session.commit()
+        
+        flash(f'Programme {programme.reference} restauré avec succès', 'success')
+        
+    except Exception as e:
+        db.session.rollback()
+        flash(f'Erreur lors de la restauration: {str(e)}', 'error')
+    
+    return redirect(url_for('programmes_archives'))
+
+
+@app.route('/programme-audit/<int:id>/supprimer-definitivement', methods=['POST'])
+@login_required
+def supprimer_programme_audit_definitif(id):
+    """Supprimer définitivement un programme archivé"""
+    programme = ProgrammeAudit.query.get_or_404(id)
+    
+    if not check_client_access(programme):
+        flash('Accès non autorisé', 'error')
+        return redirect(url_for('programmes_archives'))
+    
+    # Vérifier que le programme est bien archivé
+    if not programme.is_archived:
+        flash('Seuls les programmes archivés peuvent être supprimés définitivement', 'error')
+        return redirect(url_for('liste_programmes_audit'))
+    
+    try:
+        confirmation = request.form.get('confirmation', '')
+        
+        if confirmation != programme.reference:
+            flash('La confirmation ne correspond pas à la référence du programme', 'error')
+            return redirect(url_for('programmes_archives'))
+        
+        # Supprimer les missions associées
+        for mission in programme.missions:
+            # Supprimer les plans de repli associés
+            PlanPluieAudit.query.filter(
+                (PlanPluieAudit.mission_principale_id == mission.id) |
+                (PlanPluieAudit.mission_remplacement_id == mission.id)
+            ).delete()
+            
+            db.session.delete(mission)
+        
+        # Supprimer le programme
+        db.session.delete(programme)
+        db.session.commit()
+        
+        flash(f'Programme {programme.reference} supprimé définitivement', 'success')
+        
+    except Exception as e:
+        db.session.rollback()
+        flash(f'Erreur lors de la suppression: {str(e)}', 'error')
+    
+    return redirect(url_for('programmes_archives'))
+
+
+@app.route('/programmes-archives')
+@csrf.exempt
+@login_required
+def programmes_archives():
+    """Liste des programmes d'audit archivés"""
+    
+    # Vérification permission
+    if not current_user.has_permission('can_manage_audit'):
+        flash('Permission requise', 'error')
+        return redirect(url_for('dashboard'))
+    
+    # Récupération des programmes archivés
+    programmes = get_client_filter(ProgrammeAudit)\
+        .filter_by(is_archived=True)\
+        .order_by(ProgrammeAudit.archived_at.desc())\
+        .all()
+    
+    return render_template('programme_audit/archives.html',
+                         programmes=programmes)
+
+@app.route('/programme-audit/<int:id>/approuver', methods=['POST'])
+@csrf.exempt
+@login_required
+def approuver_programme_audit(id):
+    """Approuver un programme d'audit"""
+    programme = ProgrammeAudit.query.get_or_404(id)
+    
+    if not check_client_access(programme):
+        flash('Accès non autorisé', 'error')
+        return redirect(url_for('liste_programmes_audit'))
+    
+    try:
+        programme.statut = 'actif'
+        programme.date_approbation = datetime.strptime(
+            request.form.get('date_approbation', datetime.now().strftime('%Y-%m-%d')), 
+            '%Y-%m-%d'
+        ).date()
+        programme.date_mise_en_oeuvre = datetime.now().date()
+        programme.updated_at = datetime.now()
+        
+        db.session.commit()
+        
+        flash(f'Programme {programme.reference} approuvé avec succès', 'success')
+        
+    except Exception as e:
+        db.session.rollback()
+        flash(f'Erreur lors de l\'approbation: {str(e)}', 'error')
+    
+    return redirect(url_for('detail_programme_audit', id=id))
+
+
+
+
+
+
+
 @app.route('/audit/<int:audit_id>/matrice-maturite', methods=['GET', 'POST'])
 @login_required
 def matrice_maturite_audit(audit_id):
@@ -46241,3 +51659,4 @@ def logout():
 
 if __name__ == '__main__':
     app.run(debug=True, host='0.0.0.0', port=5005)
+
