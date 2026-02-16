@@ -988,6 +988,7 @@ class Cartographie(db.Model):
     type_cartographie = db.Column(db.String(50), default='direction')
     created_by = db.Column(db.Integer, db.ForeignKey('user.id'))
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    processus_id = db.Column(db.Integer, db.ForeignKey('processus.id')) 
     # NOUVEAUX CHAMPS POUR L'ARCHIVAGE
     is_archived = db.Column(db.Boolean, default=False)
     archived_at = db.Column(db.DateTime)
@@ -1002,6 +1003,7 @@ class Cartographie(db.Model):
     risques = db.relationship('Risque', back_populates='cartographie')
     campagnes = db.relationship('CampagneEvaluation', back_populates='cartographie', cascade='all, delete-orphan')
     client_id = db.Column(db.Integer, db.ForeignKey('clients.id'), nullable=True)
+    processus = db.relationship('Processus', backref='cartographies')
 # -------------------- RISQUE --------------------
 class Risque(db.Model):
     __tablename__ = 'risques'
