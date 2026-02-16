@@ -6324,35 +6324,7 @@ def debug_formule_modules(id):
     
     return jsonify(debug_info)
     
-@app.route('/admin/debug-form-action', methods=['GET', 'POST'])
-@login_required
-def debug_form_action():
-    """Test direct de l'action du formulaire"""
-    
-    if request.method == 'POST':
-        return f"""
-        <h2>✅ Formulaire reçu!</h2>
-        <pre>{request.form}</pre>
-        <a href="/admin/debug-form-action">Retour</a>
-        """
-    
-    return """
-    <html>
-    <head><title>Test Formulaire</title></head>
-    <body style="padding: 20px;">
-        <h1>Test Formulaire Direct</h1>
-        
-        <form method="POST">
-            <input type="hidden" name="csrf_token" value="test">
-            <p>Nom: <input type="text" name="username" value="testuser"></p>
-            <p>Email: <input type="email" name="email" value="test@test.com"></p>
-            <p>Password: <input type="password" name="password" value="test123"></p>
-            <p>Confirm: <input type="password" name="confirm_password" value="test123"></p>
-            <p><button type="submit">Tester Soumission</button></p>
-        </form>
-    </body>
-    </html>
-    """
+
 
 @app.route('/api/client/<int:client_id>/provision-server', methods=['POST'])
 @login_required
@@ -11062,88 +11034,7 @@ def add_missing_permissions():
         flash(f'❌ Erreur: {str(e)}', 'error')
         return redirect(url_for('dashboard'))
 
-@app.route('/debug/plans-action-deep')
-@login_required
-def debug_plans_action_deep():
-    """Diagnostic profond pour Plans d'action"""
-    
-    user = current_user
-    
-    # 1. Vérifier les permissions de l'utilisateur
-    user_perms = user.permissions or {}
-    
-    # 2. Vérifier la formule
-    formule_info = None
-    if user.client and user.client.formule:
-        formule = user.client.formule
-        formule_info = {
-            'nom': formule.nom,
-            'code': formule.code,
-            'modules': formule.modules,
-            'permissions_template': formule.permissions_template
-        }
-    
-    # 3. Vérifier si le module est dans la formule
-    module_in_formule = False
-    if formule_info:
-        # Chercher avec différentes clés
-        possible_keys = ['plans_action', 'plans_action_d_audit', 'action_plans']
-        for key in possible_keys:
-            if key in formule_info['modules']:
-                module_in_formule = True
-                module_value = formule_info['modules'][key]
-                print(f"✅ Module trouvé avec clé '{key}': {module_value}")
-                break
-    
-    # 4. Vérifier la route actuelle
-    from flask import request
-    route_info = {
-        'endpoint': request.endpoint,
-        'path': request.path,
-        'method': request.method
-    }
-    
-    # 5. Vérifier le décorateur check_module_access
-    import inspect
-    decorator_info = None
-    try:
-        # Obtenir la fonction de la route
-        func = app.view_functions['liste_plans_action']
-        source = inspect.getsource(func)
-        decorator_info = {
-            'has_check_module_access': '@check_module_access' in source or 'check_module_access(' in source,
-            'function_name': func.__name__
-        }
-    except:
-        pass
-    
-    return jsonify({
-        'user': {
-            'id': user.id,
-            'username': user.username,
-            'role': user.role,
-            'client_id': user.client_id,
-            'permissions_count': len(user_perms),
-            'specific_plans_permissions': {
-                'can_manage_action_plans': user_perms.get('can_manage_action_plans'),
-                'can_view_action_plans': user_perms.get('can_view_action_plans')
-            },
-            'all_permissions': user_perms
-        },
-        'client': {
-            'id': user.client_id,
-            'nom': user.client.nom if user.client else None
-        } if user.client else None,
-        'formule': formule_info,
-        'module_check': {
-            'plans_action_in_formule': module_in_formule,
-            'module_keys_searched': ['plans_action', 'plans_action_d_audit', 'action_plans'],
-            'all_module_keys': list(formule_info['modules'].keys()) if formule_info else []
-        },
-        'route_info': route_info,
-        'decorator_info': decorator_info,
-        'current_url': url_for('liste_plans_action')
-    })
+
 
 @app.route('/force-enable-plans-action-now')
 @login_required
@@ -11222,40 +11113,6 @@ def fix_plans_action_specific(id):
         flash(f'❌ Erreur: {str(e)}', 'error')
         return redirect(url_for('super_admin_editer_formule', id=id))
 
-@app.route('/debug-user-plans-action')
-@login_required
-def debug_user_plans_action():
-    """Debug spécifique pour plans_action"""
-    
-    user = current_user
-    
-    return jsonify({
-        'username': user.username,
-        'role': user.role,
-        'client_id': user.client_id,
-        'client': user.client.nom if user.client else None,
-        'formule_id': user.client.formule_id if user.client else None,
-        'formule': user.client.formule.nom if user.client and user.client.formule else None,
-        'formule_code': user.client.formule.code if user.client and user.client.formule else None,
-        
-        # Modules de la formule
-        'formule_modules': user.client.formule.modules if user.client and user.client.formule else None,
-        'plans_action_module': user.client.formule.modules.get('plans_action') if user.client and user.client.formule else None,
-        
-        # Permissions de la formule
-        'formule_permissions': user.client.formule.permissions_template if user.client and user.client.formule else None,
-        'can_manage_action_plans_formule': user.client.formule.permissions_template.get('can_manage_action_plans') if user.client and user.client.formule else None,
-        'can_view_action_plans_formule': user.client.formule.permissions_template.get('can_view_action_plans') if user.client and user.client.formule else None,
-        
-        # Permissions de l'utilisateur
-        'user_permissions': user.permissions,
-        'can_manage_action_plans_user': user.permissions.get('can_manage_action_plans'),
-        'can_view_action_plans_user': user.permissions.get('can_view_action_plans'),
-        
-        # Vérification fonction get_all_permissions_with_formule_check
-        'all_permissions_keys': list(get_all_permissions_with_formule_check(user).keys()) if hasattr(current_user, 'id') else None,
-        'plans_action_in_all_permissions': 'plans_action' in get_all_permissions_with_formule_check(user) if hasattr(current_user, 'id') else None
-    })
 
 def sync_formule_permissions_from_modules():
     """Synchronise automatiquement les permissions basées sur les modules activés"""
@@ -13237,47 +13094,7 @@ def ensure_admin_client_permissions():
                     print(f"⚠️ Erreur garantie permissions: {e}")
 
 
-@app.route('/debug/admin-permissions')
-@login_required
-def debug_admin_permissions():
-    """Débogage spécifique pour les permissions admin"""
-    
-    html = f"""
-    <html>
-    <head><title>Debug Permissions Admin</title></head>
-    <body style="padding: 20px; font-family: Arial;">
-        <h1>🔍 Debug Permissions Admin Client</h1>
-        
-        <div style="background: #f5f5f5; padding: 20px; margin: 20px 0;">
-            <h3>Utilisateur: {current_user.username}</h3>
-            <p><strong>Rôle:</strong> {current_user.role}</p>
-            <p><strong>is_client_admin:</strong> {current_user.is_client_admin}</p>
-            <p><strong>Client ID:</strong> {current_user.client_id}</p>
-            <p><strong>can_manage_users:</strong> {current_user.can_manage_users}</p>
-        </div>
-        
-        <div style="background: #e8f5e8; padding: 20px; margin: 20px 0;">
-            <h3>Permissions critiques:</h3>
-            <ul>
-                <li>can_view_notifications: {current_user.has_permission('can_view_notifications')}</li>
-                <li>can_view_dashboard: {current_user.has_permission('can_view_dashboard')}</li>
-                <li>can_view_reports: {current_user.has_permission('can_view_reports')}</li>
-                <li>can_view_departments: {current_user.has_permission('can_view_departments')}</li>
-                <li>can_view_users_list: {current_user.has_permission('can_view_users_list')}</li>
-            </ul>
-        </div>
-        
-        <div style="background: #fff3cd; padding: 20px; margin: 20px 0;">
-            <h3>Actions rapides:</h3>
-            <a href="/fix-all-admin-permissions" style="color: blue;">Corriger TOUTES les permissions admin</a><br>
-            <a href="/client-admin/dashboard" style="color: blue;">Retour au dashboard admin</a><br>
-            <a href="/notifications" style="color: blue;">Tester les notifications</a>
-        </div>
-    </body>
-    </html>
-    """
-    
-    return html
+
 
 # Filtre Jinja pour vérifier les permissions dans les templates
 @app.template_filter('has_permission')
@@ -13914,29 +13731,7 @@ def super_admin_management():
                          form=form,
                          current_user=current_user)
 
-@app.route('/debug-routes')
-def debug_routes():
-    """Affiche toutes les routes disponibles"""
-    routes = []
-    for rule in app.url_map.iter_rules():
-        routes.append({
-            'endpoint': rule.endpoint,
-            'methods': list(rule.methods),
-            'rule': rule.rule
-        })
-    
-    # Filtrer pour voir les routes liées à login
-    login_routes = [r for r in routes if 'login' in r['endpoint'].lower() or 'login' in r['rule']]
-    
-    return jsonify({
-        'all_routes_count': len(routes),
-        'login_routes': login_routes,
-        'current_user': {
-            'authenticated': current_user.is_authenticated,
-            'username': current_user.username if current_user.is_authenticated else None
-        }
-    })
-# AJOUTER CES ROUTES API DANS app.py
+
 
 
 @app.route('/api/client/<int:client_id>/reset-admin-password', methods=['POST'])
@@ -15844,50 +15639,6 @@ def gestionnaire_supprimer_utilisateur(id):
         return jsonify({'success': False, 'error': str(e)}), 500
 
 
-@app.route('/gestionnaire/debug-permissions')
-@login_required
-def debug_permissions():
-    """Page de débogage des permissions"""
-    
-    html = f"""
-    <html>
-    <head><title>Debug Permissions</title></head>
-    <body style="padding: 20px; font-family: Arial;">
-        <h1>🔍 Débogage des Permissions Gestionnaire</h1>
-        
-        <h3>Utilisateur actuel: {current_user.username}</h3>
-        
-        <div style="background: #f0f0f0; padding: 15px; margin: 10px 0;">
-            <h4>Permissions critiques:</h4>
-            <ul>
-                <li>can_create_users: {current_user.has_permission('can_create_users')}</li>
-                <li>can_edit_users: {current_user.has_permission('can_edit_users')}</li>
-                <li>can_delete_users: {current_user.has_permission('can_delete_users')}</li>
-                <li>can_deactivate_users: {current_user.has_permission('can_deactivate_users')}</li>
-                <li>can_view_users_list: {current_user.has_permission('can_view_users_list')}</li>
-                <li>can_manage_users: {current_user.can_manage_users}</li>
-                <li>is_client_admin: {current_user.is_client_admin}</li>
-            </ul>
-        </div>
-        
-        <div style="background: #e8f5e8; padding: 15px; margin: 10px 0;">
-            <h4>Toutes les permissions:</h4>
-            <pre>{json.dumps(current_user.permissions or {}, indent=2)}</pre>
-        </div>
-        
-        <div style="background: #fff3cd; padding: 15px; margin: 10px 0;">
-            <h4>Routes disponibles:</h4>
-            <ul>
-                <li><a href="/gestionnaire/utilisateurs">/gestionnaire/utilisateurs</a></li>
-                <li><a href="/gestionnaire/utilisateur/1/toggle-status" onclick="alert('Route test')">/toggle-status (test)</a></li>
-                <li><a href="/gestionnaire/utilisateur/1/supprimer" onclick="alert('Route test')">/supprimer (test)</a></li>
-            </ul>
-        </div>
-    </body>
-    </html>
-    """
-    
-    return html
 
 # Ajoutez cette fonction au début de votre fichier app.py
 def journaliser_action_client(client_id, utilisateur_id, action, details=None):
@@ -16138,14 +15889,6 @@ def super_admin_dashboard():
 # ========================
 # FONCTIONS DE DÉBOGAGE
 # ========================
-
-def debug_form_errors(form):
-    """Affiche les erreurs de formulaire"""
-    if form.errors:
-        print("❌ ERREURS DE FORMULAIRE:")
-        for field, errors in form.errors.items():
-            print(f"  Champ '{field}': {errors}")
-
 
 
 # ========================
@@ -32551,82 +32294,8 @@ def archives_logigrammes():
         return redirect(url_for('liste_logigrammes'))
     
 # Route de debug pour vérifier l'accès
-@app.route('/api/debug/logigramme/<int:activite_id>', methods=['GET'])
-@csrf.exempt
-@login_required
-def debug_logigramme_access(activite_id):
-    """Debug: vérifier l'accès à un logigramme"""
-    try:
-        # Méthode 1: Vérification standard
-        activite_standard = ProcessusActivite.query.get(activite_id)
-        
-        # Méthode 2: Vérification avec get_client_filter
-        activite_filtered = get_client_filter(ProcessusActivite).filter_by(id=activite_id).first()
-        
-        # Méthode 3: Vérification d'accès
-        access_granted = check_client_access(activite_standard) if activite_standard else False
-        
-        return jsonify({
-            'success': True,
-            'user_id': current_user.id,
-            'user_username': current_user.username,
-            'user_role': current_user.role,
-            'user_client_id': getattr(current_user, 'client_id', None),
-            'activite_id': activite_id,
-            'activite_nom': activite_standard.nom if activite_standard else None,
-            'activite_created_by': activite_standard.created_by if activite_standard else None,
-            'activite_client_id': getattr(activite_standard, 'client_id', None) if activite_standard else None,
-            'activite_found_standard': activite_standard is not None,
-            'activite_found_filtered': activite_filtered is not None,
-            'access_granted': access_granted,
-            'has_permission_can_manage_logigram': current_user.has_permission('can_manage_logigram'),
-            'is_owner': activite_standard and activite_standard.created_by == current_user.id,
-            'debug_info': {
-                'viewing_client_id': session.get('viewing_client_id'),
-                'is_super_admin': current_user.role == 'super_admin'
-            }
-        })
-        
-    except Exception as e:
-        return jsonify({'success': False, 'error': str(e)}), 500
 
-@app.route('/api/logigramme/test-fix', methods=['GET'])
-@login_required
-@csrf.exempt
-def test_logigramme_fix():
-    """Test de résolution des problèmes"""
-    try:
-        # Créer un logigramme de test si nécessaire
-        test_logigramme = ProcessusActivite.query.filter_by(nom="TEST FIX").first()
-        
-        if not test_logigramme:
-            test_logigramme = ProcessusActivite(
-                nom="TEST FIX",
-                description="Logigramme de test pour les corrections",
-                created_by=current_user.id
-            )
-            
-            if current_user.role != 'super_admin' and hasattr(current_user, 'client_id'):
-                test_logigramme.client_id = current_user.client_id
-            
-            db.session.add(test_logigramme)
-            db.session.commit()
-        
-        return jsonify({
-            'success': True,
-            'test_logigramme': test_logigramme.to_dict(),
-            'user_info': {
-                'id': current_user.id,
-                'username': current_user.username,
-                'role': current_user.role,
-                'client_id': getattr(current_user, 'client_id', None)
-            },
-            'check_client_access': check_client_access(test_logigramme),
-            'has_permission': current_user.has_permission('can_manage_logigram')
-        })
-        
-    except Exception as e:
-        return jsonify({'success': False, 'error': str(e)}), 500
+
     
 @app.route('/logigramme/nouveau', methods=['GET', 'POST'])
 @login_required
@@ -36531,35 +36200,6 @@ def checklist_audit():
 # ROUTES DE DEBUG ET TESTS
 # ============================================================================
 
-@app.route('/debug/risques')
-@login_required
-def debug_risques():
-    """Page de debug pour vérifier les risques"""
-    if current_user.role != 'admin':
-        flash('Accès réservé aux administrateurs', 'error')
-        return redirect(url_for('dashboard'))
-    
-    # Tous les risques
-    tous_risques = Risque.query.order_by(Risque.id.desc()).all()
-    
-    # Risques visibles pour l'utilisateur courant
-    risques_visibles = Risque.query.filter_by(is_archived=False).all()
-    
-    # Statistiques
-    stats = {
-        'total': len(tous_risques),
-        'archives': len([r for r in tous_risques if r.is_archived]),
-        'actifs': len([r for r in tous_risques if not r.is_archived]),
-        'avec_evaluations': len([r for r in tous_risques if r.evaluations]),
-        'sans_evaluations': len([r for r in tous_risques if not r.evaluations]),
-        'visibles': len(risques_visibles)
-    }
-    
-    return render_template('debug/risques.html',
-                         tous_risques=tous_risques,
-                         risques_visibles=risques_visibles,
-                         stats=stats,
-                         current_user=current_user)
 
 # ============================================================================
 # CORRECTION DE LA ROUTE PLANS_ACTION_AUDIT (alias pour compatibilité)
@@ -38477,284 +38117,8 @@ def restaurer_audit(id):
     
     return redirect(url_for('liste_audits', show_archived=True))
 
-@app.route('/debug_audit_access/<int:id>')
-@login_required
-def debug_audit_access(id):
-    """Debug l'accès à un audit spécifique"""
-    
-    import json
-    from flask import jsonify
-    
-    print(f"🔍 [DEBUG_ACCESS] Début pour audit {id}")
-    print(f"🔍 [DEBUG_ACCESS] User: {current_user.username} (id={current_user.id}, client_id={current_user.client_id})")
-    
-    audit = Audit.query.get(id)
-    
-    if not audit:
-        return "❌ Audit non trouvé"
-    
-    print(f"🔍 [DEBUG_ACCESS] Audit trouvé: {audit.reference}")
-    
-    # Test check_client_access
-    try:
-        access_result = check_client_access(audit)
-        print(f"✅ check_client_access résultat: {access_result}")
-    except Exception as e:
-        print(f"❌ Erreur check_client_access: {str(e)}")
-        access_result = f"Erreur: {str(e)}"
-    
-    # Test can_archive_audit
-    try:
-        can_archive = current_user.can_archive_audit(audit)
-        print(f"✅ can_archive_audit résultat: {can_archive}")
-    except Exception as e:
-        print(f"❌ Erreur can_archive_audit: {str(e)}")
-        can_archive = f"Erreur: {str(e)}"
-    
-    # Collecte des informations
-    debug_info = {
-        'audit': {
-            'id': audit.id,
-            'reference': audit.reference,
-            'titre': audit.titre,
-            'client_id': audit.client_id,
-            'created_by': audit.created_by,
-            'responsable_id': audit.responsable_id,
-            'is_archived': audit.is_archived,
-            'statut': audit.statut,
-            'equipe_audit_ids': audit.equipe_audit_ids,
-        },
-        'user': {
-            'id': current_user.id,
-            'username': current_user.username,
-            'client_id': current_user.client_id,
-            'role': current_user.role,
-            'is_client_admin': current_user.is_client_admin,
-            'can_manage_users': current_user.can_manage_users,
-        },
-        'access': {
-            'check_client_access': access_result,
-            'can_archive_audit': can_archive,
-            'has_permission_can_manage_audit': current_user.has_permission('can_manage_audit'),
-            'is_creator': current_user.id == audit.created_by,
-            'is_responsable': current_user.id == audit.responsable_id,
-            'client_id_match': current_user.client_id == audit.client_id,
-        },
-        'permissions_debug': {
-            'user_permissions': current_user.permissions if hasattr(current_user, 'permissions') else None,
-            'has_permission_result': current_user.has_permission('can_manage_audit') if hasattr(current_user, 'has_permission') else 'Méthode non trouvée',
-        }
-    }
-    
-    # HTML de debug
-    html = f"""
-    <!DOCTYPE html>
-    <html>
-    <head>
-        <title>Debug Audit {audit.reference}</title>
-        <style>
-            body {{ font-family: Arial, sans-serif; margin: 20px; }}
-            .section {{ margin: 20px 0; padding: 15px; border: 1px solid #ddd; }}
-            .success {{ background: #d4edda; border-color: #c3e6cb; }}
-            .error {{ background: #f8d7da; border-color: #f5c6cb; }}
-            .warning {{ background: #fff3cd; border-color: #ffeaa7; }}
-            .info {{ background: #d1ecf1; border-color: #bee5eb; }}
-            pre {{ background: #f8f9fa; padding: 10px; border: 1px solid #e9ecef; }}
-            .btn {{ 
-                display: inline-block; 
-                padding: 10px 20px; 
-                margin: 5px; 
-                border: none; 
-                border-radius: 4px; 
-                cursor: pointer; 
-                text-decoration: none;
-                color: white;
-            }}
-            .btn-archive {{ background: #f0ad4e; }}
-            .btn-restore {{ background: #5bc0de; }}
-            .btn-delete {{ background: #d9534f; }}
-            .btn-test {{ background: #0275d8; }}
-        </style>
-    </head>
-    <body>
-        <h1>🔍 Debug Audit: {audit.reference}</h1>
-        
-        <div class="section info">
-            <h2>Audit Info</h2>
-            <pre>{json.dumps(debug_info['audit'], indent=2, default=str)}</pre>
-        </div>
-        
-        <div class="section info">
-            <h2>User Info</h2>
-            <pre>{json.dumps(debug_info['user'], indent=2)}</pre>
-        </div>
-        
-        <div class="section {'success' if debug_info['access']['check_client_access'] else 'error'}">
-            <h2>Accès & Permissions</h2>
-            <pre>{json.dumps(debug_info['access'], indent=2)}</pre>
-        </div>
-        
-        <div class="section warning">
-            <h2>Permissions Debug</h2>
-            <pre>{json.dumps(debug_info['permissions_debug'], indent=2, default=str)}</pre>
-        </div>
-        
-        <div class="section">
-            <h2>Actions de Test</h2>
-            
-            <h3>Test d'Archivage</h3>
-            <form action="/test_archive_simple/{id}" method="POST" style="display: inline;">
-                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                <button type="submit" class="btn btn-archive">🔧 TEST ARCHIVER (Simple)</button>
-            </form>
-            
-            <form action="/audit/{id}/archive" method="POST" style="display: inline;">
-                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                <button type="submit" class="btn btn-archive">📦 ARCHIVER (Route normale)</button>
-            </form>
-            
-            <h3>Autres Actions</h3>
-            <a href="/test_archive_debug/{id}" class="btn btn-test">🧪 Test Debug Complet</a>
-            <a href="/audits" class="btn btn-test">📋 Liste des Audits</a>
-            <a href="/detail_audit/{id}" class="btn btn-test">👁️ Détail Audit</a>
-        </div>
-        
-        <div class="section">
-            <h2>Analyse</h2>
-            <ul>
-                <li><strong>Client ID Match:</strong> {'✅ OUI' if debug_info['access']['client_id_match'] else '❌ NON'}</li>
-                <li><strong>Créateur:</strong> {'✅ OUI' if debug_info['access']['is_creator'] else '❌ NON'}</li>
-                <li><strong>Permission can_manage_audit:</strong> {'✅ OUI' if debug_info['access']['has_permission_can_manage_audit'] else '❌ NON'}</li>
-                <li><strong>check_client_access:</strong> {'✅ SUCCÈS' if debug_info['access']['check_client_access'] == True else '❌ ÉCHEC'}</li>
-                <li><strong>can_archive_audit:</strong> {'✅ AUTORISÉ' if debug_info['access']['can_archive_audit'] == True else '❌ REFUSÉ'}</li>
-            </ul>
-        </div>
-        
-        <div class="section">
-            <h2>Résolution de Problèmes</h2>
-            <p>Si <strong>check_client_access</strong> échoue :</p>
-            <ol>
-                <li>Vérifiez que user.client_id ({current_user.client_id}) == audit.client_id ({audit.client_id})</li>
-                <li>Si différent, vérifiez si vous êtes le créateur (user.id={current_user.id} == audit.created_by={audit.created_by})</li>
-                <li>Exécutez <a href="/fix_all_audits_client">/fix_all_audits_client</a> pour corriger les client_id</li>
-            </ol>
-            
-            <p>Si <strong>can_archive_audit</strong> échoue :</p>
-            <ol>
-                <li>Vérifiez votre rôle: {current_user.role}</li>
-                <li>Vérifiez is_client_admin: {current_user.is_client_admin}</li>
-                <li>Vérifiez la permission can_manage_audit</li>
-            </ol>
-        </div>
-        
-        <script>
-            console.log("Debug info:", {json.dumps(debug_info, default=str)});
-        </script>
-    </body>
-    </html>
-    """
-    
-    return html
 
-@app.route('/fix_all_audits_client', methods=['GET'])
-@login_required
-def fix_all_audits_client():
-    """Migre TOUS les audits vers le client_id de leur créateur"""
-    
-    if current_user.role != 'super_admin' and not current_user.is_client_admin:
-        flash('Permission refusée', 'error')
-        return redirect(url_for('dashboard'))
-    
-    try:
-        # Récupérer tous les audits
-        all_audits = Audit.query.all()
-        fixed_count = 0
-        errors = []
-        
-        for audit in all_audits:
-            try:
-                # Si l'audit n'a pas de client_id
-                if audit.client_id is None:
-                    # Trouver le créateur
-                    creator = User.query.get(audit.created_by)
-                    if creator and creator.client_id:
-                        audit.client_id = creator.client_id
-                        fixed_count += 1
-                        print(f"✅ Audit {audit.id} -> client_id={creator.client_id}")
-                    
-                # Si l'audit a un client_id différent de son créateur
-                elif hasattr(audit, 'created_by') and audit.created_by:
-                    creator = User.query.get(audit.created_by)
-                    if creator and creator.client_id and audit.client_id != creator.client_id:
-                        print(f"⚠️ Audit {audit.id}: client_id={audit.client_id} mais créateur a client_id={creator.client_id}")
-                        # Optionnel: corriger aussi
-                        # audit.client_id = creator.client_id
-                        # fixed_count += 1
-                        
-            except Exception as e:
-                errors.append(f"Audit {audit.id}: {str(e)}")
-        
-        db.session.commit()
-        
-        return f"""
-        <h1>Migration terminée</h1>
-        <p>{fixed_count} audits corrigés</p>
-        <p>{len(errors)} erreurs</p>
-        <p><a href="/audits">Retour aux audits</a></p>
-        """
-        
-    except Exception as e:
-        db.session.rollback()
-        return f"Erreur: {str(e)}"@app.route('/fix_all_audits_client', methods=['GET'])
-@login_required
-def fix_all_audits_client():
-    """Migre TOUS les audits vers le client_id de leur créateur"""
-    
-    if current_user.role != 'super_admin' and not current_user.is_client_admin:
-        flash('Permission refusée', 'error')
-        return redirect(url_for('dashboard'))
-    
-    try:
-        # Récupérer tous les audits
-        all_audits = Audit.query.all()
-        fixed_count = 0
-        errors = []
-        
-        for audit in all_audits:
-            try:
-                # Si l'audit n'a pas de client_id
-                if audit.client_id is None:
-                    # Trouver le créateur
-                    creator = User.query.get(audit.created_by)
-                    if creator and creator.client_id:
-                        audit.client_id = creator.client_id
-                        fixed_count += 1
-                        print(f"✅ Audit {audit.id} -> client_id={creator.client_id}")
-                    
-                # Si l'audit a un client_id différent de son créateur
-                elif hasattr(audit, 'created_by') and audit.created_by:
-                    creator = User.query.get(audit.created_by)
-                    if creator and creator.client_id and audit.client_id != creator.client_id:
-                        print(f"⚠️ Audit {audit.id}: client_id={audit.client_id} mais créateur a client_id={creator.client_id}")
-                        # Optionnel: corriger aussi
-                        # audit.client_id = creator.client_id
-                        # fixed_count += 1
-                        
-            except Exception as e:
-                errors.append(f"Audit {audit.id}: {str(e)}")
-        
-        db.session.commit()
-        
-        return f"""
-        <h1>Migration terminée</h1>
-        <p>{fixed_count} audits corrigés</p>
-        <p>{len(errors)} erreurs</p>
-        <p><a href="/audits">Retour aux audits</a></p>
-        """
-        
-    except Exception as e:
-        db.session.rollback()
-        return f"Erreur: {str(e)}"
+
     
 
 @app.route('/audit/<int:id>/supprimer', methods=['POST'])
@@ -48298,30 +47662,6 @@ def update_questionnaire(id):
     flash('Questionnaire mis à jour avec succès!', 'success')
     return redirect(url_for('editer_questionnaire', id=questionnaire.id))
 
-@app.route('/api/questionnaire/<int:id>/debug')
-@login_required
-def debug_questionnaire(id):
-    """Debug: Vérifier la configuration d'un questionnaire"""
-    questionnaire = Questionnaire.query.get_or_404(id)
-    
-    return jsonify({
-        'id': questionnaire.id,
-        'titre': questionnaire.titre,
-        'collecter_nom': questionnaire.collecter_nom,
-        'collecter_email': questionnaire.collecter_email,
-        'est_actif': questionnaire.est_actif,
-        'est_public': questionnaire.est_public,
-        'reponses': [
-            {
-                'id': r.id,
-                'nom_repondant': r.nom_repondant,
-                'email_repondant': r.email_repondant,
-                'statut': r.statut
-            }
-            for r in questionnaire.reponses[:10]  # 10 premières réponses
-        ],
-        'nombre_reponses': len(questionnaire.reponses)
-    })
 
 @app.route('/questionnaires/<int:id>/reponses')
 @login_required
@@ -49501,40 +48841,7 @@ def api_statut_reponse(id, session_id):
             'success': False,
             'error': str(e)
         }), 500
-    
-@app.route('/api/debug/submit-400', methods=['POST'])
-@csrf.exempt
-def debug_submit_400():
-    """Debug: Pour voir pourquoi la soumission retourne 400"""
-    try:
-        print("🔍 DEBUG SUBMIT 400")
-        print(f"📥 Method: {request.method}")
-        print(f"📦 Content-Type: {request.content_type}")
-        print(f"📦 Headers: {dict(request.headers)}")
-        
-        raw_data = request.get_data(as_text=True)
-        print(f"📄 Données brutes: {raw_data}")
-        
-        try:
-            data = request.get_json(force=True, silent=True)
-            if data:
-                print(f"✅ JSON parsé: {json.dumps(data, indent=2)}")
-            else:
-                print("❌ Impossible de parser JSON")
-                data = {}
-        except Exception as e:
-            print(f"❌ Erreur parsing JSON: {e}")
-            data = {}
-        
-        return jsonify({
-            'success': True,
-            'message': 'Debug OK',
-            'content_type': request.content_type,
-            'data_received': data,
-            'raw_data': raw_data[:500] if raw_data else None
-        })
-    except Exception as e:
-        return jsonify({'success': False, 'error': str(e)}), 500
+ 
     
 @app.route('/api/questionnaire/<int:id>/repondre', methods=['POST', 'OPTIONS'])
 @csrf.exempt
@@ -50107,48 +49414,7 @@ def api_submit_generic():
         print("=" * 80)
         return jsonify({'success': False, 'error': str(e)}), 500
     
-@app.route('/api/debug/response-format', methods=['POST'])
-@csrf.exempt
-def debug_response_format():
-    """Debug: Voir exactement ce que retourne l'API"""
-    print("=" * 80)
-    print("🔍 DEBUG RESPONSE FORMAT")
-    print("=" * 80)
-    
-    # Simuler la soumission pour voir ce que l'API retourne
-    questionnaire_id = 4  # Votre questionnaire ID
-    
-    try:
-        # Essayer d'exécuter la vraie route
-        from flask import request as original_request
-        import io
-        from contextlib import redirect_stdout
-        
-        # Capturer la sortie
-        f = io.StringIO()
-        
-        with redirect_stdout(f):
-            # Appeler la route réelle
-            result = api_submit_questionnaire(questionnaire_id)
-        
-        output = f.getvalue()
-        print("📝 Output de l'API:")
-        print(output)
-        
-        return jsonify({
-            'success': True,
-            'debug': True,
-            'api_output': output,
-            'result_type': type(result).__name__,
-            'result': str(result)[:500] if result else 'None'
-        })
-        
-    except Exception as e:
-        return jsonify({
-            'success': False,
-            'error': str(e),
-            'traceback': traceback.format_exc()
-        }), 500
+
 
 @app.route('/api/test/all-routes', methods=['GET'])
 def test_all_routes():
@@ -50189,145 +49455,7 @@ def test_all_routes():
         'results': results
     })
 
-@app.route('/api/debug/submit-test', methods=['POST', 'OPTIONS'])
-@csrf.exempt
-def debug_submit_test():
-    """Debug: Analyser les données de soumission - VERSION CORRIGÉE"""
-    print("=" * 80)
-    print("🔍 DEBUG SUBMIT TEST - Analyse complète")
-    print("=" * 80)
-    
-    try:
-        print(f"📋 Method: {request.method}")
-        print(f"📦 Content-Type: {request.content_type}")
-        print(f"📦 Headers: {dict(request.headers)}")
-        
-        # Lire les données brutes
-        raw_data = request.get_data(as_text=True)
-        print(f"📄 Raw data (preview): {raw_data[:500]}...")
-        
-        # Essayer de parser JSON
-        data = {}
-        try:
-            if request.is_json:
-                data = request.get_json()
-                print("✅ JSON parsed successfully:")
-                print(json.dumps(data, indent=2))
-            else:
-                # Essayer de parser quand même
-                data = json.loads(raw_data) if raw_data.strip() else {}
-                print("✅ JSON parsed (forced):")
-                print(json.dumps(data, indent=2))
-        except Exception as e:
-            print(f"❌ Error parsing JSON: {e}")
-            data = {}
-        
-        print(f"\n🔍 Data analysis:")
-        print(f"  session_id: {data.get('session_id', 'NOT FOUND')}")
-        print(f"  statut: {data.get('statut', 'NOT FOUND')}")
-        print(f"  nom: '{data.get('nom', 'NOT FOUND')}'")
-        print(f"  email: '{data.get('email', 'NOT FOUND')}'")
-        print(f"  reponses: {len(data.get('reponses', {}))} items")
-        
-        # CORRECTION: Initialiser questionnaire à None au début
-        questionnaire = None
-        questionnaire_id = None
-        
-        # Essayer de trouver le questionnaire
-        # Méthode 1: Depuis les données
-        if 'questionnaire_id' in data:
-            questionnaire_id = data.get('questionnaire_id')
-            print(f"🔍 Questionnaire ID from data: {questionnaire_id}")
-            questionnaire = Questionnaire.query.get(questionnaire_id)
-        
-        # Méthode 2: Depuis le Referer
-        if not questionnaire:
-            referer = request.headers.get('Referer', '')
-            print(f"🔍 Referer: {referer}")
-            
-            import re
-            match = re.search(r'/questionnaires/(\d+)/', referer)
-            if match:
-                questionnaire_id = int(match.group(1))
-                print(f"🔍 Questionnaire ID from Referer (numeric): {questionnaire_id}")
-                questionnaire = Questionnaire.query.get(questionnaire_id)
-            else:
-                # Essayer avec un code (comme "K")
-                match = re.search(r'/questionnaires/([^/]+)/', referer)
-                if match:
-                    code = match.group(1)
-                    print(f"🔍 Questionnaire Code from Referer: {code}")
-                    questionnaire = Questionnaire.query.filter_by(code=code).first()
-                    if questionnaire:
-                        questionnaire_id = questionnaire.id
-        
-        # Afficher le résultat
-        if questionnaire:
-            print(f"✅ Questionnaire found: {questionnaire.titre} (ID: {questionnaire.id})")
-            print(f"⚙️ Configuration: collecter_nom={questionnaire.collecter_nom}, collecter_email={questionnaire.collecter_email}")
-            collecter_nom = questionnaire.collecter_nom
-            collecter_email = questionnaire.collecter_email
-        else:
-            print(f"❌ Questionnaire not found in database")
-            print(f"ℹ️ Will use default configuration for validation")
-            # CORRECTION: Définir des valeurs par défaut si questionnaire non trouvé
-            collecter_nom = False
-            collecter_email = False
-        
-        # Valider les données
-        errors = []
-        
-        # Validation session_id
-        if not data.get('session_id'):
-            errors.append('session_id manquant')
-        
-        # Validation pour soumission complète
-        if data.get('statut') == 'complet':
-            # CORRECTION: Utiliser les variables locales, pas l'objet questionnaire directement
-            if collecter_nom and not data.get('nom'):
-                errors.append('nom requis mais manquant')
-            if collecter_email:
-                if not data.get('email'):
-                    errors.append('email requis mais manquant')
-                elif '@' not in str(data.get('email', '')):
-                    errors.append('email invalide')
-        
-        if errors:
-            print(f"❌ Validation errors: {errors}")
-        else:
-            print("✅ Data validation passed")
-        
-        # Simuler la réponse
-        return jsonify({
-            'success': True,
-            'debug': True,
-            'message': 'Debug analysis completed',
-            'data_received': {
-                'session_id': data.get('session_id'),
-                'statut': data.get('statut'),
-                'nom': data.get('nom'),
-                'email': data.get('email'),
-                'reponses_count': len(data.get('reponses', {}))
-            },
-            'validation': {
-                'passed': len(errors) == 0,
-                'errors': errors,
-                'questionnaire_found': questionnaire is not None,
-                'collecter_nom': collecter_nom if 'collecter_nom' in locals() else False,
-                'collecter_email': collecter_email if 'collecter_email' in locals() else False
-            },
-            'recommendation': 'Data looks good for submission' if len(errors) == 0 else 'Fix validation errors first'
-        }), 200
-        
-    except Exception as e:
-        print(f"❌ Error in debug: {str(e)}")
-        import traceback
-        traceback.print_exc()
-        return jsonify({
-            'success': False,
-            'error': str(e),
-            'traceback': traceback.format_exc()
-        }), 500
+
 
 @app.after_request
 def after_request(response):
