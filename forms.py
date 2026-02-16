@@ -148,6 +148,7 @@ class KRIForm(FlaskForm):
     description = TextAreaField('Description')
     formule_calcul = StringField('Formule de calcul')
     unite_mesure = StringField('Unité de mesure')
+    seuil_cible = FloatField('Seuil cible (pour KPI)', validators=[Optional()])
     seuil_alerte = FloatField("Seuil d'alerte")
     seuil_critique = FloatField('Seuil critique')
     frequence_mesure = SelectField('Fréquence de mesure', choices=[
