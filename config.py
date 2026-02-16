@@ -27,12 +27,18 @@ class Config:
         SQLALCHEMY_DATABASE_URI = os.environ.get('DATABASE_URL') or 'sqlite:///controle_interne.db'
     
     SQLALCHEMY_TRACK_MODIFICATIONS = False
+    
+    SQLALCHEMY_SESSION_OPTIONS = {
+        "expire_on_commit": False
+    }
+    
     SQLALCHEMY_ENGINE_OPTIONS = {
         'pool_recycle': 300,
         'pool_pre_ping': True,
         'pool_size': 20,
         'max_overflow': 30
     }
+
     
     PERMANENT_SESSION_LIFETIME = timedelta(days=1)
     
