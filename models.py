@@ -1002,7 +1002,6 @@ class Cartographie(db.Model):
     risques = db.relationship('Risque', back_populates='cartographie')
     campagnes = db.relationship('CampagneEvaluation', back_populates='cartographie', cascade='all, delete-orphan')
     client_id = db.Column(db.Integer, db.ForeignKey('clients.id'), nullable=True)
-    processus = db.relationship('Processus', backref='cartographies')
 # -------------------- RISQUE --------------------
 class Risque(db.Model):
     __tablename__ = 'risques'
