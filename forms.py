@@ -2631,3 +2631,202 @@ class CommentaireSousActionForm(FlaskForm):
                       render_kw={"placeholder": "important, question, blocage..."})
     fichiers = MultipleFileField('Fichiers joints')
     submit = SubmitField('Publier')
+
+
+# ==================== FORMULAIRES ====================
+
+class ProgrammeAuditForm(FlaskForm):
+    """Formulaire pour créer/modifier un programme d'audit"""
+    
+    nom = StringField('Nom du programme', validators=[DataRequired()])
+    description = TextAreaField('Description')
+    periode = SelectField('Période', choices=[
+        ('annuel', 'Annuel'),
+        ('triennal', 'Triennal (3 ans)')
+    ], validators=[DataRequired()])
+    annee_debut = SelectField('Année de début', validators=[DataRequired()])
+    annee_fin = SelectField('Année de fin', validators=[DataRequired()])
+    
+    # Méthode de génération
+    methode_generation = SelectField('Méthode de génération', choices=[
+        ('manuel', 'Manuel - Je créerai les missions moi-même'),
+        ('auto_risques', 'Automatique - Basé sur la cartographie des risques'),
+        ('hybride', 'Hybride - Automatique avec ajustements manuels')
+    ], validators=[DataRequired()])
+    
+    # Critères pour génération automatisée
+    seuil_critique = BooleanField('Inclure les risques Critiques', default=True)
+    seuil_eleve = BooleanField('Inclure les risques Élevés', default=True)
+    inclure_risques_moyens = BooleanField('Inclure les risques Moyens', default=False)
+    frequence_audit_risque = SelectField('Fréquence d\'audit par niveau', choices=[
+        ('annuelle_critique', 'Annuelle pour risques critiques'),
+        ('semestrielle_critique', 'Semestrielle pour risques critiques'),
+        ('triennal_tous', 'Tous les 3 ans pour tous les risques')
+    ])
+    prioriser_processus_critiques = BooleanField('Prioriser les processus critiques', default=True)
+    
+    # Configuration
+    frequence_audit = SelectField('Fréquence générale d\'audit', choices=[
+        ('annuelle', 'Annuelle'),
+        ('semestrielle', 'Semestrielle'),
+        ('trimestrielle', 'Trimestrielle')
+    ])
+    duree_moyenne_mission = IntegerField('Durée moyenne d\'une mission (jours)', 
+                                         default=5, validators=[NumberRange(min=1, max=30)])
+    ressources_disponibles = IntegerField('Ressources disponibles (jours/homme par an)', 
+                                         default=100, validators=[NumberRange(min=10, max=1000)])
+    
+    submit = SubmitField('Créer le programme')
+
+
+class MissionAuditForm(FlaskForm):
+    """Formulaire pour créer/modifier une mission d'audit"""
+    
+    titre = StringField('Titre de la mission', validators=[DataRequired()])
+    description = TextAreaField('Description')
+    
+    # Lien avec risque
+    risque_id = SelectField('Risque associé', coerce=int, choices=[])
+    priorite = SelectField('Priorité', choices=[
+        ('critique', 'Critique'),
+        ('elevee', 'Élevée'),
+        ('moyenne', 'Moyenne'),
+        ('faible', 'Faible')
+    ])
+    
+    # Planification
+    annee_prevue = SelectField('Année prévue', choices=[], validators=[DataRequired()])
+    trimestre_prevue = SelectField('Trimestre prévu', choices=[
+        (1, '1er trimestre'),
+        (2, '2ème trimestre'),
+        (3, '3ème trimestre'),
+        (4, '4ème trimestre')
+    ])
+    date_debut_prevue = DateField('Date de début prévue', format='%Y-%m-%d')
+    date_fin_prevue = DateField('Date de fin prévue', format='%Y-%m-%d')
+    duree_estimee = IntegerField('Durée estimée (jours)', validators=[NumberRange(min=1, max=60)])
+    
+    # Ressources
+    responsable_id = SelectField('Responsable', coerce=int, choices=[])
+    equipe_ids = SelectMultipleField('Équipe d\'audit', coerce=int, choices=[])
+    
+    submit = SubmitField('Enregistrer')
+
+
+class PlanPluieForm(FlaskForm):
+    """Formulaire pour créer un plan de repli"""
+    
+    nom = StringField('Nom du plan de repli', validators=[DataRequired()])
+    description = TextAreaField('Description')
+    
+    mission_principale_id = SelectField('Mission principale', coerce=int, choices=[], validators=[DataRequired()])
+    mission_remplacement_id = SelectField('Mission de remplacement', coerce=int, choices=[], validators=[DataRequired()])
+    
+    condition_type = SelectField('Condition de déclenchement', choices=[
+        ('retard', 'Retard de plus de X jours'),
+        ('indisponibilite', 'Indisponibilité des ressources'),
+        ('urgence', 'Situation d\'urgence')
+    ])
+    condition_seuil = IntegerField('Seuil (jours)', default=15)
+    condition_description = TextAreaField('Description de la condition')
+    
+    submit = SubmitField('Créer le plan de repli')
+
+# ==================== FORMULAIRES ====================
+
+class ProgrammeAuditForm(FlaskForm):
+    """Formulaire pour créer/modifier un programme d'audit"""
+    
+    nom = StringField('Nom du programme', validators=[DataRequired()])
+    description = TextAreaField('Description')
+    periode = SelectField('Période', choices=[
+        ('annuel', 'Annuel'),
+        ('triennal', 'Triennal (3 ans)')
+    ], validators=[DataRequired()])
+    annee_debut = SelectField('Année de début', validators=[DataRequired()])
+    annee_fin = SelectField('Année de fin', validators=[DataRequired()])
+    
+    # Méthode de génération
+    methode_generation = SelectField('Méthode de génération', choices=[
+        ('manuel', 'Manuel - Je créerai les missions moi-même'),
+        ('auto_risques', 'Automatique - Basé sur la cartographie des risques'),
+        ('hybride', 'Hybride - Automatique avec ajustements manuels')
+    ], validators=[DataRequired()])
+    
+    # Critères pour génération automatisée
+    seuil_critique = BooleanField('Inclure les risques Critiques', default=True)
+    seuil_eleve = BooleanField('Inclure les risques Élevés', default=True)
+    inclure_risques_moyens = BooleanField('Inclure les risques Moyens', default=False)
+    frequence_audit_risque = SelectField('Fréquence d\'audit par niveau', choices=[
+        ('annuelle_critique', 'Annuelle pour risques critiques'),
+        ('semestrielle_critique', 'Semestrielle pour risques critiques'),
+        ('triennal_tous', 'Tous les 3 ans pour tous les risques')
+    ])
+    prioriser_processus_critiques = BooleanField('Prioriser les processus critiques', default=True)
+    
+    # Configuration
+    frequence_audit = SelectField('Fréquence générale d\'audit', choices=[
+        ('annuelle', 'Annuelle'),
+        ('semestrielle', 'Semestrielle'),
+        ('trimestrielle', 'Trimestrielle')
+    ])
+    duree_moyenne_mission = IntegerField('Durée moyenne d\'une mission (jours)', 
+                                         default=5, validators=[NumberRange(min=1, max=30)])
+    ressources_disponibles = IntegerField('Ressources disponibles (jours/homme par an)', 
+                                         default=100, validators=[NumberRange(min=10, max=1000)])
+    
+    submit = SubmitField('Créer le programme')
+
+
+class MissionAuditForm(FlaskForm):
+    """Formulaire pour créer/modifier une mission d'audit"""
+    
+    titre = StringField('Titre de la mission', validators=[DataRequired()])
+    description = TextAreaField('Description')
+    
+    # Lien avec risque
+    risque_id = SelectField('Risque associé', coerce=int, choices=[])
+    priorite = SelectField('Priorité', choices=[
+        ('critique', 'Critique'),
+        ('elevee', 'Élevée'),
+        ('moyenne', 'Moyenne'),
+        ('faible', 'Faible')
+    ])
+    
+    # Planification
+    annee_prevue = SelectField('Année prévue', choices=[], validators=[DataRequired()])
+    trimestre_prevue = SelectField('Trimestre prévu', choices=[
+        (1, '1er trimestre'),
+        (2, '2ème trimestre'),
+        (3, '3ème trimestre'),
+        (4, '4ème trimestre')
+    ])
+    date_debut_prevue = DateField('Date de début prévue', format='%Y-%m-%d')
+    date_fin_prevue = DateField('Date de fin prévue', format='%Y-%m-%d')
+    duree_estimee = IntegerField('Durée estimée (jours)', validators=[NumberRange(min=1, max=60)])
+    
+    # Ressources
+    responsable_id = SelectField('Responsable', coerce=int, choices=[])
+    equipe_ids = SelectMultipleField('Équipe d\'audit', coerce=int, choices=[])
+    
+    submit = SubmitField('Enregistrer')
+
+
+class PlanPluieForm(FlaskForm):
+    """Formulaire pour créer un plan de repli"""
+    
+    nom = StringField('Nom du plan de repli', validators=[DataRequired()])
+    description = TextAreaField('Description')
+    
+    mission_principale_id = SelectField('Mission principale', coerce=int, choices=[], validators=[DataRequired()])
+    mission_remplacement_id = SelectField('Mission de remplacement', coerce=int, choices=[], validators=[DataRequired()])
+    
+    condition_type = SelectField('Condition de déclenchement', choices=[
+        ('retard', 'Retard de plus de X jours'),
+        ('indisponibilite', 'Indisponibilité des ressources'),
+        ('urgence', 'Situation d\'urgence')
+    ])
+    condition_seuil = IntegerField('Seuil (jours)', default=15)
+    condition_description = TextAreaField('Description de la condition')
+    
+    submit = SubmitField('Créer le plan de repli')
