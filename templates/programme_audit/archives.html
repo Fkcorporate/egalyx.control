@@ -1,0 +1,239 @@
+{% extends "base.html" %}
+
+{% block title %}Programmes d'audit archivés - Egalyx{% endblock %}
+
+{% block content %}
+<div class="container-fluid px-4">
+    <!-- En-tête -->
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <div>
+            <nav aria-label="breadcrumb">
+                <ol class="breadcrumb">
+                    <li class="breadcrumb-item"><a href="{{ url_for('liste_programmes_audit') }}">Programmes d'audit</a></li>
+                    <li class="breadcrumb-item active">Archives</li>
+                </ol>
+            </nav>
+            <h1 class="h2 mb-0">
+                <i class="fas fa-archive text-secondary me-2"></i>
+                Programmes archivés
+            </h1>
+            <p class="text-muted">Gestion des programmes d'audit archivés</p>
+        </div>
+        <a href="{{ url_for('liste_programmes_audit') }}" class="btn btn-outline-primary">
+            <i class="fas fa-arrow-left me-2"></i>Retour aux programmes actifs
+        </a>
+    </div>
+
+    <!-- Statistiques des archives -->
+    <div class="row g-4 mb-4">
+        <div class="col-md-4">
+            <div class="card bg-light border-0">
+                <div class="card-body">
+                    <div class="d-flex align-items-center">
+                        <div class="bg-secondary bg-opacity-10 p-3 rounded-circle me-3">
+                            <i class="fas fa-archive fa-2x text-secondary"></i>
+                        </div>
+                        <div>
+                            <h3 class="mb-0">{{ programmes|length }}</h3>
+                            <p class="text-muted mb-0">Programmes archivés</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-4">
+            <div class="card bg-light border-0">
+                <div class="card-body">
+                    <div class="d-flex align-items-center">
+                        <div class="bg-info bg-opacity-10 p-3 rounded-circle me-3">
+                            <i class="fas fa-calendar-alt fa-2x text-info"></i>
+                        </div>
+                        <div>
+                            <h3 class="mb-0">{{ programmes|sum(attribute='nb_missions') }}</h3>
+                            <p class="text-muted mb-0">Missions archivées</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-4">
+            <div class="card bg-light border-0">
+                <div class="card-body">
+                    <div class="d-flex align-items-center">
+                        <div class="bg-warning bg-opacity-10 p-3 rounded-circle me-3">
+                            <i class="fas fa-clock fa-2x text-warning"></i>
+                        </div>
+                        <div>
+                            <h3 class="mb-0">{{ programmes|selectattr('archived_at')|list|length }}</h3>
+                            <p class="text-muted mb-0">Archivés ce mois</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Liste des programmes archivés -->
+    <div class="card">
+        <div class="card-header bg-light">
+            <h5 class="mb-0">
+                <i class="fas fa-list me-2"></i>
+                Programmes archivés
+            </h5>
+        </div>
+        <div class="card-body">
+            {% if programmes %}
+            <div class="table-responsive">
+                <table class="table table-hover">
+                    <thead>
+                        <tr>
+                            <th>Référence</th>
+                            <th>Nom</th>
+                            <th>Période</th>
+                            <th>Date d'archivage</th>
+                            <th>Archivé par</th>
+                            <th>Raison</th>
+                            <th>Missions</th>
+                            <th>Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for programme in programmes %}
+                        <tr>
+                            <td>
+                                <span class="badge bg-secondary">{{ programme.reference }}</span>
+                            </td>
+                            <td>
+                                <strong>{{ programme.nom }}</strong>
+                                <br>
+                                <small class="text-muted">{{ programme.periode|capitalize }}</small>
+                            </td>
+                            <td>
+                                {{ programme.annee_debut }} - {{ programme.annee_fin }}
+                            </td>
+                            <td>
+                                {{ programme.archived_at.strftime('%d/%m/%Y') if programme.archived_at else 'N/A' }}
+                                <br>
+                                <small class="text-muted">{{ programme.archived_at.strftime('%H:%M') if programme.archived_at else '' }}</small>
+                            </td>
+                            <td>
+                                {% if programme.archiveur %}
+                                <span>{{ programme.archiveur.username }}</span>
+                                {% else %}
+                                <span class="text-muted">N/A</span>
+                                {% endif %}
+                            </td>
+                            <td>
+                                <span class="badge bg-light text-dark" title="{{ programme.archive_reason }}">
+                                    {{ programme.archive_reason|truncate(30) if programme.archive_reason else 'Non spécifiée' }}
+                                </span>
+                            </td>
+                            <td>
+                                <span class="badge bg-info">{{ programme.nb_missions }}</span>
+                            </td>
+                            <td>
+                                <div class="btn-group btn-group-sm">
+                                    <!-- Bouton restaurer -->
+                                    <button type="button" class="btn btn-outline-success" 
+                                            data-bs-toggle="modal" 
+                                            data-bs-target="#restaurerModal{{ programme.id }}"
+                                            title="Restaurer">
+                                        <i class="fas fa-undo-alt"></i>
+                                    </button>
+                                    
+                                    <!-- Bouton supprimer définitivement -->
+                                    <button type="button" class="btn btn-outline-danger" 
+                                            data-bs-toggle="modal" 
+                                            data-bs-target="#supprimerDefinitifModal{{ programme.id }}"
+                                            title="Supprimer définitivement">
+                                        <i class="fas fa-trash"></i>
+                                    </button>
+                                </div>
+                            </td>
+                        </tr>
+
+                        <!-- Modal Restaurer -->
+                        <div class="modal fade" id="restaurerModal{{ programme.id }}" tabindex="-1">
+                            <div class="modal-dialog">
+                                <div class="modal-content">
+                                    <div class="modal-header bg-success text-white">
+                                        <h5 class="modal-title">
+                                            <i class="fas fa-undo-alt me-2"></i>
+                                            Restaurer le programme
+                                        </h5>
+                                        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+                                    </div>
+                                    <form method="POST" action="{{ url_for('restaurer_programme_audit', id=programme.id) }}">
+                                        <div class="modal-body">
+                                            <div class="alert alert-success">
+                                                <i class="fas fa-info-circle me-2"></i>
+                                                Êtes-vous sûr de vouloir restaurer le programme <strong>{{ programme.nom }}</strong> ({{ programme.reference }}) ?
+                                            </div>
+                                            <p>Le programme sera remis en état d'élaboration et réapparaîtra dans la liste des programmes actifs.</p>
+                                        </div>
+                                        <div class="modal-footer">
+                                            <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Annuler</button>
+                                            <button type="submit" class="btn btn-success">
+                                                <i class="fas fa-undo-alt me-2"></i>Restaurer
+                                            </button>
+                                        </div>
+                                    </form>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Modal Supprimer définitivement -->
+                        <div class="modal fade" id="supprimerDefinitifModal{{ programme.id }}" tabindex="-1">
+                            <div class="modal-dialog">
+                                <div class="modal-content">
+                                    <div class="modal-header bg-danger text-white">
+                                        <h5 class="modal-title">
+                                            <i class="fas fa-exclamation-triangle me-2"></i>
+                                            Suppression définitive
+                                        </h5>
+                                        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+                                    </div>
+                                    <form method="POST" action="{{ url_for('supprimer_programme_audit_definitif', id=programme.id) }}">
+                                        <div class="modal-body">
+                                            <div class="alert alert-danger">
+                                                <i class="fas fa-exclamation-circle fa-2x me-3"></i>
+                                                <div>
+                                                    <strong>Attention !</strong>
+                                                    <p class="mb-0">Cette action est irréversible. Toutes les missions et plans de repli associés seront définitivement supprimés.</p>
+                                                </div>
+                                            </div>
+                                            
+                                            <div class="mb-3">
+                                                <label class="form-label fw-bold">
+                                                    Pour confirmer, tapez la référence du programme :
+                                                </label>
+                                                <input type="text" class="form-control" name="confirmation" 
+                                                       placeholder="{{ programme.reference }}" required>
+                                                <small class="text-muted">Entrez exactement <strong>{{ programme.reference }}</strong> pour confirmer</small>
+                                            </div>
+                                        </div>
+                                        <div class="modal-footer">
+                                            <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Annuler</button>
+                                            <button type="submit" class="btn btn-danger">
+                                                <i class="fas fa-trash me-2"></i>Supprimer définitivement
+                                            </button>
+                                        </div>
+                                    </form>
+                                </div>
+                            </div>
+                        </div>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+            {% else %}
+            <div class="text-center py-5">
+                <i class="fas fa-archive fa-4x text-muted mb-3"></i>
+                <h5 class="text-muted">Aucun programme archivé</h5>
+                <p class="text-muted">Les programmes que vous archivez apparaîtront ici</p>
+            </div>
+            {% endif %}
+        </div>
+    </div>
+</div>
+{% endblock %}

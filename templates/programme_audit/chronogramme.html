@@ -1,0 +1,978 @@
+{% extends "base.html" %}
+
+{% block title %}Chronogramme - {{ programme.nom }} - Programme d'Audit - Egalyx{% endblock %}
+
+{% block content %}
+<div class="container-fluid px-4">
+    <!-- ========== EN-TÊTE ========== -->
+    <div class="d-flex flex-wrap justify-content-between align-items-center mb-4">
+        <div class="mb-3 mb-lg-0">
+            <nav aria-label="breadcrumb" class="mb-2">
+                <ol class="breadcrumb">
+                    <li class="breadcrumb-item">
+                        <a href="{{ url_for('liste_programmes_audit') }}" class="text-decoration-none">
+                            <i class="fas fa-list me-1"></i>Programmes
+                        </a>
+                    </li>
+                    <li class="breadcrumb-item">
+                        <a href="{{ url_for('detail_programme_audit', id=programme.id) }}" class="text-decoration-none">
+                            {{ programme.nom|truncate(30) }}
+                        </a>
+                    </li>
+                    <li class="breadcrumb-item active text-primary">Chronogramme</li>
+                </ol>
+            </nav>
+            
+            <div class="d-flex align-items-center gap-3">
+                <div class="bg-info bg-opacity-10 p-3 rounded-3 d-flex align-items-center justify-content-center" style="width: 60px; height: 60px;">
+                    <i class="fas fa-calendar-alt fa-2x text-info"></i>
+                </div>
+                <div>
+                    <h1 class="h2 mb-1 fw-bold">Chronogramme interactif</h1>
+                    <div class="d-flex align-items-center gap-2 flex-wrap">
+                        <span class="badge bg-light text-dark border">
+                            <i class="fas fa-hashtag me-1"></i>{{ programme.reference }}
+                        </span>
+                        <span class="text-muted">
+                            <i class="far fa-calendar me-1"></i>{{ programme.annee_debut }} - {{ programme.annee_fin }}
+                        </span>
+                        <span class="badge bg-{{ 
+                            'success' if programme.statut == 'actif' 
+                            else 'warning' if programme.statut == 'en_elaboration' 
+                            else 'secondary' 
+                        }}">
+                            {{ programme.statut|replace('_', ' ')|title }}
+                        </span>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <div class="d-flex gap-2">
+            <div class="btn-group">
+                <button class="btn btn-outline-primary dropdown-toggle" data-bs-toggle="dropdown">
+                    <i class="fas fa-tools me-2"></i>Manipuler
+                </button>
+                <ul class="dropdown-menu dropdown-menu-end">
+                    <li>
+                        <a class="dropdown-item" href="#" onclick="repartirAuto(); return false;">
+                            <i class="fas fa-robot text-info me-2"></i>Répartir automatiquement
+                        </a>
+                    </li>
+                    <li>
+                        <a class="dropdown-item" href="#" onclick="equilibrerCharge(); return false;">
+                            <i class="fas fa-balance-scale text-warning me-2"></i>Équilibrer la charge
+                        </a>
+                    </li>
+                    <li>
+                        <a class="dropdown-item" href="#" onclick="exporterCSV(); return false;">
+                            <i class="fas fa-file-csv text-success me-2"></i>Exporter CSV
+                        </a>
+                    </li>
+                    <li><hr class="dropdown-divider"></li>
+                    <li>
+                        <a class="dropdown-item" href="#" onclick="resetVue(); return false;">
+                            <i class="fas fa-undo-alt text-secondary me-2"></i>Réinitialiser
+                        </a>
+                    </li>
+                </ul>
+            </div>
+            
+            <a href="{{ url_for('detail_programme_audit', id=programme.id) }}" 
+               class="btn btn-outline-secondary d-flex align-items-center gap-2">
+                <i class="fas fa-arrow-left"></i>
+                <span class="d-none d-md-inline">Retour</span>
+            </a>
+            <button class="btn btn-outline-success d-flex align-items-center gap-2" onclick="window.print()">
+                <i class="fas fa-print"></i>
+                <span class="d-none d-md-inline">Imprimer</span>
+            </button>
+        </div>
+    </div>
+
+    <!-- ========== STATISTIQUES ========== -->
+    <div class="row g-3 g-xl-4 mb-4">
+        <div class="col-6 col-xl-3">
+            <div class="card border-start border-primary border-4 h-100 shadow-sm">
+                <div class="card-body d-flex align-items-center">
+                    <div class="flex-grow-1">
+                        <h6 class="text-muted mb-1">Missions totales</h6>
+                        <h2 class="mb-0 fw-bold">{{ programme.nb_missions }}</h2>
+                        <small class="text-muted">
+                            <span class="text-success">{{ programme.nb_missions_realisees }}</span> terminées
+                        </small>
+                    </div>
+                    <div class="bg-primary bg-opacity-10 p-3 rounded-circle">
+                        <i class="fas fa-clipboard-list fa-2x text-primary"></i>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <div class="col-6 col-xl-3">
+            <div class="card border-start border-info border-4 h-100 shadow-sm">
+                <div class="card-body d-flex align-items-center">
+                    <div class="flex-grow-1">
+                        <h6 class="text-muted mb-1">Charge totale</h6>
+                        <h2 class="mb-0 fw-bold">{{ programme.jours_audit_planifies }}j</h2>
+                        <small class="text-muted">{{ programme.jours_audit_realises }}j réalisés</small>
+                    </div>
+                    <div class="bg-info bg-opacity-10 p-3 rounded-circle">
+                        <i class="fas fa-clock fa-2x text-info"></i>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <div class="col-6 col-xl-3">
+            <div class="card border-start border-warning border-4 h-100 shadow-sm">
+                <div class="card-body d-flex align-items-center">
+                    <div class="flex-grow-1">
+                        <h6 class="text-muted mb-1">Progression</h6>
+                        <h2 class="mb-0 fw-bold">{{ programme.progression }}%</h2>
+                        <div class="progress mt-2" style="height: 4px; width: 80%;">
+                            <div class="progress-bar bg-success" style="width: {{ programme.progression }}%"></div>
+                        </div>
+                    </div>
+                    <div class="bg-warning bg-opacity-10 p-3 rounded-circle">
+                        <i class="fas fa-chart-line fa-2x text-warning"></i>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <div class="col-6 col-xl-3">
+            <div class="card border-start border-danger border-4 h-100 shadow-sm">
+                <div class="card-body d-flex align-items-center">
+                    <div class="flex-grow-1">
+                        <h6 class="text-muted mb-1">Priorités</h6>
+                        <div class="d-flex align-items-center gap-2">
+                            <span class="badge bg-danger" title="Critique">{{ programme.missions_par_priorite.critique }}</span>
+                            <span class="badge bg-warning" title="Élevée">{{ programme.missions_par_priorite.elevee }}</span>
+                            <span class="badge bg-info" title="Moyenne">{{ programme.missions_par_priorite.moyenne }}</span>
+                            <span class="badge bg-secondary" title="Faible">{{ programme.missions_par_priorite.faible }}</span>
+                        </div>
+                    </div>
+                    <div class="bg-danger bg-opacity-10 p-3 rounded-circle">
+                        <i class="fas fa-flag fa-2x text-danger"></i>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- ========== CHRONOGRAMME INTERACTIF ========== -->
+    <div class="row">
+        <div class="col-12">
+            {% if missions_par_annee %}
+                {% for annee, trimestres in missions_par_annee.items()|sort %}
+                <div class="card mb-4 shadow-sm chronogramme-annee" data-annee="{{ annee }}">
+                    <div class="card-header bg-light py-3 d-flex flex-wrap justify-content-between align-items-center">
+                        <h5 class="mb-0 fw-semibold">
+                            <i class="fas fa-calendar-alt text-primary me-2"></i>Année {{ annee }}
+                        </h5>
+                        <div class="d-flex align-items-center gap-3">
+                            <span class="badge bg-primary px-3 py-2">
+                                <i class="fas fa-clock me-1"></i>{{ ressources_par_periode[annee].values()|sum }} jours
+                            </span>
+                            <span class="badge bg-info px-3 py-2">
+                                <i class="fas fa-tasks me-1"></i>{{ trimestres.values()|map('length')|sum }} missions
+                            </span>
+                            <button class="btn btn-sm btn-outline-primary" onclick="ajouterMissionRapide({{ annee }})">
+                                <i class="fas fa-plus"></i>
+                            </button>
+                        </div>
+                    </div>
+                    
+                    <div class="card-body">
+                        <div class="row g-3">
+                            {% for trimestre in range(1, 5) %}
+                                {% set missions_trimestre = trimestres.get(trimestre, []) %}
+                                {% set charge_trimestre = ressources_par_periode[annee].get(trimestre, 0) %}
+                                
+                                <div class="col-12 col-md-6 col-lg-3">
+                                    <div class="card h-100 border-0 bg-light chronogramme-trimestre"
+                                         data-annee="{{ annee }}"
+                                         data-trimestre="{{ trimestre }}">
+                                        
+                                        <div class="card-header bg-transparent border-0 pt-3 pb-0">
+                                            <div class="d-flex justify-content-between align-items-center">
+                                                <h6 class="mb-0 fw-bold">
+                                                    <span class="badge bg-{{ 
+                                                        'primary' if trimestre == 1 
+                                                        else 'success' if trimestre == 2 
+                                                        else 'warning' if trimestre == 3 
+                                                        else 'info' 
+                                                    }} me-2">T{{ trimestre }}</span>
+                                                </h6>
+                                                <small class="text-muted">
+                                                    <i class="fas fa-clock me-1"></i>{{ charge_trimestre }}j
+                                                </small>
+                                            </div>
+                                        </div>
+                                        
+                                        <div class="card-body pt-2 mission-dropzone" 
+                                             ondrop="drop(event)"
+                                             ondragover="allowDrop(event)">
+                                             
+                                            {% if missions_trimestre %}
+                                                {% for mission in missions_trimestre %}
+                                                <div class="mission-item mb-2 p-2 rounded border-start border-3 border-{{ 
+                                                    'danger' if mission.priorite == 'critique' 
+                                                    else 'warning' if mission.priorite == 'elevee' 
+                                                    else 'info' if mission.priorite == 'moyenne' 
+                                                    else 'secondary' 
+                                                }}"
+                                                     draggable="{{ 'true' if mission.statut == 'planifie' else 'false' }}"
+                                                     ondragstart="drag(event)"
+                                                     data-mission-id="{{ mission.id }}"
+                                                     data-mission-ref="{{ mission.reference }}"
+                                                     data-mission-priorite="{{ mission.priorite }}"
+                                                     data-mission-statut="{{ mission.statut }}"
+                                                     data-mission-responsable="{{ mission.responsable.id if mission.responsable else '' }}">
+                                                    
+                                                    <div class="d-flex justify-content-between align-items-start">
+                                                        <div class="flex-grow-1">
+                                                            <div class="d-flex align-items-center gap-2 mb-1">
+                                                                {% if mission.statut == 'planifie' %}
+                                                                <i class="fas fa-grip-vertical text-muted" style="cursor: grab;"></i>
+                                                                {% endif %}
+                                                                <span class="fw-bold small">{{ mission.reference }}</span>
+                                                                <span class="badge bg-{{ 
+                                                                    'danger' if mission.priorite == 'critique' 
+                                                                    else 'warning' if mission.priorite == 'elevee' 
+                                                                    else 'info' if mission.priorite == 'moyenne' 
+                                                                    else 'secondary' 
+                                                                }} px-2" style="font-size: 0.7rem;">
+                                                                    {{ mission.priorite[:3]|upper }}
+                                                                </span>
+                                                            </div>
+                                                            
+                                                            <small class="text-muted d-block text-truncate" style="max-width: 180px;">
+                                                                {{ mission.titre|truncate(30) }}
+                                                            </small>
+                                                            
+                                                            <div class="d-flex align-items-center gap-2 mt-1">
+                                                                <span class="badge bg-{{ 
+                                                                    'secondary' if mission.statut == 'planifie' 
+                                                                    else 'primary' if mission.statut == 'en_cours' 
+                                                                    else 'success' if mission.statut == 'termine' 
+                                                                    else 'warning' 
+                                                                }} px-2" style="font-size: 0.65rem;">
+                                                                    <i class="fas {{ 
+                                                                        'fa-clock' if mission.statut == 'planifie'
+                                                                        else 'fa-play-circle' if mission.statut == 'en_cours'
+                                                                        else 'fa-check-circle' if mission.statut == 'termine'
+                                                                        else 'fa-calendar-times' 
+                                                                    }} me-1"></i>
+                                                                    {{ mission.statut[:4]|upper }}
+                                                                </span>
+                                                                
+                                                                <small class="text-muted" title="Durée estimée">
+                                                                    <i class="fas fa-hourglass-half"></i> {{ mission.duree_estimee }}j
+                                                                </small>
+                                                                
+                                                                {% if mission.responsable %}
+                                                                <span class="badge bg-info text-white" 
+                                                                      style="font-size: 0.65rem; cursor: pointer;"
+                                                                      onclick="assignerResponsable({{ mission.id }})"
+                                                                      title="Responsable: {{ mission.responsable.username }} - Cliquer pour changer">
+                                                                    <i class="fas fa-user-check me-1"></i>
+                                                                    {{ mission.responsable.username|truncate(10) }}
+                                                                </span>
+                                                                {% else %}
+                                                                <span class="badge bg-light text-dark border" 
+                                                                      style="font-size: 0.65rem; cursor: pointer;"
+                                                                      onclick="assignerResponsable({{ mission.id }})"
+                                                                      title="Aucun responsable - Cliquer pour assigner">
+                                                                    <i class="fas fa-user-plus me-1"></i>
+                                                                    Assigner
+                                                                </span>
+                                                                {% endif %}
+                                                            </div>
+                                                        </div>
+                                                        
+                                                        <div class="dropdown ms-2">
+                                                            <button class="btn btn-sm btn-link p-0 text-muted" data-bs-toggle="dropdown">
+                                                                <i class="fas fa-ellipsis-v"></i>
+                                                            </button>
+                                                            <ul class="dropdown-menu dropdown-menu-end">
+                                                                <li>
+                                                                    <a class="dropdown-item" href="#" onclick="changerDuree({{ mission.id }}); return false;">
+                                                                        <i class="fas fa-clock text-warning me-2"></i>Changer durée
+                                                                    </a>
+                                                                </li>
+                                                                <li>
+                                                                    <a class="dropdown-item" href="#" onclick="assignerResponsable({{ mission.id }}); return false;">
+                                                                        <i class="fas fa-user-tie text-success me-2"></i>Assigner responsable
+                                                                    </a>
+                                                                </li>
+                                                                <li><hr class="dropdown-divider"></li>
+                                                                <li>
+                                                                    <a class="dropdown-item text-primary" href="#" onclick="changerStatut({{ mission.id }}, 'en_cours'); return false;">
+                                                                        <i class="fas fa-play-circle me-2"></i>Démarrer
+                                                                    </a>
+                                                                </li>
+                                                                <li>
+                                                                    <a class="dropdown-item text-success" href="#" onclick="changerStatut({{ mission.id }}, 'termine'); return false;">
+                                                                        <i class="fas fa-check-circle me-2"></i>Terminer
+                                                                    </a>
+                                                                </li>
+                                                                <li>
+                                                                    <a class="dropdown-item text-warning" href="#" onclick="changerStatut({{ mission.id }}, 'reporte'); return false;">
+                                                                        <i class="fas fa-calendar-times me-2"></i>Reporter
+                                                                    </a>
+                                                                </li>
+                                                                <li><hr class="dropdown-divider"></li>
+                                                                <li>
+                                                                    <a class="dropdown-item text-danger" href="#" onclick="supprimerMission({{ mission.id }}); return false;">
+                                                                        <i class="fas fa-trash me-2"></i>Supprimer
+                                                                    </a>
+                                                                </li>
+                                                            </ul>
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                                {% endfor %}
+                                            {% else %}
+                                                <div class="text-center py-4">
+                                                    <i class="fas fa-calendar-plus fa-2x text-muted opacity-25 mb-2"></i>
+                                                    <p class="text-muted small mb-2">Aucune mission</p>
+                                                    <button class="btn btn-sm btn-outline-primary" onclick="ajouterMissionRapide({{ annee }}, {{ trimestre }})">
+                                                        <i class="fas fa-plus me-1"></i>Ajouter
+                                                    </button>
+                                                </div>
+                                            {% endif %}
+                                        </div>
+                                    </div>
+                                </div>
+                            {% endfor %}
+                        </div>
+                    </div>
+                </div>
+                {% endfor %}
+            {% else %}
+                <div class="alert alert-info">
+                    <h5>Aucune mission planifiée</h5>
+                    <p>Commencez par ajouter des missions ou générer automatiquement.</p>
+                    <div class="mt-3">
+                        <a href="{{ url_for('generer_missions_auto_programme', id=programme.id) }}" class="btn btn-primary">
+                            <i class="fas fa-robot me-2"></i>Générer auto
+                        </a>
+                        <button class="btn btn-outline-primary ms-2" onclick="ajouterMissionRapide({{ programme.annee_debut }})">
+                            <i class="fas fa-plus me-2"></i>Ajouter
+                        </button>
+                    </div>
+                </div>
+            {% endif %}
+        </div>
+    </div>
+
+    <!-- ========== GRAPHIQUE ========== -->
+    {% if missions_par_annee %}
+    <div class="row mt-4">
+        <div class="col-12">
+            <div class="card shadow-sm">
+                <div class="card-header bg-light">
+                    <h5 class="mb-0">Charge de travail par période</h5>
+                </div>
+                <div class="card-body">
+                    <canvas id="chargeChart" style="height: 300px;"></canvas>
+                </div>
+            </div>
+        </div>
+    </div>
+    {% endif %}
+</div>
+
+<!-- ========== MODAL SÉLECTION RESPONSABLE ========== -->
+<div class="modal fade" id="responsableModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header bg-primary text-white">
+                <h5 class="modal-title">
+                    <i class="fas fa-user-tie me-2"></i>
+                    Sélectionner un responsable
+                </h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <!-- Barre de recherche -->
+                <div class="mb-3">
+                    <div class="input-group">
+                        <span class="input-group-text"><i class="fas fa-search"></i></span>
+                        <input type="text" class="form-control" id="searchResponsable" 
+                               placeholder="Rechercher par nom, email ou département...">
+                    </div>
+                </div>
+                
+                <!-- Liste des utilisateurs avec loading -->
+                <div id="responsableLoading" class="text-center py-4">
+                    <div class="spinner-border text-primary" role="status">
+                        <span class="visually-hidden">Chargement...</span>
+                    </div>
+                    <p class="mt-2 text-muted">Chargement des utilisateurs...</p>
+                </div>
+                
+                <!-- Liste des résultats -->
+                <div id="responsableList" style="display: none;">
+                    <div class="alert alert-info" id="noResults" style="display: none;">
+                        <i class="fas fa-info-circle me-2"></i>
+                        Aucun utilisateur trouvé
+                    </div>
+                    <div class="list-group" id="responsableItems"></div>
+                </div>
+                
+                <!-- L'utilisateur actuellement sélectionné -->
+                <div id="selectedResponsableInfo" class="mt-3 p-3 bg-light rounded" style="display: none;">
+                    <div class="d-flex justify-content-between align-items-center">
+                        <div>
+                            <small class="text-muted">Responsable actuel</small>
+                            <div class="d-flex align-items-center gap-2 mt-1">
+                                <div class="bg-primary bg-opacity-10 p-2 rounded-circle">
+                                    <i class="fas fa-user text-primary"></i>
+                                </div>
+                                <div>
+                                    <span class="fw-semibold" id="currentResponsableName">-</span>
+                                    <br>
+                                    <small class="text-muted" id="currentResponsableDetail">-</small>
+                                </div>
+                            </div>
+                        </div>
+                        <button class="btn btn-sm btn-outline-danger" onclick="retirerResponsable()">
+                            <i class="fas fa-user-slash me-1"></i>Retirer
+                        </button>
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">
+                    <i class="fas fa-times me-2"></i>Fermer
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<script>
+// ========== CONFIGURATION ==========
+const API_BASE = '/api/chronogramme/v2';
+let currentMissionForResponsable = null;
+let responsablesList = [];
+
+// ========== DRAG & DROP ==========
+function allowDrop(e) {
+    e.preventDefault();
+}
+
+function drag(e) {
+    const item = e.target.closest('.mission-item');
+    if (item) {
+        e.dataTransfer.setData('text/plain', item.dataset.missionId);
+    }
+}
+
+function drop(e) {
+    e.preventDefault();
+    
+    const zone = e.target.closest('.mission-dropzone');
+    if (!zone) return;
+    
+    const missionId = e.dataTransfer.getData('text/plain');
+    const card = zone.closest('.chronogramme-trimestre');
+    if (!card || !missionId) return;
+    
+    const annee = parseInt(card.dataset.annee);
+    const trimestre = parseInt(card.dataset.trimestre);
+    
+    fetch(`${API_BASE}/mission/${missionId}/deplacer`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ 
+            annee: annee, 
+            trimestre: trimestre 
+        })
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            showNotification('✅ Mission déplacée', 'success');
+            setTimeout(() => location.reload(), 1000);
+        } else {
+            showNotification('❌ ' + data.message, 'danger');
+        }
+    })
+    .catch(() => showNotification('❌ Erreur réseau', 'danger'));
+}
+
+// ========== ACTIONS SUR LES MISSIONS ==========
+function changerDuree(missionId) {
+    const duree = prompt('Nouvelle durée estimée (en jours):', '5');
+    if (!duree) return;
+    
+    const dureeInt = parseInt(duree);
+    if (isNaN(dureeInt) || dureeInt < 1) {
+        showNotification('❌ Durée invalide', 'danger');
+        return;
+    }
+    
+    fetch(`${API_BASE}/mission/${missionId}/duree`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ duree: dureeInt })
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            showNotification('✅ Durée modifiée', 'success');
+            setTimeout(() => location.reload(), 1000);
+        } else {
+            showNotification('❌ ' + data.message, 'danger');
+        }
+    })
+    .catch(() => showNotification('❌ Erreur réseau', 'danger'));
+}
+
+function changerStatut(missionId, statut) {
+    const confirmMessages = {
+        'en_cours': 'Démarrer la mission ?',
+        'termine': 'Terminer la mission ?',
+        'reporte': 'Reporter la mission ?'
+    };
+    
+    if (!confirm(confirmMessages[statut] || `Changer le statut en ${statut} ?`)) return;
+    
+    fetch(`${API_BASE}/mission/${missionId}/statut`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ statut: statut })
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            showNotification(`✅ Mission ${statut}`, 'success');
+            setTimeout(() => location.reload(), 1000);
+        } else {
+            showNotification('❌ ' + data.message, 'danger');
+        }
+    })
+    .catch(() => showNotification('❌ Erreur réseau', 'danger'));
+}
+
+// ========== GESTION DES RESPONSABLES ==========
+function chargerUtilisateurs() {
+    const loading = document.getElementById('responsableLoading');
+    const list = document.getElementById('responsableList');
+    
+    fetch('/api/chronogramme/v2/utilisateurs')
+        .then(response => response.json())
+        .then(data => {
+            loading.style.display = 'none';
+            
+            if (data.success && data.utilisateurs) {
+                responsablesList = data.utilisateurs;
+                afficherUtilisateurs(responsablesList);
+                list.style.display = 'block';
+            } else {
+                list.style.display = 'block';
+                document.getElementById('noResults').style.display = 'block';
+                document.getElementById('noResults').innerHTML = `
+                    <i class="fas fa-exclamation-triangle me-2"></i>
+                    Erreur: ${data.message || 'Impossible de charger les utilisateurs'}
+                `;
+            }
+        })
+        .catch(error => {
+            loading.style.display = 'none';
+            list.style.display = 'block';
+            document.getElementById('noResults').style.display = 'block';
+            document.getElementById('noResults').innerHTML = `
+                <i class="fas fa-exclamation-triangle me-2"></i>
+                Erreur réseau: ${error.message}
+            `;
+        });
+}
+
+function afficherUtilisateurs(utilisateurs) {
+    const container = document.getElementById('responsableItems');
+    const noResults = document.getElementById('noResults');
+    
+    if (!utilisateurs || utilisateurs.length === 0) {
+        container.innerHTML = '';
+        noResults.style.display = 'block';
+        return;
+    }
+    
+    noResults.style.display = 'none';
+    
+    let html = '';
+    utilisateurs.forEach(user => {
+        let roleBadge = '';
+        let icon = 'fa-user';
+        
+        switch(user.role) {
+            case 'admin':
+                roleBadge = '<span class="badge bg-danger ms-2">Admin</span>';
+                icon = 'fa-user-cog';
+                break;
+            case 'manager':
+                roleBadge = '<span class="badge bg-warning text-dark ms-2">Manager</span>';
+                icon = 'fa-user-tie';
+                break;
+            case 'auditeur':
+                roleBadge = '<span class="badge bg-info ms-2">Auditeur</span>';
+                icon = 'fa-user-check';
+                break;
+            case 'compliance':
+                roleBadge = '<span class="badge bg-success ms-2">Conformité</span>';
+                icon = 'fa-user-shield';
+                break;
+            default:
+                roleBadge = '<span class="badge bg-secondary ms-2">Utilisateur</span>';
+        }
+        
+        const dept = user.department ? `<small class="text-muted d-block"><i class="fas fa-building me-1"></i>${user.department}</small>` : '';
+        const email = user.email ? `<small class="text-muted"><i class="fas fa-envelope me-1"></i>${user.email}</small>` : '';
+        
+        html += `
+            <a href="#" class="list-group-item list-group-item-action" onclick="selectionnerResponsable(${user.id}); return false;">
+                <div class="d-flex w-100 justify-content-between align-items-center">
+                    <div class="d-flex align-items-center gap-3">
+                        <div class="bg-primary bg-opacity-10 p-2 rounded-circle">
+                            <i class="fas ${icon} text-primary"></i>
+                        </div>
+                        <div>
+                            <div class="d-flex align-items-center">
+                                <span class="fw-semibold">${user.display_name}</span>
+                                ${roleBadge}
+                            </div>
+                            <small class="text-muted d-block">${user.username}</small>
+                            ${email}
+                            ${dept}
+                        </div>
+                    </div>
+                    <i class="fas fa-chevron-right text-muted"></i>
+                </div>
+            </a>
+        `;
+    });
+    
+    container.innerHTML = html;
+}
+
+function initRechercheResponsable() {
+    const searchInput = document.getElementById('searchResponsable');
+    if (!searchInput) return;
+    
+    searchInput.addEventListener('input', function(e) {
+        const searchTerm = e.target.value.toLowerCase().trim();
+        
+        if (!searchTerm) {
+            afficherUtilisateurs(responsablesList);
+            return;
+        }
+        
+        const filtered = responsablesList.filter(user => {
+            return user.display_name.toLowerCase().includes(searchTerm) ||
+                   user.username.toLowerCase().includes(searchTerm) ||
+                   (user.email && user.email.toLowerCase().includes(searchTerm)) ||
+                   (user.department && user.department.toLowerCase().includes(searchTerm));
+        });
+        
+        afficherUtilisateurs(filtered);
+    });
+}
+
+function assignerResponsable(missionId) {
+    currentMissionForResponsable = missionId;
+    
+    // Récupérer les infos actuelles
+    const missionItem = document.querySelector(`[data-mission-id="${missionId}"]`);
+    if (missionItem) {
+        const responsableSpan = missionItem.querySelector('.badge.bg-info');
+        if (responsableSpan) {
+            const respName = responsableSpan.textContent.replace('👤', '').trim();
+            document.getElementById('currentResponsableName').textContent = respName;
+            document.getElementById('selectedResponsableInfo').style.display = 'block';
+        } else {
+            document.getElementById('selectedResponsableInfo').style.display = 'none';
+        }
+    }
+    
+    const modal = new bootstrap.Modal(document.getElementById('responsableModal'));
+    modal.show();
+    
+    if (responsablesList.length === 0) {
+        chargerUtilisateurs();
+    } else {
+        document.getElementById('responsableLoading').style.display = 'none';
+        document.getElementById('responsableList').style.display = 'block';
+        afficherUtilisateurs(responsablesList);
+    }
+}
+
+function selectionnerResponsable(userId) {
+    if (!currentMissionForResponsable) return;
+    
+    const modal = bootstrap.Modal.getInstance(document.getElementById('responsableModal'));
+    const user = responsablesList.find(u => u.id === userId);
+    if (!user) return;
+    
+    if (!confirm(`Assigner ${user.display_name} comme responsable ?`)) return;
+    
+    fetch(`${API_BASE}/mission/${currentMissionForResponsable}/assigner`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ responsable_id: userId })
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            showNotification('✅ ' + data.message, 'success');
+            modal.hide();
+            setTimeout(() => location.reload(), 1000);
+        } else {
+            showNotification('❌ ' + data.message, 'danger');
+        }
+    })
+    .catch(() => showNotification('❌ Erreur réseau', 'danger'));
+}
+
+function retirerResponsable() {
+    if (!currentMissionForResponsable) return;
+    
+    if (!confirm('Retirer le responsable de cette mission ?')) return;
+    
+    fetch(`${API_BASE}/mission/${currentMissionForResponsable}/assigner`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ responsable_id: null })
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            showNotification('✅ ' + data.message, 'success');
+            bootstrap.Modal.getInstance(document.getElementById('responsableModal')).hide();
+            setTimeout(() => location.reload(), 1000);
+        } else {
+            showNotification('❌ ' + data.message, 'danger');
+        }
+    })
+    .catch(() => showNotification('❌ Erreur réseau', 'danger'));
+}
+
+// ========== ACTIONS GLOBALES ==========
+function ajouterMissionRapide(annee, trimestre) {
+    let url = `/programme-audit/{{ programme.id }}/mission/ajouter?annee=${annee}&redirect=chronogramme`;
+    if (trimestre) url += `&trimestre=${trimestre}`;
+    window.location.href = url;
+}
+
+function repartirAuto() {
+    if (!confirm('Répartir automatiquement toutes les missions planifiées ?')) return;
+    
+    fetch(`${API_BASE}/programme/{{ programme.id }}/repartition-auto`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' }
+    })
+    .then(response => response.json())
+    .then(data => {
+        showNotification(data.message, data.success ? 'success' : 'danger');
+        if (data.success) setTimeout(() => location.reload(), 1500);
+    })
+    .catch(() => showNotification('❌ Erreur réseau', 'danger'));
+}
+
+function equilibrerCharge() {
+    showNotification('⚖️ Équilibrage en cours...', 'info');
+    repartirAuto();
+}
+
+function resetVue() {
+    window.location.href = window.location.pathname;
+}
+
+function exporterCSV() {
+    window.location.href = `/programme-audit/{{ programme.id }}/exporter?format=csv`;
+}
+
+function supprimerMission(missionId) {
+    if (confirm('⚠️ Êtes-vous sûr de vouloir supprimer définitivement cette mission ?')) {
+        fetch(`/mission-audit/${missionId}/supprimer`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+            body: 'raison=Suppression depuis chronogramme'
+        })
+        .then(response => {
+            if (response.ok) {
+                showNotification('✅ Mission supprimée', 'success');
+                setTimeout(() => location.reload(), 1000);
+            } else {
+                response.json().then(data => {
+                    showNotification('❌ ' + (data.message || 'Erreur'), 'danger');
+                });
+            }
+        })
+        .catch(() => showNotification('❌ Erreur réseau', 'danger'));
+    }
+}
+
+// ========== GRAPHIQUE ==========
+function initChart() {
+    const ctx = document.getElementById('chargeChart');
+    if (!ctx) return;
+    
+    const labels = [];
+    const data = [];
+    
+    {% for annee in missions_par_annee.keys()|sort %}
+        {% for trimestre in range(1, 5) %}
+            labels.push('T{{ trimestre }} {{ annee }}');
+            data.push({{ ressources_par_periode.get(annee, {}).get(trimestre, 0) }});
+        {% endfor %}
+    {% endfor %}
+    
+    new Chart(ctx, {
+        type: 'bar',
+        data: {
+            labels: labels,
+            datasets: [{
+                label: 'Jours de mission',
+                data: data,
+                backgroundColor: 'rgba(13, 202, 240, 0.7)',
+                borderColor: 'rgba(13, 202, 240, 1)',
+                borderWidth: 1,
+                borderRadius: 4
+            }]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            scales: {
+                y: { 
+                    beginAtZero: true,
+                    title: {
+                        display: true,
+                        text: 'Jours'
+                    }
+                }
+            },
+            plugins: {
+                tooltip: {
+                    callbacks: {
+                        label: function(context) {
+                            return `${context.raw} jours`;
+                        }
+                    }
+                }
+            }
+        }
+    });
+}
+
+// ========== NOTIFICATIONS ==========
+function showNotification(message, type = 'info') {
+    const notif = document.createElement('div');
+    notif.className = `alert alert-${type} alert-dismissible fade show position-fixed top-0 end-0 m-3 shadow`;
+    notif.style.zIndex = 9999;
+    notif.style.minWidth = '300px';
+    notif.style.animation = 'slideIn 0.3s ease-out';
+    notif.innerHTML = `
+        ${message}
+        <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+    `;
+    document.body.appendChild(notif);
+    setTimeout(() => notif.remove(), 4000);
+}
+
+// ========== INITIALISATION ==========
+document.addEventListener('DOMContentLoaded', function() {
+    // Initialiser le graphique
+    initChart();
+    
+    // Initialiser la recherche responsable
+    initRechercheResponsable();
+    
+    // Réinitialiser quand le modal se ferme
+    const modal = document.getElementById('responsableModal');
+    if (modal) {
+        modal.addEventListener('hidden.bs.modal', function() {
+            currentMissionForResponsable = null;
+            document.getElementById('searchResponsable').value = '';
+            if (responsablesList.length > 0) {
+                afficherUtilisateurs(responsablesList);
+            }
+        });
+    }
+    
+    // Vérifier que l'API est accessible
+    fetch(`${API_BASE}/test`)
+        .then(response => response.json())
+        .then(data => {
+            console.log('✅ API Chronogramme V2 OK -', data.count, 'routes');
+        })
+        .catch(error => {
+            console.error('❌ API Chronogramme V2 indisponible:', error);
+        });
+    
+    // Tooltips Bootstrap
+    document.querySelectorAll('[data-bs-toggle="tooltip"]').forEach(el => {
+        try {
+            new bootstrap.Tooltip(el);
+        } catch(e) {}
+    });
+});
+
+// ========== STYLES DYNAMIQUES ==========
+const style = document.createElement('style');
+style.textContent = `
+    @keyframes slideIn {
+        from { transform: translateX(100%); opacity: 0; }
+        to { transform: translateX(0); opacity: 1; }
+    }
+    .mission-item {
+        background: white;
+        transition: all 0.2s;
+        cursor: move;
+        border-left-width: 4px !important;
+    }
+    .mission-item:hover {
+        background: #f8f9fa !important;
+        box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+        transform: translateY(-2px);
+    }
+    .mission-dropzone {
+        min-height: 200px;
+        max-height: 400px;
+        overflow-y: auto;
+        transition: background-color 0.2s;
+        border-radius: 8px;
+    }
+    .list-group-item-action {
+        transition: all 0.2s;
+        cursor: pointer;
+        border-left: 3px solid transparent;
+    }
+    .list-group-item-action:hover {
+        background-color: #f8f9fa;
+        border-left-color: #0d6efd;
+        transform: translateX(5px);
+    }
+    #searchResponsable:focus {
+        box-shadow: 0 0 0 0.25rem rgba(13, 110, 253, 0.25);
+        border-color: #86b7fe;
+    }
+    .chronogramme-trimestre .card-body::-webkit-scrollbar {
+        width: 6px;
+    }
+    .chronogramme-trimestre .card-body::-webkit-scrollbar-thumb {
+        background: #0d6efd;
+        border-radius: 3px;
+    }
+`;
+document.head.appendChild(style);
+</script>
+{% endblock %}
