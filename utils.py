@@ -2925,3 +2925,26 @@ class GestionnaireParametrage:
         """Synchroniser la modification d'un champ"""
         print(f"🔄 Synchronisation modification champ: {champ.nom_technique}")
         # Logique de synchronisation à implémenter selon les besoins
+
+
+def log_activity(user_id, action_type, description, entity_type=None, entity_id=None):
+    """
+    Journalise une activité utilisateur
+    """
+    try:
+        log = ActivityLog(
+            user_id=user_id,
+            action_type=action_type,
+            description=description,
+            entity_type=entity_type,
+            entity_id=entity_id,
+            ip_address=request.remote_addr if request else None,
+            user_agent=request.user_agent.string if request and request.user_agent else None
+        )
+        db.session.add(log)
+        db.session.commit()
+        return True
+    except Exception as e:
+        print(f"❌ Erreur journalisation activité: {e}")
+        db.session.rollback()
+        return False
