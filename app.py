@@ -23799,220 +23799,130 @@ def default_if_none(value, default=0):
 def evaluer_dispositif(dispositif_id):
     """Évaluer l'efficacité d'un dispositif de maîtrise"""
     
-    # ÉTAPE 1: NETTOYAGE COMPLET DES SESSIONS
-    # ========================================
+    # RÉINITIALISER LA SESSION DB AU DÉBUT
     try:
-        # Forcer la fermeture de toutes les sessions existantes
+        db.session.rollback()
         db.session.close()
-        db.session.remove()
     except:
         pass
     
-    # ÉTAPE 2: RÉCUPÉRATION DE L'UTILISATEUR DE MANIÈRE FRAÎCHE
-    # =========================================================
-    from flask import session as flask_session
-    
-    user_id = flask_session.get('_user_id')
-    if not user_id:
-        flash('Session expirée', 'error')
-        return redirect(url_for('login'))
-    
     try:
-        # Récupérer un utilisateur fraîchement attaché
-        current_user_fresh = db.session.get(User, int(user_id))
-        if not current_user_fresh:
-            flash('Utilisateur introuvable', 'error')
-            return redirect(url_for('login'))
-    except Exception as e:
-        print(f"❌ Erreur récupération utilisateur: {e}")
-        flash('Erreur de session', 'error')
-        return redirect(url_for('login'))
-    
-    # ÉTAPE 3: RÉCUPÉRATION DU DISPOSITIF AVEC UNE SESSION PROPRE
-    # ============================================================
-    try:
-        dispositif = DispositifMaitrise.query.get(dispositif_id)
-        if not dispositif:
-            flash('Dispositif introuvable', 'error')
-            return redirect(url_for('index'))
-    except Exception as e:
-        print(f"❌ Erreur récupération dispositif: {e}")
-        db.session.rollback()
-        flash('Erreur lors de la récupération du dispositif', 'error')
-        return redirect(url_for('index'))
-    
-    # ÉTAPE 4: VÉRIFICATION D'ACCÈS AVEC L'UTILISATEUR FRAÎS
-    # ======================================================
-    if not check_client_access_fresh(dispositif, current_user_fresh):
-        flash('Accès non autorisé', 'error')
-        return redirect(url_for('liste_dispositifs_risque', risque_id=dispositif.risque_id))
-    
-    # ÉTAPE 5: PRÉPARATION DU FORMULAIRE
-    # ===================================
-    form = EvaluationDispositifForm()
-    
-    # Pré-remplir si GET request
-    if request.method == 'GET':
-        form.efficacite_reelle.data = dispositif.efficacite_reelle
-        form.couverture.data = dispositif.couverture
-        form.commentaire.data = dispositif.commentaire_evaluation
+        # Nouvelle requête avec une session fraîche
+        dispositif = DispositifMaitrise.query.get_or_404(dispositif_id)
+        
+        if not check_client_access(dispositif):
+            flash('Accès non autorisé', 'error')
+            return redirect(url_for('liste_dispositifs_risque', risque_id=dispositif.risque_id))
+        
+        form = EvaluationDispositifForm()
+        
+        if form.validate_on_submit():
+            try:
+                # Créer une NOUVELLE session pour l'opération d'écriture
+                with db.session.begin_nested():
+                    # Mettre à jour les valeurs d'évaluation
+                    dispositif.efficacite_reelle = form.efficacite_reelle.data
+                    dispositif.couverture = form.couverture.data
+                    dispositif.date_derniere_verification = datetime.utcnow().date()
+                    dispositif.prochaine_verification = form.prochaine_verification.data
+                    dispositif.commentaire_evaluation = form.commentaire.data
+                    dispositif.updated_at = datetime.utcnow()
+                    
+                    # Calcul du résultat
+                    efficacite_reelle = dispositif.efficacite_reelle or 0
+                    efficacite_attendue = dispositif.efficacite_attendue or 0
+                    
+                    if efficacite_attendue == 0:
+                        resultat = 'Non évalué'
+                    elif efficacite_reelle < efficacite_attendue:
+                        resultat = 'À améliorer'
+                    else:
+                        resultat = 'Conforme'
+                    
+                    # 1. Créer une vérification
+                    verification = VerificationDispositif(
+                        dispositif_id=dispositif.id,
+                        date_verification=datetime.utcnow().date(),
+                        type_verification='Évaluation',
+                        resultat=resultat,
+                        commentaire=form.commentaire.data or f"Évaluation: {efficacite_reelle}/5 (attendu: {efficacite_attendue}/5)",
+                        verificateur_id=current_user.id,
+                        client_id=current_user.client_id
+                    )
+                    db.session.add(verification)
+                    
+                    # 2. CALCULER LA RÉDUCTION THÉORIQUE DU RISQUE (méthode conforme)
+                    if dispositif.risque and dispositif.efficacite_reelle and dispositif.couverture:
+                        dispositif.reduction_risque_pourcentage = dispositif.get_reduction_risque_conforme()
+                    
+                    # 3. Si efficacité insuffisante, créer un plan d'action
+                    if dispositif.efficacite_reelle and dispositif.efficacite_attendue:
+                        if dispositif.efficacite_reelle < dispositif.efficacite_attendue:
+                            try:
+                                from services.audit_service import creer_plan_action_automatique
+                                creer_plan_action_automatique(
+                                    risque_id=dispositif.risque_id,
+                                    dispositif_id=dispositif.id,
+                                    titre=f"Amélioration dispositif {dispositif.reference}",
+                                    description=f"Dispositif insuffisamment efficace ({dispositif.efficacite_reelle}/5 vs {dispositif.efficacite_attendue}/5 attendus)\n\nCommentaire: {form.commentaire.data}",
+                                    responsable_id=dispositif.responsable_id or current_user.id,
+                                    echeance=datetime.utcnow().date() + timedelta(days=30)
+                                )
+                            except ImportError:
+                                plan = PlanAction(
+                                    reference=f"PA-{datetime.utcnow().strftime('%Y%m%d')}-{dispositif.id}",
+                                    nom=f"Amélioration dispositif {dispositif.reference}",
+                                    description=f"Dispositif insuffisamment efficace ({dispositif.efficacite_reelle}/5 vs {dispositif.efficacite_attendue}/5 attendus)",
+                                    risque_id=dispositif.risque_id,
+                                    dispositif_id=dispositif.id,
+                                    responsable_id=dispositif.responsable_id or current_user.id,
+                                    date_debut=datetime.utcnow().date(),
+                                    date_fin_prevue=datetime.utcnow().date() + timedelta(days=30),
+                                    statut='en_cours',
+                                    priorite='haute',
+                                    client_id=current_user.client_id,
+                                    created_by=current_user.id
+                                )
+                                db.session.add(plan)
+                
+                # COMMIT UNIQUEMENT ICI
+                db.session.commit()
+                
+                # Message de succès
+                reduction_msg = ""
+                if hasattr(dispositif, 'reduction_risque_pourcentage') and dispositif.reduction_risque_pourcentage:
+                    details = dispositif.get_reduction_risque_detaille()
+                    reduction_msg = f" RÉDUCTION THÉORIQUE DU RISQUE: {dispositif.reduction_risque_pourcentage:.1f}% (type: {details['type']})"
+                
+                flash(f'Évaluation enregistrée avec succès.{reduction_msg}', 'success')
+                return redirect(url_for('detail_dispositif', dispositif_id=dispositif_id))
+                
+            except Exception as e:
+                db.session.rollback()
+                print(f"❌ Erreur lors de l'enregistrement de l'évaluation: {str(e)}")
+                print(f"Traceback: {traceback.format_exc()}")
+                flash(f'Erreur lors de l\'enregistrement: {str(e)}', 'error')
+                return redirect(url_for('evaluer_dispositif', dispositif_id=dispositif_id))
+        
+        # PRÉ-REMPLIR LE FORMULAIRE (GET request)
+        form.efficacite_reelle.data = getattr(dispositif, 'efficacite_reelle', None)
+        form.couverture.data = getattr(dispositif, 'couverture', None)
+        form.commentaire.data = getattr(dispositif, 'commentaire_evaluation', None)
+        
         if dispositif.prochaine_verification:
             form.prochaine_verification.data = dispositif.prochaine_verification
-    
-    # ÉTAPE 6: TRAITEMENT DU FORMULAIRE (POST)
-    # ========================================
-    if form.validate_on_submit():
-        try:
-            # Démarrer une transaction propre
-            db.session.begin_nested()
-            
-            # Mise à jour des valeurs
-            dispositif.efficacite_reelle = form.efficacite_reelle.data
-            dispositif.couverture = form.couverture.data
-            dispositif.date_derniere_verification = datetime.utcnow().date()
-            dispositif.prochaine_verification = form.prochaine_verification.data
-            dispositif.commentaire_evaluation = form.commentaire.data
-            dispositif.updated_at = datetime.utcnow()
-            
-            # Calcul du résultat
-            efficacite_reelle = dispositif.efficacite_reelle or 0
-            efficacite_attendue = dispositif.efficacite_attendue or 0
-            
-            if efficacite_attendue == 0:
-                resultat = 'Non évalué'
-            elif efficacite_reelle < efficacite_attendue:
-                resultat = 'À améliorer'
-            else:
-                resultat = 'Conforme'
-            
-            # Création de la vérification
-            verification = VerificationDispositif(
-                dispositif_id=dispositif.id,
-                date_verification=datetime.utcnow().date(),
-                type_verification='Évaluation',
-                resultat=resultat,
-                commentaire=form.commentaire.data or f"Évaluation: {efficacite_reelle}/5 (attendu: {efficacite_attendue}/5)",
-                verificateur_id=current_user_fresh.id,  # Utilisation de l'utilisateur frais
-                client_id=current_user_fresh.client_id
-            )
-            db.session.add(verification)
-            
-            # Calcul de la réduction du risque
-            if dispositif.risque and dispositif.efficacite_reelle and dispositif.couverture:
-                dispositif.reduction_risque_pourcentage = dispositif.get_reduction_risque_conforme()
-            
-            # Création automatique d'un plan d'action si nécessaire
-            if (dispositif.efficacite_reelle and dispositif.efficacite_attendue and 
-                dispositif.efficacite_reelle < dispositif.efficacite_attendue):
-                
-                try:
-                    # Méthode 1: via service
-                    from services.audit_service import creer_plan_action_automatique
-                    creer_plan_action_automatique(
-                        risque_id=dispositif.risque_id,
-                        dispositif_id=dispositif.id,
-                        titre=f"Amélioration dispositif {dispositif.reference}",
-                        description=f"Dispositif insuffisamment efficace ({dispositif.efficacite_reelle}/5 vs {dispositif.efficacite_attendue}/5 attendus)\n\nCommentaire: {form.commentaire.data}",
-                        responsable_id=dispositif.responsable_id or current_user_fresh.id,
-                        echeance=datetime.utcnow().date() + timedelta(days=30)
-                    )
-                except ImportError:
-                    # Méthode 2: création directe
-                    plan = PlanAction(
-                        reference=f"PA-{datetime.utcnow().strftime('%Y%m%d')}-{dispositif.id}",
-                        nom=f"Amélioration dispositif {dispositif.reference}",
-                        description=f"Dispositif insuffisamment efficace ({dispositif.efficacite_reelle}/5 vs {dispositif.efficacite_attendue}/5 attendus)",
-                        risque_id=dispositif.risque_id,
-                        dispositif_id=dispositif.id,
-                        responsable_id=dispositif.responsable_id or current_user_fresh.id,
-                        date_debut=datetime.utcnow().date(),
-                        date_fin_prevue=datetime.utcnow().date() + timedelta(days=30),
-                        statut='en_cours',
-                        priorite='haute',
-                        client_id=current_user_fresh.client_id,
-                        created_by=current_user_fresh.id
-                    )
-                    db.session.add(plan)
-            
-            # Commit final
-            db.session.commit()
-            
-            # Message de succès avec détails
-            reduction_msg = ""
-            if hasattr(dispositif, 'reduction_risque_pourcentage') and dispositif.reduction_risque_pourcentage:
-                details = dispositif.get_reduction_risque_detaille()
-                reduction_msg = f" RÉDUCTION THÉORIQUE: {dispositif.reduction_risque_pourcentage:.1f}%"
-            
-            flash(f'✅ Évaluation enregistrée avec succès.{reduction_msg}', 'success')
-            return redirect(url_for('detail_dispositif', dispositif_id=dispositif.id))
-            
-        except Exception as e:
-            db.session.rollback()
-            print(f"❌ Erreur lors de l'enregistrement: {str(e)}")
-            import traceback
-            print(traceback.format_exc())
-            flash(f'❌ Erreur: {str(e)}', 'error')
-            return render_template('dispositifs/evaluation.html',
-                                 form=form,
-                                 dispositif=dispositif)
-    
-    # ÉTAPE 7: AFFICHAGE DU FORMULAIRE (GET ou formulaire invalide)
-    # ==============================================================
-    return render_template('dispositifs/evaluation.html',
-                         form=form,
-                         dispositif=dispositif)
+        
+        return render_template('dispositifs/evaluation.html',
+                             form=form,
+                             dispositif=dispositif)
+                             
+    except Exception as e:
+        db.session.rollback()
+        print(f"❌ Erreur globale dans evaluer_dispositif: {str(e)}")
+        print(f"Traceback: {traceback.format_exc()}")
+        flash(f'Erreur: {str(e)}', 'error')
+        return redirect(url_for('liste_dispositifs_risque', risque_id=dispositif.risque_id if dispositif else 0))
 
-
-def check_client_access_fresh(entity, user):
-    """
-    Version spéciale de check_client_access qui utilise un utilisateur FRAIS
-    au lieu de current_user
-    """
-    if not user:
-        return False
-    
-    # SUPER ADMIN
-    if user.role == 'super_admin':
-        if isinstance(entity, User) and entity.role == 'super_admin':
-            return user.id == entity.id
-        return True
-    
-    if not user.client_id:
-        return False
-    
-    # Audit
-    if hasattr(entity, '__class__') and entity.__class__.__name__ == 'Audit':
-        audit_client_id = getattr(entity, 'client_id', None)
-        if audit_client_id is None:
-            if hasattr(entity, 'created_by') and entity.created_by == user.id:
-                return True
-            if hasattr(entity, 'responsable_id') and entity.responsable_id == user.id:
-                return True
-            if hasattr(entity, 'equipe_audit_ids') and entity.equipe_audit_ids:
-                try:
-                    equipe_ids = [int(id.strip()) for id in entity.equipe_audit_ids.split(',') if id.strip()]
-                    if user.id in equipe_ids:
-                        return True
-                except:
-                    pass
-            return False
-        return audit_client_id == user.client_id
-    
-    # Entité avec client_id
-    if hasattr(entity, 'client_id'):
-        entity_client_id = entity.client_id
-        if entity_client_id is None and hasattr(entity, 'created_by') and entity.created_by:
-            creator = db.session.get(User, entity.created_by)
-            return creator and creator.client_id == user.client_id
-        return entity_client_id == user.client_id
-    
-    # Objet User
-    if isinstance(entity, User):
-        if entity.role == 'super_admin':
-            return False
-        return entity.client_id == user.client_id
-    
-    return False
 
 @app.before_request
 def reset_failed_transaction():
