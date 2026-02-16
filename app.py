@@ -16016,83 +16016,33 @@ def filter_client_data():
 
 def check_client_access(entity):
     """
-    Vérifie l'accès à une entité - VERSION FINALE
-    N'utilise PAS du tout l'objet current_user.
+    Vérifie l'accès à une entité spécifique (multi-tenant sécurisé)
     """
-    from flask import session as flask_session
-    import traceback
 
-    # 1. Récupérer l'ID utilisateur depuis la SESSION FLASK (source unique et fiable)
-    user_id = flask_session.get('_user_id')
-    if not user_id:
+    if not current_user.is_authenticated:
         return False
 
-    try:
-        # 2. Récupérer une instance FRAÎCHE de l'utilisateur avec une nouvelle session
-        #    On utilise db.session.get() pour garantir une instance attachée
-        from app import db, User  # Assurez-vous que ces imports fonctionnent ici
-        
-        # Il est CRITIQUE de fermer toute session existante pour éviter les interférences
-        db.session.remove()
-        
-        user = db.session.get(User, int(user_id))
-        if not user:
-            return False
-
-        # 3. On utilise CETTE instance 'user' pour toutes les vérifications
-        user_role = user.role
-        user_client_id = user.client_id
-        user_id_val = user.id
-
-    except Exception as e:
-        print(f"🚨 ERREUR dans check_client_access: {e}")
-        print(traceback.format_exc())
-        return False
-
-    # 4. LOGIQUE D'ACCÈS (identique mais avec 'user' au lieu de 'current_user')
-    
-    # SUPER ADMIN
-    if user_role == 'super_admin':
-        if isinstance(entity, User) and entity.role == 'super_admin':
-            return user_id_val == entity.id
+    # SUPER ADMIN : accès total
+    if current_user.role == 'super_admin':
         return True
+
+    user_client_id = current_user.client_id
 
     if not user_client_id:
         return False
 
-    # Audit
-    if hasattr(entity, '__class__') and entity.__class__.__name__ == 'Audit':
-        audit_client_id = getattr(entity, 'client_id', None)
-        if audit_client_id is None:
-            if hasattr(entity, 'created_by') and entity.created_by == user_id_val:
-                return True
-            if hasattr(entity, 'responsable_id') and entity.responsable_id == user_id_val:
-                return True
-            if hasattr(entity, 'equipe_audit_ids') and entity.equipe_audit_ids:
-                try:
-                    equipe_ids = [int(id.strip()) for id in entity.equipe_audit_ids.split(',') if id.strip()]
-                    if user_id_val in equipe_ids:
-                        return True
-                except:
-                    pass
-            return False
-        return audit_client_id == user_client_id
-
-    # Entité avec client_id direct
-    if hasattr(entity, 'client_id'):
-        entity_client_id = entity.client_id
-        if entity_client_id is None and hasattr(entity, 'created_by') and entity.created_by:
-            creator = db.session.get(User, entity.created_by)
-            return creator and creator.client_id == user_client_id
-        return entity_client_id == user_client_id
-
-    # Objet User
-    if isinstance(entity, User):
-        if entity.role == 'super_admin':
-            return False
+    # 🔎 Si l'entité a un client_id → comparaison directe
+    if hasattr(entity, 'client_id') and entity.client_id is not None:
         return entity.client_id == user_client_id
 
+    # 🔎 Sinon vérifier via created_by
+    if hasattr(entity, 'created_by') and entity.created_by:
+        creator = db.session.get(User, entity.created_by)
+        if creator:
+            return creator.client_id == user_client_id
+
     return False
+
 
 # ========================
 # ROUTES PRINCIPALES
