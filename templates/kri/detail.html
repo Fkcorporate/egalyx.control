@@ -164,7 +164,7 @@
                         </div>
                     </div>
                     
-                    <!-- NOUVEAU : Seuil cible pour KPI -->
+                    <!-- Seuil cible pour KPI -->
                     {% if kri.type_indicateur == 'kpi' and kri.seuil_cible %}
                     <div class="d-flex justify-content-between align-items-center mb-3">
                         <div>
@@ -211,47 +211,47 @@
                     </div>
                     {% endif %}
 
-                    <!-- Écart par rapport à la cible pour KPI -->
+                    <!-- Écart par rapport à la cible pour KPI - VERSION DIFFÉRENCE ABSOLUE -->
                     {% if kri.type_indicateur == 'kpi' and kri.seuil_cible %}
                         {% set derniere_mesure = kri.get_derniere_mesure() %}
                         {% if derniere_mesure %}
-                            {% set ecart = kri.get_ecart_par_rapport_cible(derniere_mesure.valeur) %}
-                            {% if ecart is not none %}
+                            {% set diff = kri.get_difference_cible(derniere_mesure.valeur) %}
+                            {% set interpretation = kri.get_interpretation_difference(derniere_mesure.valeur) %}
+                            
+                            {% if diff is not none %}
                             <div class="mt-3 pt-3 border-top">
                                 <strong class="d-block text-muted small mb-2">Écart par rapport à la cible</strong>
-                                <div class="d-flex align-items-center">
+                                
+                                <div class="d-flex align-items-center mb-2">
                                     <div class="flex-grow-1">
                                         <div class="progress" style="height: 10px;">
-                                            {% set pourcentage = 50 + (ecart / 2) if ecart > 0 else 50 + (ecart / 2) %}
-                                            {% set pourcentage = pourcentage|round %}
-                                            {% set pourcentage = ([0, pourcentage, 100]|sort).1 %}
+                                            <!-- Calcul de la position dans la barre (optionnel) -->
+                                            {% set amplitude = (kri.seuil_critique - kri.seuil_cible) if kri.seuil_critique else kri.seuil_cible * 0.5 %}
+                                            {% if amplitude and amplitude != 0 %}
+                                                {% set ratio = (diff / amplitude) %}
+                                                {% set position = 50 + (ratio * 50) %}
+                                                {% set position = [0, position, 100]|sort %}
+                                                {% set position = position[1] if position[1] else 50 %}
+                                            {% else %}
+                                                {% set position = 50 %}
+                                            {% endif %}
                                             
-                                            <div class="progress-bar 
-                                                {% if ecart > 10 %}bg-danger
-                                                {% elif ecart > 5 %}bg-warning
-                                                {% elif ecart < -10 %}bg-danger
-                                                {% elif ecart < -5 %}bg-warning
-                                                {% else %}bg-success{% endif %}" 
-                                                style="width: {{ pourcentage }}%">
+                                            <div class="progress-bar bg-{{ interpretation.couleur if interpretation else 'secondary' }}" 
+                                                 style="width: {{ position|round }}%">
                                             </div>
                                         </div>
                                     </div>
-                                    <span class="ms-3 fw-bold 
-                                        {% if ecart > 10 %}text-danger
-                                        {% elif ecart > 5 %}text-warning
-                                        {% elif ecart < -10 %}text-danger
-                                        {% elif ecart < -5 %}text-warning
-                                        {% else %}text-success{% endif %}">
-                                        {{ "%+.1f"|format(ecart) }}%
+                                    <span class="ms-3 fw-bold text-{{ interpretation.couleur if interpretation else 'secondary' }}">
+                                        {{ "%+.2f"|format(diff) }} {{ kri.unite_mesure }}
                                     </span>
                                 </div>
-                                <small class="text-muted d-block mt-1">
-                                    {% if ecart > 0 %}
-                                        {{ ecart|round(1) }}% au-dessus de la cible
-                                    {% elif ecart < 0 %}
-                                        {{ (-ecart)|round(1) }}% en-dessous de la cible
-                                    {% else %}
-                                        Exactement à la cible
+                                
+                                <small class="text-muted d-block">
+                                    {{ interpretation.explication if interpretation else '' }}
+                                    {% if interpretation %}
+                                        <span class="badge bg-{{ interpretation.couleur }} ms-2">
+                                            {{ interpretation.message }}
+                                        </span>
                                     {% endif %}
                                 </small>
                             </div>
@@ -566,10 +566,17 @@
                                     </td>
                                     <td>
                                         {% if kri.type_indicateur == 'kpi' and kri.seuil_cible %}
-                                            {% set ecart = kri.get_ecart_par_rapport_cible(mesure.valeur) %}
-                                            {% if ecart is not none %}
-                                            <span class="badge bg-{{ 'success' if ecart|abs < 5 else 'warning' if ecart|abs < 10 else 'danger' }}">
-                                                {{ "%+.1f"|format(ecart) }}%
+                                            {% set diff = kri.get_difference_cible(mesure.valeur) %}
+                                            {% set interpretation = kri.get_interpretation_difference(mesure.valeur) %}
+                                            {% if diff is not none %}
+                                            <span class="d-flex align-items-center">
+                                                <span class="badge bg-{{ interpretation.couleur if interpretation else 'secondary' }} me-1">
+                                                    {{ "%+.2f"|format(diff) }}
+                                                </span>
+                                                <small class="text-muted">{{ kri.unite_mesure }}</small>
+                                                {% if interpretation %}
+                                                <small class="ms-1 text-{{ interpretation.couleur }}">({{ interpretation.message }})</small>
+                                                {% endif %}
                                             </span>
                                             {% else %}
                                             <span class="text-muted">-</span>
@@ -701,12 +708,18 @@
                                         {% if mesure.commentaire %}
                                         <p class="mt-2 mb-0 small text-muted">{{ mesure.commentaire|truncate(30) }}</p>
                                         {% endif %}
+                                        
+                                        <!-- Écart en différence absolue pour la vue période -->
                                         {% if kri.type_indicateur == 'kpi' and kri.seuil_cible %}
-                                            {% set ecart = kri.get_ecart_par_rapport_cible(mesure.valeur) %}
-                                            {% if ecart is not none %}
-                                            <small class="d-block mt-1 text-{{ 'success' if ecart|abs < 5 else 'warning' if ecart|abs < 10 else 'danger' }}">
-                                                <i class="fas fa-arrow-{{ 'up' if ecart > 0 else 'down' if ecart < 0 else 'right' }} me-1"></i>
-                                                {{ "%+.1f"|format(ecart) }}%
+                                            {% set diff = kri.get_difference_cible(mesure.valeur) %}
+                                            {% set interpretation = kri.get_interpretation_difference(mesure.valeur) %}
+                                            {% if diff is not none %}
+                                            <small class="d-block mt-1 text-{{ interpretation.couleur if interpretation else 'secondary' }}">
+                                                <i class="fas fa-arrow-{{ 'up' if diff > 0 else 'down' if diff < 0 else 'right' }} me-1"></i>
+                                                {{ "%+.2f"|format(diff) }} {{ kri.unite_mesure }}
+                                                {% if interpretation %}
+                                                <span class="badge bg-{{ interpretation.couleur }} ms-1">{{ interpretation.message }}</span>
+                                                {% endif %}
                                             </small>
                                             {% endif %}
                                         {% endif %}
