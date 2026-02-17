@@ -1291,6 +1291,80 @@ class KRI(db.Model):
                 return 'alerte' if self.type_indicateur == 'kri' else 'sous_performance'
             else:
                 return 'normal' if self.type_indicateur == 'kri' else 'dans_cible'
+    def get_difference_cible(self, valeur):
+        """
+        Retourne la différence ABSOLUE par rapport à la cible
+        Exemple: valeur=81, cible=80 → retourne +1.00
+        """
+        if self.type_indicateur != 'kpi' or self.seuil_cible is None or valeur is None:
+            return None
+        return valeur - self.seuil_cible
+
+    def get_interpretation_difference(self, valeur):
+        """
+        Interprète la différence selon le sens d'évaluation
+        Retourne un dict avec couleur et message
+        """
+        diff = self.get_difference_cible(valeur)
+        if diff is None:
+            return None
+        
+        # Configuration selon le sens d'évaluation
+        if self.sens_evaluation_seuil == 'superieur':
+            # Sous-performance si valeur > seuil (diff positive = mauvais)
+            if diff > 0:
+                return {
+                    'statut': 'sous_performance',
+                    'couleur': 'warning',
+                    'message': 'Sous-performance',
+                    'explication': f'{diff:+.2f} au-dessus de la cible'
+                }
+            elif diff < 0:
+                return {
+                    'statut': 'performance',
+                    'couleur': 'success',
+                    'message': 'Performance',
+                    'explication': f'{diff:+.2f} en-dessous de la cible'
+                }
+            else:
+                return {
+                    'statut': 'cible',
+                    'couleur': 'info',
+                    'message': 'Cible atteinte',
+                    'explication': 'Exactement à la cible'
+                }
+        else:  # sens_evaluation_seuil == 'inferieur'
+            # Sous-performance si valeur < seuil (diff négative = mauvais)
+            if diff < 0:
+                return {
+                    'statut': 'sous_performance',
+                    'couleur': 'warning',
+                    'message': 'Sous-performance',
+                    'explication': f'{diff:+.2f} en-dessous de la cible'
+                }
+            elif diff > 0:
+                return {
+                    'statut': 'performance',
+                    'couleur': 'success',
+                    'message': 'Performance',
+                    'explication': f'{diff:+.2f} au-dessus de la cible'
+                }
+            else:
+                return {
+                    'statut': 'cible',
+                    'couleur': 'info',
+                    'message': 'Cible atteinte',
+                    'explication': 'Exactement à la cible'
+                }
+
+    # OPTIONNEL: Vous pouvez garder l'ancienne méthode pour compatibilité
+    # ou la supprimer si vous ne l'utilisez plus ailleurs
+    def get_ecart_par_rapport_cible(self, valeur):
+        """Ancienne méthode (pourcentage) - à conserver si utilisée ailleurs"""
+        if self.type_indicateur != 'kpi' or self.seuil_cible is None or self.seuil_cible == 0 or valeur is None:
+            return None
+        return ((valeur - self.seuil_cible) / self.seuil_cible) * 100
+        
     
     def get_ecart_par_rapport_cible(self, valeur):
         """Calcule l'écart en pourcentage par rapport à la cible (pour KPI)"""
