@@ -109,66 +109,175 @@
                     {% endif %}
                 </div>
             </div>
-                <!-- Graphique des collectes -->
-                <div class="mt-4">
-                    <canvas id="collectesChart" style="height: 200px;"></canvas>
+           <!-- Section Sources de données -->
+            <div class="card mt-4">
+                <div class="card-header d-flex justify-content-between align-items-center">
+                    <h5 class="card-title mb-0">
+                        <i class="fas fa-database me-2"></i>Sources de données automatiques
+                    </h5>
+                    <a href="{{ url_for('liste_sources_donnees') }}" class="btn btn-sm btn-outline-primary" title="Gérer toutes les sources">
+                        <i class="fas fa-cog me-1"></i>Gérer les sources
+                    </a>
                 </div>
-                {% else %}
-                <div class="text-center py-4">
-                    <i class="fas fa-database fa-3x text-muted mb-3"></i>
-                    <p class="text-muted">Aucune source de données automatique liée à ce KRI.</p>
-                    <p class="text-muted small mb-3">
-                        <i class="fas fa-info-circle me-1"></i>
-                        Liez une source pour automatiser la collecte des mesures
-                    </p>
-                    <button class="btn btn-primary" onclick="ajouterSource()">
-                        <i class="fas fa-plus me-2"></i>Lier une source
-                    </button>
+                <div class="card-body">
+                    {% if kri.sources_associees %}
+                    <div class="table-responsive">
+                        <table class="table table-sm">
+                            <thead>
+                                <tr>
+                                    <th>Source</th>
+                                    <th>Chemin extraction</th>
+                                    <th>Dernière valeur</th>
+                                    <th>Dernière collecte</th>
+                                    <th>Statut</th>
+                                    <th>Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for link in kri.sources_associees %}
+                                <tr>
+                                    <td>
+                                        <strong>{{ link.source.nom }}</strong>
+                                        <br><small class="text-muted">{{ link.source.type_source }}</small>
+                                    </td>
+                                    <td>
+                                        <small>{{ link.chemin_donnee or link.mapping_config }}</small>
+                                    </td>
+                                    <td>
+                                        {% set derniere = link.collectes|first %}
+                                        {% if derniere %}
+                                        <span class="fw-bold">{{ "%.2f"|format(derniere.valeur) }}</span>
+                                        {% else %}
+                                        <span class="text-muted">-</span>
+                                        {% endif %}
+                                    </td>
+                                    <td>
+                                        {% if link.collectes %}
+                                        <small>{{ link.collectes[0].date_collecte.strftime('%d/%m/%Y %H:%M') }}</small>
+                                        {% else %}
+                                        <span class="text-muted">Jamais</span>
+                                        {% endif %}
+                                    </td>
+                                    <td>
+                                        {% if link.est_actif %}
+                                        <span class="badge bg-success">Actif</span>
+                                        {% else %}
+                                        <span class="badge bg-secondary">Inactif</span>
+                                        {% endif %}
+                                    </td>
+                                    <td>
+                                        <div class="btn-group btn-group-sm">
+                                            <button class="btn btn-outline-primary" 
+                                                    onclick="forcerCollecte({{ link.id }})"
+                                                    title="Forcer une collecte">
+                                                <i class="fas fa-sync-alt"></i>
+                                            </button>
+                                            <a href="{{ url_for('detail_source_donnee', id=link.source.id) }}" 
+                                               class="btn btn-outline-info"
+                                               title="Voir la source">
+                                                <i class="fas fa-eye"></i>
+                                            </a>
+                                        </div>
+                                    </td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+            
+                    <!-- Graphique des collectes -->
+                    <div class="mt-4">
+                        <canvas id="collectesChart" style="height: 200px;"></canvas>
+                    </div>
+                    
+                    <!-- Lien vers la gestion des sources -->
+                    <div class="text-end mt-3">
+                        <a href="{{ url_for('liste_sources_donnees') }}" class="btn btn-sm btn-outline-secondary">
+                            <i class="fas fa-database me-1"></i>Voir toutes les sources
+                        </a>
+                    </div>
+                    
+                    {% else %}
+                    <div class="text-center py-4">
+                        <i class="fas fa-database fa-3x text-muted mb-3"></i>
+                        <p class="text-muted">Aucune source de données automatique liée à ce KRI.</p>
+                        <p class="text-muted small mb-3">
+                            <i class="fas fa-info-circle me-1"></i>
+                            Liez une source pour automatiser la collecte des mesures
+                        </p>
+                        <div class="d-flex justify-content-center gap-2">
+                            <button class="btn btn-primary" onclick="ajouterSource()">
+                                <i class="fas fa-plus me-2"></i>Lier une source
+                            </button>
+                            <a href="{{ url_for('liste_sources_donnees') }}" class="btn btn-outline-primary">
+                                <i class="fas fa-cog me-2"></i>Gérer les sources
+                            </a>
+                        </div>
+                    </div>
+                    {% endif %}
                 </div>
-                {% endif %}
             </div>
-        </div>
-
-        <script>
-        function forcerCollecte(linkId) {
-            fetch(`/api/kri/links/${linkId}/collecter`, {
-                method: 'POST',
-                headers: {
-                    'X-CSRFToken': '{{ csrf_token() }}'
-                }
-            })
-            .then(r => r.json())
-            .then(data => {
-                if (data.success) {
-                    alert('✅ Collecte forcée avec succès');
-                    location.reload();
-                } else {
-                    alert('❌ Erreur: ' + data.error);
-                }
-            });
-        }
-
-        // Graphique des collectes
-        const ctx = document.getElementById('collectesChart')?.getContext('2d');
-        if (ctx) {
-            fetch(`/api/kri/{{ kri.id }}/historique-collectes`)
-                .then(r => r.json())
+            
+            <script>
+            function forcerCollecte(linkId) {
+                fetch(`/api/kri/links/${linkId}/collecter`, {
+                    method: 'POST',
+                    headers: {
+                        'X-CSRFToken': '{{ csrf_token() }}'
+                    }
+                })
+                .then(response => response.json())
                 .then(data => {
-                    new Chart(ctx, {
-                        type: 'line',
-                        data: {
-                            labels: data.map(d => new Date(d.date).toLocaleDateString()),
-                            datasets: [{
-                                label: 'Valeurs collectées',
-                                data: data.map(d => d.valeur),
-                                borderColor: 'rgb(75, 192, 192)',
-                                tension: 0.1
-                            }]
-                        }
-                    });
+                    if (data.success) {
+                        showToast('✅ Collecte forcée avec succès', 'success');
+                        setTimeout(() => location.reload(), 1500);
+                    } else {
+                        showToast('❌ Erreur: ' + data.error, 'error');
+                    }
+                })
+                .catch(error => {
+                    console.error('Erreur:', error);
+                    showToast('❌ Erreur de connexion', 'error');
                 });
-        }
-        </script>
+            }
+            
+            // Graphique des collectes
+            const ctx = document.getElementById('collectesChart')?.getContext('2d');
+            if (ctx) {
+                fetch(`/api/kri/{{ kri.id }}/historique-collectes`)
+                    .then(r => r.json())
+                    .then(data => {
+                        new Chart(ctx, {
+                            type: 'line',
+                            data: {
+                                labels: data.map(d => new Date(d.date).toLocaleDateString()),
+                                datasets: [{
+                                    label: 'Valeurs collectées',
+                                    data: data.map(d => d.valeur),
+                                    borderColor: 'rgb(75, 192, 192)',
+                                    backgroundColor: 'rgba(75, 192, 192, 0.1)',
+                                    tension: 0.1,
+                                    fill: true
+                                }]
+                            },
+                            options: {
+                                responsive: true,
+                                maintainAspectRatio: false,
+                                plugins: {
+                                    legend: {
+                                        display: false
+                                    }
+                                },
+                                scales: {
+                                    y: {
+                                        beginAtZero: true
+                                    }
+                                }
+                            }
+                        });
+                    });
+            }
+            </script>
             <!-- Carte seuils d'alerte et cibles -->
             <div class="card mt-4">
                 <div class="card-header">
