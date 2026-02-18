@@ -1781,7 +1781,7 @@ class Audit(db.Model):
     portee = db.Column(db.Text)
     objectifs = db.Column(db.Text)
     criteres = db.Column(db.Text)
-    processus_id = db.Column(db.Integer, db.ForeignKey('processus.id'))
+    processus_id = db.Column(db.Integer, db.ForeignKey('processus.id'), nullable=True)
     responsable_id = db.Column(db.Integer, db.ForeignKey('user.id'))
     equipe_audit_ids = db.Column(db.String(500))
     participants_ids = db.Column(db.String(500))
