@@ -6373,3 +6373,236 @@ class ActivityLog(db.Model):
     
     def __repr__(self):
         return f'<ActivityLog {self.id}: {self.action_type}>'
+
+# ============================================
+# MODÈLES POUR COLLECTE MULTI-SOURCES
+# ============================================
+
+class SourceDonnee(db.Model):
+    """Configuration d'une source de données externe"""
+    __tablename__ = 'sources_donnees'
+    
+    id = db.Column(db.Integer, primary_key=True)
+    nom = db.Column(db.String(100), nullable=False)
+    description = db.Column(db.Text)
+    
+    # Type de source
+    TYPE_SOURCE = [
+        ('api', 'API REST'),
+        ('base_donnees', 'Base de données'),
+        ('fichier', 'Fichier (CSV/Excel)'),
+        ('web_scraping', 'Web Scraping'),
+        ('formulaire', 'Formulaire externe'),
+        ('iot', 'Capteur IoT'),
+        ('erp', 'ERP/CRM'),
+        ('autre', 'Autre')
+    ]
+    type_source = db.Column(db.String(50), nullable=False)
+    
+    # Configuration de connexion (JSON)
+    config_connexion = db.Column(db.JSON, nullable=False, default={})
+    
+    # Paramètres d'authentification (cryptés)
+    auth_config = db.Column(db.JSON, nullable=True)
+    
+    # Fréquence de rafraîchissement (en secondes)
+    frequence_rafraichissement = db.Column(db.Integer, default=86400)  # 24h par défaut
+    
+    # Dernière exécution
+    derniere_execution = db.Column(db.DateTime)
+    prochaine_execution = db.Column(db.DateTime)
+    statut = db.Column(db.String(50), default='actif')  # actif, inactif, erreur
+    
+    # Métadonnées
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    created_by = db.Column(db.Integer, db.ForeignKey('user.id'))
+    client_id = db.Column(db.Integer, db.ForeignKey('clients.id'))
+    
+    # Relations
+    createur = db.relationship('User', foreign_keys=[created_by])
+    kri_associes = db.relationship('SourceKRILink', back_populates='source', cascade='all, delete-orphan')
+    
+    def __repr__(self):
+        return f'<SourceDonnee {self.nom}>'
+    
+    def get_decrypted_auth(self):
+        """Retourne les authentifiants déchiffrés"""
+        if not self.auth_config:
+            return None
+        from utils.crypt_utils import decrypt_dict
+        return decrypt_dict(self.auth_config)
+
+
+class SourceKRILink(db.Model):
+    """Liaison entre une source de données et un KRI"""
+    __tablename__ = 'source_kri_links'
+    
+    id = db.Column(db.Integer, primary_key=True)
+    source_id = db.Column(db.Integer, db.ForeignKey('sources_donnees.id'), nullable=False)
+    kri_id = db.Column(db.Integer, db.ForeignKey('kri.id'), nullable=False)
+    
+    # Configuration de l'extraction
+    chemin_donnee = db.Column(db.String(500))  # JSON path ou requête
+    transformateur = db.Column(db.String(100))  # Nom du transformateur à appliquer
+    mapping_config = db.Column(db.JSON, default={})  # Mapping des champs
+    
+    # Paramètres de validation
+    seuil_min = db.Column(db.Float, nullable=True)
+    seuil_max = db.Column(db.Float, nullable=True)
+    validation_regles = db.Column(db.JSON, default={})
+    
+    # Active ou non
+    est_actif = db.Column(db.Boolean, default=True)
+    
+    # Métadonnées
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    
+    # Relations
+    source = db.relationship('SourceDonnee', back_populates='kri_associes')
+    kri = db.relationship('KRI', backref='sources_associees')
+    collectes = db.relationship('CollecteDonnee', back_populates='source_link', cascade='all, delete-orphan')
+    
+    __table_args__ = (
+        db.UniqueConstraint('source_id', 'kri_id', name='unique_source_kri'),
+    )
+    
+    def valider_valeur(self, valeur):
+        """Valide une valeur selon les règles configurées"""
+        resultat = {'valide': True, 'message': ''}
+        
+        if self.seuil_min is not None and valeur < self.seuil_min:
+            resultat['valide'] = False
+            resultat['message'] = f"Valeur {valeur} < seuil min {self.seuil_min}"
+        
+        if self.seuil_max is not None and valeur > self.seuil_max:
+            resultat['valide'] = False
+            resultat['message'] = f"Valeur {valeur} > seuil max {self.seuil_max}"
+        
+        return resultat
+
+
+class CollecteDonnee(db.Model):
+    """Historique des collectes automatiques"""
+    __tablename__ = 'collectes_donnees'
+    
+    id = db.Column(db.Integer, primary_key=True)
+    source_link_id = db.Column(db.Integer, db.ForeignKey('source_kri_links.id'), nullable=False)
+    
+    # Données collectées
+    valeur = db.Column(db.Float, nullable=False)
+    donnees_brutes = db.Column(db.JSON)  # Données originales pour audit
+    metadonnees = db.Column(db.JSON)  # Métadonnées de la collecte
+    
+    # Statut de la collecte
+    statut = db.Column(db.String(50), default='succes')  # succes, erreur, avertissement
+    message = db.Column(db.Text)  # Message d'erreur ou d'avertissement
+    
+    # Dates
+    date_collecte = db.Column(db.DateTime, default=datetime.utcnow)
+    date_valeur = db.Column(db.DateTime)  # Date à laquelle la valeur est valide
+    
+    # Relations
+    source_link = db.relationship('SourceKRILink', back_populates='collectes')
+    
+    # Créer une mesure KRI associée
+    mesure_kri_id = db.Column(db.Integer, db.ForeignKey('mesure_kri.id'), nullable=True)
+    mesure_kri = db.relationship('MesureKRI', backref='collecte_source')
+    
+    def creer_mesure_kri(self):
+        """Crée une mesure KRI à partir de cette collecte"""
+        if self.mesure_kri_id:
+            return self.mesure_kri
+        
+        from models import MesureKRI
+        
+        mesure = MesureKRI(
+            kri_id=self.source_link.kri_id,
+            valeur=self.valeur,
+            date_mesure=self.date_valeur or self.date_collecte,
+            commentaire=f"Collecte auto: {self.source_link.source.nom}",
+            created_by=self.source_link.source.created_by,
+            client_id=self.source_link.kri.client_id
+        )
+        db.session.add(mesure)
+        db.session.flush()
+        self.mesure_kri_id = mesure.id
+        return mesure
+
+
+class TransformateurDonnee(db.Model):
+    """Transformateurs de données personnalisables"""
+    __tablename__ = 'transformateurs_donnees'
+    
+    id = db.Column(db.Integer, primary_key=True)
+    nom = db.Column(db.String(100), unique=True, nullable=False)
+    description = db.Column(db.Text)
+    
+    TYPE_TRANSFORM = [
+        ('formule', 'Formule mathématique'),
+        ('python', 'Script Python'),
+        ('moyenne', 'Moyenne mobile'),
+        ('somme', 'Somme'),
+        ('comptage', 'Comptage'),
+        ('extraction', 'Extraction JSON'),
+        ('agregation', 'Agrégation temporelle'),
+        ('normalisation', 'Normalisation')
+    ]
+    type_transform = db.Column(db.String(50), nullable=False)
+    
+    # Code ou configuration
+    code = db.Column(db.Text)  # Pour les scripts Python
+    config = db.Column(db.JSON, default={})  # Pour les formules
+    
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    created_by = db.Column(db.Integer, db.ForeignKey('user.id'))
+    
+    createur = db.relationship('User', foreign_keys=[created_by])
+    
+    def appliquer(self, donnees, **kwargs):
+        """Applique la transformation aux données"""
+        if self.type_transform == 'formule':
+            return self._appliquer_formule(donnees, **kwargs)
+        elif self.type_transform == 'moyenne':
+            return self._appliquer_moyenne(donnees, **kwargs)
+        elif self.type_transform == 'somme':
+            return sum(donnees) if isinstance(donnees, (list, tuple)) else donnees
+        elif self.type_transform == 'comptage':
+            return len(donnees) if isinstance(donnees, (list, tuple)) else 1
+        return donnees
+    
+    def _appliquer_formule(self, donnees, **kwargs):
+        """Applique une formule mathématique"""
+        try:
+            contexte = {'donnees': donnees, **kwargs}
+            return eval(self.config.get('formule', 'donnees'), {"__builtins__": {}}, contexte)
+        except Exception as e:
+            raise ValueError(f"Erreur formule: {e}")
+    
+    def _appliquer_moyenne(self, donnees, **kwargs):
+        """Calcule la moyenne"""
+        if not isinstance(donnees, (list, tuple)):
+            return donnees
+        return sum(donnees) / len(donnees) if donnees else 0
+
+
+class AlerteCollecte(db.Model):
+    """Alertes liées aux collectes"""
+    __tablename__ = 'alertes_collecte'
+    
+    id = db.Column(db.Integer, primary_key=True)
+    collecte_id = db.Column(db.Integer, db.ForeignKey('collectes_donnees.id'), nullable=False)
+    type_alerte = db.Column(db.String(50))  # anomalie, seuil, erreur
+    niveau = db.Column(db.String(20))  # info, warning, danger
+    message = db.Column(db.Text)
+    traitee = db.Column(db.Boolean, default=False)
+    traitee_par = db.Column(db.Integer, db.ForeignKey('user.id'))
+    traitee_le = db.Column(db.DateTime)
+    
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    
+    collecte = db.relationship('CollecteDonnee', backref='alertes')
+    traiteur = db.relationship('User', foreign_keys=[traitee_par])
+
