@@ -1160,11 +1160,13 @@ class KRI(db.Model):
     # SEUILS D'ALERTE
     seuil_alerte = db.Column(db.Float)
     seuil_critique = db.Column(db.Float)
+    seuil_cible = db.Column(db.Float, nullable=True) 
     
     # SENS D'ÉVALUATION DES SEUILS
     sens_evaluation_seuil = db.Column(db.String(20), default='superieur')
     # 'superieur' : Risque si valeur actuelle > seuil (défaut)
     # 'inferieur' : Risque si valeur actuelle < seuil
+    
     
     # FRÉQUENCE ET RESPONSABLE
     frequence_mesure = db.Column(db.String(50))
@@ -1422,6 +1424,103 @@ class KRI(db.Model):
     def get_sans_risque(cls):
         """Obtenir les indicateurs non associés à un risque"""
         return cls.query.filter(cls.risque_id.is_(None), cls.est_actif==True).all()
+
+    
+    def get_difference_cible(self, valeur):
+        """
+        Calcule la différence entre une valeur et la cible
+        Retourne None si pas de cible définie
+        """
+        if self.type_indicateur != 'kpi' or self.seuil_cible is None:
+            return None
+        
+        try:
+            return valeur - self.seuil_cible
+        except (TypeError, ValueError):
+            return None
+    
+    def get_interpretation_difference(self, valeur):
+        """
+        Interprète l'écart par rapport à la cible
+        Retourne un dict avec couleur, message et explication
+        """
+        diff = self.get_difference_cible(valeur)
+        if diff is None:
+            return None
+        
+        # Calcul du pourcentage d'écart
+        if self.seuil_cible != 0:
+            pourcentage = (diff / self.seuil_cible) * 100
+        else:
+            pourcentage = float('inf') if diff > 0 else float('-inf')
+        
+        # Interprétation selon le sens d'évaluation
+        if self.sens_evaluation_seuil == 'inferieur':
+            # Pour un KPI, on veut généralement une valeur ÉLEVÉE (donc diff positive = bonne)
+            if diff >= 0:
+                if pourcentage > 10:
+                    return {
+                        'couleur': 'success',
+                        'message': 'Excellent',
+                        'explication': f'Dépasse la cible de {pourcentage:.1f}%'
+                    }
+                else:
+                    return {
+                        'couleur': 'info',
+                        'message': 'Atteint',
+                        'explication': f'Dans la cible (écart de {pourcentage:.1f}%)'
+                    }
+            else:
+                if pourcentage < -10:
+                    return {
+                        'couleur': 'danger',
+                        'message': 'Critique',
+                        'explication': f'Sous la cible de {abs(pourcentage):.1f}%'
+                    }
+                else:
+                    return {
+                        'couleur': 'warning',
+                        'message': 'Attention',
+                        'explication': f'Légèrement sous la cible ({abs(pourcentage):.1f}%)'
+                    }
+        else:  # sens_evaluation_seuil == 'superieur'
+            # Pour certains KPI, on veut une valeur BASSE (ex: taux de défaut)
+            if diff <= 0:
+                if pourcentage < -10:
+                    return {
+                        'couleur': 'success',
+                        'message': 'Excellent',
+                        'explication': f'En dessous de la cible de {abs(pourcentage):.1f}%'
+                    }
+                else:
+                    return {
+                        'couleur': 'info',
+                        'message': 'Atteint',
+                        'explication': f'Dans la cible (écart de {abs(pourcentage):.1f}%)'
+                    }
+            else:
+                if pourcentage > 10:
+                    return {
+                        'couleur': 'danger',
+                        'message': 'Critique',
+                        'explication': f'Au-dessus de la cible de {pourcentage:.1f}%'
+                    }
+                else:
+                    return {
+                        'couleur': 'warning',
+                        'message': 'Attention',
+                        'explication': f'Légèrement au-dessus de la cible ({pourcentage:.1f}%)'
+                    }
+    
+    # Optionnel : Ajouter une méthode pour formater la différence
+    def format_difference_cible(self, valeur):
+        """Formate la différence par rapport à la cible"""
+        diff = self.get_difference_cible(valeur)
+        if diff is None:
+            return "N/A"
+        
+        signe = "+" if diff > 0 else ""
+        return f"{signe}{diff:.2f} {self.unite_mesure or ''}"
     
     @classmethod
     def get_statistiques_globales(cls):
