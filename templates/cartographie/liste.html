@@ -30,10 +30,53 @@
         </div>
     </div>
 
+    <!-- Barre de recherche -->
+    <div class="card mb-4">
+        <div class="card-body">
+            <div class="row">
+                <div class="col-md-6">
+                    <div class="input-group">
+                        <span class="input-group-text bg-white">
+                            <i class="fas fa-search text-muted"></i>
+                        </span>
+                        <input type="text" class="form-control" id="searchCartographie" 
+                               placeholder="Rechercher une cartographie par nom, direction, service...">
+                    </div>
+                </div>
+                <div class="col-md-3">
+                    <select class="form-select" id="filterDirection">
+                        <option value="toutes">Toutes les directions</option>
+                        {% set directions = cartographies|map(attribute='direction')|select|unique(attribute='id')|list %}
+                        {% for direction in directions %}
+                        <option value="{{ direction.nom }}">{{ direction.nom }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="col-md-3">
+                    <select class="form-select" id="filterService">
+                        <option value="tous">Tous les services</option>
+                        {% set services = cartographies|map(attribute='service')|select|unique(attribute='id')|list %}
+                        {% for service in services %}
+                        <option value="{{ service.nom }}">{{ service.nom }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+            </div>
+            <div class="row mt-2">
+                <div class="col-12">
+                    <small class="text-muted" id="resultCount">{{ cartographies|length }} cartographie(s) trouvée(s)</small>
+                </div>
+            </div>
+        </div>
+    </div>
+
     <!-- Grille des cartographies -->
-    <div class="row">
+    <div class="row" id="cartographieGrid">
         {% for cartographie in cartographies %}
-        <div class="col-xl-4 col-lg-6 col-md-12 mb-4">
+        <div class="col-xl-4 col-lg-6 col-md-12 mb-4 cartographie-card" 
+             data-nom="{{ cartographie.nom|lower }}"
+             data-direction="{{ cartographie.direction.nom|lower if cartographie.direction else '' }}"
+             data-service="{{ cartographie.service.nom|lower if cartographie.service else '' }}">
             <div class="fk-card h-100">
                 <!-- En-tête avec menu d'actions -->
                 <div class="fk-card-header d-flex justify-content-between align-items-center">
@@ -55,6 +98,15 @@
                                     <i class="fas fa-eye text-primary me-2"></i>Consulter
                                 </a>
                             </li>
+                            
+                            <!-- Rapport PDF -->
+                            {% if cartographie.campagnes %}
+                            <li>
+                                <a class="dropdown-item" href="{{ url_for('telecharger_rapport_cartographie_pdf', cartographie_id=cartographie.id, campagne_id=cartographie.campagnes[0].id) }}" target="_blank">
+                                    <i class="fas fa-file-pdf text-danger me-2"></i>Rapport PDF
+                                </a>
+                            </li>
+                            {% endif %}
                             
                             <!-- Modifier -->
                             <li>
@@ -207,6 +259,121 @@
     </div>
 </div>
 
+<!-- Script de recherche -->
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    const searchInput = document.getElementById('searchCartographie');
+    const filterDirection = document.getElementById('filterDirection');
+    const filterService = document.getElementById('filterService');
+    const cards = document.querySelectorAll('.cartographie-card');
+    const resultCount = document.getElementById('resultCount');
+    
+    function filterCartographies() {
+        const searchTerm = searchInput.value.toLowerCase();
+        const directionFilter = filterDirection.value.toLowerCase();
+        const serviceFilter = filterService.value.toLowerCase();
+        
+        let visibleCount = 0;
+        
+        cards.forEach(card => {
+            const cardNom = card.dataset.nom || '';
+            const cardDirection = card.dataset.direction || '';
+            const cardService = card.dataset.service || '';
+            
+            // Filtre recherche
+            let show = cardNom.includes(searchTerm) || 
+                      cardDirection.includes(searchTerm) || 
+                      cardService.includes(searchTerm);
+            
+            // Filtre direction
+            if (show && directionFilter !== 'toutes') {
+                show = cardDirection.includes(directionFilter);
+            }
+            
+            // Filtre service
+            if (show && serviceFilter !== 'tous') {
+                show = cardService.includes(serviceFilter);
+            }
+            
+            card.style.display = show ? '' : 'none';
+            if (show) visibleCount++;
+        });
+        
+        resultCount.textContent = `${visibleCount} cartographie(s) trouvée(s)`;
+        
+        // Afficher un message si aucun résultat
+        const emptyMessage = document.getElementById('emptySearchMessage');
+        if (visibleCount === 0) {
+            if (!emptyMessage) {
+                const grid = document.getElementById('cartographieGrid');
+                const message = document.createElement('div');
+                message.id = 'emptySearchMessage';
+                message.className = 'col-12 mt-4';
+                message.innerHTML = `
+                    <div class="text-center py-5">
+                        <i class="fas fa-search fa-4x text-muted mb-3"></i>
+                        <h5>Aucune cartographie trouvée</h5>
+                        <p class="text-muted">Essayez d'autres termes de recherche</p>
+                    </div>
+                `;
+                grid.appendChild(message);
+            }
+        } else {
+            if (emptyMessage) emptyMessage.remove();
+        }
+    }
+    
+    searchInput.addEventListener('input', filterCartographies);
+    filterDirection.addEventListener('change', filterCartographies);
+    filterService.addEventListener('change', filterCartographies);
+    
+    // Tooltips Bootstrap
+    const tooltipTriggerList = [].slice.call(document.querySelectorAll('[data-bs-toggle="tooltip"]'));
+    tooltipTriggerList.map(function (tooltipTriggerEl) {
+        return new bootstrap.Tooltip(tooltipTriggerEl);
+    });
+    
+    // Confirmation pour les actions sensibles
+    document.querySelectorAll('form[action*="archiver"]').forEach(form => {
+        form.addEventListener('submit', function(e) {
+            if (!confirm('Archiver cette cartographie ?\n\nCette action archivera également tous les risques associés.')) {
+                e.preventDefault();
+            }
+        });
+    });
+    
+    document.querySelectorAll('form[action*="dupliquer"]').forEach(form => {
+        form.addEventListener('submit', function(e) {
+            if (!confirm('Dupliquer cette cartographie ?\n\nUne copie sera créée avec tous les risques non archivés.')) {
+                e.preventDefault();
+            }
+        });
+    });
+    
+    // Animation des cartes au défilement
+    const observerOptions = {
+        threshold: 0.1,
+        rootMargin: '0px 0px -50px 0px'
+    };
+    
+    const observer = new IntersectionObserver((entries) => {
+        entries.forEach(entry => {
+            if (entry.isIntersecting) {
+                entry.target.style.opacity = '1';
+                entry.target.style.transform = 'translateY(0)';
+            }
+        });
+    }, observerOptions);
+    
+    cards.forEach(el => {
+        el.style.opacity = '0';
+        el.style.transform = 'translateY(20px)';
+        el.style.transition = 'all 0.5s ease-out';
+        observer.observe(el);
+    });
+});
+</script>
+
 <!-- Styles CSS -->
 <style>
 .fk-card {
@@ -219,7 +386,7 @@
 .fk-card:hover {
     transform: translateY(-5px);
     box-shadow: 0 12px 24px rgba(0, 0, 0, 0.08);
-    border-color: var(--fk-light-blue);
+    border-color: #3498db;
 }
 
 .fk-card-header {
@@ -265,8 +432,8 @@
 }
 
 .dropdown-item:hover {
-    background-color: var(--fk-light-blue);
-    color: var(--fk-dark-blue);
+    background-color: #e6f0fa;
+    color: #2c3e50;
 }
 
 .fk-btn {
@@ -274,16 +441,51 @@
     padding: 0.5rem 1rem;
     font-weight: 500;
     transition: all 0.2s;
+    display: inline-block;
+    text-decoration: none;
+}
+
+.fk-btn-primary {
+    background-color: #3498db;
+    color: white;
+    border: 2px solid #3498db;
+}
+
+.fk-btn-primary:hover {
+    background-color: #2980b9;
+    border-color: #2980b9;
+    color: white;
 }
 
 .fk-btn-outline-primary {
-    border: 2px solid var(--fk-accent);
-    color: var(--fk-accent);
+    border: 2px solid #3498db;
+    color: #3498db;
+    background: transparent;
 }
 
 .fk-btn-outline-primary:hover {
-    background-color: var(--fk-accent);
+    background-color: #3498db;
     color: white;
+}
+
+.fk-btn-outline-secondary {
+    border: 2px solid #95a5a6;
+    color: #7f8c8d;
+    background: transparent;
+}
+
+.fk-btn-outline-secondary:hover {
+    background-color: #95a5a6;
+    color: white;
+}
+
+.input-group-text {
+    border-right: none;
+}
+
+.form-control:focus, .form-select:focus {
+    border-color: #3498db;
+    box-shadow: 0 0 0 0.2rem rgba(52, 152, 219, 0.25);
 }
 
 /* Responsive */
@@ -307,65 +509,4 @@
     }
 }
 </style>
-
-<!-- Scripts JavaScript -->
-<script>
-document.addEventListener('DOMContentLoaded', function() {
-    // Tooltips Bootstrap
-    const tooltipTriggerList = [].slice.call(document.querySelectorAll('[data-bs-toggle="tooltip"]'));
-    tooltipTriggerList.map(function (tooltipTriggerEl) {
-        return new bootstrap.Tooltip(tooltipTriggerEl);
-    });
-    
-    // Confirmation pour les actions sensibles
-    document.querySelectorAll('form[action*="archiver"]').forEach(form => {
-        form.addEventListener('submit', function(e) {
-            if (!confirm('Archiver cette cartographie ?\n\nCette action archivera également tous les risques associés.')) {
-                e.preventDefault();
-            }
-        });
-    });
-    
-    document.querySelectorAll('form[action*="dupliquer"]').forEach(form => {
-        form.addEventListener('submit', function(e) {
-            if (!confirm('Dupliquer cette cartographie ?\n\nUne copie sera créée avec tous les risques non archivés.')) {
-                e.preventDefault();
-            }
-        });
-    });
-    
-    // Animation des cartes au défilement
-    const observerOptions = {
-        threshold: 0.1,
-        rootMargin: '0px 0px -50px 0px'
-    };
-    
-    const observer = new IntersectionObserver((entries) => {
-        entries.forEach(entry => {
-            if (entry.isIntersecting) {
-                entry.target.style.opacity = '1';
-                entry.target.style.transform = 'translateY(0)';
-                entry.target.style.transition = 'all 0.5s ease-out';
-            }
-        });
-    }, observerOptions);
-    
-    document.querySelectorAll('.fk-card').forEach(el => {
-        el.style.opacity = '0';
-        el.style.transform = 'translateY(20px)';
-        observer.observe(el);
-    });
-    
-    // Gestion des menus déroulants sur mobile
-    document.querySelectorAll('.dropdown').forEach(dropdown => {
-        dropdown.addEventListener('shown.bs.dropdown', function () {
-            this.querySelector('.dropdown-menu').style.display = 'block';
-        });
-        
-        dropdown.addEventListener('hidden.bs.dropdown', function () {
-            this.querySelector('.dropdown-menu').style.display = 'none';
-        });
-    });
-});
-</script>
 {% endblock %}
