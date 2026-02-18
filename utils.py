@@ -2931,6 +2931,11 @@ def log_activity(user_id, action_type, description, entity_type=None, entity_id=
     """
     Journalise une activité utilisateur
     """
+    # ✅ SOLUTION : Importer À L'INTÉRIEUR de la fonction
+    from flask import request
+    from models import ActivityLog  # Import ici, pas en haut
+    from app import db  # ou votre instance db
+    
     try:
         log = ActivityLog(
             user_id=user_id,
