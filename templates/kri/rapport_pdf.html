@@ -286,6 +286,21 @@
             color: white;
         }
         
+        .badge-success {
+            background-color: #28a745;
+            color: white;
+        }
+        
+        .badge-warning {
+            background-color: #ffc107;
+            color: #2c3e50;
+        }
+        
+        .badge-info {
+            background-color: #17a2b8;
+            color: white;
+        }
+        
         /* Pied de page */
         .footer {
             margin-top: 50px;
@@ -315,7 +330,7 @@
             margin-bottom: 15px;
         }
         
-        /* Graphique ASCII pour l'écart */
+        /* Graphique pour l'écart */
         .progress-container {
             width: 100%;
             background-color: #e9ecef;
@@ -361,6 +376,33 @@
                 font-size: 9px;
                 color: #6c757d;
             }
+        }
+        
+        /* Résumé objectif */
+        .summary-box {
+            background-color: #f0f7ff;
+            padding: 15px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+            border-left: 4px solid #2a5298;
+        }
+        
+        .summary-title {
+            font-size: 14px;
+            color: #2a5298;
+            font-weight: 600;
+            margin-bottom: 5px;
+        }
+        
+        .summary-value {
+            font-size: 28px;
+            font-weight: 700;
+        }
+        
+        .flex-between {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
         }
     </style>
 </head>
@@ -438,6 +480,46 @@
             </div>
         </div>
     </div>
+    
+    <!-- Résumé objectif vs réalisé (NOUVEAU) -->
+    {% if derniere_mesure and kri.type_indicateur == 'kpi' and kri.seuil_cible and difference_cible is not none %}
+    <div class="summary-box">
+        <div class="summary-title">OBJECTIF VS RÉALISÉ</div>
+        <div class="flex-between">
+            <div>
+                <div style="font-size: 16px; color: #6c757d;">Objectif</div>
+                <div style="font-size: 24px; font-weight: 600;">{{ "%.2f"|format(kri.seuil_cible) }} {{ kri.unite_mesure }}</div>
+            </div>
+            <div style="text-align: center;">
+                <div style="font-size: 16px; color: #6c757d;">Écart</div>
+                <div style="font-size: 28px; font-weight: 700; color: 
+                    {% if interpretation %}
+                        {% if interpretation.couleur == 'warning' %}#ffc107
+                        {% elif interpretation.couleur == 'danger' %}#dc3545
+                        {% elif interpretation.couleur == 'success' %}#28a745
+                        {% else %}#17a2b8{% endif %}
+                    {% endif %};">
+                    {{ "%+.2f"|format(difference_cible) }} {{ kri.unite_mesure }}
+                </div>
+            </div>
+            <div style="text-align: right;">
+                <div style="font-size: 16px; color: #6c757d;">Réalisé</div>
+                <div style="font-size: 24px; font-weight: 600;">{{ "%.2f"|format(derniere_mesure.valeur) }} {{ kri.unite_mesure }}</div>
+            </div>
+        </div>
+        <div style="margin-top: 10px; text-align: center;">
+            <span class="badge-etat 
+                {% if interpretation %}
+                    {% if interpretation.statut == 'sous_performance' %}badge-alerte
+                    {% elif interpretation.statut == 'performance' %}badge-success
+                    {% else %}badge-info{% endif %}
+                {% endif %}">
+                {{ interpretation.message if interpretation else '' }}
+            </span>
+            <span style="margin-left: 10px; color: #6c757d;">{{ interpretation.explication if interpretation else '' }}</span>
+        </div>
+    </div>
+    {% endif %}
     
     <!-- Description -->
     {% if kri.description %}
@@ -525,19 +607,50 @@
             </div>
         </div>
         
-        {% if kri.type_indicateur == 'kpi' and kri.seuil_cible and ecart_cible is not none %}
+        <!-- Écart par rapport à la cible - VERSION DIFFÉRENCE ABSOLUE -->
+        {% if kri.type_indicateur == 'kpi' and kri.seuil_cible and difference_cible is not none %}
         <div class="card mt-3">
             <div class="card-header">Écart par rapport à la cible</div>
             <div class="card-body">
+                <!-- Barre de progression adaptée -->
                 <div class="progress-container">
-                    <div class="progress-bar" style="width: {{ 50 + (ecart_cible/2) if ecart_cible > 0 else 50 + (ecart_cible/2) }}%"></div>
+                    {% set amplitude = (kri.seuil_critique - kri.seuil_cible) if kri.seuil_critique else kri.seuil_cible * 0.5 %}
+                    {% if amplitude and amplitude != 0 %}
+                        {% set ratio = (difference_cible / amplitude) %}
+                        {% set position = 50 + (ratio * 50) %}
+                        {% if position < 0 %}{% set position = 0 %}{% endif %}
+                        {% if position > 100 %}{% set position = 100 %}{% endif %}
+                    {% else %}
+                        {% set position = 50 %}
+                    {% endif %}
+                    
+                    <div class="progress-bar" style="width: {{ position|round }}%;"></div>
                     <div class="progress-marker" style="left: 50%;"></div>
                 </div>
-                <div style="text-align: center; margin-top: 10px;">
-                    <span style="font-weight: 700; {% if ecart_cible > 10 %}color: #dc3545{% elif ecart_cible > 5 %}color: #ffc107{% elif ecart_cible < -10 %}color: #dc3545{% elif ecart_cible < -5 %}color: #ffc107{% else %}color: #28a745{% endif %}">
-                        {{ "%+.1f"|format(ecart_cible) }}%
-                    </span>
-                    <span class="text-muted"> par rapport à la cible</span>
+                
+                <div style="text-align: center; margin-top: 15px;">
+                    <div style="font-size: 24px; font-weight: 700; color: 
+                        {% if interpretation %}
+                            {% if interpretation.couleur == 'warning' %}#ffc107
+                            {% elif interpretation.couleur == 'danger' %}#dc3545
+                            {% elif interpretation.couleur == 'success' %}#28a745
+                            {% else %}#17a2b8{% endif %}
+                        {% endif %};">
+                        {{ "%+.2f"|format(difference_cible) }} {{ kri.unite_mesure }}
+                    </div>
+                    <div style="margin-top: 5px;">
+                        <span class="badge-etat 
+                            {% if interpretation %}
+                                {% if interpretation.statut == 'sous_performance' %}badge-alerte
+                                {% elif interpretation.statut == 'performance' %}badge-success
+                                {% else %}badge-info{% endif %}
+                            {% endif %}">
+                            {{ interpretation.message if interpretation else '' }}
+                        </span>
+                    </div>
+                    <div class="text-muted" style="margin-top: 8px; font-size: 13px;">
+                        {{ interpretation.explication if interpretation else '' }}
+                    </div>
                 </div>
             </div>
         </div>
@@ -631,10 +744,40 @@
                         </td>
                         <td>
                             {% if kri.type_indicateur == 'kpi' and kri.seuil_cible %}
-                                {% set ecart = ((mesure.valeur - kri.seuil_cible) / kri.seuil_cible * 100) if kri.seuil_cible != 0 else 0 %}
-                                <span style="color: {% if ecart|abs < 5 %}#28a745{% elif ecart|abs < 10 %}#ffc107{% else %}#dc3545{% endif %};">
-                                    {{ "%+.1f"|format(ecart) }}%
-                                </span>
+                                {% set diff = kri.get_difference_cible(mesure.valeur) %}
+                                {% set interp = kri.get_interpretation_difference(mesure.valeur) %}
+                                {% if diff is not none %}
+                                    <div style="display: flex; flex-direction: column;">
+                                        <div style="display: flex; align-items: center;">
+                                            <span style="font-weight: 600; 
+                                                {% if interp %}
+                                                    {% if interp.couleur == 'warning' %}color: #ffc107;
+                                                    {% elif interp.couleur == 'danger' %}color: #dc3545;
+                                                    {% elif interp.couleur == 'success' %}color: #28a745;
+                                                    {% else %}color: #17a2b8;{% endif %}
+                                                {% endif %}">
+                                                {{ "%+.2f"|format(diff) }} {{ kri.unite_mesure }}
+                                            </span>
+                                            {% if interp %}
+                                            <span class="badge-etat" style="
+                                                {% if interp.statut == 'sous_performance' %}
+                                                    background-color: #ffc107; color: #2c3e50; margin-left: 8px;
+                                                {% elif interp.statut == 'performance' %}
+                                                    background-color: #28a745; color: white; margin-left: 8px;
+                                                {% else %}
+                                                    background-color: #17a2b8; color: white; margin-left: 8px;
+                                                {% endif %}">
+                                                {{ interp.message }}
+                                            </span>
+                                            {% endif %}
+                                        </div>
+                                        <div style="font-size: 11px; color: #6c757d; margin-top: 3px;">
+                                            {{ interp.explication if interp else '' }}
+                                        </div>
+                                    </div>
+                                {% else %}
+                                    -
+                                {% endif %}
                             {% else %}
                                 -
                             {% endif %}
