@@ -6352,3 +6352,24 @@ class JournalAuditProgramme(db.Model):
     # Relations
     programme = db.relationship('ProgrammeAudit', backref='journal_audit')
     utilisateur = db.relationship('User', foreign_keys=[user_id])
+
+# models.py - Ajoutez ceci avec vos autres modèles
+
+class ActivityLog(db.Model):
+    __tablename__ = 'activity_logs'
+    
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.Integer, db.ForeignKey('user.id'))
+    action_type = db.Column(db.String(100))
+    description = db.Column(db.Text)
+    entity_type = db.Column(db.String(50))
+    entity_id = db.Column(db.Integer)
+    ip_address = db.Column(db.String(50))
+    user_agent = db.Column(db.String(255))
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    
+    # Relation
+    user = db.relationship('User', backref='activities')
+    
+    def __repr__(self):
+        return f'<ActivityLog {self.id}: {self.action_type}>'
