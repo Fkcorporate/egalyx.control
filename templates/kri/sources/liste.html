@@ -1,0 +1,206 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="container-fluid py-4">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <div>
+            <h2 class="h3 mb-0">
+                <i class="fas fa-database me-2 text-primary"></i>
+                Sources de Données
+            </h2>
+            <p class="text-muted mt-1">
+                {{ sources|length }} source(s) configurée(s)
+            </p>
+        </div>
+        <div>
+            <a href="{{ url_for('nouvelle_source_donnee') }}" class="btn btn-primary">
+                <i class="fas fa-plus me-2"></i>Nouvelle source
+            </a>
+        </div>
+    </div>
+
+    <!-- Stats rapides -->
+    <div class="row mb-4">
+        <div class="col-md-3">
+            <div class="card border-start border-primary border-4">
+                <div class="card-body">
+                    <div class="d-flex justify-content-between">
+                        <div>
+                            <h6 class="text-muted mb-1">Actives</h6>
+                            <h3 class="mb-0">{{ sources|selectattr('statut', 'equalto', 'actif')|list|length }}</h3>
+                        </div>
+                        <i class="fas fa-check-circle fa-2x text-primary opacity-25"></i>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card border-start border-danger border-4">
+                <div class="card-body">
+                    <div class="d-flex justify-content-between">
+                        <div>
+                            <h6 class="text-muted mb-1">En erreur</h6>
+                            <h3 class="mb-0">{{ sources|selectattr('statut', 'equalto', 'erreur')|list|length }}</h3>
+                        </div>
+                        <i class="fas fa-exclamation-triangle fa-2x text-danger opacity-25"></i>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card border-start border-info border-4">
+                <div class="card-body">
+                    <div class="d-flex justify-content-between">
+                        <div>
+                            <h6 class="text-muted mb-1">Collectes aujourd'hui</h6>
+                            <h3 class="mb-0" id="collectesToday">-</h3>
+                        </div>
+                        <i class="fas fa-sync-alt fa-2x text-info opacity-25"></i>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card border-start border-success border-4">
+                <div class="card-body">
+                    <div class="d-flex justify-content-between">
+                        <div>
+                            <h6 class="text-muted mb-1">KRI liés</h6>
+                            <h3 class="mb-0" id="totalKri">-</h3>
+                        </div>
+                        <i class="fas fa-link fa-2x text-success opacity-25"></i>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Liste des sources -->
+    <div class="card">
+        <div class="card-body">
+            {% if sources %}
+            <div class="table-responsive">
+                <table class="table table-hover">
+                    <thead>
+                        <tr>
+                            <th>Nom</th>
+                            <th>Type</th>
+                            <th>Statut</th>
+                            <th>KRI liés</th>
+                            <th>Fréquence</th>
+                            <th>Dernière exécution</th>
+                            <th>Prochaine exécution</th>
+                            <th>Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for source in sources %}
+                        <tr>
+                            <td>
+                                <strong>{{ source.nom }}</strong>
+                                {% if source.description %}
+                                <br><small class="text-muted">{{ source.description|truncate(50) }}</small>
+                                {% endif %}
+                            </td>
+                            <td>
+                                <span class="badge bg-secondary">{{ source.type_source }}</span>
+                            </td>
+                            <td>
+                                {% if source.statut == 'actif' %}
+                                <span class="badge bg-success">Actif</span>
+                                {% elif source.statut == 'erreur' %}
+                                <span class="badge bg-danger">Erreur</span>
+                                {% else %}
+                                <span class="badge bg-secondary">Inactif</span>
+                                {% endif %}
+                            </td>
+                            <td class="text-center">
+                                <span class="badge bg-info">{{ source.kri_associes|length }}</span>
+                            </td>
+                            <td>
+                                {% if source.frequence_rafraichissement >= 86400 %}
+                                    Quotidien
+                                {% elif source.frequence_rafraichissement >= 3600 %}
+                                    Horaire
+                                {% else %}
+                                    {{ source.frequence_rafraichissement }}s
+                                {% endif %}
+                            </td>
+                            <td>
+                                {% if source.derniere_execution %}
+                                <small>{{ source.derniere_execution.strftime('%d/%m/%Y %H:%M') }}</small>
+                                {% else %}
+                                <span class="text-muted">Jamais</span>
+                                {% endif %}
+                            </td>
+                            <td>
+                                {% if source.prochaine_execution %}
+                                <small>{{ source.prochaine_execution.strftime('%d/%m/%Y %H:%M') }}</small>
+                                {% else %}
+                                <span class="text-muted">-</span>
+                                {% endif %}
+                            </td>
+                            <td>
+                                <div class="btn-group btn-group-sm">
+                                    <a href="{{ url_for('detail_source_donnee', id=source.id) }}" 
+                                       class="btn btn-outline-primary" title="Détails">
+                                        <i class="fas fa-eye"></i>
+                                    </a>
+                                    <a href="{{ url_for('editer_source_donnee', id=source.id) }}" 
+                                       class="btn btn-outline-warning" title="Modifier">
+                                        <i class="fas fa-edit"></i>
+                                    </a>
+                                    <button class="btn btn-outline-success" 
+                                            onclick="executerSource({{ source.id }})"
+                                            title="Exécuter maintenant">
+                                        <i class="fas fa-play"></i>
+                                    </button>
+                                </div>
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+            {% else %}
+            <div class="text-center py-5">
+                <i class="fas fa-database fa-4x text-muted mb-3"></i>
+                <h5 class="text-muted">Aucune source de données</h5>
+                <p class="text-muted">Configurez votre première source pour alimenter vos KRI automatiquement.</p>
+                <a href="{{ url_for('nouvelle_source_donnee') }}" class="btn btn-primary">
+                    <i class="fas fa-plus me-2"></i>Configurer une source
+                </a>
+            </div>
+            {% endif %}
+        </div>
+    </div>
+</div>
+
+<script>
+function executerSource(id) {
+    if (confirm('Lancer une collecte manuelle ?')) {
+        fetch(`/kri/sources/${id}/executer`, {
+            method: 'POST',
+            headers: {
+                'X-CSRFToken': '{{ csrf_token() }}'
+            }
+        }).then(response => {
+            if (response.ok) {
+                alert('Collecte lancée avec succès');
+                location.reload();
+            } else {
+                alert('Erreur lors de la collecte');
+            }
+        });
+    }
+}
+
+// Charger les stats
+fetch('/api/kri/sources/stats')
+    .then(r => r.json())
+    .then(data => {
+        document.getElementById('collectesToday').textContent = data.collectes_today || 0;
+        document.getElementById('totalKri').textContent = data.total_kri_lies || 0;
+    });
+</script>
+{% endblock %}
