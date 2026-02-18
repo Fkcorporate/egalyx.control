@@ -1,0 +1,400 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="container-fluid py-4">
+    <!-- En-tête -->
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <div>
+            <h2 class="h3 mb-0">
+                <i class="fas fa-database me-2 text-primary"></i>
+                {{ source.nom }}
+            </h2>
+            <p class="text-muted mt-1">
+                Détail de la source de données
+                {% if source.type_source == 'api' %}
+                <span class="badge bg-info ms-2">API</span>
+                {% elif source.type_source == 'base_donnees' %}
+                <span class="badge bg-warning">Base de données</span>
+                {% elif source.type_source == 'fichier' %}
+                <span class="badge bg-success">Fichier</span>
+                {% endif %}
+            </p>
+        </div>
+        <div class="d-flex gap-2">
+            <a href="{{ url_for('liste_sources_donnees') }}" class="btn btn-outline-secondary">
+                <i class="fas fa-arrow-left me-1"></i>Retour
+            </a>
+            <a href="{{ url_for('editer_source_donnee', id=source.id) }}" class="btn btn-primary">
+                <i class="fas fa-edit me-1"></i>Modifier
+            </a>
+        </div>
+    </div>
+
+    <!-- Informations générales -->
+    <div class="row">
+        <div class="col-md-6 mb-4">
+            <div class="card h-100">
+                <div class="card-header">
+                    <h5 class="card-title mb-0">
+                        <i class="fas fa-info-circle me-2"></i>Informations générales
+                    </h5>
+                </div>
+                <div class="card-body">
+                    <table class="table table-borderless">
+                        <tr>
+                            <td width="200"><strong>Nom :</strong></td>
+                            <td>{{ source.nom }}</td>
+                        </tr>
+                        <tr>
+                            <td><strong>Type :</strong></td>
+                            <td>
+                                {% if source.type_source == 'api' %}
+                                <span class="badge bg-info">API REST</span>
+                                {% elif source.type_source == 'base_donnees' %}
+                                <span class="badge bg-warning">Base de données</span>
+                                {% elif source.type_source == 'fichier' %}
+                                <span class="badge bg-success">Fichier</span>
+                                {% else %}
+                                <span class="badge bg-secondary">{{ source.type_source }}</span>
+                                {% endif %}
+                            </td>
+                        </tr>
+                        <tr>
+                            <td><strong>Statut :</strong></td>
+                            <td>
+                                {% if source.statut == 'actif' %}
+                                <span class="badge bg-success">Actif</span>
+                                {% elif source.statut == 'inactif' %}
+                                <span class="badge bg-secondary">Inactif</span>
+                                {% elif source.statut == 'erreur' %}
+                                <span class="badge bg-danger">Erreur</span>
+                                {% endif %}
+                            </td>
+                        </tr>
+                        <tr>
+                            <td><strong>Description :</strong></td>
+                            <td>{{ source.description or 'Aucune description' }}</td>
+                        </tr>
+                        <tr>
+                            <td><strong>Fréquence :</strong></td>
+                            <td>
+                                {% if source.frequence_rafraichissement >= 86400 %}
+                                    Quotidienne ({{ (source.frequence_rafraichissement / 86400)|int }} jour(s))
+                                {% elif source.frequence_rafraichissement >= 3600 %}
+                                    Horaire ({{ (source.frequence_rafraichissement / 3600)|int }} heure(s))
+                                {% else %}
+                                    {{ source.frequence_rafraichissement }} secondes
+                                {% endif %}
+                            </td>
+                        </tr>
+                        <tr>
+                            <td><strong>Dernière exécution :</strong></td>
+                            <td>
+                                {% if source.derniere_execution %}
+                                {{ source.derniere_execution.strftime('%d/%m/%Y %H:%M') }}
+                                {% else %}
+                                <span class="text-muted">Jamais</span>
+                                {% endif %}
+                            </td>
+                        </tr>
+                        <tr>
+                            <td><strong>Prochaine exécution :</strong></td>
+                            <td>
+                                {% if source.prochaine_execution %}
+                                {{ source.prochaine_execution.strftime('%d/%m/%Y %H:%M') }}
+                                {% else %}
+                                <span class="text-muted">Non planifiée</span>
+                                {% endif %}
+                            </td>
+                        </tr>
+                        <tr>
+                            <td><strong>Créé le :</strong></td>
+                            <td>{{ source.created_at.strftime('%d/%m/%Y %H:%M') }}</td>
+                        </tr>
+                    </table>
+                    
+                    <div class="d-grid gap-2 mt-3">
+                        <button class="btn btn-success" onclick="executerSource()">
+                            <i class="fas fa-play me-2"></i>Exécuter maintenant
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Configuration détaillée -->
+        <div class="col-md-6 mb-4">
+            <div class="card h-100">
+                <div class="card-header">
+                    <h5 class="card-title mb-0">
+                        <i class="fas fa-cog me-2"></i>Configuration
+                    </h5>
+                </div>
+                <div class="card-body">
+                    {% if source.type_source == 'api' %}
+                    <h6 class="text-primary"><i class="fas fa-cloud me-2"></i>Configuration API</h6>
+                    <table class="table table-borderless">
+                        <tr>
+                            <td width="150"><strong>URL :</strong></td>
+                            <td><code>{{ source.config_connexion.url }}</code></td>
+                        </tr>
+                        <tr>
+                            <td><strong>Méthode :</strong></td>
+                            <td><span class="badge bg-secondary">{{ source.config_connexion.method|default('GET') }}</span></td>
+                        </tr>
+                        <tr>
+                            <td><strong>Headers :</strong></td>
+                            <td><pre class="bg-light p-2 rounded"><code>{{ source.config_connexion.headers|tojson(indent=2) }}</code></pre></td>
+                        </tr>
+                    </table>
+                    
+                    {% elif source.type_source == 'fichier' %}
+                    <h6 class="text-success"><i class="fas fa-file me-2"></i>Configuration Fichier</h6>
+                    <table class="table table-borderless">
+                        <tr>
+                            <td width="150"><strong>Chemin :</strong></td>
+                            <td><code>{{ source.config_connexion.chemin }}</code></td>
+                        </tr>
+                        <tr>
+                            <td><strong>Format :</strong></td>
+                            <td><span class="badge bg-secondary">{{ source.config_connexion.format|upper }}</span></td>
+                        </tr>
+                    </table>
+                    
+                    {% elif source.type_source == 'base_donnees' %}
+                    <h6 class="text-warning"><i class="fas fa-database me-2"></i>Configuration Base de données</h6>
+                    <table class="table table-borderless">
+                        <tr>
+                            <td width="150"><strong>Type :</strong></td>
+                            <td>{{ source.config_connexion.type }}</td>
+                        </tr>
+                        <tr>
+                            <td><strong>Hôte :</strong></td>
+                            <td>{{ source.config_connexion.host }}</td>
+                        </tr>
+                        <tr>
+                            <td><strong>Port :</strong></td>
+                            <td>{{ source.config_connexion.port }}</td>
+                        </tr>
+                        <tr>
+                            <td><strong>Base :</strong></td>
+                            <td>{{ source.config_connexion.database }}</td>
+                        </tr>
+                        <tr>
+                            <td><strong>Requête :</strong></td>
+                            <td><pre class="bg-light p-2 rounded"><code>{{ source.config_connexion.requete }}</code></pre></td>
+                        </tr>
+                    </table>
+                    {% endif %}
+
+                    {% if source.auth_config %}
+                    <h6 class="mt-4 text-secondary"><i class="fas fa-lock me-2"></i>Authentification</h6>
+                    <table class="table table-borderless">
+                        <tr>
+                            <td width="150"><strong>Type :</strong></td>
+                            <td>
+                                {% if source.auth_config.type == 'basic' %}
+                                Basic Auth
+                                {% elif source.auth_config.type == 'bearer' %}
+                                Bearer Token
+                                {% elif source.auth_config.type == 'api_key' %}
+                                API Key
+                                {% endif %}
+                            </td>
+                        </tr>
+                        {% if source.auth_config.type == 'basic' %}
+                        <tr>
+                            <td><strong>Utilisateur :</strong></td>
+                            <td>{{ source.auth_config.username }}</td>
+                        </tr>
+                        {% elif source.auth_config.type == 'bearer' %}
+                        <tr>
+                            <td><strong>Token :</strong></td>
+                            <td>•••••••• (caché)</td>
+                        </tr>
+                        {% elif source.auth_config.type == 'api_key' %}
+                        <tr>
+                            <td><strong>Clé :</strong></td>
+                            <td>{{ source.auth_config.key_name }}</td>
+                        </tr>
+                        <tr>
+                            <td><strong>Dans :</strong></td>
+                            <td>{{ 'Headers' if source.auth_config.in_header else 'Paramètres' }}</td>
+                        </tr>
+                        {% endif %}
+                    </table>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- KRI liés -->
+    <div class="row mb-4">
+        <div class="col-12">
+            <div class="card">
+                <div class="card-header d-flex justify-content-between align-items-center">
+                    <h5 class="card-title mb-0">
+                        <i class="fas fa-link me-2"></i>KRI liés à cette source
+                    </h5>
+                    <span class="badge bg-primary">{{ liens|length }} KRI(s)</span>
+                </div>
+                <div class="card-body">
+                    {% if liens %}
+                    <div class="table-responsive">
+                        <table class="table table-hover">
+                            <thead>
+                                <tr>
+                                    <th>KRI</th>
+                                    <th>Chemin d'extraction</th>
+                                    <th>Statut</th>
+                                    <th>Dernière valeur</th>
+                                    <th>Dernière collecte</th>
+                                    <th>Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for lien in liens %}
+                                <tr>
+                                    <td>
+                                        <strong>{{ lien.kri.nom }}</strong>
+                                        <br><small class="text-muted">{{ lien.kri.get_type_display() }}</small>
+                                    </td>
+                                    <td>
+                                        <small>{{ lien.chemin_donnee or lien.mapping_config }}</small>
+                                    </td>
+                                    <td>
+                                        {% if lien.est_actif %}
+                                        <span class="badge bg-success">Actif</span>
+                                        {% else %}
+                                        <span class="badge bg-secondary">Inactif</span>
+                                        {% endif %}
+                                    </td>
+                                    <td>
+                                        {% if lien.collectes %}
+                                        {{ "%.2f"|format(lien.collectes[0].valeur) }} {{ lien.kri.unite_mesure }}
+                                        {% else %}
+                                        <span class="text-muted">-</span>
+                                        {% endif %}
+                                    </td>
+                                    <td>
+                                        {% if lien.collectes %}
+                                        <small>{{ lien.collectes[0].date_collecte.strftime('%d/%m/%Y %H:%M') }}</small>
+                                        {% else %}
+                                        <span class="text-muted">Jamais</span>
+                                        {% endif %}
+                                    </td>
+                                    <td>
+                                        <a href="{{ url_for('detail_kri', kri_id=lien.kri.id) }}" 
+                                           class="btn btn-sm btn-outline-primary">
+                                            <i class="fas fa-eye"></i>
+                                        </a>
+                                    </td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                    {% else %}
+                    <div class="text-center py-4">
+                        <i class="fas fa-unlink fa-3x text-muted mb-3"></i>
+                        <p class="text-muted">Aucun KRI lié à cette source.</p>
+                    </div>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Historique des collectes -->
+    <div class="row">
+        <div class="col-12">
+            <div class="card">
+                <div class="card-header">
+                    <h5 class="card-title mb-0">
+                        <i class="fas fa-history me-2"></i>Historique des collectes
+                    </h5>
+                </div>
+                <div class="card-body">
+                    {% if collectes %}
+                    <div class="table-responsive">
+                        <table class="table table-sm">
+                            <thead>
+                                <tr>
+                                    <th>Date</th>
+                                    <th>KRI</th>
+                                    <th>Valeur</th>
+                                    <th>Statut</th>
+                                    <th>Message</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for collecte in collectes %}
+                                <tr>
+                                    <td>{{ collecte.date_collecte.strftime('%d/%m/%Y %H:%M') }}</td>
+                                    <td>
+                                        <a href="{{ url_for('detail_kri', kri_id=collecte.source_link.kri.id) }}">
+                                            {{ collecte.source_link.kri.nom }}
+                                        </a>
+                                    </td>
+                                    <td><strong>{{ "%.2f"|format(collecte.valeur) }}</strong></td>
+                                    <td>
+                                        {% if collecte.statut == 'succes' %}
+                                        <span class="badge bg-success">Succès</span>
+                                        {% elif collecte.statut == 'avertissement' %}
+                                        <span class="badge bg-warning">Avertissement</span>
+                                        {% elif collecte.statut == 'erreur' %}
+                                        <span class="badge bg-danger">Erreur</span>
+                                        {% endif %}
+                                    </td>
+                                    <td>
+                                        {% if collecte.message %}
+                                        <small class="text-muted">{{ collecte.message|truncate(50) }}</small>
+                                        {% endif %}
+                                    </td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                    {% else %}
+                    <div class="text-center py-4">
+                        <i class="fas fa-database fa-3x text-muted mb-3"></i>
+                        <p class="text-muted">Aucune collecte effectuée pour le moment.</p>
+                        <button class="btn btn-primary" onclick="executerSource()">
+                            <i class="fas fa-play me-2"></i>Lancer une collecte
+                        </button>
+                    </div>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+function executerSource() {
+    if (confirm('Lancer une collecte manuelle ?')) {
+        fetch('{{ url_for("executer_source", id=source.id) }}', {
+            method: 'POST',
+            headers: {
+                'X-CSRFToken': '{{ csrf_token() }}'
+            }
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                alert('✅ Collecte lancée avec succès');
+                location.reload();
+            } else {
+                alert('❌ Erreur: ' + (data.error || 'Erreur inconnue'));
+            }
+        })
+        .catch(error => {
+            console.error('Erreur:', error);
+            alert('❌ Erreur de connexion');
+        });
+    }
+}
+</script>
+{% endblock %}
