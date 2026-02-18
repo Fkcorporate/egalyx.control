@@ -182,6 +182,7 @@
                                             <option value="terminee">Terminée</option>
                                             <option value="planifiee">Planifiée</option>
                                             <option value="suspendue">Suspendue</option>
+                                            <option value="archivee">Archivée</option>
                                         </select>
                                     </div>
                                     <div class="mb-3">
@@ -269,27 +270,61 @@
                         </div>
                     </div>
                     
-                    {% if voir_archives and campagnes_data|length > 0 and (current_user.role == 'admin' or current_user.is_client_admin) %}
-                    <div class="dropdown">
-                        <button class="btn btn-outline-light dropdown-toggle d-flex align-items-center gap-2" type="button" 
-                                data-bs-toggle="dropdown" style="border-radius: 8px; padding: 0.5rem 1rem;">
-                            <i class="fas fa-ellipsis-h"></i>
-                            <span>Actions</span>
-                        </button>
-                        <ul class="dropdown-menu dropdown-menu-end">
-                            <li>
-                                <form method="POST" action="{{ url_for('supprimer_toutes_campagnes_archivees', cartographie_id=cartographie.id) }}" 
-                                      class="dropdown-item p-0">
-                                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                                    <button type="submit" class="dropdown-item text-danger"
-                                            onclick="return confirm('ATTENTION: Cette action supprimera définitivement TOUTES les campagnes archivées. Êtes-vous sûr ?')">
-                                        <i class="fas fa-trash me-2"></i>Vider les archives
-                                    </button>
-                                </form>
-                            </li>
-                        </ul>
+                    <div class="d-flex gap-2">
+                        <!-- Bouton d'export PDF pour toutes les campagnes -->
+                        <div class="dropdown">
+                            <button class="btn btn-outline-light dropdown-toggle d-flex align-items-center gap-2" 
+                                    type="button" data-bs-toggle="dropdown"
+                                    style="border-radius: 8px; padding: 0.5rem 1rem;">
+                                <i class="fas fa-file-pdf text-danger"></i>
+                                <span>Rapports PDF</span>
+                            </button>
+                            <ul class="dropdown-menu dropdown-menu-end">
+                                <li>
+                                    <a class="dropdown-item" href="#" onclick="genererRapportToutesCampagnes()">
+                                        <i class="fas fa-file-pdf me-2 text-danger"></i>Toutes les campagnes
+                                    </a>
+                                </li>
+                                <li><hr class="dropdown-divider"></li>
+                                <li>
+                                    <span class="dropdown-header">Campagnes disponibles</span>
+                                </li>
+                                {% for data in campagnes_data %}
+                                <li>
+                                    <a class="dropdown-item" href="{{ url_for('telecharger_rapport_cartographie_pdf_campagne', cartographie_id=cartographie.id, campagne_id=data.campagne.id) }}" 
+                                       target="_blank">
+                                        <i class="fas fa-file-pdf me-2 text-danger"></i>
+                                        {{ data.campagne.nom|truncate(25) }}
+                                        <span class="badge bg-secondary ms-2">{{ data.progression|round|int }}%</span>
+                                    </a>
+                                </li>
+                                {% endfor %}
+                            </ul>
+                        </div>
+                        
+                        {% if voir_archives and campagnes_data|length > 0 and (current_user.role == 'admin' or current_user.is_client_admin) %}
+                        <div class="dropdown">
+                            <button class="btn btn-outline-light dropdown-toggle d-flex align-items-center gap-2" 
+                                    type="button" data-bs-toggle="dropdown"
+                                    style="border-radius: 8px; padding: 0.5rem 1rem;">
+                                <i class="fas fa-ellipsis-h"></i>
+                                <span>Actions</span>
+                            </button>
+                            <ul class="dropdown-menu dropdown-menu-end">
+                                <li>
+                                    <form method="POST" action="{{ url_for('supprimer_toutes_campagnes_archivees', cartographie_id=cartographie.id) }}" 
+                                          class="dropdown-item p-0">
+                                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                                        <button type="submit" class="dropdown-item text-danger"
+                                                onclick="return confirm('ATTENTION: Cette action supprimera définitivement TOUTES les campagnes archivées. Êtes-vous sûr ?')">
+                                            <i class="fas fa-trash me-2"></i>Vider les archives
+                                        </button>
+                                    </form>
+                                </li>
+                            </ul>
+                        </div>
+                        {% endif %}
                     </div>
-                    {% endif %}
                 </div>
                 
                 <div class="fk-card-body p-0">
@@ -443,6 +478,15 @@
                                                     <i class="fas fa-play"></i>
                                                 </a>
                                                 
+                                                <!-- NOUVEAU BOUTON RAPPORT PDF -->
+                                                <a href="{{ url_for('telecharger_rapport_cartographie_pdf_campagne', cartographie_id=cartographie.id, campagne_id=data.campagne.id) }}" 
+                                                   class="btn btn-outline-danger d-flex align-items-center" 
+                                                   title="Télécharger le rapport PDF"
+                                                   target="_blank"
+                                                   style="border-radius: 6px; padding: 0.375rem 0.75rem;">
+                                                    <i class="fas fa-file-pdf"></i>
+                                                </a>
+                                                
                                                 <a href="{{ url_for('modifier_campagne', campagne_id=data.campagne.id) }}" 
                                                    class="btn btn-outline-info d-flex align-items-center" 
                                                    title="Modifier"
@@ -479,6 +523,16 @@
                                                     </li>
                                                     <li><hr class="dropdown-divider"></li>
                                                     {% endif %}
+                                                    
+                                                    <!-- Option : Rapport PDF (déjà présent mais ajouté aussi ici) -->
+                                                    <li>
+                                                        <a class="dropdown-item text-danger" 
+                                                           href="{{ url_for('telecharger_rapport_cartographie_pdf_campagne', cartographie_id=cartographie.id, campagne_id=data.campagne.id) }}"
+                                                           target="_blank">
+                                                            <i class="fas fa-file-pdf me-2"></i>Télécharger rapport PDF
+                                                        </a>
+                                                    </li>
+                                                    <li><hr class="dropdown-divider"></li>
                                                     
                                                     <!-- Option : Archiver/Désarchiver -->
                                                     {% if data.campagne.statut != 'archivee' %}
@@ -691,6 +745,30 @@
         </div>
     </div>
 </div>
+
+<!-- Modal pour générer rapport de toutes les campagnes -->
+<div class="modal fade" id="modalRapportToutesCampagnes" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content" style="border: none; border-radius: 16px;">
+            <div class="modal-header" style="background: linear-gradient(135deg, var(--fk-navy) 0%, var(--fk-blue) 100%);">
+                <h5 class="modal-title text-white">
+                    <i class="fas fa-file-pdf me-2"></i>Générer rapport consolidé
+                </h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body p-4">
+                <p>Cette fonctionnalité générera un rapport PDF consolidé de toutes les campagnes.</p>
+                <div class="fk-alert fk-alert-info">
+                    <i class="fas fa-info-circle"></i>
+                    <span>Fonctionnalité en cours de développement</span>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Fermer</button>
+            </div>
+        </div>
+    </div>
+</div>
 {% endblock %}
 
 {% block scripts %}
@@ -763,8 +841,7 @@ function rechercherCampagne(terme) {
     
     lignes.forEach((ligne, index) => {
         const nomLigne = ligne.getAttribute('data-nom');
-        const nomElement = ligne.querySelector('.campagne-nom');
-        const estVisible = termeMin === '' || nomLigne.includes(termeMin);
+        const estVisible = termeMin === '' || (nomLigne && nomLigne.includes(termeMin));
         
         ligne.style.display = estVisible ? '' : 'none';
         
@@ -800,6 +877,11 @@ function cloturerCampagne(campagneId, campagneNom) {
     document.getElementById('campagneNomCloture').textContent = campagneNom;
     
     const modal = new bootstrap.Modal(document.getElementById('modalClotureCampagne'));
+    modal.show();
+}
+
+function genererRapportToutesCampagnes() {
+    const modal = new bootstrap.Modal(document.getElementById('modalRapportToutesCampagnes'));
     modal.show();
 }
 
@@ -893,6 +975,12 @@ document.addEventListener('keydown', function(e) {
         }
     }
 });
+
+// Fonction pour afficher des notifications toast
+function showToast(message, type = 'info') {
+    // Implémentez votre système de toast ici
+    console.log(`[${type}] ${message}`);
+}
 </script>
 
 <style>
