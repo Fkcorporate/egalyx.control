@@ -109,7 +109,66 @@
                     {% endif %}
                 </div>
             </div>
+                <!-- Graphique des collectes -->
+                <div class="mt-4">
+                    <canvas id="collectesChart" style="height: 200px;"></canvas>
+                </div>
+                {% else %}
+                <div class="text-center py-4">
+                    <i class="fas fa-database fa-3x text-muted mb-3"></i>
+                    <p class="text-muted">Aucune source de données automatique liée à ce KRI.</p>
+                    <p class="text-muted small mb-3">
+                        <i class="fas fa-info-circle me-1"></i>
+                        Liez une source pour automatiser la collecte des mesures
+                    </p>
+                    <button class="btn btn-primary" onclick="ajouterSource()">
+                        <i class="fas fa-plus me-2"></i>Lier une source
+                    </button>
+                </div>
+                {% endif %}
+            </div>
+        </div>
 
+        <script>
+        function forcerCollecte(linkId) {
+            fetch(`/api/kri/links/${linkId}/collecter`, {
+                method: 'POST',
+                headers: {
+                    'X-CSRFToken': '{{ csrf_token() }}'
+                }
+            })
+            .then(r => r.json())
+            .then(data => {
+                if (data.success) {
+                    alert('✅ Collecte forcée avec succès');
+                    location.reload();
+                } else {
+                    alert('❌ Erreur: ' + data.error);
+                }
+            });
+        }
+
+        // Graphique des collectes
+        const ctx = document.getElementById('collectesChart')?.getContext('2d');
+        if (ctx) {
+            fetch(`/api/kri/{{ kri.id }}/historique-collectes`)
+                .then(r => r.json())
+                .then(data => {
+                    new Chart(ctx, {
+                        type: 'line',
+                        data: {
+                            labels: data.map(d => new Date(d.date).toLocaleDateString()),
+                            datasets: [{
+                                label: 'Valeurs collectées',
+                                data: data.map(d => d.valeur),
+                                borderColor: 'rgb(75, 192, 192)',
+                                tension: 0.1
+                            }]
+                        }
+                    });
+                });
+        }
+        </script>
             <!-- Carte seuils d'alerte et cibles -->
             <div class="card mt-4">
                 <div class="card-header">
