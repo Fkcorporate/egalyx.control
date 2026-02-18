@@ -1,0 +1,322 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="container-fluid py-4">
+    <!-- En-tête -->
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <div>
+            <h2 class="h3 mb-0">
+                <i class="fas fa-exclamation-triangle text-warning me-2"></i>
+                Liste des Risques
+            </h2>
+            <p class="text-muted mt-1">
+                {{ risques.total }} risque(s) actif(s) trouvé(s)
+                {% if cartographie_id %}
+                    {% for carto in cartographies %}
+                        {% if carto.id == cartographie_id %}
+                            dans <strong>{{ carto.nom }}</strong>
+                        {% endif %}
+                    {% endfor %}
+                {% endif %}
+                {% if campagne_id %}
+                    {% for campagne in campagnes %}
+                        {% if campagne.id == campagne_id %}
+                            - Campagne <strong>{{ campagne.nom }}</strong>
+                        {% endif %}
+                    {% endfor %}
+                {% endif %}
+            </p>
+        </div>
+        <div>
+            <a href="{{ url_for('dashboard') }}" class="btn btn-outline-secondary">
+                <i class="fas fa-arrow-left me-1"></i> Retour
+            </a>
+            {% if current_user.has_permission('can_manage_risks') %}
+            <a href="{{ url_for('nouveau_risque_sans_carto') }}" class="btn btn-primary ms-2">
+                <i class="fas fa-plus me-1"></i> Nouveau risque
+            </a>
+            {% endif %}
+        </div>
+    </div>
+
+    <!-- Statistiques -->
+    <div class="row mb-4">
+        <div class="col-md-2">
+            <div class="card text-center border-start border-primary border-4">
+                <div class="card-body">
+                    <h3 class="text-primary">{{ stats.total }}</h3>
+                    <p class="text-muted mb-0">Total</p>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-2">
+            <div class="card text-center border-start border-danger border-4">
+                <div class="card-body">
+                    <h3 class="text-danger">{{ stats.critiques }}</h3>
+                    <p class="text-muted mb-0">Critiques</p>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-2">
+            <div class="card text-center border-start border-info border-4">
+                <div class="card-body">
+                    <h3 class="text-info">{{ stats.avec_evaluations }}</h3>
+                    <p class="text-muted mb-0">Évalués</p>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-2">
+            <div class="card text-center border-start border-warning border-4">
+                <div class="card-body">
+                    <h3 class="text-warning">{{ stats.sans_evaluations }}</h3>
+                    <p class="text-muted mb-0">Non évalués</p>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-2">
+            <div class="card text-center border-start border-success border-4">
+                <div class="card-body">
+                    <h3 class="text-success">{{ stats.avec_kri }}</h3>
+                    <p class="text-muted mb-0">Avec KRI</p>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-2">
+            <div class="card text-center border-start border-secondary border-4">
+                <div class="card-body">
+                    <h3 class="text-secondary">{{ stats.archives }}</h3>
+                    <p class="text-muted mb-0">Archivés</p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Filtres avancés -->
+    <div class="card mb-4">
+        <div class="card-body">
+            <form method="GET" action="{{ url_for('liste_risques') }}" class="row g-3">
+                <!-- Filtre par cartographie -->
+                <div class="col-md-3">
+                    <label class="form-label">Cartographie</label>
+                    <select name="cartographie_id" class="form-select" onchange="this.form.submit()">
+                        <option value="">Toutes les cartographies</option>
+                        {% for carto in cartographies %}
+                        <option value="{{ carto.id }}" {% if cartographie_id == carto.id %}selected{% endif %}>
+                            {{ carto.nom }}
+                        </option>
+                        {% endfor %}
+                    </select>
+                </div>
+                
+                <!-- Filtre par campagne (dépend de la cartographie) -->
+                <div class="col-md-3">
+                    <label class="form-label">Campagne d'évaluation</label>
+                    <select name="campagne_id" class="form-select">
+                        <option value="">Toutes les campagnes</option>
+                        {% for campagne in campagnes %}
+                        <option value="{{ campagne.id }}" {% if campagne_id == campagne.id %}selected{% endif %}>
+                            {{ campagne.nom }} ({{ campagne.date_debut.strftime('%d/%m/%Y') if campagne.date_debut }})
+                        </option>
+                        {% endfor %}
+                    </select>
+                </div>
+                
+                <!-- Filtre par niveau -->
+                <div class="col-md-2">
+                    <label class="form-label">Niveau</label>
+                    <select name="niveau" class="form-select">
+                        <option value="">Tous</option>
+                        <option value="Critique" {% if filtre_niveau == 'Critique' %}selected{% endif %}>Critique</option>
+                        <option value="Élevé" {% if filtre_niveau == 'Élevé' %}selected{% endif %}>Élevé</option>
+                        <option value="Moyen" {% if filtre_niveau == 'Moyen' %}selected{% endif %}>Moyen</option>
+                        <option value="Faible" {% if filtre_niveau == 'Faible' %}selected{% endif %}>Faible</option>
+                    </select>
+                </div>
+                
+                <!-- Filtre par statut KRI -->
+                <div class="col-md-2">
+                    <label class="form-label">Statut KRI</label>
+                    <select name="statut" class="form-select">
+                        <option value="">Tous</option>
+                        <option value="avec_kri" {% if filtre_statut == 'avec_kri' %}selected{% endif %}>Avec KRI</option>
+                        <option value="sans_kri" {% if filtre_statut == 'sans_kri' %}selected{% endif %}>Sans KRI</option>
+                    </select>
+                </div>
+                
+                <div class="col-md-2 d-flex align-items-end">
+                    <button type="submit" class="btn btn-primary w-100">
+                        <i class="fas fa-filter me-1"></i> Filtrer
+                    </button>
+                    <a href="{{ url_for('liste_risques') }}" class="btn btn-outline-secondary ms-2" title="Réinitialiser">
+                        <i class="fas fa-times"></i>
+                    </a>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Liste des risques -->
+    <div class="card">
+        <div class="card-body p-0">
+            {% if risques.items %}
+            <div class="table-responsive">
+                <table class="table table-hover align-middle mb-0">
+                    <thead class="bg-light">
+                        <tr>
+                            <th>Référence</th>
+                            <th>Intitulé</th>
+                            <th>Cartographie</th>
+                            <th>
+                                {% if campagne_id %}
+                                Évaluation campagne
+                                {% else %}
+                                Dernier niveau
+                                {% endif %}
+                            </th>
+                            <th>KRI</th>
+                            <th>
+                                {% if campagne_id %}
+                                Évalué le
+                                {% else %}
+                                Dernière évaluation
+                                {% endif %}
+                            </th>
+                            <th>Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for risque in risques.items %}
+                        <tr>
+                            <td>
+                                <strong class="text-primary">{{ risque.reference }}</strong>
+                            </td>
+                            <td>
+                                <div class="fw-bold">{{ risque.intitule }}</div>
+                                {% if risque.description %}
+                                <small class="text-muted">{{ risque.description|truncate(50) }}</small>
+                                {% endif %}
+                            </td>
+                            <td>
+                                {% if risque.cartographie %}
+                                <span class="badge bg-info">{{ risque.cartographie.nom }}</span>
+                                {% else %}
+                                <span class="text-muted">-</span>
+                                {% endif %}
+                            </td>
+                            <td>
+                                {% if campagne_id and risque.evaluation_campagne %}
+                                    {% set niveau = risque.evaluation_campagne.niveau_risque %}
+                                    {% include "includes/niveau_badge.html" %}
+                                {% elif not campagne_id and risque.derniere_evaluation %}
+                                    {% set niveau = risque.derniere_evaluation.niveau_risque %}
+                                    {% include "includes/niveau_badge.html" %}
+                                {% else %}
+                                    <span class="badge bg-secondary">Non évalué</span>
+                                {% endif %}
+                            </td>
+                            <td class="text-center">
+                                {% if risque.kri %}
+                                <span class="badge bg-primary rounded-pill">
+                                    <i class="fas fa-check-circle me-1"></i>Oui
+                                </span>
+                                {% else %}
+                                <span class="text-muted">-</span>
+                                {% endif %}
+                            </td>
+                            <td>
+                                {% if campagne_id and risque.evaluation_campagne %}
+                                <small>{{ risque.evaluation_campagne.created_at.strftime('%d/%m/%Y') }}</small>
+                                {% elif not campagne_id and risque.derniere_evaluation %}
+                                <small>{{ risque.derniere_evaluation.created_at.strftime('%d/%m/%Y') }}</small>
+                                {% else %}
+                                <small class="text-muted">Jamais</small>
+                                {% endif %}
+                            </td>
+                            <td>
+                                <div class="btn-group btn-group-sm">
+                                    <a href="{{ url_for('detail_risque', id=risque.id) }}" 
+                                       class="btn btn-outline-primary" title="Voir">
+                                        <i class="fas fa-eye"></i>
+                                    </a>
+                                    {% if current_user.has_permission('can_manage_risks') %}
+                                    <a href="{{ url_for('modifier_risque', id=risque.id) }}" 
+                                       class="btn btn-outline-warning" title="Modifier">
+                                        <i class="fas fa-edit"></i>
+                                    </a>
+                                    {% endif %}
+                                    {% if campagne_id %}
+                                    <a href="{{ url_for('evaluer_risque', risque_id=risque.id, campagne_id=campagne_id) }}" 
+                                       class="btn btn-outline-success" title="Évaluer pour cette campagne">
+                                        <i class="fas fa-clipboard-check"></i>
+                                    </a>
+                                    {% endif %}
+                                </div>
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+
+            <!-- Pagination -->
+            {% if risques.pages > 1 %}
+            <div class="d-flex justify-content-between align-items-center p-3 border-top">
+                <div class="text-muted small">
+                    Page {{ risques.page }} sur {{ risques.pages }}
+                    ({{ risques.total }} résultats)
+                </div>
+                <nav aria-label="Pagination">
+                    <ul class="pagination mb-0">
+                        {% if risques.has_prev %}
+                        <li class="page-item">
+                            <a class="page-link" href="{{ url_for('liste_risques', page=risques.prev_num, per_page=per_page, cartographie_id=cartographie_id, campagne_id=campagne_id, niveau=filtre_niveau, statut=filtre_statut) }}">
+                                Précédent
+                            </a>
+                        </li>
+                        {% endif %}
+
+                        {% for page_num in risques.iter_pages() %}
+                            {% if page_num %}
+                                <li class="page-item {% if page_num == risques.page %}active{% endif %}">
+                                    <a class="page-link" href="{{ url_for('liste_risques', page=page_num, per_page=per_page, cartographie_id=cartographie_id, campagne_id=campagne_id, niveau=filtre_niveau, statut=filtre_statut) }}">
+                                        {{ page_num }}
+                                    </a>
+                                </li>
+                            {% else %}
+                                <li class="page-item disabled">
+                                    <span class="page-link">...</span>
+                                </li>
+                            {% endif %}
+                        {% endfor %}
+
+                        {% if risques.has_next %}
+                        <li class="page-item">
+                            <a class="page-link" href="{{ url_for('liste_risques', page=risques.next_num, per_page=per_page, cartographie_id=cartographie_id, campagne_id=campagne_id, niveau=filtre_niveau, statut=filtre_statut) }}">
+                                Suivant
+                            </a>
+                        </li>
+                        {% endif %}
+                    </ul>
+                </nav>
+            </div>
+            {% endif %}
+
+            {% else %}
+            <div class="text-center py-5">
+                <i class="fas fa-exclamation-triangle fa-4x text-muted mb-3"></i>
+                <h4 class="text-muted">Aucun risque trouvé</h4>
+                <p class="text-muted">
+                    Aucun risque ne correspond aux critères sélectionnés.
+                </p>
+                {% if current_user.has_permission('can_manage_risks') %}
+                <a href="{{ url_for('nouveau_risque') }}" class="btn btn-primary mt-3">
+                    <i class="fas fa-plus me-1"></i>
+                    Créer un risque
+                </a>
+                {% endif %}
+            </div>
+            {% endif %}
+        </div>
+    </div>
+</div>
+{% endblock %}
