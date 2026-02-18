@@ -193,6 +193,19 @@
                         </span>
                         {% endif %}
                         
+                        <!-- NOUVEAU : Indicateur d'écart pour KPI -->
+                        {% if kri.type_indicateur == 'kpi' and kri.seuil_cible and derniere_mesure %}
+                            {% set diff = kri.get_difference_cible(derniere_mesure.valeur) %}
+                            {% set interpretation = kri.get_interpretation_difference(derniere_mesure.valeur) %}
+                            {% if diff is not none and interpretation %}
+                            <span class="fk-badge fk-badge-{{ interpretation.couleur }}" 
+                                  title="{{ interpretation.explication }}">
+                                <i class="fas fa-arrow-{{ 'up' if diff > 0 else 'down' if diff < 0 else 'right' }} me-1"></i>
+                                {{ "%+.1f"|format(diff) }} {{ kri.unite_mesure }}
+                            </span>
+                            {% endif %}
+                        {% endif %}
+                        
                         {% if not kri.risque_id %}
                         <span class="fk-badge fk-badge-info">
                             <i class="fas fa-unlink me-1"></i>Indépendant
@@ -341,27 +354,40 @@
                         </div>
                         {% endif %}
 
-                        <!-- Affichage de la cible pour les KPI -->
-                        {% if kri.type_indicateur == 'kpi' and kri.seuil_cible %}
-                        <div class="mt-2 pt-2 border-top">
-                            <div class="d-flex justify-content-between align-items-center">
-                                <small class="text-muted">
-                                    <i class="fas fa-bullseye text-info me-1"></i>Cible:
-                                </small>
-                                <span class="text-info fw-bold">{{ "%.2f"|format(kri.seuil_cible) }} {{ kri.unite_mesure }}</span>
-                            </div>
-                            {% if derniere_mesure %}
-                                {% set ecart = kri.get_ecart_par_rapport_cible(derniere_mesure.valeur) %}
-                                {% if ecart is not none %}
+                        <!-- Affichage de la cible pour les KPI - VERSION DIFFÉRENCE ABSOLUE -->
+                        {% if kri.type_indicateur == 'kpi' and kri.seuil_cible and derniere_mesure %}
+                            {% set diff = kri.get_difference_cible(derniere_mesure.valeur) %}
+                            {% set interpretation = kri.get_interpretation_difference(derniere_mesure.valeur) %}
+                            {% if diff is not none %}
+                            <div class="mt-2 pt-2 border-top">
+                                <div class="d-flex justify-content-between align-items-center">
+                                    <small class="text-muted">
+                                        <i class="fas fa-bullseye text-info me-1"></i>Cible:
+                                    </small>
+                                    <span class="text-info fw-bold">{{ "%.2f"|format(kri.seuil_cible) }} {{ kri.unite_mesure }}</span>
+                                </div>
+                                
                                 <div class="d-flex justify-content-between align-items-center mt-1">
                                     <small class="text-muted">Écart:</small>
-                                    <span class="badge bg-{{ 'success' if ecart|abs < 5 else 'warning' if ecart|abs < 10 else 'danger' }}">
-                                        {{ "%+.1f"|format(ecart) }}%
-                                    </span>
+                                    <div class="d-flex align-items-center gap-1">
+                                        <span class="badge bg-{{ interpretation.couleur if interpretation else 'secondary' }}">
+                                            {{ "%+.2f"|format(diff) }} {{ kri.unite_mesure }}
+                                        </span>
+                                        {% if interpretation %}
+                                        <small class="text-{{ interpretation.couleur }}" style="font-size: 10px;">
+                                            ({{ interpretation.message }})
+                                        </small>
+                                        {% endif %}
+                                    </div>
+                                </div>
+                                
+                                {% if interpretation %}
+                                <div class="mt-1 small text-muted">
+                                    <i class="fas fa-info-circle me-1"></i>{{ interpretation.explication }}
                                 </div>
                                 {% endif %}
+                            </div>
                             {% endif %}
-                        </div>
                         {% endif %}
                     </div>
 
@@ -498,6 +524,25 @@
                                 <small class="text-muted">Mesures</small>
                             </div>
                         </div>
+                        
+                        <!-- Affichage de l'écart dans le modal -->
+                        {% if kri.type_indicateur == 'kpi' and kri.seuil_cible and derniere_mesure %}
+                            {% set diff = kri.get_difference_cible(kri.mesures[-1].valeur) %}
+                            {% set interpretation = kri.get_interpretation_difference(kri.mesures[-1].valeur) %}
+                            {% if diff is not none %}
+                            <div class="alert alert-{{ interpretation.couleur if interpretation else 'info' }} mt-3 mb-0">
+                                <div class="d-flex align-items-center">
+                                    <i class="fas fa-{{ 'exclamation-triangle' if interpretation.statut == 'sous_performance' else 'check-circle' if interpretation.statut == 'performance' else 'info-circle' }} me-2 fs-5"></i>
+                                    <div>
+                                        <strong>Écart par rapport à la cible :</strong>
+                                        {{ "%+.2f"|format(diff) }} {{ kri.unite_mesure }}
+                                        ({{ interpretation.explication if interpretation else '' }})
+                                    </div>
+                                </div>
+                            </div>
+                            {% endif %}
+                        {% endif %}
+                        
                         {% else %}
                         <div class="text-center py-5">
                             <i class="fas fa-chart-line fa-3x text-muted mb-3"></i>
@@ -628,6 +673,57 @@
         </div>
     </div>
 </div>
+
+<!-- Styles supplémentaires pour les badges -->
+<style>
+.fk-badge-success {
+    background-color: #d1e7dd;
+    color: #0a3622;
+    border: 1px solid #a3cfbb;
+    padding: 4px 8px;
+    border-radius: 4px;
+    font-size: 11px;
+    font-weight: 600;
+    display: inline-flex;
+    align-items: center;
+}
+
+.fk-badge-warning {
+    background-color: #fff3cd;
+    color: #856404;
+    border: 1px solid #ffe69c;
+    padding: 4px 8px;
+    border-radius: 4px;
+    font-size: 11px;
+    font-weight: 600;
+    display: inline-flex;
+    align-items: center;
+}
+
+.fk-badge-danger {
+    background-color: #f8d7da;
+    color: #58151c;
+    border: 1px solid #f1aeb5;
+    padding: 4px 8px;
+    border-radius: 4px;
+    font-size: 11px;
+    font-weight: 600;
+    display: inline-flex;
+    align-items: center;
+}
+
+.fk-badge-info {
+    background-color: #cff4fc;
+    color: #055160;
+    border: 1px solid #9eeaf9;
+    padding: 4px 8px;
+    border-radius: 4px;
+    font-size: 11px;
+    font-weight: 600;
+    display: inline-flex;
+    align-items: center;
+}
+</style>
 {% endblock %}
 
 {% block scripts %}
