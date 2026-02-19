@@ -1,3 +1,4 @@
+<!-- templates/admin/config_organigramme.html -->
 {% extends "base.html" %}
 
 {% block content %}
@@ -12,53 +13,482 @@
                     </h5>
                 </div>
                 <div class="card-body">
-                    <form method="POST">
-                        <div class="mb-3">
-                            <label class="form-label">Nom de l'entreprise</label>
-                            <input type="text" class="form-control" name="nom_entreprise" 
-                                   value="{{ config.nom_entreprise }}" required>
+                    <form method="POST" enctype="multipart/form-data">
+                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                        
+                        <!-- Nom de l'entreprise -->
+                        <div class="mb-4">
+                            <label class="form-label fw-bold">
+                                <i class="fas fa-building me-2 text-primary"></i>
+                                Nom de l'entreprise
+                            </label>
+                            <input type="text" class="form-control form-control-lg" 
+                                   name="nom_entreprise" 
+                                   value="{{ config.nom_entreprise }}" 
+                                   placeholder="Ex: Egalyx Control SAS"
+                                   required>
                             <div class="form-text">
-                                Ce nom apparaîtra en titre de l'organigramme
+                                Ce nom apparaîtra en titre de l'organigramme et dans les PDF
                             </div>
                         </div>
                         
-                        <div class="row">
-                            <div class="col-md-6 mb-3">
-                                <label class="form-label">Couleur principale</label>
-                                <input type="color" class="form-control form-control-color" 
-                                       name="couleur_primaire" value="{{ config.couleur_primaire }}">
-                                <div class="form-text">Utilisée pour les directions</div>
-                            </div>
+                        <hr class="my-4">
+                        
+                        <!-- Logo de l'entreprise -->
+                        <div class="mb-4">
+                            <label class="form-label fw-bold">
+                                <i class="fas fa-image me-2 text-primary"></i>
+                                Logo de l'entreprise
+                            </label>
                             
-                            <div class="col-md-6 mb-3">
-                                <label class="form-label">Couleur secondaire</label>
-                                <input type="color" class="form-control form-control-color" 
-                                       name="couleur_secondaire" value="{{ config.couleur_secondaire }}">
-                                <div class="form-text">Utilisée pour les services</div>
+                            <div class="row">
+                                <div class="col-md-8">
+                                    <div class="border rounded p-4 bg-light">
+                                        <div class="mb-3">
+                                            <label for="logo" class="form-label">Choisir un fichier image</label>
+                                            <input type="file" class="form-control" id="logo" name="logo" 
+                                                   accept="image/png, image/jpeg, image/gif, image/svg+xml">
+                                            <div class="form-text">
+                                                Formats acceptés : PNG, JPG, JPEG, GIF, SVG (max 2 Mo)
+                                            </div>
+                                        </div>
+                                        
+                                        {% if config.logo_entreprise %}
+                                        <div class="alert alert-success mb-0">
+                                            <div class="d-flex align-items-center">
+                                                <i class="fas fa-check-circle me-2 fs-4"></i>
+                                                <div>
+                                                    <strong>Logo actuel :</strong> {{ config.logo_nom or 'logo.png' }}
+                                                </div>
+                                            </div>
+                                        </div>
+                                        {% endif %}
+                                    </div>
+                                </div>
+                                
+                                <div class="col-md-4">
+                                    <div class="card h-100">
+                                        <div class="card-header bg-light">
+                                            <h6 class="mb-0">Aperçu du logo</h6>
+                                        </div>
+                                        <div class="card-body text-center">
+                                            {% if config.logo_entreprise %}
+                                            <img src="{{ config.logo_entreprise }}" 
+                                                 alt="Logo entreprise" 
+                                                 class="img-fluid mb-3"
+                                                 style="max-height: 100px; max-width: 100%;"
+                                                 id="logoPreview">
+                                            <div>
+                                                <button type="button" class="btn btn-sm btn-outline-danger" 
+                                                        onclick="supprimerLogo()"
+                                                        id="btnSupprimerLogo">
+                                                    <i class="fas fa-trash me-1"></i>Supprimer
+                                                </button>
+                                            </div>
+                                            {% else %}
+                                            <div class="text-center py-4">
+                                                <i class="fas fa-image fa-4x text-muted mb-3"></i>
+                                                <p class="text-muted mb-0">Aucun logo</p>
+                                                <small>Sélectionnez une image</small>
+                                                <div id="previewContainer" style="display: none;">
+                                                    <img id="imagePreview" src="#" alt="Aperçu" 
+                                                         style="max-height: 100px; max-width: 100%;" class="mt-3">
+                                                </div>
+                                            </div>
+                                            {% endif %}
+                                        </div>
+                                    </div>
+                                </div>
                             </div>
                         </div>
                         
-                        <div class="mb-3">
-                            <label class="form-label">Pied de page</label>
+                        <hr class="my-4">
+                        
+                        <!-- Couleurs personnalisées -->
+                        <div class="mb-4">
+                            <label class="form-label fw-bold">
+                                <i class="fas fa-paint-brush me-2 text-primary"></i>
+                                Couleurs personnalisées
+                            </label>
+                            
+                            <div class="row">
+                                <div class="col-md-6 mb-3">
+                                    <div class="card">
+                                        <div class="card-body">
+                                            <label class="form-label">Couleur principale (directions)</label>
+                                            <div class="d-flex align-items-center gap-3">
+                                                <input type="color" class="form-control form-control-color" 
+                                                       name="couleur_primaire" 
+                                                       value="{{ config.couleur_primaire or '#2563eb' }}"
+                                                       style="width: 60px; height: 40px;">
+                                                <input type="text" class="form-control" 
+                                                       id="couleur_primaire_text" 
+                                                       value="{{ config.couleur_primaire or '#2563eb' }}"
+                                                       maxlength="7">
+                                            </div>
+                                            <div class="form-text mt-2">
+                                                <span class="badge" style="background-color: {{ config.couleur_primaire or '#2563eb' }}; color: white;">
+                                                    Aperçu
+                                                </span>
+                                                Utilisée pour les entêtes de directions
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                                
+                                <div class="col-md-6 mb-3">
+                                    <div class="card">
+                                        <div class="card-body">
+                                            <label class="form-label">Couleur secondaire (services)</label>
+                                            <div class="d-flex align-items-center gap-3">
+                                                <input type="color" class="form-control form-control-color" 
+                                                       name="couleur_secondaire" 
+                                                       value="{{ config.couleur_secondaire or '#10b981' }}"
+                                                       style="width: 60px; height: 40px;">
+                                                <input type="text" class="form-control" 
+                                                       id="couleur_secondaire_text" 
+                                                       value="{{ config.couleur_secondaire or '#10b981' }}"
+                                                       maxlength="7">
+                                            </div>
+                                            <div class="form-text mt-2">
+                                                <span class="badge" style="background-color: {{ config.couleur_secondaire or '#10b981' }}; color: white;">
+                                                    Aperçu
+                                                </span>
+                                                Utilisée pour les entêtes de services
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <hr class="my-4">
+                        
+                        <!-- Pied de page -->
+                        <div class="mb-4">
+                            <label class="form-label fw-bold">
+                                <i class="fas fa-paragraph me-2 text-primary"></i>
+                                Pied de page
+                            </label>
                             <input type="text" class="form-control" name="pied_de_page" 
-                                   value="{{ config.pied_de_page }}">
+                                   value="{{ config.pied_de_page or 'Document confidentiel' }}"
+                                   placeholder="Ex: Document confidentiel - Ne pas diffuser">
                             <div class="form-text">
-                                Texte qui apparaîtra en bas de chaque page
+                                Texte qui apparaîtra en bas de chaque page du PDF
                             </div>
                         </div>
                         
-                        <div class="mt-4">
-                            <button type="submit" class="btn btn-primary">
-                                <i class="fas fa-save me-2"></i>Enregistrer
-                            </button>
-                            <a href="{{ url_for('admin_organigramme') }}" class="btn btn-secondary">
-                                <i class="fas fa-times me-2"></i>Annuler
+                        <hr class="my-4">
+                        
+                        <!-- Aperçu en direct -->
+                        <div class="mb-4">
+                            <label class="form-label fw-bold">
+                                <i class="fas fa-eye me-2 text-primary"></i>
+                                Aperçu en direct
+                            </label>
+                            <div class="card bg-light">
+                                <div class="card-body">
+                                    <div class="d-flex align-items-center justify-content-between mb-3">
+                                        <div class="d-flex align-items-center">
+                                            {% if config.logo_entreprise %}
+                                            <img src="{{ config.logo_entreprise }}" alt="Logo" style="height: 40px; margin-right: 15px;" id="previewLogo">
+                                            {% else %}
+                                            <div class="bg-secondary text-white rounded p-2 me-3" style="width: 40px; height: 40px; display: flex; align-items: center; justify-content: center;">
+                                                <i class="fas fa-building"></i>
+                                            </div>
+                                            {% endif %}
+                                            <h4 class="mb-0" id="previewNom" style="color: {{ config.couleur_primaire or '#2563eb' }};">
+                                                {{ config.nom_entreprise }}
+                                            </h4>
+                                        </div>
+                                        <span class="badge" style="background-color: {{ config.couleur_secondaire or '#10b981' }};">
+                                            Aperçu
+                                        </span>
+                                    </div>
+                                    
+                                    <div class="row mt-3">
+                                        <div class="col-md-6">
+                                            <div class="p-3 rounded text-white" style="background-color: {{ config.couleur_primaire or '#2563eb' }};">
+                                                <i class="fas fa-building me-2"></i>
+                                                Direction (couleur principale)
+                                            </div>
+                                        </div>
+                                        <div class="col-md-6">
+                                            <div class="p-3 rounded text-white" style="background-color: {{ config.couleur_secondaire or '#10b981' }};">
+                                                <i class="fas fa-cog me-2"></i>
+                                                Service (couleur secondaire)
+                                            </div>
+                                        </div>
+                                    </div>
+                                    
+                                    <div class="text-muted small mt-3 text-center" id="previewFooter">
+                                        {{ config.pied_de_page or 'Document confidentiel' }}
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <!-- Boutons d'action -->
+                        <div class="d-flex justify-content-between mt-5">
+                            <a href="{{ url_for('admin_organigramme') }}" class="btn btn-outline-secondary">
+                                <i class="fas fa-arrow-left me-2"></i>Retour à l'organigramme
                             </a>
+                            <div>
+                                <button type="reset" class="btn btn-outline-warning me-2">
+                                    <i class="fas fa-undo me-2"></i>Réinitialiser
+                                </button>
+                                <button type="submit" class="btn btn-primary">
+                                    <i class="fas fa-save me-2"></i>Enregistrer la configuration
+                                </button>
+                            </div>
                         </div>
                     </form>
+                </div>
+            </div>
+            
+            <!-- Carte d'information -->
+            <div class="card mt-4 bg-info text-white">
+                <div class="card-body">
+                    <div class="d-flex align-items-center">
+                        <i class="fas fa-info-circle fa-3x me-3"></i>
+                        <div>
+                            <h5 class="mb-1">À propos de la configuration</h5>
+                            <p class="mb-0">
+                                Les modifications seront appliquées immédiatement à l'organigramme et aux prochains PDF générés.
+                                Le logo apparaîtra sur la page de garde des documents exportés.
+                            </p>
+                        </div>
+                    </div>
                 </div>
             </div>
         </div>
     </div>
 </div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+// Prévisualisation du logo
+document.getElementById('logo')?.addEventListener('change', function(e) {
+    const file = e.target.files[0];
+    if (file) {
+        const reader = new FileReader();
+        reader.onload = function(e) {
+            // Mettre à jour l'aperçu
+            const previewContainer = document.getElementById('previewContainer');
+            const imagePreview = document.getElementById('imagePreview');
+            const previewLogo = document.getElementById('previewLogo');
+            
+            if (previewContainer) {
+                previewContainer.style.display = 'block';
+                imagePreview.src = e.target.result;
+            }
+            
+            if (previewLogo) {
+                previewLogo.src = e.target.result;
+            }
+            
+            // Masquer le message "Aucun logo"
+            const noLogoDiv = document.querySelector('.text-center.py-4');
+            if (noLogoDiv) {
+                noLogoDiv.style.display = 'none';
+            }
+        };
+        reader.readAsDataURL(file);
+    }
+});
+
+// Synchronisation des couleurs
+document.querySelector('input[name="couleur_primaire"]')?.addEventListener('input', function(e) {
+    document.getElementById('couleur_primaire_text').value = e.target.value;
+    document.getElementById('previewNom').style.color = e.target.value;
+    
+    // Mettre à jour l'aperçu de la direction
+    const directionPreview = document.querySelector('.col-md-6:first-child .p-3');
+    if (directionPreview) {
+        directionPreview.style.backgroundColor = e.target.value;
+    }
+});
+
+document.getElementById('couleur_primaire_text')?.addEventListener('input', function(e) {
+    let value = e.target.value;
+    if (!value.startsWith('#')) {
+        value = '#' + value;
+    }
+    if (/^#[0-9A-F]{6}$/i.test(value)) {
+        document.querySelector('input[name="couleur_primaire"]').value = value;
+        document.getElementById('previewNom').style.color = value;
+        
+        const directionPreview = document.querySelector('.col-md-6:first-child .p-3');
+        if (directionPreview) {
+            directionPreview.style.backgroundColor = value;
+        }
+    }
+});
+
+document.querySelector('input[name="couleur_secondaire"]')?.addEventListener('input', function(e) {
+    document.getElementById('couleur_secondaire_text').value = e.target.value;
+    
+    // Mettre à jour l'aperçu du service
+    const servicePreview = document.querySelector('.col-md-6:last-child .p-3');
+    if (servicePreview) {
+        servicePreview.style.backgroundColor = e.target.value;
+    }
+    
+    // Mettre à jour le badge d'aperçu
+    const badge = document.querySelector('.badge[style*="background-color"]:not([class*="bg-"])');
+    if (badge) {
+        badge.style.backgroundColor = e.target.value;
+    }
+});
+
+document.getElementById('couleur_secondaire_text')?.addEventListener('input', function(e) {
+    let value = e.target.value;
+    if (!value.startsWith('#')) {
+        value = '#' + value;
+    }
+    if (/^#[0-9A-F]{6}$/i.test(value)) {
+        document.querySelector('input[name="couleur_secondaire"]').value = value;
+        
+        const servicePreview = document.querySelector('.col-md-6:last-child .p-3');
+        if (servicePreview) {
+            servicePreview.style.backgroundColor = value;
+        }
+        
+        const badge = document.querySelector('.badge[style*="background-color"]:not([class*="bg-"])');
+        if (badge) {
+            badge.style.backgroundColor = value;
+        }
+    }
+});
+
+// Mise à jour du nom en direct
+document.querySelector('input[name="nom_entreprise"]')?.addEventListener('input', function(e) {
+    document.getElementById('previewNom').textContent = e.target.value || 'Nom de l\'entreprise';
+});
+
+// Mise à jour du pied de page en direct
+document.querySelector('input[name="pied_de_page"]')?.addEventListener('input', function(e) {
+    document.getElementById('previewFooter').textContent = e.target.value || 'Document confidentiel';
+});
+
+// Fonction pour supprimer le logo
+function supprimerLogo() {
+    if (confirm('Êtes-vous sûr de vouloir supprimer le logo ?')) {
+        fetch('{{ url_for("supprimer_logo_organigramme") }}', {
+            method: 'POST',
+            headers: {
+                'X-CSRFToken': '{{ csrf_token() }}',
+                'Content-Type': 'application/json'
+            }
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                location.reload();
+            } else {
+                alert('Erreur: ' + data.error);
+            }
+        })
+        .catch(error => {
+            console.error('Erreur:', error);
+            alert('Erreur réseau');
+        });
+    }
+}
+
+// Réinitialisation du formulaire
+document.querySelector('button[type="reset"]')?.addEventListener('click', function(e) {
+    e.preventDefault();
+    if (confirm('Réinitialiser tous les changements ?')) {
+        window.location.href = window.location.href;
+    }
+});
+
+// Validation avant soumission
+document.querySelector('form')?.addEventListener('submit', function(e) {
+    const nom = document.querySelector('input[name="nom_entreprise"]').value.trim();
+    if (!nom) {
+        e.preventDefault();
+        alert('Le nom de l\'entreprise est obligatoire');
+    }
+});
+
+// Initialisation des couleurs au chargement
+document.addEventListener('DOMContentLoaded', function() {
+    // Appliquer les couleurs initiales
+    const couleurPrimaire = document.querySelector('input[name="couleur_primaire"]').value;
+    const couleurSecondaire = document.querySelector('input[name="couleur_secondaire"]').value;
+    
+    if (couleurPrimaire) {
+        document.getElementById('previewNom').style.color = couleurPrimaire;
+    }
+    if (couleurSecondaire) {
+        const badge = document.querySelector('.badge[style*="background-color"]:not([class*="bg-"])');
+        if (badge) {
+            badge.style.backgroundColor = couleurSecondaire;
+        }
+    }
+});
+</script>
+
+<style>
+/* Styles supplémentaires pour la page de configuration */
+.form-control-color {
+    padding: 0.375rem;
+}
+
+.card .badge {
+    font-size: 0.9rem;
+    padding: 0.5rem 1rem;
+}
+
+.preview-section {
+    transition: all 0.3s ease;
+}
+
+#previewNom {
+    transition: color 0.3s ease;
+}
+
+/* Animation pour l'aperçu */
+@keyframes pulse {
+    0% { transform: scale(1); }
+    50% { transform: scale(1.02); }
+    100% { transform: scale(1); }
+}
+
+.card.bg-light {
+    animation: pulse 2s infinite;
+}
+
+/* Style pour l'upload de fichier */
+.custom-file-upload {
+    border: 2px dashed #ccc;
+    border-radius: 8px;
+    padding: 20px;
+    text-align: center;
+    cursor: pointer;
+    transition: all 0.3s ease;
+}
+
+.custom-file-upload:hover {
+    border-color: #2563eb;
+    background-color: #f0f7ff;
+}
+
+.custom-file-upload i {
+    font-size: 2rem;
+    color: #2563eb;
+}
+
+/* Style pour les aperçus de couleurs */
+.color-preview {
+    width: 30px;
+    height: 30px;
+    border-radius: 50%;
+    border: 2px solid white;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+}
+</style>
 {% endblock %}
