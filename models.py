@@ -902,6 +902,10 @@ class User(UserMixin, db.Model):
         return f'<User {self.username} ({self.role})>'
     
 # -------------------- DIRECTION --------------------
+# ============================================
+# MODÈLES POUR DIRECTIONS ET SERVICES (AVEC LOGO)
+# ============================================
+
 class Direction(db.Model):
     __tablename__ = 'direction'
     
@@ -910,27 +914,26 @@ class Direction(db.Model):
     description = db.Column(db.Text)
     responsable_id = db.Column(db.Integer, db.ForeignKey('user.id'))
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
-    is_active = db.Column(db.Boolean, default=True)  # AJOUTÉ pour soft delete
-    is_archived = db.Column(db.Boolean, default=False)  # AJOUTÉ pour archiver
-    archived_at = db.Column(db.DateTime)  # AJOUTÉ
-    archived_by = db.Column(db.Integer, db.ForeignKey('user.id'))  # AJOUTÉ
+    is_active = db.Column(db.Boolean, default=True)
+    is_archived = db.Column(db.Boolean, default=False)
+    archived_at = db.Column(db.DateTime)
+    archived_by = db.Column(db.Integer, db.ForeignKey('user.id'))
     client_id = db.Column(db.Integer, db.ForeignKey('clients.id'), nullable=True)
 
-    # CORRECTION : Définir les relations avec foreign_keys spécifiques
+    # Relations
     responsable = db.relationship('User', 
                                  back_populates='directions_managees', 
-                                 foreign_keys=[responsable_id])  # AJOUTÉ
+                                 foreign_keys=[responsable_id])
     
     archived_by_user = db.relationship('User', 
                                       back_populates='directions_archivees', 
-                                      foreign_keys=[archived_by])  # AJOUTÉ
+                                      foreign_keys=[archived_by])
     
     services = db.relationship('Service', back_populates='direction', lazy=True)
     cartographies = db.relationship('Cartographie', back_populates='direction', lazy=True)
     processus = db.relationship('Processus', back_populates='direction', lazy=True)
 
 
-# -------------------- SERVICE --------------------
 class Service(db.Model):
     __tablename__ = 'service'
     
@@ -940,28 +943,43 @@ class Service(db.Model):
     direction_id = db.Column(db.Integer, db.ForeignKey('direction.id'))
     responsable_id = db.Column(db.Integer, db.ForeignKey('user.id'))
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
-    is_active = db.Column(db.Boolean, default=True)  # AJOUTÉ pour soft delete
-    is_archived = db.Column(db.Boolean, default=False)  # AJOUTÉ pour archiver
-    archived_at = db.Column(db.DateTime)  # AJOUTÉ
-    archived_by = db.Column(db.Integer, db.ForeignKey('user.id'))  # AJOUTÉ
+    is_active = db.Column(db.Boolean, default=True)
+    is_archived = db.Column(db.Boolean, default=False)
+    archived_at = db.Column(db.DateTime)
+    archived_by = db.Column(db.Integer, db.ForeignKey('user.id'))
     client_id = db.Column(db.Integer, db.ForeignKey('clients.id'), nullable=True)
 
-    # CORRECTION : Définir les relations avec foreign_keys spécifiques
+    # Relations
     direction = db.relationship('Direction', back_populates='services')
     
     responsable = db.relationship('User', 
                                  back_populates='services_managees', 
-                                 foreign_keys=[responsable_id])  # AJOUTÉ
+                                 foreign_keys=[responsable_id])
     
     archived_by_user = db.relationship('User', 
                                       back_populates='services_archivees', 
-                                      foreign_keys=[archived_by])  # AJOUTÉ
+                                      foreign_keys=[archived_by])
     
     processus = db.relationship('Processus', back_populates='service', lazy=True)
     cartographies = db.relationship('Cartographie', back_populates='service', lazy=True)
 
-# -------------------- CARTOGRAPHIE --------------------
-# Dans models.py, dans la classe Cartographie, ajoutez :
+
+class ConfigurationOrganigramme(db.Model):
+    """Configuration de l'organigramme pour chaque client"""
+    __tablename__ = 'configuration_organigramme'
+    
+    id = db.Column(db.Integer, primary_key=True)
+    client_id = db.Column(db.Integer, db.ForeignKey('clients.id'), unique=True)
+    nom_entreprise = db.Column(db.String(200), default="Nom de l'entreprise")
+    logo_entreprise = db.Column(db.String(500), nullable=True)  # Chemin du logo
+    logo_nom = db.Column(db.String(255), nullable=True)  # Nom original du fichier
+    couleur_primaire = db.Column(db.String(20), default="#2563eb")
+    couleur_secondaire = db.Column(db.String(20), default="#10b981")
+    pied_de_page = db.Column(db.String(500), default="Document confidentiel")
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    updated_at = db.Column(db.DateTime, onupdate=datetime.utcnow)
+    
+    client = db.relationship('Client', backref='config_organigramme')
 
 
 class Cartographie(db.Model):
@@ -6607,18 +6625,4 @@ class AlerteCollecte(db.Model):
     traiteur = db.relationship('User', foreign_keys=[traitee_par])
 
 
-class ConfigurationOrganigramme(db.Model):
-    """Configuration de l'organigramme pour chaque client"""
-    __tablename__ = 'configuration_organigramme'
-    
-    id = db.Column(db.Integer, primary_key=True)
-    client_id = db.Column(db.Integer, db.ForeignKey('clients.id'), unique=True)
-    nom_entreprise = db.Column(db.String(200), default="Nom de l'entreprise")
-    logo_entreprise = db.Column(db.String(500), nullable=True)  # URL ou chemin du logo
-    couleur_primaire = db.Column(db.String(20), default="#2563eb")  # Bleu
-    couleur_secondaire = db.Column(db.String(20), default="#10b981")  # Vert
-    pied_de_page = db.Column(db.String(500), default="Document confidentiel")
-    created_at = db.Column(db.DateTime, default=datetime.utcnow)
-    updated_at = db.Column(db.DateTime, onupdate=datetime.utcnow)
-    
-    client = db.relationship('Client', backref='config_organigramme')
+
