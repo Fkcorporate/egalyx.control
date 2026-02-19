@@ -358,4 +358,226 @@ function confirmDeleteDirection(directionId, directionName) {
                 showToast('error', 'Erreur: ' + data.error);
             }
         })
-        .catch
+        .catch(error => {
+            showToast('error', 'Erreur réseau: ' + error);
+        });
+    }
+}
+
+function confirmDeleteService(serviceId, serviceName) {
+    if (confirm(`Êtes-vous sûr de vouloir supprimer le service "${serviceName}" ?`)) {
+        fetch(`/admin/service/${serviceId}/supprimer`, {
+            method: 'DELETE',
+            headers: {
+                'X-CSRFToken': '{{ csrf_token() }}',
+                'Content-Type': 'application/json'
+            }
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                showToast('success', data.message);
+                setTimeout(() => location.reload(), 1500);
+            } else {
+                showToast('error', 'Erreur: ' + data.error);
+            }
+        })
+        .catch(error => {
+            showToast('error', 'Erreur réseau: ' + error);
+        });
+    }
+}
+
+function archiveDirection(directionId, directionName) {
+    if (confirm(`Êtes-vous sûr de vouloir archiver la direction "${directionName}" ?\n\nElle sera déplacée dans les archives.`)) {
+        fetch(`/admin/direction/${directionId}/archiver`, {
+            method: 'POST',
+            headers: {
+                'X-CSRFToken': '{{ csrf_token() }}',
+                'Content-Type': 'application/json'
+            }
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                showToast('success', data.message);
+                setTimeout(() => location.reload(), 1500);
+            } else {
+                showToast('error', 'Erreur: ' + data.error);
+            }
+        })
+        .catch(error => {
+            showToast('error', 'Erreur réseau: ' + error);
+        });
+    }
+}
+
+// ============================================
+// FONCTION POUR LES TOASTS (NOTIFICATIONS)
+// ============================================
+
+function showToast(type, message) {
+    // Créer le conteneur s'il n'existe pas
+    let toastContainer = document.getElementById('toast-container');
+    if (!toastContainer) {
+        toastContainer = document.createElement('div');
+        toastContainer.id = 'toast-container';
+        toastContainer.className = 'toast-container position-fixed top-0 end-0 p-3';
+        toastContainer.style.zIndex = '9999';
+        document.body.appendChild(toastContainer);
+    }
+    
+    // Configurer les couleurs selon le type
+    const bgColor = {
+        'success': 'bg-success',
+        'error': 'bg-danger',
+        'warning': 'bg-warning',
+        'info': 'bg-info'
+    }[type] || 'bg-info';
+    
+    const icon = {
+        'success': 'fa-check-circle',
+        'error': 'fa-exclamation-circle',
+        'warning': 'fa-exclamation-triangle',
+        'info': 'fa-info-circle'
+    }[type] || 'fa-info-circle';
+    
+    // Créer le toast
+    const toast = document.createElement('div');
+    toast.className = `toast align-items-center text-white ${bgColor} border-0`;
+    toast.setAttribute('role', 'alert');
+    toast.innerHTML = `
+        <div class="d-flex">
+            <div class="toast-body">
+                <i class="fas ${icon} me-2"></i>${message}
+            </div>
+            <button type="button" class="btn-close btn-close-white me-2 m-auto" data-bs-dismiss="toast"></button>
+        </div>
+    `;
+    
+    toastContainer.appendChild(toast);
+    
+    // Afficher le toast
+    const bsToast = new bootstrap.Toast(toast, { autohide: true, delay: 3000 });
+    bsToast.show();
+    
+    // Supprimer après fermeture
+    toast.addEventListener('hidden.bs.toast', () => toast.remove());
+}
+
+// ============================================
+// RECHERCHE EN DIRECT DANS LES DIRECTIONS
+// ============================================
+
+document.addEventListener('DOMContentLoaded', function() {
+    // Ajouter une barre de recherche
+    const header = document.querySelector('.card-header .d-flex');
+    if (header) {
+        const searchDiv = document.createElement('div');
+        searchDiv.className = 'ms-auto me-3';
+        searchDiv.style.width = '250px';
+        searchDiv.innerHTML = `
+            <div class="input-group input-group-sm">
+                <span class="input-group-text bg-white border-end-0">
+                    <i class="fas fa-search text-muted"></i>
+                </span>
+                <input type="text" class="form-control border-start-0" 
+                       id="searchDirection" 
+                       placeholder="Rechercher une direction..."
+                       style="border-left: none;">
+            </div>
+        `;
+        header.appendChild(searchDiv);
+        
+        // Fonction de recherche
+        document.getElementById('searchDirection').addEventListener('input', function(e) {
+            const searchTerm = e.target.value.toLowerCase();
+            document.querySelectorAll('.col-lg-6.mb-4').forEach(card => {
+                const directionName = card.querySelector('.card-header h6')?.textContent.toLowerCase() || '';
+                const services = Array.from(card.querySelectorAll('.services-list strong')).map(s => s.textContent.toLowerCase());
+                
+                const matches = directionName.includes(searchTerm) || 
+                               services.some(s => s.includes(searchTerm));
+                
+                card.style.display = matches ? 'block' : 'none';
+            });
+        });
+    }
+});
+
+// ============================================
+// EXPORT DES FONCTIONS
+// ============================================
+window.confirmDeleteDirection = confirmDeleteDirection;
+window.confirmDeleteService = confirmDeleteService;
+window.archiveDirection = archiveDirection;
+window.showToast = showToast;
+</script>
+{% endblock %}
+
+{% block styles %}
+<style>
+/* Styles supplémentaires */
+.services-list {
+    max-height: 250px;
+    overflow-y: auto;
+    padding-right: 5px;
+}
+
+.services-list::-webkit-scrollbar {
+    width: 6px;
+}
+
+.services-list::-webkit-scrollbar-track {
+    background: #f1f1f1;
+    border-radius: 3px;
+}
+
+.services-list::-webkit-scrollbar-thumb {
+    background: #888;
+    border-radius: 3px;
+}
+
+.services-list::-webkit-scrollbar-thumb:hover {
+    background: #555;
+}
+
+.card {
+    transition: all 0.3s ease;
+}
+
+.card:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 0.5rem 1rem rgba(0, 0, 0, 0.15) !important;
+}
+
+.badge {
+    font-size: 0.8rem;
+    padding: 0.4rem 0.6rem;
+}
+
+.modal-header {
+    border-bottom: none;
+}
+
+.modal-footer {
+    border-top: none;
+}
+
+/* Animation pour les notifications */
+@keyframes slideIn {
+    from {
+        transform: translateX(100%);
+        opacity: 0;
+    }
+    to {
+        transform: translateX(0);
+        opacity: 1;
+    }
+}
+
+.toast {
+    animation: slideIn 0.3s ease;
+}
+</style>
+{% endblock %}
