@@ -1,209 +1,605 @@
+<!-- templates/admin/directions.html -->
 {% extends "base.html" %}
 
 {% block content %}
-<div class="d-flex justify-content-between flex-wrap flex-md-nowrap align-items-center pt-3 pb-2 mb-3 border-bottom">
-    <h1 class="h2"><i class="fas fa-building"></i> {{ t("Gestion des Directions et Services") }}</h1>
-    <div class="btn-toolbar mb-2 mb-md-0">
-        <a href="{{ url_for('nouvelle_direction') }}" class="btn btn-primary me-2">
-            <i class="fas fa-plus"></i> {{ t("Nouvelle Direction") }}</a>
-        <a href="{{ url_for('admin_directions_archivees') }}" class="btn btn-secondary">
-            <i class="fas fa-archive"></i> {{ t("Directions Archivées") }}</a>
+<div class="container-fluid py-4">
+    <!-- En-tête avec actions -->
+    <div class="d-flex justify-content-between flex-wrap flex-md-nowrap align-items-center mb-4">
+        <div>
+            <h1 class="h2 mb-2">
+                <i class="fas fa-building text-primary me-2"></i>
+                {{ t("Gestion des Directions et Services") }}
+            </h1>
+            <nav aria-label="breadcrumb">
+                <ol class="breadcrumb">
+                    <li class="breadcrumb-item"><a href="{{ url_for('dashboard') }}">Dashboard</a></li>
+                    <li class="breadcrumb-item active">Directions & Services</li>
+                </ol>
+            </nav>
+        </div>
+        <div class="btn-toolbar mb-2 mb-md-0">
+            <div class="btn-group me-2">
+                <a href="{{ url_for('nouvelle_direction') }}" class="btn btn-primary">
+                    <i class="fas fa-plus-circle me-2"></i>{{ t("Nouvelle Direction") }}
+                </a>
+                <a href="{{ url_for('admin_organigramme') }}" class="btn btn-info">
+                    <i class="fas fa-sitemap me-2"></i>{{ t("Voir l'organigramme") }}
+                </a>
+            </div>
+            <a href="{{ url_for('admin_directions_archivees') }}" class="btn btn-outline-secondary">
+                <i class="fas fa-archive me-2"></i>{{ t("Archives") }}
+                {% if directions_archivees > 0 %}
+                <span class="badge bg-danger ms-1">{{ directions_archivees }}</span>
+                {% endif %}
+            </a>
+        </div>
     </div>
-</div>
-<a href="{{ url_for('admin_organigramme') }}" class="btn btn-info me-2">
-    <i class="fas fa-chart-simple me-1"></i> Voir l'organigramme
-</a>
-<div class="card shadow mb-4">
-    <div class="card-header bg-primary text-white d-flex justify-content-between align-items-center">
-        <h5 class="mb-0"><i class="fas fa-sitemap"></i> {{ t("Directions Actives") }}</h5>
-        <span class="badge bg-light text-dark">{{ directions|length }} {{ t("direction(s)") }}</span>
-    </div>
-    <div class="card-body">
-        {% if directions %}
-        <div class="row">
-            {% for direction in directions %}
-            <div class="col-md-6 col-lg-4 mb-3">
-                <div class="card h-100">
-                    <div class="card-header bg-light d-flex justify-content-between align-items-center">
-                        <h6 class="mb-0">{{ direction.nom }}</h6>
-                        <div>
-                            <span class="badge bg-primary">{{ direction.services|selectattr('is_active')|list|length }} {{ t("service(s)") }}</span>
-                            {% if direction.is_archived %}
-                            <span class="badge bg-warning">{{ t("Archivée") }}</span>
-                            {% endif %}
+
+    <!-- Cartes de statistiques -->
+    <div class="row g-3 mb-4">
+        <div class="col-md-3">
+            <div class="card border-0 shadow-sm h-100">
+                <div class="card-body">
+                    <div class="d-flex align-items-center">
+                        <div class="stat-icon bg-primary bg-opacity-10 rounded-3 p-3 me-3">
+                            <i class="fas fa-sitemap fa-2x text-primary"></i>
                         </div>
-                    </div>
-                    <div class="card-body">
-                        <p class="card-text small">{{ direction.description or 'Aucune description' }}</p>
-                        
-                        <div class="mb-2">
-                            <small class="text-muted">
-                                <i class="fas fa-user-tie"></i> 
-                                {{ t("Responsable:") }} {{ direction.responsable.username if direction.responsable else 'Non assigné' }}
+                        <div>
+                            <span class="text-muted small text-uppercase">{{ t("Directions Actives") }}</span>
+                            <h3 class="mb-0 fw-bold">{{ directions|length }}</h3>
+                            <small class="text-success">
+                                <i class="fas fa-arrow-up me-1"></i>+{{ new_directions_count|default(0) }} ce mois
                             </small>
                         </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <div class="col-md-3">
+            <div class="card border-0 shadow-sm h-100">
+                <div class="card-body">
+                    <div class="d-flex align-items-center">
+                        <div class="stat-icon bg-success bg-opacity-10 rounded-3 p-3 me-3">
+                            <i class="fas fa-cubes fa-2x text-success"></i>
+                        </div>
+                        <div>
+                            <span class="text-muted small text-uppercase">{{ t("Services Actifs") }}</span>
+                            <h3 class="mb-0 fw-bold">{{ total_services }}</h3>
+                            <small class="text-info">{{ t("Moyenne") }} {{ "%.1f"|format(total_services / directions|length if directions|length > 0 else 0) }} / direction</small>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <div class="col-md-3">
+            <div class="card border-0 shadow-sm h-100">
+                <div class="card-body">
+                    <div class="d-flex align-items-center">
+                        <div class="stat-icon bg-info bg-opacity-10 rounded-3 p-3 me-3">
+                            <i class="fas fa-user-tie fa-2x text-info"></i>
+                        </div>
+                        <div>
+                            <span class="text-muted small text-uppercase">{{ t("Responsables") }}</span>
+                            <h3 class="mb-0 fw-bold">{{ total_responsables }}</h3>
+                            <small>
+                                <span class="badge bg-primary">{{ responsables_utilisateurs|default(0) }} utilisateurs</span>
+                                <span class="badge bg-secondary">{{ responsables_manuels|default(0) }} externes</span>
+                            </small>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <div class="col-md-3">
+            <div class="card border-0 shadow-sm h-100">
+                <div class="card-body">
+                    <div class="d-flex align-items-center">
+                        <div class="stat-icon bg-warning bg-opacity-10 rounded-3 p-3 me-3">
+                            <i class="fas fa-chart-pie fa-2x text-warning"></i>
+                        </div>
+                        <div>
+                            <span class="text-muted small text-uppercase">{{ t("Taux d'encadrement") }}</span>
+                            <h3 class="mb-0 fw-bold">{{ taux_encadrement }}%</h3>
+                            <div class="progress mt-2" style="height: 5px;">
+                                <div class="progress-bar bg-success" role="progressbar" 
+                                     style="width: {{ taux_encadrement }}%"></div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
 
-                        {% set active_services = direction.services|selectattr('is_active')|list %}
+    <!-- Barre de recherche et filtres -->
+    <div class="card border-0 shadow-sm mb-4">
+        <div class="card-body">
+            <div class="row g-3">
+                <div class="col-md-6">
+                    <div class="input-group">
+                        <span class="input-group-text bg-transparent border-end-0">
+                            <i class="fas fa-search text-muted"></i>
+                        </span>
+                        <input type="text" 
+                               class="form-control border-start-0 ps-0" 
+                               id="searchDirection" 
+                               placeholder="{{ t('Rechercher une direction ou un service...') }}"
+                               style="border-left: none;">
+                    </div>
+                </div>
+                <div class="col-md-6 text-md-end">
+                    <div class="btn-group" role="group">
+                        <button type="button" class="btn btn-outline-secondary btn-sm" onclick="filterDirections('all')">
+                            <i class="fas fa-list me-1"></i>{{ t("Tous") }}
+                        </button>
+                        <button type="button" class="btn btn-outline-primary btn-sm" onclick="filterDirections('with-responsable')">
+                            <i class="fas fa-user-check me-1"></i>{{ t("Avec responsable") }}
+                        </button>
+                        <button type="button" class="btn btn-outline-warning btn-sm" onclick="filterDirections('without-responsable')">
+                            <i class="fas fa-user-slash me-1"></i>{{ t("Sans responsable") }}
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Liste des directions -->
+    <div class="row" id="directionsContainer">
+        {% for direction in directions %}
+        {% set active_services = direction.services|selectattr('is_active')|list %}
+        <div class="col-md-6 col-lg-4 mb-4 direction-item" 
+             data-direction="{{ direction.nom }}"
+             data-responsable="{{ 'oui' if direction.responsable_id or direction.responsable_nom_manuel else 'non' }}">
+            <div class="card h-100 border-0 shadow-sm direction-card">
+                <!-- En-tête direction -->
+                <div class="card-header bg-gradient-primary text-white py-3">
+                    <div class="d-flex justify-content-between align-items-start">
+                        <h5 class="mb-0 fw-bold">
+                            <i class="fas fa-building me-2"></i>
+                            {{ direction.nom }}
+                        </h5>
+                        <span class="badge bg-white text-primary rounded-pill px-3 py-2">
+                            <i class="fas fa-cubes me-1"></i>{{ active_services|length }}
+                        </span>
+                    </div>
+                    
+                    <!-- Responsable de la direction -->
+                    <div class="direction-responsable mt-3 p-2 bg-white bg-opacity-10 rounded">
+                        <div class="d-flex align-items-center">
+                            <i class="fas fa-user-tie me-2"></i>
+                            <div class="flex-grow-1">
+                                <small class="opacity-75">{{ t("Responsable") }}:</small>
+                                <div class="fw-semibold">
+                                    {% if direction.responsable_id and direction.responsable %}
+                                        <span class="badge bg-primary-subtle text-white">
+                                            <i class="fas fa-user-circle me-1"></i>{{ direction.responsable.username }}
+                                        </span>
+                                        <small class="text-white-50">(utilisateur)</small>
+                                    {% elif direction.responsable_nom_manuel %}
+                                        <span class="badge bg-info-subtle text-white">
+                                            <i class="fas fa-pen me-1"></i>{{ direction.responsable_nom_manuel }}
+                                        </span>
+                                        <small class="text-white-50">(externe)</small>
+                                    {% else %}
+                                        <span class="badge bg-warning text-dark">
+                                            <i class="fas fa-exclamation-triangle me-1"></i>{{ t("Non assigné") }}
+                                        </span>
+                                    {% endif %}
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- Corps direction -->
+                <div class="card-body">
+                    {% if direction.description %}
+                    <p class="text-muted small mb-3">
+                        <i class="fas fa-align-left me-1 opacity-50"></i>
+                        {{ direction.description|truncate(100) }}
+                    </p>
+                    {% endif %}
+                    
+                    <!-- Liste des services -->
+                    <h6 class="fw-semibold mb-3">
+                        <i class="fas fa-cubes text-success me-2"></i>
+                        {{ t("Services") }}
+                        <span class="badge bg-light text-dark ms-2">{{ active_services|length }}</span>
+                    </h6>
+                    
+                    <div class="services-list" style="max-height: 300px; overflow-y: auto;">
                         {% if active_services %}
-                        <h6 class="mt-3">{{ t("Services Actifs:") }}</h6>
-                        <div class="services-list">
                             {% for service in active_services %}
-                            <div class="d-flex justify-content-between align-items-center mb-1">
-                                <span class="badge bg-secondary">{{ service.nom }}</span>
-                                <div>
-                                    <small class="text-muted me-2">
-                                        {{ service.responsable.username if service.responsable else 'Sans resp.' }}
-                                    </small>
-                                    <button class="btn btn-sm btn-outline-danger" 
-                                            onclick="confirmDeleteService({{ service.id }}, '{{ service.nom }}')"
-                                            title="{{ t("Supprimer") }}">
-                                        <i class="fas fa-trash"></i>
-                                    </button>
+                            <div class="service-item mb-2 p-2 border rounded" data-service-id="{{ service.id }}">
+                                <div class="d-flex justify-content-between align-items-start">
+                                    <div class="flex-grow-1">
+                                        <div class="fw-semibold">
+                                            {{ service.nom }}
+                                            {% if not service.responsable_id and not service.responsable_nom_manuel %}
+                                                <span class="badge bg-warning bg-opacity-10 text-warning ms-2 small">
+                                                    <i class="fas fa-exclamation-circle me-1"></i>{{ t("Sans resp.") }}
+                                                </span>
+                                            {% endif %}
+                                        </div>
+                                        
+                                        <!-- Responsable du service -->
+                                        <div class="small text-muted mt-1">
+                                            <i class="fas fa-user-tie me-1 text-success"></i>
+                                            {% if service.responsable_id and service.responsable %}
+                                                <span>{{ service.responsable.username }}</span>
+                                                <small class="text-muted">(utilisateur)</small>
+                                            {% elif service.responsable_nom_manuel %}
+                                                <span>{{ service.responsable_nom_manuel }}</span>
+                                                <small class="text-muted">(externe)</small>
+                                            {% else %}
+                                                <span class="text-muted">{{ t("Responsable non assigné") }}</span>
+                                            {% endif %}
+                                        </div>
+                                        
+                                        <!-- Équipe du service -->
+                                        {% if service.equipe_membres %}
+                                        <div class="small text-muted mt-1">
+                                            <i class="fas fa-users me-1 text-info"></i>
+                                            <span>{{ service.equipe_membres|length }} membre(s): </span>
+                                            <span class="text-truncate d-inline-block" style="max-width: 150px;">
+                                                {{ service.equipe_membres|join(', ') }}
+                                            </span>
+                                        </div>
+                                        {% endif %}
+                                    </div>
+                                    
+                                    <div class="btn-group btn-group-sm ms-2">
+                                        <button class="btn btn-outline-primary" 
+                                                onclick="editService({{ service.id }})"
+                                                title="{{ t('Modifier') }}">
+                                            <i class="fas fa-edit"></i>
+                                        </button>
+                                        <button class="btn btn-outline-info" 
+                                                onclick="voirEquipe({{ service.id }}, '{{ service.nom }}')"
+                                                title="{{ t('Voir équipe') }}">
+                                            <i class="fas fa-users"></i>
+                                        </button>
+                                        <button class="btn btn-outline-danger" 
+                                                onclick="confirmDeleteService({{ service.id }}, '{{ service.nom }}')"
+                                                title="{{ t('Supprimer') }}">
+                                            <i class="fas fa-trash"></i>
+                                        </button>
+                                    </div>
                                 </div>
                             </div>
                             {% endfor %}
-                        </div>
                         {% else %}
-                        <p class="text-muted small">{{ t("Aucun service créé") }}</p>
+                            <div class="text-center py-4 bg-light rounded">
+                                <i class="fas fa-folder-open fa-2x text-muted mb-2"></i>
+                                <p class="text-muted mb-0">{{ t("Aucun service créé") }}</p>
+                                <a href="{{ url_for('nouveau_service', direction_id=direction.id) }}" 
+                                   class="btn btn-sm btn-outline-success mt-2">
+                                    <i class="fas fa-plus me-1"></i>{{ t("Ajouter un service") }}
+                                </a>
+                            </div>
                         {% endif %}
                     </div>
-                    <div class="card-footer">
-                        <div class="btn-group w-100">
-                            <button class="btn btn-sm btn-outline-primary" 
-                                    data-bs-toggle="modal" 
-                                    data-bs-target="#editDirectionModal{{ direction.id }}">
-                                <i class="fas fa-edit"></i>
-                            </button>
-                            <a href="{{ url_for('nouveau_service', direction_id=direction.id) }}" 
-                               class="btn btn-sm btn-outline-success">
-                                <i class="fas fa-plus"></i> {{ t("Service") }}</a>
-                            <button class="btn btn-sm btn-outline-warning"
-                                    onclick="archiveDirection({{ direction.id }}, '{{ direction.nom }}')"
-                                    title="{{ t("Archiver") }}">
-                                <i class="fas fa-archive"></i>
-                            </button>
-                            <button class="btn btn-sm btn-outline-danger"
-                                    onclick="confirmDeleteDirection({{ direction.id }}, '{{ direction.nom }}')"
-                                    title="{{ t("Supprimer") }}">
-                                <i class="fas fa-trash"></i>
-                            </button>
-                        </div>
+                </div>
+                
+                <!-- Pied de carte avec actions -->
+                <div class="card-footer bg-transparent border-top-0 pt-0">
+                    <div class="btn-group w-100">
+                        <button class="btn btn-sm btn-outline-primary" 
+                                data-bs-toggle="modal" 
+                                data-bs-target="#editDirectionModal{{ direction.id }}">
+                            <i class="fas fa-edit me-1"></i>{{ t("Modifier") }}
+                        </button>
+                        <a href="{{ url_for('nouveau_service', direction_id=direction.id) }}" 
+                           class="btn btn-sm btn-outline-success">
+                            <i class="fas fa-plus-circle me-1"></i>{{ t("Service") }}
+                        </a>
+                        <button class="btn btn-sm btn-outline-warning"
+                                onclick="archiveDirection({{ direction.id }}, '{{ direction.nom }}')">
+                            <i class="fas fa-archive me-1"></i>
+                        </button>
+                        <button class="btn btn-sm btn-outline-danger"
+                                onclick="confirmDeleteDirection({{ direction.id }}, '{{ direction.nom }}')">
+                            <i class="fas fa-trash me-1"></i>
+                        </button>
                     </div>
                 </div>
             </div>
+        </div>
 
-            <div class="modal fade" id="editDirectionModal{{ direction.id }}" tabindex="-1">
-                <div class="modal-dialog">
-                    <div class="modal-content">
-                        <div class="modal-header">
-                            <h5 class="modal-title">{{ t("Modifier la Direction") }}</h5>
-                            <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
-                        </div>
-                        <div class="modal-body">
-                            <form action="{{ url_for('modifier_direction', direction_id=direction.id) }}" method="POST">
-                                <div class="mb-3">
-                                    <label class="form-label">{{ t("Nom") }}</label>
-                                    <input type="text" class="form-control" name="nom" value="{{ direction.nom }}" required>
+        <!-- Modal d'édition de la direction -->
+        <div class="modal fade" id="editDirectionModal{{ direction.id }}" tabindex="-1">
+            <div class="modal-dialog modal-lg">
+                <div class="modal-content">
+                    <div class="modal-header bg-primary text-white">
+                        <h5 class="modal-title">
+                            <i class="fas fa-edit me-2"></i>{{ t("Modifier la Direction") }} : {{ direction.nom }}
+                        </h5>
+                        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+                    </div>
+                    <div class="modal-body">
+                        <form action="{{ url_for('modifier_direction', direction_id=direction.id) }}" method="POST" id="editDirectionForm{{ direction.id }}">
+                            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                            
+                            <div class="mb-3">
+                                <label class="form-label fw-semibold">{{ t("Nom de la direction") }}</label>
+                                <input type="text" class="form-control" name="nom" value="{{ direction.nom }}" required>
+                            </div>
+                            
+                            <div class="mb-3">
+                                <label class="form-label fw-semibold">{{ t("Description") }}</label>
+                                <textarea class="form-control" name="description" rows="3">{{ direction.description or '' }}</textarea>
+                            </div>
+                            
+                            <!-- Type de responsable -->
+                            <div class="mb-3">
+                                <label class="form-label fw-semibold">{{ t("Responsable") }}</label>
+                                <div class="card bg-light">
+                                    <div class="card-body">
+                                        <div class="mb-3">
+                                            <div class="form-check form-check-inline">
+                                                <input class="form-check-input" type="radio" 
+                                                       name="type_responsable" 
+                                                       id="type_utilisateur{{ direction.id }}" 
+                                                       value="utilisateur"
+                                                       {% if direction.responsable_id %}checked{% endif %}
+                                                       onclick="toggleEditResponsableType({{ direction.id }})">
+                                                <label class="form-check-label" for="type_utilisateur{{ direction.id }}">
+                                                    {{ t("Sélectionner un utilisateur") }}
+                                                </label>
+                                            </div>
+                                            <div class="form-check form-check-inline">
+                                                <input class="form-check-input" type="radio" 
+                                                       name="type_responsable" 
+                                                       id="type_manuel{{ direction.id }}" 
+                                                       value="manuel"
+                                                       {% if direction.responsable_nom_manuel %}checked{% endif %}
+                                                       onclick="toggleEditResponsableType({{ direction.id }})">
+                                                <label class="form-check-label" for="type_manuel{{ direction.id }}">
+                                                    {{ t("Saisie manuelle") }}
+                                                </label>
+                                            </div>
+                                        </div>
+                                        
+                                        <!-- Zone utilisateur -->
+                                        <div id="edit_zone_utilisateur{{ direction.id }}" 
+                                             style="{% if direction.responsable_nom_manuel %}display: none;{% endif %}">
+                                            <label class="form-label">{{ t("Sélectionner un responsable") }}</label>
+                                            <select class="form-select" name="responsable_id">
+                                                <option value="">{{ t("--- Sélectionner ---") }}</option>
+                                                {% for user in users %}
+                                                <option value="{{ user.id }}" 
+                                                        {% if direction.responsable_id == user.id %}selected{% endif %}>
+                                                    {{ user.username }}
+                                                </option>
+                                                {% endfor %}
+                                            </select>
+                                        </div>
+                                        
+                                        <!-- Zone manuelle -->
+                                        <div id="edit_zone_manuel{{ direction.id }}" 
+                                             style="{% if not direction.responsable_nom_manuel %}display: none;{% endif %}">
+                                            <label class="form-label">{{ t("Nom du responsable") }}</label>
+                                            <input type="text" class="form-control" 
+                                                   name="responsable_nom_manuel" 
+                                                   value="{{ direction.responsable_nom_manuel or '' }}"
+                                                   placeholder="Ex: Jean Dupont">
+                                        </div>
+                                    </div>
                                 </div>
-                                <div class="mb-3">
-                                    <label class="form-label">{{ t("Description") }}</label>
-                                    <textarea class="form-control" name="description" rows="3">{{ direction.description or '' }}</textarea>
-                                </div>
-                                <div class="mb-3">
-                                    <label class="form-label">{{ t("Responsable") }}</label>
-                                    <select class="form-select" name="responsable_id">
-                                        <option value="">{{ t("Sélectionner un responsable") }}</option>
-                                        {% for user in users %}
-                                        <option value="{{ user.id }}" {% if direction.responsable_id == user.id %}selected{% endif %}>
-                                            {{ user.username }}
-                                        </option>
-                                        {% endfor %}
-                                    </select>
-                                </div>
-                                <button type="submit" class="btn btn-primary">{{ t("Enregistrer") }}</button>
-                            </form>
-                        </div>
+                            </div>
+                            
+                            <div class="text-end">
+                                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">
+                                    {{ t("Annuler") }}
+                                </button>
+                                <button type="submit" class="btn btn-primary">
+                                    <i class="fas fa-save me-2"></i>{{ t("Enregistrer") }}
+                                </button>
+                            </div>
+                        </form>
                     </div>
                 </div>
             </div>
-            {% endfor %}
         </div>
-        {% else %}
-        <div class="alert alert-info">
-            <h4 class="alert-heading">{{ t("Aucune direction active") }}</h4>
-            <p>{{ t("Commencez par créer vos directions organisationnelles.") }}</p>
-            <a href="{{ url_for('nouvelle_direction') }}" class="btn btn-primary">{{ t("Créer une direction") }}</a>
-        </div>
-        {% endif %}
+        {% endfor %}
     </div>
 </div>
 
-<div class="row">
-    <div class="col-md-3">
-        <div class="card text-white bg-primary mb-3">
-            <div class="card-body">
-                <div class="d-flex justify-content-between">
-                    <div>
-                        <h4>{{ directions|length }}</h4>
-                        <p class="mb-0">{{ t("Directions Actives") }}</p>
-                    </div>
-                    <div class="align-self-center">
-                        <i class="fas fa-sitemap fa-2x"></i>
-                    </div>
+<!-- Modal pour voir l'équipe -->
+<div class="modal fade" id="equipeModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header bg-info text-white">
+                <h5 class="modal-title">
+                    <i class="fas fa-users me-2"></i>
+                    {{ t("Équipe du service") }}
+                </h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <h6 id="serviceNomEquipe" class="fw-bold mb-3"></h6>
+                <div id="listeEquipe" class="list-group">
+                    <!-- Dynamiquement rempli -->
                 </div>
             </div>
-        </div>
-    </div>
-    <div class="col-md-3">
-        <div class="card text-white bg-success mb-3">
-            <div class="card-body">
-                <div class="d-flex justify-content-between">
-                    <div>
-                        <h4>{{ total_services }}</h4>
-                        <p class="mb-0">{{ t("Services Actifs") }}</p>
-                    </div>
-                    <div class="align-self-center">
-                        <i class="fas fa-building fa-2x"></i>
-                    </div>
-                </div>
-            </div>
-        </div>
-    </div>
-    <div class="col-md-3">
-        <div class="card text-white bg-info mb-3">
-            <div class="card-body">
-                <div class="d-flex justify-content-between">
-                    <div>
-                        <h4>{{ total_cartographies }}</h4>
-                        <p class="mb-0">{{ t("Cartographies") }}</p>
-                    </div>
-                    <div class="align-self-center">
-                        <i class="fas fa-map fa-2x"></i>
-                    </div>
-                </div>
-            </div>
-        </div>
-    </div>
-    <div class="col-md-3">
-        <div class="card text-white bg-warning mb-3">
-            <div class="card-body">
-                <div class="d-flex justify-content-between">
-                    <div>
-                        <h4>{{ directions_archivees }}</h4>
-                        <p class="mb-0">{{ t("Directions Archivées") }}</p>
-                    </div>
-                    <div class="align-self-center">
-                        <i class="fas fa-archive fa-2x"></i>
-                    </div>
-                </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">{{ t("Fermer") }}</button>
             </div>
         </div>
     </div>
 </div>
-{% endblock %}
 
-{% block scripts %}
+<!-- Styles personnalisés -->
+<style>
+.bg-gradient-primary {
+    background: linear-gradient(135deg, {{ config.couleur_primaire if config else '#2563eb' }}, {{ config.couleur_primaire if config else '#2563eb' }}dd);
+}
+
+.direction-card {
+    transition: transform 0.2s ease, box-shadow 0.2s ease;
+    border-radius: 1rem;
+    overflow: hidden;
+}
+
+.direction-card:hover {
+    transform: translateY(-4px);
+    box-shadow: 0 20px 25px -5px rgba(0,0,0,0.1) !important;
+}
+
+.stat-icon {
+    width: 3rem;
+    height: 3rem;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.services-list {
+    scrollbar-width: thin;
+    scrollbar-color: #cbd5e1 #f1f5f9;
+}
+
+.services-list::-webkit-scrollbar {
+    width: 6px;
+}
+
+.services-list::-webkit-scrollbar-track {
+    background: #f1f5f9;
+    border-radius: 10px;
+}
+
+.services-list::-webkit-scrollbar-thumb {
+    background: #cbd5e1;
+    border-radius: 10px;
+}
+
+.service-item {
+    transition: background-color 0.2s ease;
+}
+
+.service-item:hover {
+    background-color: #f8fafc;
+}
+
+/* Animation de fade */
+@keyframes fadeIn {
+    from { opacity: 0; transform: translateY(10px); }
+    to { opacity: 1; transform: translateY(0); }
+}
+
+.direction-item {
+    animation: fadeIn 0.3s ease forwards;
+}
+
+/* Badges personnalisés */
+.bg-primary-subtle {
+    background-color: rgba(37, 99, 235, 0.2);
+}
+
+.bg-info-subtle {
+    background-color: rgba(6, 182, 212, 0.2);
+}
+</style>
+
 <script>
+// Variables globales
+let directionsData = [];
+
+// Recherche dynamique
+document.getElementById('searchDirection')?.addEventListener('input', function(e) {
+    const searchTerm = e.target.value.toLowerCase();
+    const items = document.querySelectorAll('.direction-item');
+    
+    items.forEach(item => {
+        const text = item.textContent.toLowerCase();
+        if (text.includes(searchTerm)) {
+            item.style.display = '';
+        } else {
+            item.style.display = 'none';
+        }
+    });
+});
+
+// Filtres
+function filterDirections(type) {
+    const items = document.querySelectorAll('.direction-item');
+    
+    items.forEach(item => {
+        const hasResponsable = item.dataset.responsable === 'oui';
+        
+        if (type === 'all') {
+            item.style.display = '';
+        } else if (type === 'with-responsable') {
+            item.style.display = hasResponsable ? '' : 'none';
+        } else if (type === 'without-responsable') {
+            item.style.display = !hasResponsable ? '' : 'none';
+        }
+    });
+}
+
+// Gestion des modals d'édition
+function toggleEditResponsableType(directionId) {
+    const typeUtilisateur = document.getElementById(`type_utilisateur${directionId}`).checked;
+    const zoneUtilisateur = document.getElementById(`edit_zone_utilisateur${directionId}`);
+    const zoneManuel = document.getElementById(`edit_zone_manuel${directionId}`);
+    
+    if (typeUtilisateur) {
+        zoneUtilisateur.style.display = 'block';
+        zoneManuel.style.display = 'none';
+        zoneManuel.querySelector('input').value = '';
+    } else {
+        zoneUtilisateur.style.display = 'none';
+        zoneManuel.style.display = 'block';
+        zoneUtilisateur.querySelector('select').value = '';
+    }
+}
+
+// Voir l'équipe
+function voirEquipe(serviceId, serviceNom) {
+    // Récupérer les données du service
+    fetch(`/api/service/${serviceId}/equipe`)
+        .then(response => response.json())
+        .then(data => {
+            document.getElementById('serviceNomEquipe').textContent = serviceNom;
+            const listeEquipe = document.getElementById('listeEquipe');
+            listeEquipe.innerHTML = '';
+            
+            if (data.equipe && data.equipe.length > 0) {
+                data.equipe.forEach(membre => {
+                    listeEquipe.innerHTML += `
+                        <div class="list-group-item d-flex align-items-center">
+                            <i class="fas fa-user-circle text-info me-3 fs-5"></i>
+                            <span>${membre}</span>
+                        </div>
+                    `;
+                });
+            } else {
+                listeEquipe.innerHTML = `
+                    <div class="text-center py-4 text-muted">
+                        <i class="fas fa-users-slash fa-3x mb-3"></i>
+                        <p>{{ t("Aucun membre dans l'équipe") }}</p>
+                    </div>
+                `;
+            }
+            
+            new bootstrap.Modal(document.getElementById('equipeModal')).show();
+        })
+        .catch(error => {
+            console.error('Erreur:', error);
+            alert('{{ t("Erreur lors du chargement de l\'équipe") }}');
+        });
+}
+
+// Modifier service
+function editService(serviceId) {
+    window.location.href = `/admin/service/${serviceId}/modifier`;
+}
+
+// Confirmation suppression direction
 function confirmDeleteDirection(directionId, directionName) {
     if (confirm(`{{ t("Êtes-vous sûr de vouloir supprimer la direction") }} "${directionName}" ?\n\n{{ t("Cette action supprimera également tous les services associés.") }}`)) {
         fetch(`/admin/direction/${directionId}/supprimer`, {
@@ -216,18 +612,20 @@ function confirmDeleteDirection(directionId, directionName) {
         .then(response => response.json())
         .then(data => {
             if (data.success) {
-                alert(data.message);
-                location.reload();
+                showNotification('success', data.message);
+                setTimeout(() => location.reload(), 1000);
             } else {
-                alert('{{ t("Erreur:") }} ' + data.error);
+                showNotification('error', '{{ t("Erreur:") }} ' + data.error);
             }
         })
         .catch(error => {
-            alert('{{ t("Erreur réseau:") }} ' + error);
+            console.error('Erreur:', error);
+            showNotification('error', '{{ t("Erreur réseau") }}');
         });
     }
 }
 
+// Confirmation suppression service
 function confirmDeleteService(serviceId, serviceName) {
     if (confirm(`{{ t("Êtes-vous sûr de vouloir supprimer le service") }} "${serviceName}" ?`)) {
         fetch(`/admin/service/${serviceId}/supprimer`, {
@@ -240,20 +638,22 @@ function confirmDeleteService(serviceId, serviceName) {
         .then(response => response.json())
         .then(data => {
             if (data.success) {
-                alert(data.message);
-                location.reload();
+                showNotification('success', data.message);
+                setTimeout(() => location.reload(), 1000);
             } else {
-                alert('{{ t("Erreur:") }} ' + data.error);
+                showNotification('error', '{{ t("Erreur:") }} ' + data.error);
             }
         })
         .catch(error => {
-            alert('{{ t("Erreur réseau:") }} ' + error);
+            console.error('Erreur:', error);
+            showNotification('error', '{{ t("Erreur réseau") }}');
         });
     }
 }
 
+// Archiver direction
 function archiveDirection(directionId, directionName) {
-    if (confirm(`{{ t("Êtes-vous sûr de vouloir archiver la direction") }} "${directionName}" ?\n\n{{ t("Elle sera déplacée dans les archives.") }}`)) {
+    if (confirm(`{{ t("Êtes-vous sûr de vouloir archiver la direction") }} "${directionName}" ?`)) {
         fetch(`/admin/direction/${directionId}/archiver`, {
             method: 'POST',
             headers: {
@@ -264,16 +664,55 @@ function archiveDirection(directionId, directionName) {
         .then(response => response.json())
         .then(data => {
             if (data.success) {
-                alert(data.message);
-                location.reload();
+                showNotification('success', data.message);
+                setTimeout(() => location.reload(), 1000);
             } else {
-                alert('{{ t("Erreur:") }} ' + data.error);
+                showNotification('error', '{{ t("Erreur:") }} ' + data.error);
             }
         })
         .catch(error => {
-            alert('{{ t("Erreur réseau:") }} ' + error);
+            console.error('Erreur:', error);
+            showNotification('error', '{{ t("Erreur réseau") }}');
         });
     }
 }
+
+// Système de notification
+function showNotification(type, message) {
+    const toast = document.createElement('div');
+    toast.className = `toast align-items-center text-white bg-${type === 'success' ? 'success' : 'danger'} border-0 position-fixed top-0 end-0 m-3`;
+    toast.setAttribute('role', 'alert');
+    toast.setAttribute('aria-live', 'assertive');
+    toast.setAttribute('aria-atomic', 'true');
+    toast.style.zIndex = '9999';
+    
+    toast.innerHTML = `
+        <div class="d-flex">
+            <div class="toast-body">
+                <i class="fas ${type === 'success' ? 'fa-check-circle' : 'fa-exclamation-circle'} me-2"></i>
+                ${message}
+            </div>
+            <button type="button" class="btn-close btn-close-white me-2 m-auto" data-bs-dismiss="toast"></button>
+        </div>
+    `;
+    
+    document.body.appendChild(toast);
+    const bsToast = new bootstrap.Toast(toast, { delay: 3000 });
+    bsToast.show();
+    
+    setTimeout(() => toast.remove(), 3500);
+}
+
+// Initialisation au chargement
+document.addEventListener('DOMContentLoaded', function() {
+    // Récupérer les données pour la recherche
+    const items = document.querySelectorAll('.direction-item');
+    items.forEach(item => {
+        directionsData.push({
+            element: item,
+            text: item.textContent.toLowerCase()
+        });
+    });
+});
 </script>
 {% endblock %}
