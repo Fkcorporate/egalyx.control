@@ -6606,3 +6606,19 @@ class AlerteCollecte(db.Model):
     collecte = db.relationship('CollecteDonnee', backref='alertes')
     traiteur = db.relationship('User', foreign_keys=[traitee_par])
 
+
+class ConfigurationOrganigramme(db.Model):
+    """Configuration de l'organigramme pour chaque client"""
+    __tablename__ = 'configuration_organigramme'
+    
+    id = db.Column(db.Integer, primary_key=True)
+    client_id = db.Column(db.Integer, db.ForeignKey('clients.id'), unique=True)
+    nom_entreprise = db.Column(db.String(200), default="Nom de l'entreprise")
+    logo_entreprise = db.Column(db.String(500), nullable=True)  # URL ou chemin du logo
+    couleur_primaire = db.Column(db.String(20), default="#2563eb")  # Bleu
+    couleur_secondaire = db.Column(db.String(20), default="#10b981")  # Vert
+    pied_de_page = db.Column(db.String(500), default="Document confidentiel")
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    updated_at = db.Column(db.DateTime, onupdate=datetime.utcnow)
+    
+    client = db.relationship('Client', backref='config_organigramme')
