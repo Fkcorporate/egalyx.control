@@ -1,12 +1,19 @@
+<!-- templates/admin/organigramme.html -->
 {% extends "base.html" %}
 
 {% block content %}
 <div class="container-fluid py-4">
     <div class="d-flex justify-content-between align-items-center mb-4">
-        <h1 class="h3">
-            <i class="fas fa-sitemap text-primary me-2"></i>
-            Organigramme de l'entreprise
-        </h1>
+        <div>
+            <h1 class="h3 mb-0">
+                <i class="fas fa-sitemap text-primary me-2"></i>
+                Organigramme de l'entreprise
+            </h1>
+            <p class="text-muted mt-1">
+                Visualisation hiérarchique des directions et services
+            </p>
+        </div>
+        
         <div class="btn-group">
             <button type="button" class="btn btn-primary dropdown-toggle" data-bs-toggle="dropdown">
                 <i class="fas fa-download me-2"></i>Exporter
@@ -14,7 +21,7 @@
             <ul class="dropdown-menu dropdown-menu-end">
                 <li>
                     <a class="dropdown-item" href="{{ url_for('admin_organigramme_pdf') }}">
-                        <i class="fas fa-file-pdf text-danger me-2"></i>PDF (impression)
+                        <i class="fas fa-file-pdf text-danger me-2"></i>PDF Professionnel
                     </a>
                 </li>
                 <li>
@@ -33,7 +40,69 @@
                         <i class="fas fa-print text-secondary me-2"></i>Imprimer
                     </a>
                 </li>
+                <li><hr class="dropdown-divider"></li>
+                <li>
+                    <a class="dropdown-item" href="{{ url_for('configurer_organigramme') }}">
+                        <i class="fas fa-cog text-primary me-2"></i>Configurer
+                    </a>
+                </li>
             </ul>
+        </div>
+    </div>
+    
+    <!-- Statistiques rapides -->
+    <div class="row mb-4">
+        <div class="col-md-3">
+            <div class="card bg-primary text-white">
+                <div class="card-body">
+                    <div class="d-flex justify-content-between align-items-center">
+                        <div>
+                            <h6 class="card-title mb-1">Directions</h6>
+                            <h2 class="mb-0">{{ directions|length }}</h2>
+                        </div>
+                        <i class="fas fa-sitemap fa-3x opacity-50"></i>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card bg-success text-white">
+                <div class="card-body">
+                    <div class="d-flex justify-content-between align-items-center">
+                        <div>
+                            <h6 class="card-title mb-1">Services</h6>
+                            <h2 class="mb-0">{{ total_services }}</h2>
+                        </div>
+                        <i class="fas fa-building fa-3x opacity-50"></i>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card bg-info text-white">
+                <div class="card-body">
+                    <div class="d-flex justify-content-between align-items-center">
+                        <div>
+                            <h6 class="card-title mb-1">Responsables</h6>
+                            <h2 class="mb-0">{{ total_responsables }}</h2>
+                        </div>
+                        <i class="fas fa-user-tie fa-3x opacity-50"></i>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card bg-warning text-white">
+                <div class="card-body">
+                    <div class="d-flex justify-content-between align-items-center">
+                        <div>
+                            <h6 class="card-title mb-1">Taux d'encadrement</h6>
+                            <h2 class="mb-0">{{ taux_encadrement }}%</h2>
+                        </div>
+                        <i class="fas fa-chart-pie fa-3x opacity-50"></i>
+                    </div>
+                </div>
+            </div>
         </div>
     </div>
     
@@ -42,21 +111,71 @@
         {% if organigramme_html %}
             {{ organigramme_html|safe }}
         {% else %}
-            <iframe srcdoc="{{ organigramme_html|e }}" style="width: 100%; height: 800px; border: none;"></iframe>
+            <!-- Fallback si pas d'HTML généré -->
+            <div class="org-chart">
+                <div class="org-grid">
+                    {% for direction in directions %}
+                    <div class="direction-card">
+                        <div class="direction-header" style="background: linear-gradient(135deg, #2563eb 0%, #1d4ed8 100%);">
+                            <h2>{{ direction.nom }}</h2>
+                            <div class="direction-responsable">
+                                <div class="responsable-avatar">
+                                    <i class="fas fa-user-tie"></i>
+                                </div>
+                                <div class="responsable-info">
+                                    <div class="responsable-name">
+                                        {{ direction.responsable.username if direction.responsable else 'Non assigné' }}
+                                    </div>
+                                    <div class="responsable-title">Directeur</div>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="direction-body">
+                            <p class="direction-description">
+                                {{ direction.description or 'Aucune description' }}
+                            </p>
+                            
+                            <div class="services-section">
+                                <h3>
+                                    <i class="fas fa-building me-2"></i>
+                                    Services
+                                </h3>
+                                <div class="services-list">
+                                    {% for service in direction.services if service.is_active %}
+                                    <div class="service-item">
+                                        <div class="service-name">{{ service.nom }}</div>
+                                        <div class="service-responsable">
+                                            <i class="fas fa-user me-1"></i>
+                                            {{ service.responsable.username if service.responsable else 'Non assigné' }}
+                                        </div>
+                                    </div>
+                                    {% else %}
+                                    <div class="text-muted small">Aucun service actif</div>
+                                    {% endfor %}
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    {% endfor %}
+                </div>
+            </div>
         {% endif %}
     </div>
 </div>
 
-<!-- Modal de configuration -->
+<!-- Modal de configuration rapide -->
 <div class="modal fade" id="configOrganigrammeModal" tabindex="-1">
     <div class="modal-dialog">
         <div class="modal-content">
             <div class="modal-header">
-                <h5 class="modal-title">Configuration de l'organigramme</h5>
+                <h5 class="modal-title">
+                    <i class="fas fa-sliders-h me-2"></i>
+                    Options d'affichage
+                </h5>
                 <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
             </div>
             <div class="modal-body">
-                <form id="formConfigOrganigramme">
+                <form id="formConfigAffichage">
                     <div class="mb-3">
                         <label class="form-label">Niveaux à afficher</label>
                         <div class="form-check">
@@ -67,31 +186,34 @@
                             <input class="form-check-input" type="checkbox" id="showServices" checked>
                             <label class="form-check-label">Services</label>
                         </div>
+                        <div class="form-check">
+                            <input class="form-check-input" type="checkbox" id="showResponsables" checked>
+                            <label class="form-check-label">Noms des responsables</label>
+                        </div>
                     </div>
                     
                     <div class="mb-3">
-                        <label class="form-label">Format d'export</label>
-                        <select class="form-select" id="exportFormat">
-                            <option value="pdf">PDF (impression)</option>
-                            <option value="png">PNG (image)</option>
-                            <option value="html">HTML (web)</option>
+                        <label class="form-label">Ordre d'affichage</label>
+                        <select class="form-select" id="orderBy">
+                            <option value="alpha">Alphabétique</option>
+                            <option value="date">Date de création</option>
+                            <option value="services">Nombre de services</option>
                         </select>
                     </div>
                     
                     <div class="mb-3">
-                        <label class="form-label">Style</label>
-                        <select class="form-select" id="styleOrganigramme">
-                            <option value="moderne">Moderne (couleurs)</option>
-                            <option value="classique">Classique (noir/blanc)</option>
-                            <option value="compact">Compact</option>
-                        </select>
+                        <label class="form-label">Vue compacte</label>
+                        <div class="form-check form-switch">
+                            <input class="form-check-input" type="checkbox" id="compactView">
+                            <label class="form-check-label">Afficher en mode compact</label>
+                        </div>
                     </div>
                 </form>
             </div>
             <div class="modal-footer">
                 <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Annuler</button>
-                <button type="button" class="btn btn-primary" onclick="exporterAvecConfig()">
-                    <i class="fas fa-download me-2"></i>Exporter
+                <button type="button" class="btn btn-primary" onclick="appliquerConfig()">
+                    <i class="fas fa-check me-2"></i>Appliquer
                 </button>
             </div>
         </div>
@@ -99,28 +221,267 @@
 </div>
 {% endblock %}
 
+{% block styles %}
+<style>
+/* Styles supplémentaires pour l'organigramme */
+.org-chart {
+    max-width: 1400px;
+    margin: 0 auto;
+}
+
+.org-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(350px, 1fr));
+    gap: 25px;
+}
+
+.direction-card {
+    background: white;
+    border-radius: 12px;
+    box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+    overflow: hidden;
+    transition: all 0.3s ease;
+    border: 1px solid #e2e8f0;
+}
+
+.direction-card:hover {
+    transform: translateY(-5px);
+    box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1);
+}
+
+.direction-header {
+    background: linear-gradient(135deg, #2563eb 0%, #1d4ed8 100%);
+    color: white;
+    padding: 20px;
+}
+
+.direction-header h2 {
+    font-size: 1.5em;
+    margin-bottom: 15px;
+    font-weight: 600;
+}
+
+.direction-responsable {
+    display: flex;
+    align-items: center;
+    gap: 15px;
+    background: rgba(255, 255, 255, 0.1);
+    padding: 12px;
+    border-radius: 8px;
+}
+
+.responsable-avatar {
+    width: 45px;
+    height: 45px;
+    background: rgba(255, 255, 255, 0.2);
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 1.5em;
+}
+
+.responsable-info {
+    flex: 1;
+}
+
+.responsable-name {
+    font-weight: 600;
+    font-size: 1.1em;
+}
+
+.responsable-title {
+    font-size: 0.85em;
+    opacity: 0.9;
+}
+
+.direction-body {
+    padding: 20px;
+}
+
+.direction-description {
+    color: #64748b;
+    font-size: 0.95em;
+    margin-bottom: 20px;
+    padding-bottom: 15px;
+    border-bottom: 1px dashed #e2e8f0;
+}
+
+.services-section h3 {
+    font-size: 1.1em;
+    color: #1e293b;
+    margin-bottom: 15px;
+    display: flex;
+    align-items: center;
+}
+
+.services-list {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+    gap: 12px;
+}
+
+.service-item {
+    background: #f8fafc;
+    border-radius: 6px;
+    padding: 12px;
+    border-left: 4px solid #10b981;
+    transition: all 0.2s ease;
+}
+
+.service-item:hover {
+    background: white;
+    border-left-width: 6px;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+}
+
+.service-name {
+    font-weight: 600;
+    font-size: 0.95em;
+    margin-bottom: 5px;
+    color: #1e293b;
+}
+
+.service-responsable {
+    font-size: 0.85em;
+    color: #64748b;
+    display: flex;
+    align-items: center;
+    gap: 5px;
+}
+
+/* Mode compact */
+.compact-view .org-grid {
+    grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+}
+
+.compact-view .direction-header {
+    padding: 15px;
+}
+
+.compact-view .direction-header h2 {
+    font-size: 1.2em;
+    margin-bottom: 10px;
+}
+
+.compact-view .direction-body {
+    padding: 15px;
+}
+
+.compact-view .services-list {
+    grid-template-columns: 1fr;
+}
+
+/* Animation d'apparition */
+@keyframes fadeIn {
+    from {
+        opacity: 0;
+        transform: translateY(20px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+.direction-card {
+    animation: fadeIn 0.5s ease forwards;
+}
+
+.direction-card:nth-child(odd) { animation-delay: 0.1s; }
+.direction-card:nth-child(even) { animation-delay: 0.2s; }
+
+/* Responsive */
+@media (max-width: 768px) {
+    .org-grid {
+        grid-template-columns: 1fr;
+    }
+    
+    .direction-card {
+        margin-bottom: 20px;
+    }
+}
+</style>
+{% endblock %}
+
 {% block scripts %}
 <script>
+// Variables globales
+let directionsData = [];
+
+// Charger les données via API
+async function chargerDonneesOrganigramme() {
+    try {
+        const response = await fetch('/api/organigramme/donnees');
+        const data = await response.json();
+        directionsData = data.directions;
+        
+        // Mettre à jour les statistiques
+        document.getElementById('totalDirections').textContent = data.total_directions;
+        document.getElementById('totalServices').textContent = data.total_services;
+        
+        console.log('✅ Données organigramme chargées:', data);
+    } catch (error) {
+        console.error('❌ Erreur chargement données:', error);
+    }
+}
+
+// Fonction pour imprimer
 function imprimerOrganigramme() {
     const printContent = document.querySelector('.organigramme-container').innerHTML;
     const originalTitle = document.title;
     
     const printWindow = window.open('', '_blank');
     printWindow.document.write(`
+        <!DOCTYPE html>
         <html>
             <head>
                 <title>Organigramme - Impression</title>
                 <style>
-                    body { font-family: Arial, sans-serif; margin: 20px; }
+                    body {
+                        font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+                        margin: 20px;
+                        padding: 20px;
+                    }
+                    .direction-card {
+                        break-inside: avoid;
+                        page-break-inside: avoid;
+                        margin-bottom: 20px;
+                        border: 1px solid #ddd;
+                        border-radius: 8px;
+                        overflow: hidden;
+                    }
+                    .direction-header {
+                        background: #2563eb;
+                        color: white;
+                        padding: 15px;
+                    }
+                    .direction-body {
+                        padding: 15px;
+                    }
+                    .services-list {
+                        display: grid;
+                        grid-template-columns: repeat(2, 1fr);
+                        gap: 10px;
+                    }
+                    .service-item {
+                        border-left: 3px solid #10b981;
+                        padding: 8px;
+                        background: #f8fafc;
+                    }
                     @media print {
                         body { margin: 0; }
+                        .no-print { display: none; }
                     }
                 </style>
             </head>
             <body>
                 ${printContent}
                 <script>
-                    window.onload = function() { window.print(); window.close(); }
+                    window.onload = function() { 
+                        window.print(); 
+                        window.close(); 
+                    }
                 <\/script>
             </body>
         </html>
@@ -128,31 +489,113 @@ function imprimerOrganigramme() {
     printWindow.document.close();
 }
 
-function exporterAvecConfig() {
-    const format = document.getElementById('exportFormat').value;
-    window.location.href = `/admin/organigramme/exporter/${format}`;
+// Appliquer la configuration d'affichage
+function appliquerConfig() {
+    const showDirections = document.getElementById('showDirections').checked;
+    const showServices = document.getElementById('showServices').checked;
+    const showResponsables = document.getElementById('showResponsables').checked;
+    const compactView = document.getElementById('compactView').checked;
+    
+    const container = document.querySelector('.org-grid');
+    if (!container) return;
+    
+    // Mode compact
+    if (compactView) {
+        document.querySelector('.organigramme-container').classList.add('compact-view');
+    } else {
+        document.querySelector('.organigramme-container').classList.remove('compact-view');
+    }
+    
+    // Masquer/afficher les éléments
+    document.querySelectorAll('.direction-card').forEach(card => {
+        if (!showDirections) {
+            card.style.display = 'none';
+        } else {
+            card.style.display = 'block';
+            
+            // Gérer les services
+            const services = card.querySelectorAll('.service-item');
+            services.forEach(service => {
+                service.style.display = showServices ? 'block' : 'none';
+            });
+            
+            // Gérer les responsables
+            const responsables = card.querySelectorAll('.service-responsable, .direction-responsable');
+            responsables.forEach(resp => {
+                resp.style.display = showResponsables ? 'flex' : 'none';
+            });
+        }
+    });
+    
+    // Fermer le modal
+    const modal = bootstrap.Modal.getInstance(document.getElementById('configOrganigrammeModal'));
+    if (modal) modal.hide();
 }
 
-// Charger les données via API pour une version interactive
-async function chargerDonneesOrganigramme() {
-    try {
-        const response = await fetch('/api/organigramme/donnees');
-        const data = await response.json();
+// Recherche dans l'organigramme
+function rechercherOrganigramme(texte) {
+    const searchTerm = texte.toLowerCase();
+    document.querySelectorAll('.direction-card').forEach(card => {
+        const directionName = card.querySelector('.direction-header h2')?.textContent.toLowerCase() || '';
+        const services = Array.from(card.querySelectorAll('.service-name')).map(s => s.textContent.toLowerCase());
         
-        console.log('Données organigramme:', data);
+        const matches = directionName.includes(searchTerm) || 
+                       services.some(s => s.includes(searchTerm));
         
-        // Mettre à jour les statistiques
-        document.getElementById('totalDirections').textContent = data.total_directions;
-        document.getElementById('totalServices').textContent = data.total_services;
+        card.style.display = matches ? 'block' : 'none';
         
-    } catch (error) {
-        console.error('Erreur chargement données:', error);
-    }
+        if (matches && searchTerm) {
+            card.style.border = '2px solid #2563eb';
+            card.style.boxShadow = '0 0 0 3px rgba(37, 99, 235, 0.1)';
+        } else {
+            card.style.border = '1px solid #e2e8f0';
+            card.style.boxShadow = 'none';
+        }
+    });
 }
 
 // Initialisation
 document.addEventListener('DOMContentLoaded', function() {
     chargerDonneesOrganigramme();
+    
+    // Ajouter une barre de recherche
+    const header = document.querySelector('.d-flex.justify-content-between.align-items-center.mb-4');
+    if (header) {
+        const searchDiv = document.createElement('div');
+        searchDiv.className = 'ms-3 flex-grow-1';
+        searchDiv.innerHTML = `
+            <div class="input-group">
+                <span class="input-group-text bg-white border-end-0">
+                    <i class="fas fa-search text-muted"></i>
+                </span>
+                <input type="text" class="form-control border-start-0" 
+                       placeholder="Rechercher une direction ou un service..." 
+                       id="searchOrganigramme"
+                       style="border-left: none;">
+            </div>
+        `;
+        header.appendChild(searchDiv);
+        
+        document.getElementById('searchOrganigramme').addEventListener('input', function(e) {
+            rechercherOrganigramme(e.target.value);
+        });
+    }
+    
+    // Ajouter un bouton de configuration
+    const btnGroup = document.querySelector('.btn-group');
+    if (btnGroup) {
+        const configBtn = document.createElement('button');
+        configBtn.className = 'btn btn-outline-secondary ms-2';
+        configBtn.innerHTML = '<i class="fas fa-sliders-h me-1"></i>Affichage';
+        configBtn.setAttribute('data-bs-toggle', 'modal');
+        configBtn.setAttribute('data-bs-target', '#configOrganigrammeModal');
+        btnGroup.parentNode.insertBefore(configBtn, btnGroup.nextSibling);
+    }
 });
+
+// Export des fonctions pour utilisation globale
+window.imprimerOrganigramme = imprimerOrganigramme;
+window.appliquerConfig = appliquerConfig;
+window.rechercherOrganigramme = rechercherOrganigramme;
 </script>
 {% endblock %}
