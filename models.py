@@ -902,6 +902,7 @@ class User(UserMixin, db.Model):
         return f'<User {self.username} ({self.role})>'
     
 # -------------------- DIRECTION AVEC CHAMP NOM_RESPONSABLE_MANUEL --------------------
+# -------------------- DIRECTION --------------------
 class Direction(db.Model):
     __tablename__ = 'direction'
     
@@ -909,9 +910,10 @@ class Direction(db.Model):
     nom = db.Column(db.String(100), nullable=False)
     description = db.Column(db.Text)
     
-    # 🔴 MODIFICATION: Responsable peut être soit un utilisateur (ID) soit un nom saisi manuellement
+    # 🔴 NOUVEAU: Responsable peut être soit un utilisateur (ID) soit un nom saisi manuellement
     responsable_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=True)
     responsable_nom_manuel = db.Column(db.String(200), nullable=True)  # Nom saisi manuellement
+    responsable_type = db.Column(db.String(20), default='utilisateur')  # 'utilisateur' ou 'manuel'
     
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     is_active = db.Column(db.Boolean, default=True)
@@ -943,18 +945,13 @@ class Direction(db.Model):
         else:
             return "Non assigné"
     
-    # Propriété pour savoir si le responsable est un utilisateur ou manuel
+    # Propriété pour savoir si le responsable est assigné
     @property
-    def responsable_type(self):
-        if self.responsable_id:
-            return "utilisateur"
-        elif self.responsable_nom_manuel:
-            return "manuel"
-        else:
-            return "non_assigné"
+    def a_responsable(self):
+        return bool(self.responsable_id or self.responsable_nom_manuel)
 
 
-# -------------------- SERVICE AVEC CHAMP NOM_RESPONSABLE_MANUEL ET EQUIPE --------------------
+# -------------------- SERVICE --------------------
 class Service(db.Model):
     __tablename__ = 'service'
     
@@ -963,9 +960,10 @@ class Service(db.Model):
     description = db.Column(db.Text)
     direction_id = db.Column(db.Integer, db.ForeignKey('direction.id'))
     
-    # 🔴 MODIFICATION: Responsable peut être soit un utilisateur (ID) soit un nom saisi manuellement
+    # 🔴 NOUVEAU: Responsable peut être soit un utilisateur (ID) soit un nom saisi manuellement
     responsable_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=True)
     responsable_nom_manuel = db.Column(db.String(200), nullable=True)  # Nom saisi manuellement
+    responsable_type = db.Column(db.String(20), default='utilisateur')  # 'utilisateur' ou 'manuel'
     
     # 🔴 NOUVEAU: Membres de l'équipe (stockés en JSON)
     equipe_membres = db.Column(db.JSON, default=[])  # Liste des noms des membres
@@ -1001,15 +999,10 @@ class Service(db.Model):
         else:
             return "Non assigné"
     
-    # Propriété pour savoir si le responsable est un utilisateur ou manuel
+    # Propriété pour savoir si le responsable est assigné
     @property
-    def responsable_type(self):
-        if self.responsable_id:
-            return "utilisateur"
-        elif self.responsable_nom_manuel:
-            return "manuel"
-        else:
-            return "non_assigné"
+    def a_responsable(self):
+        return bool(self.responsable_id or self.responsable_nom_manuel)
     
     # Méthode pour ajouter un membre à l'équipe
     def ajouter_membre_equipe(self, nom_membre):
@@ -1027,7 +1020,6 @@ class Service(db.Model):
     @property
     def nb_membres_equipe(self):
         return len(self.equipe_membres) if self.equipe_membres else 0
-
 
 # -------------------- CONFIGURATION ORGANIGRAMME --------------------
 class ConfigurationOrganigramme(db.Model):
