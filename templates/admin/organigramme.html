@@ -2,12 +2,12 @@
 
 {% block content %}
 <div class="container-fluid py-4">
-    <!-- En-tête avec logo -->
+    <!-- En-tête avec logo et actions -->
     <div class="card border-0 shadow-sm mb-4">
         <div class="card-body">
-            <div class="d-flex justify-content-between align-items-center flex-wrap">
+            <div class="d-flex justify-content-between align-items-center flex-wrap gap-3">
                 <div class="d-flex align-items-center gap-4">
-                    <!-- LOGO - CORRIGÉ -->
+                    <!-- LOGO avec gestion d'erreur -->
                     {% if config and config.logo_entreprise %}
                     <div class="logo-container">
                         <img src="{{ url_for('serve_upload', filename=config.logo_entreprise) }}" 
@@ -33,7 +33,7 @@
                 </div>
                 
                 <!-- Boutons d'action -->
-                <div class="d-flex gap-2 mt-3 mt-lg-0">
+                <div class="d-flex gap-2">
                     <div class="dropdown">
                         <button class="btn btn-primary dropdown-toggle" type="button" data-bs-toggle="dropdown">
                             <i class="fas fa-download me-2"></i>Exporter
@@ -55,6 +55,11 @@
                                     <i class="fas fa-cog text-primary me-2"></i>Personnaliser
                                 </a>
                             </li>
+                            <li>
+                                <a class="dropdown-item" href="{{ url_for('admin_directions') }}">
+                                    <i class="fas fa-building me-2"></i>Gérer directions
+                                </a>
+                            </li>
                         </ul>
                     </div>
                     
@@ -65,8 +70,8 @@
             </div>
         </div>
     </div>
-    
-    <!-- Statistiques -->
+
+    <!-- Statistiques améliorées -->
     <div class="row g-3 mb-4">
         <div class="col-md-3">
             <div class="card border-0 shadow-sm h-100">
@@ -78,6 +83,9 @@
                         <div>
                             <span class="text-muted small text-uppercase">Directions</span>
                             <h3 class="mb-0 fw-bold">{{ directions|length }}</h3>
+                            <small class="text-success">
+                                <i class="fas fa-arrow-up me-1"></i>{{ directions_avec_resp }} avec responsable
+                            </small>
                         </div>
                     </div>
                 </div>
@@ -94,6 +102,7 @@
                         <div>
                             <span class="text-muted small text-uppercase">Services</span>
                             <h3 class="mb-0 fw-bold">{{ total_services }}</h3>
+                            <small class="text-info">{{ "%.1f"|format(total_services / directions|length if directions|length > 0 else 0) }} / direction</small>
                         </div>
                     </div>
                 </div>
@@ -110,6 +119,10 @@
                         <div>
                             <span class="text-muted small text-uppercase">Responsables</span>
                             <h3 class="mb-0 fw-bold">{{ total_responsables }}</h3>
+                            <small>
+                                <span class="badge bg-primary">{{ responsables_utilisateurs|default(0) }} utilisateurs</span>
+                                <span class="badge bg-secondary">{{ responsables_manuels|default(0) }} externes</span>
+                            </small>
                         </div>
                     </div>
                 </div>
@@ -121,23 +134,24 @@
                 <div class="card-body">
                     <div class="d-flex align-items-center">
                         <div class="stat-icon bg-warning bg-opacity-10 rounded-3 p-3 me-3">
-                            <i class="fas fa-chart-pie fa-2x text-warning"></i>
+                            <i class="fas fa-users fa-2x text-warning"></i>
                         </div>
                         <div>
-                            <span class="text-muted small text-uppercase">Taux encadrement</span>
-                            <h3 class="mb-0 fw-bold">{{ taux_encadrement }}%</h3>
+                            <span class="text-muted small text-uppercase">Équipes</span>
+                            <h3 class="mb-0 fw-bold">{{ total_membres_equipe }}</h3>
+                            <small class="text-muted">{{ services_avec_equipe }} services avec équipe</small>
                         </div>
                     </div>
                 </div>
             </div>
         </div>
     </div>
-    
-    <!-- Barre de recherche -->
+
+    <!-- Barre de recherche et filtres -->
     <div class="card border-0 shadow-sm mb-4">
         <div class="card-body">
             <div class="row g-3">
-                <div class="col-md-6">
+                <div class="col-md-5">
                     <div class="input-group">
                         <span class="input-group-text bg-transparent border-end-0">
                             <i class="fas fa-search text-muted"></i>
@@ -149,21 +163,43 @@
                                style="border-left: none;">
                     </div>
                 </div>
-                <div class="col-md-6 text-md-end">
-                    <span class="badge bg-light text-dark p-2" id="resultCount">
-                        <i class="fas fa-layer-group me-1"></i>{{ directions|length }} directions • {{ total_services }} services
-                    </span>
+                <div class="col-md-7">
+                    <div class="d-flex justify-content-end gap-2">
+                        <span class="badge bg-light text-dark p-2" id="resultCount">
+                            <i class="fas fa-layer-group me-1"></i>{{ directions|length }} directions • {{ total_services }} services
+                        </span>
+                        
+                        <div class="btn-group" role="group">
+                            <button type="button" class="btn btn-outline-primary btn-sm" onclick="filterOrganigramme('all')">
+                                Tous
+                            </button>
+                            <button type="button" class="btn btn-outline-success btn-sm" onclick="filterOrganigramme('with-responsable')">
+                                <i class="fas fa-user-check me-1"></i>Avec responsable
+                            </button>
+                            <button type="button" class="btn btn-outline-warning btn-sm" onclick="filterOrganigramme('without-responsable')">
+                                <i class="fas fa-user-slash me-1"></i>Sans responsable
+                            </button>
+                            <button type="button" class="btn btn-outline-info btn-sm" onclick="filterOrganigramme('with-equipe')">
+                                <i class="fas fa-users me-1"></i>Avec équipe
+                            </button>
+                        </div>
+                    </div>
                 </div>
             </div>
         </div>
     </div>
-    
+
     <!-- Organigramme GRID -->
     <div class="org-grid" id="organigrammeContainer">
         {% for direction in directions %}
         {% set active_services = direction.services|selectattr('is_active')|list %}
-        <div class="direction-card" data-direction="{{ direction.nom }}" data-services="{{ direction.nom }} {{ active_services|map(attribute='nom')|join(' ') }}">
-            <!-- En-tête direction -->
+        <div class="direction-card" 
+             data-direction="{{ direction.nom }}"
+             data-services="{{ direction.nom }} {{ active_services|map(attribute='nom')|join(' ') }}"
+             data-responsable="{{ 'oui' if direction.responsable_id or direction.responsable_nom_manuel else 'non' }}"
+             data-equipe="{{ 'oui' if active_services|selectattr('equipe_membres')|list else 'non' }}">
+            
+            <!-- En-tête direction avec gradient -->
             <div class="direction-header" style="background: linear-gradient(135deg, {{ config.couleur_primaire if config else '#2563eb' }} 0%, {{ config.couleur_primaire if config else '#2563eb' }}dd 100%);">
                 <div class="d-flex justify-content-between align-items-start">
                     <h2 class="direction-title">{{ direction.nom }}</h2>
@@ -172,13 +208,22 @@
                     </span>
                 </div>
                 
+                <!-- Responsable de la direction -->
                 <div class="direction-responsable mt-3">
                     <div class="responsable-avatar">
                         <i class="fas fa-user-circle"></i>
                     </div>
                     <div class="responsable-info">
                         <div class="responsable-name">
-                            {{ direction.responsable.username if direction.responsable else 'Poste à pourvoir' }}
+                            {% if direction.responsable_id and direction.responsable %}
+                                {{ direction.responsable.username }}
+                                <span class="responsable-type utilisateur">utilisateur</span>
+                            {% elif direction.responsable_nom_manuel %}
+                                {{ direction.responsable_nom_manuel }}
+                                <span class="responsable-type externe">externe</span>
+                            {% else %}
+                                <span class="text-warning">Responsable non assigné</span>
+                            {% endif %}
                         </div>
                         <div class="responsable-title">Directeur(trice)</div>
                     </div>
@@ -188,7 +233,10 @@
             <!-- Corps direction -->
             <div class="direction-body">
                 {% if direction.description %}
-                <p class="direction-description">{{ direction.description }}</p>
+                <p class="direction-description">
+                    <i class="fas fa-align-left me-1 opacity-50"></i>
+                    {{ direction.description }}
+                </p>
                 {% endif %}
                 
                 <!-- Services -->
@@ -203,19 +251,45 @@
                         <div class="service-card" style="border-left-color: {{ config.couleur_secondaire if config else '#10b981' }};">
                             <div class="service-header">
                                 <span class="service-name">{{ service.nom }}</span>
-                                {% if not service.responsable %}
+                                {% if not service.responsable_id and not service.responsable_nom_manuel %}
                                 <span class="badge bg-warning bg-opacity-10 text-warning ms-2">À pourvoir</span>
                                 {% endif %}
                             </div>
+                            
+                            <!-- Responsable du service -->
                             <div class="service-responsable">
-                                <i class="fas fa-user-circle me-1" style="color: {{ config.couleur_primaire if config else '#2563eb' }};"></i>
-                                <span>{{ service.responsable.username if service.responsable else 'Non assigné' }}</span>
+                                <i class="fas fa-user-tie me-1" style="color: {{ config.couleur_primaire if config else '#2563eb' }};"></i>
+                                <span>
+                                    {% if service.responsable_id and service.responsable %}
+                                        {{ service.responsable.username }}
+                                        <small class="text-muted">(utilisateur)</small>
+                                    {% elif service.responsable_nom_manuel %}
+                                        {{ service.responsable_nom_manuel }}
+                                        <small class="text-muted">(externe)</small>
+                                    {% else %}
+                                        <span class="text-muted">Non assigné</span>
+                                    {% endif %}
+                                </span>
                             </div>
+                            
+                            <!-- Équipe du service -->
+                            {% if service.equipe_membres and service.equipe_membres|length > 0 %}
+                            <div class="service-equipe mt-2 pt-2 border-top border-light">
+                                <i class="fas fa-users me-1 text-info"></i>
+                                <small>
+                                    <span class="text-muted">Équipe ({{ service.equipe_membres|length }}) :</span>
+                                    <span class="equipe-membres">{{ service.equipe_membres|join(', ') }}</span>
+                                </small>
+                            </div>
+                            {% endif %}
                         </div>
                         {% else %}
                         <div class="text-center py-4 bg-light rounded-3">
                             <i class="fas fa-folder-open fa-2x text-muted mb-2"></i>
                             <p class="text-muted mb-0">Aucun service actif</p>
+                            <a href="{{ url_for('nouveau_service', direction_id=direction.id) }}" class="btn btn-sm btn-outline-success mt-2">
+                                <i class="fas fa-plus me-1"></i>Ajouter
+                            </a>
                         </div>
                         {% endfor %}
                     </div>
@@ -224,16 +298,42 @@
         </div>
         {% endfor %}
     </div>
-    
-    <!-- Pied de page -->
+
+    <!-- Pied de page personnalisé -->
     {% if config and config.pied_de_page %}
     <div class="text-center mt-5 pt-4 border-top">
-        <p class="text-muted small">{{ config.pied_de_page }}</p>
+        <p class="text-muted small">
+            <i class="fas fa-circle-info me-1"></i>
+            {{ config.pied_de_page }}
+        </p>
     </div>
     {% endif %}
 </div>
 
-<!-- Style personnalisé -->
+<!-- Modal pour voir l'équpe en détail -->
+<div class="modal fade" id="equipeModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header bg-info text-white">
+                <h5 class="modal-title">
+                    <i class="fas fa-users me-2"></i>
+                    Membres de l'équipe
+                </h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <h6 id="serviceNomEquipe" class="fw-bold mb-3"></h6>
+                <div id="listeEquipe" class="list-group">
+                    <!-- Rempli dynamiquement -->
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Fermer</button>
+            </div>
+        </div>
+    </div>
+</div>
+
 <style>
 :root {
     --primary-color: {{ config.couleur_primaire if config else '#2563eb' }};
@@ -242,7 +342,7 @@
 
 .org-grid {
     display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(380px, 1fr));
+    grid-template-columns: repeat(auto-fit, minmax(400px, 1fr));
     gap: 1.5rem;
 }
 
@@ -253,6 +353,7 @@
     box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
     transition: transform 0.2s ease, box-shadow 0.2s ease;
     border: 1px solid rgba(0, 0, 0, 0.05);
+    animation: fadeInUp 0.4s ease forwards;
 }
 
 .direction-card:hover {
@@ -266,7 +367,7 @@
 }
 
 .direction-title {
-    font-size: 1.5rem;
+    font-size: 1.4rem;
     font-weight: 700;
     margin: 0;
     line-height: 1.2;
@@ -294,6 +395,25 @@
 .responsable-name {
     font-weight: 600;
     font-size: 1rem;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    flex-wrap: wrap;
+}
+
+.responsable-type {
+    font-size: 0.7rem;
+    padding: 0.2rem 0.5rem;
+    border-radius: 1rem;
+    background: rgba(255, 255, 255, 0.2);
+}
+
+.responsable-type.utilisateur {
+    background: rgba(16, 185, 129, 0.3);
+}
+
+.responsable-type.externe {
+    background: rgba(6, 182, 212, 0.3);
 }
 
 .responsable-title {
@@ -343,19 +463,34 @@
 .service-header {
     display: flex;
     align-items: center;
+    justify-content: space-between;
     margin-bottom: 0.5rem;
 }
 
 .service-name {
     font-weight: 600;
     color: #1e293b;
+    font-size: 0.95rem;
 }
 
 .service-responsable {
     font-size: 0.85rem;
-    color: #64748b;
+    color: #475569;
     display: flex;
     align-items: center;
+    gap: 0.25rem;
+}
+
+.service-equipe {
+    font-size: 0.8rem;
+    color: #64748b;
+    margin-top: 0.5rem;
+    padding-top: 0.5rem;
+}
+
+.equipe-membres {
+    color: #0ea5e9;
+    font-weight: 500;
 }
 
 .stat-icon {
@@ -378,12 +513,14 @@
     }
 }
 
-.direction-card {
-    animation: fadeInUp 0.4s ease forwards;
-}
-
 .direction-card:nth-child(odd) { animation-delay: 0.1s; }
 .direction-card:nth-child(even) { animation-delay: 0.2s; }
+
+/* Badges */
+.badge {
+    font-weight: 500;
+    letter-spacing: 0.3px;
+}
 
 /* Responsive */
 @media (max-width: 768px) {
@@ -397,7 +534,8 @@
     .btn-group,
     .dropdown,
     .btn,
-    #searchOrganigramme {
+    #searchOrganigramme,
+    .stat-icon {
         display: none !important;
     }
     
@@ -405,12 +543,14 @@
         break-inside: avoid;
         box-shadow: none;
         border: 1px solid #ddd;
+        page-break-inside: avoid;
     }
 }
 </style>
 
 <script>
 document.addEventListener('DOMContentLoaded', function() {
+    // Recherche dynamique
     const searchInput = document.getElementById('searchOrganigramme');
     const cards = document.querySelectorAll('.direction-card');
     const resultCount = document.getElementById('resultCount');
@@ -421,17 +561,14 @@ document.addEventListener('DOMContentLoaded', function() {
             let visibleCount = 0;
             
             cards.forEach(card => {
-                const searchableText = card.getAttribute('data-services')?.toLowerCase() || '';
+                const directionName = card.querySelector('.direction-title').textContent.toLowerCase();
+                const services = Array.from(card.querySelectorAll('.service-name')).map(s => s.textContent.toLowerCase());
+                const equipe = Array.from(card.querySelectorAll('.equipe-membres')).map(e => e.textContent.toLowerCase());
+                
+                const searchableText = directionName + ' ' + services.join(' ') + ' ' + equipe.join(' ');
                 const matches = searchTerm === '' || searchableText.includes(searchTerm);
                 
                 card.style.display = matches ? 'block' : 'none';
-                
-                if (matches && searchTerm !== '') {
-                    card.style.border = `2px solid var(--primary-color)`;
-                } else {
-                    card.style.border = '1px solid rgba(0, 0, 0, 0.05)';
-                }
-                
                 if (matches) visibleCount++;
             });
             
@@ -441,10 +578,56 @@ document.addEventListener('DOMContentLoaded', function() {
             }
         });
     }
+    
+    // Ajouter des tooltips pour les équipes
+    document.querySelectorAll('.service-equipe').forEach(el => {
+        el.addEventListener('click', function() {
+            const serviceName = this.closest('.service-card').querySelector('.service-name').textContent;
+            const membres = this.querySelector('.equipe-membres').textContent;
+            
+            document.getElementById('serviceNomEquipe').textContent = serviceName;
+            const listeEquipe = document.getElementById('listeEquipe');
+            listeEquipe.innerHTML = '';
+            
+            membres.split(',').forEach(membre => {
+                listeEquipe.innerHTML += `
+                    <div class="list-group-item">
+                        <i class="fas fa-user-circle text-info me-2"></i>
+                        ${membre.trim()}
+                    </div>
+                `;
+            });
+            
+            new bootstrap.Modal(document.getElementById('equipeModal')).show();
+        });
+    });
 });
 
+function filterOrganigramme(type) {
+    const cards = document.querySelectorAll('.direction-card');
+    
+    cards.forEach(card => {
+        const hasResponsable = card.dataset.responsable === 'oui';
+        const hasEquipe = card.dataset.equipe === 'oui';
+        
+        if (type === 'all') {
+            card.style.display = 'block';
+        } else if (type === 'with-responsable') {
+            card.style.display = hasResponsable ? 'block' : 'none';
+        } else if (type === 'without-responsable') {
+            card.style.display = !hasResponsable ? 'block' : 'none';
+        } else if (type === 'with-equipe') {
+            card.style.display = hasEquipe ? 'block' : 'none';
+        }
+    });
+    
+    // Mettre à jour le compteur
+    const visibleCount = Array.from(cards).filter(c => c.style.display !== 'none').length;
+    document.getElementById('resultCount').innerHTML = 
+        `<i class="fas fa-layer-group me-1"></i>${visibleCount} sur ${cards.length} directions`;
+}
+
 function captureAsPNG() {
-    // Utiliser html2canvas pour capturer l'organigramme
     if (typeof html2canvas !== 'undefined') {
         const element = document.getElementById('organigrammeContainer');
         html2canvas(element, {
@@ -461,7 +644,6 @@ function captureAsPNG() {
         });
     } else {
         alert('Chargement de la librairie...');
-        // Charger html2canvas si nécessaire
         const script = document.createElement('script');
         script.src = 'https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js';
         script.onload = captureAsPNG;
