@@ -901,18 +901,18 @@ class User(UserMixin, db.Model):
     def __repr__(self):
         return f'<User {self.username} ({self.role})>'
     
-# -------------------- DIRECTION --------------------
-# ============================================
-# MODÈLES POUR DIRECTIONS ET SERVICES (AVEC LOGO)
-# ============================================
-
+# -------------------- DIRECTION AVEC CHAMP NOM_RESPONSABLE_MANUEL --------------------
 class Direction(db.Model):
     __tablename__ = 'direction'
     
     id = db.Column(db.Integer, primary_key=True)
     nom = db.Column(db.String(100), nullable=False)
     description = db.Column(db.Text)
-    responsable_id = db.Column(db.Integer, db.ForeignKey('user.id'))
+    
+    # 🔴 MODIFICATION: Responsable peut être soit un utilisateur (ID) soit un nom saisi manuellement
+    responsable_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=True)
+    responsable_nom_manuel = db.Column(db.String(200), nullable=True)  # Nom saisi manuellement
+    
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     is_active = db.Column(db.Boolean, default=True)
     is_archived = db.Column(db.Boolean, default=False)
@@ -932,8 +932,29 @@ class Direction(db.Model):
     services = db.relationship('Service', back_populates='direction', lazy=True)
     cartographies = db.relationship('Cartographie', back_populates='direction', lazy=True)
     processus = db.relationship('Processus', back_populates='direction', lazy=True)
+    
+    # Propriété pour obtenir le nom du responsable (quel que soit le mode)
+    @property
+    def responsable_nom(self):
+        if self.responsable_id and self.responsable:
+            return self.responsable.username
+        elif self.responsable_nom_manuel:
+            return self.responsable_nom_manuel
+        else:
+            return "Non assigné"
+    
+    # Propriété pour savoir si le responsable est un utilisateur ou manuel
+    @property
+    def responsable_type(self):
+        if self.responsable_id:
+            return "utilisateur"
+        elif self.responsable_nom_manuel:
+            return "manuel"
+        else:
+            return "non_assigné"
 
 
+# -------------------- SERVICE AVEC CHAMP NOM_RESPONSABLE_MANUEL ET EQUIPE --------------------
 class Service(db.Model):
     __tablename__ = 'service'
     
@@ -941,7 +962,14 @@ class Service(db.Model):
     nom = db.Column(db.String(100), nullable=False)
     description = db.Column(db.Text)
     direction_id = db.Column(db.Integer, db.ForeignKey('direction.id'))
-    responsable_id = db.Column(db.Integer, db.ForeignKey('user.id'))
+    
+    # 🔴 MODIFICATION: Responsable peut être soit un utilisateur (ID) soit un nom saisi manuellement
+    responsable_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=True)
+    responsable_nom_manuel = db.Column(db.String(200), nullable=True)  # Nom saisi manuellement
+    
+    # 🔴 NOUVEAU: Membres de l'équipe (stockés en JSON)
+    equipe_membres = db.Column(db.JSON, default=[])  # Liste des noms des membres
+    
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     is_active = db.Column(db.Boolean, default=True)
     is_archived = db.Column(db.Boolean, default=False)
@@ -962,8 +990,46 @@ class Service(db.Model):
     
     processus = db.relationship('Processus', back_populates='service', lazy=True)
     cartographies = db.relationship('Cartographie', back_populates='service', lazy=True)
+    
+    # Propriété pour obtenir le nom du responsable (quel que soit le mode)
+    @property
+    def responsable_nom(self):
+        if self.responsable_id and self.responsable:
+            return self.responsable.username
+        elif self.responsable_nom_manuel:
+            return self.responsable_nom_manuel
+        else:
+            return "Non assigné"
+    
+    # Propriété pour savoir si le responsable est un utilisateur ou manuel
+    @property
+    def responsable_type(self):
+        if self.responsable_id:
+            return "utilisateur"
+        elif self.responsable_nom_manuel:
+            return "manuel"
+        else:
+            return "non_assigné"
+    
+    # Méthode pour ajouter un membre à l'équipe
+    def ajouter_membre_equipe(self, nom_membre):
+        if not self.equipe_membres:
+            self.equipe_membres = []
+        if nom_membre not in self.equipe_membres:
+            self.equipe_membres.append(nom_membre)
+    
+    # Méthode pour retirer un membre de l'équipe
+    def retirer_membre_equipe(self, nom_membre):
+        if self.equipe_membres and nom_membre in self.equipe_membres:
+            self.equipe_membres.remove(nom_membre)
+    
+    # Propriété pour obtenir le nombre de membres
+    @property
+    def nb_membres_equipe(self):
+        return len(self.equipe_membres) if self.equipe_membres else 0
 
 
+# -------------------- CONFIGURATION ORGANIGRAMME --------------------
 class ConfigurationOrganigramme(db.Model):
     """Configuration de l'organigramme pour chaque client"""
     __tablename__ = 'configuration_organigramme'
@@ -980,7 +1046,7 @@ class ConfigurationOrganigramme(db.Model):
     updated_at = db.Column(db.DateTime, onupdate=datetime.utcnow)
     
     client = db.relationship('Client', backref='config_organigramme')
-
+    
 
 class Cartographie(db.Model):
     __tablename__ = 'cartographie'
