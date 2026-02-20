@@ -100,64 +100,6 @@ class DirectionForm(FlaskForm):
         
         return True
 
-class ServiceForm(FlaskForm):
-    nom = StringField('Nom du service', validators=[DataRequired()])
-    description = TextAreaField('Description')
-    direction_id = SelectField('Direction', coerce=int, validators=[DataRequired()])
-    
-    # 🔴 NOUVEAU: Type de responsable (utilisateur ou manuel)
-    type_responsable = RadioField('Type de responsable', 
-                                 choices=[('utilisateur', 'Sélectionner un utilisateur existant'),
-                                          ('manuel', 'Saisir un nom manuellement')],
-                                 default='utilisateur')
-    
-    # Pour la sélection d'utilisateur existant
-    responsable_id = SelectField('Sélectionner un responsable', 
-                                coerce=coerce_int_or_none, 
-                                validators=[Optional()])
-    
-    # Pour la saisie manuelle
-    responsable_nom_manuel = StringField('Nom du responsable', validators=[Optional()])
-    
-    # 🔴 NOUVEAU: Membres de l'équipe (champ dynamique)
-    equipe_membres = TextAreaField('Membres de l\'équipe (un par ligne)', 
-                                  validators=[Optional()],
-                                  description='Saisissez un nom par ligne')
-    
-    submit = SubmitField('Créer le service')
-    class DirectionForm(FlaskForm):
-    nom = StringField('Nom de la direction', validators=[DataRequired()])
-    description = TextAreaField('Description')
-    
-    # Type de responsable (utilisateur ou manuel)
-    type_responsable = RadioField('Type de responsable', 
-                                 choices=[('utilisateur', 'Sélectionner un utilisateur existant'),
-                                          ('manuel', 'Saisir un nom manuellement')],
-                                 default='utilisateur')
-    
-    # Pour la sélection d'utilisateur existant
-    responsable_id = SelectField('Sélectionner un responsable', 
-                                coerce=lambda x: int(x) if x and x != 'None' and x != '' else None, 
-                                validators=[Optional()])
-    
-    # Pour la saisie manuelle
-    responsable_nom_manuel = StringField('Nom du responsable', validators=[Optional()])
-    
-    submit = SubmitField('Créer la direction')
-    
-    def validate(self):
-        if not super().validate():
-            return False
-        
-        # Vérifier qu'au moins un type de responsable est renseigné
-        if self.type_responsable.data == 'utilisateur' and (not self.responsable_id.data or self.responsable_id.data == 0):
-            self.responsable_id.errors.append('Veuillez sélectionner un responsable ou choisir "Saisie manuelle"')
-            return False
-        elif self.type_responsable.data == 'manuel' and not self.responsable_nom_manuel.data:
-            self.responsable_nom_manuel.errors.append('Veuillez saisir un nom')
-            return False
-        
-        return True
 
 
 class ServiceForm(FlaskForm):
