@@ -13,10 +13,10 @@ from datetime import datetime
 # Fonction utilitaire pour convertir en int ou None
 def coerce_int_or_none(value):
     """
-    Convertit une valeur en entier ou retourne None si la valeur est vide ou '0'
+    Convertit une valeur en entier ou retourne None si la valeur est vide, '0', None
     """
-    # 🔴 CORRECTION: Ajouter la gestion de '0'
-    if value == '' or value is None or value == '0' or value == 0:
+    # 🔴 CORRECTION: Gérer tous les cas où on veut None
+    if value in (None, '', '0', 0, 'None', 'null', 'none', 'NULL'):
         return None
     try:
         return int(value)
