@@ -12,11 +12,15 @@ from datetime import datetime
 
 # Fonction utilitaire pour convertir en int ou None
 def coerce_int_or_none(value):
-    if value == '' or value is None:
+    """
+    Convertit une valeur en entier ou retourne None si la valeur est vide ou '0'
+    """
+    # 🔴 CORRECTION: Ajouter la gestion de '0'
+    if value == '' or value is None or value == '0' or value == 0:
         return None
     try:
         return int(value)
-    except ValueError:
+    except (ValueError, TypeError):
         return None
 
 # Widget personnalisé pour les sélections multiples
@@ -70,13 +74,13 @@ class DirectionForm(FlaskForm):
     nom = StringField('Nom de la direction', validators=[DataRequired()])
     description = TextAreaField('Description')
     
-    # 🔴 NOUVEAU: Type de responsable (utilisateur ou manuel)
+    # Type de responsable (utilisateur ou manuel)
     type_responsable = RadioField('Type de responsable', 
                                  choices=[('utilisateur', 'Sélectionner un utilisateur existant'),
                                           ('manuel', 'Saisir un nom manuellement')],
                                  default='utilisateur')
     
-    # Pour la sélection d'utilisateur existant
+    # 🔴 CORRECTION: Utiliser la fonction coerce_int_or_none améliorée
     responsable_id = SelectField('Sélectionner un responsable', 
                                 coerce=coerce_int_or_none, 
                                 validators=[Optional()])
@@ -91,15 +95,15 @@ class DirectionForm(FlaskForm):
             return False
         
         # Vérifier qu'au moins un type de responsable est renseigné
-        if self.type_responsable.data == 'utilisateur' and (not self.responsable_id.data or self.responsable_id.data == 0):
-            self.responsable_id.errors.append('Veuillez sélectionner un responsable ou choisir "Saisie manuelle"')
-            return False
+        if self.type_responsable.data == 'utilisateur':
+            if not self.responsable_id.data:  # Maintenant None pour '0'
+                self.responsable_id.errors.append('Veuillez sélectionner un responsable ou choisir "Saisie manuelle"')
+                return False
         elif self.type_responsable.data == 'manuel' and not self.responsable_nom_manuel.data:
             self.responsable_nom_manuel.errors.append('Veuillez saisir un nom')
             return False
         
         return True
-
 
 
 class ServiceForm(FlaskForm):
@@ -113,7 +117,7 @@ class ServiceForm(FlaskForm):
                                           ('manuel', 'Saisir un nom manuellement')],
                                  default='utilisateur')
     
-    # Pour la sélection d'utilisateur existant
+    # 🔴 CORRECTION: Utiliser la fonction coerce_int_or_none améliorée
     responsable_id = SelectField('Sélectionner un responsable', 
                                 coerce=coerce_int_or_none, 
                                 validators=[Optional()])
@@ -128,15 +132,15 @@ class ServiceForm(FlaskForm):
     
     submit = SubmitField('Créer le service')
     
-    # 🔴 CORRECTION: Ajouter *args, **kwargs
     def validate(self, *args, **kwargs):
         if not super().validate(*args, **kwargs):
             return False
         
         # Vérifier qu'au moins un type de responsable est renseigné
-        if self.type_responsable.data == 'utilisateur' and (not self.responsable_id.data or self.responsable_id.data == 0):
-            self.responsable_id.errors.append('Veuillez sélectionner un responsable ou choisir "Saisie manuelle"')
-            return False
+        if self.type_responsable.data == 'utilisateur':
+            if not self.responsable_id.data:  # Maintenant None pour '0'
+                self.responsable_id.errors.append('Veuillez sélectionner un responsable ou choisir "Saisie manuelle"')
+                return False
         elif self.type_responsable.data == 'manuel' and not self.responsable_nom_manuel.data:
             self.responsable_nom_manuel.errors.append('Veuillez saisir un nom')
             return False
