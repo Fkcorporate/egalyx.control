@@ -1,58 +1,670 @@
 {% extends "base.html" %}
 
 {% block content %}
-<div class="d-flex justify-content-between flex-wrap flex-md-nowrap align-items-center pt-3 pb-2 mb-3 border-bottom">
-    <h1 class="h2">
-        <i class="fas fa-edit"></i> 
-        {% if action == 'modifier' %}
-            Modifier le Risque : {{ risque.reference }}
-        {% else %}
-            Nouveau Risque
-        {% endif %}
-    </h1>
-    <div class="btn-toolbar mb-2 mb-md-0">
-        {% if action == 'modifier' %}
-            <a href="{{ url_for('detail_risque', id=risque.id) }}" class="btn btn-secondary me-2">
-                <i class="fas fa-arrow-left"></i> Retour au risque
-            </a>
-            <a href="{{ url_for('detail_cartographie', id=risque.cartographie_id) }}" class="btn btn-outline-info">
-                <i class="fas fa-map"></i> Voir la cartographie
-            </a>
-        {% else %}
-            <a href="{{ url_for('detail_cartographie', id=cartographie.id) }}" class="btn btn-secondary">
-                <i class="fas fa-arrow-left"></i> Retour à la cartographie
-            </a>
-        {% endif %}
-    </div>
-</div>
+<style>
+    /* ============================================
+       STYLES SPÉCIFIQUES - FORMULAIRE RISQUE
+       HARMONISÉ AVEC DETAIL_RISQUE.HTML
+       ============================================ */
+    
+    /* Variables de base - reprises de detail_risque.html */
+    :root {
+        --fk-navy: #0A1929;
+        --fk-blue: #1A3C6B;
+        --fk-accent: #0066CC;
+        --fk-light-blue: #3B82F6;
+        --fk-steel: #334155;
+        --fk-platinum: #F8FAFC;
+        --fk-success: #0D9488;
+        --fk-warning: #F59E0B;
+        --fk-error: #DC2626;
+        --fk-gold: #D4AF37;
+        
+        --primary-gradient: linear-gradient(135deg, #0A1929 0%, #1A3C6B 100%);
+        --accent-gradient: linear-gradient(135deg, #0066CC 0%, #3B82F6 100%);
+        
+        --shadow-soft: 0 4px 20px rgba(0, 0, 0, 0.08);
+        --shadow-medium: 0 8px 30px rgba(0, 0, 0, 0.12);
+        --shadow-hard: 0 12px 50px rgba(0, 0, 0, 0.2);
+        
+        --radius-lg: 16px;
+        --radius-md: 12px;
+        --radius-sm: 8px;
+        
+        --transition-smooth: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    }
 
-<div class="row">
-    <div class="col-md-8">
-        <div class="card shadow">
-            <div class="card-header bg-primary text-white">
-                <h6 class="mb-0">
-                    <i class="fas fa-info-circle"></i> 
-                    {% if action == 'modifier' %}
-                        Informations du Risque
-                    {% else %}
-                        Création d'un Nouveau Risque
-                    {% endif %}
-                </h6>
-            </div>
-            <div class="card-body">
-                <form method="POST" enctype="multipart/form-data" id="risqueForm">
-                    {{ form.hidden_tag() }}
+    /* Variables sémantiques - mode clair */
+    body {
+        --bg-primary: #ffffff;
+        --bg-secondary: #f8fafc;
+        --bg-tertiary: #f1f5f9;
+        --text-primary: #1e293b;
+        --text-secondary: #334155;
+        --text-muted: #64748b;
+        --border-color: #e2e8f0;
+        --card-bg: #ffffff;
+        --card-header-bg: linear-gradient(135deg, #f8fafc 0%, #ffffff 100%);
+        --hover-bg: #f1f5f9;
+    }
+
+    /* Mode sombre */
+    [data-bs-theme="dark"] body {
+        --bg-primary: #0f172a;
+        --bg-secondary: #1e293b;
+        --bg-tertiary: #334155;
+        --text-primary: #f8fafc;
+        --text-secondary: #cbd5e1;
+        --text-muted: #94a3b8;
+        --border-color: #334155;
+        --card-bg: #1e293b;
+        --card-header-bg: linear-gradient(135deg, #1e293b 0%, #0f172a 100%);
+        --hover-bg: #334155;
+    }
+
+    /* En-tête de page */
+    .page-header-modern {
+        background: var(--primary-gradient);
+        border-radius: var(--radius-lg);
+        padding: 1.5rem 2rem;
+        margin-bottom: 2rem;
+        color: white;
+        box-shadow: var(--shadow-medium);
+        position: relative;
+        overflow: hidden;
+    }
+
+    .page-header-modern::before {
+        content: '';
+        position: absolute;
+        top: -50%;
+        right: -10%;
+        width: 300px;
+        height: 300px;
+        background: rgba(255, 255, 255, 0.1);
+        border-radius: 50%;
+        transform: rotate(25deg);
+    }
+
+    .page-header-modern::after {
+        content: '';
+        position: absolute;
+        bottom: -50%;
+        left: -10%;
+        width: 400px;
+        height: 400px;
+        background: rgba(255, 255, 255, 0.05);
+        border-radius: 50%;
+        transform: rotate(-15deg);
+    }
+
+    .page-header-content {
+        position: relative;
+        z-index: 2;
+    }
+
+    .page-title {
+        font-size: 1.8rem;
+        font-weight: 600;
+        margin-bottom: 0.25rem;
+        color: white;
+    }
+
+    .page-subtitle {
+        font-size: 0.95rem;
+        opacity: 0.9;
+        margin: 0;
+    }
+
+    /* Boutons modernes */
+    .fk-btn {
+        padding: 0.6rem 1.2rem;
+        border-radius: var(--radius-sm);
+        font-weight: 500;
+        display: inline-flex;
+        align-items: center;
+        gap: 0.5rem;
+        transition: var(--transition-smooth);
+        border: none;
+        cursor: pointer;
+        font-size: 0.9rem;
+        text-decoration: none;
+    }
+
+    .fk-btn-primary {
+        background: var(--accent-gradient);
+        color: white;
+        box-shadow: 0 5px 15px rgba(0, 102, 204, 0.3);
+    }
+
+    .fk-btn-primary:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 10px 25px rgba(0, 102, 204, 0.4);
+    }
+
+    .fk-btn-secondary {
+        background: var(--bg-secondary);
+        color: var(--text-primary);
+        border: 1px solid var(--border-color);
+    }
+
+    .fk-btn-secondary:hover {
+        background: var(--hover-bg);
+        transform: translateY(-2px);
+        box-shadow: var(--shadow-soft);
+    }
+
+    .fk-btn-info {
+        background: var(--fk-light-blue);
+        color: white;
+    }
+
+    .fk-btn-info:hover {
+        background: var(--fk-accent);
+        transform: translateY(-2px);
+        box-shadow: var(--shadow-soft);
+    }
+
+    .fk-btn-outline {
+        background: transparent;
+        border: 2px solid var(--border-color);
+        color: var(--text-primary);
+    }
+
+    .fk-btn-outline:hover {
+        border-color: var(--fk-accent);
+        color: var(--fk-accent);
+        background: var(--hover-bg);
+    }
+
+    .fk-btn-success {
+        background: var(--fk-success);
+        color: white;
+    }
+
+    .fk-btn-success:hover {
+        background: #0f766e;
+        transform: translateY(-2px);
+        box-shadow: var(--shadow-soft);
+    }
+
+    /* Cartes modernes */
+    .fk-card {
+        background: var(--card-bg);
+        border: 1px solid var(--border-color);
+        border-radius: var(--radius-lg);
+        margin-bottom: 1.5rem;
+        overflow: hidden;
+        box-shadow: var(--shadow-soft);
+        transition: var(--transition-smooth);
+    }
+
+    .fk-card:hover {
+        box-shadow: var(--shadow-medium);
+    }
+
+    .fk-card-header {
+        background: var(--accent-gradient);
+        color: white;
+        padding: 1rem 1.5rem;
+        border-bottom: none;
+        display: flex;
+        align-items: center;
+        gap: 0.75rem;
+    }
+
+    .fk-card-header i {
+        font-size: 1.1rem;
+    }
+
+    .fk-card-header h6 {
+        margin: 0;
+        font-weight: 600;
+        font-size: 1rem;
+    }
+
+    .fk-card-header.light {
+        background: var(--bg-secondary);
+        color: var(--text-primary);
+        border-bottom: 1px solid var(--border-color);
+    }
+
+    .fk-card-body {
+        padding: 1.5rem;
+        background: var(--card-bg);
+        color: var(--text-primary);
+    }
+
+    /* Titres de section */
+    .section-title {
+        font-size: 1.1rem;
+        font-weight: 600;
+        color: var(--text-primary);
+        border-bottom: 2px solid var(--border-color);
+        padding-bottom: 0.5rem;
+        margin-bottom: 1.5rem;
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+    }
+
+    .section-title i {
+        color: var(--fk-accent);
+    }
+
+    /* Formulaires */
+    .fk-form-label {
+        font-weight: 600;
+        font-size: 0.9rem;
+        color: var(--text-primary);
+        margin-bottom: 0.25rem;
+    }
+
+    .fk-form-label .text-danger {
+        color: var(--fk-error) !important;
+        margin-left: 0.25rem;
+    }
+
+    .fk-form-control {
+        width: 100%;
+        border: 2px solid var(--border-color);
+        border-radius: var(--radius-sm);
+        padding: 0.6rem 1rem;
+        font-size: 0.95rem;
+        transition: var(--transition-smooth);
+        background: var(--bg-primary);
+        color: var(--text-primary);
+    }
+
+    .fk-form-control:focus {
+        border-color: var(--fk-accent);
+        box-shadow: 0 0 0 3px rgba(0, 102, 204, 0.1);
+        outline: none;
+    }
+
+    .fk-form-control.is-invalid {
+        border-color: var(--fk-error);
+    }
+
+    .invalid-feedback {
+        color: var(--fk-error);
+        font-size: 0.8rem;
+        margin-top: 0.25rem;
+    }
+
+    .form-text {
+        color: var(--text-muted);
+        font-size: 0.8rem;
+        margin-top: 0.25rem;
+    }
+
+    /* Select */
+    .fk-form-select {
+        width: 100%;
+        border: 2px solid var(--border-color);
+        border-radius: var(--radius-sm);
+        padding: 0.6rem 1rem;
+        font-size: 0.95rem;
+        background: var(--bg-primary);
+        color: var(--text-primary);
+        cursor: pointer;
+    }
+
+    .fk-form-select:focus {
+        border-color: var(--fk-accent);
+        outline: none;
+        box-shadow: 0 0 0 3px rgba(0, 102, 204, 0.1);
+    }
+
+    /* Checkbox */
+    .fk-form-check {
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+        cursor: pointer;
+    }
+
+    .fk-form-check input[type="checkbox"] {
+        width: 1.2rem;
+        height: 1.2rem;
+        cursor: pointer;
+        accent-color: var(--fk-accent);
+    }
+
+    /* Fichier */
+    .fk-file-input {
+        border: 2px dashed var(--border-color);
+        border-radius: var(--radius-sm);
+        padding: 1rem;
+        background: var(--bg-secondary);
+        cursor: pointer;
+        transition: var(--transition-smooth);
+    }
+
+    .fk-file-input:hover {
+        border-color: var(--fk-accent);
+        background: var(--hover-bg);
+    }
+
+    .fk-file-preview {
+        margin-top: 0.5rem;
+        padding: 0.5rem;
+        background: var(--bg-tertiary);
+        border-radius: var(--radius-sm);
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+    }
+
+    .fk-file-preview i {
+        color: var(--fk-error);
+        cursor: pointer;
+    }
+
+    .fk-file-preview i:hover {
+        color: var(--fk-error);
+        transform: scale(1.1);
+    }
+
+    /* Groupe de fichiers additionnels */
+    .fichier-group {
+        padding: 1rem;
+        border: 1px dashed var(--border-color);
+        border-radius: var(--radius-sm);
+        background: var(--bg-secondary);
+        margin-bottom: 1rem;
+        transition: var(--transition-smooth);
+    }
+
+    .fichier-group:hover {
+        background: var(--hover-bg);
+        border-color: var(--fk-accent);
+    }
+
+    .fichier-group .btn-supprimer {
+        margin-top: 0.5rem;
+        background: transparent;
+        border: 1px solid var(--fk-error);
+        color: var(--fk-error);
+        padding: 0.3rem 1rem;
+        border-radius: var(--radius-sm);
+        font-size: 0.8rem;
+        display: inline-flex;
+        align-items: center;
+        gap: 0.5rem;
+        cursor: pointer;
+        transition: var(--transition-smooth);
+    }
+
+    .fichier-group .btn-supprimer:hover {
+        background: var(--fk-error);
+        color: white;
+    }
+
+    /* Alertes */
+    .fk-alert {
+        border-radius: var(--radius-sm);
+        padding: 1rem;
+        border: none;
+        border-left: 4px solid;
+        background: var(--bg-secondary);
+        color: var(--text-primary);
+    }
+
+    .fk-alert-info {
+        border-left-color: var(--fk-accent);
+        background: rgba(0, 102, 204, 0.1);
+    }
+
+    .fk-alert-success {
+        border-left-color: var(--fk-success);
+        background: rgba(13, 148, 136, 0.1);
+    }
+
+    .fk-alert-warning {
+        border-left-color: var(--fk-warning);
+        background: rgba(245, 158, 11, 0.1);
+    }
+
+    .fk-alert-danger {
+        border-left-color: var(--fk-error);
+        background: rgba(220, 38, 38, 0.1);
+    }
+
+    /* Badges */
+    .badge-modern {
+        display: inline-block;
+        padding: 0.35rem 0.75rem;
+        border-radius: 50px;
+        font-size: 0.75rem;
+        font-weight: 600;
+        background: var(--bg-tertiary);
+        color: var(--text-secondary);
+    }
+
+    .badge-primary {
+        background: var(--fk-accent);
+        color: white;
+    }
+
+    .badge-success {
+        background: var(--fk-success);
+        color: white;
+    }
+
+    .badge-warning {
+        background: var(--fk-warning);
+        color: white;
+    }
+
+    .badge-danger {
+        background: var(--fk-error);
+        color: white;
+    }
+
+    /* Informations contextuelles */
+    .info-contextuelle {
+        background: var(--card-bg);
+        border: 1px solid var(--border-color);
+        border-radius: var(--radius-lg);
+        overflow: hidden;
+    }
+
+    .info-contextuelle-header {
+        background: var(--accent-gradient);
+        color: white;
+        padding: 1rem 1.5rem;
+    }
+
+    .info-contextuelle-header h6 {
+        margin: 0;
+        font-weight: 600;
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+    }
+
+    .info-contextuelle-body {
+        padding: 1.5rem;
+    }
+
+    .info-item {
+        margin-bottom: 1rem;
+        padding-bottom: 0.5rem;
+        border-bottom: 1px solid var(--border-color);
+    }
+
+    .info-item:last-child {
+        border-bottom: none;
+        margin-bottom: 0;
+        padding-bottom: 0;
+    }
+
+    .info-label {
+        font-size: 0.8rem;
+        color: var(--text-muted);
+        margin-bottom: 0.2rem;
+    }
+
+    .info-value {
+        font-size: 0.95rem;
+        font-weight: 600;
+        color: var(--text-primary);
+    }
+
+    /* Aide */
+    .aide-card {
+        background: var(--bg-secondary);
+        border: 1px solid var(--border-color);
+        border-radius: var(--radius-lg);
+        overflow: hidden;
+    }
+
+    .aide-header {
+        background: var(--bg-tertiary);
+        padding: 1rem 1.5rem;
+        border-bottom: 1px solid var(--border-color);
+    }
+
+    .aide-header h6 {
+        margin: 0;
+        font-weight: 600;
+        color: var(--text-primary);
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+    }
+
+    .aide-body {
+        padding: 1.5rem;
+    }
+
+    .aide-body p {
+        margin-bottom: 0.75rem;
+        font-size: 0.9rem;
+        color: var(--text-secondary);
+    }
+
+    .aide-body p:last-child {
+        margin-bottom: 0;
+    }
+
+    /* Animations */
+    @keyframes fadeIn {
+        from {
+            opacity: 0;
+            transform: translateY(20px);
+        }
+        to {
+            opacity: 1;
+            transform: translateY(0);
+        }
+    }
+
+    .animate-in {
+        animation: fadeIn 0.5s ease-out forwards;
+    }
+
+    /* Responsive */
+    @media (max-width: 768px) {
+        .page-header-modern {
+            padding: 1.5rem;
+        }
+
+        .page-title {
+            font-size: 1.5rem;
+        }
+
+        .fk-card-body {
+            padding: 1rem;
+        }
+
+        .section-title {
+            font-size: 1rem;
+        }
+
+        .row > [class*="col-"] {
+            margin-bottom: 1rem;
+        }
+    }
+</style>
+
+<div class="detail-container">
+    <!-- En-tête de page -->
+    <div class="page-header-modern animate-in">
+        <div class="page-header-content">
+            <div class="row align-items-center">
+                <div class="col">
+                    <nav aria-label="breadcrumb">
+                        <ol class="breadcrumb" style="background: transparent; margin-bottom: 0.5rem;">
+                            <li class="breadcrumb-item"><a href="{{ url_for('liste_cartographies') }}" style="color: rgba(255,255,255,0.8);">Cartographies</a></li>
+                            {% if action == 'modifier' %}
+                                <li class="breadcrumb-item"><a href="{{ url_for('detail_cartographie', id=risque.cartographie_id) }}" style="color: rgba(255,255,255,0.8);">{{ risque.cartographie.nom }}</a></li>
+                                <li class="breadcrumb-item"><a href="{{ url_for('detail_risque', id=risque.id) }}" style="color: rgba(255,255,255,0.8);">{{ risque.reference }}</a></li>
+                                <li class="breadcrumb-item active" style="color: white;">Modifier</li>
+                            {% else %}
+                                <li class="breadcrumb-item"><a href="{{ url_for('detail_cartographie', id=cartographie.id) }}" style="color: rgba(255,255,255,0.8);">{{ cartographie.nom }}</a></li>
+                                <li class="breadcrumb-item active" style="color: white;">Nouveau risque</li>
+                            {% endif %}
+                        </ol>
+                    </nav>
                     
-                    <!-- Section Informations Générales -->
-                    <div class="mb-4">
-                        <h5 class="border-bottom pb-2 mb-3">
-                            <i class="fas fa-info-circle text-primary"></i> Informations Générales
-                        </h5>
+                    <h1 class="page-title">
+                        <i class="fas fa-edit me-2"></i>
+                        {% if action == 'modifier' %}
+                            Modifier le Risque : {{ risque.reference }}
+                        {% else %}
+                            Nouveau Risque
+                        {% endif %}
+                    </h1>
+                    {% if action == 'modifier' %}
+                    <p class="page-subtitle">{{ risque.intitule }}</p>
+                    {% else %}
+                    <p class="page-subtitle">Création d'un risque dans la cartographie {{ cartographie.nom }}</p>
+                    {% endif %}
+                </div>
+                
+                <div class="col-auto">
+                    <div class="d-flex gap-2">
+                        {% if action == 'modifier' %}
+                            <a href="{{ url_for('detail_risque', id=risque.id) }}" class="fk-btn fk-btn-secondary">
+                                <i class="fas fa-arrow-left"></i> Retour
+                            </a>
+                            <a href="{{ url_for('detail_cartographie', id=risque.cartographie_id) }}" class="fk-btn fk-btn-info">
+                                <i class="fas fa-map"></i> Cartographie
+                            </a>
+                        {% else %}
+                            <a href="{{ url_for('detail_cartographie', id=cartographie.id) }}" class="fk-btn fk-btn-secondary">
+                                <i class="fas fa-arrow-left"></i> Retour
+                            </a>
+                        {% endif %}
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="row">
+        <!-- Colonne principale - Formulaire -->
+        <div class="col-md-8">
+            <div class="fk-card animate-in">
+                <div class="fk-card-header">
+                    <i class="fas fa-info-circle"></i>
+                    <h6 class="mb-0">{% if action == 'modifier' %}Modification du Risque{% else %}Création d'un Nouveau Risque{% endif %}</h6>
+                </div>
+                <div class="fk-card-body">
+                    <form method="POST" enctype="multipart/form-data" id="risqueForm">
+                        {{ form.hidden_tag() }}
+                        
+                        <!-- Section Informations Générales -->
+                        <div class="section-title">
+                            <i class="fas fa-info-circle"></i> Informations Générales
+                        </div>
                         
                         <div class="row mb-3">
                             <div class="col-md-6">
-                                {{ form.intitule.label(class="form-label fw-bold") }}
-                                {{ form.intitule(class="form-control" + (" is-invalid" if form.intitule.errors else "")) }}
+                                <label class="fk-form-label">{{ form.intitule.label }} <span class="text-danger">*</span></label>
+                                {{ form.intitule(class="fk-form-control" + (" is-invalid" if form.intitule.errors else "")) }}
                                 {% if form.intitule.errors %}
                                     <div class="invalid-feedback">
                                         {% for error in form.intitule.errors %}
@@ -63,9 +675,9 @@
                                 <div class="form-text">Titre court et descriptif du risque</div>
                             </div>
                             <div class="col-md-6">
-                                {{ form.categorie.label(class="form-label fw-bold") }}
+                                <label class="fk-form-label">{{ form.categorie.label }} <span class="text-danger">*</span></label>
                                 {% if categories_liste and categories_liste.valeurs %}
-                                    <select class="form-select" name="categorie" id="categorie" required>
+                                    <select class="fk-form-select" name="categorie" id="categorie" required>
                                         <option value="">Sélectionnez une catégorie</option>
                                         {% for item in categories_liste.valeurs %}
                                         <option value="{{ item.valeur }}" 
@@ -75,7 +687,7 @@
                                         {% endfor %}
                                     </select>
                                 {% else %}
-                                    {{ form.categorie(class="form-select" + (" is-invalid" if form.categorie.errors else "")) }}
+                                    {{ form.categorie(class="fk-form-select" + (" is-invalid" if form.categorie.errors else "")) }}
                                 {% endif %}
                                 {% if form.categorie.errors %}
                                     <div class="invalid-feedback">
@@ -89,9 +701,9 @@
 
                         <div class="row mb-3">
                             <div class="col-md-6">
-                                {{ form.type_risque.label(class="form-label fw-bold") }}
+                                <label class="fk-form-label">{{ form.type_risque.label }}</label>
                                 {% if types_risque_liste and types_risque_liste.valeurs %}
-                                    <select class="form-select" name="type_risque" id="type_risque">
+                                    <select class="fk-form-select" name="type_risque" id="type_risque">
                                         <option value="">Sélectionnez un type</option>
                                         {% for item in types_risque_liste.valeurs %}
                                         <option value="{{ item.valeur }}" 
@@ -101,7 +713,7 @@
                                         {% endfor %}
                                     </select>
                                 {% else %}
-                                    {{ form.type_risque(class="form-control" + (" is-invalid" if form.type_risque.errors else "")) }}
+                                    {{ form.type_risque(class="fk-form-control" + (" is-invalid" if form.type_risque.errors else "")) }}
                                 {% endif %}
                                 {% if form.type_risque.errors %}
                                     <div class="invalid-feedback">
@@ -112,8 +724,8 @@
                                 {% endif %}
                             </div>
                             <div class="col-md-6">
-                                {{ form.processus_concerne.label(class="form-label fw-bold") }}
-                                {{ form.processus_concerne(class="form-control" + (" is-invalid" if form.processus_concerne.errors else "")) }}
+                                <label class="fk-form-label">{{ form.processus_concerne.label }}</label>
+                                {{ form.processus_concerne(class="fk-form-control" + (" is-invalid" if form.processus_concerne.errors else "")) }}
                                 {% if form.processus_concerne.errors %}
                                     <div class="invalid-feedback">
                                         {% for error in form.processus_concerne.errors %}
@@ -128,27 +740,27 @@
                         <!-- Champs personnalisés de la section 'general' -->
                         {% for champ in champs_configures if champ.section == 'general' and champ.est_actif %}
                         <div class="mb-3">
-                            <label class="form-label fw-bold">
+                            <label class="fk-form-label">
                                 {{ champ.nom_affichage }}
                                 {% if champ.est_obligatoire %}<span class="text-danger">*</span>{% endif %}
                             </label>
                             
                             {% if champ.type_champ == 'texte' %}
                                 <input type="text" 
-                                       class="form-control" 
+                                       class="fk-form-control" 
                                        name="champ_{{ champ.nom_technique }}"
                                        value="{{ valeurs_existantes.get(champ.nom_technique, '') }}"
                                        {% if champ.est_obligatoire %}required{% endif %}
                                        {% if champ.regex_validation %}pattern="{{ champ.regex_validation }}"{% endif %}>
                             
                             {% elif champ.type_champ == 'textarea' %}
-                                <textarea class="form-control" 
+                                <textarea class="fk-form-control" 
                                           name="champ_{{ champ.nom_technique }}"
                                           rows="3"
                                           {% if champ.est_obligatoire %}required{% endif %}>{{ valeurs_existantes.get(champ.nom_technique, '') }}</textarea>
                             
                             {% elif champ.type_champ == 'select' %}
-                                <select class="form-select" 
+                                <select class="fk-form-select" 
                                         name="champ_{{ champ.nom_technique }}"
                                         {% if champ.est_obligatoire %}required{% endif %}>
                                     <option value="">Sélectionnez...</option>
@@ -163,7 +775,7 @@
                                 </select>
                             
                             {% elif champ.type_champ == 'checkbox' %}
-                                <div class="form-check">
+                                <div class="fk-form-check">
                                     <input class="form-check-input" 
                                            type="checkbox" 
                                            name="champ_{{ champ.nom_technique }}"
@@ -174,21 +786,30 @@
                             
                             {% elif champ.type_champ == 'date' %}
                                 <input type="date" 
-                                       class="form-control" 
+                                       class="fk-form-control" 
                                        name="champ_{{ champ.nom_technique }}"
                                        value="{{ valeurs_existantes.get(champ.nom_technique, '') }}"
                                        {% if champ.est_obligatoire %}required{% endif %}>
                             
                             {% elif champ.type_champ == 'fichier' %}
+                                <div class="fk-file-input" onclick="document.getElementById('fichier_{{ champ.nom_technique }}').click()">
+                                    <i class="fas fa-cloud-upload-alt me-2"></i>
+                                    Cliquez pour sélectionner un fichier...
+                                </div>
                                 <input type="file" 
-                                       class="form-control" 
+                                       id="fichier_{{ champ.nom_technique }}"
+                                       class="d-none" 
                                        name="fichier_{{ champ.nom_technique }}"
                                        accept="{% for ext in config_fichiers.extensions %}.{{ ext }}{% if not loop.last %},{% endif %}{% endfor %}">
-                                       {% if valeurs_existantes.get(champ.nom_technique) %}
-                                <div class="mt-2">
-                                    <small class="text-muted">
-                                        Fichier actuel : {{ valeurs_existantes.get(champ.nom_technique) }}
-                                    </small>
+                                {% if valeurs_existantes.get(champ.nom_technique) %}
+                                <div class="fk-file-preview">
+                                    <span>
+                                        <i class="fas fa-file me-2"></i>
+                                        {{ valeurs_existantes.get(champ.nom_technique) }}
+                                    </span>
+                                    <i class="fas fa-times" onclick="this.parentElement.remove(); document.getElementById('supprimer_{{ champ.nom_technique }}').value = 'true'"></i>
+                                    <input type="hidden" name="supprimer_fichier_{{ champ.nom_technique }}" 
+                                           id="supprimer_{{ champ.nom_technique }}" value="false">
                                 </div>
                                 {% endif %}
                             {% endif %}
@@ -198,17 +819,15 @@
                             {% endif %}
                         </div>
                         {% endfor %}
-                    </div>
 
-                    <!-- Section Analyse du Risque -->
-                    <div class="mb-4">
-                        <h5 class="border-bottom pb-2 mb-3">
-                            <i class="fas fa-search text-warning"></i> Analyse du Risque
-                        </h5>
+                        <!-- Section Analyse du Risque -->
+                        <div class="section-title mt-4">
+                            <i class="fas fa-search" style="color: var(--fk-warning);"></i> Analyse du Risque
+                        </div>
 
                         <div class="mb-3">
-                            {{ form.description.label(class="form-label fw-bold") }}
-                            {{ form.description(class="form-control" + (" is-invalid" if form.description.errors else ""), rows=4) }}
+                            <label class="fk-form-label">{{ form.description.label }}</label>
+                            {{ form.description(class="fk-form-control" + (" is-invalid" if form.description.errors else ""), rows=4) }}
                             {% if form.description.errors %}
                                 <div class="invalid-feedback">
                                     {% for error in form.description.errors %}
@@ -220,8 +839,8 @@
                         </div>
 
                         <div class="mb-3">
-                            {{ form.cause_racine.label(class="form-label fw-bold") }}
-                            {{ form.cause_racine(class="form-control" + (" is-invalid" if form.cause_racine.errors else ""), rows=3) }}
+                            <label class="fk-form-label">{{ form.cause_racine.label }}</label>
+                            {{ form.cause_racine(class="fk-form-control" + (" is-invalid" if form.cause_racine.errors else ""), rows=3) }}
                             {% if form.cause_racine.errors %}
                                 <div class="invalid-feedback">
                                     {% for error in form.cause_racine.errors %}
@@ -233,8 +852,8 @@
                         </div>
 
                         <div class="mb-3">
-                            {{ form.consequences.label(class="form-label fw-bold") }}
-                            {{ form.consequences(class="form-control" + (" is-invalid" if form.consequences.errors else ""), rows=3) }}
+                            <label class="fk-form-label">{{ form.consequences.label }}</label>
+                            {{ form.consequences(class="fk-form-control" + (" is-invalid" if form.consequences.errors else ""), rows=3) }}
                             {% if form.consequences.errors %}
                                 <div class="invalid-feedback">
                                     {% for error in form.consequences.errors %}
@@ -248,19 +867,19 @@
                         <!-- Champs personnalisés de la section 'analyse' -->
                         {% for champ in champs_configures if champ.section == 'analyse' and champ.est_actif %}
                         <div class="mb-3">
-                            <label class="form-label fw-bold">
+                            <label class="fk-form-label">
                                 {{ champ.nom_affichage }}
                                 {% if champ.est_obligatoire %}<span class="text-danger">*</span>{% endif %}
                             </label>
                             
                             {% if champ.type_champ == 'textarea' %}
-                                <textarea class="form-control" 
+                                <textarea class="fk-form-control" 
                                           name="champ_{{ champ.nom_technique }}"
                                           rows="3"
                                           {% if champ.est_obligatoire %}required{% endif %}>{{ valeurs_existantes.get(champ.nom_technique, '') }}</textarea>
                             
                             {% elif champ.type_champ == 'select' %}
-                                <select class="form-select" 
+                                <select class="fk-form-select" 
                                         name="champ_{{ champ.nom_technique }}"
                                         {% if champ.est_obligatoire %}required{% endif %}>
                                     <option value="">Sélectionnez...</option>
@@ -275,7 +894,7 @@
                                 </select>
                             
                             {% elif champ.type_champ == 'multiselect' %}
-                                <select class="form-select" 
+                                <select class="fk-form-select" 
                                         name="champ_{{ champ.nom_technique }}" 
                                         multiple
                                         size="4"
@@ -289,10 +908,10 @@
                                         {% endfor %}
                                     {% endif %}
                                 </select>
-                                <small class="form-text text-muted">Maintenez Ctrl (Cmd sur Mac) pour sélectionner plusieurs valeurs</small>
+                                <small class="form-text">Maintenez Ctrl (Cmd sur Mac) pour sélectionner plusieurs valeurs</small>
                             
                             {% elif champ.type_champ == 'checkbox' %}
-                                <div class="form-check">
+                                <div class="fk-form-check">
                                     <input class="form-check-input" 
                                            type="checkbox" 
                                            name="champ_{{ champ.nom_technique }}"
@@ -307,52 +926,52 @@
                             {% endif %}
                         </div>
                         {% endfor %}
-                    </div>
 
-                    <!-- Section Documentation -->
-                    {% if champs_configures|selectattr('section', 'equalto', 'documentation')|selectattr('est_actif')|list %}
-                    <div class="mb-4">
-                        <h5 class="border-bottom pb-2 mb-3">
-                            <i class="fas fa-file text-info"></i> Documentation
-                        </h5>
+                        <!-- Section Documentation -->
+                        {% if champs_configures|selectattr('section', 'equalto', 'documentation')|selectattr('est_actif')|list %}
+                        <div class="section-title mt-4">
+                            <i class="fas fa-file" style="color: var(--fk-success);"></i> Documentation
+                        </div>
                         
                         {% for champ in champs_configures if champ.section == 'documentation' and champ.est_actif %}
                         <div class="mb-3">
-                            <label class="form-label fw-bold">
+                            <label class="fk-form-label">
                                 {{ champ.nom_affichage }}
                                 {% if champ.est_obligatoire %}<span class="text-danger">*</span>{% endif %}
                             </label>
                             
                             {% if champ.type_champ == 'fichier' %}
+                                <div class="fk-file-input" onclick="document.getElementById('fichier_doc_{{ champ.nom_technique }}').click()">
+                                    <i class="fas fa-cloud-upload-alt me-2"></i>
+                                    Cliquez pour sélectionner un fichier...
+                                </div>
                                 <input type="file" 
-                                       class="form-control" 
+                                       id="fichier_doc_{{ champ.nom_technique }}"
+                                       class="d-none" 
                                        name="fichier_{{ champ.nom_technique }}"
-                                       accept="{{ config_fichiers.extensions|map('concat', '.')|join(',') }}"
+                                       accept="{% for ext in config_fichiers.extensions %}.{{ ext }}{% if not loop.last %},{% endif %}{% endfor %}"
                                        {% if champ.est_obligatoire and not valeurs_existantes.get(champ.nom_technique) %}required{% endif %}>
                                 
                                 {% if valeurs_existantes.get(champ.nom_technique) %}
-                                <div class="mt-2">
-                                    <div class="alert alert-info p-2">
+                                <div class="fk-file-preview">
+                                    <span>
                                         <i class="fas fa-file me-2"></i>
-                                        Fichier actuel : {{ valeurs_existantes.get(champ.nom_technique) }}
-                                        <a href="#" class="float-end text-decoration-none" 
-                                           onclick="event.preventDefault(); document.getElementById('supprimer_{{ champ.nom_technique }}').value = 'true'; this.parentElement.style.display = 'none';">
-                                            <i class="fas fa-times text-danger"></i>
-                                        </a>
-                                        <input type="hidden" name="supprimer_fichier_{{ champ.nom_technique }}" 
-                                               id="supprimer_{{ champ.nom_technique }}" value="false">
-                                    </div>
+                                        {{ valeurs_existantes.get(champ.nom_technique) }}
+                                    </span>
+                                    <i class="fas fa-times" onclick="this.parentElement.remove(); document.getElementById('supprimer_doc_{{ champ.nom_technique }}').value = 'true'"></i>
+                                    <input type="hidden" name="supprimer_fichier_{{ champ.nom_technique }}" 
+                                           id="supprimer_doc_{{ champ.nom_technique }}" value="false">
                                 </div>
                                 {% endif %}
                             
                             {% elif champ.type_champ == 'textarea' %}
-                                <textarea class="form-control" 
+                                <textarea class="fk-form-control" 
                                           name="champ_{{ champ.nom_technique }}"
                                           rows="3"
                                           {% if champ.est_obligatoire %}required{% endif %}>{{ valeurs_existantes.get(champ.nom_technique, '') }}</textarea>
                             
                             {% elif champ.type_champ == 'select' %}
-                                <select class="form-select" 
+                                <select class="fk-form-select" 
                                         name="champ_{{ champ.nom_technique }}"
                                         {% if champ.est_obligatoire %}required{% endif %}>
                                     <option value="">Sélectionnez...</option>
@@ -372,27 +991,30 @@
                             {% endif %}
                         </div>
                         {% endfor %}
-                    </div>
-                    {% endif %}
+                        {% endif %}
 
-                    <!-- Section Fichiers additionnels -->
-                    <div class="mb-4">
-                        <h5 class="border-bottom pb-2 mb-3">
-                            <i class="fas fa-paperclip text-success"></i> Fichiers additionnels
-                        </h5>
+                        <!-- Section Fichiers additionnels -->
+                        <div class="section-title mt-4">
+                            <i class="fas fa-paperclip" style="color: var(--fk-success);"></i> Fichiers additionnels
+                        </div>
                         
                         <div id="fichiers-container">
                             {% for i in range(3) %}
-                            <div class="mb-3 fichier-group">
+                            <div class="fichier-group">
                                 <div class="row g-2">
                                     <div class="col-md-8">
+                                        <div class="fk-file-input" onclick="document.getElementById('fichier_add_{{ i }}').click()">
+                                            <i class="fas fa-cloud-upload-alt me-2"></i>
+                                            Sélectionner un fichier...
+                                        </div>
                                         <input type="file" 
-                                               class="form-control" 
+                                               id="fichier_add_{{ i }}"
+                                               class="d-none" 
                                                name="fichier_additionnel_{{ i }}"
                                                accept="{% for ext in config_fichiers.extensions %}.{{ ext }}{% if not loop.last %},{% endif %}{% endfor %}">
-                                            </div>
+                                    </div>
                                     <div class="col-md-4">
-                                        <select class="form-select" name="categorie_fichier_{{ i }}">
+                                        <select class="fk-form-select" name="categorie_fichier_{{ i }}">
                                             <option value="document">Document</option>
                                             <option value="image">Image</option>
                                             <option value="analyse">Analyse</option>
@@ -402,7 +1024,7 @@
                                 </div>
                                 <div class="mt-1">
                                     <input type="text" 
-                                           class="form-control form-control-sm" 
+                                           class="fk-form-control" 
                                            name="description_fichier_{{ i }}"
                                            placeholder="Description du fichier...">
                                 </div>
@@ -410,99 +1032,130 @@
                             {% endfor %}
                         </div>
                         
-                        <button type="button" class="btn btn-sm btn-outline-success" id="ajouter-fichier">
+                        <button type="button" class="fk-btn fk-btn-success" id="ajouter-fichier" style="margin-top: 0.5rem;">
                             <i class="fas fa-plus"></i> Ajouter un autre fichier
                         </button>
-                    </div>
 
-                    <div class="d-grid gap-2 d-md-flex justify-content-md-end mt-4">
-                        {% if action == 'modifier' %}
-                            <a href="{{ url_for('detail_risque', id=risque.id) }}" class="btn btn-secondary me-md-2">
-                                <i class="fas fa-times"></i> Annuler
-                            </a>
-                        {% else %}
-                            <a href="{{ url_for('detail_cartographie', id=cartographie.id) }}" class="btn btn-secondary me-md-2">
-                                <i class="fas fa-times"></i> Annuler
-                            </a>
-                        {% endif %}
-                        <button type="submit" class="btn btn-primary">
-                            <i class="fas fa-save"></i> 
+                        <div class="d-flex justify-content-end gap-2 mt-4">
                             {% if action == 'modifier' %}
-                                Modifier le Risque
+                                <a href="{{ url_for('detail_risque', id=risque.id) }}" class="fk-btn fk-btn-secondary">
+                                    <i class="fas fa-times"></i> Annuler
+                                </a>
                             {% else %}
-                                Créer le Risque
+                                <a href="{{ url_for('detail_cartographie', id=cartographie.id) }}" class="fk-btn fk-btn-secondary">
+                                    <i class="fas fa-times"></i> Annuler
+                                </a>
                             {% endif %}
-                        </button>
-                    </div>
-                </form>
+                            <button type="submit" class="fk-btn fk-btn-primary">
+                                <i class="fas fa-save"></i> 
+                                {% if action == 'modifier' %}
+                                    Modifier le Risque
+                                {% else %}
+                                    Créer le Risque
+                                {% endif %}
+                            </button>
+                        </div>
+                    </form>
+                </div>
             </div>
         </div>
-    </div>
 
-    <div class="col-md-4">
-        <!-- Informations contextuelles -->
-        <div class="card shadow mb-4">
-            <div class="card-header bg-info text-white">
-                <h6 class="mb-0"><i class="fas fa-info-circle"></i> Informations</h6>
-            </div>
-            <div class="card-body">
-                {% if action == 'modifier' %}
-                    <h6>Risque existant</h6>
-                    <p class="small text-muted">
-                        Vous modifiez le risque <strong>{{ risque.reference }}</strong>.
-                        Toutes les modifications seront tracées dans l'historique.
-                    </p>
-                    
-                    <div class="mt-3">
-                        <strong>Cartographie :</strong>
-                        <br>
-                        <a href="{{ url_for('detail_cartographie', id=risque.cartographie_id) }}" class="text-decoration-none">
-                            {{ risque.cartographie.nom }}
-                        </a>
-                    </div>
-                    
-                    {% if risque.evaluations %}
-                    <div class="mt-2">
-                        <strong>Évaluations :</strong>
-                        <br>
-                        <span class="badge bg-primary">{{ risque.evaluations|length }}</span> évaluation(s)
-                    </div>
+        <!-- Colonne de droite - Informations et aide -->
+        <div class="col-md-4">
+            <!-- Informations contextuelles -->
+            <div class="info-contextuelle animate-in">
+                <div class="info-contextuelle-header">
+                    <h6 class="mb-0">
+                        <i class="fas fa-info-circle"></i>
+                        Informations
+                    </h6>
+                </div>
+                <div class="info-contextuelle-body">
+                    {% if action == 'modifier' %}
+                        <div class="info-item">
+                            <div class="info-label">Risque existant</div>
+                            <div class="info-value">{{ risque.reference }}</div>
+                        </div>
+                        
+                        <div class="info-item">
+                            <div class="info-label">Cartographie</div>
+                            <div class="info-value">
+                                <a href="{{ url_for('detail_cartographie', id=risque.cartographie_id) }}" class="text-decoration-none">
+                                    {{ risque.cartographie.nom }}
+                                </a>
+                            </div>
+                        </div>
+                        
+                        {% if risque.evaluations %}
+                        <div class="info-item">
+                            <div class="info-label">Évaluations</div>
+                            <div class="info-value">
+                                <span class="badge-modern badge-primary">{{ risque.evaluations|length }}</span> évaluation(s)
+                            </div>
+                        </div>
+                        {% endif %}
+                        
+                        <div class="info-item">
+                            <div class="info-label">Créé le</div>
+                            <div class="info-value">{{ risque.created_at.strftime('%d/%m/%Y à %H:%M') }}</div>
+                        </div>
+                        
+                    {% else %}
+                        <div class="info-item">
+                            <div class="info-label">Nouveau risque</div>
+                            <div class="info-value">Création en cours</div>
+                        </div>
+                        
+                        <div class="info-item">
+                            <div class="info-label">Cartographie</div>
+                            <div class="info-value">{{ cartographie.nom }}</div>
+                        </div>
+                        
+                        <div class="info-item">
+                            <div class="info-label">Direction</div>
+                            <div class="info-value">{{ cartographie.direction.nom }}</div>
+                        </div>
+                        
+                        {% if cartographie.service %}
+                        <div class="info-item">
+                            <div class="info-label">Service</div>
+                            <div class="info-value">{{ cartographie.service.nom }}</div>
+                        </div>
+                        {% endif %}
+                        
+                        <div class="fk-alert fk-alert-info mt-3">
+                            <i class="fas fa-lightbulb me-2"></i>
+                            <strong>Conseil :</strong> Une fois créé, vous pourrez évaluer ce risque et lui associer des indicateurs KRI.
+                        </div>
                     {% endif %}
-                    
-                    <div class="mt-2">
-                        <strong>Créé le :</strong>
-                        <br>
-                        <small class="text-muted">{{ risque.created_at.strftime('%d/%m/%Y à %H:%M') }}</small>
-                    </div>
-                    
-                {% else %}
-                    <h6>Nouveau risque</h6>
-                    <p class="small text-muted">
-                        Vous créez un nouveau risque dans la cartographie 
-                        <strong>{{ cartographie.nom }}</strong>.
-                    </p>
-                    
-                    <div class="alert alert-info mt-3">
-                        <small>
-                            <i class="fas fa-lightbulb"></i> 
-                            <strong>Conseil :</strong> Une fois créé, vous pourrez évaluer 
-                            ce risque et lui associer des indicateurs KRI.
-                        </small>
-                    </div>
-                {% endif %}
+                </div>
             </div>
-        </div>
 
-        <!-- Aide à la saisie -->
-        <div class="card shadow">
-            <div class="card-header bg-light">
-                <h6 class="mb-0"><i class="fas fa-question-circle"></i> Aide</h6>
-            </div>
-            <div class="card-body">
-                <div class="small">
-                    <p><strong>Champs obligatoires :</strong> Les champs marqués d'un * sont obligatoires.</p>
-                    <p><strong>Fichiers :</strong> Formats autorisés : {{ config_fichiers.extensions|join(', ') }} (max {{ config_fichiers.taille_max_mo }} Mo)</p>
-                    <p><strong>Validation :</strong> Certains champs peuvent avoir des règles de validation spécifiques.</p>
+            <!-- Aide à la saisie -->
+            <div class="aide-card mt-4 animate-in">
+                <div class="aide-header">
+                    <h6 class="mb-0">
+                        <i class="fas fa-question-circle"></i>
+                        Aide
+                    </h6>
+                </div>
+                <div class="aide-body">
+                    <p>
+                        <i class="fas fa-asterisk text-danger me-1" style="font-size: 0.6rem;"></i>
+                        <strong>Champs obligatoires :</strong> Les champs marqués d'une étoile rouge sont obligatoires.
+                    </p>
+                    <p>
+                        <i class="fas fa-file me-1"></i>
+                        <strong>Fichiers :</strong> Formats autorisés : {{ config_fichiers.extensions|join(', ') }} (max {{ config_fichiers.taille_max_mo }} Mo)
+                    </p>
+                    <p>
+                        <i class="fas fa-check-circle me-1"></i>
+                        <strong>Validation :</strong> Certains champs peuvent avoir des règles de validation spécifiques.
+                    </p>
+                    <p>
+                        <i class="fas fa-lightbulb me-1"></i>
+                        <strong>Astuce :</strong> Vous pouvez ajouter plusieurs fichiers additionnels en cliquant sur le bouton vert.
+                    </p>
                 </div>
             </div>
         </div>
@@ -517,17 +1170,22 @@ document.addEventListener('DOMContentLoaded', function() {
     document.getElementById('ajouter-fichier').addEventListener('click', function() {
         const container = document.getElementById('fichiers-container');
         const newGroup = document.createElement('div');
-        newGroup.className = 'mb-3 fichier-group';
+        newGroup.className = 'fichier-group';
         newGroup.innerHTML = `
             <div class="row g-2">
                 <div class="col-md-8">
+                    <div class="fk-file-input" onclick="document.getElementById('fichier_add_${fichierCounter}').click()">
+                        <i class="fas fa-cloud-upload-alt me-2"></i>
+                        Sélectionner un fichier...
+                    </div>
                     <input type="file" 
-                           class="form-control" 
+                           id="fichier_add_${fichierCounter}"
+                           class="d-none" 
                            name="fichier_additionnel_${fichierCounter}"
                            accept="{% for ext in config_fichiers.extensions %}.{{ ext }}{% if not loop.last %},{% endif %}{% endfor %}">
                 </div>
                 <div class="col-md-4">
-                    <select class="form-select" name="categorie_fichier_${fichierCounter}">
+                    <select class="fk-form-select" name="categorie_fichier_${fichierCounter}">
                         <option value="document">Document</option>
                         <option value="image">Image</option>
                         <option value="analyse">Analyse</option>
@@ -537,11 +1195,11 @@ document.addEventListener('DOMContentLoaded', function() {
             </div>
             <div class="mt-1">
                 <input type="text" 
-                       class="form-control form-control-sm" 
+                       class="fk-form-control" 
                        name="description_fichier_${fichierCounter}"
                        placeholder="Description du fichier...">
             </div>
-            <button type="button" class="btn btn-sm btn-outline-danger mt-1 supprimer-fichier">
+            <button type="button" class="btn-supprimer" onclick="this.closest('.fichier-group').remove()">
                 <i class="fas fa-times"></i> Supprimer
             </button>
         `;
@@ -550,23 +1208,16 @@ document.addEventListener('DOMContentLoaded', function() {
         fichierCounter++;
     });
     
-    // Délégation d'événement pour les boutons de suppression
-    document.getElementById('fichiers-container').addEventListener('click', function(e) {
-        if (e.target.closest('.supprimer-fichier')) {
-            e.target.closest('.fichier-group').remove();
-        }
-    });
-    
     // Validation des fichiers
     document.getElementById('risqueForm').addEventListener('submit', function(e) {
         const fileInputs = this.querySelectorAll('input[type="file"]');
         const maxSize = {{ config_fichiers.taille_max_mo }} * 1024 * 1024; // Convertir en octets
+        const allowedExtensions = {{ config_fichiers.extensions|tojson }};
         
         for (const input of fileInputs) {
             if (input.files.length > 0) {
                 const file = input.files[0];
                 const extension = file.name.split('.').pop().toLowerCase();
-                const allowedExtensions = {{ config_fichiers.extensions|tojson }};
                 
                 // Vérifier l'extension
                 if (!allowedExtensions.includes(extension)) {
@@ -586,20 +1237,28 @@ document.addEventListener('DOMContentLoaded', function() {
             }
         }
     });
+    
+    // Gestion des clics sur les zones de fichiers
+    document.querySelectorAll('.fk-file-input').forEach(element => {
+        element.addEventListener('click', function() {
+            const fileInput = this.nextElementSibling;
+            if (fileInput && fileInput.type === 'file') {
+                fileInput.click();
+            }
+        });
+    });
+    
+    // Afficher le nom du fichier sélectionné
+    document.querySelectorAll('input[type="file"]').forEach(input => {
+        input.addEventListener('change', function() {
+            if (this.files.length > 0) {
+                const previewDiv = this.previousElementSibling;
+                if (previewDiv && previewDiv.classList.contains('fk-file-input')) {
+                    previewDiv.innerHTML = `<i class="fas fa-check me-2"></i>${this.files[0].name}`;
+                }
+            }
+        });
+    });
 });
 </script>
-
-<style>
-.fichier-group {
-    padding: 10px;
-    border: 1px dashed #dee2e6;
-    border-radius: 5px;
-    background-color: #f8f9fa;
-}
-
-.fichier-group:hover {
-    background-color: #e9ecef;
-    border-color: #adb5bd;
-}
-</style>
 {% endblock %}
