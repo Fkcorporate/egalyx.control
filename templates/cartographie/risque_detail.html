@@ -1,1043 +1,1763 @@
 {% extends "base.html" %}
 
 {% block content %}
-<div class="d-flex justify-content-between flex-wrap flex-md-nowrap align-items-center pt-3 pb-2 mb-3 border-bottom">
-    <h1 class="h2">
-        <i class="fas fa-exclamation-triangle"></i> Fiche du Risque : {{ risque.reference }}
-        {% for champ in champs_par_section.general if champ.nom_technique == 'priorite' and champ.get_valeur() == 'haute' %}
-            <span class="badge bg-danger ms-2">Haute priorité</span>
-        {% endfor %}
-    </h1>
-    <div class="btn-toolbar mb-2 mb-md-0">
-        <a href="{{ url_for('detail_cartographie', id=risque.cartographie_id) }}" class="btn btn-secondary me-2">
-            <i class="fas fa-arrow-left"></i> Retour à la cartographie
-        </a>
-        <a href="{{ url_for('evaluer_risque_triphase', id=risque.id) }}" class="btn btn-primary me-2">
-            <i class="fas fa-chart-bar"></i> Évaluer
-        </a>
-        {% if not risque.kri %}
-        <a href="{{ url_for('nouveau_kri', risque_id=risque.id) }}" class="btn btn-success me-2">
-            <i class="fas fa-chart-line"></i> Créer KRI
-        </a>
-        {% endif %}
-        <a href="{{ url_for('modifier_risque', id=risque.id) }}" class="btn btn-outline-warning me-2">
-            <i class="fas fa-edit"></i> Modifier
-        </a>
-        
-        <!-- Bouton pour ajouter des éléments -->
-        {% if current_user.has_permission('can_manage_risks') or risque.created_by == current_user.id %}
-        <div class="btn-group" role="group">
-            <button type="button" class="btn btn-outline-success dropdown-toggle" data-bs-toggle="dropdown">
-                <i class="fas fa-plus"></i> Ajouter
-            </button>
-            <ul class="dropdown-menu">
-                <li>
-                    <a class="dropdown-item" href="#" data-bs-toggle="modal" data-bs-target="#modalAjoutChamp">
-                        <i class="fas fa-tag me-2"></i>Champ personnalisé
-                    </a>
-                </li>
-                <li>
-                    <a class="dropdown-item" href="#" data-bs-toggle="modal" data-bs-target="#modalAjoutFichier">
-                        <i class="fas fa-file-upload me-2"></i>Fichier
-                    </a>
-                </li>
-                <li><hr class="dropdown-divider"></li>
-                <li>
-                    <form action="{{ url_for('nouvelle_evaluation_risque', id=risque.id) }}" method="post" class="d-inline">
-                        <button type="submit" class="dropdown-item">
-                            <i class="fas fa-redo me-2"></i>Nouvelle évaluation
-                        </button>
-                    </form>
-                </li>
-            </ul>
-        </div>
-        {% endif %}
-    </div>
-</div>
+<style>
+    /* ============================================
+       STYLES GÉNÉRAUX - DESIGN ÉLÉGANT & PROFESSIONNEL
+       MÊME STYLE QUE DETAIL_AUDIT.HTML
+       ============================================ */
+    :root {
+        --primary: #1e3a8a;
+        --primary-light: #2563eb;
+        --primary-soft: #3b82f6;
+        --primary-pale: #dbeafe;
+        --primary-bg: #eff6ff;
+        --success: #10b981;
+        --warning: #f59e0b;
+        --danger: #ef4444;
+        --info: #3b82f6;
+        --dark: #1e293b;
+        --gray: #64748b;
+        --light: #f8fafc;
+        --border: #e2e8f0;
+    }
 
-<!-- Formulaire de modification de référence -->
-<div class="card mb-4">
-    <div class="card-header bg-info text-white">
-        <h6 class="mb-0"><i class="fas fa-tag me-2"></i>Référence du Risque</h6>
-    </div>
-    <div class="card-body">
-        <form action="{{ url_for('modifier_reference_risque', id=risque.id) }}" method="post" class="row g-3 align-items-center">
-            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-            <div class="col-md-3">
-                <label for="reference" class="form-label fw-bold">Référence :</label>
-                <input type="text" class="form-control" id="reference" name="reference" 
-                       value="{{ risque.reference }}" required maxlength="50" pattern="[A-Za-z0-9\-_]+"
-                       title="Utilisez uniquement des lettres, chiffres, tirets et underscores">
-            </div>
-            <div class="col-md-6">
-                <small class="text-muted">
-                    <i class="fas fa-info-circle"></i> Cette référence sera affichée sur les matrices de risques. 
-                    Utilisez un nom abrégé pour identifier facilement le risque (ex: RISQ-001, FIN-IMP, OP-SECUR).
-                </small>
-            </div>
-            <div class="col-md-3">
-                <button type="submit" class="btn btn-primary w-100">
-                    <i class="fas fa-save me-1"></i>Modifier la référence
-                </button>
-            </div>
-        </form>
-    </div>
-</div>
+    /* En-tête de page */
+    .page-header-modern {
+        background: linear-gradient(135deg, #1e3a8a 0%, #2563eb 100%);
+        border-radius: 0 0 20px 20px;
+        padding: 30px 0;
+        margin: -1.5rem -1.5rem 2rem -1.5rem;
+        color: white;
+        box-shadow: 0 20px 40px rgba(37, 99, 235, 0.2);
+        position: relative;
+        overflow: hidden;
+    }
 
-<div class="row">
-    <!-- Colonne de gauche - Informations générales et analyse -->
-    <div class="col-md-6">
-        <!-- Informations générales -->
-        <div class="card shadow mb-4">
-            <div class="card-header bg-primary text-white d-flex justify-content-between align-items-center">
-                <h6 class="mb-0"><i class="fas fa-info-circle"></i> Informations Générales</h6>
-                <button class="btn btn-sm btn-light" type="button" data-bs-toggle="collapse" 
-                        data-bs-target="#sectionGeneral" aria-expanded="true">
-                    <i class="fas fa-chevron-down"></i>
-                </button>
+    .page-header-modern::before {
+        content: '';
+        position: absolute;
+        top: -50%;
+        right: -10%;
+        width: 300px;
+        height: 300px;
+        background: rgba(255, 255, 255, 0.1);
+        border-radius: 50%;
+        transform: rotate(25deg);
+    }
+
+    .page-header-modern::after {
+        content: '';
+        position: absolute;
+        bottom: -50%;
+        left: -10%;
+        width: 400px;
+        height: 400px;
+        background: rgba(255, 255, 255, 0.05);
+        border-radius: 50%;
+        transform: rotate(-15deg);
+    }
+
+    .page-header-modern .container-fluid {
+        position: relative;
+        z-index: 2;
+    }
+
+    .header-icon {
+        width: 60px;
+        height: 60px;
+        background: rgba(255, 255, 255, 0.2);
+        border-radius: 15px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 28px;
+        color: white;
+    }
+
+    .page-title {
+        font-size: 28px;
+        font-weight: 300;
+        margin-bottom: 5px;
+        line-height: 1.2;
+    }
+
+    .page-subtitle {
+        font-size: 14px;
+        opacity: 0.9;
+        margin: 0;
+    }
+
+    .btn-modern {
+        padding: 10px 20px;
+        border-radius: 10px;
+        font-weight: 500;
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+        transition: all 0.2s ease;
+        border: none;
+        cursor: pointer;
+        font-size: 13px;
+        text-decoration: none;
+    }
+
+    .btn-modern.btn-primary {
+        background: linear-gradient(135deg, var(--primary-light), var(--primary));
+        color: white;
+        box-shadow: 0 5px 15px rgba(37, 99, 235, 0.3);
+    }
+
+    .btn-modern.btn-primary:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 10px 25px rgba(37, 99, 235, 0.4);
+    }
+
+    .btn-modern.btn-success {
+        background: linear-gradient(135deg, #34d399, var(--success));
+        color: white;
+        box-shadow: 0 5px 15px rgba(16, 185, 129, 0.3);
+    }
+
+    .btn-modern.btn-success:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 10px 25px rgba(16, 185, 129, 0.4);
+    }
+
+    .btn-modern.btn-warning {
+        background: linear-gradient(135deg, #fbbf24, var(--warning));
+        color: white;
+        box-shadow: 0 5px 15px rgba(245, 158, 11, 0.3);
+    }
+
+    .btn-modern.btn-warning:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 10px 25px rgba(245, 158, 11, 0.4);
+    }
+
+    .btn-modern.btn-outline-light {
+        background: rgba(255, 255, 255, 0.1);
+        backdrop-filter: blur(10px);
+        border: 1px solid rgba(255, 255, 255, 0.2);
+        color: white;
+    }
+
+    .btn-modern.btn-outline-light:hover {
+        background: rgba(255, 255, 255, 0.2);
+        transform: translateY(-2px);
+    }
+
+    .btn-modern.btn-outline-secondary {
+        background: white;
+        border: 2px solid var(--border);
+        color: var(--dark);
+    }
+
+    .btn-modern.btn-outline-secondary:hover {
+        border-color: var(--primary);
+        color: var(--primary);
+        background: var(--primary-bg);
+    }
+
+    .btn-modern.btn-info {
+        background: linear-gradient(135deg, #60a5fa, var(--info));
+        color: white;
+    }
+
+    .btn-modern.btn-danger {
+        background: linear-gradient(135deg, #f87171, var(--danger));
+        color: white;
+    }
+
+    /* Badge priorité */
+    .badge-priority {
+        background: var(--danger);
+        color: white;
+        padding: 5px 15px;
+        border-radius: 50px;
+        font-size: 12px;
+        font-weight: 600;
+        margin-left: 15px;
+        display: inline-block;
+    }
+
+    /* Cartes modernes */
+    .card-modern {
+        background: white;
+        border-radius: 20px;
+        border: 1px solid var(--border);
+        margin-bottom: 25px;
+        overflow: hidden;
+        box-shadow: 0 10px 30px rgba(0, 0, 0, 0.05);
+        transition: all 0.3s ease;
+    }
+
+    .card-modern:hover {
+        box-shadow: 0 20px 40px rgba(37, 99, 235, 0.1);
+    }
+
+    .card-header-modern {
+        background: linear-gradient(135deg, var(--primary-bg) 0%, white 100%);
+        padding: 20px 25px;
+        border-bottom: 1px solid var(--border);
+    }
+
+    .card-header-modern.primary {
+        background: linear-gradient(135deg, var(--primary-light), var(--primary));
+        color: white;
+    }
+
+    .card-header-modern.warning {
+        background: linear-gradient(135deg, #fbbf24, var(--warning));
+        color: white;
+    }
+
+    .card-header-modern.info {
+        background: linear-gradient(135deg, #60a5fa, var(--info));
+        color: white;
+    }
+
+    .card-header-modern.success {
+        background: linear-gradient(135deg, #34d399, var(--success));
+        color: white;
+    }
+
+    .card-header-modern.light {
+        background: var(--light);
+        color: var(--dark);
+    }
+
+    .card-body {
+        padding: 25px;
+    }
+
+    .card-footer-modern {
+        background: var(--light);
+        padding: 15px 25px;
+        border-top: 1px solid var(--border);
+    }
+
+    .header-icon-sm {
+        width: 40px;
+        height: 40px;
+        background: var(--primary);
+        border-radius: 10px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        color: white;
+        font-size: 18px;
+    }
+
+    .header-icon-sm.bg-primary { background: var(--primary); }
+    .header-icon-sm.bg-warning { background: var(--warning); }
+    .header-icon-sm.bg-info { background: var(--info); }
+    .header-icon-sm.bg-success { background: var(--success); }
+    .header-icon-sm.bg-light { background: var(--light); color: var(--dark); }
+
+    /* Tableaux élégants */
+    .elegant-table {
+        width: 100%;
+        border-collapse: separate;
+        border-spacing: 0 10px;
+    }
+
+    .elegant-table thead th {
+        padding: 12px 15px;
+        font-size: 12px;
+        font-weight: 600;
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+        color: var(--gray);
+        border-bottom: 2px solid var(--border);
+        white-space: nowrap;
+        background: transparent;
+    }
+
+    .elegant-table tbody tr {
+        background: var(--light);
+        border-radius: 12px;
+        transition: all 0.2s ease;
+    }
+
+    .elegant-table tbody tr:hover {
+        background: white;
+        box-shadow: 0 5px 20px rgba(0, 0, 0, 0.05);
+        transform: scale(1.01);
+    }
+
+    .elegant-table tbody td {
+        padding: 15px;
+        border: none;
+        font-size: 13px;
+    }
+
+    .elegant-table tbody td:first-child {
+        border-radius: 12px 0 0 12px;
+    }
+
+    .elegant-table tbody td:last-child {
+        border-radius: 0 12px 12px 0;
+    }
+
+    /* Badges modernes */
+    .badge-modern {
+        display: inline-block;
+        padding: 5px 12px;
+        border-radius: 50px;
+        font-size: 11px;
+        font-weight: 600;
+        text-align: center;
+        white-space: nowrap;
+        background: white;
+        border: 1px solid var(--border);
+        color: var(--dark);
+    }
+
+    .badge-primary {
+        background: linear-gradient(135deg, var(--primary-light), var(--primary));
+        color: white;
+        border: none;
+    }
+
+    .badge-success {
+        background: linear-gradient(135deg, #34d399, var(--success));
+        color: white;
+        border: none;
+    }
+
+    .badge-warning {
+        background: linear-gradient(135deg, #fbbf24, var(--warning));
+        color: white;
+        border: none;
+    }
+
+    .badge-danger {
+        background: linear-gradient(135deg, #f87171, var(--danger));
+        color: white;
+        border: none;
+    }
+
+    .badge-info {
+        background: linear-gradient(135deg, #60a5fa, var(--info));
+        color: white;
+        border: none;
+    }
+
+    /* Barres de progression */
+    .progress-modern {
+        background: var(--border);
+        border-radius: 50px;
+        height: 8px;
+        overflow: hidden;
+        margin: 10px 0;
+    }
+
+    .progress-modern-bar {
+        height: 100%;
+        border-radius: 50px;
+        background: linear-gradient(90deg, var(--primary-light), var(--primary));
+        transition: width 0.3s ease;
+    }
+
+    .progress-modern-bar.success { background: linear-gradient(90deg, #34d399, var(--success)); }
+    .progress-modern-bar.warning { background: linear-gradient(90deg, #fbbf24, var(--warning)); }
+    .progress-modern-bar.danger { background: linear-gradient(90deg, #f87171, var(--danger)); }
+
+    /* Cartes d'information */
+    .info-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+        gap: 15px;
+        margin-bottom: 20px;
+    }
+
+    .info-card {
+        background: var(--light);
+        border-radius: 12px;
+        padding: 15px;
+        display: flex;
+        align-items: center;
+        gap: 15px;
+        transition: all 0.2s ease;
+    }
+
+    .info-card:hover {
+        background: white;
+        box-shadow: 0 5px 15px rgba(0, 0, 0, 0.05);
+    }
+
+    .info-icon {
+        width: 45px;
+        height: 45px;
+        background: var(--primary);
+        border-radius: 10px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        color: white;
+        font-size: 20px;
+    }
+
+    .info-content {
+        flex: 1;
+    }
+
+    .info-label {
+        font-size: 11px;
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+        color: var(--gray);
+        margin-bottom: 3px;
+    }
+
+    .info-value {
+        font-size: 14px;
+        font-weight: 600;
+        color: var(--dark);
+    }
+
+    /* Score cards */
+    .score-card {
+        background: white;
+        border-radius: 15px;
+        padding: 20px;
+        text-align: center;
+        border: 1px solid var(--border);
+        transition: all 0.2s ease;
+    }
+
+    .score-card:hover {
+        transform: translateY(-5px);
+        box-shadow: 0 20px 40px rgba(0, 0, 0, 0.1);
+    }
+
+    .score-card.primary { border-top: 4px solid var(--primary); }
+    .score-card.warning { border-top: 4px solid var(--warning); }
+    .score-card.success { border-top: 4px solid var(--success); }
+
+    .score-value {
+        font-size: 32px;
+        font-weight: 700;
+        color: var(--dark);
+        line-height: 1.2;
+        margin-bottom: 5px;
+    }
+
+    .score-label {
+        font-size: 12px;
+        color: var(--gray);
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+    }
+
+    /* Boutons d'action */
+    .action-buttons {
+        display: flex;
+        gap: 10px;
+        flex-wrap: wrap;
+    }
+
+    .btn-action {
+        width: 36px;
+        height: 36px;
+        border-radius: 8px;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        text-decoration: none;
+        transition: all 0.2s ease;
+        background: var(--light);
+        color: var(--gray);
+        font-size: 14px;
+        border: none;
+        cursor: pointer;
+    }
+
+    .btn-action:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 5px 10px rgba(0, 0, 0, 0.1);
+    }
+
+    .btn-action.primary:hover { background: var(--primary); color: white; }
+    .btn-action.success:hover { background: var(--success); color: white; }
+    .btn-action.warning:hover { background: var(--warning); color: white; }
+    .btn-action.danger:hover { background: var(--danger); color: white; }
+    .btn-action.info:hover { background: var(--info); color: white; }
+
+    /* Section avec bordure */
+    .border-section {
+        border-left: 4px solid;
+        padding-left: 20px;
+        margin: 15px 0;
+    }
+
+    .border-section.primary { border-left-color: var(--primary); }
+    .border-section.warning { border-left-color: var(--warning); }
+    .border-section.success { border-left-color: var(--success); }
+    .border-section.info { border-left-color: var(--info); }
+
+    /* Badge de notification */
+    .badge-notification {
+        position: absolute;
+        top: -5px;
+        right: -5px;
+        background: var(--danger);
+        color: white;
+        border-radius: 50%;
+        width: 18px;
+        height: 18px;
+        font-size: 10px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+    }
+
+    /* Dropdown menu */
+    .dropdown-menu-modern {
+        border: none;
+        border-radius: 12px;
+        box-shadow: 0 10px 40px rgba(0, 0, 0, 0.15);
+        padding: 8px;
+    }
+
+    .dropdown-item-modern {
+        padding: 10px 15px;
+        border-radius: 8px;
+        font-size: 13px;
+        transition: all 0.2s ease;
+    }
+
+    .dropdown-item-modern:hover {
+        background: var(--primary-bg);
+        color: var(--primary);
+    }
+
+    .dropdown-item-modern i {
+        width: 20px;
+        color: var(--gray);
+    }
+
+    /* Formulaires */
+    .form-control-modern {
+        border: 1px solid var(--border);
+        border-radius: 10px;
+        padding: 10px 15px;
+        font-size: 14px;
+        transition: all 0.2s ease;
+    }
+
+    .form-control-modern:focus {
+        border-color: var(--primary);
+        outline: none;
+        box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.1);
+    }
+
+    /* Modals */
+    .modal-content-modern {
+        border: none;
+        border-radius: 20px;
+        overflow: hidden;
+    }
+
+    .modal-header-modern {
+        background: linear-gradient(135deg, var(--primary-light), var(--primary));
+        color: white;
+        padding: 20px 25px;
+        border: none;
+    }
+
+    .modal-header-modern .btn-close {
+        filter: brightness(0) invert(1);
+    }
+
+    .modal-body-modern {
+        padding: 25px;
+    }
+
+    .modal-footer-modern {
+        padding: 20px 25px;
+        border-top: 1px solid var(--border);
+        background: var(--light);
+    }
+
+    /* Animations */
+    @keyframes slideIn {
+        from {
+            opacity: 0;
+            transform: translateY(20px);
+        }
+        to {
+            opacity: 1;
+            transform: translateY(0);
+        }
+    }
+
+    .animate-in {
+        animation: slideIn 0.5s ease forwards;
+    }
+
+    /* Responsive */
+    @media (max-width: 768px) {
+        .page-header-modern {
+            padding: 20px 0;
+        }
+
+        .page-title {
+            font-size: 22px;
+        }
+
+        .action-buttons {
+            flex-direction: column;
+        }
+
+        .btn-modern {
+            width: 100%;
+            justify-content: center;
+        }
+
+        .info-grid {
+            grid-template-columns: 1fr;
+        }
+
+        .elegant-table {
+            display: block;
+            overflow-x: auto;
+        }
+    }
+</style>
+
+<!-- En-tête de page -->
+<div class="page-header-modern animate-in">
+    <div class="container-fluid">
+        <div class="row align-items-center">
+            <div class="col">
+                <div class="d-flex align-items-center">
+                    <div class="header-icon">
+                        <i class="fas fa-exclamation-triangle"></i>
+                    </div>
+                    <div class="header-content ms-3">
+                        <nav aria-label="breadcrumb">
+                            <ol class="breadcrumb">
+                                <li class="breadcrumb-item"><a href="{{ url_for('liste_cartographies') }}" class="text-white-50">Cartographies</a></li>
+                                <li class="breadcrumb-item"><a href="{{ url_for('detail_cartographie', id=risque.cartographie_id) }}" class="text-white-50">{{ risque.cartographie.nom }}</a></li>
+                                <li class="breadcrumb-item active text-white" aria-current="page">{{ risque.reference }}</li>
+                            </ol>
+                        </nav>
+                        <h1 class="page-title">
+                            {{ risque.reference }}
+                            {% for champ in champs_par_section.general if champ.nom_technique == 'priorite' and champ.get_valeur() == 'haute' %}
+                                <span class="badge-priority">Haute priorité</span>
+                            {% endfor %}
+                        </h1>
+                        <p class="page-subtitle">{{ risque.intitule }}</p>
+                    </div>
+                </div>
             </div>
-            <div class="card-body collapse show" id="sectionGeneral">
-                <table class="table table-sm table-borderless">
-                    <tr>
-                        <th width="40%">Référence:</th>
-                        <td><strong class="text-primary">{{ risque.reference }}</strong></td>
-                    </tr>
-                    <tr>
-                        <th>Intitulé:</th>
-                        <td>{{ risque.intitule }}</td>
-                    </tr>
-                    <tr>
-                        <th>Description:</th>
-                        <td>{{ risque.description or '<span class="text-muted">Non renseignée</span>'|safe }}</td>
-                    </tr>
-                    <tr>
-                        <th>Catégorie:</th>
-                        <td><span class="badge bg-secondary">{{ risque.categorie or 'Non classé' }}</span></td>
-                    </tr>
-                    <tr>
-                        <th>Type de risque:</th>
-                        <td>{{ risque.type_risque or '<span class="text-muted">Non spécifié</span>'|safe }}</td>
-                    </tr>
-                    <tr>
-                        <th>Processus concerné:</th>
-                        <td>{{ risque.processus_concerne or '<span class="text-muted">Non spécifié</span>'|safe }}</td>
-                    </tr>
+            <div class="col-auto">
+                <div class="action-buttons">
+                    <a href="{{ url_for('evaluer_risque_triphase', id=risque.id) }}" class="btn-modern btn-primary">
+                        <i class="fas fa-chart-bar me-2"></i> Évaluer
+                    </a>
+                    {% if not risque.kri %}
+                    <a href="{{ url_for('nouveau_kri', risque_id=risque.id) }}" class="btn-modern btn-success">
+                        <i class="fas fa-chart-line me-2"></i> Créer KRI
+                    </a>
+                    {% endif %}
+                    <a href="{{ url_for('modifier_risque', id=risque.id) }}" class="btn-modern btn-warning">
+                        <i class="fas fa-edit me-2"></i> Modifier
+                    </a>
                     
+                    {% if current_user.has_permission('can_manage_risks') or risque.created_by == current_user.id %}
+                    <div class="btn-group">
+                        <button type="button" class="btn-modern btn-outline-light dropdown-toggle" data-bs-toggle="dropdown">
+                            <i class="fas fa-plus me-2"></i> Ajouter
+                        </button>
+                        <ul class="dropdown-menu dropdown-menu-modern dropdown-menu-end">
+                            <li>
+                                <a class="dropdown-item dropdown-item-modern" href="#" data-bs-toggle="modal" data-bs-target="#modalAjoutChamp">
+                                    <i class="fas fa-tag me-2"></i>Champ personnalisé
+                                </a>
+                            </li>
+                            <li>
+                                <a class="dropdown-item dropdown-item-modern" href="#" data-bs-toggle="modal" data-bs-target="#modalAjoutFichier">
+                                    <i class="fas fa-file-upload me-2"></i>Fichier
+                                </a>
+                            </li>
+                            <li><hr class="dropdown-divider"></li>
+                            <li>
+                                <form action="{{ url_for('nouvelle_evaluation_risque', id=risque.id) }}" method="post" class="d-inline">
+                                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                                    <button type="submit" class="dropdown-item dropdown-item-modern">
+                                        <i class="fas fa-redo me-2"></i>Nouvelle évaluation
+                                    </button>
+                                </form>
+                            </li>
+                        </ul>
+                    </div>
+                    {% endif %}
+                    
+                    <a href="{{ url_for('detail_cartographie', id=risque.cartographie_id) }}" class="btn-modern btn-outline-light">
+                        <i class="fas fa-arrow-left me-2"></i> Retour
+                    </a>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="container-fluid mt-4">
+    <!-- Formulaire de modification de référence -->
+    <div class="card-modern animate-in">
+        <div class="card-header-modern info">
+            <div class="d-flex align-items-center">
+                <div class="header-icon-sm bg-info me-3">
+                    <i class="fas fa-tag"></i>
+                </div>
+                <h5 class="mb-0">Référence du Risque</h5>
+            </div>
+        </div>
+        <div class="card-body">
+            <form action="{{ url_for('modifier_reference_risque', id=risque.id) }}" method="post" class="row g-3 align-items-center">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                <div class="col-md-3">
+                    <label for="reference" class="form-label fw-bold">Référence :</label>
+                    <input type="text" class="form-control-modern" id="reference" name="reference" 
+                           value="{{ risque.reference }}" required maxlength="50" pattern="[A-Za-z0-9\-_]+"
+                           title="Utilisez uniquement des lettres, chiffres, tirets et underscores">
+                </div>
+                <div class="col-md-6">
+                    <small class="text-muted">
+                        <i class="fas fa-info-circle me-1"></i> Cette référence sera affichée sur les matrices de risques. 
+                        Utilisez un nom abrégé (ex: RISQ-001, FIN-IMP).
+                    </small>
+                </div>
+                <div class="col-md-3">
+                    <button type="submit" class="btn-modern btn-primary w-100">
+                        <i class="fas fa-save me-1"></i>Modifier la référence
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <div class="row">
+        <!-- Colonne de gauche - Informations générales et analyse -->
+        <div class="col-md-6">
+            <!-- Informations générales -->
+            <div class="card-modern animate-in">
+                <div class="card-header-modern primary">
+                    <div class="d-flex align-items-center">
+                        <div class="header-icon-sm bg-primary me-3">
+                            <i class="fas fa-info-circle"></i>
+                        </div>
+                        <h5 class="mb-0">Informations Générales</h5>
+                    </div>
+                </div>
+                <div class="card-body">
+                    <div class="info-grid">
+                        <div class="info-card">
+                            <div class="info-icon">
+                                <i class="fas fa-hashtag"></i>
+                            </div>
+                            <div class="info-content">
+                                <div class="info-label">Référence</div>
+                                <div class="info-value">{{ risque.reference }}</div>
+                            </div>
+                        </div>
+                        
+                        <div class="info-card">
+                            <div class="info-icon">
+                                <i class="fas fa-tag"></i>
+                            </div>
+                            <div class="info-content">
+                                <div class="info-label">Catégorie</div>
+                                <div class="info-value">{{ risque.categorie or 'Non classé' }}</div>
+                            </div>
+                        </div>
+                        
+                        <div class="info-card">
+                            <div class="info-icon">
+                                <i class="fas fa-exclamation-circle"></i>
+                            </div>
+                            <div class="info-content">
+                                <div class="info-label">Type de risque</div>
+                                <div class="info-value">{{ risque.type_risque or 'Non spécifié' }}</div>
+                            </div>
+                        </div>
+                        
+                        <div class="info-card">
+                            <div class="info-icon">
+                                <i class="fas fa-sitemap"></i>
+                            </div>
+                            <div class="info-content">
+                                <div class="info-label">Processus</div>
+                                <div class="info-value">{{ risque.processus_concerne or 'Non spécifié' }}</div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="mt-4">
+                        <h6 class="fw-bold mb-3">Description</h6>
+                        <div class="border-section primary">
+                            <p class="mb-0">{{ risque.description or 'Aucune description' }}</p>
+                        </div>
+                    </div>
+
                     <!-- Champs personnalisés de la section 'general' -->
                     {% for champ in champs_par_section.general %}
-                    <tr>
-                        <th>{{ champ.config.nom_affichage if champ.config else champ.nom_technique }}:</th>
-                        <td>
-                            {% if champ.config and champ.config.type_champ == 'checkbox' %}
-                                {% if champ.get_valeur() %}
-                                <span class="badge bg-success">Oui</span>
-                                {% else %}
-                                <span class="badge bg-secondary">Non</span>
-                                {% endif %}
-                            {% elif champ.config and champ.config.type_champ == 'select' %}
-                                <span class="badge bg-info">{{ champ.get_valeur() }}</span>
-                            {% elif champ.config and champ.config.type_champ == 'date' %}
-                                {{ champ.get_valeur().strftime('%d/%m/%Y') if champ.get_valeur() else '<span class="text-muted">Non renseigné</span>'|safe }}
-                            {% elif champ.config and champ.config.type_champ == 'fichier' and champ.get_valeur() %}
-                                <a href="{{ url_for('telecharger_champ_fichier', champ_id=champ.id) }}" 
-                                   class="text-decoration-none" target="_blank">
-                                    <i class="fas fa-file me-1"></i>{{ champ.get_valeur() }}
-                                </a>
-                            {% elif champ.config and champ.config.type_champ == 'multiselect' %}
-                                {% for valeur in champ.get_valeur() or [] %}
-                                <span class="badge bg-primary me-1">{{ valeur }}</span>
-                                {% endfor %}
-                            {% else %}
-                                {{ champ.get_valeur() or '<span class="text-muted">Non renseigné</span>'|safe }}
-                            {% endif %}
-                            
+                    <div class="mt-4">
+                        <div class="d-flex justify-content-between align-items-start">
+                            <h6 class="fw-bold mb-3">{{ champ.config.nom_affichage if champ.config else champ.nom_technique }} :</h6>
                             {% if current_user.has_permission('can_manage_risks') or risque.created_by == current_user.id %}
-                            <button class="btn btn-sm btn-outline-warning float-end" 
-                                    onclick="editerChamp({{ champ.id }})"
-                                    title="Modifier ce champ">
+                            <button class="btn-action primary" onclick="editerChamp({{ champ.id }})" title="Modifier">
                                 <i class="fas fa-edit"></i>
                             </button>
                             {% endif %}
-                        </td>
-                    </tr>
-                    {% endfor %}
-                    
-                    <tr>
-                        <th>Cartographie:</th>
-                        <td>
-                            <a href="{{ url_for('detail_cartographie', id=risque.cartographie_id) }}" class="text-decoration-none">
-                                {{ risque.cartographie.nom }}
-                            </a>
-                        </td>
-                    </tr>
-                    <tr>
-                        <th>Créé par:</th>
-                        <td>{{ risque.createur.username }} le {{ risque.created_at.strftime('%d/%m/%Y à %H:%M') }}</td>
-                    </tr>
-                    {% if risque.updated_at and risque.updated_at != risque.created_at %}
-                    <tr>
-                        <th>Modifié le:</th>
-                        <td>{{ risque.updated_at.strftime('%d/%m/%Y à %H:%M') }}</td>
-                    </tr>
-                    {% endif %}
-                    {% if risque.is_archived %}
-                    <tr class="table-warning">
-                        <th>Statut:</th>
-                        <td>
-                            <span class="badge bg-warning">Archivé</span>
-                            {% if risque.archive_reason %}
-                            <br><small class="text-muted">Raison: {{ risque.archive_reason }}</small>
-                            {% endif %}
-                        </td>
-                    </tr>
-                    {% endif %}
-                </table>
-            </div>
-        </div>
-
-        <!-- Analyse du Risque -->
-        <div class="card shadow mb-4">
-            <div class="card-header bg-warning text-dark d-flex justify-content-between align-items-center">
-                <h6 class="mb-0"><i class="fas fa-search"></i> Analyse du Risque</h6>
-                <button class="btn btn-sm btn-light" type="button" data-bs-toggle="collapse" 
-                        data-bs-target="#sectionAnalyse" aria-expanded="true">
-                    <i class="fas fa-chevron-down"></i>
-                </button>
-            </div>
-            <div class="card-body collapse show" id="sectionAnalyse">
-                <h6><i class="fas fa-bug me-1"></i>Cause racine:</h6>
-                <div class="ps-3 border-start border-warning border-3 mb-3">
-                    {{ risque.cause_racine or '<span class="text-muted">Non renseignée</span>'|safe }}
-                </div>
-                
-                <h6><i class="fas fa-exclamation-circle me-1"></i>Conséquences:</h6>
-                <div class="ps-3 border-start border-warning border-3 mb-3">
-                    {{ risque.consequences or '<span class="text-muted">Non renseignées</span>'|safe }}
-                </div>
-                
-                <!-- Champs personnalisés de la section 'analyse' -->
-                {% for champ in champs_par_section.analyse %}
-                <div class="mb-3">
-                    <h6>
-                        {{ champ.config.nom_affichage if champ.config else champ.nom_technique }}:
-                        {% if champ.config and champ.config.est_obligatoire %}
-                        <span class="text-danger">*</span>
-                        {% endif %}
-                    </h6>
-                    <div class="ps-3 border-start border-warning border-3">
-                        {% if champ.config and champ.config.type_champ == 'textarea' %}
-                            {{ champ.get_valeur()|nl2br|safe }}
-                        {% elif champ.config and champ.config.type_champ == 'multiselect' %}
-                            {% for valeur in champ.get_valeur() or [] %}
-                            <span class="badge bg-warning me-1">{{ valeur }}</span>
-                            {% endfor %}
-                        {% elif champ.config and champ.config.type_champ == 'checkbox' %}
-                            {% if champ.get_valeur() %}
-                            <span class="badge bg-success">Oui</span>
+                        </div>
+                        <div class="border-section primary">
+                            {% if champ.config and champ.config.type_champ == 'checkbox' %}
+                                {% if champ.get_valeur() %}
+                                <span class="badge-modern badge-success">Oui</span>
+                                {% else %}
+                                <span class="badge-modern">Non</span>
+                                {% endif %}
+                            {% elif champ.config and champ.config.type_champ == 'select' %}
+                                <span class="badge-modern badge-info">{{ champ.get_valeur() }}</span>
+                            {% elif champ.config and champ.config.type_champ == 'date' %}
+                                {{ champ.get_valeur().strftime('%d/%m/%Y') if champ.get_valeur() else 'Non renseigné' }}
+                            {% elif champ.config and champ.config.type_champ == 'fichier' and champ.get_valeur() %}
+                                <a href="{{ url_for('telecharger_champ_fichier', champ_id=champ.id) }}" 
+                                   class="text-decoration-none" target="_blank">
+                                    <i class="fas fa-file me-2"></i>{{ champ.get_valeur() }}
+                                </a>
+                            {% elif champ.config and champ.config.type_champ == 'multiselect' %}
+                                {% for valeur in champ.get_valeur() or [] %}
+                                <span class="badge-modern badge-primary me-1">{{ valeur }}</span>
+                                {% endfor %}
                             {% else %}
-                            <span class="badge bg-secondary">Non</span>
+                                {{ champ.get_valeur() or 'Non renseigné' }}
                             {% endif %}
-                        {% elif champ.config and champ.config.type_champ == 'select' %}
-                            <span class="badge bg-warning">{{ champ.get_valeur() }}</span>
-                        {% elif champ.config and champ.config.type_champ == 'fichier' and champ.get_valeur() %}
-                            <a href="{{ url_for('telecharger_champ_fichier', champ_id=champ.id) }}" 
-                               class="text-decoration-none" target="_blank">
-                                <i class="fas fa-file me-1"></i>{{ champ.get_valeur() }}
-                            </a>
-                        {% else %}
-                            {{ champ.get_valeur() or '<span class="text-muted">Non renseigné</span>'|safe }}
+                        </div>
+                    </div>
+                    {% endfor %}
+
+                    <div class="mt-4">
+                        <div class="info-grid">
+                            <div class="info-card">
+                                <div class="info-icon">
+                                    <i class="fas fa-map"></i>
+                                </div>
+                                <div class="info-content">
+                                    <div class="info-label">Cartographie</div>
+                                    <div class="info-value">
+                                        <a href="{{ url_for('detail_cartographie', id=risque.cartographie_id) }}" class="text-decoration-none">
+                                            {{ risque.cartographie.nom }}
+                                        </a>
+                                    </div>
+                                </div>
+                            </div>
+                            
+                            <div class="info-card">
+                                <div class="info-icon">
+                                    <i class="fas fa-user"></i>
+                                </div>
+                                <div class="info-content">
+                                    <div class="info-label">Créé par</div>
+                                    <div class="info-value">{{ risque.createur.username }}</div>
+                                </div>
+                            </div>
+                            
+                            <div class="info-card">
+                                <div class="info-icon">
+                                    <i class="fas fa-calendar"></i>
+                                </div>
+                                <div class="info-content">
+                                    <div class="info-label">Créé le</div>
+                                    <div class="info-value">{{ risque.created_at.strftime('%d/%m/%Y') }}</div>
+                                </div>
+                            </div>
+                            
+                            {% if risque.updated_at and risque.updated_at != risque.created_at %}
+                            <div class="info-card">
+                                <div class="info-icon">
+                                    <i class="fas fa-clock"></i>
+                                </div>
+                                <div class="info-content">
+                                    <div class="info-label">Modifié le</div>
+                                    <div class="info-value">{{ risque.updated_at.strftime('%d/%m/%Y') }}</div>
+                                </div>
+                            </div>
+                            {% endif %}
+                            
+                            {% if risque.is_archived %}
+                            <div class="info-card" style="border-left: 4px solid var(--warning);">
+                                <div class="info-icon" style="background: var(--warning);">
+                                    <i class="fas fa-archive"></i>
+                                </div>
+                                <div class="info-content">
+                                    <div class="info-label">Statut</div>
+                                    <div class="info-value">
+                                        <span class="badge-modern badge-warning">Archivé</span>
+                                        {% if risque.archive_reason %}
+                                        <br><small class="text-muted">{{ risque.archive_reason }}</small>
+                                        {% endif %}
+                                    </div>
+                                </div>
+                            </div>
+                            {% endif %}
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Analyse du Risque -->
+            <div class="card-modern animate-in">
+                <div class="card-header-modern warning">
+                    <div class="d-flex align-items-center">
+                        <div class="header-icon-sm bg-warning me-3">
+                            <i class="fas fa-search"></i>
+                        </div>
+                        <h5 class="mb-0">Analyse du Risque</h5>
+                    </div>
+                </div>
+                <div class="card-body">
+                    <div class="mb-4">
+                        <h6 class="fw-bold mb-3"><i class="fas fa-bug me-2"></i>Cause racine</h6>
+                        <div class="border-section warning">
+                            {{ risque.cause_racine or 'Non renseignée' }}
+                        </div>
+                    </div>
+                    
+                    <div class="mb-4">
+                        <h6 class="fw-bold mb-3"><i class="fas fa-exclamation-circle me-2"></i>Conséquences</h6>
+                        <div class="border-section warning">
+                            {{ risque.consequences or 'Non renseignées' }}
+                        </div>
+                    </div>
+                    
+                    <!-- Champs personnalisés de la section 'analyse' -->
+                    {% for champ in champs_par_section.analyse %}
+                    <div class="mb-4">
+                        <div class="d-flex justify-content-between align-items-start">
+                            <h6 class="fw-bold mb-3">{{ champ.config.nom_affichage if champ.config else champ.nom_technique }} :</h6>
+                            {% if current_user.has_permission('can_manage_risks') or risque.created_by == current_user.id %}
+                            <button class="btn-action warning" onclick="editerChamp({{ champ.id }})" title="Modifier">
+                                <i class="fas fa-edit"></i>
+                            </button>
+                            {% endif %}
+                        </div>
+                        <div class="border-section warning">
+                            {% if champ.config and champ.config.type_champ == 'textarea' %}
+                                {{ champ.get_valeur()|nl2br|safe }}
+                            {% elif champ.config and champ.config.type_champ == 'multiselect' %}
+                                {% for valeur in champ.get_valeur() or [] %}
+                                <span class="badge-modern badge-warning me-1">{{ valeur }}</span>
+                                {% endfor %}
+                            {% elif champ.config and champ.config.type_champ == 'checkbox' %}
+                                {% if champ.get_valeur() %}
+                                <span class="badge-modern badge-success">Oui</span>
+                                {% else %}
+                                <span class="badge-modern">Non</span>
+                                {% endif %}
+                            {% elif champ.config and champ.config.type_champ == 'select' %}
+                                <span class="badge-modern badge-warning">{{ champ.get_valeur() }}</span>
+                            {% elif champ.config and champ.config.type_champ == 'fichier' and champ.get_valeur() %}
+                                <a href="{{ url_for('telecharger_champ_fichier', champ_id=champ.id) }}" 
+                                   class="text-decoration-none" target="_blank">
+                                    <i class="fas fa-file me-2"></i>{{ champ.get_valeur() }}
+                                </a>
+                            {% else %}
+                                {{ champ.get_valeur() or 'Non renseigné' }}
+                            {% endif %}
+                        </div>
+                        {% if champ.config and champ.config.aide_texte %}
+                        <small class="text-muted mt-1">{{ champ.config.aide_texte }}</small>
                         {% endif %}
-                        
+                    </div>
+                    {% endfor %}
+                </div>
+            </div>
+
+            <!-- Champs personnalisés (autres sections) -->
+            {% if champs_par_section.personnalise %}
+            <div class="card-modern animate-in">
+                <div class="card-header-modern light">
+                    <div class="d-flex align-items-center">
+                        <div class="header-icon-sm bg-light me-3">
+                            <i class="fas fa-tags"></i>
+                        </div>
+                        <h5 class="mb-0">Informations complémentaires</h5>
+                    </div>
+                </div>
+                <div class="card-body">
+                    {% for champ in champs_par_section.personnalise %}
+                    <div class="d-flex justify-content-between align-items-start mb-4">
+                        <div class="flex-grow-1">
+                            <h6 class="fw-bold mb-2">{{ champ.config.nom_affichage if champ.config else champ.nom_technique }} :</h6>
+                            <div>
+                                {% if champ.config and champ.config.type_champ == 'checkbox' %}
+                                    {% if champ.get_valeur() %}
+                                    <span class="badge-modern badge-success">Oui</span>
+                                    {% else %}
+                                    <span class="badge-modern">Non</span>
+                                    {% endif %}
+                                {% elif champ.config and champ.config.type_champ == 'select' %}
+                                    <span class="badge-modern">{{ champ.get_valeur() }}</span>
+                                {% elif champ.config and champ.config.type_champ == 'date' %}
+                                    {{ champ.get_valeur().strftime('%d/%m/%Y') if champ.get_valeur() else 'Non renseigné' }}
+                                {% elif champ.config and champ.config.type_champ == 'fichier' and champ.get_valeur() %}
+                                    <a href="{{ url_for('telecharger_champ_fichier', champ_id=champ.id) }}" 
+                                       class="text-decoration-none" target="_blank">
+                                        <i class="fas fa-file me-2"></i>{{ champ.get_valeur() }}
+                                    </a>
+                                {% else %}
+                                    {{ champ.get_valeur() or 'Non renseigné' }}
+                                {% endif %}
+                            </div>
+                        </div>
                         {% if current_user.has_permission('can_manage_risks') or risque.created_by == current_user.id %}
-                        <button class="btn btn-sm btn-outline-warning float-end mt-2" 
-                                onclick="editerChamp({{ champ.id }})"
-                                title="Modifier ce champ">
+                        <button class="btn-action" onclick="editerChamp({{ champ.id }})" title="Modifier">
                             <i class="fas fa-edit"></i>
                         </button>
                         {% endif %}
                     </div>
-                    {% if champ.config and champ.config.aide_texte %}
-                    <small class="text-muted">{{ champ.config.aide_texte }}</small>
-                    {% endif %}
-                </div>
-                {% endfor %}
-            </div>
-        </div>
-
-        <!-- Champs personnalisés (autres sections) -->
-        {% if champs_par_section.personnalise %}
-        <div class="card shadow mb-4">
-            <div class="card-header bg-secondary text-white d-flex justify-content-between align-items-center">
-                <h6 class="mb-0"><i class="fas fa-tags"></i> Informations complémentaires</h6>
-                <button class="btn btn-sm btn-light" type="button" data-bs-toggle="collapse" 
-                        data-bs-target="#sectionPersonnalise" aria-expanded="true">
-                    <i class="fas fa-chevron-down"></i>
-                </button>
-            </div>
-            <div class="card-body collapse show" id="sectionPersonnalise">
-                <table class="table table-sm table-borderless">
-                    {% for champ in champs_par_section.personnalise %}
-                    <tr>
-                        <th width="40%">{{ champ.config.nom_affichage if champ.config else champ.nom_technique }}:</th>
-                        <td>
-                            {% if champ.config and champ.config.type_champ == 'checkbox' %}
-                                {% if champ.get_valeur() %}
-                                <span class="badge bg-success">Oui</span>
-                                {% else %}
-                                <span class="badge bg-secondary">Non</span>
-                                {% endif %}
-                            {% elif champ.config and champ.config.type_champ == 'select' %}
-                                <span class="badge bg-secondary">{{ champ.get_valeur() }}</span>
-                            {% elif champ.config and champ.config.type_champ == 'date' %}
-                                {{ champ.get_valeur().strftime('%d/%m/%Y') if champ.get_valeur() else '<span class="text-muted">Non renseigné</span>'|safe }}
-                            {% elif champ.config and champ.config.type_champ == 'fichier' and champ.get_valeur() %}
-                                <a href="{{ url_for('telecharger_champ_fichier', champ_id=champ.id) }}" 
-                                   class="text-decoration-none" target="_blank">
-                                    <i class="fas fa-file me-1"></i>{{ champ.get_valeur() }}
-                                </a>
-                            {% else %}
-                                {{ champ.get_valeur() or '<span class="text-muted">Non renseigné</span>'|safe }}
-                            {% endif %}
-                            
-                            {% if current_user.has_permission('can_manage_risks') or risque.created_by == current_user.id %}
-                            <button class="btn btn-sm btn-outline-secondary float-end" 
-                                    onclick="editerChamp({{ champ.id }})"
-                                    title="Modifier ce champ">
-                                <i class="fas fa-edit"></i>
-                            </button>
-                            {% endif %}
-                        </td>
-                    </tr>
                     {% endfor %}
-                </table>
+                </div>
             </div>
+            {% endif %}
         </div>
-        {% endif %}
-    </div>
 
-    <!-- Colonne de droite - Évaluations et KRI -->
-    <div class="col-md-6">
-        <!-- Dernière évaluation -->
-        <div class="card shadow mb-4">
-            <div class="card-header bg-info text-white d-flex justify-content-between align-items-center">
-                <h6 class="mb-0"><i class="fas fa-chart-bar"></i> Dernière Évaluation</h6>
-                <button class="btn btn-sm btn-light" type="button" data-bs-toggle="collapse" 
-                        data-bs-target="#sectionEvaluation" aria-expanded="true">
-                    <i class="fas fa-chevron-down"></i>
-                </button>
-            </div>
-            <div class="card-body collapse show" id="sectionEvaluation">
-                {% if derniere_evaluation %}
-                    {% if impact_final and probabilite_final and impact_final > 0 and probabilite_final > 0 %}
-                    <!-- Évaluation complète -->
-                    <div class="row text-center mb-3">
-                        <div class="col-md-4">
-                            <div class="card border-primary">
-                                <div class="card-body py-2">
-                                    <h3 class="text-primary mb-0">{{ impact_final }}/5</h3>
-                                    <small class="text-muted">Impact</small>
-                                </div>
-                            </div>
+        <!-- Colonne de droite - Évaluations et KRI -->
+        <div class="col-md-6">
+            <!-- Dernière évaluation -->
+            <div class="card-modern animate-in">
+                <div class="card-header-modern info">
+                    <div class="d-flex align-items-center">
+                        <div class="header-icon-sm bg-info me-3">
+                            <i class="fas fa-chart-bar"></i>
                         </div>
-                        <div class="col-md-4">
-                            <div class="card border-warning">
-                                <div class="card-body py-2">
-                                    <h3 class="text-warning mb-0">{{ probabilite_final }}/5</h3>
-                                    <small class="text-muted">Probabilité</small>
-                                </div>
-                            </div>
-                        </div>
-                        <div class="col-md-4">
-                            <div class="card border-success">
-                                <div class="card-body py-2">
-                                    <h3 class="text-success mb-0">{{ niveau_maitrise_final or 'N/A' }}/5</h3>
-                                    <small class="text-muted">Maîtrise</small>
-                                </div>
-                            </div>
-                        </div>
+                        <h5 class="mb-0">Dernière Évaluation</h5>
                     </div>
-                    
-                    <div class="text-center mb-3">
-                        <h4 class="mb-2">Score global</h4>
-                        {% if score_final and niveau_risque_final %}
-                        <span class="badge bg-{% if niveau_risque_final == 'Critique' %}danger{% elif niveau_risque_final == 'Élevé' %}warning{% elif niveau_risque_final == 'Moyen' %}info{% else %}success{% endif %} fs-6 p-3">
-                            {{ score_final }} - {{ niveau_risque_final }}
-                        </span>
-                        {% else %}
-                        <span class="badge bg-secondary fs-6 p-3">Score non calculé</span>
-                        {% endif %}
-                    </div>
-                    
-                    <!-- Informations de campagne -->
-                    {% if derniere_evaluation.campagne_nom %}
-                    <div class="mt-3 p-3 bg-light rounded">
-                        <strong>Campagne:</strong> {{ derniere_evaluation.campagne_nom }}
-                        {% if derniere_evaluation.campagne_date_debut %}
-                        <br><small class="text-muted">
-                            Période: {{ derniere_evaluation.campagne_date_debut.strftime('%d/%m/%Y') }}
-                            {% if derniere_evaluation.campagne_date_fin %}
-                            au {{ derniere_evaluation.campagne_date_fin.strftime('%d/%m/%Y') }}
+                </div>
+                <div class="card-body">
+                    {% if derniere_evaluation %}
+                        {% if impact_final and probabilite_final and impact_final > 0 and probabilite_final > 0 %}
+                        <!-- Évaluation complète -->
+                        <div class="row text-center mb-4">
+                            <div class="col-md-4">
+                                <div class="score-card primary">
+                                    <div class="score-value">{{ impact_final }}/5</div>
+                                    <div class="score-label">Impact</div>
+                                </div>
+                            </div>
+                            <div class="col-md-4">
+                                <div class="score-card warning">
+                                    <div class="score-value">{{ probabilite_final }}/5</div>
+                                    <div class="score-label">Probabilité</div>
+                                </div>
+                            </div>
+                            <div class="col-md-4">
+                                <div class="score-card success">
+                                    <div class="score-value">{{ niveau_maitrise_final or 'N/A' }}/5</div>
+                                    <div class="score-label">Maîtrise</div>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <div class="text-center mb-4">
+                            {% if score_final and niveau_risque_final %}
+                            <span class="badge-modern badge-{% if niveau_risque_final == 'Critique' %}danger{% elif niveau_risque_final == 'Élevé' %}warning{% elif niveau_risque_final == 'Moyen' %}info{% else %}success{% endif %} fs-6 p-3">
+                                Score {{ score_final }} - {{ niveau_risque_final }}
+                            </span>
+                            {% else %}
+                            <span class="badge-modern fs-6 p-3">Score non calculé</span>
                             {% endif %}
-                        </small>
+                        </div>
+                        
+                        <!-- Informations de campagne -->
+                        {% if derniere_evaluation.campagne_nom %}
+                        <div class="info-card mb-3">
+                            <div class="info-icon">
+                                <i class="fas fa-calendar-alt"></i>
+                            </div>
+                            <div class="info-content">
+                                <div class="info-label">Campagne</div>
+                                <div class="info-value">{{ derniere_evaluation.campagne_nom }}</div>
+                                {% if derniere_evaluation.campagne_date_debut %}
+                                <small class="text-muted">
+                                    {{ derniere_evaluation.campagne_date_debut.strftime('%d/%m/%Y') }}
+                                    {% if derniere_evaluation.campagne_date_fin %}
+                                    - {{ derniere_evaluation.campagne_date_fin.strftime('%d/%m/%Y') }}
+                                    {% endif %}
+                                </small>
+                                {% endif %}
+                            </div>
+                        </div>
                         {% endif %}
-                    </div>
-                    {% endif %}
-                    
-                    <!-- Commentaires -->
-                    {% if derniere_evaluation.commentaire_confirmation %}
-                    <div class="mt-3 p-3 bg-light rounded">
-                        <strong>Commentaire final:</strong>
-                        <p class="mb-0 mt-1">{{ derniere_evaluation.commentaire_confirmation }}</p>
-                    </div>
-                    {% elif derniere_evaluation.commentaire_validation %}
-                    <div class="mt-3 p-3 bg-light rounded">
-                        <strong>Commentaire validation:</strong>
-                        <p class="mb-0 mt-1">{{ derniere_evaluation.commentaire_validation }}</p>
-                    </div>
-                    {% elif derniere_evaluation.commentaire_pre_evaluation %}
-                    <div class="mt-3 p-3 bg-light rounded">
-                        <strong>Commentaire pré-évaluation:</strong>
-                        <p class="mb-0 mt-1">{{ derniere_evaluation.commentaire_pre_evaluation }}</p>
-                    </div>
-                    {% endif %}
-                    
-                    <!-- Métadonnées -->
-                    <div class="mt-3 small text-muted text-center">
-                        {% if derniere_evaluation.evaluateur_final %}
-                            <i class="fas fa-user me-1"></i>Confirmé par {{ derniere_evaluation.evaluateur_final.username }}
-                        {% elif derniere_evaluation.validateur %}
-                            <i class="fas fa-user me-1"></i>Validé par {{ derniere_evaluation.validateur.username }}
-                        {% elif derniere_evaluation.referent_pre_evaluation %}
-                            <i class="fas fa-user me-1"></i>Pré-évalué par {{ derniere_evaluation.referent_pre_evaluation.username }}
+                        
+                        <!-- Commentaires -->
+                        {% if derniere_evaluation.commentaire_confirmation %}
+                        <div class="info-card">
+                            <div class="info-icon">
+                                <i class="fas fa-comment"></i>
+                            </div>
+                            <div class="info-content">
+                                <div class="info-label">Commentaire final</div>
+                                <div class="info-value">{{ derniere_evaluation.commentaire_confirmation }}</div>
+                            </div>
+                        </div>
+                        {% elif derniere_evaluation.commentaire_validation %}
+                        <div class="info-card">
+                            <div class="info-icon">
+                                <i class="fas fa-comment"></i>
+                            </div>
+                            <div class="info-content">
+                                <div class="info-label">Commentaire validation</div>
+                                <div class="info-value">{{ derniere_evaluation.commentaire_validation }}</div>
+                            </div>
+                        </div>
+                        {% elif derniere_evaluation.commentaire_pre_evaluation %}
+                        <div class="info-card">
+                            <div class="info-icon">
+                                <i class="fas fa-comment"></i>
+                            </div>
+                            <div class="info-content">
+                                <div class="info-label">Commentaire pré-évaluation</div>
+                                <div class="info-value">{{ derniere_evaluation.commentaire_pre_evaluation }}</div>
+                            </div>
+                        </div>
                         {% endif %}
-                        <br><i class="fas fa-clock me-1"></i>le {{ derniere_evaluation.created_at.strftime('%d/%m/%Y à %H:%M') }}
-                    </div>
-                    
+                        
+                        <!-- Métadonnées -->
+                        <div class="text-muted small text-center mt-3">
+                            {% if derniere_evaluation.evaluateur_final %}
+                                <i class="fas fa-user me-1"></i>Confirmé par {{ derniere_evaluation.evaluateur_final.username }}
+                            {% elif derniere_evaluation.validateur %}
+                                <i class="fas fa-user me-1"></i>Validé par {{ derniere_evaluation.validateur.username }}
+                            {% elif derniere_evaluation.referent_pre_evaluation %}
+                                <i class="fas fa-user me-1"></i>Pré-évalué par {{ derniere_evaluation.referent_pre_evaluation.username }}
+                            {% endif %}
+                            <br><i class="fas fa-clock me-1"></i>le {{ derniere_evaluation.created_at.strftime('%d/%m/%Y à %H:%M') }}
+                        </div>
+                        
+                        {% else %}
+                        <!-- Évaluation incomplète -->
+                        <div class="alert alert-warning text-center">
+                            <i class="fas fa-exclamation-triangle me-2"></i>
+                            <strong>Évaluation incomplète</strong>
+                            <p class="mb-0 mt-2">Cette évaluation n'a pas d'impact ou de probabilité définis.</p>
+                            <a href="{{ url_for('evaluer_risque_triphase', id=risque.id) }}" class="btn-modern btn-warning mt-3">
+                                Compléter l'évaluation
+                            </a>
+                        </div>
+                        {% endif %}
+                        
                     {% else %}
-                    <!-- Évaluation incomplète -->
-                    <div class="alert alert-warning text-center">
-                        <i class="fas fa-exclamation-triangle me-2"></i>
-                        <strong>Évaluation incomplète</strong>
-                        <p class="mb-0 mt-2">Cette évaluation n'a pas d'impact ou de probabilité définis.</p>
-                        <a href="{{ url_for('evaluer_risque_triphase', id=risque.id) }}" class="btn btn-warning btn-sm mt-2">
-                            Compléter l'évaluation
+                    <!-- Aucune évaluation -->
+                    <div class="text-center py-5">
+                        <i class="fas fa-chart-bar fa-4x text-muted mb-3"></i>
+                        <p class="text-muted mb-4">Aucune évaluation disponible</p>
+                        <a href="{{ url_for('evaluer_risque_triphase', id=risque.id) }}" class="btn-modern btn-primary">
+                            <i class="fas fa-plus me-2"></i>Première évaluation
                         </a>
                     </div>
                     {% endif %}
                     
-                {% else %}
-                <!-- Aucune évaluation -->
-                <div class="text-center text-muted py-4">
-                    <i class="fas fa-chart-bar fa-3x mb-3 text-muted"></i>
-                    <p class="mb-3">Aucune évaluation disponible</p>
-                    <a href="{{ url_for('evaluer_risque_triphase', id=risque.id) }}" class="btn btn-primary">
-                        <i class="fas fa-plus me-1"></i>Première évaluation
-                    </a>
-                </div>
-                {% endif %}
-                
-                <!-- Champs personnalisés de la section 'evaluation' -->
-                {% for champ in champs_par_section.evaluation %}
-                <div class="mt-3 p-3 bg-light rounded">
-                    <strong>{{ champ.config.nom_affichage if champ.config else champ.nom_technique }}:</strong>
-                    <div class="mt-1">
-                        {% if champ.config and champ.config.type_champ == 'textarea' %}
-                            {{ champ.get_valeur()|nl2br|safe }}
-                        {% elif champ.config and champ.config.type_champ == 'select' %}
-                            <span class="badge bg-info">{{ champ.get_valeur() }}</span>
-                        {% elif champ.config and champ.config.type_champ == 'checkbox' %}
-                            {% if champ.get_valeur() %}
-                            <span class="badge bg-success">Oui</span>
-                            {% else %}
-                            <span class="badge bg-secondary">Non</span>
+                    <!-- Champs personnalisés de la section 'evaluation' -->
+                    {% for champ in champs_par_section.evaluation %}
+                    <div class="mt-4">
+                        <div class="d-flex justify-content-between align-items-start">
+                            <h6 class="fw-bold mb-3">{{ champ.config.nom_affichage if champ.config else champ.nom_technique }} :</h6>
+                            {% if current_user.has_permission('can_manage_risks') or risque.created_by == current_user.id %}
+                            <button class="btn-action info" onclick="editerChamp({{ champ.id }})" title="Modifier">
+                                <i class="fas fa-edit"></i>
+                            </button>
                             {% endif %}
-                        {% elif champ.config and champ.config.type_champ == 'multiselect' %}
-                            {% for valeur in champ.get_valeur() or [] %}
-                            <span class="badge bg-info me-1">{{ valeur }}</span>
-                            {% endfor %}
-                        {% elif champ.config and champ.config.type_champ == 'fichier' and champ.get_valeur() %}
-                            <a href="{{ url_for('telecharger_champ_fichier', champ_id=champ.id) }}" 
-                               class="text-decoration-none" target="_blank">
-                                <i class="fas fa-file me-1"></i>{{ champ.get_valeur() }}
-                            </a>
-                        {% else %}
-                            {{ champ.get_valeur() or '<span class="text-muted">Non renseigné</span>'|safe }}
-                        {% endif %}
-                        
-                        {% if current_user.has_permission('can_manage_risks') or risque.created_by == current_user.id %}
-                        <button class="btn btn-sm btn-outline-info float-end" 
-                                onclick="editerChamp({{ champ.id }})"
-                                title="Modifier ce champ">
-                            <i class="fas fa-edit"></i>
-                        </button>
-                        {% endif %}
-                    </div>
-                    {% if champ.config and champ.config.aide_texte %}
-                    <small class="text-muted">{{ champ.config.aide_texte }}</small>
-                    {% endif %}
-                </div>
-                {% endfor %}
-            </div>
-        </div>
-
-        <!-- KRI associé -->
-        {% if risque.kri %}
-        <div class="card shadow mb-4">
-            <div class="card-header bg-success text-white d-flex justify-content-between align-items-center">
-                <h6 class="mb-0"><i class="fas fa-chart-line"></i> Indicateur de Risque (KRI)</h6>
-                <button class="btn btn-sm btn-light" type="button" data-bs-toggle="collapse" 
-                        data-bs-target="#sectionKRI" aria-expanded="true">
-                    <i class="fas fa-chevron-down"></i>
-                </button>
-            </div>
-            <div class="card-body collapse show" id="sectionKRI">
-                <h6 class="text-success">{{ risque.kri.nom }}</h6>
-                <p class="small text-muted">{{ risque.kri.description or 'Aucune description' }}</p>
-                
-                <table class="table table-sm table-borderless">
-                    <tr>
-                        <th width="40%">Unité:</th>
-                        <td><code>{{ risque.kri.unite_mesure }}</code></td>
-                    </tr>
-                    <tr>
-                        <th>Seuil d'alerte:</th>
-                        <td>
-                            <span class="badge bg-warning">{{ risque.kri.seuil_alerte or 'Non défini' }}</span>
-                        </td>
-                    </tr>
-                    <tr>
-                        <th>Seuil critique:</th>
-                        <td>
-                            <span class="badge bg-danger">{{ risque.kri.seuil_critique or 'Non défini' }}</span>
-                        </td>
-                    </tr>
-                    <tr>
-                        <th>Fréquence:</th>
-                        <td>{{ risque.kri.frequence_mesure or 'Non spécifiée' }}</td>
-                    </tr>
-                    <tr>
-                        <th>Responsable:</th>
-                        <td>{{ risque.kri.responsable_mesure.username if risque.kri.responsable_mesure else 'Non assigné' }}</td>
-                    </tr>
-                    <tr>
-                        <th>Statut:</th>
-                        <td>
-                            {% if risque.kri.is_archived %}
-                            <span class="badge bg-warning">Archivé</span>
-                            {% else %}
-                            <span class="badge bg-success">Actif</span>
-                            {% endif %}
-                        </td>
-                    </tr>
-                </table>
-                
-                {% if risque.kri.mesures %}
-                <div class="mt-3 p-3 bg-light rounded">
-                    <strong>Dernière mesure:</strong>
-                    {% set derniere_mesure = risque.kri.mesures|sort(attribute='date_mesure', reverse=true)|first %}
-                    <div class="d-flex justify-content-between align-items-center mt-2">
-                        <span class="badge bg-{% if risque.kri.seuil_critique and derniere_mesure.valeur >= risque.kri.seuil_critique %}danger{% elif risque.kri.seuil_alerte and derniere_mesure.valeur >= risque.kri.seuil_alerte %}warning{% else %}success{% endif %} fs-6">
-                            {{ derniere_mesure.valeur }} {{ risque.kri.unite_mesure }}
-                        </span>
-                        <small class="text-muted">{{ derniere_mesure.date_mesure.strftime('%d/%m/%Y') }}</small>
-                    </div>
-                </div>
-                {% else %}
-                <div class="alert alert-info text-center py-2">
-                    <small><i class="fas fa-info-circle me-1"></i>Aucune mesure enregistrée</small>
-                </div>
-                {% endif %}
-                
-                <div class="mt-3 text-center">
-                    <a href="{{ url_for('liste_kri') }}" class="btn btn-outline-success btn-sm">
-                        <i class="fas fa-list me-1"></i>Voir tous les KRI
-                    </a>
-                    {% if current_user.has_permission('can_manage_kri') %}
-                    <a href="{{ url_for('modifier_kri', kri_id=risque.kri.id) }}" class="btn btn-outline-warning btn-sm">                        <i class="fas fa-edit me-1"></i>Modifier KRI
-                    </a>
-                    {% endif %}
-                </div>
-            </div>
-        </div>
-        {% else %}
-        <!-- Pas de KRI -->
-        <div class="card shadow mb-4">
-            <div class="card-header bg-light d-flex justify-content-between align-items-center">
-                <h6 class="mb-0"><i class="fas fa-chart-line"></i> Indicateur de Risque (KRI)</h6>
-                <button class="btn btn-sm btn-light" type="button" data-bs-toggle="collapse" 
-                        data-bs-target="#sectionKRI" aria-expanded="true">
-                    <i class="fas fa-chevron-down"></i>
-                </button>
-            </div>
-            <div class="card-body collapse show text-center py-4" id="sectionKRI">
-                <i class="fas fa-chart-line fa-2x text-muted mb-3"></i>
-                <p class="text-muted mb-3">Aucun KRI associé à ce risque</p>
-                <a href="{{ url_for('nouveau_kri', risque_id=risque.id) }}" class="btn btn-success">
-                    <i class="fas fa-plus me-1"></i>Créer un KRI
-                </a>
-            </div>
-        </div>
-        {% endif %}
-    </div>
-</div>
-<!-- ========== DISPOSITIFS DE MAÎTRISE ========== -->
-<div class="row mt-4">
-    <div class="col-12">
-        <div class="card shadow">
-            <div class="card-header bg-warning text-dark d-flex justify-content-between align-items-center">
-                <h6 class="mb-0">
-                    <i class="fas fa-shield-alt me-2"></i>Dispositifs de Maîtrise
-                    <span class="badge bg-primary ms-2">{{ dispositifs|length }}</span>
-                </h6>
-                <div class="btn-group">
-                    <a href="{{ url_for('liste_dispositifs_risque', risque_id=risque.id) }}" 
-                       class="btn btn-sm btn-outline-primary">
-                        <i class="fas fa-external-link-alt me-1"></i>Voir tout
-                    </a>
-                    <a href="{{ url_for('nouveau_dispositif', risque_id=risque.id) }}" 
-                       class="btn btn-sm btn-success">
-                        <i class="fas fa-plus me-1"></i>Ajouter
-                    </a>
-                </div>
-            </div>
-            <div class="card-body">
-                {% if dispositifs %}
-                <!-- Statistiques rapides -->
-            <div class="row mb-4">
-                {# Solution manuelle pour éviter les erreurs avec None #}
-                {% set dispositifs_efficaces = [] %}
-                {% set dispositifs_a_verifier = [] %}
-                {% set dispositifs_avec_plan = [] %}
-                
-                {% for dispositif in dispositifs %}
-                    {% if dispositif.efficacite_reelle is not none and dispositif.efficacite_reelle >= 4 %}
-                        {% set dispositifs_efficaces = dispositifs_efficaces + [dispositif] %}
-                    {% endif %}
-                    {% if dispositif.prochaine_verification is none %}
-                        {% set dispositifs_a_verifier = dispositifs_a_verifier + [dispositif] %}
-                    {% endif %}
-                    {% if dispositif.plan_action_id is not none %}
-                        {% set dispositifs_avec_plan = dispositifs_avec_plan + [dispositif] %}
-                    {% endif %}
-                {% endfor %}
-                
-                <div class="col-md-3">
-                    <div class="card bg-light border">
-                        <div class="card-body text-center py-2">
-                            <h5 class="mb-0">{{ dispositifs|length }}</h5>
-                            <small class="text-muted">Total</small>
                         </div>
-                    </div>
-                </div>
-                <div class="col-md-3">
-                    <div class="card bg-success text-white">
-                        <div class="card-body text-center py-2">
-                            <h5 class="mb-0">{{ dispositifs_efficaces|length }}</h5>
-                            <small>Efficaces</small>
-                        </div>
-                    </div>
-                </div>
-                <div class="col-md-3">
-                    <div class="card bg-warning text-dark">
-                        <div class="card-body text-center py-2">
-                            <h5 class="mb-0">{{ dispositifs_a_verifier|length }}</h5>
-                            <small>À vérifier</small>
-                        </div>
-                    </div>
-                </div>
-                <div class="col-md-3">
-                    <div class="card bg-info text-white">
-                        <div class="card-body text-center py-2">
-                            <h5 class="mb-0">{{ dispositifs_avec_plan|length }}</h5>
-                            <small>Avec plans</small>
-                        </div>
-                    </div>
-                </div>
-            </div>
-
-                <!-- Liste des dispositifs -->
-                <div class="table-responsive">
-                    <table class="table table-hover table-sm">
-                        <thead>
-                            <tr>
-                                <th>RÉFÉRENCE</th>
-                                <th>NOM</th>
-                                <th>TYPE</th>
-                                <th>EFFICACITÉ</th>
-                                <th>STATUT</th>
-                                <th>PROCHAINE VÉRIF</th>
-                                <th class="text-end">ACTIONS</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            {% for dispositif in dispositifs[:5] %}
-                            <tr>
-                                <td>
-                                    <strong>{{ dispositif.reference }}</strong>
-                                </td>
-                                <td>
-                                    <div class="fw-bold">{{ dispositif.nom|truncate(30) }}</div>
-                                    {% if dispositif.description %}
-                                    <small class="text-muted">{{ dispositif.description|truncate(40) }}</small>
-                                    {% endif %}
-                                </td>
-                                <td>
-                                    {% if dispositif.type_dispositif == 'Préventif' %}
-                                    <span class="badge bg-success">{{ dispositif.type_dispositif[:1] }}</span>
-                                    {% elif dispositif.type_dispositif == 'Détectif' %}
-                                    <span class="badge bg-warning text-dark">{{ dispositif.type_dispositif[:1] }}</span>
-                                    {% elif dispositif.type_dispositif == 'Correctif' %}
-                                    <span class="badge bg-danger">{{ dispositif.type_dispositif[:1] }}</span>
-                                    {% else %}
-                                    <span class="badge bg-secondary">{{ dispositif.type_dispositif[:1] }}</span>
-                                    {% endif %}
-                                </td>
-                                <td>
-                                    {% if dispositif.efficacite_reelle %}
-                                    <div class="progress" style="height: 8px;">
-                                        <div class="progress-bar bg-{% if dispositif.efficacite_reelle >= 4 %}success{% elif dispositif.efficacite_reelle >= 3 %}warning{% else %}danger{% endif %}" 
-                                             style="width: {{ (dispositif.efficacite_reelle / 5) * 100 }}%">
-                                        </div>
-                                    </div>
-                                    <small class="text-muted">{{ dispositif.efficacite_reelle }}/5</small>
-                                    {% else %}
-                                    <span class="badge bg-secondary">Non évalué</span>
-                                    {% endif %}
-                                </td>
-                                <td>
-                                    {% if dispositif.statut == 'actif' %}
-                                    <span class="badge bg-success">Actif</span>
-                                    {% elif dispositif.statut == 'inactif' %}
-                                    <span class="badge bg-secondary">Inactif</span>
-                                    {% else %}
-                                    <span class="badge bg-warning text-dark">{{ dispositif.statut }}</span>
-                                    {% endif %}
-                                </td>
-                                <td>
-                                    {% if dispositif.prochaine_verification %}
-                                        {% set jours_restants = (dispositif.prochaine_verification - datetime.now().date()).days %}
-                                        {{ dispositif.prochaine_verification.strftime('%d/%m/%Y') }}
-                                        <br>
-                                        <small class="text-{% if jours_restants <= 7 %}danger{% elif jours_restants <= 30 %}warning{% else %}success{% endif %}">
-                                            {{ jours_restants }} jour(s)
-                                        </small>
-                                    {% else %}
-                                        <span class="badge bg-warning text-dark">Non planifiée</span>
-                                    {% endif %}
-                                </td>
-                                <td>
-                                    <div class="btn-group btn-group-sm">
-                                        <a href="{{ url_for('detail_dispositif', dispositif_id=dispositif.id) }}" 
-                                           class="btn btn-outline-info" title="Détails">
-                                            <i class="fas fa-eye"></i>
-                                        </a>
-                                        <a href="{{ url_for('evaluer_dispositif', dispositif_id=dispositif.id) }}" 
-                                           class="btn btn-outline-warning" title="Évaluer">
-                                            <i class="fas fa-chart-bar"></i>
-                                        </a>
-                                    </div>
-                                </td>
-                            </tr>
-                            {% endfor %}
-                        </tbody>
-                    </table>
-                </div>
-                
-                {% if dispositifs|length > 5 %}
-                <div class="text-center mt-3">
-                    <a href="{{ url_for('liste_dispositifs_risque', risque_id=risque.id) }}" class="btn btn-sm btn-outline-primary">
-                        <i class="fas fa-list me-1"></i>Voir tous les {{ dispositifs|length }} dispositifs
-                    </a>
-                </div>
-                {% endif %}
-                
-                {% else %}
-                <!-- Aucun dispositif -->
-                <div class="text-center py-5">
-                    <i class="fas fa-shield-alt fa-4x text-muted mb-3"></i>
-                    <h5 class="text-muted">Aucun dispositif de maîtrise défini</h5>
-                    <p class="text-muted">Les dispositifs de maîtrise renforcent la gestion de ce risque</p>
-                    <a href="{{ url_for('nouveau_dispositif', risque_id=risque.id) }}" class="btn btn-success">
-                        <i class="fas fa-plus me-2"></i>Créer le premier dispositif
-                    </a>
-                </div>
-                {% endif %}
-            </div>
-        </div>
-    </div>
-</div>
-<!-- Section Documentation et Fichiers -->
-<div class="row mt-4">
-    <div class="col-md-12">
-        <div class="card shadow">
-            <div class="card-header bg-info text-white d-flex justify-content-between align-items-center">
-                <h6 class="mb-0">
-                    <i class="fas fa-file-alt me-2"></i>Documentation et Fichiers
-                </h6>
-                <button class="btn btn-sm btn-light" type="button" data-bs-toggle="collapse" 
-                        data-bs-target="#sectionDocumentation" aria-expanded="true">
-                    <i class="fas fa-chevron-down"></i>
-                </button>
-            </div>
-            <div class="card-body collapse show" id="sectionDocumentation">
-                <div class="row">
-                    <!-- Champs de documentation -->
-                    {% if champs_par_section.documentation %}
-                    <div class="col-md-6">
-                        <h6>Informations documentaires</h6>
-                        {% for champ in champs_par_section.documentation %}
-                        <div class="mb-3">
-                            <label class="form-label fw-bold">
-                                {{ champ.config.nom_affichage if champ.config else champ.nom_technique }}:
-                            </label>
-                            <div class="border rounded p-3 position-relative">
-                                {% if champ.config and champ.config.type_champ == 'fichier' and champ.get_valeur() %}
-                                    <a href="{{ url_for('telecharger_champ_fichier', champ_id=champ.id) }}" 
-                                       class="text-decoration-none d-block" target="_blank">
-                                        <i class="fas fa-file me-2"></i>{{ champ.get_valeur() }}
-                                    </a>
-                                {% elif champ.config and champ.config.type_champ == 'textarea' %}
-                                    {{ champ.get_valeur()|nl2br|safe }}
-                                {% elif champ.config and champ.config.type_champ == 'select' %}
-                                    <span class="badge bg-info">{{ champ.get_valeur() }}</span>
-                                {% elif champ.config and champ.config.type_champ == 'multiselect' %}
-                                    {% for valeur in champ.get_valeur() or [] %}
-                                    <span class="badge bg-info me-1">{{ valeur }}</span>
-                                    {% endfor %}
-                                {% elif champ.config and champ.config.type_champ == 'checkbox' %}
-                                    {% if champ.get_valeur() %}
-                                    <span class="badge bg-success">Oui</span>
-                                    {% else %}
-                                    <span class="badge bg-secondary">Non</span>
-                                    {% endif %}
+                        <div class="border-section info">
+                            {% if champ.config and champ.config.type_champ == 'textarea' %}
+                                {{ champ.get_valeur()|nl2br|safe }}
+                            {% elif champ.config and champ.config.type_champ == 'select' %}
+                                <span class="badge-modern badge-info">{{ champ.get_valeur() }}</span>
+                            {% elif champ.config and champ.config.type_champ == 'checkbox' %}
+                                {% if champ.get_valeur() %}
+                                <span class="badge-modern badge-success">Oui</span>
                                 {% else %}
-                                    {{ champ.get_valeur() or '<span class="text-muted">Non renseigné</span>'|safe }}
+                                <span class="badge-modern">Non</span>
                                 {% endif %}
-                                
-                                {% if current_user.has_permission('can_manage_risks') or risque.created_by == current_user.id %}
-                                <button class="btn btn-sm btn-outline-info position-absolute top-0 end-0 m-2" 
-                                        onclick="editerChamp({{ champ.id }})"
-                                        title="Modifier ce champ">
-                                    <i class="fas fa-edit"></i>
-                                </button>
-                                {% endif %}
-                            </div>
-                            {% if champ.config and champ.config.aide_texte %}
-                            <small class="text-muted">{{ champ.config.aide_texte }}</small>
+                            {% elif champ.config and champ.config.type_champ == 'multiselect' %}
+                                {% for valeur in champ.get_valeur() or [] %}
+                                <span class="badge-modern badge-info me-1">{{ valeur }}</span>
+                                {% endfor %}
+                            {% elif champ.config and champ.config.type_champ == 'fichier' and champ.get_valeur() %}
+                                <a href="{{ url_for('telecharger_champ_fichier', champ_id=champ.id) }}" 
+                                   class="text-decoration-none" target="_blank">
+                                    <i class="fas fa-file me-2"></i>{{ champ.get_valeur() }}
+                                </a>
+                            {% else %}
+                                {{ champ.get_valeur() or 'Non renseigné' }}
                             {% endif %}
                         </div>
-                        {% endfor %}
+                        {% if champ.config and champ.config.aide_texte %}
+                        <small class="text-muted mt-1">{{ champ.config.aide_texte }}</small>
+                        {% endif %}
+                    </div>
+                    {% endfor %}
+                </div>
+            </div>
+
+            <!-- KRI associé -->
+            {% if risque.kri %}
+            <div class="card-modern animate-in">
+                <div class="card-header-modern success">
+                    <div class="d-flex align-items-center">
+                        <div class="header-icon-sm bg-success me-3">
+                            <i class="fas fa-chart-line"></i>
+                        </div>
+                        <h5 class="mb-0">Indicateur de Risque (KRI)</h5>
+                    </div>
+                </div>
+                <div class="card-body">
+                    <h6 class="fw-bold text-success mb-3">{{ risque.kri.nom }}</h6>
+                    <p class="text-muted small">{{ risque.kri.description or 'Aucune description' }}</p>
+                    
+                    <div class="info-grid">
+                        <div class="info-card">
+                            <div class="info-icon" style="background: var(--success);">
+                                <i class="fas fa-ruler"></i>
+                            </div>
+                            <div class="info-content">
+                                <div class="info-label">Unité</div>
+                                <div class="info-value"><code>{{ risque.kri.unite_mesure }}</code></div>
+                            </div>
+                        </div>
+                        
+                        <div class="info-card">
+                            <div class="info-icon" style="background: var(--warning);">
+                                <i class="fas fa-exclamation-triangle"></i>
+                            </div>
+                            <div class="info-content">
+                                <div class="info-label">Seuil d'alerte</div>
+                                <div class="info-value">{{ risque.kri.seuil_alerte or 'Non défini' }}</div>
+                            </div>
+                        </div>
+                        
+                        <div class="info-card">
+                            <div class="info-icon" style="background: var(--danger);">
+                                <i class="fas fa-skull-crosswalk"></i>
+                            </div>
+                            <div class="info-content">
+                                <div class="info-label">Seuil critique</div>
+                                <div class="info-value">{{ risque.kri.seuil_critique or 'Non défini' }}</div>
+                            </div>
+                        </div>
+                        
+                        <div class="info-card">
+                            <div class="info-icon" style="background: var(--info);">
+                                <i class="fas fa-user"></i>
+                            </div>
+                            <div class="info-content">
+                                <div class="info-label">Responsable</div>
+                                <div class="info-value">{{ risque.kri.responsable_mesure.username if risque.kri.responsable_mesure else 'Non assigné' }}</div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    {% if risque.kri.mesures %}
+                    <div class="mt-4">
+                        <h6 class="fw-bold mb-3">Dernière mesure</h6>
+                        {% set derniere_mesure = risque.kri.mesures|sort(attribute='date_mesure', reverse=true)|first %}
+                        <div class="info-card">
+                            <div class="info-icon" style="background: {% if risque.kri.seuil_critique and derniere_mesure.valeur >= risque.kri.seuil_critique %}var(--danger){% elif risque.kri.seuil_alerte and derniere_mesure.valeur >= risque.kri.seuil_alerte %}var(--warning){% else %}var(--success){% endif %};">
+                                <i class="fas fa-chart-line"></i>
+                            </div>
+                            <div class="info-content">
+                                <div class="info-label">{{ derniere_mesure.date_mesure.strftime('%d/%m/%Y') }}</div>
+                                <div class="info-value fs-4">{{ derniere_mesure.valeur }} {{ risque.kri.unite_mesure }}</div>
+                            </div>
+                        </div>
+                    </div>
+                    {% else %}
+                    <div class="alert alert-info text-center py-2">
+                        <small><i class="fas fa-info-circle me-1"></i>Aucune mesure enregistrée</small>
                     </div>
                     {% endif %}
                     
-                    <!-- Liste des fichiers attachés -->
-                    <div class="col-md-{% if champs_par_section.documentation %}6{% else %}12{% endif %}">
-                        <div class="d-flex justify-content-between align-items-center mb-3">
-                            <h6 class="mb-0">Fichiers attachés</h6>
-                            <span class="badge bg-primary">{{ fichiers|length }}</span>
+                    <div class="mt-4 text-center">
+                        <a href="{{ url_for('liste_kri') }}" class="btn-modern btn-outline-secondary">
+                            <i class="fas fa-list me-1"></i>Voir tous les KRI
+                        </a>
+                        {% if current_user.has_permission('can_manage_kri') %}
+                        <a href="{{ url_for('modifier_kri', kri_id=risque.kri.id) }}" class="btn-modern btn-warning">
+                            <i class="fas fa-edit me-1"></i>Modifier KRI
+                        </a>
+                        {% endif %}
+                    </div>
+                </div>
+            </div>
+            {% else %}
+            <!-- Pas de KRI -->
+            <div class="card-modern animate-in">
+                <div class="card-header-modern light">
+                    <div class="d-flex align-items-center">
+                        <div class="header-icon-sm bg-light me-3">
+                            <i class="fas fa-chart-line"></i>
                         </div>
-                        
-                        {% if fichiers %}
-                        <div class="list-group">
-                            {% for fichier in fichiers %}
-                            <div class="list-group-item">
-                                <div class="d-flex justify-content-between align-items-center">
-                                    <div class="d-flex align-items-center">
-                                        <!-- Icône selon le type de fichier -->
-                                        {% if fichier.type_fichier %}
-                                            {% if 'pdf' in fichier.type_fichier %}
-                                            <i class="fas fa-file-pdf text-danger fa-lg me-3"></i>
-                                            {% elif 'word' in fichier.type_fichier or 'document' in fichier.type_fichier %}
-                                            <i class="fas fa-file-word text-primary fa-lg me-3"></i>
-                                            {% elif 'excel' in fichier.type_fichier or 'spreadsheet' in fichier.type_fichier %}
-                                            <i class="fas fa-file-excel text-success fa-lg me-3"></i>
-                                            {% elif 'image' in fichier.type_fichier %}
-                                            <i class="fas fa-file-image text-warning fa-lg me-3"></i>
-                                            {% else %}
-                                            <i class="fas fa-file-alt fa-lg me-3"></i>
-                                            {% endif %}
+                        <h5 class="mb-0">Indicateur de Risque (KRI)</h5>
+                    </div>
+                </div>
+                <div class="card-body text-center py-5">
+                    <i class="fas fa-chart-line fa-4x text-muted mb-3"></i>
+                    <p class="text-muted mb-4">Aucun KRI associé à ce risque</p>
+                    <a href="{{ url_for('nouveau_kri', risque_id=risque.id) }}" class="btn-modern btn-success">
+                        <i class="fas fa-plus me-2"></i>Créer un KRI
+                    </a>
+                </div>
+            </div>
+            {% endif %}
+        </div>
+    </div>
+
+    <!-- ========== DISPOSITIFS DE MAÎTRISE ========== -->
+    <div class="row mt-4">
+        <div class="col-12">
+            <div class="card-modern animate-in">
+                <div class="card-header-modern warning">
+                    <div class="d-flex justify-content-between align-items-center">
+                        <div class="d-flex align-items-center">
+                            <div class="header-icon-sm bg-warning me-3">
+                                <i class="fas fa-shield-alt"></i>
+                            </div>
+                            <h5 class="mb-0">Dispositifs de Maîtrise</h5>
+                        </div>
+                        <span class="badge-modern badge-warning">{{ dispositifs|length }}</span>
+                    </div>
+                </div>
+                <div class="card-body">
+                    {% if dispositifs %}
+                    <!-- Statistiques rapides -->
+                    {% set dispositifs_efficaces = [] %}
+                    {% set dispositifs_a_verifier = [] %}
+                    {% set dispositifs_avec_plan = [] %}
+                    
+                    {% for dispositif in dispositifs %}
+                        {% if dispositif.efficacite_reelle is not none and dispositif.efficacite_reelle >= 4 %}
+                            {% set dispositifs_efficaces = dispositifs_efficaces + [dispositif] %}
+                        {% endif %}
+                        {% if dispositif.prochaine_verification is none %}
+                            {% set dispositifs_a_verifier = dispositifs_a_verifier + [dispositif] %}
+                        {% endif %}
+                        {% if dispositif.plan_action_id is not none %}
+                            {% set dispositifs_avec_plan = dispositifs_avec_plan + [dispositif] %}
+                        {% endif %}
+                    {% endfor %}
+                    
+                    <div class="row g-3 mb-4">
+                        <div class="col-md-3">
+                            <div class="score-card">
+                                <div class="score-value">{{ dispositifs|length }}</div>
+                                <div class="score-label">Total</div>
+                            </div>
+                        </div>
+                        <div class="col-md-3">
+                            <div class="score-card success">
+                                <div class="score-value">{{ dispositifs_efficaces|length }}</div>
+                                <div class="score-label">Efficaces</div>
+                            </div>
+                        </div>
+                        <div class="col-md-3">
+                            <div class="score-card warning">
+                                <div class="score-value">{{ dispositifs_a_verifier|length }}</div>
+                                <div class="score-label">À vérifier</div>
+                            </div>
+                        </div>
+                        <div class="col-md-3">
+                            <div class="score-card info">
+                                <div class="score-value">{{ dispositifs_avec_plan|length }}</div>
+                                <div class="score-label">Avec plans</div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Liste des dispositifs -->
+                    <div class="table-responsive">
+                        <table class="elegant-table">
+                            <thead>
+                                <tr>
+                                    <th>RÉFÉRENCE</th>
+                                    <th>NOM</th>
+                                    <th>TYPE</th>
+                                    <th>EFFICACITÉ</th>
+                                    <th>STATUT</th>
+                                    <th>PROCHAINE VÉRIF</th>
+                                    <th class="text-end">ACTIONS</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for dispositif in dispositifs[:5] %}
+                                <tr>
+                                    <td>
+                                        <strong class="text-primary">{{ dispositif.reference }}</strong>
+                                    </td>
+                                    <td>
+                                        <div class="fw-bold">{{ dispositif.nom|truncate(30) }}</div>
+                                        {% if dispositif.description %}
+                                        <small class="text-muted">{{ dispositif.description|truncate(40) }}</small>
+                                        {% endif %}
+                                    </td>
+                                    <td>
+                                        {% if dispositif.type_dispositif == 'Préventif' %}
+                                        <span class="badge-modern badge-success" title="Préventif">P</span>
+                                        {% elif dispositif.type_dispositif == 'Détectif' %}
+                                        <span class="badge-modern badge-warning" title="Détectif">D</span>
+                                        {% elif dispositif.type_dispositif == 'Correctif' %}
+                                        <span class="badge-modern badge-danger" title="Correctif">C</span>
                                         {% else %}
-                                            <i class="fas fa-file-alt fa-lg me-3"></i>
+                                        <span class="badge-modern">?</span>
                                         {% endif %}
-                                        
-                                        <div>
-                                            <a href="{{ url_for('telecharger_fichier_risque', id=fichier.id) }}"
-                                               class="text-decoration-none fw-bold"
-                                               target="_blank">
-                                                {{ fichier.nom_fichier }}
-                                            </a>
-                                            {% if fichier.categorie %}
-                                            <span class="badge bg-secondary ms-2">{{ fichier.categorie }}</span>
-                                            {% endif %}
-                                            <br>
-                                            <small class="text-muted">
-                                                Ajouté par {{ fichier.uploader.username if fichier.uploader else 'Inconnu' }}
-                                                le {{ fichier.created_at.strftime('%d/%m/%Y à %H:%M') }}
-                                            </small>
+                                    </td>
+                                    <td>
+                                        {% if dispositif.efficacite_reelle %}
+                                        <div class="d-flex align-items-center gap-2">
+                                            <div class="progress-modern" style="width: 80px;">
+                                                <div class="progress-modern-bar {% if dispositif.efficacite_reelle >= 4 %}success{% elif dispositif.efficacite_reelle >= 3 %}warning{% else %}danger{% endif %}" 
+                                                     style="width: {{ (dispositif.efficacite_reelle / 5) * 100 }}%"></div>
+                                            </div>
+                                            <small>{{ dispositif.efficacite_reelle }}/5</small>
                                         </div>
-                                    </div>
-                                    <div class="d-flex align-items-center">
-                                        <span class="badge bg-light text-dark me-2">
-                                            {{ (fichier.taille / 1024)|round(1) }} Ko
-                                        </span>
-                                        {% if current_user.has_permission('can_manage_risks') or risque.created_by == current_user.id or current_user.id == fichier.uploaded_by %}
-                                        <form method="POST" 
-                                              action="{{ url_for('supprimer_fichier_risque', id=fichier.id) }}"
-                                              class="d-inline"
-                                              onsubmit="return confirm('Supprimer définitivement ce fichier ?');">
-                                            <button type="submit" class="btn btn-sm btn-outline-danger" title="Supprimer">
-                                                <i class="fas fa-trash"></i>
-                                            </button>
-                                        </form>
+                                        {% else %}
+                                        <span class="badge-modern">Non évalué</span>
                                         {% endif %}
-                                    </div>
+                                    </td>
+                                    <td>
+                                        {% if dispositif.statut == 'actif' %}
+                                        <span class="badge-modern badge-success">Actif</span>
+                                        {% elif dispositif.statut == 'inactif' %}
+                                        <span class="badge-modern">Inactif</span>
+                                        {% else %}
+                                        <span class="badge-modern badge-warning">{{ dispositif.statut }}</span>
+                                        {% endif %}
+                                    </td>
+                                    <td>
+                                        {% if dispositif.prochaine_verification %}
+                                            {% set jours_restants = (dispositif.prochaine_verification - now().date()).days %}
+                                            <span class="{% if jours_restants <= 7 %}text-danger{% elif jours_restants <= 30 %}text-warning{% else %}text-success{% endif %}">
+                                                {{ dispositif.prochaine_verification.strftime('%d/%m/%Y') }}
+                                            </span>
+                                            <br>
+                                            <small class="text-{% if jours_restants <= 7 %}danger{% elif jours_restants <= 30 %}warning{% else %}success{% endif %}">
+                                                {{ jours_restants }} jour(s)
+                                            </small>
+                                        {% else %}
+                                            <span class="badge-modern badge-warning">Non planifiée</span>
+                                        {% endif %}
+                                    </td>
+                                    <td class="text-end">
+                                        <div class="action-buttons justify-content-end">
+                                            <a href="{{ url_for('detail_dispositif', dispositif_id=dispositif.id) }}" 
+                                               class="btn-action info" title="Détails">
+                                                <i class="fas fa-eye"></i>
+                                            </a>
+                                            <a href="{{ url_for('evaluer_dispositif', dispositif_id=dispositif.id) }}" 
+                                               class="btn-action warning" title="Évaluer">
+                                                <i class="fas fa-chart-bar"></i>
+                                            </a>
+                                        </div>
+                                    </td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                    
+                    {% if dispositifs|length > 5 %}
+                    <div class="text-center mt-4">
+                        <a href="{{ url_for('liste_dispositifs_risque', risque_id=risque.id) }}" class="btn-modern btn-outline-secondary">
+                            <i class="fas fa-list me-1"></i>Voir tous les {{ dispositifs|length }} dispositifs
+                        </a>
+                    </div>
+                    {% endif %}
+                    
+                    {% else %}
+                    <!-- Aucun dispositif -->
+                    <div class="text-center py-5">
+                        <i class="fas fa-shield-alt fa-4x text-muted mb-3"></i>
+                        <h5 class="text-muted">Aucun dispositif de maîtrise défini</h5>
+                        <p class="text-muted mb-4">Les dispositifs de maîtrise renforcent la gestion de ce risque</p>
+                        <a href="{{ url_for('nouveau_dispositif', risque_id=risque.id) }}" class="btn-modern btn-success">
+                            <i class="fas fa-plus me-2"></i>Créer le premier dispositif
+                        </a>
+                    </div>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Section Documentation et Fichiers -->
+    <div class="row mt-4">
+        <div class="col-12">
+            <div class="card-modern animate-in">
+                <div class="card-header-modern info">
+                    <div class="d-flex align-items-center">
+                        <div class="header-icon-sm bg-info me-3">
+                            <i class="fas fa-file-alt"></i>
+                        </div>
+                        <h5 class="mb-0">Documentation et Fichiers</h5>
+                        <span class="badge-modern badge-info ms-3">{{ fichiers|length }}</span>
+                    </div>
+                </div>
+                <div class="card-body">
+                    <div class="row">
+                        <!-- Champs de documentation -->
+                        {% if champs_par_section.documentation %}
+                        <div class="col-md-6">
+                            <h6 class="fw-bold mb-3">Informations documentaires</h6>
+                            {% for champ in champs_par_section.documentation %}
+                            <div class="mb-4">
+                                <div class="d-flex justify-content-between align-items-start">
+                                    <label class="fw-bold small text-muted">{{ champ.config.nom_affichage if champ.config else champ.nom_technique }} :</label>
+                                    {% if current_user.has_permission('can_manage_risks') or risque.created_by == current_user.id %}
+                                    <button class="btn-action" onclick="editerChamp({{ champ.id }})" title="Modifier">
+                                        <i class="fas fa-edit"></i>
+                                    </button>
+                                    {% endif %}
                                 </div>
-                                {% if fichier.description %}
-                                <div class="mt-2">
-                                    <small class="text-muted">{{ fichier.description }}</small>
+                                <div class="border p-3 rounded">
+                                    {% if champ.config and champ.config.type_champ == 'fichier' and champ.get_valeur() %}
+                                        <a href="{{ url_for('telecharger_champ_fichier', champ_id=champ.id) }}" 
+                                           class="text-decoration-none" target="_blank">
+                                            <i class="fas fa-file me-2"></i>{{ champ.get_valeur() }}
+                                        </a>
+                                    {% elif champ.config and champ.config.type_champ == 'textarea' %}
+                                        {{ champ.get_valeur()|nl2br|safe }}
+                                    {% elif champ.config and champ.config.type_champ == 'select' %}
+                                        <span class="badge-modern badge-info">{{ champ.get_valeur() }}</span>
+                                    {% elif champ.config and champ.config.type_champ == 'multiselect' %}
+                                        {% for valeur in champ.get_valeur() or [] %}
+                                        <span class="badge-modern badge-info me-1">{{ valeur }}</span>
+                                        {% endfor %}
+                                    {% elif champ.config and champ.config.type_champ == 'checkbox' %}
+                                        {% if champ.get_valeur() %}
+                                        <span class="badge-modern badge-success">Oui</span>
+                                        {% else %}
+                                        <span class="badge-modern">Non</span>
+                                        {% endif %}
+                                    {% else %}
+                                        {{ champ.get_valeur() or 'Non renseigné' }}
+                                    {% endif %}
                                 </div>
+                                {% if champ.config and champ.config.aide_texte %}
+                                <small class="text-muted">{{ champ.config.aide_texte }}</small>
                                 {% endif %}
                             </div>
                             {% endfor %}
                         </div>
-                        {% else %}
-                        <div class="alert alert-info text-center py-4">
-                            <i class="fas fa-file-alt fa-3x mb-3"></i>
-                            <p class="mb-2">Aucun fichier attaché à ce risque</p>
-                            <p class="small text-muted mb-0">Vous pouvez ajouter des documents, images, analyses...</p>
-                        </div>
                         {% endif %}
+                        
+                        <!-- Liste des fichiers attachés -->
+                        <div class="col-md-{% if champs_par_section.documentation %}6{% else %}12{% endif %}">
+                            <h6 class="fw-bold mb-3">Fichiers attachés</h6>
+                            
+                            {% if fichiers %}
+                            <div class="list-group">
+                                {% for fichier in fichiers %}
+                                <div class="list-group-item border-0 bg-light rounded mb-2">
+                                    <div class="d-flex justify-content-between align-items-center">
+                                        <div class="d-flex align-items-center">
+                                            <!-- Icône selon le type de fichier -->
+                                            {% if fichier.type_fichier %}
+                                                {% if 'pdf' in fichier.type_fichier %}
+                                                <i class="fas fa-file-pdf text-danger fa-lg me-3"></i>
+                                                {% elif 'word' in fichier.type_fichier or 'document' in fichier.type_fichier %}
+                                                <i class="fas fa-file-word text-primary fa-lg me-3"></i>
+                                                {% elif 'excel' in fichier.type_fichier or 'spreadsheet' in fichier.type_fichier %}
+                                                <i class="fas fa-file-excel text-success fa-lg me-3"></i>
+                                                {% elif 'image' in fichier.type_fichier %}
+                                                <i class="fas fa-file-image text-warning fa-lg me-3"></i>
+                                                {% else %}
+                                                <i class="fas fa-file-alt fa-lg me-3"></i>
+                                                {% endif %}
+                                            {% else %}
+                                                <i class="fas fa-file-alt fa-lg me-3"></i>
+                                            {% endif %}
+                                            
+                                            <div>
+                                                <a href="{{ url_for('telecharger_fichier_risque', id=fichier.id) }}"
+                                                   class="text-decoration-none fw-bold"
+                                                   target="_blank">
+                                                    {{ fichier.nom_fichier }}
+                                                </a>
+                                                {% if fichier.categorie %}
+                                                <span class="badge-modern ms-2">{{ fichier.categorie }}</span>
+                                                {% endif %}
+                                                <br>
+                                                <small class="text-muted">
+                                                    Ajouté par {{ fichier.uploader.username if fichier.uploader else 'Inconnu' }}
+                                                    le {{ fichier.created_at.strftime('%d/%m/%Y') }}
+                                                </small>
+                                            </div>
+                                        </div>
+                                        <div class="d-flex align-items-center gap-2">
+                                            <span class="badge-modern">
+                                                {{ (fichier.taille / 1024)|round(1) }} Ko
+                                            </span>
+                                            {% if current_user.has_permission('can_manage_risks') or risque.created_by == current_user.id or current_user.id == fichier.uploaded_by %}
+                                            <form method="POST" 
+                                                  action="{{ url_for('supprimer_fichier_risque', id=fichier.id) }}"
+                                                  class="d-inline"
+                                                  onsubmit="return confirm('Supprimer définitivement ce fichier ?');">
+                                                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                                                <button type="submit" class="btn-action danger" title="Supprimer">
+                                                    <i class="fas fa-trash"></i>
+                                                </button>
+                                            </form>
+                                            {% endif %}
+                                        </div>
+                                    </div>
+                                    {% if fichier.description %}
+                                    <div class="mt-2 small text-muted">
+                                        {{ fichier.description }}
+                                    </div>
+                                    {% endif %}
+                                </div>
+                                {% endfor %}
+                            </div>
+                            {% else %}
+                            <div class="text-center py-5 bg-light rounded">
+                                <i class="fas fa-file-alt fa-4x text-muted mb-3"></i>
+                                <p class="text-muted">Aucun fichier attaché à ce risque</p>
+                            </div>
+                            {% endif %}
+                        </div>
                     </div>
                 </div>
             </div>
         </div>
     </div>
-</div>
 
-<!-- Historique des évaluations -->
-<!-- Historique des évaluations -->
-<div class="row mt-4">
-    <div class="col-12">
-        <div class="card shadow">
-            <div class="card-header bg-light d-flex justify-content-between align-items-center">
-                <h6 class="mb-0">
-                    <i class="fas fa-history me-2"></i>Historique des Évaluations
-                    <span class="badge bg-primary ms-2">{{ historique_evaluations|length }}</span>
-                </h6>
-                <button class="btn btn-sm btn-light" type="button" data-bs-toggle="collapse" 
-                        data-bs-target="#sectionHistorique" aria-expanded="true">
-                    <i class="fas fa-chevron-down"></i>
-                </button>
-            </div>
-            <div class="card-body collapse show" id="sectionHistorique">
-                {% if historique_evaluations %}
-                <div class="table-responsive">
-                    <table class="table table-sm table-striped table-hover">
-                        <thead class="table-light">
-                            <tr>
-                                <th>Date</th>
-                                <th>Phase</th>
-                                <th>Impact</th>
-                                <th>Probabilité</th>
-                                <th>Maîtrise</th>
-                                <th>Score</th>
-                                <th>Niveau</th>
-                                <th>Évaluateur</th>
-                                <th>Actions</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            {% for eval in historique_evaluations %}
-                            {% set valeurs = eval.get_valeurs_finales() %}
-                            <tr class="{% if not eval.est_complete() %}table-warning{% endif %}">
-                                <td>
-                                    <small>{{ eval.created_at.strftime('%d/%m/%Y') }}</small>
-                                    <br><small class="text-muted">{{ eval.created_at.strftime('%H:%M') }}</small>
-                                </td>
-                                <td>
-                                    {% if eval.date_confirmation %}
-                                        <span class="badge bg-success">Confirmée</span>
-                                    {% elif eval.date_validation %}
-                                        <span class="badge bg-warning">Validée</span>
-                                    {% else %}
-                                        <span class="badge bg-info">Pré-éval</span>
-                                    {% endif %}
-                                </td>
-                                <td>
-                                    {% if valeurs.impact %}
-                                    <span class="badge bg-primary">{{ valeurs.impact }}/5</span>
-                                    {% else %}
-                                    <span class="badge bg-secondary">N/A</span>
-                                    {% endif %}
-                                </td>
-                                <td>
-                                    {% if valeurs.probabilite %}
-                                    <span class="badge bg-warning">{{ valeurs.probabilite }}/5</span>
-                                    {% else %}
-                                    <span class="badge bg-secondary">N/A</span>
-                                    {% endif %}
-                                </td>
-                                <td>
-                                    {% if valeurs.niveau_maitrise %}
-                                    <span class="badge bg-success">{{ valeurs.niveau_maitrise }}/5</span>
-                                    {% else %}
-                                    <span class="badge bg-secondary">N/A</span>
-                                    {% endif %}
-                                </td>
-                                <td>
-                                    <strong>{{ valeurs.score or 'N/A' }}</strong>
-                                </td>
-                                <td>
-                                    {% if valeurs.niveau_risque %}
-                                    <span class="badge bg-{% if valeurs.niveau_risque == 'Critique' %}danger{% elif valeurs.niveau_risque == 'Élevé' %}warning{% elif valeurs.niveau_risque == 'Moyen' %}info{% else %}success{% endif %}">
-                                        {{ valeurs.niveau_risque }}
-                                    </span>
-                                    {% else %}
-                                    <span class="badge bg-secondary">N/A</span>
-                                    {% endif %}
-                                </td>
-                                <td>
-                                    {% if eval.evaluateur_final %}
-                                        {{ eval.evaluateur_final.username }}
-                                    {% elif eval.validateur %}
-                                        {{ eval.validateur.username }}
-                                    {% elif eval.referent_pre_evaluation %}
-                                        {{ eval.referent_pre_evaluation.username }}
-                                    {% else %}
-                                        Non assigné
-                                    {% endif %}
-                                </td>
-                                <td>
-                                    <div class="btn-group btn-group-sm" role="group">
-                                        <!-- Bouton pour voir les détails -->
-                                        <button type="button" class="btn btn-outline-info btn-sm" 
-                                                onclick="voirDetailsEvaluation({{ eval.id }})"
-                                                title="Voir les détails">
-                                            <i class="fas fa-eye"></i>
-                                        </button>
-                                        
-                                        <!-- Bouton pour réutiliser cette évaluation -->
-                                        <form action="{{ url_for('nouvelle_evaluation_risque', id=risque.id) }}" method="post" class="d-inline">
-                                            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                                            <input type="hidden" name="evaluation_id" value="{{ eval.id }}">
-                                            <button type="submit" class="btn btn-outline-primary btn-sm" 
-                                                    title="Réutiliser cette évaluation">
-                                                <i class="fas fa-redo"></i>
+    <!-- Historique des évaluations -->
+    <div class="row mt-4">
+        <div class="col-12">
+            <div class="card-modern animate-in">
+                <div class="card-header-modern light">
+                    <div class="d-flex align-items-center">
+                        <div class="header-icon-sm bg-light me-3">
+                            <i class="fas fa-history"></i>
+                        </div>
+                        <h5 class="mb-0">Historique des Évaluations</h5>
+                        <span class="badge-modern ms-3">{{ historique_evaluations|length }}</span>
+                    </div>
+                </div>
+                <div class="card-body">
+                    {% if historique_evaluations %}
+                    <div class="table-responsive">
+                        <table class="elegant-table">
+                            <thead>
+                                <tr>
+                                    <th>Date</th>
+                                    <th>Phase</th>
+                                    <th>Impact</th>
+                                    <th>Probabilité</th>
+                                    <th>Maîtrise</th>
+                                    <th>Score</th>
+                                    <th>Niveau</th>
+                                    <th>Évaluateur</th>
+                                    <th class="text-end">Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for eval in historique_evaluations %}
+                                {% set valeurs = eval.get_valeurs_finales() %}
+                                <tr class="{% if not eval.est_complete() %}table-warning{% endif %}">
+                                    <td>
+                                        <small>{{ eval.created_at.strftime('%d/%m/%Y') }}</small>
+                                        <br><small class="text-muted">{{ eval.created_at.strftime('%H:%M') }}</small>
+                                    </td>
+                                    <td>
+                                        {% if eval.date_confirmation %}
+                                            <span class="badge-modern badge-success">Confirmée</span>
+                                        {% elif eval.date_validation %}
+                                            <span class="badge-modern badge-warning">Validée</span>
+                                        {% else %}
+                                            <span class="badge-modern badge-info">Pré-éval</span>
+                                        {% endif %}
+                                    </td>
+                                    <td>
+                                        {% if valeurs.impact %}
+                                        <span class="badge-modern badge-primary">{{ valeurs.impact }}/5</span>
+                                        {% else %}
+                                        <span class="badge-modern">N/A</span>
+                                        {% endif %}
+                                    </td>
+                                    <td>
+                                        {% if valeurs.probabilite %}
+                                        <span class="badge-modern badge-warning">{{ valeurs.probabilite }}/5</span>
+                                        {% else %}
+                                        <span class="badge-modern">N/A</span>
+                                        {% endif %}
+                                    </td>
+                                    <td>
+                                        {% if valeurs.niveau_maitrise %}
+                                        <span class="badge-modern badge-success">{{ valeurs.niveau_maitrise }}/5</span>
+                                        {% else %}
+                                        <span class="badge-modern">N/A</span>
+                                        {% endif %}
+                                    </td>
+                                    <td>
+                                        <strong>{{ valeurs.score or 'N/A' }}</strong>
+                                    </td>
+                                    <td>
+                                        {% if valeurs.niveau_risque %}
+                                        <span class="badge-modern badge-{% if valeurs.niveau_risque == 'Critique' %}danger{% elif valeurs.niveau_risque == 'Élevé' %}warning{% elif valeurs.niveau_risque == 'Moyen' %}info{% else %}success{% endif %}">
+                                            {{ valeurs.niveau_risque }}
+                                        </span>
+                                        {% else %}
+                                        <span class="badge-modern">N/A</span>
+                                        {% endif %}
+                                    </td>
+                                    <td>
+                                        {% if eval.evaluateur_final %}
+                                            {{ eval.evaluateur_final.username }}
+                                        {% elif eval.validateur %}
+                                            {{ eval.validateur.username }}
+                                        {% elif eval.referent_pre_evaluation %}
+                                            {{ eval.referent_pre_evaluation.username }}
+                                        {% else %}
+                                            Non assigné
+                                        {% endif %}
+                                    </td>
+                                    <td class="text-end">
+                                        <div class="action-buttons justify-content-end">
+                                            <button type="button" class="btn-action info" 
+                                                    onclick="voirDetailsEvaluation({{ eval.id }})"
+                                                    title="Voir les détails">
+                                                <i class="fas fa-eye"></i>
                                             </button>
-                                        </form>
-                                    </div>
-                                </td>
-                            </tr>
-                            {% endfor %}
-                        </tbody>
-                    </table>
+                                            
+                                            <form action="{{ url_for('nouvelle_evaluation_risque', id=risque.id) }}" method="post" class="d-inline">
+                                                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                                                <input type="hidden" name="evaluation_id" value="{{ eval.id }}">
+                                                <button type="submit" class="btn-action primary" 
+                                                        title="Réutiliser cette évaluation">
+                                                    <i class="fas fa-redo"></i>
+                                                </button>
+                                            </form>
+                                        </div>
+                                    </td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                    {% else %}
+                    <div class="text-center py-5">
+                        <i class="fas fa-history fa-4x text-muted mb-3"></i>
+                        <p class="text-muted">Aucune évaluation enregistrée</p>
+                    </div>
+                    {% endif %}
                 </div>
-                {% else %}
-                <div class="text-center text-muted py-4">
-                    <i class="fas fa-history fa-3x mb-3"></i>
-                    <p>Aucune évaluation enregistrée</p>
-                </div>
-                {% endif %}
             </div>
         </div>
     </div>
@@ -1047,25 +1767,23 @@
 {% if current_user.has_permission('can_manage_risks') or risque.created_by == current_user.id %}
 
 <!-- Modal pour ajouter un fichier -->
-<!-- Modal pour ajouter un fichier -->
-<div class="modal fade" id="modalAjoutFichier" tabindex="-1" aria-labelledby="modalAjoutFichierLabel" aria-hidden="true">
+<div class="modal fade" id="modalAjoutFichier" tabindex="-1">
     <div class="modal-dialog">
-        <div class="modal-content">
-            <div class="modal-header">
-                <h5 class="modal-title" id="modalAjoutFichierLabel">
-                    <i class="fas fa-file-upload"></i> Ajouter un fichier
+        <div class="modal-content modal-content-modern">
+            <div class="modal-header modal-header-modern">
+                <h5 class="modal-title">
+                    <i class="fas fa-file-upload me-2"></i> Ajouter un fichier
                 </h5>
-                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
             </div>
-            <!-- SUPPRIMEZ LE FORMULAIRE EN TROP ICI -->
             <form method="POST" action="{{ url_for('ajouter_fichier_risque', risque_id=risque.id) }}" 
                   enctype="multipart/form-data" id="formAjoutFichier">
-                <div class="modal-body">
+                <div class="modal-body modal-body-modern">
                     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                     
                     <div class="mb-3">
                         <label class="form-label fw-bold">Fichier :</label>
-                        <input type="file" class="form-control" name="fichier" id="fichierInput" required>
+                        <input type="file" class="form-control-modern" name="fichier" id="fichierInput" required>
                         <small class="form-text text-muted">
                             Formats autorisés : {{ config_fichiers.extensions|join(', ') }}<br>
                             Taille max : {{ config_fichiers.taille_max_mo }} Mo
@@ -1075,7 +1793,7 @@
                     
                     <div class="mb-3">
                         <label class="form-label fw-bold">Catégorie :</label>
-                        <select class="form-select" name="categorie" required>
+                        <select class="form-control-modern" name="categorie" required>
                             <option value="">Sélectionnez une catégorie</option>
                             {% for categorie in config_fichiers.categories %}
                             <option value="{{ categorie }}">{{ categorie }}</option>
@@ -1085,15 +1803,15 @@
                     
                     <div class="mb-3">
                         <label class="form-label fw-bold">Description :</label>
-                        <textarea class="form-control" name="description" rows="3" 
+                        <textarea class="form-control-modern" name="description" rows="3" 
                                   placeholder="Description du fichier (optionnel)..." 
                                   maxlength="500"></textarea>
                         <small class="form-text text-muted">Maximum 500 caractères</small>
                     </div>
                 </div>
-                <div class="modal-footer">
-                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Annuler</button>
-                    <button type="submit" class="btn btn-primary" id="btnUploadFichier">
+                <div class="modal-footer modal-footer-modern">
+                    <button type="button" class="btn-modern btn-outline-secondary" data-bs-dismiss="modal">Annuler</button>
+                    <button type="submit" class="btn-modern btn-primary" id="btnUploadFichier">
                         <i class="fas fa-upload me-1"></i>Téléverser
                     </button>
                 </div>
@@ -1103,22 +1821,22 @@
 </div>
 
 <!-- Modal pour ajouter un champ personnalisé -->
-<div class="modal fade" id="modalAjoutChamp" tabindex="-1" aria-labelledby="modalAjoutChampLabel" aria-hidden="true">
+<div class="modal fade" id="modalAjoutChamp" tabindex="-1">
     <div class="modal-dialog">
-        <div class="modal-content">
-            <div class="modal-header">
-                <h5 class="modal-title" id="modalAjoutChampLabel">
-                    <i class="fas fa-plus"></i> Ajouter un champ personnalisé
+        <div class="modal-content modal-content-modern">
+            <div class="modal-header modal-header-modern">
+                <h5 class="modal-title">
+                    <i class="fas fa-plus me-2"></i> Ajouter un champ personnalisé
                 </h5>
-                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
             </div>
             <form method="POST" action="{{ url_for('ajouter_champ_personnalise', risque_id=risque.id) }}" id="formAjoutChamp">
-                <div class="modal-body">
+                <div class="modal-body modal-body-modern">
                     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                     
                     <div class="mb-3">
                         <label class="form-label fw-bold">Sélectionner un champ :</label>
-                        <select class="form-select" name="champ_config_id" id="selectChampConfig" 
+                        <select class="form-control-modern" name="champ_config_id" id="selectChampConfig" 
                                 onchange="chargerConfigurationChamp()" required>
                             <option value="">-- Sélectionner un champ --</option>
                             {% for config in champs_disponibles %}
@@ -1142,9 +1860,9 @@
                         </div>
                     </div>
                 </div>
-                <div class="modal-footer">
-                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Annuler</button>
-                    <button type="submit" class="btn btn-primary" disabled id="btnAjouterChamp">
+                <div class="modal-footer modal-footer-modern">
+                    <button type="button" class="btn-modern btn-outline-secondary" data-bs-dismiss="modal">Annuler</button>
+                    <button type="submit" class="btn-modern btn-primary" disabled id="btnAjouterChamp">
                         <i class="fas fa-plus me-1"></i>Ajouter
                     </button>
                 </div>
@@ -1154,16 +1872,16 @@
 </div>
 
 <!-- Modal pour éditer un champ existant -->
-<div class="modal fade" id="modalEditerChamp" tabindex="-1" aria-labelledby="modalEditerChampLabel" aria-hidden="true">
+<div class="modal fade" id="modalEditerChamp" tabindex="-1">
     <div class="modal-dialog">
-        <div class="modal-content">
-            <div class="modal-header">
-                <h5 class="modal-title" id="modalEditerChampLabel">
-                    <i class="fas fa-edit"></i> Modifier le champ
+        <div class="modal-content modal-content-modern">
+            <div class="modal-header modal-header-modern">
+                <h5 class="modal-title">
+                    <i class="fas fa-edit me-2"></i> Modifier le champ
                 </h5>
-                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
             </div>
-            <div class="modal-body" id="contenuEditionChamp">
+            <div class="modal-body modal-body-modern" id="contenuEditionChamp">
                 <!-- Chargé dynamiquement -->
             </div>
         </div>
@@ -1175,32 +1893,29 @@
 <!-- Actions rapides -->
 <div class="row mt-4">
     <div class="col-12">
-        <div class="card border-0">
+        <div class="card-modern border-0 bg-transparent shadow-none">
             <div class="card-body text-center">
-                <div class="btn-group" role="group">
-                    <a href="{{ url_for('evaluer_risque_triphase', id=risque.id) }}" class="btn btn-primary">
-                        <i class="fas fa-chart-bar me-1"></i>Nouvelle Évaluation
+                <div class="action-buttons justify-content-center">
+                    <a href="{{ url_for('evaluer_risque_triphase', id=risque.id) }}" class="btn-modern btn-primary">
+                        <i class="fas fa-chart-bar me-2"></i>Nouvelle Évaluation
                     </a>
-                    <a href="{{ url_for('modifier_risque', id=risque.id) }}" class="btn btn-outline-warning">
-                        <i class="fas fa-edit me-1"></i>Modifier le Risque
+                    <a href="{{ url_for('modifier_risque', id=risque.id) }}" class="btn-modern btn-warning">
+                        <i class="fas fa-edit me-2"></i>Modifier le Risque
                     </a>
-                    <a href="{{ url_for('evaluer_risque_triphase', id=risque.id) }}" class="btn btn-primary">
-                        <i class="fas fa-chart-bar me-1"></i>Évaluer
-                    </a>
-                    <a href="{{ url_for('nouvelle_campagne_evaluation', id=risque.id) }}" class="btn btn-success">
-                        <i class="fas fa-calendar-plus me-1"></i>Nouvelle Campagne
+                    <a href="{{ url_for('nouvelle_campagne_evaluation', id=risque.id) }}" class="btn-modern btn-success">
+                        <i class="fas fa-calendar-plus me-2"></i>Nouvelle Campagne
                     </a>
                     {% if not risque.kri %}
-                    <a href="{{ url_for('nouveau_kri', risque_id=risque.id) }}" class="btn btn-success">
-                        <i class="fas fa-chart-line me-1"></i>Créer KRI
+                    <a href="{{ url_for('nouveau_kri', risque_id=risque.id) }}" class="btn-modern btn-success">
+                        <i class="fas fa-chart-line me-2"></i>Créer KRI
                     </a>
                     {% endif %}
-                    <a href="{{ url_for('detail_cartographie', id=risque.cartographie_id) }}" class="btn btn-outline-info">
-                        <i class="fas fa-map me-1"></i>Voir sur la Matrice
+                    <a href="{{ url_for('detail_cartographie', id=risque.cartographie_id) }}" class="btn-modern btn-info">
+                        <i class="fas fa-map me-2"></i>Voir sur la Matrice
                     </a>
                     {% if current_user.has_permission('can_manage_risks') %}
-                    <a href="{{ url_for('exporter_risque', id=risque.id) }}" class="btn btn-outline-secondary">
-                        <i class="fas fa-download me-1"></i>Exporter
+                    <a href="{{ url_for('exporter_risque', id=risque.id) }}" class="btn-modern btn-outline-secondary">
+                        <i class="fas fa-download me-2"></i>Exporter
                     </a>
                     {% endif %}
                 </div>
@@ -1208,6 +1923,7 @@
         </div>
     </div>
 </div>
+{% endblock %}
 
 {% block scripts %}
 <script>
@@ -1230,7 +1946,6 @@ document.addEventListener('DOMContentLoaded', function() {
                 const allowedExtensions = {{ config_fichiers.extensions|tojson }};
                 const maxSize = {{ config_fichiers.taille_max_mo }} * 1024 * 1024;
                 
-                // Vérifier l'extension
                 if (!allowedExtensions.includes(extension)) {
                     e.preventDefault();
                     const errorDiv = document.getElementById('fichierError');
@@ -1239,7 +1954,6 @@ document.addEventListener('DOMContentLoaded', function() {
                     return;
                 }
                 
-                // Vérifier la taille
                 if (file.size > maxSize) {
                     e.preventDefault();
                     const errorDiv = document.getElementById('fichierError');
@@ -1249,13 +1963,11 @@ document.addEventListener('DOMContentLoaded', function() {
                     return;
                 }
                 
-                // Désactiver le bouton pendant l'upload
                 btnUploadFichier.disabled = true;
                 btnUploadFichier.innerHTML = '<i class="fas fa-spinner fa-spin me-1"></i>Téléversement...';
             }
         });
         
-        // Réinitialiser la validation quand le fichier change
         fichierInput.addEventListener('change', function() {
             this.classList.remove('is-invalid');
             document.getElementById('fichierError').textContent = '';
@@ -1283,7 +1995,7 @@ document.addEventListener('DOMContentLoaded', function() {
                                 html = `
                                     <div class="mb-3">
                                         <label class="form-label fw-bold">Valeur :</label>
-                                        <input type="text" class="form-control" name="valeur" 
+                                        <input type="text" class="form-control-modern" name="valeur" 
                                                ${estObligatoire ? 'required' : ''}
                                                maxlength="255">
                                         ${config.aide_texte ? `<small class="form-text text-muted">${config.aide_texte}</small>` : ''}
@@ -1295,7 +2007,7 @@ document.addEventListener('DOMContentLoaded', function() {
                                 html = `
                                     <div class="mb-3">
                                         <label class="form-label fw-bold">Valeur :</label>
-                                        <textarea class="form-control" name="valeur" rows="4" 
+                                        <textarea class="form-control-modern" name="valeur" rows="4" 
                                                   ${estObligatoire ? 'required' : ''}></textarea>
                                         ${config.aide_texte ? `<small class="form-text text-muted">${config.aide_texte}</small>` : ''}
                                     </div>
@@ -1312,7 +2024,7 @@ document.addEventListener('DOMContentLoaded', function() {
                                 html = `
                                     <div class="mb-3">
                                         <label class="form-label fw-bold">Valeur :</label>
-                                        <select class="form-select" name="valeur" ${estObligatoire ? 'required' : ''}>
+                                        <select class="form-control-modern" name="valeur" ${estObligatoire ? 'required' : ''}>
                                             <option value="">-- Sélectionner --</option>
                                             ${options}
                                         </select>
@@ -1331,7 +2043,7 @@ document.addEventListener('DOMContentLoaded', function() {
                                 html = `
                                     <div class="mb-3">
                                         <label class="form-label fw-bold">Valeurs :</label>
-                                        <select class="form-select" name="valeur" multiple 
+                                        <select class="form-control-modern" name="valeur" multiple 
                                                 size="4" ${estObligatoire ? 'required' : ''}>
                                             ${multiOptions}
                                         </select>
@@ -1355,7 +2067,7 @@ document.addEventListener('DOMContentLoaded', function() {
                                 html = `
                                     <div class="mb-3">
                                         <label class="form-label fw-bold">Date :</label>
-                                        <input type="date" class="form-control" name="valeur" 
+                                        <input type="date" class="form-control-modern" name="valeur" 
                                                ${estObligatoire ? 'required' : ''}>
                                         ${config.aide_texte ? `<small class="form-text text-muted">${config.aide_texte}</small>` : ''}
                                     </div>
@@ -1366,7 +2078,7 @@ document.addEventListener('DOMContentLoaded', function() {
                                 html = `
                                     <div class="mb-3">
                                         <label class="form-label fw-bold">Fichier :</label>
-                                        <input type="file" class="form-control" name="valeur" 
+                                        <input type="file" class="form-control-modern" name="valeur" 
                                                ${estObligatoire ? 'required' : ''}>
                                         ${config.aide_texte ? `<small class="form-text text-muted">${config.aide_texte}</small>` : ''}
                                     </div>
@@ -1407,10 +2119,10 @@ document.addEventListener('DOMContentLoaded', function() {
         });
     }
     
-    // Initialiser les tooltips Bootstrap
-    var tooltipTriggerList = [].slice.call(document.querySelectorAll('[data-bs-toggle="tooltip"]'))
-    var tooltipList = tooltipTriggerList.map(function (tooltipTriggerEl) {
-        return new bootstrap.Tooltip(tooltipTriggerEl)
+    // Initialiser les tooltips
+    const tooltipTriggerList = [].slice.call(document.querySelectorAll('[data-bs-toggle="tooltip"]'));
+    tooltipTriggerList.map(function (tooltipTriggerEl) {
+        return new bootstrap.Tooltip(tooltipTriggerEl);
     });
 });
 
@@ -1434,63 +2146,138 @@ function editerChamp(champId) {
         });
 }
 
-// Confirmation de suppression
-function confirmerSuppression(message) {
-    return confirm(message || 'Êtes-vous sûr de vouloir supprimer cet élément ?');
-}
 // Fonction pour voir les détails d'une évaluation
 function voirDetailsEvaluation(evaluationId) {
     fetch(`/api/evaluation/${evaluationId}/details`)
         .then(response => response.json())
         .then(data => {
             if (data.success) {
-                // Créer le contenu de la modal
-                let html = `
-                <div class="modal-header">
-                    <h5 class="modal-title">Détails de l'évaluation</h5>
-                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
-                </div>
+                const html = `
                 <div class="modal-body">
                     <div class="row">
                         <div class="col-md-6">
-                            <h6>Phase 1 - Pré-évaluation</h6>
-                            <p><strong>Impact:</strong> ${data.impact_pre || 'Non défini'}/5</p>
-                            <p><strong>Probabilité:</strong> ${data.probabilite_pre || 'Non défini'}/5</p>
-                            <p><strong>Maîtrise:</strong> ${data.niveau_maitrise_pre || 'Non défini'}/5</p>
-                            <p><strong>Commentaire:</strong> ${data.commentaire_pre_evaluation || 'Aucun'}</p>
+                            <h6 class="fw-bold mb-3">Phase 1 - Pré-évaluation</h6>
+                            <div class="info-card mb-2">
+                                <div class="info-icon" style="background: var(--primary);">
+                                    <i class="fas fa-bolt"></i>
+                                </div>
+                                <div class="info-content">
+                                    <div class="info-label">Impact</div>
+                                    <div class="info-value">${data.impact_pre || 'Non défini'}/5</div>
+                                </div>
+                            </div>
+                            <div class="info-card mb-2">
+                                <div class="info-icon" style="background: var(--warning);">
+                                    <i class="fas fa-chart-line"></i>
+                                </div>
+                                <div class="info-content">
+                                    <div class="info-label">Probabilité</div>
+                                    <div class="info-value">${data.probabilite_pre || 'Non défini'}/5</div>
+                                </div>
+                            </div>
+                            <div class="info-card mb-2">
+                                <div class="info-icon" style="background: var(--success);">
+                                    <i class="fas fa-shield-alt"></i>
+                                </div>
+                                <div class="info-content">
+                                    <div class="info-label">Maîtrise</div>
+                                    <div class="info-value">${data.niveau_maitrise_pre || 'Non défini'}/5</div>
+                                </div>
+                            </div>
+                            ${data.commentaire_pre_evaluation ? `
+                            <div class="mt-3 p-3 bg-light rounded">
+                                <small class="fw-bold">Commentaire :</small>
+                                <p class="mb-0 small">${data.commentaire_pre_evaluation}</p>
+                            </div>
+                            ` : ''}
                         </div>
                         <div class="col-md-6">
-                            <h6>Phase 2 - Validation</h6>
-                            <p><strong>Impact ajusté:</strong> ${data.impact_val || 'Non ajusté'}/5</p>
-                            <p><strong>Probabilité ajustée:</strong> ${data.probabilite_val || 'Non ajusté'}/5</p>
-                            <p><strong>Statut:</strong> <span class="badge bg-${data.statut_validation === 'valide' ? 'success' : 'warning'}">${data.statut_validation}</span></p>
-                            <p><strong>Commentaire:</strong> ${data.commentaire_validation || 'Aucun'}</p>
+                            <h6 class="fw-bold mb-3">Phase 2 - Validation</h6>
+                            <div class="info-card mb-2">
+                                <div class="info-icon" style="background: var(--primary);">
+                                    <i class="fas fa-bolt"></i>
+                                </div>
+                                <div class="info-content">
+                                    <div class="info-label">Impact ajusté</div>
+                                    <div class="info-value">${data.impact_val || 'Non ajusté'}/5</div>
+                                </div>
+                            </div>
+                            <div class="info-card mb-2">
+                                <div class="info-icon" style="background: var(--warning);">
+                                    <i class="fas fa-chart-line"></i>
+                                </div>
+                                <div class="info-content">
+                                    <div class="info-label">Probabilité ajustée</div>
+                                    <div class="info-value">${data.probabilite_val || 'Non ajusté'}/5</div>
+                                </div>
+                            </div>
+                            <div class="info-card mb-2">
+                                <div class="info-icon" style="background: ${data.statut_validation === 'valide' ? 'var(--success)' : 'var(--warning)'};">
+                                    <i class="fas fa-check-circle"></i>
+                                </div>
+                                <div class="info-content">
+                                    <div class="info-label">Statut</div>
+                                    <div class="info-value">
+                                        <span class="badge-modern badge-${data.statut_validation === 'valide' ? 'success' : 'warning'}">${data.statut_validation}</span>
+                                    </div>
+                                </div>
+                            </div>
+                            ${data.commentaire_validation ? `
+                            <div class="mt-3 p-3 bg-light rounded">
+                                <small class="fw-bold">Commentaire :</small>
+                                <p class="mb-0 small">${data.commentaire_validation}</p>
+                            </div>
+                            ` : ''}
                         </div>
                     </div>
                     ${data.date_confirmation ? `
-                    <div class="row mt-3">
+                    <div class="row mt-4">
                         <div class="col-12">
-                            <h6>Phase 3 - Confirmation</h6>
-                            <p><strong>Impact final:</strong> ${data.impact_conf || 'Non ajusté'}/5</p>
-                            <p><strong>Probabilité finale:</strong> ${data.probabilite_conf || 'Non ajusté'}/5</p>
-                            <p><strong>Score final:</strong> ${data.score_risque || 'Non calculé'}</p>
-                            <p><strong>Niveau:</strong> <span class="badge bg-${data.niveau_risque === 'Critique' ? 'danger' : data.niveau_risque === 'Élevé' ? 'warning' : data.niveau_risque === 'Moyen' ? 'info' : 'success'}">${data.niveau_risque}</span></p>
+                            <h6 class="fw-bold mb-3">Phase 3 - Confirmation</h6>
+                            <div class="row g-3">
+                                <div class="col-md-4">
+                                    <div class="score-card primary">
+                                        <div class="score-value">${data.impact_conf || 'N/A'}/5</div>
+                                        <div class="score-label">Impact final</div>
+                                    </div>
+                                </div>
+                                <div class="col-md-4">
+                                    <div class="score-card warning">
+                                        <div class="score-value">${data.probabilite_conf || 'N/A'}/5</div>
+                                        <div class="score-label">Probabilité finale</div>
+                                    </div>
+                                </div>
+                                <div class="col-md-4">
+                                    <div class="score-card ${data.niveau_risque === 'Critique' ? 'danger' : data.niveau_risque === 'Élevé' ? 'warning' : data.niveau_risque === 'Moyen' ? 'info' : 'success'}">
+                                        <div class="score-value">${data.score_risque || 'N/A'}</div>
+                                        <div class="score-label">Score</div>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="mt-3 text-center">
+                                <span class="badge-modern badge-${data.niveau_risque === 'Critique' ? 'danger' : data.niveau_risque === 'Élevé' ? 'warning' : data.niveau_risque === 'Moyen' ? 'info' : 'success'} fs-6 p-3">
+                                    Niveau : ${data.niveau_risque}
+                                </span>
+                            </div>
                         </div>
                     </div>
                     ` : ''}
                 </div>
                 <div class="modal-footer">
-                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Fermer</button>
-                    <a href="${data.url_modification}" class="btn btn-primary">Modifier</a>
+                    <button type="button" class="btn-modern btn-outline-secondary" data-bs-dismiss="modal">Fermer</button>
+                    <a href="${data.url_modification}" class="btn-modern btn-primary">Modifier</a>
                 </div>
                 `;
                 
-                // Créer une modal dynamique
                 const modalDiv = document.createElement('div');
                 modalDiv.className = 'modal fade';
                 modalDiv.innerHTML = `
                     <div class="modal-dialog modal-lg">
-                        <div class="modal-content">
+                        <div class="modal-content modal-content-modern">
+                            <div class="modal-header modal-header-modern">
+                                <h5 class="modal-title">Détails de l'évaluation</h5>
+                                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                            </div>
                             ${html}
                         </div>
                     </div>
@@ -1500,7 +2287,6 @@ function voirDetailsEvaluation(evaluationId) {
                 const modal = new bootstrap.Modal(modalDiv);
                 modal.show();
                 
-                // Nettoyer après fermeture
                 modalDiv.addEventListener('hidden.bs.modal', function () {
                     document.body.removeChild(modalDiv);
                 });
@@ -1512,52 +2298,4 @@ function voirDetailsEvaluation(evaluationId) {
         });
 }
 </script>
-
-<style>
-/* Styles supplémentaires */
-.border-start {
-    border-left-width: 4px !important;
-}
-
-.list-group-item:hover {
-    background-color: #f8f9fa;
-}
-
-.card-header button {
-    transition: transform 0.3s ease;
-}
-
-.card-header button[aria-expanded="false"] .fa-chevron-down {
-    transform: rotate(-90deg);
-}
-
-.badge {
-    font-weight: 500;
-}
-
-.table th {
-    font-weight: 600;
-}
-
-.alert {
-    border-left: 4px solid;
-}
-
-.alert-info {
-    border-left-color: #0dcaf0;
-}
-
-.alert-warning {
-    border-left-color: #ffc107;
-}
-
-.alert-danger {
-    border-left-color: #dc3545;
-}
-
-.alert-success {
-    border-left-color: #198754;
-}
-</style>
-{% endblock %}
 {% endblock %}
