@@ -563,7 +563,18 @@ class User(UserMixin, db.Model):
         """Met à jour la date de dernière connexion"""
         self.last_login = datetime.utcnow()
         db.session.commit()
-    
+    # Dans le modèle User, ajouter cette propriété
+    @property
+    def nom_complet(self):
+        """Retourne le nom complet de l'utilisateur"""
+        if self.prenom and self.nom:
+            return f"{self.prenom} {self.nom}"
+        elif self.nom:
+            return self.nom
+        elif self.prenom:
+            return self.prenom
+        else:
+            return self.username
     def can_access_department(self, department_id):
         """Vérifie si l'utilisateur peut accéder à un département spécifique"""
         if self.has_permission('can_access_all_departments'):
