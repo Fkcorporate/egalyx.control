@@ -1759,21 +1759,1222 @@
 </div>
 
 <!-- Inclure tous les modals -->
-{% include 'audit/modals/gestion_equipe.html' %}
-{% include 'audit/modals/nouvelle_constatation.html' %}
-{% include 'audit/modals/nouvelle_recommandation.html' %}
-{% include 'audit/modals/nouveau_plan_action.html' %}
-{% include 'audit/modals/upload_multiple.html' %}
-{% include 'audit/modals/rapport.html' %}
-{% include 'audit/modals/statut_recommandation.html' %}
-{% include 'audit/modals/modifier_constatation.html' %}
-{% include 'audit/modals/changer_statut_constatation.html' %}
-{% include 'audit/modals/ajouter_preuve.html' %}
-{% include 'audit/modals/voir_preuves.html' %}
-{% include 'audit/modals/modifier_recommandation.html' %}
-{% include 'audit/modals/resume_constatation.html' %}
-{% include 'audit/modals/resume_recommandation.html' %}
+<!-- Modal Gestion d'équipe -->
+<div class="modal fade" id="modalGestionEquipe" tabindex="-1">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content modal-content-modern">
+            <form method="POST" action="{{ url_for('gerer_equipe_audit', audit_id=audit.id) }}" id="formGestionEquipe">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                
+                <div class="modal-header modal-header-modern">
+                    <h5 class="modal-title">
+                        <i class="fas fa-users-cog me-2"></i> {{ t("Gérer l'équipe d'audit") }}
+                    </h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="{{ t("Fermer") }}"></button>
+                </div>
+                
+                <div class="modal-body modal-body-modern">
+                    <ul class="nav nav-tabs mb-4" id="equipeTabs" role="tablist">
+                        <li class="nav-item" role="presentation">
+                            <button class="nav-link active" id="utilisateurs-tab" data-bs-toggle="tab" 
+                                    data-bs-target="#utilisateurs" type="button" role="tab">
+                                <i class="fas fa-user-check me-1"></i> {{ t("Utilisateurs existants") }}
+                            </button>
+                        </li>
+                        <li class="nav-item" role="presentation">
+                            <button class="nav-link" id="externes-tab" data-bs-toggle="tab" 
+                                    data-bs-target="#externes" type="button" role="tab">
+                                <i class="fas fa-user-plus me-1"></i> {{ t("Nouveaux membres") }}
+                            </button>
+                        </li>
+                    </ul>
 
+                    <div class="tab-content" id="equipeTabsContent">
+                        <!-- Utilisateurs existants -->
+                        <div class="tab-pane fade show active" id="utilisateurs" role="tabpanel">
+                            <div class="alert alert-info">
+                                <i class="fas fa-info-circle me-2"></i> {{ t("Sélectionnez parmi les utilisateurs déjà enregistrés.") }}
+                            </div>
+                            
+                            <div class="mb-3">
+                                <label class="form-label">{{ t("Rechercher un utilisateur") }}</label>
+                                <input type="text" class="form-control" id="rechercheUtilisateur" 
+                                       placeholder="{{ t("Nom, prénom, email ou rôle...") }}">
+                            </div>
+                            
+                            <div class="mb-2 d-flex justify-content-between align-items-center">
+                                <div class="form-check">
+                                    <input class="form-check-input" type="checkbox" id="selectAllUtilisateurs">
+                                    <label class="form-check-label" for="selectAllUtilisateurs">{{ t("Tout sélectionner") }}</label>
+                                </div>
+                                <small class="text-muted">
+                                    <span id="nbUtilisateursSelectionnes">0</span> {{ t("sélectionné(s)") }}
+                                </small>
+                            </div>
+                            
+                            <div class="table-responsive" style="max-height: 300px; overflow-y: auto;">
+                                <table class="table table-hover table-sm">
+                                    <thead class="table-light">
+                                        <tr>
+                                            <th width="5%">#</th>
+                                            <th width="30%">{{ t("Utilisateur") }}</th>
+                                            <th width="20%">{{ t("Email") }}</th>
+                                            <th width="15%">{{ t("Rôle") }}</th>
+                                            <th width="15%">{{ t("Département") }}</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody id="listeUtilisateurs">
+                                        {% for user in users %}
+                                        {% set is_selected = user.id|string in (audit.equipe_audit_ids or '').split(',') %}
+                                        <tr data-user-id="{{ user.id }}" 
+                                            data-user-name="{{ (user.nom or '')|lower }} {{ (user.prenom or '')|lower }} {{ user.username|lower }} {{ user.email|lower }} {{ (user.role or '')|lower }}"
+                                            class="{% if is_selected %}table-success{% endif %}">
+                                            <td>
+                                                <input type="checkbox" name="utilisateurs_existants[]" value="{{ user.id }}"
+                                                       class="form-check-input checkbox-utilisateur" {% if is_selected %}checked{% endif %}>
+                                            </td>
+                                            <td>
+                                                <div class="d-flex align-items-center">
+                                                    <div class="member-avatar me-2" style="width: 30px; height: 30px; font-size: 12px;">
+                                                        <small>{{ (user.nom|first if user.nom else user.username|first)|upper }}{{ (user.prenom|first if user.prenom else '')|upper }}</small>
+                                                    </div>
+                                                    <div>
+                                                        <div class="fw-bold">
+                                                            {% if user.nom and user.prenom %}
+                                                                {{ user.prenom }} {{ user.nom }}
+                                                            {% else %}
+                                                                {{ user.username }}
+                                                            {% endif %}
+                                                        </div>
+                                                        <small class="text-muted">{{ user.username }}</small>
+                                                    </div>
+                                                </div>
+                                            </td>
+                                            <td><small>{{ user.email }}</small></td>
+                                            <td><span class="badge-modern">{{ user.role }}</span></td>
+                                            <td><span class="badge-modern">{{ user.department or '-' }}</span></td>
+                                        </tr>
+                                        {% endfor %}
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+
+                        <!-- Membres externes -->
+                        <div class="tab-pane fade" id="externes" role="tabpanel">
+                            <div class="alert alert-warning">
+                                <i class="fas fa-exclamation-circle me-2"></i> {{ t("Créez des membres externes sans compte dans le système.") }}
+                            </div>
+                            
+                            <div id="membresExternesContainer">
+                                {% for membre in audit.membres_externes|default([]) %}
+                                <div class="membre-externe-card card mb-3">
+                                    <div class="card-body">
+                                        <div class="row g-2">
+                                            <div class="col-md-3">
+                                                <label class="form-label small">{{ t("Nom *") }}</label>
+                                                <input type="text" class="form-control form-control-sm" 
+                                                       name="membres_externes[{{ loop.index0 }}][nom]" value="{{ membre.nom }}" required>
+                                            </div>
+                                            <div class="col-md-3">
+                                                <label class="form-label small">{{ t("Prénom *") }}</label>
+                                                <input type="text" class="form-control form-control-sm" 
+                                                       name="membres_externes[{{ loop.index0 }}][prenom]" value="{{ membre.prenom }}" required>
+                                            </div>
+                                            <div class="col-md-4">
+                                                <label class="form-label small">{{ t("Email *") }}</label>
+                                                <input type="email" class="form-control form-control-sm" 
+                                                       name="membres_externes[{{ loop.index0 }}][email]" value="{{ membre.email }}" required>
+                                            </div>
+                                            <div class="col-md-2">
+                                                <label class="form-label small">&nbsp;</label>
+                                                <button type="button" class="btn btn-outline-danger btn-sm w-100" 
+                                                        onclick="supprimerMembreExterne(this)">
+                                                    <i class="fas fa-trash"></i>
+                                                </button>
+                                            </div>
+                                        </div>
+                                        <div class="row g-2 mt-1">
+                                            <div class="col-md-6">
+                                                <label class="form-label small">{{ t("Fonction") }}</label>
+                                                <input type="text" class="form-control form-control-sm" 
+                                                       name="membres_externes[{{ loop.index0 }}][fonction]" value="{{ membre.fonction }}" 
+                                                       placeholder="{{ t("Ex: Auditeur externe") }}">
+                                            </div>
+                                            <div class="col-md-6">
+                                                <label class="form-label small">{{ t("Organisation") }}</label>
+                                                <input type="text" class="form-control form-control-sm" 
+                                                       name="membres_externes[{{ loop.index0 }}][organisation]" value="{{ membre.organisation }}" 
+                                                       placeholder="{{ t("Ex: Cabinet d'audit") }}">
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                                {% endfor %}
+                            </div>
+                            
+                            <div class="text-center mb-3">
+                                <button type="button" class="btn-elegant btn-primary" onclick="ajouterMembreExterne()">
+                                    <i class="fas fa-plus me-1"></i> {{ t("Ajouter un membre externe") }}
+                                </button>
+                            </div>
+
+                            <template id="templateMembreExterne">
+                                <div class="membre-externe-card card mb-3">
+                                    <div class="card-body">
+                                        <div class="row g-2">
+                                            <div class="col-md-3">
+                                                <label class="form-label small">{{ t("Nom *") }}</label>
+                                                <input type="text" class="form-control form-control-sm" 
+                                                       name="membres_externes[INDEX][nom]" placeholder="{{ t("Nom") }}" required>
+                                            </div>
+                                            <div class="col-md-3">
+                                                <label class="form-label small">{{ t("Prénom *") }}</label>
+                                                <input type="text" class="form-control form-control-sm" 
+                                                       name="membres_externes[INDEX][prenom]" placeholder="{{ t("Prénom") }}" required>
+                                            </div>
+                                            <div class="col-md-4">
+                                                <label class="form-label small">{{ t("Email *") }}</label>
+                                                <input type="email" class="form-control form-control-sm" 
+                                                       name="membres_externes[INDEX][email]" placeholder="email@exemple.com" required>
+                                            </div>
+                                            <div class="col-md-2">
+                                                <label class="form-label small">&nbsp;</label>
+                                                <button type="button" class="btn btn-outline-danger btn-sm w-100" 
+                                                        onclick="supprimerMembreExterne(this)">
+                                                    <i class="fas fa-trash"></i>
+                                                </button>
+                                            </div>
+                                        </div>
+                                        <div class="row g-2 mt-1">
+                                            <div class="col-md-6">
+                                                <label class="form-label small">{{ t("Fonction") }}</label>
+                                                <input type="text" class="form-control form-control-sm" 
+                                                       name="membres_externes[INDEX][fonction]" placeholder="{{ t("Ex: Auditeur externe") }}">
+                                            </div>
+                                            <div class="col-md-6">
+                                                <label class="form-label small">{{ t("Organisation") }}</label>
+                                                <input type="text" class="form-control form-control-sm" 
+                                                       name="membres_externes[INDEX][organisation]" placeholder="{{ t("Ex: Cabinet d'audit") }}">
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </template>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="modal-footer modal-footer-modern">
+                    <button type="button" class="btn-elegant btn-outline" data-bs-dismiss="modal">
+                        <i class="fas fa-times me-1"></i> {{ t("Annuler") }}
+                    </button>
+                    <button type="submit" class="btn-elegant btn-primary">
+                        <i class="fas fa-save me-1"></i> {{ t("Enregistrer l'équipe") }}
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+<!-- Modal Nouvelle constatation -->
+<div class="modal fade" id="modalConstatation" tabindex="-1">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content modal-content-modern">
+            <form action="{{ url_for('nouvelle_constatation', audit_id=audit.id) }}" method="POST">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                <div class="modal-header modal-header-modern">
+                    <h5 class="modal-title">{{ t("Nouvelle constatation") }}</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body modal-body-modern">
+                    <div class="mb-3">
+                        <label class="form-label">{{ t("Processus concerné") }}</label>
+                        <div class="mb-3">
+                            <div class="form-check form-check-inline">
+                                <input class="form-check-input" type="radio" name="selection_processus_constatation" 
+                                       id="from_audit" value="from_audit" checked onclick="toggleConstatationProcessus()">
+                                <label class="form-check-label" for="from_audit">
+                                    <i class="fas fa-clipboard-check me-1"></i> {{ t("Même processus que l'audit") }}
+                                </label>
+                            </div>
+                            <div class="form-check form-check-inline">
+                                <input class="form-check-input" type="radio" name="selection_processus_constatation" 
+                                       id="from_logigramme" value="from_logigramme" onclick="toggleConstatationProcessus()">
+                                <label class="form-check-label" for="from_logigramme">
+                                    <i class="fas fa-project-diagram me-1"></i> {{ t("Sélectionner depuis le logigramme") }}
+                                </label>
+                            </div>
+                            <div class="form-check form-check-inline">
+                                <input class="form-check-input" type="radio" name="selection_processus_constatation" 
+                                       id="manuel_constatation" value="manuel" onclick="toggleConstatationProcessus()">
+                                <label class="form-check-label" for="manuel_constatation">
+                                    <i class="fas fa-edit me-1"></i> {{ t("Écrire manuellement") }}
+                                </label>
+                            </div>
+                        </div>
+
+                        <input type="hidden" id="processus_final" name="processus_concerne">
+
+                        <div id="processus_audit_info" class="alert alert-info">
+                            <strong>{{ t("Processus d'audit :") }}</strong>
+                            <span id="processus_audit_nom">{{ audit.processus_audite_display or 'Non spécifié' }}</span>
+                        </div>
+
+                        <div id="logigramme_selection" style="display: none;">
+                            <select class="form-select" id="processus_logigramme_select">
+                                <option value="">{{ t("Sélectionner un processus") }}</option>
+                                {% for processus in all_processus %}
+                                <option value="{{ processus.nom }}">{{ processus.nom }}</option>
+                                {% endfor %}
+                            </select>
+                        </div>
+
+                        <div id="manuel_ecriture" style="display: none;">
+                            <input type="text" class="form-control" id="processus_manuel_input" 
+                                   placeholder="{{ t("Nom du processus concerné...") }}">
+                        </div>
+                    </div>
+
+                    <div class="mb-3">
+                        <label class="form-label">{{ t("Description *") }}</label>
+                        <textarea class="form-control" name="description" rows="4" required 
+                                  placeholder="{{ t("Décrivez la constatation...") }}"></textarea>
+                    </div>
+                    
+                    <div class="row">
+                        <div class="col-md-6">
+                            <label class="form-label">{{ t("Type de constatation *") }}</label>
+                            <select class="form-select" name="type_constatation" required>
+                                <option value="">{{ t("Sélectionner...") }}</option>
+                                <option value="conformite">{{ t("Conformité") }}</option>
+                                <option value="non_conformite">{{ t("Non-conformité") }}</option>
+                                <option value="observation">{{ t("Observation") }}</option>
+                                <option value="recommandation">{{ t("Recommandation") }}</option>
+                            </select>
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label">{{ t("Gravité") }}</label>
+                            <select class="form-select" name="gravite">
+                                <option value="mineure">{{ t("Mineure") }}</option>
+                                <option value="moyenne" selected>{{ t("Moyenne") }}</option>
+                                <option value="majeure">{{ t("Majeure") }}</option>
+                                <option value="critique">{{ t("Critique") }}</option>
+                            </select>
+                        </div>
+                    </div>
+                    
+                    <div class="mb-3">
+                        <label class="form-label">{{ t("Cause racine") }}</label>
+                        <textarea class="form-control" name="cause_racine" rows="2" 
+                                  placeholder="{{ t("Cause racine identifiée...") }}"></textarea>
+                    </div>
+                    
+                    <div class="mb-3">
+                        <label class="form-label">{{ t("Conclusion (pour rapport final)") }}</label>
+                        <textarea class="form-control" name="conclusion" rows="3" 
+                                  placeholder="{{ t("Résumé et conclusion qui apparaîtront dans le rapport final...") }}"></textarea>
+                    </div>
+
+                    <div class="mb-3">
+                        <label class="form-label">{{ t("Commentaires additionnels") }}</label>
+                        <textarea class="form-control" name="commentaires" rows="2" 
+                                  placeholder="{{ t("Commentaires internes pour l'équipe d'audit...") }}"></textarea>
+                    </div>
+                    
+                    <div class="mb-3">
+                        <label class="form-label">{{ t("Risque associé (optionnel)") }}</label>
+
+                        <div class="row mb-2">
+                            <div class="col-md-6">
+                                <label class="form-label">{{ t("Filtrer par cartographie") }}</label>
+                                <select class="form-select" id="filtreCartographieConstatation" onchange="filtrerRisquesConstatation()">
+                                    <option value="all">{{ t("Toutes les cartographies") }}</option>
+                                    {% for cartographie in cartographies_list %}
+                                        <option value="{{ cartographie.id }}">{{ cartographie.nom }}</option>
+                                    {% endfor %}
+                                </select>
+                            </div>
+                            <div class="col-md-6">
+                                <label class="form-label">{{ t("Rechercher un risque") }}</label>
+                                <input type="text" class="form-control" id="rechercheRisqueConstatation" 
+                                       placeholder="{{ t("Référence ou intitulé...") }}" onkeyup="filtrerRisquesConstatation()">
+                            </div>
+                        </div>
+                        
+                        <select class="form-select" name="risque_id" id="selectRisqueConstatation">
+                            <option value="">{{ t("Aucun risque associé") }}</option>
+                            {% for risque in risques_list %}
+                                <option value="{{ risque.id }}" 
+                                        data-cartographie="{{ risque.cartographie_id }}"
+                                        data-reference="{{ risque.reference }}"
+                                        data-intitule="{{ risque.intitule }}"
+                                        data-categorie="{{ risque.categorie }}"
+                                        data-niveau="{% if risque.evaluations %}{% set derniere_eval = risque.evaluations|sort(attribute='created_at')|last %}{{ derniere_eval.niveau_risque }}{% else %}Non évalué{% endif %}">
+                                    {{ risque.reference }} - {{ risque.intitule }} 
+                                    {% if risque.evaluations %}
+                                        {% set derniere_eval = risque.evaluations|sort(attribute='created_at')|last %}
+                                        - {{ derniere_eval.niveau_risque }} (Score: {{ derniere_eval.score_risque }})
+                                    {% endif %}
+                                    - {{ risque.cartographie.nom }}
+                                </option>
+                            {% endfor %}
+                        </select>
+
+                        <div id="infoRisqueConstatation" class="mt-2 p-2 bg-light rounded" style="display: none;">
+                            <small>
+                                <strong>{{ t("Risque sélectionné :") }}</strong>
+                                <span id="risqueReference"></span> - <span id="risqueIntitule"></span><br>
+                                <span id="risqueCategorie"></span> - <span id="risqueNiveau"></span>
+                            </small>
+                        </div>
+                    </div>
+                </div>
+                <div class="modal-footer modal-footer-modern">
+                    <button type="button" class="btn-elegant btn-outline" data-bs-dismiss="modal">{{ t("Annuler") }}</button>
+                    <button type="submit" class="btn-elegant btn-primary">{{ t("Créer la constatation") }}</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+<!-- Modal Nouvelle recommandation -->
+<div class="modal fade" id="modalRecommandation" tabindex="-1">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content modal-content-modern">
+            <form action="{{ url_for('nouvelle_recommandation', audit_id=audit.id) }}" method="POST">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                <div class="modal-header modal-header-modern">
+                    <h5 class="modal-title">{{ t("Nouvelle recommandation") }}</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body modal-body-modern">
+                    <div class="mb-3">
+                        <label class="form-label">{{ t("Description *") }}</label>
+                        <textarea class="form-control" name="description" rows="4" required 
+                                  placeholder="{{ t("Décrivez la recommandation...") }}"></textarea>
+                    </div>
+                    
+                    <div class="row">
+                        <div class="col-md-6">
+                            <label class="form-label">{{ t("Type de recommandation *") }}</label>
+                            <select class="form-select" name="type_recommandation" required>
+                                <option value="">{{ t("Sélectionner...") }}</option>
+                                <option value="corrective">{{ t("Corrective") }}</option>
+                                <option value="preventive">{{ t("Préventive") }}</option>
+                                <option value="amelioration">{{ t("Amélioration") }}</option>
+                            </select>
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label">{{ t("Délai de mise en œuvre") }}</label>
+                            <select class="form-select" name="delai_mise_en_oeuvre">
+                                <option value="">{{ t("Sélectionner...") }}</option>
+                                <option value="immediat">{{ t("Immédiat (≤ 1 mois)") }}</option>
+                                <option value="court_terme">{{ t("Court terme (1-3 mois)") }}</option>
+                                <option value="moyen_terme">{{ t("Moyen terme (3-6 mois)") }}</option>
+                                <option value="long_terme">{{ t("Long terme (> 6 mois)") }}</option>
+                            </select>
+                        </div>
+                    </div>
+                    
+                    <div class="mb-3">
+                        <label class="form-label">{{ t("Date d'échéance") }}</label>
+                        <input type="date" class="form-control" name="date_echeance">
+                    </div>
+                    
+                    <div class="mb-3">
+                        <label class="form-label">{{ t("Constatation associée (optionnel)") }}</label>
+                        <select class="form-select" name="constatation_id">
+                            <option value="">{{ t("Aucune constatation") }}</option>
+                            {% for constatation in audit.constatations %}
+                                <option value="{{ constatation.id }}">{{ constatation.reference }} - {{ constatation.description[:50] }}...</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+
+                    <div class="mb-3">
+                        <label class="form-label">{{ t("Risque associé (optionnel)") }}</label>
+
+                        <div class="row mb-2">
+                            <div class="col-md-6">
+                                <label class="form-label">{{ t("Filtrer par cartographie") }}</label>
+                                <select class="form-select" id="filtreCartographieRecommandation" onchange="filtrerRisquesRecommandation()">
+                                    <option value="all">{{ t("Toutes les cartographies") }}</option>
+                                    {% for cartographie in cartographies_list %}
+                                        <option value="{{ cartographie.id }}">{{ cartographie.nom }}</option>
+                                    {% endfor %}
+                                </select>
+                            </div>
+                            <div class="col-md-6">
+                                <label class="form-label">{{ t("Rechercher un risque") }}</label>
+                                <input type="text" class="form-control" id="rechercheRisqueRecommandation" 
+                                       placeholder="{{ t("Référence ou intitulé...") }}" onkeyup="filtrerRisquesRecommandation()">
+                            </div>
+                        </div>
+                        
+                        <select class="form-select" name="risque_id" id="selectRisqueRecommandation">
+                            <option value="">{{ t("Aucun risque associé") }}</option>
+                            {% for risque in risques_list %}
+                                <option value="{{ risque.id }}" 
+                                        data-cartographie="{{ risque.cartographie_id }}"
+                                        data-reference="{{ risque.reference }}"
+                                        data-intitule="{{ risque.intitule }}"
+                                        data-categorie="{{ risque.categorie }}"
+                                        data-niveau="{% if risque.evaluations %}{% set derniere_eval = risque.evaluations|sort(attribute='created_at')|last %}{{ derniere_eval.niveau_risque }}{% else %}Non évalué{% endif %}">
+                                    {{ risque.reference }} - {{ risque.intitule }} 
+                                    {% if risque.evaluations %}
+                                        {% set derniere_eval = risque.evaluations|sort(attribute='created_at')|last %}
+                                        - {{ derniere_eval.niveau_risque }} (Score: {{ derniere_eval.score_risque }})
+                                    {% endif %}
+                                    - {{ risque.cartographie.nom }}
+                                </option>
+                            {% endfor %}
+                        </select>
+
+                        <div id="infoRisqueRecommandation" class="mt-2 p-2 bg-light rounded" style="display: none;">
+                            <small>
+                                <strong>{{ t("Risque sélectionné :") }}</strong>
+                                <span id="risqueReferenceRec"></span> - <span id="risqueIntituleRec"></span><br>
+                                <span id="risqueCategorieRec"></span> - <span id="risqueNiveauRec"></span>
+                            </small>
+                        </div>
+                    </div>
+                    
+                    <div class="mb-3">
+                        <label class="form-label">{{ t("Responsable (optionnel)") }}</label>
+                        <select class="form-select" name="responsable_id">
+                            <option value="">{{ t("Non assigné") }}</option>
+                            {% for user in users %}
+                                <option value="{{ user.id }}">{{ user.username }} - {{ user.role }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                </div>
+                <div class="modal-footer modal-footer-modern">
+                    <button type="button" class="btn-elegant btn-outline" data-bs-dismiss="modal">{{ t("Annuler") }}</button>
+                    <button type="submit" class="btn-elegant btn-primary">{{ t("Créer la recommandation") }}</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+<!-- Modal Nouveau plan d'action -->
+<div class="modal fade" id="modalPlanAction" tabindex="-1">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content modal-content-modern">
+            <form action="{{ url_for('nouveau_plan_action', audit_id=audit.id) }}" method="POST">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                <div class="modal-header modal-header-modern">
+                    <h5 class="modal-title">{{ t("Nouveau plan d'action") }}</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body modal-body-modern">
+                    <div class="mb-3">
+                        <label class="form-label">{{ t("Nom du plan *") }}</label>
+                        <input type="text" class="form-control" name="nom" required placeholder="{{ t("Nom du plan d'action...") }}">
+                    </div>
+                    
+                    <div class="mb-3">
+                        <label class="form-label">{{ t("Description") }}</label>
+                        <textarea class="form-control" name="description" rows="3" placeholder="{{ t("Description détaillée...") }}"></textarea>
+                    </div>
+                    
+                    <div class="row">
+                        <div class="col-md-6">
+                            <label class="form-label">{{ t("Date de début") }}</label>
+                            <input type="date" class="form-control" name="date_debut">
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label">{{ t("Date de fin prévue") }}</label>
+                            <input type="date" class="form-control" name="date_fin_prevue">
+                        </div>
+                    </div>
+                    
+                    <div class="mb-3">
+                        <label class="form-label">{{ t("Recommandation associée (optionnel)") }}</label>
+                        <select class="form-select" name="recommandation_id">
+                            <option value="">{{ t("Aucune recommandation") }}</option>
+                            {% for recommandation in audit.recommandations %}
+                                <option value="{{ recommandation.id }}">{{ recommandation.description[:50] }}...</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+
+                    <div class="mb-3">
+                        <label class="form-label">{{ t("Risque associé (optionnel)") }}</label>
+
+                        <div class="row mb-2">
+                            <div class="col-md-6">
+                                <label class="form-label">{{ t("Filtrer par cartographie") }}</label>
+                                <select class="form-select" id="filtreCartographiePlan" onchange="filtrerRisquesPlan()">
+                                    <option value="all">{{ t("Toutes les cartographies") }}</option>
+                                    {% for cartographie in cartographies_list %}
+                                        <option value="{{ cartographie.id }}">{{ cartographie.nom }}</option>
+                                    {% endfor %}
+                                </select>
+                            </div>
+                            <div class="col-md-6">
+                                <label class="form-label">{{ t("Rechercher un risque") }}</label>
+                                <input type="text" class="form-control" id="rechercheRisquePlan" 
+                                       placeholder="{{ t("Référence ou intitulé...") }}" onkeyup="filtrerRisquesPlan()">
+                            </div>
+                        </div>
+                        
+                        <select class="form-select" name="risque_id" id="selectRisquePlan">
+                            <option value="">{{ t("Aucun risque") }}</option>
+                            {% for risque in risques_list %}
+                                <option value="{{ risque.id }}" 
+                                        data-cartographie="{{ risque.cartographie_id }}"
+                                        data-reference="{{ risque.reference }}"
+                                        data-intitule="{{ risque.intitule }}"
+                                        data-categorie="{{ risque.categorie }}"
+                                        data-niveau="{% if risque.evaluations %}{% set derniere_eval = risque.evaluations|sort(attribute='created_at')|last %}{{ derniere_eval.niveau_risque }}{% else %}Non évalué{% endif %}">
+                                    {{ risque.reference }} - {{ risque.intitule }} 
+                                    {% if risque.evaluations %}
+                                        {% set derniere_eval = risque.evaluations|sort(attribute='created_at')|last %}
+                                        - {{ derniere_eval.niveau_risque }} (Score: {{ derniere_eval.score_risque }})
+                                    {% endif %}
+                                    - {{ risque.cartographie.nom }}
+                                </option>
+                            {% endfor %}
+                        </select>
+
+                        <div id="infoRisquePlan" class="mt-2 p-2 bg-light rounded" style="display: none;">
+                            <small>
+                                <strong>{{ t("Risque sélectionné :") }}</strong>
+                                <span id="risqueReferencePlan"></span> - <span id="risqueIntitulePlan"></span><br>
+                                <span id="risqueCategoriePlan"></span> - <span id="risqueNiveauPlan"></span>
+                            </small>
+                        </div>
+                    </div>
+                    
+                    <div class="mb-3">
+                        <label class="form-label">{{ t("Responsable") }}</label>
+                        <select class="form-select" name="responsable_id">
+                            <option value="">{{ t("Non assigné") }}</option>
+                            {% for user in users %}
+                                <option value="{{ user.id }}">{{ user.username }} - {{ user.role }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                </div>
+                <div class="modal-footer modal-footer-modern">
+                    <button type="button" class="btn-elegant btn-outline" data-bs-dismiss="modal">{{ t("Annuler") }}</button>
+                    <button type="submit" class="btn-elegant btn-primary">{{ t("Créer le plan d'action") }}</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+<!-- Modal Upload multiple -->
+<div class="modal fade" id="modalUploadMultiple" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content modal-content-modern">
+            <form method="POST" action="{{ url_for('upload_multiple_preuves', audit_id=audit.id) }}" enctype="multipart/form-data">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                <div class="modal-header modal-header-modern">
+                    <h5 class="modal-title">{{ t("Upload multiple de preuves") }}</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body modal-body-modern">
+                    <div class="mb-3">
+                        <label class="form-label">{{ t("Sélectionner des fichiers") }}</label>
+                        <input type="file" class="form-control" name="preuves[]" multiple 
+                               accept=".pdf,.jpg,.jpeg,.png,.doc,.docx,.xls,.xlsx">
+                        <small class="text-muted">{{ t("Maintenez Ctrl (Cmd sur Mac) pour sélectionner plusieurs fichiers.") }}</small>
+                    </div>
+                    
+                    <div class="mb-3">
+                        <label class="form-label">{{ t("Associer à une constatation (optionnel)") }}</label>
+                        <select class="form-select" name="constatation_id">
+                            <option value="">{{ t("Pas de constatation spécifique") }}</option>
+                            {% for constatation in audit.constatations %}
+                                <option value="{{ constatation.id }}">{{ constatation.reference }} - {{ constatation.description[:50] }}...</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    
+                    <div class="alert alert-info">
+                        <i class="fas fa-info-circle me-2"></i> {{ t("Les fichiers seront automatiquement renommés pour éviter les conflits.") }}
+                    </div>
+                </div>
+                <div class="modal-footer modal-footer-modern">
+                    <button type="button" class="btn-elegant btn-outline" data-bs-dismiss="modal">{{ t("Annuler") }}</button>
+                    <button type="submit" class="btn-elegant btn-primary">{{ t("Uploader") }}</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+<!-- Modal Rapport -->
+<div class="modal fade" id="modalRapport" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content modal-content-modern">
+            <div class="modal-header modal-header-modern">
+                <h5 class="modal-title">{{ t("Rapports d'audit") }}</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body modal-body-modern">
+                <div class="d-grid gap-2">
+                    <a href="{{ url_for('rapport_audit_complet', audit_id=audit.id) }}" class="btn-elegant btn-info w-100">
+                        <i class="fas fa-eye me-2"></i> {{ t("Voir rapport complet") }}
+                    </a>
+                    <a href="{{ url_for('rapport_audit_pdf_elegant', audit_id=audit.id) }}" class="btn-elegant btn-primary w-100" target="_blank">
+                        <i class="fas fa-file-pdf me-2"></i> {{ t("PDF Élégant") }}
+                    </a>
+                    <a href="{{ url_for('export_rapport_audit_pdf', audit_id=audit.id) }}" class="btn-elegant btn-danger w-100">
+                        <i class="fas fa-file-pdf me-2"></i> {{ t("Exporter en PDF") }}
+                    </a>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+<!-- Modal Statut Recommandation -->
+<div class="modal fade" id="modalStatutRecommandation" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content modal-content-modern">
+            <form id="formStatutRecommandation" method="POST" action="{{ url_for('changer_statut_recommandation', recommandation_id=0) }}">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                <div class="modal-header modal-header-modern">
+                    <h5 class="modal-title">{{ t("Changer le statut d'une recommandation") }}</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body modal-body-modern">
+                    <input type="hidden" id="recommandationId" name="recommandation_id">
+                    
+                    <div class="mb-3">
+                        <label class="form-label">{{ t("Statut") }}</label>
+                        <select class="form-select" id="statutRecommandation" name="statut" required>
+                            <option value="a_traiter">{{ t("À traiter") }}</option>
+                            <option value="en_cours">{{ t("En cours") }}</option>
+                            <option value="termine">{{ t("Terminé") }}</option>
+                            <option value="retarde">{{ t("Retardé") }}</option>
+                        </select>
+                    </div>
+                    
+                    <div class="mb-3">
+                        <label class="form-label">{{ t("Taux d'avancement") }}</label>
+                        <input type="range" class="form-range" id="tauxAvancement" name="taux_avancement" 
+                               min="0" max="100" step="5" value="0">
+                        <div class="d-flex justify-content-between">
+                            <small>0%</small>
+                            <span id="valeurTaux" class="fw-bold">0%</span>
+                            <small>100%</small>
+                        </div>
+                    </div>
+                </div>
+                <div class="modal-footer modal-footer-modern">
+                    <button type="button" class="btn-elegant btn-outline" data-bs-dismiss="modal">{{ t("Annuler") }}</button>
+                    <button type="submit" class="btn-elegant btn-primary">{{ t("Mettre à jour") }}</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+<!-- Modal Modifier Constatation (généré pour chaque constatation) -->
+{% for constatation in audit.constatations %}
+<div class="modal fade" id="modalModifierConstatation{{ constatation.id }}" tabindex="-1">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content modal-content-modern">
+            <form method="POST" action="{{ url_for('modifier_constatation', constatation_id=constatation.id) }}">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                <div class="modal-header modal-header-modern">
+                    <h5 class="modal-title">{{ t("Modifier la constatation") }} {{ constatation.reference }}</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body modal-body-modern">
+                    <div class="mb-3">
+                        <label class="form-label">{{ t("Description *") }}</label>
+                        <textarea class="form-control" name="description" rows="4" required>{{ constatation.description }}</textarea>
+                    </div>
+
+                    <div class="row">
+                        <div class="col-md-6 mb-3">
+                            <label class="form-label">{{ t("Type de constatation *") }}</label>
+                            <select class="form-select" name="type_constatation" required>
+                                <option value="non_conformite" {% if constatation.type_constatation == 'non_conformite' %}selected{% endif %}>{{ t("Non-conformité") }}</option>
+                                <option value="observation" {% if constatation.type_constatation == 'observation' %}selected{% endif %}>{{ t("Observation") }}</option>
+                                <option value="amelioration" {% if constatation.type_constatation == 'amelioration' %}selected{% endif %}>{{ t("Opportunité d'amélioration") }}</option>
+                                <option value="conformite" {% if constatation.type_constatation == 'conformite' %}selected{% endif %}>{{ t("Conformité") }}</option>
+                                <option value="recommandation" {% if constatation.type_constatation == 'recommandation' %}selected{% endif %}>{{ t("Recommandation") }}</option>
+                            </select>
+                        </div>
+                        <div class="col-md-6 mb-3">
+                            <label class="form-label">{{ t("Gravité *") }}</label>
+                            <select class="form-select" name="gravite" required>
+                                <option value="mineure" {% if constatation.gravite == 'mineure' %}selected{% endif %}>{{ t("Mineure") }}</option>
+                                <option value="moyenne" {% if constatation.gravite == 'moyenne' %}selected{% endif %}>{{ t("Moyenne") }}</option>
+                                <option value="majeure" {% if constatation.gravite == 'majeure' %}selected{% endif %}>{{ t("Majeure") }}</option>
+                                <option value="critique" {% if constatation.gravite == 'critique' %}selected{% endif %}>{{ t("Critique") }}</option>
+                            </select>
+                        </div>
+                    </div>
+
+                    <div class="mb-3">
+                        <label class="form-label">{{ t("Conclusion (pour rapport final)") }}</label>
+                        <textarea class="form-control" name="conclusion" rows="3">{{ constatation.conclusion or '' }}</textarea>
+                        <small class="text-muted">{{ t("Cette conclusion apparaîtra dans le rapport final") }}</small>
+                    </div>
+                    
+                    <div class="mb-3">
+                        <label class="form-label">{{ t("Commentaires additionnels") }}</label>
+                        <textarea class="form-control" name="commentaires" rows="2">{{ constatation.commentaires or '' }}</textarea>
+                        <small class="text-muted">{{ t("Commentaires internes pour l'équipe d'audit") }}</small>
+                    </div>
+                    
+                    <div class="mb-3">
+                        <label class="form-label">{{ t("Recommandations immédiates") }}</label>
+                        <textarea class="form-control" name="recommandations_immediates" rows="2">{{ constatation.recommandations_immediates or '' }}</textarea>
+                        <small class="text-muted">{{ t("Actions correctives immédiates proposées") }}</small>
+                    </div>
+
+                    <div class="mb-3">
+                        <label class="form-label">{{ t("Processus concerné") }}</label>
+                        <input type="text" class="form-control" name="processus_concerne" 
+                               value="{{ constatation.processus_concerne or '' }}"
+                               placeholder="{{ t("Nom du processus impacté...") }}">
+                    </div>
+
+                    <div class="mb-3">
+                        <label class="form-label">{{ t("Cause racine") }}</label>
+                        <textarea class="form-control" name="cause_racine" rows="3">{{ constatation.cause_racine or '' }}</textarea>
+                    </div>
+
+                    <div class="mb-3">
+                        <label class="form-label">{{ t("Risque associé") }}</label>
+                        <select class="form-select" name="risque_id">
+                            <option value="">{{ t("Aucun risque associé") }}</option>
+                            {% for risque in risques_list %}
+                                <option value="{{ risque.id }}" {% if constatation.risque_id == risque.id %}selected{% endif %}>
+                                    {{ risque.reference }} - {{ risque.intitule }}
+                                </option>
+                            {% endfor %}
+                        </select>
+                        <small class="text-muted">{{ t("Ce risque apparaîtra dans l'onglet \"Risques associés\" de l'audit") }}</small>
+                    </div>
+
+                    <div class="mb-3">
+                        <label class="form-label">{{ t("Statut") }}</label>
+                        <select class="form-select" name="statut">
+                            <option value="a_analyser" {% if constatation.statut == 'a_analyser' %}selected{% endif %}>{{ t("À analyser") }}</option>
+                            <option value="a_valider" {% if constatation.statut == 'a_valider' %}selected{% endif %}>{{ t("À valider") }}</option>
+                            <option value="en_action" {% if constatation.statut == 'en_action' %}selected{% endif %}>{{ t("En action") }}</option>
+                            <option value="clos" {% if constatation.statut == 'clos' %}selected{% endif %}>{{ t("Clos") }}</option>
+                        </select>
+                    </div>
+                </div>
+                <div class="modal-footer modal-footer-modern">
+                    <button type="button" class="btn-elegant btn-outline" data-bs-dismiss="modal">{{ t("Annuler") }}</button>
+                    <button type="submit" class="btn-elegant btn-primary">{{ t("Enregistrer les modifications") }}</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+{% endfor %}
+<!-- Modal Changer Statut Constatation -->
+{% for constatation in audit.constatations %}
+<div class="modal fade" id="modalChangerStatutConstatation{{ constatation.id }}" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content modal-content-modern">
+            <form method="POST" action="{{ url_for('changer_statut_constatation', constatation_id=constatation.id) }}">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                <div class="modal-header modal-header-modern">
+                    <h5 class="modal-title">{{ t("Changer le statut de") }} {{ constatation.reference }}</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body modal-body-modern">
+                    <div class="mb-3">
+                        <label class="form-label">{{ t("Statut actuel") }}</label>
+                        <div class="alert alert-{{ constatation.get_couleur_statut }}">
+                            <strong>{{ constatation.statut|replace('_', ' ')|title }}</strong>
+                        </div>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">{{ t("Nouveau statut") }}</label>
+                        <select class="form-select" name="statut" required>
+                            <option value="">{{ t("Sélectionner un statut") }}</option>
+                            <option value="a_analyser" {% if constatation.statut == 'a_analyser' %}selected{% endif %}>{{ t("À analyser") }}</option>
+                            <option value="a_valider" {% if constatation.statut == 'a_valider' %}selected{% endif %}>{{ t("À valider") }}</option>
+                            <option value="en_action" {% if constatation.statut == 'en_action' %}selected{% endif %}>{{ t("En action") }}</option>
+                            <option value="clos" {% if constatation.statut == 'clos' %}selected{% endif %}>{{ t("Clos") }}</option>
+                        </select>
+                    </div>
+                </div>
+                <div class="modal-footer modal-footer-modern">
+                    <button type="button" class="btn-elegant btn-outline" data-bs-dismiss="modal">{{ t("Annuler") }}</button>
+                    <button type="submit" class="btn-elegant btn-primary">{{ t("Changer") }}</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+{% endfor %}
+<!-- Modal Ajouter Preuve -->
+{% for constatation in audit.constatations %}
+<div class="modal fade" id="modalAjouterPreuve{{ constatation.id }}" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content modal-content-modern">
+            <form method="POST" action="{{ url_for('upload_preuve_constatation', constatation_id=constatation.id) }}" 
+                  enctype="multipart/form-data">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                <div class="modal-header modal-header-modern">
+                    <h5 class="modal-title">{{ t("Ajouter une preuve pour") }} {{ constatation.reference }}</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body modal-body-modern">
+                    <div class="alert alert-info mb-3">
+                        <i class="fas fa-info-circle me-2"></i>
+                        <strong>{{ t("Responsable :") }}</strong> {{ current_user.username }}<br>
+                        <small>{{ t("Vous serez automatiquement enregistré comme responsable de ce fichier") }}</small>
+                    </div>
+                    
+                    <div class="mb-3">
+                        <label class="form-label">{{ t("Sélectionner un fichier *") }}</label>
+                        <input type="file" class="form-control" name="preuve" required>
+                        <small class="text-muted">{{ t("Formats : PDF, DOC, DOCX, XLS, XLSX, JPG, JPEG, PNG (max 16MB)") }}</small>
+                    </div>
+
+                    <div class="mb-3">
+                        <label class="form-label">{{ t("Commentaire (optionnel)") }}</label>
+                        <textarea class="form-control" name="commentaire" rows="3" 
+                                  placeholder="{{ t("Description du fichier, contexte, observations...") }}"></textarea>
+                        <small class="text-muted">{{ t("Ce commentaire sera sauvegardé avec le fichier") }}</small>
+                    </div>
+                </div>
+                <div class="modal-footer modal-footer-modern">
+                    <button type="button" class="btn-elegant btn-outline" data-bs-dismiss="modal">{{ t("Annuler") }}</button>
+                    <button type="submit" class="btn-elegant btn-primary">
+                        <i class="fas fa-upload me-1"></i> {{ t("Uploader") }}
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+{% endfor %}
+<!-- Modal Voir Preuves -->
+{% for constatation in audit.constatations %}
+<div class="modal fade" id="modalVoirPreuves{{ constatation.id }}" tabindex="-1">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content modal-content-modern">
+            <div class="modal-header modal-header-modern">
+                <h5 class="modal-title">{{ t("Preuves pour") }} {{ constatation.reference }}</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body modal-body-modern">
+                {% if constatation.get_preuves_list %}
+                    <div class="table-responsive">
+                        <table class="elegant-table">
+                            <thead>
+                                <tr>
+                                    <th>{{ t("Fichier") }}</th>
+                                    <th>{{ t("Commentaire") }}</th>
+                                    <th>{{ t("Responsable") }}</th>
+                                    <th>{{ t("Date") }}</th>
+                                    <th class="text-end">{{ t("Actions") }}</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for preuve in constatation.get_preuves_list %}
+                                {% set metadata = get_fichier_metadata(constatation.id, preuve) %}
+                                <tr>
+                                    <td>
+                                        <i class="fas fa-file me-2"></i>
+                                        <strong>{{ preuve }}</strong>
+                                        <br>
+                                        <small class="text-muted">{{ metadata.taille }}</small>
+                                    </td>
+                                    <td>
+                                        {% if metadata.commentaire %}
+                                        <small>{{ metadata.commentaire }}</small>
+                                        {% else %}
+                                        <span class="text-muted">-</span>
+                                        {% endif %}
+                                    </td>
+                                    <td>
+                                        <span class="badge-modern badge-info">{{ metadata.responsable }}</span>
+                                    </td>
+                                    <td>
+                                        <small>{{ metadata.date_upload }}</small>
+                                    </td>
+                                    <td class="text-end">
+                                        <div class="btn-group btn-group-sm">
+                                            <a href="{{ url_for('download_preuve', filename=preuve) }}" 
+                                               class="btn btn-outline-primary" target="_blank">
+                                                <i class="fas fa-download"></i>
+                                            </a>
+                                            <button class="btn btn-outline-danger" 
+                                                    onclick="deleteConstatationPreuve('{{ constatation.id }}', '{{ preuve }}')">
+                                                <i class="fas fa-trash"></i>
+                                            </button>
+                                        </div>
+                                    </td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                {% else %}
+                    <div class="text-center py-4">
+                        <i class="fas fa-paperclip fa-3x text-muted mb-3"></i>
+                        <h5>{{ t("Aucune preuve") }}</h5>
+                        <p class="text-muted">{{ t("Ajoutez des preuves pour cette constatation.") }}</p>
+                        <button class="btn-elegant btn-primary" data-bs-toggle="modal" data-bs-target="#modalAjouterPreuve{{ constatation.id }}">
+                            <i class="fas fa-plus me-1"></i> {{ t("Ajouter une preuve") }}
+                        </button>
+                    </div>
+                {% endif %}
+            </div>
+            <div class="modal-footer modal-footer-modern">
+                <button type="button" class="btn-elegant btn-outline" data-bs-dismiss="modal">{{ t("Fermer") }}</button>
+            </div>
+        </div>
+    </div>
+</div>
+{% endfor %}
+<!-- Modal Modifier Recommandation -->
+{% for recommandation in audit.recommandations %}
+<div class="modal fade" id="modalModifierRecommandation{{ recommandation.id }}" tabindex="-1">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content modal-content-modern">
+            <form method="POST" action="{{ url_for('modifier_recommandation', recommandation_id=recommandation.id) }}">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                <div class="modal-header modal-header-modern">
+                    <h5 class="modal-title">{{ t("Modifier la recommandation") }}</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body modal-body-modern">
+                    <div class="mb-3">
+                        <label class="form-label">{{ t("Référence") }}</label>
+                        <input type="text" class="form-control" value="{{ recommandation.reference }}" readonly>
+                    </div>
+                    
+                    <div class="mb-3">
+                        <label class="form-label">{{ t("Description *") }}</label>
+                        <textarea class="form-control" name="description" rows="4" required>{{ recommandation.description }}</textarea>
+                    </div>
+                    
+                    <div class="row">
+                        <div class="col-md-6 mb-3">
+                            <label class="form-label">{{ t("Type de recommandation *") }}</label>
+                            <select class="form-select" name="type_recommandation" required>
+                                <option value="corrective" {% if recommandation.type_recommandation == 'corrective' %}selected{% endif %}>{{ t("Corrective") }}</option>
+                                <option value="preventive" {% if recommandation.type_recommandation == 'preventive' %}selected{% endif %}>{{ t("Préventive") }}</option>
+                                <option value="amelioration" {% if recommandation.type_recommandation == 'amelioration' %}selected{% endif %}>{{ t("Amélioration") }}</option>
+                            </select>
+                        </div>
+                        
+                        <div class="col-md-6 mb-3">
+                            <label class="form-label">{{ t("Catégorie") }}</label>
+                            <select class="form-select" name="categorie">
+                                <option value="">{{ t("Sélectionner...") }}</option>
+                                <option value="conformite_reglementaire" {% if recommandation.categorie == 'conformite_reglementaire' %}selected{% endif %}>{{ t("Conformité réglementaire") }}</option>
+                                <option value="amelioration_continue" {% if recommandation.categorie == 'amelioration_continue' %}selected{% endif %}>{{ t("Amélioration continue") }}</option>
+                                <option value="reduction_risque" {% if recommandation.categorie == 'reduction_risque' %}selected{% endif %}>{{ t("Réduction de risque") }}</option>
+                                <option value="optimisation_processus" {% if recommandation.categorie == 'optimisation_processus' %}selected{% endif %}>{{ t("Optimisation de processus") }}</option>
+                                <option value="securite" {% if recommandation.categorie == 'securite' %}selected{% endif %}>{{ t("Sécurité") }}</option>
+                            </select>
+                        </div>
+                    </div>
+                    
+                    <div class="row">
+                        <div class="col-md-6 mb-3">
+                            <label class="form-label">{{ t("Délai de mise en œuvre") }}</label>
+                            <select class="form-select" name="delai_mise_en_oeuvre">
+                                <option value="">{{ t("Sélectionner...") }}</option>
+                                <option value="immediat" {% if recommandation.delai_mise_en_oeuvre == 'immediat' %}selected{% endif %}>{{ t("Immédiat") }}</option>
+                                <option value="court_terme" {% if recommandation.delai_mise_en_oeuvre == 'court_terme' %}selected{% endif %}>{{ t("Court terme (1-3 mois)") }}</option>
+                                <option value="moyen_terme" {% if recommandation.delai_mise_en_oeuvre == 'moyen_terme' %}selected{% endif %}>{{ t("Moyen terme (3-6 mois)") }}</option>
+                                <option value="long_terme" {% if recommandation.delai_mise_en_oeuvre == 'long_terme' %}selected{% endif %}>{{ t("Long terme (> 6 mois)") }}</option>
+                            </select>
+                        </div>
+                        
+                        <div class="col-md-6 mb-3">
+                            <label class="form-label">{{ t("Date d'échéance") }}</label>
+                            <input type="date" class="form-control" name="date_echeance" 
+                                   value="{{ recommandation.date_echeance.strftime('%Y-%m-%d') if recommandation.date_echeance else '' }}">
+                        </div>
+                    </div>
+                    
+                    <div class="row">
+                        <div class="col-md-4 mb-3">
+                            <label class="form-label">{{ t("Urgence (1-5)") }}</label>
+                            <select class="form-select" name="urgence">
+                                {% for i in range(1, 6) %}
+                                <option value="{{ i }}" {% if recommandation.urgence == i %}selected{% endif %}>{{ i }}</option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                        
+                        <div class="col-md-4 mb-3">
+                            <label class="form-label">{{ t("Impact (1-5)") }}</label>
+                            <select class="form-select" name="impact_operationnel">
+                                {% for i in range(1, 6) %}
+                                <option value="{{ i }}" {% if recommandation.impact_operationnel == i %}selected{% endif %}>{{ i }}</option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                        
+                        <div class="col-md-4 mb-3">
+                            <label class="form-label">{{ t("Statut") }}</label>
+                            <select class="form-select" name="statut" id="statutSelect{{ recommandation.id }}" onchange="toggleAvancement({{ recommandation.id }})">
+                                <option value="a_traiter" {% if recommandation.statut == 'a_traiter' %}selected{% endif %}>{{ t("À traiter") }}</option>
+                                <option value="en_cours" {% if recommandation.statut == 'en_cours' %}selected{% endif %}>{{ t("En cours") }}</option>
+                                <option value="termine" {% if recommandation.statut == 'termine' %}selected{% endif %}>{{ t("Terminé") }}</option>
+                                <option value="retarde" {% if recommandation.statut == 'retarde' %}selected{% endif %}>{{ t("Retardé") }}</option>
+                            </select>
+                        </div>
+                    </div>
+                    
+                    <div class="mb-3" id="avancementContainer{{ recommandation.id }}">
+                        <label class="form-label">{{ t("Taux d'avancement") }}</label>
+                        <div class="d-flex align-items-center">
+                            <input type="range" class="form-range me-3" id="tauxAvancement{{ recommandation.id }}" 
+                                   name="taux_avancement" min="0" max="100" step="5" 
+                                   value="{{ recommandation.taux_avancement or 0 }}"
+                                   oninput="updateAvancementValue({{ recommandation.id }})">
+                            <span class="fw-bold" id="avancementValue{{ recommandation.id }}">
+                                {{ recommandation.taux_avancement or 0 }}%
+                            </span>
+                        </div>
+                    </div>
+
+                    <div class="mb-3">
+                        <label class="form-label">{{ t("Risque associé") }}</label>
+
+                        <div class="row mb-2">
+                            <div class="col-md-6">
+                                <label class="form-label">{{ t("Filtrer par cartographie") }}</label>
+                                <select class="form-select filtre-cartographie" 
+                                        onchange="filtrerRisquesModif('{{ recommandation.id }}')">
+                                    <option value="all">{{ t("Toutes les cartographies") }}</option>
+                                    {% for cartographie in cartographies_list %}
+                                        <option value="{{ cartographie.id }}">{{ cartographie.nom }}</option>
+                                    {% endfor %}
+                                </select>
+                            </div>
+                            <div class="col-md-6">
+                                <label class="form-label">{{ t("Rechercher un risque") }}</label>
+                                <input type="text" class="form-control recherche-risque" 
+                                       placeholder="{{ t("Référence ou intitulé...") }}" 
+                                       onkeyup="filtrerRisquesModif('{{ recommandation.id }}')">
+                            </div>
+                        </div>
+                        
+                        <select class="form-select" name="risque_id" id="selectRisqueModif{{ recommandation.id }}">
+                            <option value="">{{ t("Aucun risque associé") }}</option>
+                            {% for risque in risques_list %}
+                                <option value="{{ risque.id }}" 
+                                        data-cartographie="{{ risque.cartographie_id }}"
+                                        data-reference="{{ risque.reference }}"
+                                        data-intitule="{{ risque.intitule }}"
+                                        data-categorie="{{ risque.categorie }}"
+                                        data-niveau="{% if risque.evaluations %}{% set derniere_eval = risque.evaluations|sort(attribute='created_at')|last %}{{ derniere_eval.niveau_risque }}{% else %}Non évalué{% endif %}"
+                                        {% if recommandation.risque_id == risque.id %}selected{% endif %}>
+                                    {{ risque.reference }} - {{ risque.intitule }} 
+                                    {% if risque.evaluations %}
+                                        {% set derniere_eval = risque.evaluations|sort(attribute='created_at')|last %}
+                                        - {{ derniere_eval.niveau_risque }} (Score: {{ derniere_eval.score_risque }})
+                                    {% endif %}
+                                    - {{ risque.cartographie.nom }}
+                                </option>
+                            {% endfor %}
+                        </select>
+
+                        <div id="infoRisqueModif{{ recommandation.id }}" class="mt-2 p-2 bg-light rounded" 
+                             style="{% if recommandation.risque %}display: block;{% else %}display: none;{% endif %}">
+                            <small>
+                                <strong>{{ t("Risque sélectionné :") }}</strong>
+                                <span id="risqueReferenceModif{{ recommandation.id }}">
+                                    {% if recommandation.risque %}{{ recommandation.risque.reference }}{% endif %}
+                                </span> - 
+                                <span id="risqueIntituleModif{{ recommandation.id }}">
+                                    {% if recommandation.risque %}{{ recommandation.risque.intitule }}{% endif %}
+                                </span><br>
+                                <span id="risqueCategorieModif{{ recommandation.id }}">
+                                    {% if recommandation.risque %}{{ recommandation.risque.categorie }}{% endif %}
+                                </span> - 
+                                <span id="risqueNiveauModif{{ recommandation.id }}" class="risque-niveau">
+                                    {% if recommandation.risque and recommandation.risque.evaluations %}
+                                        {% set derniere_eval = recommandation.risque.evaluations|sort(attribute='created_at')|last %}
+                                        {{ derniere_eval.niveau_risque }}
+                                    {% endif %}
+                                </span>
+                            </small>
+                        </div>
+                    </div>
+                    
+                    <div class="mb-3">
+                        <label class="form-label">{{ t("Responsable") }}</label>
+                        <select class="form-select" name="responsable_id">
+                            <option value="">{{ t("Non assigné") }}</option>
+                            {% for user in users %}
+                                <option value="{{ user.id }}" {% if recommandation.responsable_id == user.id %}selected{% endif %}>
+                                    {{ user.username }} - {{ user.role }}
+                                </option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                </div>
+                <div class="modal-footer modal-footer-modern">
+                    <button type="button" class="btn-elegant btn-outline" data-bs-dismiss="modal">{{ t("Annuler") }}</button>
+                    <button type="submit" class="btn-elegant btn-primary">{{ t("Enregistrer les modifications") }}</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+{% endfor %}
+<!-- Modal Résumé Constatation -->
+<div class="modal fade" id="modalResumeConstatation" tabindex="-1">
+    <div class="modal-dialog modal-xl">
+        <div class="modal-content modal-content-modern">
+            <div class="modal-header modal-header-modern bg-primary text-white">
+                <h5 class="modal-title">{{ t("Résumé de la constatation") }}</h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body modal-body-modern" id="resumeConstatationContent">
+                <div class="text-center py-5">
+                    <div class="spinner-border text-primary" role="status">
+                        <span class="visually-hidden">{{ t("Chargement...") }}</span>
+                    </div>
+                    <p class="mt-3">{{ t("Chargement du résumé...") }}</p>
+                </div>
+            </div>
+            <div class="modal-footer modal-footer-modern">
+                <button type="button" class="btn-elegant btn-outline" data-bs-dismiss="modal">
+                    <i class="fas fa-times me-1"></i> {{ t("Fermer") }}
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+<!-- Modal Résumé Recommandation -->
+<div class="modal fade" id="modalResumeRecommandation" tabindex="-1">
+    <div class="modal-dialog modal-xl">
+        <div class="modal-content modal-content-modern">
+            <div class="modal-header modal-header-modern bg-warning text-white">
+                <h5 class="modal-title">{{ t("Résumé de la recommandation") }}</h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body modal-body-modern" id="resumeRecommandationContent">
+                <div class="text-center py-5">
+                    <div class="spinner-border text-primary" role="status">
+                        <span class="visually-hidden">{{ t("Chargement...") }}</span>
+                    </div>
+                    <p class="mt-3">{{ t("Chargement du résumé...") }}</p>
+                </div>
+            </div>
+            <div class="modal-footer modal-footer-modern">
+                <button type="button" class="btn-elegant btn-outline" data-bs-dismiss="modal">
+                    <i class="fas fa-times me-1"></i> {{ t("Fermer") }}
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
 <input type="hidden" id="audit_processus_value" value="{{ audit.processus_audite_display or '' }}">
 
 <!-- Scripts -->
