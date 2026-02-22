@@ -2546,261 +2546,269 @@ renvoi propre {% extends "base.html" %}
         </div>
         {% endif %}
 
-        <!-- ========== LISTE DES RISQUES ========== -->
-        <div class="row">
-            <div class="col-12">
-                <div class="card-modern animate-in">
-                    <div class="card-header-modern">
-                        <div class="d-flex justify-content-between align-items-center">
-                            <div class="d-flex align-items-center">
-                                <div class="header-icon-sm">
-                                    <i class="fas fa-list-ul"></i>
-                                </div>
-                                <h5 class="mb-0 ms-2">Liste des Risques - {{ campagne_active.nom }}</h5>
-                            </div>
-                            <div class="d-flex align-items-center gap-3">
-                                <span class="badge-modern badge-info">{{ nb_risques_evalues }}/{{ nb_risques_total }} évalués</span>
-                                <button class="btn-filter" onclick="toggleFiltres()">
-                                    <i class="fas fa-filter"></i> Filtres
-                                </button>
-                                <a href="{{ url_for('risques_archives') }}" class="btn-filter">
-                                    <i class="fas fa-archive"></i> Voir archives
-                                </a>
-                                <a href="{{ url_for('export_risques_excel', cartographie_id=cartographie.id, campagne_id=campagne_active.id) }}" 
-                                   class="btn-modern btn-success">
-                                    <i class="fas fa-file-excel"></i> Export Excel
-                                </a>
-                            </div>
+       <!-- ========== LISTE DES RISQUES ========== -->
+<div class="row">
+    <div class="col-12">
+        <div class="card-modern animate-in">
+            <div class="card-header-modern">
+                <div class="d-flex justify-content-between align-items-center">
+                    <div class="d-flex align-items-center">
+                        <div class="header-icon-sm">
+                            <i class="fas fa-list-ul"></i>
                         </div>
+                        <h5 class="mb-0 ms-2">Liste des Risques - {{ campagne_active.nom }}</h5>
                     </div>
-                    <div class="card-body">
-                        {% set risques_actifs = cartographie.risques|rejectattr('is_archived')|list %}
-                        {% if risques_actifs %}
-                        <div id="filtresSection" class="filters-panel" style="display: none;">
-                            <div class="filter-grid">
-                                <!-- Filtre de hiérarchisation par criticité -->
-                                <div class="filter-group">
-                                    <label class="filter-label">Hiérarchisation</label>
-                                    <select class="filter-select" onchange="hierarchiserRisques(this.value)">
-                                        <option value="score_desc">Score décroissant ▼</option>
-                                        <option value="score_asc">Score croissant ▲</option>
-                                        <option value="niveau_critique">Niveau critique d'abord</option>
-                                        <option value="impact_desc">Impact décroissant</option>
-                                        <option value="probabilite_desc">Probabilité décroissante</option>
-                                        <option value="reference">Par référence</option>
-                                        <option value="categorie">Par catégorie</option>
-                                    </select>
-                                </div>
-                                
-                                <div class="filter-group">
-                                    <label class="filter-label">Niveau de risque</label>
-                                    <select class="filter-select" onchange="filtrerTableau(this.value)">
-                                        <option value="tous">Tous les niveaux</option>
-                                        <option value="Critique">Critique</option>
-                                        <option value="Élevé">Élevé</option>
-                                        <option value="Moyen">Moyen</option>
-                                        <option value="Faible">Faible</option>
-                                        <option value="Non évalué">À évaluer</option>
-                                    </select>
-                                </div>
-                                
-                                <div class="filter-group">
-                                    <label class="filter-label">Catégorie</label>
-                                    <select class="filter-select" onchange="filtrerParCategorie(this.value)">
-                                        <option value="tous">Toutes les catégories</option>
-                                        {% set categories = risques_actifs|map(attribute='categorie')|unique|list %}
-                                        {% for categorie in categories %}
-                                            <option value="{{ categorie }}">{{ categorie }}</option>
-                                        {% endfor %}
-                                    </select>
-                                </div>
-                                
-                                <div class="filter-group">
-                                    <label class="filter-label">Recherche</label>
-                                    <div class="search-box">
-                                        <i class="fas fa-search search-icon"></i>
-                                        <input type="text" class="search-input" placeholder="Référence ou intitulé..." onkeyup="rechercherRisque(this.value)">
-                                    </div>
-                                </div>
-                            </div>
-                            
-                            <!-- Indicateur de tri actif -->
-                            <div id="triActif" class="active-filter-indicator" style="display: none;">
-                                <span class="filter-badge">
-                                    <i class="fas fa-sort-amount-down me-1"></i>
-                                    <span id="triLabel">Tri actif</span>
-                                    <button class="btn-close-filter" onclick="reinitialiserTri()">
-                                        <i class="fas fa-times"></i>
-                                    </button>
-                                </span>
-                            </div>
-                        </div>
-
-                        <div class="table-modern-container">
-                            <table class="table-modern" id="tableauRisques">
-                                <thead>
-                                    <tr>
-                                        <th>RÉFÉRENCE</th>
-                                        <th>INTITULÉ</th>
-                                        <th>CATÉGORIE</th>
-                                        <th>STATUT</th>
-                                        <th>IMPACT/PROB</th>
-                                        <th>NIVEAU</th>
-                                        <th class="text-end">ACTIONS</th>
-                                    </tr>
-                                </thead>
-                                <tbody>
-                                    {% for item in risques_avec_evaluation %}
-                                    {% set risque = item.risque %}
-                                    {% set evaluation = item.evaluation %}
-                                    <tr class="risk-row-modern {% if not item.est_evalue %}table-warning{% endif %}" 
-                                        data-niveau="{{ evaluation.niveau_risque if evaluation else 'Non évalué' }}" 
-                                        data-categorie="{{ risque.categorie }}"
-                                        onclick="highlightRisk('{{ risque.id }}')"
-                                        style="cursor: pointer;">
-                                        <td>
-                                            <div class="risk-ref">{{ risque.reference }}</div>
-                                        </td>
-                                        <td>
-                                            <div class="risk-title">{{ risque.intitule }}</div>
-                                            {% if risque.description %}
-                                            <div class="risk-desc">{{ risque.description|truncate(60) }}</div>
-                                            {% endif %}
-                                        </td>
-                                        <td>
-                                            <span class="category-tag">{{ risque.categorie }}</span>
-                                        </td>
-                                        <td>
-                                            {% if item.est_evalue %}
-                                                <span class="badge-modern badge-success">Évalué</span>
-                                                {% if evaluation and evaluation.created_at %}
-                                                <div class="small text-muted">{{ evaluation.created_at.strftime('%d/%m/%Y') }}</div>
-                                                {% endif %}
-                                            {% else %}
-                                                <span class="badge-modern badge-warning">À évaluer</span>
-                                            {% endif %}
-                                        </td>
-                                        <td>
-                                            {% if evaluation %}
-                                                {% set impact_final = evaluation.impact_conf or evaluation.impact_val or evaluation.impact_pre %}
-                                                {% set probabilite_final = evaluation.probabilite_conf or evaluation.probabilite_val or evaluation.probabilite_pre %}
-                                                {% if impact_final and probabilite_final %}
-                                                <div class="score-badges">
-                                                    <span class="impact-badge">{{ impact_final }}/5</span>
-                                                    <span class="prob-badge">{{ probabilite_final }}/5</span>
-                                                </div>
-                                                {% else %}
-                                                <span class="text-muted">-/-</span>
-                                                {% endif %}
-                                            {% else %}
-                                                <span class="text-muted">-/-</span>
-                                            {% endif %}
-                                        </td>
-                                        <td>
-                                            {% if evaluation and evaluation.niveau_risque %}
-                                                {% set niveau_final = evaluation.niveau_risque %}
-                                                <span class="level-badge 
-                                                    {% if niveau_final == 'Critique' %}critical
-                                                    {% elif niveau_final == 'Élevé' %}high
-                                                    {% elif niveau_final == 'Moyen' %}medium
-                                                    {% else %}low{% endif %}">
-                                                    {{ niveau_final }}
-                                                </span>
-                                            {% else %}
-                                                <span class="level-badge bg-secondary">Non évalué</span>
-                                            {% endif %}
-                                        </td>
-                                        <td class="text-end">
-                                            <div class="action-buttons">
-                                                {% if evaluation %}
-                                                <a href="{{ url_for('matrice_risque_specifique', cartographie_id=cartographie.id, risque_id=risque.id) }}?campagne={{ campagne_active.id }}" 
-                                                   class="btn-action matrix" 
-                                                   title="Voir sur matrice">
-                                                    <i class="fas fa-bullseye"></i>
-                                                </a>
-                                                {% endif %}
-                                                
-                                                <a href="{{ url_for('detail_risque', id=risque.id) }}" 
-                                                   class="btn-action view" 
-                                                   title="Voir détail">
-                                                    <i class="fas fa-eye"></i>
-                                                </a>
-                                                
-                                                <a href="{{ url_for('evaluer_risque_triphase', id=risque.id) }}"
-                                                   class="btn-action {% if item.est_evalue %}evaluate{% else %}warning{% endif %}" 
-                                                   title="{% if item.est_evalue %}Modifier l'évaluation{% else %}Évaluer dans cette campagne{% endif %}">
-                                                    <i class="fas fa-chart-bar"></i>
-                                                </a>
-                                                
-                                                {% set dispositifs_risque = risque.dispositifs_maitrise_list %}
-                                                {% if dispositifs_risque and dispositifs_risque|length > 0 %}
-                                                <a href="{{ url_for('liste_dispositifs_risque', risque_id=risque.id) }}" 
-                                                class="btn-action dispositif" 
-                                                title="Voir les {{ dispositifs_risque|length }} dispositif(s) de maîtrise">
-                                                    <i class="fas fa-shield-alt"></i>
-                                                    <span class="badge-notification">{{ dispositifs_risque|length }}</span>
-                                                </a>
-                                                {% endif %}
-                                                
-                                                {% if not risque.kri %}
-                                                <a href="{{ url_for('nouveau_kri', risque_id=risque.id) }}" 
-                                                   class="btn-action kri"
-                                                   title="Créer KRI">
-                                                    <i class="fas fa-chart-line"></i>
-                                                </a>
-                                                {% endif %}
-                                                        
-                                                <!-- Menu déroulant pour actions supplémentaires -->
-                                                <div class="btn-group">
-                                                    <button type="button" class="btn-action more" title="Plus d'actions" data-bs-toggle="dropdown">
-                                                        <i class="fas fa-ellipsis-v"></i>
-                                                    </button>
-                                                    <ul class="dropdown-menu dropdown-menu-end" style="background: var(--card-bg); border: 1px solid var(--border-color);">
-                                                        <li>
-                                                            <form action="{{ url_for('archiver_risque', id=risque.id) }}" method="POST" style="display: inline;">
-                                                                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                                                                <button type="submit" class="dropdown-item" style="color: var(--text-primary);"
-                                                                        onclick="return confirm('Êtes-vous sûr de vouloir archiver ce risque ?');">
-                                                                    <i class="fas fa-archive me-2"></i> Archiver
-                                                                </button>
-                                                            </form>
-                                                        </li>
-                                                        {% if not risque.evaluations %}
-                                                        <li><hr class="dropdown-divider" style="border-color: var(--border-color);"></li>
-                                                        <li>
-                                                            <form method="POST" action="{{ url_for('supprimer_risque', id=risque.id) }}" 
-                                                                  class="d-inline">
-                                                                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                                                                <button type="submit" class="dropdown-item text-danger" 
-                                                                        onclick="return confirm('Êtes-vous sûr de vouloir supprimer définitivement ce risque ?')">
-                                                                    <i class="fas fa-trash me-2"></i>Supprimer
-                                                                </button>
-                                                            </form>
-                                                        </li>
-                                                        {% endif %}
-                                                    </ul>
-                                                </div>
-                                            </div>
-                                        </td>
-                                    </tr>
-                                    {% endfor %}
-                                </tbody>
-                            </table>
-                        </div>
-                        {% else %}
-                        <div class="empty-state-full">
-                            <div class="empty-illustration">
-                                <i class="fas fa-map-marked-alt"></i>
-                            </div>
-                            <h3 class="empty-title">Aucun risque identifié</h3>
-                            <p class="empty-description">Commencez par ajouter des risques à cette cartographie pour analyser votre exposition.</p>
-                            <a href="{{ url_for('nouveau_risque', cartographie_id=cartographie.id) }}" class="btn-modern btn-primary">
-                                <i class="fas fa-plus"></i> Ajouter le premier risque
-                            </a>
-                        </div>
-                        {% endif %}
+                    <div class="d-flex align-items-center gap-3">
+                        <span class="badge-modern badge-info">{{ nb_risques_evalues }}/{{ nb_risques_total }} évalués</span>
+                        <button class="btn-filter" onclick="toggleFiltres()">
+                            <i class="fas fa-filter"></i> Filtres
+                        </button>
+                        <a href="{{ url_for('risques_archives') }}" class="btn-filter">
+                            <i class="fas fa-archive"></i> Voir archives
+                        </a>
+                        <a href="{{ url_for('export_risques_excel', cartographie_id=cartographie.id, campagne_id=campagne_active.id) }}" 
+                           class="btn-modern btn-success">
+                            <i class="fas fa-file-excel"></i> Export Excel
+                        </a>
                     </div>
                 </div>
+            </div>
+            <div class="card-body">
+                {% set risques_actifs = cartographie.risques|rejectattr('is_archived')|list %}
+                {% if risques_actifs %}
+                <div id="filtresSection" class="filters-panel" style="display: none;">
+                    <div class="filter-grid">
+                        <!-- Filtre de hiérarchisation par criticité -->
+                        <div class="filter-group">
+                            <label class="filter-label">Hiérarchisation</label>
+                            <select class="filter-select" onchange="hierarchiserRisques(this.value)">
+                                <option value="score_desc">Score décroissant ▼</option>
+                                <option value="score_asc">Score croissant ▲</option>
+                                <option value="niveau_critique">Niveau critique d'abord</option>
+                                <option value="impact_desc">Impact décroissant</option>
+                                <option value="probabilite_desc">Probabilité décroissante</option>
+                                <option value="reference">Par référence</option>
+                                <option value="categorie">Par catégorie</option>
+                            </select>
+                        </div>
+                        
+                        <div class="filter-group">
+                            <label class="filter-label">Niveau de risque</label>
+                            <select class="filter-select" onchange="filtrerTableau(this.value)">
+                                <option value="tous">Tous les niveaux</option>
+                                <option value="Critique">Critique</option>
+                                <option value="Élevé">Élevé</option>
+                                <option value="Moyen">Moyen</option>
+                                <option value="Faible">Faible</option>
+                                <option value="Non évalué">À évaluer</option>
+                            </select>
+                        </div>
+                        
+                        <div class="filter-group">
+                            <label class="filter-label">Catégorie</label>
+                            <select class="filter-select" onchange="filtrerParCategorie(this.value)">
+                                <option value="tous">Toutes les catégories</option>
+                                {% set categories = risques_actifs|map(attribute='categorie')|unique|list %}
+                                {% for categorie in categories %}
+                                    <option value="{{ categorie }}">{{ categorie }}</option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                        
+                        <div class="filter-group">
+                            <label class="filter-label">Recherche</label>
+                            <div class="search-box">
+                                <i class="fas fa-search search-icon"></i>
+                                <input type="text" class="search-input" placeholder="Référence ou intitulé..." onkeyup="rechercherRisque(this.value)">
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- Indicateur de tri actif -->
+                    <div id="triActif" class="active-filter-indicator" style="display: none;">
+                        <span class="filter-badge">
+                            <i class="fas fa-sort-amount-down me-1"></i>
+                            <span id="triLabel">Tri actif</span>
+                            <button class="btn-close-filter" onclick="reinitialiserTri()">
+                                <i class="fas fa-times"></i>
+                            </button>
+                        </span>
+                    </div>
+                </div>
+
+                <div class="table-modern-container">
+                    <table class="table-modern" id="tableauRisques">
+                        <thead>
+                            <tr>
+                                <th>RÉFÉRENCE</th>
+                                <th>INTITULÉ</th>
+                                <th>CATÉGORIE</th>
+                                <th>STATUT</th>
+                                <th>IMPACT/PROB</th>
+                                <th>NIVEAU</th>
+                                <th class="text-end">ACTIONS</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for item in risques_avec_evaluation %}
+                            {% set risque = item.risque %}
+                            {% set evaluation = item.evaluation %}
+                            {% set dispositifs_risque = risque.dispositifs_maitrise_list|default([]) %}
+                            {% set nb_dispositifs = dispositifs_risque|length %}
+                            <tr class="risk-row-modern {% if not item.est_evalue %}table-warning{% endif %}" 
+                                data-niveau="{{ evaluation.niveau_risque if evaluation else 'Non évalué' }}" 
+                                data-categorie="{{ risque.categorie }}"
+                                onclick="highlightRisk('{{ risque.id }}')"
+                                style="cursor: pointer;">
+                                <td>
+                                    <div class="risk-ref">{{ risque.reference }}</div>
+                                </td>
+                                <td>
+                                    <div class="risk-title">{{ risque.intitule }}</div>
+                                    {% if risque.description %}
+                                    <div class="risk-desc">{{ risque.description|truncate(60) }}</div>
+                                    {% endif %}
+                                </td>
+                                <td>
+                                    <span class="category-tag">{{ risque.categorie }}</span>
+                                </td>
+                                <td>
+                                    {% if item.est_evalue %}
+                                        <span class="badge-modern badge-success">Évalué</span>
+                                        {% if evaluation and evaluation.created_at %}
+                                        <div class="small text-muted">{{ evaluation.created_at.strftime('%d/%m/%Y') }}</div>
+                                        {% endif %}
+                                    {% else %}
+                                        <span class="badge-modern badge-warning">À évaluer</span>
+                                    {% endif %}
+                                </td>
+                                <td>
+                                    {% if evaluation %}
+                                        {% set impact_final = evaluation.impact_conf or evaluation.impact_val or evaluation.impact_pre %}
+                                        {% set probabilite_final = evaluation.probabilite_conf or evaluation.probabilite_val or evaluation.probabilite_pre %}
+                                        {% if impact_final and probabilite_final %}
+                                        <div class="score-badges">
+                                            <span class="impact-badge">{{ impact_final }}/5</span>
+                                            <span class="prob-badge">{{ probabilite_final }}/5</span>
+                                        </div>
+                                        {% else %}
+                                        <span class="text-muted">-/-</span>
+                                        {% endif %}
+                                    {% else %}
+                                        <span class="text-muted">-/-</span>
+                                    {% endif %}
+                                </td>
+                                <td>
+                                    {% if evaluation and evaluation.niveau_risque %}
+                                        {% set niveau_final = evaluation.niveau_risque %}
+                                        <span class="level-badge 
+                                            {% if niveau_final == 'Critique' %}critical
+                                            {% elif niveau_final == 'Élevé' %}high
+                                            {% elif niveau_final == 'Moyen' %}medium
+                                            {% else %}low{% endif %}">
+                                            {{ niveau_final }}
+                                        </span>
+                                    {% else %}
+                                        <span class="level-badge bg-secondary">Non évalué</span>
+                                    {% endif %}
+                                </td>
+                                <td class="text-end">
+                                    <div class="action-buttons">
+                                        {% if evaluation %}
+                                        <a href="{{ url_for('matrice_risque_specifique', cartographie_id=cartographie.id, risque_id=risque.id) }}?campagne={{ campagne_active.id }}" 
+                                           class="btn-action matrix" 
+                                           title="Voir sur matrice">
+                                            <i class="fas fa-bullseye"></i>
+                                        </a>
+                                        {% endif %}
+                                        
+                                        <a href="{{ url_for('detail_risque', id=risque.id) }}" 
+                                           class="btn-action view" 
+                                           title="Voir détail">
+                                            <i class="fas fa-eye"></i>
+                                        </a>
+                                        
+                                        <a href="{{ url_for('evaluer_risque_triphase', id=risque.id) }}"
+                                           class="btn-action {% if item.est_evalue %}evaluate{% else %}warning{% endif %}" 
+                                           title="{% if item.est_evalue %}Modifier l'évaluation{% else %}Évaluer dans cette campagne{% endif %}">
+                                            <i class="fas fa-chart-bar"></i>
+                                        </a>
+                                        
+                                        <!-- Icône Dispositifs avec badge de notification -->
+                                        {% if nb_dispositifs > 0 %}
+                                        <a href="{{ url_for('liste_dispositifs_risque', risque_id=risque.id) }}" 
+                                           class="btn-action dispositif" 
+                                           title="Voir les {{ nb_dispositifs }} dispositif(s) de maîtrise"
+                                           style="position: relative;">
+                                            <i class="fas fa-shield-alt"></i>
+                                            <span class="badge-notification">{{ nb_dispositifs }}</span>
+                                        </a>
+                                        {% else %}
+                                        <a href="{{ url_for('nouveau_dispositif', risque_id=risque.id) }}" 
+                                           class="btn-action" 
+                                           title="Ajouter un dispositif de maîtrise"
+                                           style="background: var(--bg-tertiary); color: var(--text-muted);">
+                                            <i class="fas fa-shield-alt"></i>
+                                        </a>
+                                        {% endif %}
+                                        
+                                        {% if not risque.kri %}
+                                        <a href="{{ url_for('nouveau_kri', risque_id=risque.id) }}" 
+                                           class="btn-action kri"
+                                           title="Créer KRI">
+                                            <i class="fas fa-chart-line"></i>
+                                        </a>
+                                        {% endif %}
+                                                
+                                        <!-- Menu déroulant pour actions supplémentaires -->
+                                        <div class="btn-group">
+                                            <button type="button" class="btn-action more" title="Plus d'actions" data-bs-toggle="dropdown">
+                                                <i class="fas fa-ellipsis-v"></i>
+                                            </button>
+                                            <ul class="dropdown-menu dropdown-menu-end" style="background: var(--card-bg); border: 1px solid var(--border-color);">
+                                                <li>
+                                                    <form action="{{ url_for('archiver_risque', id=risque.id) }}" method="POST" style="display: inline;">
+                                                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                                                        <button type="submit" class="dropdown-item" style="color: var(--text-primary);"
+                                                                onclick="return confirm('Êtes-vous sûr de vouloir archiver ce risque ?');">
+                                                            <i class="fas fa-archive me-2"></i> Archiver
+                                                        </button>
+                                                    </form>
+                                                </li>
+                                                {% if not risque.evaluations %}
+                                                <li><hr class="dropdown-divider" style="border-color: var(--border-color);"></li>
+                                                <li>
+                                                    <form method="POST" action="{{ url_for('supprimer_risque', id=risque.id) }}" 
+                                                          class="d-inline">
+                                                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                                                        <button type="submit" class="dropdown-item text-danger" 
+                                                                onclick="return confirm('Êtes-vous sûr de vouloir supprimer définitivement ce risque ?')">
+                                                            <i class="fas fa-trash me-2"></i>Supprimer
+                                                        </button>
+                                                    </form>
+                                                </li>
+                                                {% endif %}
+                                            </ul>
+                                        </div>
+                                    </div>
+                                </td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+                {% else %}
+                <div class="empty-state-full">
+                    <div class="empty-illustration">
+                        <i class="fas fa-map-marked-alt"></i>
+                    </div>
+                    <h3 class="empty-title">Aucun risque identifié</h3>
+                    <p class="empty-description">Commencez par ajouter des risques à cette cartographie pour analyser votre exposition.</p>
+                    <a href="{{ url_for('nouveau_risque', cartographie_id=cartographie.id) }}" class="btn-modern btn-primary">
+                        <i class="fas fa-plus"></i> Ajouter le premier risque
+                    </a>
+                </div>
+                {% endif %}
             </div>
         </div>
     </div>
