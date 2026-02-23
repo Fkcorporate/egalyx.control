@@ -1,348 +1,470 @@
 {% extends "base.html" %}
 
+{% block title %}Rapports d'Audit - Egalyx{% endblock %}
+
 {% block content %}
-<div class="d-flex justify-content-between align-items-center mb-4">
-    <h2><i class="fas fa-file-alt me-2"></i>{{ t("Rapports d'Audit") }}</h2>
-    <div>
-        {% if current_user.has_permission('can_manage_audit') %}
-        <a href="{{ url_for('liste_audits') }}" class="btn btn-outline-primary">
-            <i class="fas fa-list me-1"></i>{{ t("Voir tous les audits") }}
-        </a>
-        {% endif %}
-    </div>
-</div>
-
-<div class="row mb-4">
-    <div class="col-md-3">
-        <div class="card text-center border-start border-primary border-4">
-            <div class="card-body">
-                <h3 class="text-primary">{{ audits|length }}</h3>
-                <p class="text-muted mb-0">{{ t("Audits") }}</p>
-            </div>
-        </div>
-    </div>
-    <div class="col-md-3">
-        <div class="card text-center border-start border-info border-4">
-            <div class="card-body">
-                <h3 class="text-info">{{ constatations_total }}</h3>
-                <p class="text-muted mb-0">{{ t("Constatations") }}</p>
-            </div>
-        </div>
-    </div>
-    <div class="col-md-3">
-        <div class="card text-center border-start border-warning border-4">
-            <div class="card-body">
-                <h3 class="text-warning">{{ recommandations_total }}</h3>
-                <p class="text-muted mb-0">{{ t("Recommandations") }}</p>
-            </div>
-        </div>
-    </div>
-    <div class="col-md-3">
-        <div class="card text-center border-start border-success border-4">
-            <div class="card-body">
-                <h3 class="text-success">{{ plans_action_total }}</h3>
-                <p class="text-muted mb-0">{{ t("Plans d'Action") }}</p>
-            </div>
-        </div>
-    </div>
-</div>
-
-<div class="row">
-    <div class="col-md-8">
-        <div class="card shadow-sm mb-4">
-            <div class="card-header bg-light">
-                <h5 class="card-title mb-0">{{ t("Audits Disponibles") }}</h5>
-            </div>
-            <div class="card-body">
-                {% if audits %}
-                <div class="table-responsive">
-                    <table class="table table-hover">
-                        <thead class="table-light">
-                            <tr>
-                                <th>{{ t("Référence") }}</th>
-                                <th>{{ t("Titre") }}</th>
-                                <th>{{ t("Type") }}</th>
-                                <th>{{ t("Statut") }}</th>
-                                <th class="text-center">{{ t("Rapport") }}</th>
-                                <th class="text-center">{{ t("Fichiers") }}</th>
-                                {% if current_user.has_permission('can_manage_audit') %}
-                                <th class="text-center">{{ t("Actions") }}</th>
-                                {% endif %}
-                            </tr>
-                        </thead>
-                        <tbody>
-                            {% for audit in audits %}
-                            <tr>
-                                <td><strong class="text-primary">{{ audit.reference }}</strong></td>
-                                <td>{{ audit.titre|truncate(30) }}</td>
-                                <td>
-                                    <span class="badge bg-light text-dark">{{ audit.type_audit }}</span>
-                                </td>
-                                <td>
-                                    {% if audit.statut == 'planifie' %}
-                                    <span class="badge bg-secondary">{{ t("Planifié") }}</span>
-                                    {% elif audit.statut == 'en_cours' %}
-                                    <span class="badge bg-warning">{{ t("En cours") }}</span>
-                                    {% elif audit.statut == 'termine' %}
-                                    <span class="badge bg-success">{{ t("Terminé") }}</span>
-                                    {% elif audit.statut == 'annule' %}
-                                    <span class="badge bg-danger">{{ t("Annulé") }}</span>
-                                    {% endif %}
-                                </td>
-                                    <!-- Dans votre template rapports.html, dans la colonne Actions -->
-                                <td class="text-center">
-                                    <div class="btn-group btn-group-sm" role="group">
-                                        <a href="{{ url_for('rapport_audit_complet', audit_id=audit.id) }}" 
-                                           class="btn btn-outline-primary" 
-                                           title="{{ t("Voir le rapport") }}">
-                                            <i class="fas fa-eye"></i>
-                                        </a>
-                                        <a href="{{ url_for('rapport_audit_pdf_elegant', audit_id=audit.id) }}" 
-                                           class="btn btn-outline-info" 
-                                           title="{{ t("PDF Élégant") }}">
-                                            <i class="fas fa-file-pdf"></i>
-                                        </a>
-                                        <a href="{{ url_for('export_audit_excel', audit_id=audit.id) }}" 
-                                           class="btn btn-outline-success" 
-                                           title="{{ t("Export Excel") }}">
-                                            <i class="fas fa-file-excel"></i>
-                                        </a>
-                                        <a href="{{ url_for('export_rapport_audit_pdf', audit_id=audit.id) }}" 
-                                           class="btn btn-outline-secondary" 
-                                           title="{{ t("PDF Standard") }}">
-                                            <i class="fas fa-file-pdf"></i>
-                                        </a>
-                                    </div>
-                                </td>
-                                <td class="text-center">
-                                    {% set fichiers_count = fichiers_par_audit.get(audit.id, [])|length %}
-                                    {% if fichiers_count > 0 %}
-                                    <div class="d-flex align-items-center justify-content-center">
-                                        <span class="badge bg-info me-2">
-                                            {{ fichiers_count }}
-                                        </span>
-                                        <button type="button" 
-                                                class="btn btn-sm btn-outline-info view-files-btn"
-                                                data-audit-id="{{ audit.id }}"
-                                                title="{{ t("Voir les fichiers") }}">
-                                            <i class="fas fa-eye"></i>
-                                        </button>
-                                    </div>
-                                    {% else %}
-                                    <span class="text-muted">-</span>
-                                    {% endif %}
-                                </td>
-                                {% if current_user.has_permission('can_manage_audit') %}
-                                <td class="text-center">
-                                    <button type="button" 
-                                            class="btn btn-sm btn-outline-primary add-file-btn"
-                                            data-audit-id="{{ audit.id }}"
-                                            data-audit-ref="{{ audit.reference }}"
-                                            title="{{ t("Ajouter un fichier") }}">
-                                        <i class="fas fa-plus"></i>
-                                    </button>
-                                </td>
-                                {% endif %}
-                            </tr>
-                            {% endfor %}
-                        </tbody>
-                    </table>
+<div class="container-fluid px-4">
+    <!-- ========== EN-TÊTE ========== -->
+    <div class="d-flex justify-content-between align-items-center mb-5">
+        <div>
+            <div class="d-flex align-items-center gap-3 mb-2">
+                <div class="p-3 rounded-2" style="background: #2563eb;">
+                    <i class="fas fa-file-alt text-white fa-lg"></i>
                 </div>
-                {% else %}
-                <div class="text-center py-5">
-                    <i class="fas fa-folder-open fa-3x text-muted mb-3"></i>
-                    <p class="text-muted">{{ t("Aucun audit disponible pour le moment.") }}</p>
+                <div>
+                    <h1 class="fw-bold mt-1 mb-0" style="color: #0f172a; font-size: 2rem;">
+                        {{ t("Rapports d'Audit") }}
+                    </h1>
                 </div>
-                {% endif %}
+            </div>
+            <div class="mt-3" style="height: 3px; width: 80px; background: #2563eb; border-radius: 2px;"></div>
+        </div>
+        
+        <div>
+            {% if current_user.has_permission('can_manage_audit') %}
+            <a href="{{ url_for('liste_audits') }}" class="btn px-4 py-2 d-flex align-items-center gap-2"
+               style="border-radius: 10px; background: white; color: #2563eb; border: 1px solid #e2e8f0;">
+                <i class="fas fa-list" style="color: #2563eb;"></i>
+                <span class="d-none d-md-inline">{{ t("Voir tous les audits") }}</span>
+            </a>
+            {% endif %}
+        </div>
+    </div>
+
+    <!-- ========== STATISTIQUES ========== -->
+    <div class="row g-4 mb-5">
+        <div class="col-md-3">
+            <div class="card border-0 shadow-sm h-100" style="border-radius: 16px; background: white;">
+                <div class="card-body p-4">
+                    <div class="d-flex align-items-center justify-content-between">
+                        <div>
+                            <span class="text-uppercase small fw-semibold mb-2 d-block" style="color: #64748b;">{{ t("AUDITS") }}</span>
+                            <h2 class="fw-bold mb-0" style="color: #0f172a; font-size: 2rem;">{{ audits|length }}</h2>
+                        </div>
+                        <div class="rounded-circle p-3 d-flex align-items-center justify-content-center" 
+                             style="background: #e2e8f0; width: 64px; height: 64px;">
+                            <i class="fas fa-clipboard-check fa-2x" style="color: #2563eb;"></i>
+                        </div>
+                    </div>
+                    <div class="mt-3" style="height: 3px; width: 40px; background: #2563eb; border-radius: 2px;"></div>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card border-0 shadow-sm h-100" style="border-radius: 16px; background: white;">
+                <div class="card-body p-4">
+                    <div class="d-flex align-items-center justify-content-between">
+                        <div>
+                            <span class="text-uppercase small fw-semibold mb-2 d-block" style="color: #64748b;">{{ t("CONSTATATIONS") }}</span>
+                            <h2 class="fw-bold mb-0" style="color: #0f172a; font-size: 2rem;">{{ constatations_total }}</h2>
+                        </div>
+                        <div class="rounded-circle p-3 d-flex align-items-center justify-content-center" 
+                             style="background: #dbeafe; width: 64px; height: 64px;">
+                            <i class="fas fa-exclamation-triangle fa-2x" style="color: #b45309;"></i>
+                        </div>
+                    </div>
+                    <div class="mt-3" style="height: 3px; width: 40px; background: #b45309; border-radius: 2px;"></div>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card border-0 shadow-sm h-100" style="border-radius: 16px; background: white;">
+                <div class="card-body p-4">
+                    <div class="d-flex align-items-center justify-content-between">
+                        <div>
+                            <span class="text-uppercase small fw-semibold mb-2 d-block" style="color: #64748b;">{{ t("RECOMMANDATIONS") }}</span>
+                            <h2 class="fw-bold mb-0" style="color: #0f172a; font-size: 2rem;">{{ recommandations_total }}</h2>
+                        </div>
+                        <div class="rounded-circle p-3 d-flex align-items-center justify-content-center" 
+                             style="background: #fff3e0; width: 64px; height: 64px;">
+                            <i class="fas fa-lightbulb fa-2x" style="color: #b45309;"></i>
+                        </div>
+                    </div>
+                    <div class="mt-3" style="height: 3px; width: 40px; background: #b45309; border-radius: 2px;"></div>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card border-0 shadow-sm h-100" style="border-radius: 16px; background: white;">
+                <div class="card-body p-4">
+                    <div class="d-flex align-items-center justify-content-between">
+                        <div>
+                            <span class="text-uppercase small fw-semibold mb-2 d-block" style="color: #64748b;">{{ t("PLANS D'ACTION") }}</span>
+                            <h2 class="fw-bold mb-0" style="color: #0f172a; font-size: 2rem;">{{ plans_action_total }}</h2>
+                        </div>
+                        <div class="rounded-circle p-3 d-flex align-items-center justify-content-center" 
+                             style="background: #dcfce7; width: 64px; height: 64px;">
+                            <i class="fas fa-tasks fa-2x" style="color: #059669;"></i>
+                        </div>
+                    </div>
+                    <div class="mt-3" style="height: 3px; width: 40px; background: #059669; border-radius: 2px;"></div>
+                </div>
             </div>
         </div>
     </div>
 
-    <div class="col-md-4">
-        <div class="card shadow-sm mb-4">
-            <div class="card-header bg-light">
-                <h5 class="card-title mb-0">{{ t("Répartition par Type") }}</h5>
-            </div>
-            <div class="card-body">
-                <canvas id="chartTypesAudit" height="200"></canvas>
-            </div>
-        </div>
-
-        <div class="card shadow-sm">
-            <div class="card-header bg-light">
-                <h5 class="card-title mb-0">{{ t("Statut des Audits") }}</h5>
-            </div>
-            <div class="card-body">
-                <canvas id="chartStatutsAudit" height="200"></canvas>
-            </div>
-        </div>
-    </div>
-</div>
-
-<div class="row mt-4">
-    <div class="col-12">
-        <div class="card shadow-sm">
-            <div class="card-header bg-light d-flex justify-content-between align-items-center">
-                <h5 class="card-title mb-0">
-                    <i class="fas fa-paperclip me-2"></i>{{ t("Fichiers Joints") }}
-                    <span class="badge bg-primary ms-2">
-                        {{ total_fichiers_rapport if total_fichiers_rapport is defined else 0 }}
-                    </span>
-                </h5>
-                {% if current_user.has_permission('can_manage_audit') %}
-                <button type="button" 
-                        class="btn btn-primary btn-sm"
-                        data-bs-toggle="modal" 
-                        data-bs-target="#uploadModal">
-                    <i class="fas fa-plus me-1"></i>{{ t("Ajouter") }}
-                </button>
-                {% endif %}
-            </div>
-            <div class="card-body">
-                {% if fichiers_par_audit and fichiers_par_audit|length > 0 %}
-                <div class="table-responsive">
-                    <table class="table table-hover">
-                        <thead class="table-light">
-                            <tr>
-                                <th>{{ t("Audit") }}</th>
-                                <th>{{ t("Fichier") }}</th>
-                                <th>{{ t("Type") }}</th>
-                                <th>{{ t("Taille") }}</th>
-                                <th>{{ t("Description") }}</th>
-                                <th>{{ t("Ajouté le") }}</th>
-                                <th class="text-center">{{ t("Actions") }}</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            {% for audit_id, fichiers in fichiers_par_audit.items() %}
-                                {% set audit_info = audits_dict.get(audit_id) %}
-                                {% for fichier in fichiers %}
+    <!-- ========== CONTENU PRINCIPAL ========== -->
+    <div class="row g-4">
+        <!-- Tableau des audits -->
+        <div class="col-md-8">
+            <div class="card border-0 shadow-sm h-100" style="border-radius: 16px; overflow: hidden;">
+                <div class="card-header bg-transparent d-flex justify-content-between align-items-center p-4" style="border-bottom: 1px solid #e2e8f0;">
+                    <h5 class="fw-semibold mb-0" style="color: #0f172a;">
+                        <i class="fas fa-list-ul me-2" style="color: #2563eb;"></i>
+                        {{ t("Audits Disponibles") }}
+                    </h5>
+                </div>
+                
+                <div class="card-body p-0">
+                    {% if audits %}
+                    <div class="table-responsive">
+                        <table class="table mb-0" style="min-width: 1000px;">
+                            <thead style="background: #f8fafc;">
                                 <tr>
-                                    <td>
-                                        {% if audit_info %}
-                                        <div class="fw-semibold">{{ audit_info.reference }}</div>
-                                        <small class="text-muted">{{ audit_info.titre|truncate(30) }}</small>
-                                        {% else %}
-                                        <span class="text-muted">Audit #{{ audit_id }}</span>
-                                        {% endif %}
+                                    <th class="px-4 py-3 text-uppercase small fw-semibold" style="color: #64748b;">{{ t("RÉFÉRENCE") }}</th>
+                                    <th class="px-4 py-3 text-uppercase small fw-semibold" style="color: #64748b;">{{ t("TITRE") }}</th>
+                                    <th class="px-4 py-3 text-uppercase small fw-semibold" style="color: #64748b;">{{ t("TYPE") }}</th>
+                                    <th class="px-4 py-3 text-uppercase small fw-semibold" style="color: #64748b;">{{ t("STATUT") }}</th>
+                                    <th class="px-4 py-3 text-uppercase small fw-semibold text-center" style="color: #64748b;">{{ t("RAPPORT") }}</th>
+                                    <th class="px-4 py-3 text-uppercase small fw-semibold text-center" style="color: #64748b;">{{ t("FICHIERS") }}</th>
+                                    {% if current_user.has_permission('can_manage_audit') %}
+                                    <th class="px-4 py-3 text-uppercase small fw-semibold text-center" style="color: #64748b;">{{ t("ACTIONS") }}</th>
+                                    {% endif %}
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for audit in audits %}
+                                <tr style="border-bottom: 1px solid #f1f5f9;" 
+                                    data-audit-id="{{ audit.id }}"
+                                    onmouseover="this.style.backgroundColor='#f8fafc'" 
+                                    onmouseout="this.style.backgroundColor='transparent'">
+                                    <td class="px-4 py-3">
+                                        <span class="fw-semibold" style="color: #2563eb;">{{ audit.reference }}</span>
                                     </td>
-                                    <td>
-                                        <div class="d-flex align-items-center">
-                                            <i class="fas {{ 
-                                                'fa-file-pdf text-danger' if fichier.type_fichier == 'pdf' 
-                                                else 'fa-file-word text-primary' if fichier.type_fichier in ['doc', 'docx'] 
-                                                else 'fa-file-excel text-success' if fichier.type_fichier in ['xls', 'xlsx'] 
-                                                else 'fa-file-powerpoint text-warning' if fichier.type_fichier in ['ppt', 'pptx']
-                                                else 'fa-file-image text-info' if fichier.type_fichier in ['jpg', 'jpeg', 'png', 'gif']
-                                                else 'fa-file-alt text-secondary' 
-                                            }} me-2 fs-5"></i>
-                                            <div>
-                                                <div class="fw-medium">{{ fichier.nom_fichier|truncate(25) }}</div>
-                                                <small class="text-muted">
-                                                    {{ fichier.created_at|format_datetime if fichier.created_at else '' }}
-                                                </small>
-                                            </div>
-                                        </div>
+                                    <td class="px-4 py-3">
+                                        <div style="color: #0f172a;">{{ audit.titre|truncate(30) }}</div>
                                     </td>
-                                    <td>
-                                        <span class="badge bg-light text-dark text-uppercase">
-                                            .{{ fichier.type_fichier }}
+                                    <td class="px-4 py-3">
+                                        <span class="badge px-3 py-2 fw-normal" style="background: #f8fafc; color: #2563eb; border: 1px solid #e2e8f0; border-radius: 20px;">
+                                            {{ audit.type_audit }}
                                         </span>
                                     </td>
-                                    <td>{{ fichier.taille_formatee if fichier.taille_formatee else '-' }}</td>
-                                    <td>
-                                        {% if fichier.description %}
-                                        <span title="{{ fichier.description }}">
-                                            {{ fichier.description|truncate(40) }}
+                                    <td class="px-4 py-3">
+                                        {% if audit.statut == 'planifie' %}
+                                        <span class="badge px-3 py-2" style="background: #64748b; color: white; border-radius: 20px;">
+                                            {{ t("Planifié") }}
                                         </span>
-                                        {% else %}
-                                        <span class="text-muted">-</span>
+                                        {% elif audit.statut == 'en_cours' %}
+                                        <span class="badge px-3 py-2" style="background: #b45309; color: white; border-radius: 20px;">
+                                            {{ t("En cours") }}
+                                        </span>
+                                        {% elif audit.statut == 'termine' %}
+                                        <span class="badge px-3 py-2" style="background: #059669; color: white; border-radius: 20px;">
+                                            {{ t("Terminé") }}
+                                        </span>
+                                        {% elif audit.statut == 'annule' %}
+                                        <span class="badge px-3 py-2" style="background: #b91c1c; color: white; border-radius: 20px;">
+                                            {{ t("Annulé") }}
+                                        </span>
                                         {% endif %}
                                     </td>
-                                    <td>
-                                        <small>{{ fichier.created_at|format_datetime if fichier.created_at else '' }}</small>
-                                    </td>
-                                    <td class="text-center">
-                                        <div class="btn-group btn-group-sm" role="group">
-                                            <a href="{{ url_for('telecharger_fichier_rapport_audit', fichier_id=fichier.id) }}" 
-                                               class="btn btn-outline-primary" 
-                                               title="{{ t("Télécharger") }}"
-                                               target="_blank">
-                                                <i class="fas fa-download"></i>
+                                    <td class="px-4 py-3 text-center">
+                                        <div class="btn-group" role="group">
+                                            <a href="{{ url_for('rapport_audit_complet', audit_id=audit.id) }}" 
+                                               class="btn btn-sm px-3" 
+                                               style="background: #f8fafc; color: #2563eb; border: 1px solid #e2e8f0; border-radius: 8px 0 0 8px;"
+                                               title="{{ t("Voir le rapport") }}">
+                                                <i class="fas fa-eye"></i>
                                             </a>
-                                            {% if current_user.has_permission('can_manage_audit') or 
-                                                current_user.id == fichier.uploaded_by or
-                                                (audit_info and (current_user.id == audit_info.created_by or current_user.id == audit_info.responsable_id)) %}
-                                            <button type="button" 
-                                                    class="btn btn-outline-danger delete-file-btn"
-                                                    data-file-id="{{ fichier.id }}"
-                                                    data-file-name="{{ fichier.nom_fichier }}"
-                                                    title="{{ t("Supprimer") }}">
-                                                <i class="fas fa-trash"></i>
-                                            </button>
-                                            {% endif %}
+                                            <a href="{{ url_for('rapport_audit_pdf_elegant', audit_id=audit.id) }}" 
+                                               class="btn btn-sm px-3" 
+                                               style="background: #f8fafc; color: #b45309; border: 1px solid #e2e8f0; border-left: none;"
+                                               title="{{ t("PDF Élégant") }}">
+                                                <i class="fas fa-file-pdf"></i>
+                                            </a>
+                                            <a href="{{ url_for('export_audit_excel', audit_id=audit.id) }}" 
+                                               class="btn btn-sm px-3" 
+                                               style="background: #f8fafc; color: #059669; border: 1px solid #e2e8f0; border-left: none;"
+                                               title="{{ t("Export Excel") }}">
+                                                <i class="fas fa-file-excel"></i>
+                                            </a>
+                                            <a href="{{ url_for('export_rapport_audit_pdf', audit_id=audit.id) }}" 
+                                               class="btn btn-sm px-3" 
+                                               style="background: #f8fafc; color: #64748b; border: 1px solid #e2e8f0; border-left: none; border-radius: 0 8px 8px 0;"
+                                               title="{{ t("PDF Standard") }}">
+                                                <i class="fas fa-file-pdf"></i>
+                                            </a>
                                         </div>
                                     </td>
+                                    <td class="px-4 py-3 text-center">
+                                        {% set fichiers_count = fichiers_par_audit.get(audit.id, [])|length %}
+                                        {% if fichiers_count > 0 %}
+                                        <div class="d-flex align-items-center justify-content-center gap-2">
+                                            <span class="badge px-3 py-2" style="background: #2563eb; color: white; border-radius: 20px;">
+                                                {{ fichiers_count }}
+                                            </span>
+                                            <button type="button" 
+                                                    class="btn btn-sm px-3 view-files-btn"
+                                                    data-audit-id="{{ audit.id }}"
+                                                    title="{{ t("Voir les fichiers") }}"
+                                                    style="background: #f8fafc; color: #2563eb; border: 1px solid #e2e8f0; border-radius: 8px;">
+                                                <i class="fas fa-eye"></i>
+                                            </button>
+                                        </div>
+                                        {% else %}
+                                        <span class="text-muted">—</span>
+                                        {% endif %}
+                                    </td>
+                                    {% if current_user.has_permission('can_manage_audit') %}
+                                    <td class="px-4 py-3 text-center">
+                                        <button type="button" 
+                                                class="btn btn-sm px-3 add-file-btn"
+                                                data-audit-id="{{ audit.id }}"
+                                                data-audit-ref="{{ audit.reference }}"
+                                                title="{{ t("Ajouter un fichier") }}"
+                                                style="background: #f8fafc; color: #2563eb; border: 1px solid #e2e8f0; border-radius: 8px;">
+                                            <i class="fas fa-plus"></i>
+                                        </button>
+                                    </td>
+                                    {% endif %}
                                 </tr>
                                 {% endfor %}
-                            {% endfor %}
-                        </tbody>
-                    </table>
-                </div>
-                {% else %}
-                <div class="text-center py-5">
-                    <i class="fas fa-file-upload fa-3x text-muted mb-3"></i>
-                    <p class="text-muted">{{ t("Aucun fichier joint aux rapports.") }}</p>
-                    {% if current_user.has_permission('can_manage_audit') %}
-                    <p class="text-muted small">{{ t("Cliquez sur 'Ajouter' pour joindre des documents aux rapports d'audit.") }}</p>
+                            </tbody>
+                        </table>
+                    </div>
+                    {% else %}
+                    <div class="text-center py-5">
+                        <div class="mb-3">
+                            <div class="rounded-circle d-inline-flex align-items-center justify-content-center p-3" style="background: #f1f5f9; width: 80px; height: 80px;">
+                                <i class="fas fa-folder-open fa-3x" style="color: #94a3b8;"></i>
+                            </div>
+                        </div>
+                        <h5 class="fw-semibold mb-2" style="color: #334155;">{{ t("Aucun audit disponible") }}</h5>
+                        <p class="mb-0" style="color: #64748b;">{{ t("Pour le moment, aucun audit n'est disponible.") }}</p>
+                    </div>
                     {% endif %}
                 </div>
-                {% endif %}
+            </div>
+        </div>
+
+        <!-- Graphiques -->
+        <div class="col-md-4">
+            <div class="card border-0 shadow-sm mb-4" style="border-radius: 16px;">
+                <div class="card-header bg-transparent p-4" style="border-bottom: 1px solid #e2e8f0;">
+                    <h5 class="fw-semibold mb-0" style="color: #0f172a;">
+                        <i class="fas fa-chart-pie me-2" style="color: #2563eb;"></i>
+                        {{ t("Répartition par Type") }}
+                    </h5>
+                </div>
+                <div class="card-body p-4">
+                    <canvas id="chartTypesAudit" style="height: 200px;"></canvas>
+                </div>
+            </div>
+
+            <div class="card border-0 shadow-sm" style="border-radius: 16px;">
+                <div class="card-header bg-transparent p-4" style="border-bottom: 1px solid #e2e8f0;">
+                    <h5 class="fw-semibold mb-0" style="color: #0f172a;">
+                        <i class="fas fa-chart-pie me-2" style="color: #2563eb;"></i>
+                        {{ t("Statut des Audits") }}
+                    </h5>
+                </div>
+                <div class="card-body p-4">
+                    <canvas id="chartStatutsAudit" style="height: 200px;"></canvas>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- ========== FICHIERS JOINTS ========== -->
+    <div class="row mt-4">
+        <div class="col-12">
+            <div class="card border-0 shadow-sm" style="border-radius: 16px; overflow: hidden;">
+                <div class="card-header bg-transparent d-flex justify-content-between align-items-center p-4" style="border-bottom: 1px solid #e2e8f0;">
+                    <h5 class="fw-semibold mb-0" style="color: #0f172a;">
+                        <i class="fas fa-paperclip me-2" style="color: #2563eb;"></i>
+                        {{ t("Fichiers Joints") }}
+                        <span class="badge ms-2 px-3 py-2" style="background: #2563eb; color: white; border-radius: 20px;">
+                            {{ total_fichiers_rapport if total_fichiers_rapport is defined else 0 }}
+                        </span>
+                    </h5>
+                    {% if current_user.has_permission('can_manage_audit') %}
+                    <button type="button" 
+                            class="btn px-4 py-2 d-flex align-items-center gap-2"
+                            data-bs-toggle="modal" 
+                            data-bs-target="#uploadModal"
+                            style="border-radius: 10px; background: #2563eb; color: white; border: none; box-shadow: 0 4px 12px rgba(37, 99, 235, 0.3);">
+                        <i class="fas fa-plus"></i>
+                        <span class="d-none d-md-inline">{{ t("Ajouter") }}</span>
+                    </button>
+                    {% endif %}
+                </div>
+                
+                <div class="card-body p-0">
+                    {% if fichiers_par_audit and fichiers_par_audit|length > 0 %}
+                    <div class="table-responsive">
+                        <table class="table mb-0" style="min-width: 1200px;">
+                            <thead style="background: #f8fafc;">
+                                <tr>
+                                    <th class="px-4 py-3 text-uppercase small fw-semibold" style="color: #64748b;">{{ t("AUDIT") }}</th>
+                                    <th class="px-4 py-3 text-uppercase small fw-semibold" style="color: #64748b;">{{ t("FICHIER") }}</th>
+                                    <th class="px-4 py-3 text-uppercase small fw-semibold" style="color: #64748b;">{{ t("TYPE") }}</th>
+                                    <th class="px-4 py-3 text-uppercase small fw-semibold" style="color: #64748b;">{{ t("TAILLE") }}</th>
+                                    <th class="px-4 py-3 text-uppercase small fw-semibold" style="color: #64748b;">{{ t("DESCRIPTION") }}</th>
+                                    <th class="px-4 py-3 text-uppercase small fw-semibold" style="color: #64748b;">{{ t("AJOUTÉ LE") }}</th>
+                                    <th class="px-4 py-3 text-uppercase small fw-semibold text-center" style="color: #64748b;">{{ t("ACTIONS") }}</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for audit_id, fichiers in fichiers_par_audit.items() %}
+                                    {% set audit_info = audits_dict.get(audit_id) %}
+                                    {% for fichier in fichiers %}
+                                    <tr style="border-bottom: 1px solid #f1f5f9;" data-file-id="{{ fichier.id }}">
+                                        <td class="px-4 py-3">
+                                            {% if audit_info %}
+                                            <div class="fw-semibold" style="color: #2563eb;">{{ audit_info.reference }}</div>
+                                            <small style="color: #64748b;">{{ audit_info.titre|truncate(30) }}</small>
+                                            {% else %}
+                                            <span class="text-muted">{{ t("Audit") }} #{{ audit_id }}</span>
+                                            {% endif %}
+                                        </td>
+                                        <td class="px-4 py-3">
+                                            <div class="d-flex align-items-center">
+                                                <i class="fas {{ 
+                                                    'fa-file-pdf text-danger' if fichier.type_fichier == 'pdf' 
+                                                    else 'fa-file-word text-primary' if fichier.type_fichier in ['doc', 'docx'] 
+                                                    else 'fa-file-excel text-success' if fichier.type_fichier in ['xls', 'xlsx'] 
+                                                    else 'fa-file-powerpoint text-warning' if fichier.type_fichier in ['ppt', 'pptx']
+                                                    else 'fa-file-image text-info' if fichier.type_fichier in ['jpg', 'jpeg', 'png', 'gif']
+                                                    else 'fa-file-alt text-secondary' 
+                                                }} me-3 fs-4"></i>
+                                                <div>
+                                                    <div class="fw-medium" style="color: #0f172a;">{{ fichier.nom_fichier|truncate(25) }}</div>
+                                                    <small style="color: #64748b;">
+                                                        {{ fichier.created_at|format_datetime if fichier.created_at else '' }}
+                                                    </small>
+                                                </div>
+                                            </div>
+                                        </td>
+                                        <td class="px-4 py-3">
+                                            <span class="badge px-3 py-2 fw-normal" style="background: #f8fafc; color: #2563eb; border: 1px solid #e2e8f0; border-radius: 20px; text-transform: uppercase;">
+                                                .{{ fichier.type_fichier }}
+                                            </span>
+                                        </td>
+                                        <td class="px-4 py-3" style="color: #334155;">{{ fichier.taille_formatee if fichier.taille_formatee else '-' }}</td>
+                                        <td class="px-4 py-3">
+                                            {% if fichier.description %}
+                                            <span title="{{ fichier.description }}" style="color: #334155;">
+                                                {{ fichier.description|truncate(40) }}
+                                            </span>
+                                            {% else %}
+                                            <span class="text-muted">—</span>
+                                            {% endif %}
+                                        </td>
+                                        <td class="px-4 py-3">
+                                            <small style="color: #334155;">{{ fichier.created_at|format_datetime if fichier.created_at else '' }}</small>
+                                        </td>
+                                        <td class="px-4 py-3 text-center">
+                                            <div class="btn-group" role="group">
+                                                <a href="{{ url_for('telecharger_fichier_rapport_audit', fichier_id=fichier.id) }}" 
+                                                   class="btn btn-sm px-3" 
+                                                   title="{{ t("Télécharger") }}"
+                                                   target="_blank"
+                                                   style="background: #f8fafc; color: #2563eb; border: 1px solid #e2e8f0; border-radius: 8px 0 0 8px;">
+                                                    <i class="fas fa-download"></i>
+                                                </a>
+                                                {% if current_user.has_permission('can_manage_audit') or 
+                                                    current_user.id == fichier.uploaded_by or
+                                                    (audit_info and (current_user.id == audit_info.created_by or current_user.id == audit_info.responsable_id)) %}
+                                                <button type="button" 
+                                                        class="btn btn-sm px-3 delete-file-btn"
+                                                        data-file-id="{{ fichier.id }}"
+                                                        data-file-name="{{ fichier.nom_fichier }}"
+                                                        title="{{ t("Supprimer") }}"
+                                                        style="background: #f8fafc; color: #b91c1c; border: 1px solid #e2e8f0; border-left: none; border-radius: 0 8px 8px 0;">
+                                                    <i class="fas fa-trash"></i>
+                                                </button>
+                                                {% endif %}
+                                            </div>
+                                        </td>
+                                    </tr>
+                                    {% endfor %}
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                    {% else %}
+                    <div class="text-center py-5">
+                        <div class="mb-3">
+                            <div class="rounded-circle d-inline-flex align-items-center justify-content-center p-3" style="background: #f1f5f9; width: 80px; height: 80px;">
+                                <i class="fas fa-file-upload fa-3x" style="color: #94a3b8;"></i>
+                            </div>
+                        </div>
+                        <h5 class="fw-semibold mb-2" style="color: #334155;">{{ t("Aucun fichier joint") }}</h5>
+                        <p class="mb-0" style="color: #64748b;">{{ t("Aucun fichier n'a encore été ajouté aux rapports d'audit.") }}</p>
+                        {% if current_user.has_permission('can_manage_audit') %}
+                        <p class="mt-2 small" style="color: #94a3b8;">{{ t("Cliquez sur 'Ajouter' pour joindre des documents.") }}</p>
+                        {% endif %}
+                    </div>
+                    {% endif %}
+                </div>
             </div>
         </div>
     </div>
 </div>
 
-<!-- Modal pour l'ajout de fichier (global) -->
+<!-- ========== MODAL POUR L'AJOUT DE FICHIER (GLOBAL) ========== -->
 <div class="modal fade" id="uploadModal" tabindex="-1" aria-hidden="true">
     <div class="modal-dialog modal-dialog-centered">
-        <div class="modal-content">
-            <div class="modal-header">
-                <h5 class="modal-title">
-                    <i class="fas fa-cloud-upload-alt me-2"></i>{{ t("Ajouter un Fichier") }}
-                </h5>
-                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="{{ t("Fermer") }}"></button>
+        <div class="modal-content border-0" style="border-radius: 20px; box-shadow: 0 25px 50px -12px rgba(0,0,0,0.25);">
+            <div class="p-4" style="background: #2563eb; border-radius: 20px 20px 0 0;">
+                <div class="d-flex align-items-center gap-3">
+                    <div class="rounded-circle bg-white p-2" style="width: 48px; height: 48px;">
+                        <i class="fas fa-cloud-upload-alt fa-lg" style="color: #2563eb;"></i>
+                    </div>
+                    <div>
+                        <h5 class="fw-bold text-white mb-1">{{ t("Ajouter un Fichier") }}</h5>
+                    </div>
+                    <button type="button" class="btn-close btn-close-white ms-auto" data-bs-dismiss="modal"></button>
+                </div>
             </div>
+            
             <form id="uploadForm" action="{{ url_for('upload_fichier_rapport_global') }}" method="POST" enctype="multipart/form-data">
                 <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                <div class="modal-body">
-                    <div class="mb-3">
-                        <label for="auditSelect" class="form-label">{{ t("Sélectionner un audit") }} <span class="text-danger">*</span></label>
-                        <select class="form-select" id="auditSelect" name="audit_id" required>
+                <div class="modal-body p-4">
+                    <div class="mb-4">
+                        <label class="form-label fw-semibold small text-uppercase" style="color: #64748b;">{{ t("Sélectionner un audit") }} <span class="text-danger">*</span></label>
+                        <select class="form-select border-0 bg-light px-4 py-3" id="auditSelect" name="audit_id" required style="border-radius: 12px;">
                             <option value="">{{ t("-- Choisir un audit --") }}</option>
                             {% for audit in audits %}
                             <option value="{{ audit.id }}">{{ audit.reference }} - {{ audit.titre|truncate(40) }}</option>
                             {% endfor %}
                         </select>
                     </div>
-                    <div class="mb-3">
-                        <label for="fichier" class="form-label">{{ t("Sélectionner un fichier") }} <span class="text-danger">*</span></label>
-                        <input type="file" class="form-control" id="fichier" name="fichier" required>
-                        <div class="form-text">
-                            {{ t("Formats acceptés : PDF, DOC/DOCX, XLS/XLSX, PPT/PPTX, JPG/PNG, TXT") }}
-                            <br>{{ t("Taille maximale : 10 Mo") }}
+                    
+                    <div class="mb-4">
+                        <label class="form-label fw-semibold small text-uppercase" style="color: #64748b;">{{ t("Sélectionner un fichier") }} <span class="text-danger">*</span></label>
+                        <input type="file" class="form-control border-0 bg-light px-4 py-3" id="fichier" name="fichier" required style="border-radius: 12px;">
+                        <div class="mt-2 small" style="color: #64748b;">
+                            <i class="fas fa-info-circle me-1" style="color: #2563eb;"></i>
+                            {{ t("Formats acceptés : PDF, DOC/DOCX, XLS/XLSX, PPT/PPTX, JPG/PNG, TXT") }}<br>
+                            <i class="fas fa-info-circle me-1" style="color: #2563eb;"></i>
+                            {{ t("Taille maximale : 10 Mo") }}
                         </div>
                     </div>
+                    
                     <div class="mb-3">
-                        <label for="description" class="form-label">{{ t("Description (optionnelle)") }}</label>
-                        <textarea class="form-control" id="description" name="description" rows="3" 
-                                  placeholder="{{ t("Description du fichier...") }}"></textarea>
+                        <label class="form-label fw-semibold small text-uppercase" style="color: #64748b;">{{ t("Description (optionnelle)") }}</label>
+                        <textarea class="form-control border-0 bg-light px-4 py-3" id="description" name="description" rows="3" 
+                                  placeholder="{{ t("Description du fichier...") }}" style="border-radius: 12px;"></textarea>
                     </div>
                 </div>
-                <div class="modal-footer">
-                    <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">{{ t("Annuler") }}</button>
-                    <button type="submit" class="btn btn-primary">
-                        <i class="fas fa-upload me-1"></i>{{ t("Téléverser") }}
+                <div class="modal-footer border-0 p-4 pt-0">
+                    <button type="button" class="btn w-100 py-2 mb-2" data-bs-dismiss="modal"
+                            style="border-radius: 10px; background: #f8fafc; color: #334155; border: 1px solid #e2e8f0;">
+                        <i class="fas fa-times me-2"></i>{{ t("Annuler") }}
+                    </button>
+                    <button type="submit" class="btn w-100 py-2" style="border-radius: 10px; background: #2563eb; color: white; border: none;">
+                        <i class="fas fa-upload me-2"></i>{{ t("Téléverser") }}
                     </button>
                 </div>
             </form>
@@ -350,39 +472,51 @@
     </div>
 </div>
 
-<!-- Modal pour l'ajout rapide de fichier -->
+<!-- ========== MODAL POUR L'AJOUT RAPIDE DE FICHIER ========== -->
 <div class="modal fade" id="quickUploadModal" tabindex="-1" aria-hidden="true">
     <div class="modal-dialog modal-dialog-centered">
-        <div class="modal-content">
-            <div class="modal-header">
-                <h5 class="modal-title">
-                    <i class="fas fa-cloud-upload-alt me-2"></i>
-                    {{ t("Ajouter un fichier à") }} <span id="auditRef" class="fw-semibold"></span>
-                </h5>
-                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="{{ t("Fermer") }}"></button>
+        <div class="modal-content border-0" style="border-radius: 20px; box-shadow: 0 25px 50px -12px rgba(0,0,0,0.25);">
+            <div class="p-4" style="background: #2563eb; border-radius: 20px 20px 0 0;">
+                <div class="d-flex align-items-center gap-3">
+                    <div class="rounded-circle bg-white p-2" style="width: 48px; height: 48px;">
+                        <i class="fas fa-cloud-upload-alt fa-lg" style="color: #2563eb;"></i>
+                    </div>
+                    <div>
+                        <h5 class="fw-bold text-white mb-1">{{ t("Ajouter un fichier") }}</h5>
+                        <span class="small text-white opacity-75" id="auditRef"></span>
+                    </div>
+                    <button type="button" class="btn-close btn-close-white ms-auto" data-bs-dismiss="modal"></button>
+                </div>
             </div>
+            
             <form id="quickUploadForm" action="{{ url_for('upload_fichier_rapport_global') }}" method="POST" enctype="multipart/form-data">
                 <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                 <input type="hidden" id="quickAuditId" name="audit_id">
-                <div class="modal-body">
-                    <div class="mb-3">
-                        <label for="quickFichier" class="form-label">{{ t("Sélectionner un fichier") }} <span class="text-danger">*</span></label>
-                        <input type="file" class="form-control" id="quickFichier" name="fichier" required>
-                        <div class="form-text">
-                            {{ t("Formats acceptés : PDF, DOC/DOCX, XLS/XLSX, PPT/PPTX, JPG/PNG, TXT") }}
-                            <br>{{ t("Taille maximale : 10 Mo") }}
+                <div class="modal-body p-4">
+                    <div class="mb-4">
+                        <label class="form-label fw-semibold small text-uppercase" style="color: #64748b;">{{ t("Sélectionner un fichier") }} <span class="text-danger">*</span></label>
+                        <input type="file" class="form-control border-0 bg-light px-4 py-3" id="quickFichier" name="fichier" required style="border-radius: 12px;">
+                        <div class="mt-2 small" style="color: #64748b;">
+                            <i class="fas fa-info-circle me-1" style="color: #2563eb;"></i>
+                            {{ t("Formats acceptés : PDF, DOC/DOCX, XLS/XLSX, PPT/PPTX, JPG/PNG, TXT") }}<br>
+                            <i class="fas fa-info-circle me-1" style="color: #2563eb;"></i>
+                            {{ t("Taille maximale : 10 Mo") }}
                         </div>
                     </div>
+                    
                     <div class="mb-3">
-                        <label for="quickDescription" class="form-label">{{ t("Description (optionnelle)") }}</label>
-                        <textarea class="form-control" id="quickDescription" name="description" rows="3" 
-                                  placeholder="{{ t("Description du fichier...") }}"></textarea>
+                        <label class="form-label fw-semibold small text-uppercase" style="color: #64748b;">{{ t("Description (optionnelle)") }}</label>
+                        <textarea class="form-control border-0 bg-light px-4 py-3" id="quickDescription" name="description" rows="3" 
+                                  placeholder="{{ t("Description du fichier...") }}" style="border-radius: 12px;"></textarea>
                     </div>
                 </div>
-                <div class="modal-footer">
-                    <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">{{ t("Annuler") }}</button>
-                    <button type="submit" class="btn btn-primary">
-                        <i class="fas fa-upload me-1"></i>{{ t("Téléverser") }}
+                <div class="modal-footer border-0 p-4 pt-0">
+                    <button type="button" class="btn w-100 py-2 mb-2" data-bs-dismiss="modal"
+                            style="border-radius: 10px; background: #f8fafc; color: #334155; border: 1px solid #e2e8f0;">
+                        <i class="fas fa-times me-2"></i>{{ t("Annuler") }}
+                    </button>
+                    <button type="submit" class="btn w-100 py-2" style="border-radius: 10px; background: #2563eb; color: white; border: none;">
+                        <i class="fas fa-upload me-2"></i>{{ t("Téléverser") }}
                     </button>
                 </div>
             </form>
@@ -390,41 +524,59 @@
     </div>
 </div>
 
-<!-- Modal de confirmation de suppression -->
+<!-- ========== MODAL DE CONFIRMATION DE SUPPRESSION ========== -->
 <div class="modal fade" id="confirmDeleteModal" tabindex="-1" aria-hidden="true">
     <div class="modal-dialog modal-dialog-centered">
-        <div class="modal-content">
-            <div class="modal-header">
-                <h5 class="modal-title text-danger">
-                    <i class="fas fa-exclamation-triangle me-2"></i>{{ t("Confirmation de suppression") }}
-                </h5>
-                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="{{ t("Fermer") }}"></button>
-            </div>
-            <div class="modal-body">
-                <p>{{ t("Êtes-vous sûr de vouloir supprimer le fichier") }} <strong id="fileNameToDelete"></strong> ?</p>
-                <div class="alert alert-warning mt-3">
-                    <i class="fas fa-exclamation-circle me-2"></i>
-                    {{ t("Cette action est irréversible. Le fichier sera définitivement supprimé.") }}
+        <div class="modal-content border-0" style="border-radius: 20px; box-shadow: 0 25px 50px -12px rgba(0,0,0,0.25);">
+            <div class="p-4" style="background: #b91c1c; border-radius: 20px 20px 0 0;">
+                <div class="d-flex align-items-center gap-3">
+                    <div class="rounded-circle bg-white p-2" style="width: 48px; height: 48px;">
+                        <i class="fas fa-exclamation-triangle fa-lg" style="color: #b91c1c;"></i>
+                    </div>
+                    <div>
+                        <h5 class="fw-bold text-white mb-1">{{ t("Confirmation de suppression") }}</h5>
+                    </div>
+                    <button type="button" class="btn-close btn-close-white ms-auto" data-bs-dismiss="modal"></button>
                 </div>
             </div>
-            <div class="modal-footer">
-                <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">{{ t("Annuler") }}</button>
-                <button type="button" class="btn btn-danger" id="confirmDeleteBtn">
-                    <i class="fas fa-trash me-1"></i>{{ t("Supprimer définitivement") }}
+            
+            <div class="modal-body p-4">
+                <div class="d-flex align-items-start gap-3 p-3 mb-3" style="background: #fee2e2; border-radius: 12px;">
+                    <i class="fas fa-exclamation-triangle mt-1" style="color: #b91c1c;"></i>
+                    <div>
+                        <p class="mb-2" style="color: #334155;">
+                            {{ t("Êtes-vous sûr de vouloir supprimer le fichier") }} 
+                            <strong id="fileNameToDelete" style="color: #0f172a;"></strong> ?
+                        </p>
+                        <p class="mb-0" style="color: #64748b;">
+                            <i class="fas fa-info-circle me-1"></i>
+                            {{ t("Cette action est irréversible. Le fichier sera définitivement supprimé.") }}
+                        </p>
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer border-0 p-4 pt-0">
+                <button type="button" class="btn w-100 py-2 mb-2" data-bs-dismiss="modal"
+                        style="border-radius: 10px; background: #f8fafc; color: #334155; border: 1px solid #e2e8f0;">
+                    <i class="fas fa-times me-2"></i>{{ t("Annuler") }}
+                </button>
+                <button type="button" class="btn w-100 py-2" id="confirmDeleteBtn" style="border-radius: 10px; background: #b91c1c; color: white; border: none;">
+                    <i class="fas fa-trash me-2"></i>{{ t("Supprimer définitivement") }}
                 </button>
             </div>
         </div>
     </div>
 </div>
 
+<!-- ========== SCRIPTS ========== -->
 <script>
 document.addEventListener('DOMContentLoaded', function() {
     let fileToDelete = null;
     
-    // Initialiser les graphiques
+    // ========== INITIALISER LES GRAPHIQUES ==========
     initCharts();
     
-    // Initialiser les événements
+    // ========== INITIALISER LES ÉVÉNEMENTS ==========
     initEventListeners();
     
     function initCharts() {
@@ -438,7 +590,7 @@ document.addEventListener('DOMContentLoaded', function() {
                     datasets: [{
                         data: {{ types_audit.data|tojson if types_audit and types_audit.data else [] }},
                         backgroundColor: [
-                            '#4e73df', '#1cc88a', '#36b9cc', '#f6c23e', '#e74a3b', '#858796'
+                            '#2563eb', '#059669', '#0891b2', '#b45309', '#b91c1c', '#64748b'
                         ],
                         borderWidth: 1,
                         borderColor: '#fff'
@@ -452,7 +604,8 @@ document.addEventListener('DOMContentLoaded', function() {
                             position: 'bottom',
                             labels: {
                                 padding: 20,
-                                usePointStyle: true
+                                usePointStyle: true,
+                                color: '#334155'
                             }
                         }
                     },
@@ -471,7 +624,7 @@ document.addEventListener('DOMContentLoaded', function() {
                     datasets: [{
                         data: {{ statuts_audit.data|tojson if statuts_audit and statuts_audit.data else [] }},
                         backgroundColor: [
-                            '#6c757d', '#ffc107', '#28a745', '#dc3545'
+                            '#64748b', '#b45309', '#059669', '#b91c1c'
                         ],
                         borderWidth: 1,
                         borderColor: '#fff'
@@ -485,7 +638,8 @@ document.addEventListener('DOMContentLoaded', function() {
                             position: 'bottom',
                             labels: {
                                 padding: 20,
-                                usePointStyle: true
+                                usePointStyle: true,
+                                color: '#334155'
                             }
                         }
                     },
@@ -505,28 +659,26 @@ document.addEventListener('DOMContentLoaded', function() {
                 
                 if (!auditId) {
                     e.preventDefault();
-                    showToast('warning', 'Veuillez sélectionner un audit');
+                    showToast('warning', '{{ t("Veuillez sélectionner un audit") }}');
                     return;
                 }
                 
                 if (!fileInput.files[0]) {
                     e.preventDefault();
-                    showToast('warning', 'Veuillez sélectionner un fichier');
+                    showToast('warning', '{{ t("Veuillez sélectionner un fichier") }}');
                     return;
                 }
                 
-                // Validation de la taille (10MB max)
                 const maxSize = 10 * 1024 * 1024;
                 if (fileInput.files[0].size > maxSize) {
                     e.preventDefault();
-                    showToast('error', 'Le fichier est trop volumineux. Taille maximum : 10 Mo');
+                    showToast('error', '{{ t("Le fichier est trop volumineux. Taille maximum : 10 Mo") }}');
                     return;
                 }
                 
-                // Afficher l'indicateur de chargement
                 const submitBtn = e.target.querySelector('button[type="submit"]');
                 if (submitBtn) {
-                    submitBtn.innerHTML = '<i class="fas fa-spinner fa-spin me-1"></i>Téléversement...';
+                    submitBtn.innerHTML = '<i class="fas fa-spinner fa-spin me-2"></i>{{ t("Téléversement...") }}';
                     submitBtn.disabled = true;
                 }
             });
@@ -540,22 +692,20 @@ document.addEventListener('DOMContentLoaded', function() {
                 
                 if (!fileInput.files[0]) {
                     e.preventDefault();
-                    showToast('warning', 'Veuillez sélectionner un fichier');
+                    showToast('warning', '{{ t("Veuillez sélectionner un fichier") }}');
                     return;
                 }
                 
-                // Validation de la taille (10MB max)
                 const maxSize = 10 * 1024 * 1024;
                 if (fileInput.files[0].size > maxSize) {
                     e.preventDefault();
-                    showToast('error', 'Le fichier est trop volumineux. Taille maximum : 10 Mo');
+                    showToast('error', '{{ t("Le fichier est trop volumineux. Taille maximum : 10 Mo") }}');
                     return;
                 }
                 
-                // Afficher l'indicateur de chargement
                 const submitBtn = e.target.querySelector('button[type="submit"]');
                 if (submitBtn) {
-                    submitBtn.innerHTML = '<i class="fas fa-spinner fa-spin me-1"></i>Téléversement...';
+                    submitBtn.innerHTML = '<i class="fas fa-spinner fa-spin me-2"></i>{{ t("Téléversement...") }}';
                     submitBtn.disabled = true;
                 }
             });
@@ -570,11 +720,8 @@ document.addEventListener('DOMContentLoaded', function() {
                 
                 document.getElementById('quickAuditId').value = auditId;
                 document.getElementById('auditRef').textContent = auditRef;
-                
-                // Réinitialiser le formulaire
                 document.getElementById('quickUploadForm').reset();
                 
-                // Afficher le modal
                 const modal = new bootstrap.Modal(document.getElementById('quickUploadModal'));
                 modal.show();
             }
@@ -604,42 +751,24 @@ document.addEventListener('DOMContentLoaded', function() {
     }
     
     function scrollToAuditFiles(auditId) {
-        // Trouver l'audit dans le tableau
-        const rows = document.querySelectorAll('.table-hover tbody tr');
-        let foundRow = null;
+        const targetRow = document.querySelector(`tr[data-audit-id="${auditId}"]`);
         
-        for (let row of rows) {
-            const refElement = row.querySelector('td:first-child .fw-semibold');
-            if (refElement) {
-                // Chercher la ligne correspondant à l'audit
-                // Vous devrez peut-être adapter cette logique selon vos données
-                const rowAuditId = row.querySelector('[data-audit-id]');
-                if (rowAuditId && rowAuditId.getAttribute('data-audit-id') === auditId) {
-                    foundRow = row;
-                    break;
-                }
-            }
-        }
-        
-        if (foundRow) {
-            // Surligner la ligne
-            foundRow.classList.add('table-info');
+        if (targetRow) {
+            targetRow.classList.add('table-info');
+            targetRow.scrollIntoView({ behavior: 'smooth', block: 'center' });
             
-            // Scroll vers la ligne
-            foundRow.scrollIntoView({ behavior: 'smooth', block: 'center' });
-            
-            // Retirer le surlignement après 3 secondes
             setTimeout(() => {
-                foundRow.classList.remove('table-info');
+                targetRow.classList.remove('table-info');
             }, 3000);
+            
+            showToast('info', '{{ t("Audit trouvé dans la liste") }}');
         } else {
-            showToast('info', 'Aucun fichier trouvé pour cet audit');
+            showToast('info', '{{ t("Aucun fichier trouvé pour cet audit") }}');
         }
     }
     
     function showDeleteConfirmation(fileId, fileName) {
         fileToDelete = { id: fileId, name: fileName };
-        
         document.getElementById('fileNameToDelete').textContent = fileName;
         
         const modal = new bootstrap.Modal(document.getElementById('confirmDeleteModal'));
@@ -650,7 +779,7 @@ document.addEventListener('DOMContentLoaded', function() {
         if (!fileToDelete) return;
         
         const deleteBtn = document.getElementById('confirmDeleteBtn');
-        deleteBtn.innerHTML = '<i class="fas fa-spinner fa-spin me-1"></i>Suppression...';
+        deleteBtn.innerHTML = '<i class="fas fa-spinner fa-spin me-2"></i>{{ t("Suppression...") }}';
         deleteBtn.disabled = true;
         
         fetch(`/fichier-rapport-audit/${fileToDelete.id}/supprimer`, {
@@ -667,33 +796,46 @@ document.addEventListener('DOMContentLoaded', function() {
             if (modal) modal.hide();
             
             if (data.success) {
-                showToast('success', 'Fichier supprimé avec succès');
+                showToast('success', '{{ t("Fichier supprimé avec succès") }}');
                 setTimeout(() => location.reload(), 1000);
             } else {
-                showToast('error', data.message || 'Erreur lors de la suppression');
+                showToast('error', data.message || '{{ t("Erreur lors de la suppression") }}');
             }
         })
         .catch(error => {
-            console.error('Erreur:', error);
-            showToast('error', 'Une erreur est survenue');
+            console.error('{{ t("Erreur") }}:', error);
+            showToast('error', '{{ t("Une erreur est survenue") }}');
         })
         .finally(() => {
-            deleteBtn.innerHTML = '<i class="fas fa-trash me-1"></i>Supprimer définitivement';
+            deleteBtn.innerHTML = '<i class="fas fa-trash me-2"></i>{{ t("Supprimer définitivement") }}';
             deleteBtn.disabled = false;
             fileToDelete = null;
         });
     }
     
     function showToast(type, message) {
-        // Créer un toast
         const toastContainer = document.getElementById('toastContainer') || createToastContainer();
         const toastId = 'toast-' + Date.now();
         
+        const colors = {
+            'success': '#059669',
+            'error': '#b91c1c',
+            'warning': '#b45309',
+            'info': '#2563eb'
+        };
+        
+        const icons = {
+            'success': 'fa-check-circle',
+            'error': 'fa-exclamation-circle',
+            'warning': 'fa-exclamation-triangle',
+            'info': 'fa-info-circle'
+        };
+        
         const toastHTML = `
-            <div id="${toastId}" class="toast align-items-center text-bg-${type} border-0" role="alert">
+            <div id="${toastId}" class="toast align-items-center border-0" role="alert" style="background: ${colors[type]}; color: white; border-radius: 12px;">
                 <div class="d-flex">
                     <div class="toast-body">
-                        <i class="fas ${getToastIcon(type)} me-2"></i>
+                        <i class="fas ${icons[type]} me-2"></i>
                         ${message}
                     </div>
                     <button type="button" class="btn-close btn-close-white me-2 m-auto" data-bs-dismiss="toast"></button>
@@ -719,64 +861,28 @@ document.addEventListener('DOMContentLoaded', function() {
         document.body.appendChild(container);
         return container;
     }
-    
-    function getToastIcon(type) {
-        switch(type) {
-            case 'success': return 'fa-check-circle';
-            case 'error': return 'fa-exclamation-circle';
-            case 'warning': return 'fa-exclamation-triangle';
-            default: return 'fa-info-circle';
-        }
-    }
 });
 </script>
 
 <style>
-/* Styles personnalisés */
-.card {
-    border: none;
-    border-radius: 0.5rem;
+/* ========== STYLES PERSONNALISÉS ========== */
+.btn, .card {
+    transition: all 0.3s ease;
 }
 
-.card-header {
-    border-bottom: 1px solid rgba(0,0,0,.125);
-    background-color: #f8f9fa;
+.btn:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05) !important;
 }
 
-.table th {
-    font-weight: 600;
-    color: #495057;
-    border-top: none;
-}
-
-.badge {
-    font-weight: 500;
-    letter-spacing: 0.3px;
-}
-
-.btn-outline-primary:hover {
-    background-color: #4e73df;
-    border-color: #4e73df;
-}
-
-.btn-outline-success:hover {
-    background-color: #1cc88a;
-    border-color: #1cc88a;
-}
-
-.btn-outline-danger:hover {
-    background-color: #e74a3b;
-    border-color: #e74a3b;
-}
-
-.btn-outline-info:hover {
-    background-color: #36b9cc;
-    border-color: #36b9cc;
+.card:hover {
+    transform: translateY(-4px);
+    box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04) !important;
 }
 
 /* Animation pour les nouvelles lignes */
 @keyframes highlightRow {
-    0% { background-color: rgba(78, 115, 223, 0.1); }
+    0% { background-color: rgba(37, 99, 235, 0.1); }
     100% { background-color: transparent; }
 }
 
@@ -784,30 +890,100 @@ document.addEventListener('DOMContentLoaded', function() {
     animation: highlightRow 2s ease-out;
 }
 
-/* Styles pour les icônes de fichiers */
-.fa-file-pdf { color: #e74a3b; }
-.fa-file-word { color: #2b579a; }
-.fa-file-excel { color: #217346; }
-.fa-file-powerpoint { color: #d24726; }
-.fa-file-image { color: #1cc88a; }
-.fa-file-alt { color: #6c757d; }
-
 /* Surlignement de ligne */
 .table-info {
-    background-color: rgba(78, 115, 223, 0.1) !important;
+    background-color: rgba(37, 99, 235, 0.1) !important;
     transition: background-color 0.3s ease;
 }
 
-/* Responsive */
+/* Styles pour les icônes de fichiers */
+.fa-file-pdf { color: #b91c1c; }
+.fa-file-word { color: #2563eb; }
+.fa-file-excel { color: #059669; }
+.fa-file-powerpoint { color: #b45309; }
+.fa-file-image { color: #0891b2; }
+.fa-file-alt { color: #64748b; }
+
+/* ========== MODE SOMBRE ========== */
+[data-bs-theme="dark"] {
+    color-scheme: dark;
+}
+
+[data-bs-theme="dark"] body {
+    background: #0f172a;
+    color: #e2e8f0;
+}
+
+[data-bs-theme="dark"] .card {
+    background: #1e293b !important;
+    border-color: #334155 !important;
+}
+
+[data-bs-theme="dark"] h1, 
+[data-bs-theme="dark"] h2, 
+[data-bs-theme="dark"] h3, 
+[data-bs-theme="dark"] h4, 
+[data-bs-theme="dark"] h5, 
+[data-bs-theme="dark"] h6 {
+    color: #f1f5f9 !important;
+}
+
+[data-bs-theme="dark"] .text-muted,
+[data-bs-theme="dark"] small:not(.text-white) {
+    color: #94a3b8 !important;
+}
+
+[data-bs-theme="dark"] .bg-light {
+    background: #334155 !important;
+}
+
+[data-bs-theme="dark"] [style*="background: #f8fafc"] {
+    background: #334155 !important;
+}
+
+[data-bs-theme="dark"] [style*="color: #0f172a"] {
+    color: #f1f5f9 !important;
+}
+
+[data-bs-theme="dark"] [style*="color: #334155"] {
+    color: #e2e8f0 !important;
+}
+
+[data-bs-theme="dark"] [style*="color: #64748b"] {
+    color: #94a3b8 !important;
+}
+
+[data-bs-theme="dark"] .form-control,
+[data-bs-theme="dark"] .form-select {
+    background: #334155 !important;
+    border-color: #475569 !important;
+    color: #f1f5f9 !important;
+}
+
+[data-bs-theme="dark"] .form-control::placeholder {
+    color: #94a3b8;
+}
+
+[data-bs-theme="dark"] .modal-content {
+    background: #1e293b;
+}
+
+[data-bs-theme="dark"] .btn-outline-secondary {
+    background: #334155 !important;
+    border-color: #475569 !important;
+    color: #f1f5f9 !important;
+}
+
+[data-bs-theme="dark"] .table-info {
+    background-color: rgba(37, 99, 235, 0.2) !important;
+}
+
+[data-bs-theme="dark"] canvas {
+    filter: brightness(0.9);
+}
+
+/* ========== RESPONSIVE ========== */
 @media (max-width: 768px) {
-    .card-body {
-        padding: 1rem;
-    }
-    
-    .table-responsive {
-        font-size: 0.9rem;
-    }
-    
     .btn-group {
         flex-wrap: wrap;
         gap: 0.25rem;
@@ -818,7 +994,6 @@ document.addEventListener('DOMContentLoaded', function() {
         font-size: 0.8rem;
     }
     
-    /* Masquer certaines colonnes sur mobile */
     .table th:nth-child(3),
     .table td:nth-child(3),
     .table th:nth-child(6),
