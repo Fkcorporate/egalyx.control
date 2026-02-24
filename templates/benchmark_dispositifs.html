@@ -1,131 +1,824 @@
 {% extends "base.html" %}
 
 {% block content %}
-<div class="container-fluid">
-    <!-- En-tête -->
-    <div class="d-flex justify-content-between flex-wrap flex-md-nowrap align-items-center pt-3 pb-2 mb-3 border-bottom">
-        <h1 class="h2">
-            <i class="fas fa-chart-line text-primary"></i> 
-            Pilotage stratégique des dispositifs
-        </h1>
-        <div class="btn-toolbar mb-2 mb-md-0">
-            <a href="{{ url_for('exporter_rapport_dispositifs') }}" class="btn btn-outline-danger me-2">
-                <i class="fas fa-file-pdf"></i> Exporter rapport PDF
-            </a>
-            <button class="btn btn-outline-secondary" onclick="window.print()">
-                <i class="fas fa-print"></i> Imprimer
-            </button>
+<style>
+    /* ============================================
+       STYLES SPÉCIFIQUES - PILOTAGE STRATÉGIQUE
+       ============================================ */
+    
+    /* Variables de base */
+    .dashboard-container {
+        max-width: 1600px;
+        margin: 0 auto;
+    }
+
+    /* ========== EN-TÊTE DE PAGE ========== */
+    .page-header {
+        background: linear-gradient(135deg, #0A1929 0%, #1A3C6B 100%);
+        border-radius: 20px;
+        padding: 2rem;
+        margin-bottom: 2rem;
+        color: white;
+        box-shadow: 0 4px 20px rgba(0, 0, 0, 0.08);
+        position: relative;
+        overflow: hidden;
+        z-index: 1;
+    }
+
+    .page-header::before {
+        content: '';
+        position: absolute;
+        top: -50%;
+        right: -10%;
+        width: 300px;
+        height: 300px;
+        background: rgba(255, 255, 255, 0.1);
+        border-radius: 50%;
+        transform: rotate(25deg);
+        pointer-events: none;
+        z-index: 0;
+    }
+
+    .page-header::after {
+        content: '';
+        position: absolute;
+        bottom: -50%;
+        left: -10%;
+        width: 400px;
+        height: 400px;
+        background: rgba(255, 255, 255, 0.05);
+        border-radius: 50%;
+        transform: rotate(-15deg);
+        pointer-events: none;
+        z-index: 0;
+    }
+
+    .page-header-content {
+        position: relative;
+        z-index: 2;
+    }
+
+    .page-title {
+        font-size: 2rem;
+        font-weight: 600;
+        margin-bottom: 0.5rem;
+    }
+
+    .breadcrumb {
+        background: transparent;
+        padding: 0;
+        margin-bottom: 1rem;
+    }
+
+    .breadcrumb-item a {
+        color: rgba(255, 255, 255, 0.8);
+        text-decoration: none;
+        transition: all 0.3s ease;
+    }
+
+    .breadcrumb-item a:hover {
+        color: white;
+    }
+
+    .breadcrumb-item.active {
+        color: white;
+    }
+
+    .breadcrumb-item + .breadcrumb-item::before {
+        color: rgba(255, 255, 255, 0.5);
+    }
+
+    .header-actions {
+        display: flex;
+        gap: 0.75rem;
+        flex-wrap: wrap;
+        align-items: center;
+        position: relative;
+        z-index: 10;
+    }
+
+    .fk-btn {
+        padding: 0.6rem 1.2rem;
+        border-radius: 10px;
+        font-weight: 500;
+        display: inline-flex;
+        align-items: center;
+        gap: 0.5rem;
+        transition: all 0.3s ease;
+        border: none;
+        cursor: pointer;
+        font-size: 0.9rem;
+        text-decoration: none;
+        z-index: 10;
+        position: relative;
+    }
+
+    .fk-btn-primary {
+        background: linear-gradient(135deg, #0066CC, #3B82F6);
+        color: white;
+        box-shadow: 0 5px 15px rgba(0, 102, 204, 0.3);
+    }
+
+    .fk-btn-primary:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 10px 25px rgba(0, 102, 204, 0.4);
+        color: white;
+    }
+
+    .fk-btn-danger {
+        background: linear-gradient(135deg, #DC2626, #EF4444);
+        color: white;
+        box-shadow: 0 5px 15px rgba(220, 38, 38, 0.3);
+    }
+
+    .fk-btn-danger:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 10px 25px rgba(220, 38, 38, 0.4);
+        color: white;
+    }
+
+    .fk-btn-secondary {
+        background: rgba(255, 255, 255, 0.15);
+        border: 1px solid rgba(255, 255, 255, 0.3);
+        color: white;
+    }
+
+    .fk-btn-secondary:hover {
+        background: rgba(255, 255, 255, 0.25);
+        transform: translateY(-2px);
+        color: white;
+    }
+
+    .fk-btn-outline-secondary {
+        background: rgba(255, 255, 255, 0.1);
+        backdrop-filter: blur(10px);
+        border: 1px solid rgba(255, 255, 255, 0.2);
+        color: white;
+    }
+
+    .fk-btn-outline-secondary:hover {
+        background: rgba(255, 255, 255, 0.2);
+        transform: translateY(-2px);
+        color: white;
+    }
+
+    /* ========== KPI CARDS ========== */
+    .kpi-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+        gap: 1.5rem;
+        margin-bottom: 2rem;
+    }
+
+    .kpi-card {
+        background: white;
+        border: 1px solid #e2e8f0;
+        border-radius: 20px;
+        padding: 1.5rem;
+        transition: all 0.3s ease;
+        box-shadow: 0 4px 20px rgba(0, 0, 0, 0.08);
+        position: relative;
+        overflow: hidden;
+    }
+
+    .kpi-card:hover {
+        transform: translateY(-5px);
+        box-shadow: 0 12px 40px rgba(0, 0, 0, 0.15);
+    }
+
+    [data-bs-theme="dark"] .kpi-card {
+        background: #1e293b;
+        border-color: #334155;
+    }
+
+    .kpi-card.primary {
+        background: linear-gradient(135deg, #0066CC, #3B82F6);
+        color: white;
+    }
+
+    .kpi-card.success {
+        background: linear-gradient(135deg, #0D9488, #14B8A6);
+        color: white;
+    }
+
+    .kpi-card.warning {
+        background: linear-gradient(135deg, #F59E0B, #FBBF24);
+        color: white;
+    }
+
+    .kpi-card.info {
+        background: linear-gradient(135deg, #3B82F6, #6366F1);
+        color: white;
+    }
+
+    .kpi-card.danger {
+        background: linear-gradient(135deg, #DC2626, #EF4444);
+        color: white;
+    }
+
+    .kpi-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-bottom: 1rem;
+    }
+
+    .kpi-title {
+        font-size: 0.9rem;
+        font-weight: 600;
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+        opacity: 0.9;
+    }
+
+    .kpi-icon {
+        width: 48px;
+        height: 48px;
+        background: rgba(255, 255, 255, 0.2);
+        border-radius: 12px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 1.5rem;
+        color: white;
+    }
+
+    .kpi-value {
+        font-size: 2.5rem;
+        font-weight: 700;
+        line-height: 1.2;
+        margin-bottom: 0.25rem;
+    }
+
+    .kpi-trend {
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+        font-size: 0.85rem;
+        color: rgba(255, 255, 255, 0.9);
+    }
+
+    .kpi-footer {
+        margin-top: 1rem;
+        font-size: 0.8rem;
+        opacity: 0.8;
+    }
+
+    /* ========== CARTES ========== */
+    .fk-card-modern {
+        background: white;
+        border: 1px solid #e2e8f0;
+        border-radius: 20px;
+        margin-bottom: 1.5rem;
+        overflow: hidden;
+        box-shadow: 0 4px 20px rgba(0, 0, 0, 0.08);
+        transition: all 0.3s ease;
+    }
+
+    .fk-card-modern:hover {
+        box-shadow: 0 8px 30px rgba(0, 0, 0, 0.12);
+    }
+
+    [data-bs-theme="dark"] .fk-card-modern {
+        background: #1e293b;
+        border-color: #334155;
+    }
+
+    .fk-card-header {
+        padding: 1.25rem 1.5rem;
+        border-bottom: 1px solid #e2e8f0;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        flex-wrap: wrap;
+        gap: 1rem;
+        background: #f8fafc;
+        color: #0f172a;
+    }
+
+    .fk-card-header.primary {
+        background: linear-gradient(135deg, #0A1929 0%, #1A3C6B 100%);
+        color: white;
+        border-bottom: none;
+    }
+
+    .fk-card-header.success {
+        background: linear-gradient(135deg, #0D9488, #14B8A6);
+        color: white;
+        border-bottom: none;
+    }
+
+    .fk-card-header.warning {
+        background: linear-gradient(135deg, #F59E0B, #FBBF24);
+        color: white;
+        border-bottom: none;
+    }
+
+    .fk-card-header.danger {
+        background: linear-gradient(135deg, #DC2626, #EF4444);
+        color: white;
+        border-bottom: none;
+    }
+
+    .header-icon-sm {
+        width: 40px;
+        height: 40px;
+        background: rgba(255, 255, 255, 0.2);
+        border-radius: 8px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 1.2rem;
+        color: white;
+    }
+
+    .fk-card-body {
+        padding: 1.5rem;
+        background: white;
+        color: #0f172a;
+    }
+
+    [data-bs-theme="dark"] .fk-card-body {
+        background: #1e293b;
+        color: #f1f5f9;
+    }
+
+    /* ========== BADGES ========== */
+    .badge-modern {
+        display: inline-block;
+        padding: 0.35rem 0.75rem;
+        border-radius: 50px;
+        font-size: 0.75rem;
+        font-weight: 600;
+        text-align: center;
+        white-space: nowrap;
+        border: 1px solid transparent;
+    }
+
+    .badge-primary { background: #0066CC; color: white; }
+    .badge-success { background: #0D9488; color: white; }
+    .badge-warning { background: #F59E0B; color: white; }
+    .badge-danger { background: #DC2626; color: white; }
+    .badge-info { background: #3B82F6; color: white; }
+    .badge-secondary { background: #64748b; color: white; }
+
+    .badge-resilience {
+        display: inline-block;
+        padding: 0.5rem 1rem;
+        border-radius: 8px;
+        font-weight: 600;
+        text-align: center;
+    }
+
+    .badge-resilience.critique {
+        background: rgba(220, 38, 38, 0.15);
+        color: #DC2626;
+        border: 1px solid rgba(220, 38, 38, 0.3);
+    }
+
+    .badge-resilience.faible {
+        background: rgba(245, 158, 11, 0.15);
+        color: #F59E0B;
+        border: 1px solid rgba(245, 158, 11, 0.3);
+    }
+
+    .badge-resilience.moyenne {
+        background: rgba(59, 130, 246, 0.15);
+        color: #3B82F6;
+        border: 1px solid rgba(59, 130, 246, 0.3);
+    }
+
+    .badge-resilience.bonne {
+        background: rgba(13, 148, 136, 0.15);
+        color: #0D9488;
+        border: 1px solid rgba(13, 148, 136, 0.3);
+    }
+
+    .badge-resilience.excellente {
+        background: rgba(16, 185, 129, 0.15);
+        color: #10B981;
+        border: 1px solid rgba(16, 185, 129, 0.3);
+    }
+
+    /* ========== TABLEAUX ========== */
+    .fk-table-modern {
+        width: 100%;
+        border-collapse: collapse;
+        font-size: 0.9rem;
+    }
+
+    .fk-table-modern thead th {
+        padding: 0.75rem 1rem;
+        font-size: 0.7rem;
+        font-weight: 600;
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+        color: #64748b;
+        border-bottom: 2px solid #e2e8f0;
+        background: #f8fafc;
+        white-space: nowrap;
+    }
+
+    .fk-table-modern tbody td {
+        padding: 1rem;
+        border-bottom: 1px solid #e2e8f0;
+        color: #0f172a;
+        vertical-align: middle;
+    }
+
+    .fk-table-modern tbody tr {
+        transition: all 0.2s ease;
+    }
+
+    .fk-table-modern tbody tr:hover {
+        background: #f1f5f9;
+    }
+
+    [data-bs-theme="dark"] .fk-table-modern thead th {
+        color: #94a3b8;
+        border-bottom-color: #334155;
+        background: #0f172a;
+    }
+
+    [data-bs-theme="dark"] .fk-table-modern tbody td {
+        border-bottom-color: #334155;
+        color: #f1f5f9;
+    }
+
+    [data-bs-theme="dark"] .fk-table-modern tbody tr:hover {
+        background: #1e293b;
+    }
+
+    /* ========== PROGRESS ========== */
+    .progress-modern {
+        background: #e2e8f0;
+        border-radius: 50px;
+        height: 8px;
+        overflow: hidden;
+        width: 100%;
+    }
+
+    [data-bs-theme="dark"] .progress-modern {
+        background: #334155;
+    }
+
+    .progress-modern-bar {
+        height: 100%;
+        border-radius: 50px;
+        transition: width 0.3s ease;
+    }
+
+    .progress-modern-bar.success { background: #0D9488; }
+    .progress-modern-bar.warning { background: #F59E0B; }
+    .progress-modern-bar.danger { background: #DC2626; }
+    .progress-modern-bar.primary { background: #0066CC; }
+
+    /* ========== BOUTONS D'ACTION ========== */
+    .btn-action {
+        width: 36px;
+        height: 36px;
+        border-radius: 8px;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        background: #f1f5f9;
+        border: 1px solid #e2e8f0;
+        color: #64748b;
+        transition: all 0.3s ease;
+        cursor: pointer;
+        text-decoration: none;
+        z-index: 10;
+        position: relative;
+    }
+
+    .btn-action:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 4px 20px rgba(0, 0, 0, 0.08);
+        background: #ffffff;
+        text-decoration: none;
+    }
+
+    [data-bs-theme="dark"] .btn-action {
+        background: #1e293b;
+        border-color: #334155;
+        color: #94a3b8;
+    }
+
+    [data-bs-theme="dark"] .btn-action:hover {
+        background: #0f172a;
+    }
+
+    .btn-action.primary:hover { background: #0066CC; color: white; border-color: #0066CC; }
+    .btn-action.success:hover { background: #0D9488; color: white; border-color: #0D9488; }
+    .btn-action.warning:hover { background: #F59E0B; color: white; border-color: #F59E0B; }
+    .btn-action.danger:hover { background: #DC2626; color: white; border-color: #DC2626; }
+    .btn-action.info:hover { background: #3B82F6; color: white; border-color: #3B82F6; }
+
+    /* ========== GRILLE ========== */
+    .stats-grid {
+        display: grid;
+        grid-template-columns: repeat(2, 1fr);
+        gap: 1.5rem;
+        margin-bottom: 1.5rem;
+    }
+
+    @media (max-width: 768px) {
+        .stats-grid {
+            grid-template-columns: 1fr;
+        }
+    }
+
+    /* ========== ALERTES ========== */
+    .fk-alert-modern {
+        border-radius: 10px;
+        padding: 1rem 1.25rem;
+        border: none;
+        border-left: 4px solid;
+        display: flex;
+        align-items: center;
+        gap: 1rem;
+        margin-bottom: 1rem;
+        color: #0f172a;
+    }
+
+    [data-bs-theme="dark"] .fk-alert-modern {
+        color: #f1f5f9;
+    }
+
+    .fk-alert-modern.success {
+        background: rgba(13, 148, 136, 0.1);
+        border-left-color: #0D9488;
+    }
+
+    .fk-alert-modern.warning {
+        background: rgba(245, 158, 11, 0.1);
+        border-left-color: #F59E0B;
+    }
+
+    .fk-alert-modern.danger {
+        background: rgba(220, 38, 38, 0.1);
+        border-left-color: #DC2626;
+    }
+
+    .fk-alert-modern.info {
+        background: rgba(0, 102, 204, 0.1);
+        border-left-color: #0066CC;
+    }
+
+    /* ========== LISTE ========== */
+    .fk-list-item {
+        background: #f8fafc;
+        border: 1px solid #e2e8f0;
+        border-radius: 10px;
+        padding: 1rem;
+        margin-bottom: 0.75rem;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        transition: all 0.3s ease;
+    }
+
+    .fk-list-item:hover {
+        background: #f1f5f9;
+        transform: translateX(2px);
+        box-shadow: 0 4px 20px rgba(0, 0, 0, 0.08);
+    }
+
+    [data-bs-theme="dark"] .fk-list-item {
+        background: #0f172a;
+        border-color: #334155;
+    }
+
+    [data-bs-theme="dark"] .fk-list-item:hover {
+        background: #1e293b;
+    }
+
+    /* ========== ANIMATIONS ========== */
+    @keyframes fadeIn {
+        from {
+            opacity: 0;
+            transform: translateY(20px);
+        }
+        to {
+            opacity: 1;
+            transform: translateY(0);
+        }
+    }
+
+    @keyframes slideInRight {
+        from {
+            opacity: 0;
+            transform: translateX(30px);
+        }
+        to {
+            opacity: 1;
+            transform: translateX(0);
+        }
+    }
+
+    .animate-in {
+        animation: fadeIn 0.5s ease-out forwards;
+    }
+
+    .animate-slide {
+        animation: slideInRight 0.5s ease-out forwards;
+    }
+
+    /* ========== RESPONSIVE ========== */
+    @media (max-width: 768px) {
+        .page-header {
+            padding: 1.5rem;
+        }
+
+        .page-title {
+            font-size: 1.5rem;
+        }
+
+        .header-actions {
+            flex-direction: column;
+            width: 100%;
+        }
+
+        .header-actions .fk-btn {
+            width: 100%;
+            justify-content: center;
+        }
+
+        .kpi-grid {
+            grid-template-columns: 1fr;
+        }
+
+        .fk-table-modern {
+            display: block;
+            overflow-x: auto;
+        }
+    }
+</style>
+
+<div class="dashboard-container">
+    <!-- En-tête de page -->
+    <div class="page-header animate-in">
+        <div class="page-header-content">
+            <div class="row align-items-center">
+                <div class="col">
+                    <nav aria-label="breadcrumb">
+                        <ol class="breadcrumb">
+                            <li class="breadcrumb-item"><a href="{{ url_for('dashboard') }}">Dashboard</a></li>
+                            <li class="breadcrumb-item active">Pilotage stratégique</li>
+                        </ol>
+                    </nav>
+                    
+                    <div class="page-title">
+                        <i class="fas fa-chart-line me-2"></i>Pilotage stratégique des dispositifs
+                    </div>
+                    
+                    <p class="text-white-50 mb-0">
+                        Vue d'ensemble de l'efficacité et de la performance des dispositifs de maîtrise
+                    </p>
+                </div>
+                
+                <div class="col-auto">
+                    <div class="header-actions">
+                        <a href="{{ url_for('exporter_rapport_dispositifs') }}" class="fk-btn fk-btn-danger">
+                            <i class="fas fa-file-pdf"></i> Rapport PDF
+                        </a>
+                        <button class="fk-btn fk-btn-outline-light" onclick="window.print()">
+                            <i class="fas fa-print"></i> Imprimer
+                        </button>
+                    </div>
+                </div>
+            </div>
         </div>
     </div>
 
     <!-- KPIs Cards -->
-    <div class="row mb-4">
-        <div class="col-md-3">
-            <div class="card bg-primary text-white h-100">
-                <div class="card-body">
-                    <div class="d-flex justify-content-between align-items-center">
-                        <div>
-                            <h6 class="card-title">Total dispositifs</h6>
-                            <h2 class="mb-0 display-4">{{ stats.total }}</h2>
-                        </div>
-                        <i class="fas fa-shield-alt fa-3x opacity-50"></i>
-                    </div>
+    <div class="kpi-grid">
+        <div class="kpi-card primary animate-slide" style="animation-delay: 0.1s;">
+            <div class="kpi-header">
+                <span class="kpi-title">Total dispositifs</span>
+                <div class="kpi-icon">
+                    <i class="fas fa-shield-alt"></i>
                 </div>
             </div>
-        </div>
-        <div class="col-md-3">
-            <div class="card bg-success text-white h-100">
-                <div class="card-body">
-                    <div class="d-flex justify-content-between align-items-center">
-                        <div>
-                            <h6 class="card-title">Efficacité moyenne</h6>
-                            <h2 class="mb-0 display-4">{{ stats.efficacite_moyenne }}/5</h2>
-                            <small>Réduction: {{ stats.reduction_moyenne }}%</small>
-                        </div>
-                        <i class="fas fa-star fa-3x opacity-50"></i>
-                    </div>
-                </div>
+            <div class="kpi-value">{{ stats.total }}</div>
+            <div class="kpi-trend">
+                <i class="fas fa-arrow-up"></i>
+                <span>{{ stats.total_actifs }} actifs</span>
+            </div>
+            <div class="kpi-footer">
+                <i class="fas fa-check-circle me-1"></i>{{ stats.total - (stats.sans_evaluation|length) }} évalués
             </div>
         </div>
-        <div class="col-md-3">
-            <div class="card bg-warning h-100">
-                <div class="card-body">
-                    <div class="d-flex justify-content-between align-items-center">
-                        <div>
-                            <h6 class="card-title">À améliorer</h6>
-                            <h2 class="mb-0 display-4">{{ stats.a_ameliorer|length }}</h2>
-                            <small>Efficacité < 3/5</small>
-                        </div>
-                        <i class="fas fa-exclamation-triangle fa-3x opacity-50"></i>
-                    </div>
+
+        <div class="kpi-card success animate-slide" style="animation-delay: 0.2s;">
+            <div class="kpi-header">
+                <span class="kpi-title">Efficacité moyenne</span>
+                <div class="kpi-icon">
+                    <i class="fas fa-star"></i>
                 </div>
             </div>
+            <div class="kpi-value">{{ stats.efficacite_moyenne }}/5</div>
+            <div class="kpi-trend">
+                <i class="fas fa-chart-line"></i>
+                <span>Réduction: {{ stats.reduction_moyenne }}%</span>
+            </div>
+            <div class="kpi-footer">
+                <i class="fas fa-trophy me-1"></i>{{ stats.top_performers|length }} top performers
+            </div>
         </div>
-        <div class="col-md-3">
-            <div class="card bg-info text-white h-100">
-                <div class="card-body">
-                    <div class="d-flex justify-content-between align-items-center">
-                        <div>
-                            <h6 class="card-title">Non évalués</h6>
-                            <h2 class="mb-0 display-4">{{ stats.sans_evaluation|length }}</h2>
-                            <small>Action requise</small>
-                        </div>
-                        <i class="fas fa-clock fa-3x opacity-50"></i>
-                    </div>
+
+        <div class="kpi-card warning animate-slide" style="animation-delay: 0.3s;">
+            <div class="kpi-header">
+                <span class="kpi-title">À améliorer</span>
+                <div class="kpi-icon">
+                    <i class="fas fa-exclamation-triangle"></i>
                 </div>
+            </div>
+            <div class="kpi-value">{{ stats.a_ameliorer|length }}</div>
+            <div class="kpi-trend">
+                <i class="fas fa-arrow-down"></i>
+                <span>Efficacité &lt; 3/5</span>
+            </div>
+            <div class="kpi-footer">
+                <i class="fas fa-clock me-1"></i>Action prioritaire
+            </div>
+        </div>
+
+        <div class="kpi-card danger animate-slide" style="animation-delay: 0.4s;">
+            <div class="kpi-header">
+                <span class="kpi-title">Non évalués</span>
+                <div class="kpi-icon">
+                    <i class="fas fa-clock"></i>
+                </div>
+            </div>
+            <div class="kpi-value">{{ stats.sans_evaluation|length }}</div>
+            <div class="kpi-trend">
+                <i class="fas fa-exclamation-circle"></i>
+                <span>Action requise</span>
+            </div>
+            <div class="kpi-footer">
+                <i class="fas fa-chart-bar me-1"></i>À évaluer rapidement
             </div>
         </div>
     </div>
 
     <!-- Graphiques -->
-    <div class="row mb-4">
-        <div class="col-md-6">
-            <div class="card shadow h-100">
-                <div class="card-header bg-light">
-                    <h6 class="mb-0"><i class="fas fa-chart-pie me-2"></i>Répartition par type</h6>
-                </div>
-                <div class="card-body">
-                    <canvas id="chartType" height="300"></canvas>
+    <div class="stats-grid">
+        <div class="fk-card-modern animate-in">
+            <div class="fk-card-header">
+                <div class="d-flex align-items-center gap-3">
+                    <div class="header-icon-sm" style="background: #334155;">
+                        <i class="fas fa-chart-pie"></i>
+                    </div>
+                    <h6 class="mb-0">Répartition par type</h6>
                 </div>
             </div>
+            <div class="fk-card-body">
+                <canvas id="chartType" height="300"></canvas>
+            </div>
         </div>
-        <div class="col-md-6">
-            <div class="card shadow h-100">
-                <div class="card-header bg-light">
-                    <h6 class="mb-0"><i class="fas fa-chart-bar me-2"></i>Distribution des efficacités</h6>
+
+        <div class="fk-card-modern animate-in">
+            <div class="fk-card-header">
+                <div class="d-flex align-items-center gap-3">
+                    <div class="header-icon-sm" style="background: #334155;">
+                        <i class="fas fa-chart-bar"></i>
+                    </div>
+                    <h6 class="mb-0">Distribution des efficacités</h6>
                 </div>
-                <div class="card-body">
-                    <canvas id="chartEfficacite" height="300"></canvas>
-                </div>
+            </div>
+            <div class="fk-card-body">
+                <canvas id="chartEfficacite" height="300"></canvas>
             </div>
         </div>
     </div>
 
-    <!-- SECTION STRESS TEST - Tableau de résilience -->
-    <div class="card shadow mb-4">
-        <div class="card-header bg-warning">
-            <h6 class="mb-0"><i class="fas fa-bolt me-2"></i>Analyse de résilience - Stress Tests avancés</h6>
+    <!-- SECTION RÉSILIENCE -->
+    <div class="fk-card-modern animate-in">
+        <div class="fk-card-header warning">
+            <div class="d-flex align-items-center gap-3">
+                <div class="header-icon-sm">
+                    <i class="fas fa-bolt"></i>
+                </div>
+                <h6 class="mb-0">Résilience des dispositifs</h6>
+            </div>
         </div>
-        <div class="card-body">
+        <div class="fk-card-body p-0">
             <div class="table-responsive">
-                <table class="table table-hover">
+                <table class="fk-table-modern">
                     <thead>
                         <tr>
                             <th>Dispositif</th>
                             <th>Type</th>
-                            <th>Normal</th>
-                            <th class="bg-danger text-white">💻 Cyber</th>
-                            <th class="bg-warning">👥 Humain</th>
-                            <th class="bg-info">🔧 Technique</th>
-                            <th class="bg-secondary text-white">🌪️ Naturel</th>
+                            <th>Efficacité</th>
+                            <th>Réduction</th>
                             <th>Résilience</th>
-                            <th>Actions</th>
+                            <th class="text-end">Stress Test</th>
                         </tr>
                     </thead>
                     <tbody>
                         {% for d in dispositifs %}
                         {% if d.efficacite_reelle %}
-                        {% set stress_tests = d.stress_test_avance() %}
                         {% set resilience = d.get_score_resilience() %}
                         <tr>
                             <td>
@@ -134,69 +827,41 @@
                                 <small class="text-muted">{{ d.nom|truncate(25) }}</small>
                             </td>
                             <td>
-                                <span class="badge bg-{{ 'success' if d.type_dispositif == 'Préventif' else 'warning' if d.type_dispositif == 'Détectif' else 'info' }}">
+                                <span class="badge-type 
+                                    {% if d.type_dispositif == 'Préventif' %}preventif
+                                    {% elif d.type_dispositif == 'Détectif' %}detectif
+                                    {% elif d.type_dispositif == 'Correctif' %}correctif
+                                    {% else %}default{% endif %}">
                                     {{ d.type_dispositif }}
                                 </span>
                             </td>
                             <td>
-                                <span class="badge bg-success">{{ d.efficacite_reelle }}/5</span>
-                                <br>
-                                <small>{{ d.get_reduction_risque_detaille().reduction_finale }}%</small>
-                            </td>
-                            <td class="{% if stress_tests.cyber.efficacite < 3 %}table-danger{% elif stress_tests.cyber.efficacite < 4 %}table-warning{% endif %}">
-                                <strong>{{ stress_tests.cyber.efficacite }}/5</strong>
-                                <br>
-                                <small class="text-muted">{{ stress_tests.cyber.duree }}</small>
-                                <br>
-                                <span class="badge bg-{{ 'danger' if stress_tests.cyber.facteur < 0.3 else 'warning' if stress_tests.cyber.facteur < 0.6 else 'success' }}">
-                                    fact: {{ "%.2f"|format(stress_tests.cyber.facteur) }}
-                                </span>
-                            </td>
-                            <td class="{% if stress_tests.humain.efficacite < 3 %}table-danger{% elif stress_tests.humain.efficacite < 4 %}table-warning{% endif %}">
-                                <strong>{{ stress_tests.humain.efficacite }}/5</strong>
-                                <br>
-                                <small class="text-muted">{{ stress_tests.humain.duree }}</small>
-                                <br>
-                                <span class="badge bg-{{ 'danger' if stress_tests.humain.facteur < 0.3 else 'warning' if stress_tests.humain.facteur < 0.6 else 'success' }}">
-                                    fact: {{ "%.2f"|format(stress_tests.humain.facteur) }}
-                                </span>
-                            </td>
-                            <td class="{% if stress_tests.technique.efficacite < 3 %}table-danger{% elif stress_tests.technique.efficacite < 4 %}table-warning{% endif %}">
-                                <strong>{{ stress_tests.technique.efficacite }}/5</strong>
-                                <br>
-                                <small class="text-muted">{{ stress_tests.technique.duree }}</small>
-                                <br>
-                                <span class="badge bg-{{ 'danger' if stress_tests.technique.facteur < 0.3 else 'warning' if stress_tests.technique.facteur < 0.6 else 'success' }}">
-                                    fact: {{ "%.2f"|format(stress_tests.technique.facteur) }}
-                                </span>
-                            </td>
-                            <td class="{% if stress_tests.naturel.efficacite < 3 %}table-danger{% elif stress_tests.naturel.efficacite < 4 %}table-warning{% endif %}">
-                                <strong>{{ stress_tests.naturel.efficacite }}/5</strong>
-                                <br>
-                                <small class="text-muted">{{ stress_tests.naturel.duree }}</small>
-                                <br>
-                                <span class="badge bg-{{ 'danger' if stress_tests.naturel.facteur < 0.3 else 'warning' if stress_tests.naturel.facteur < 0.6 else 'success' }}">
-                                    fact: {{ "%.2f"|format(stress_tests.naturel.facteur) }}
+                                <span class="badge-modern 
+                                    {% if d.efficacite_reelle >= 4 %}badge-success
+                                    {% elif d.efficacite_reelle >= 3 %}badge-warning
+                                    {% else %}badge-danger{% endif %}">
+                                    {{ d.efficacite_reelle }}/5
                                 </span>
                             </td>
                             <td>
-                                <span class="badge bg-{{ 'success' if resilience[1] >= 4 else 'warning' if resilience[1] >= 3 else 'danger' }} p-2">
-                                    {{ resilience[0] }}
-                                    <br>
+                                <strong class="text-primary">{{ d.get_reduction_risque_detaille().reduction_finale }}%</strong>
+                            </td>
+                            <td>
+                                <div class="badge-resilience 
+                                    {% if resilience[1] >= 4.5 %}excellente
+                                    {% elif resilience[1] >= 4 %}bonne
+                                    {% elif resilience[1] >= 3 %}moyenne
+                                    {% elif resilience[1] >= 2 %}faible
+                                    {% else %}critique{% endif %}">
+                                    <div>{{ resilience[0] }}</div>
                                     <strong>{{ "%.1f"|format(resilience[1]) }}/5</strong>
-                                </span>
-                            </td>
-                            <td>
-                                <div class="btn-group btn-group-sm">
-                                    <a href="{{ url_for('detail_dispositif', dispositif_id=d.id) }}" 
-                                       class="btn btn-outline-info" title="Détails">
-                                        <i class="fas fa-eye"></i>
-                                    </a>
-                                    <a href="{{ url_for('stress_test_dispositif', dispositif_id=d.id) }}" 
-                                       class="btn btn-outline-warning" title="Stress test détaillé">
-                                        <i class="fas fa-bolt"></i>
-                                    </a>
                                 </div>
+                            </td>
+                            <td class="text-end">
+                                <a href="{{ url_for('stress_test_dispositif', dispositif_id=d.id) }}" 
+                                   class="btn-action warning" title="Lancer le stress test">
+                                    <i class="fas fa-bolt"></i>
+                                </a>
                             </td>
                         </tr>
                         {% endif %}
@@ -207,113 +872,20 @@
         </div>
     </div>
 
-    <!-- Synthèse des vulnérabilités -->
-    <div class="row mb-4">
-        <div class="col-md-6">
-            <div class="card shadow h-100 border-danger">
-                <div class="card-header bg-danger text-white">
-                    <h6 class="mb-0"><i class="fas fa-exclamation-triangle me-2"></i>Points de vulnérabilité critiques</h6>
-                </div>
-                <div class="card-body">
-                    {% set vulns = [] %}
-                    {% for d in dispositifs %}
-                        {% if d.efficacite_reelle %}
-                            {% set tests = d.stress_test_avance() %}
-                            {% for key, test in tests.items() %}
-                                {% if test.efficacite < 2 %}
-                                    {% set vuln = vulns.append({
-                                        'dispositif': d.reference,
-                                        'scenario': test.scenario,
-                                        'efficacite': test.efficacite,
-                                        'id': d.id
-                                    }) %}
-                                {% endif %}
-                            {% endfor %}
-                        {% endif %}
-                    {% endfor %}
-                    
-                    {% if vulns %}
-                        {% for vuln in vulns %}
-                        <div class="alert alert-danger mb-2">
-                            <div class="d-flex justify-content-between align-items-center">
-                                <div>
-                                    <strong>{{ vuln.dispositif }}</strong> - {{ vuln.scenario }}
-                                    <br>
-                                    <small>Efficacité sous stress: {{ vuln.efficacite }}/5</small>
-                                </div>
-                                <a href="{{ url_for('stress_test_dispositif', dispositif_id=vuln.id) }}" 
-                                   class="btn btn-sm btn-outline-danger">
-                                    Analyser
-                                </a>
-                            </div>
-                        </div>
-                        {% endfor %}
-                    {% else %}
-                        <p class="text-center text-muted py-4">
-                            <i class="fas fa-check-circle fa-3x mb-3"></i>
-                            <br>Aucune vulnérabilité critique détectée
-                        </p>
-                    {% endif %}
-                </div>
-            </div>
-        </div>
-
-        <div class="col-md-6">
-            <div class="card shadow h-100 border-success">
-                <div class="card-header bg-success text-white">
-                    <h6 class="mb-0"><i class="fas fa-chart-line me-2"></i>Top résilience</h6>
-                </div>
-                <div class="card-body">
-                    {% set top_resilients = [] %}
-                    {% for d in dispositifs %}
-                        {% if d.efficacite_reelle %}
-                            {% set resilience = d.get_score_resilience() %}
-                            {% if resilience[1] >= 4 %}
-                                {% set top = top_resilients.append({
-                                    'dispositif': d.reference,
-                                    'score': resilience[1],
-                                    'id': d.id
-                                }) %}
-                            {% endif %}
-                        {% endif %}
-                    {% endfor %}
-                    
-                    {% if top_resilients %}
-                        {% for top in top_resilients|sort(attribute='score', reverse=true) %}
-                        <div class="alert alert-success mb-2">
-                            <div class="d-flex justify-content-between align-items-center">
-                                <div>
-                                    <strong>{{ top.dispositif }}</strong>
-                                    <br>
-                                    <small>Score résilience: {{ "%.1f"|format(top.score) }}/5</small>
-                                </div>
-                                <a href="{{ url_for('detail_dispositif', dispositif_id=top.id) }}" 
-                                   class="btn btn-sm btn-outline-success">
-                                    <i class="fas fa-eye"></i>
-                                </a>
-                            </div>
-                        </div>
-                        {% endfor %}
-                    {% else %}
-                        <p class="text-center text-muted py-4">
-                            <i class="fas fa-info-circle fa-3x mb-3"></i>
-                            <br>Aucun dispositif avec excellente résilience
-                        </p>
-                    {% endif %}
-                </div>
-            </div>
-        </div>
-    </div>
-
     <!-- Top Performers -->
     {% if stats.top_performers %}
-    <div class="card shadow mb-4 border-success">
-        <div class="card-header bg-success text-white">
-            <h6 class="mb-0"><i class="fas fa-trophy me-2"></i>Top Performers (efficacité ≥ 4/5)</h6>
+    <div class="fk-card-modern animate-in">
+        <div class="fk-card-header success">
+            <div class="d-flex align-items-center gap-3">
+                <div class="header-icon-sm">
+                    <i class="fas fa-trophy"></i>
+                </div>
+                <h6 class="mb-0">Top Performers (efficacité ≥ 4/5)</h6>
+            </div>
         </div>
-        <div class="card-body">
+        <div class="fk-card-body p-0">
             <div class="table-responsive">
-                <table class="table table-hover">
+                <table class="fk-table-modern">
                     <thead>
                         <tr>
                             <th>Référence</th>
@@ -322,7 +894,7 @@
                             <th>Efficacité</th>
                             <th>Réduction</th>
                             <th>Résilience</th>
-                            <th>Action</th>
+                            <th class="text-end">Action</th>
                         </tr>
                     </thead>
                     <tbody>
@@ -331,21 +903,28 @@
                             <td><strong>{{ perf.reference }}</strong></td>
                             <td>{{ perf.nom|truncate(30) }}</td>
                             <td>
-                                <span class="badge bg-{{ 'success' if perf.type == 'Préventif' else 'warning' if perf.type == 'Détectif' else 'info' }}">
+                                <span class="badge-type 
+                                    {% if perf.type == 'Préventif' %}preventif
+                                    {% elif perf.type == 'Détectif' %}detectif
+                                    {% elif perf.type == 'Correctif' %}correctif
+                                    {% else %}default{% endif %}">
                                     {{ perf.type }}
                                 </span>
                             </td>
                             <td>
-                                <span class="badge bg-success">{{ perf.efficacite }}/5</span>
+                                <span class="badge-modern badge-success">{{ perf.efficacite }}/5</span>
                             </td>
-                            <td><strong>{{ perf.reduction }}%</strong></td>
+                            <td><strong class="text-success">{{ perf.reduction }}%</strong></td>
                             <td>
-                                {% set resilience = perf.resilience if perf.resilience else 'N/A' %}
-                                {{ resilience }}
+                                {% if perf.resilience %}
+                                    <span class="badge-modern badge-info">{{ perf.resilience }}</span>
+                                {% else %}
+                                    <span class="badge-modern badge-secondary">N/A</span>
+                                {% endif %}
                             </td>
-                            <td>
+                            <td class="text-end">
                                 <a href="{{ url_for('detail_dispositif', dispositif_id=perf.id) }}" 
-                                   class="btn btn-sm btn-outline-primary">
+                                   class="btn-action info" title="Détails">
                                     <i class="fas fa-eye"></i>
                                 </a>
                             </td>
@@ -358,111 +937,128 @@
     </div>
     {% endif %}
 
-    <!-- Dispositifs à améliorer -->
-    {% if stats.a_ameliorer %}
-    <div class="row mb-4">
-        <div class="col-md-6">
-            <div class="card shadow h-100 border-warning">
-                <div class="card-header bg-warning">
-                    <h6 class="mb-0"><i class="fas fa-exclamation-triangle me-2"></i>À améliorer (efficacité < 3/5)</h6>
-                </div>
-                <div class="card-body">
-                    <div class="list-group">
-                        {% for item in stats.a_ameliorer %}
-                        <div class="list-group-item">
-                            <div class="d-flex justify-content-between align-items-center">
-                                <div>
-                                    <strong>{{ item.reference }}</strong>
-                                    <br>
-                                    <small class="text-muted">{{ item.nom|truncate(40) }}</small>
-                                </div>
-                                <div>
-                                    <span class="badge bg-danger me-2">{{ item.efficacite }}/5</span>
-                                    <span class="badge bg-warning">Écart: {{ item.ecart }}</span>
-                                    <a href="{{ url_for('evaluer_dispositif', dispositif_id=item.id) }}" 
-                                       class="btn btn-sm btn-warning ms-2">
-                                        <i class="fas fa-chart-bar"></i>
-                                    </a>
-                                </div>
-                            </div>
-                        </div>
-                        {% endfor %}
+    <!-- Dispositifs à améliorer et non évalués -->
+    <div class="stats-grid">
+        <!-- Dispositifs à améliorer -->
+        <div class="fk-card-modern animate-in">
+            <div class="fk-card-header warning">
+                <div class="d-flex align-items-center gap-3">
+                    <div class="header-icon-sm">
+                        <i class="fas fa-exclamation-triangle"></i>
                     </div>
+                    <h6 class="mb-0">À améliorer (efficacité &lt; 3/5)</h6>
                 </div>
+            </div>
+            <div class="fk-card-body p-0">
+                {% if stats.a_ameliorer %}
+                <div style="max-height: 400px; overflow-y: auto;">
+                    {% for item in stats.a_ameliorer %}
+                    <div class="fk-list-item">
+                        <div>
+                            <strong>{{ item.reference }}</strong>
+                            <br>
+                            <small class="text-muted">{{ item.nom|truncate(40) }}</small>
+                        </div>
+                        <div class="d-flex align-items-center gap-3">
+                            <span class="badge-modern badge-danger">{{ item.efficacite }}/5</span>
+                            <span class="badge-modern badge-warning">Écart: {{ item.ecart }}</span>
+                            <a href="{{ url_for('evaluer_dispositif', dispositif_id=item.id) }}" 
+                               class="btn-action warning" title="Évaluer">
+                                <i class="fas fa-chart-bar"></i>
+                            </a>
+                        </div>
+                    </div>
+                    {% endfor %}
+                </div>
+                {% else %}
+                <div class="text-center py-4 text-muted">
+                    <i class="fas fa-check-circle fa-3x mb-3 text-success"></i>
+                    <p>Aucun dispositif à améliorer</p>
+                </div>
+                {% endif %}
             </div>
         </div>
 
         <!-- Dispositifs non évalués -->
-        <div class="col-md-6">
-            <div class="card shadow h-100 border-danger">
-                <div class="card-header bg-danger text-white">
-                    <h6 class="mb-0"><i class="fas fa-clock me-2"></i>Non évalués</h6>
+        <div class="fk-card-modern animate-in">
+            <div class="fk-card-header danger">
+                <div class="d-flex align-items-center gap-3">
+                    <div class="header-icon-sm">
+                        <i class="fas fa-clock"></i>
+                    </div>
+                    <h6 class="mb-0">Non évalués</h6>
                 </div>
-                <div class="card-body">
-                    {% if stats.sans_evaluation %}
-                        <div class="list-group">
-                            {% for item in stats.sans_evaluation %}
-                            <div class="list-group-item">
-                                <div class="d-flex justify-content-between align-items-center">
-                                    <div>
-                                        <strong>{{ item.reference }}</strong>
-                                        <br>
-                                        <small class="text-muted">{{ item.nom|truncate(40) }}</small>
-                                    </div>
-                                    <a href="{{ url_for('evaluer_dispositif', dispositif_id=item.id) }}" 
-                                       class="btn btn-sm btn-danger">
-                                        <i class="fas fa-chart-bar"></i> Évaluer
-                                    </a>
-                                </div>
-                            </div>
-                            {% endfor %}
+            </div>
+            <div class="fk-card-body p-0">
+                {% if stats.sans_evaluation %}
+                <div style="max-height: 400px; overflow-y: auto;">
+                    {% for item in stats.sans_evaluation %}
+                    <div class="fk-list-item">
+                        <div>
+                            <strong>{{ item.reference }}</strong>
+                            <br>
+                            <small class="text-muted">{{ item.nom|truncate(40) }}</small>
                         </div>
-                    {% else %}
-                        <p class="text-center text-muted py-4">
-                            <i class="fas fa-check-circle fa-3x mb-3"></i>
-                            <br>Tous les dispositifs sont évalués !
-                        </p>
-                    {% endif %}
+                        <a href="{{ url_for('evaluer_dispositif', dispositif_id=item.id) }}" 
+                           class="fk-btn fk-btn-danger btn-sm">
+                            <i class="fas fa-chart-bar me-1"></i>Évaluer
+                        </a>
+                    </div>
+                    {% endfor %}
                 </div>
+                {% else %}
+                <div class="text-center py-4 text-muted">
+                    <i class="fas fa-check-circle fa-3x mb-3 text-success"></i>
+                    <p>Tous les dispositifs sont évalués !</p>
+                </div>
+                {% endif %}
             </div>
         </div>
     </div>
-    {% endif %}
 
     <!-- Vérifications en retard -->
-    <div class="card shadow mb-4 border-danger">
-        <div class="card-header bg-danger text-white">
-            <h6 class="mb-0"><i class="fas fa-exclamation-circle me-2"></i>Vérifications en retard</h6>
+    <div class="fk-card-modern animate-in">
+        <div class="fk-card-header danger">
+            <div class="d-flex align-items-center gap-3">
+                <div class="header-icon-sm">
+                    <i class="fas fa-exclamation-circle"></i>
+                </div>
+                <h6 class="mb-0">Vérifications en retard</h6>
+            </div>
         </div>
-        <div class="card-body">
+        <div class="fk-card-body p-0">
             {% set verifications_retard = dispositifs|selectattr('prochaine_verification', '!=', none)|selectattr('prochaine_verification', '<', datetime.now().date())|list %}
             {% if verifications_retard %}
             <div class="table-responsive">
-                <table class="table">
+                <table class="fk-table-modern">
                     <thead>
                         <tr>
                             <th>Dispositif</th>
                             <th>Prochaine vérif</th>
                             <th>Retard</th>
                             <th>Responsable</th>
-                            <th>Action</th>
+                            <th class="text-end">Action</th>
                         </tr>
                     </thead>
                     <tbody>
                         {% for d in verifications_retard %}
                         <tr>
-                            <td>{{ d.reference }}</td>
+                            <td>
+                                <strong>{{ d.reference }}</strong>
+                                <br>
+                                <small class="text-muted">{{ d.nom|truncate(25) }}</small>
+                            </td>
                             <td>{{ d.prochaine_verification.strftime('%d/%m/%Y') }}</td>
                             <td>
-                                <span class="badge bg-danger">
+                                <span class="badge-modern badge-danger">
                                     {{ (datetime.now().date() - d.prochaine_verification).days }} jours
                                 </span>
                             </td>
                             <td>{{ d.responsable.username if d.responsable else 'Non assigné' }}</td>
-                            <td>
+                            <td class="text-end">
                                 <a href="{{ url_for('evaluer_dispositif', dispositif_id=d.id) }}" 
-                                   class="btn btn-sm btn-outline-danger">
-                                    <i class="fas fa-clock"></i> Vérifier
+                                   class="btn-action danger" title="Vérifier">
+                                    <i class="fas fa-clock"></i>
                                 </a>
                             </td>
                         </tr>
@@ -471,70 +1067,159 @@
                 </table>
             </div>
             {% else %}
-            <p class="text-center text-muted py-3">
-                <i class="fas fa-check-circle text-success"></i>
-                Aucune vérification en retard
-            </p>
+            <div class="text-center py-4 text-muted">
+                <i class="fas fa-check-circle fa-3x mb-3 text-success"></i>
+                <p>Aucune vérification en retard</p>
+            </div>
             {% endif %}
         </div>
     </div>
 </div>
 
+<!-- Token CSRF pour les requêtes AJAX -->
+<meta name="csrf-token" content="{{ csrf_token() }}">
 {% endblock %}
 
 {% block scripts %}
 <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 <script>
+// ============================================
+// INITIALISATION DES GRAPHIQUES
+// ============================================
 document.addEventListener('DOMContentLoaded', function() {
+    console.log('🚀 Page de pilotage chargée');
+    
     // Graphique par type
-    const ctxType = document.getElementById('chartType').getContext('2d');
-    new Chart(ctxType, {
-        type: 'doughnut',
-        data: {
-            labels: {{ stats.par_type.keys()|list|tojson }},
-            datasets: [{
-                data: {{ stats.par_type.values()|list|tojson }},
-                backgroundColor: ['#28a745', '#ffc107', '#dc3545', '#17a2b8', '#6c757d'],
-                borderWidth: 0
-            }]
-        },
-        options: {
-            responsive: true,
-            plugins: {
-                legend: { position: 'bottom' }
+    const ctxType = document.getElementById('chartType');
+    if (ctxType) {
+        new Chart(ctxType, {
+            type: 'doughnut',
+            data: {
+                labels: {{ stats.par_type.keys()|list|tojson }},
+                datasets: [{
+                    data: {{ stats.par_type.values()|list|tojson }},
+                    backgroundColor: ['#0D9488', '#F59E0B', '#DC2626', '#3B82F6', '#64748b'],
+                    borderWidth: 0,
+                    hoverOffset: 8
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                    legend: { 
+                        position: 'bottom',
+                        labels: {
+                            color: document.documentElement.getAttribute('data-bs-theme') === 'dark' ? '#f1f5f9' : '#0f172a'
+                        }
+                    }
+                },
+                cutout: '60%'
             }
-        }
-    });
+        });
+    }
     
     // Distribution efficacité
-    const ctxEff = document.getElementById('chartEfficacite').getContext('2d');
-    new Chart(ctxEff, {
-        type: 'bar',
-        data: {
-            labels: ['1/5', '2/5', '3/5', '4/5', '5/5'],
-            datasets: [{
-                label: 'Nombre de dispositifs',
-                data: [
-                    {{ dispositifs|selectattr('efficacite_reelle', '==', 1)|list|length }},
-                    {{ dispositifs|selectattr('efficacite_reelle', '==', 2)|list|length }},
-                    {{ dispositifs|selectattr('efficacite_reelle', '==', 3)|list|length }},
-                    {{ dispositifs|selectattr('efficacite_reelle', '==', 4)|list|length }},
-                    {{ dispositifs|selectattr('efficacite_reelle', '==', 5)|list|length }}
-                ],
-                backgroundColor: ['#dc3545', '#fd7e14', '#ffc107', '#28a745', '#20c997'],
-                borderRadius: 5
-            }]
-        },
-        options: {
-            responsive: true,
-            scales: {
-                y: {
-                    beginAtZero: true,
-                    ticks: { stepSize: 1 }
+    const ctxEff = document.getElementById('chartEfficacite');
+    if (ctxEff) {
+        new Chart(ctxEff, {
+            type: 'bar',
+            data: {
+                labels: ['1/5', '2/5', '3/5', '4/5', '5/5'],
+                datasets: [{
+                    label: 'Nombre de dispositifs',
+                    data: [
+                        {{ dispositifs|selectattr('efficacite_reelle', '==', 1)|list|length }},
+                        {{ dispositifs|selectattr('efficacite_reelle', '==', 2)|list|length }},
+                        {{ dispositifs|selectattr('efficacite_reelle', '==', 3)|list|length }},
+                        {{ dispositifs|selectattr('efficacite_reelle', '==', 4)|list|length }},
+                        {{ dispositifs|selectattr('efficacite_reelle', '==', 5)|list|length }}
+                    ],
+                    backgroundColor: ['#DC2626', '#F97316', '#F59E0B', '#0D9488', '#10B981'],
+                    borderRadius: 8,
+                    barPercentage: 0.7
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                scales: {
+                    y: {
+                        beginAtZero: true,
+                        ticks: { 
+                            stepSize: 1,
+                            color: document.documentElement.getAttribute('data-bs-theme') === 'dark' ? '#94a3b8' : '#64748b'
+                        },
+                        grid: {
+                            color: document.documentElement.getAttribute('data-bs-theme') === 'dark' ? '#334155' : '#e2e8f0'
+                        }
+                    },
+                    x: {
+                        ticks: {
+                            color: document.documentElement.getAttribute('data-bs-theme') === 'dark' ? '#f1f5f9' : '#0f172a'
+                        },
+                        grid: {
+                            display: false
+                        }
+                    }
+                },
+                plugins: {
+                    legend: {
+                        display: false
+                    }
                 }
             }
-        }
+        });
+    }
+    
+    // Animation des cartes au scroll
+    const observer = new IntersectionObserver((entries) => {
+        entries.forEach(entry => {
+            if (entry.isIntersecting) {
+                entry.target.style.opacity = '1';
+                entry.target.style.transform = 'translateY(0)';
+            }
+        });
+    }, { threshold: 0.1 });
+    
+    document.querySelectorAll('.kpi-card, .fk-card-modern').forEach(el => {
+        el.style.opacity = '0';
+        el.style.transform = 'translateY(20px)';
+        el.style.transition = 'all 0.5s ease-out';
+        observer.observe(el);
     });
+    
+    // Mise à jour des couleurs si changement de thème
+    const themeObserver = new MutationObserver(function(mutations) {
+        mutations.forEach(function(mutation) {
+            if (mutation.attributeName === 'data-bs-theme') {
+                location.reload(); // Recharger les graphiques
+            }
+        });
+    });
+    
+    themeObserver.observe(document.documentElement, { attributes: true });
 });
+
+// ============================================
+// FONCTIONS UTILITAIRES
+// ============================================
+function exporterRapport() {
+    window.location.href = "{{ url_for('exporter_rapport_dispositifs') }}";
+}
+
+function imprimerPage() {
+    window.print();
+}
+
+// Fonctions de test pour la console
+window.testPilotage = function() {
+    console.log('📊 Données de pilotage:');
+    console.log('Total dispositifs:', {{ stats.total }});
+    console.log('Efficacité moyenne:', {{ stats.efficacite_moyenne }});
+    console.log('Top performers:', {{ stats.top_performers|length }});
+    console.log('À améliorer:', {{ stats.a_ameliorer|length }});
+    console.log('Non évalués:', {{ stats.sans_evaluation|length }});
+};
 </script>
 {% endblock %}
