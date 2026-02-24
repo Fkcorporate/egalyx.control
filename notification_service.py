@@ -267,3 +267,44 @@ class NotificationService:
                             entite_id=recommandation.id,
                             urgence='urgent' if jours_restants <= 3 else 'important'
                         )
+
+    def verifier_et_notifier():
+    """
+    Vérification automatique et notifications
+    À exécuter via cron job
+    """
+    dispositifs = DispositifMaitrise.query.filter_by(is_archived=False).all()
+    
+    alertes = []
+    for d in dispositifs:
+        criticite = d.get_matrice_criticite()
+        
+        # Alerte si vérification en retard
+        if d.prochaine_verification and d.prochaine_verification < datetime.now().date():
+            alertes.append({
+                'type': 'RETARD_VERIFICATION',
+                'dispositif': d.reference,
+                'message': f"Vérification en retard de {(datetime.now().date() - d.prochaine_verification).days} jours",
+                'responsable': d.responsable.email if d.responsable else None
+            })
+        
+        # Alerte si efficacité critique
+        if d.efficacite_reelle and d.efficacite_reelle < 2:
+            alertes.append({
+                'type': 'EFFICACITE_CRITIQUE',
+                'dispositif': d.reference,
+                'message': f"Efficacité critique: {d.efficacite_reelle}/5",
+                'responsable': d.responsable.email if d.responsable else None
+            })
+        
+        # Alerte si écart important
+        if d.efficacite_reelle and d.efficacite_attendue:
+            if d.efficacite_attendue - d.efficacite_reelle >= 2:
+                alertes.append({
+                    'type': 'ECART_CRITIQUE',
+                    'dispositif': d.reference,
+                    'message': f"Écart critique: {d.efficacite_reelle}/5 vs {d.efficacite_attendue}/5 attendu",
+                    'responsable': d.responsable.email if d.responsable else None
+                })
+    
+    return alertes
