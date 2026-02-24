@@ -1,339 +1,1120 @@
 {% extends "base.html" %}
 
 {% block content %}
-<div class="d-flex justify-content-between flex-wrap flex-md-nowrap align-items-center pt-3 pb-2 mb-3 border-bottom">
-    <h1 class="h2">
-        <i class="fas fa-shield-alt"></i> Dispositifs de Maîtrise - {{ risque.reference }}
-    </h1>
-    <div class="btn-toolbar mb-2 mb-md-0">
-        <a href="{{ url_for('detail_risque', id=risque.id) }}" class="btn btn-secondary me-2">
-            <i class="fas fa-arrow-left"></i> Retour au risque
-        </a>
-        <a href="{{ url_for('nouveau_dispositif', risque_id=risque.id) }}" class="btn btn-primary">
-            <i class="fas fa-plus"></i> Nouveau dispositif
-        </a>
-    </div>
-</div>
+<style>
+    /* ============================================
+       STYLES SPÉCIFIQUES - LISTE DISPOSITIFS
+       ============================================ */
+    
+    /* Variables de base */
+    .list-container {
+        max-width: 1400px;
+        margin: 0 auto;
+    }
 
-<!-- Cartes de statistiques -->
-<div class="row mb-4">
-    <div class="col-md-3">
-        <div class="card bg-primary text-white">
-            <div class="card-body">
-                <h6 class="card-title">Total dispositifs</h6>
-                <h2 class="mb-0">{{ stats.total }}</h2>
-            </div>
-        </div>
-    </div>
-    <div class="col-md-3">
-        <div class="card bg-success text-white">
-            <div class="card-body">
-                <h6 class="card-title">Dispositifs efficaces</h6>
-                <h2 class="mb-0">{{ stats.efficaces }}</h2>
-                <small>{{ ((stats.efficaces / stats.total) * 100 if stats.total > 0 else 0)|round }}%</small>
-            </div>
-        </div>
-    </div>
-    <div class="col-md-3">
-        <div class="card bg-warning text-dark">
-            <div class="card-body">
-                <h6 class="card-title">À évaluer</h6>
-                <h2 class="mb-0">
-                    {{ dispositifs|selectattr('date_derniere_verification', 'none')|list|length }}
-                </h2>
-            </div>
-        </div>
-    </div>
-    <div class="col-md-3">
-        <div class="card bg-info text-white">
-            <div class="card-body">
-                <h6 class="card-title">Avec plans d'action</h6>
-                <h2 class="mb-0">
-                    {{ dispositifs|selectattr('plan_action_id')|list|length }}
-                </h2>
-            </div>
-        </div>
-    </div>
-</div>
+    /* ========== EN-TÊTE DE PAGE ========== */
+    .page-header {
+        background: linear-gradient(135deg, #0A1929 0%, #1A3C6B 100%);
+        border-radius: 20px;
+        padding: 2rem;
+        margin-bottom: 2rem;
+        color: white;
+        box-shadow: 0 4px 20px rgba(0, 0, 0, 0.08);
+        position: relative;
+        overflow: hidden;
+        z-index: 1;
+    }
 
-<!-- Tableau des dispositifs -->
-<div class="card shadow">
-    <div class="card-header bg-light d-flex justify-content-between align-items-center">
-        <h6 class="mb-0">
-            <i class="fas fa-list me-2"></i>Liste des dispositifs de maîtrise
-        </h6>
-        <div class="btn-group">
-            <button class="btn btn-sm btn-outline-secondary dropdown-toggle" data-bs-toggle="dropdown">
-                <i class="fas fa-filter"></i> Filtrer
+    .page-header::before {
+        content: '';
+        position: absolute;
+        top: -50%;
+        right: -10%;
+        width: 300px;
+        height: 300px;
+        background: rgba(255, 255, 255, 0.1);
+        border-radius: 50%;
+        transform: rotate(25deg);
+        pointer-events: none;
+        z-index: 0;
+    }
+
+    .page-header::after {
+        content: '';
+        position: absolute;
+        bottom: -50%;
+        left: -10%;
+        width: 400px;
+        height: 400px;
+        background: rgba(255, 255, 255, 0.05);
+        border-radius: 50%;
+        transform: rotate(-15deg);
+        pointer-events: none;
+        z-index: 0;
+    }
+
+    .page-header-content {
+        position: relative;
+        z-index: 2;
+    }
+
+    .page-title {
+        font-size: 2rem;
+        font-weight: 600;
+        margin-bottom: 0.5rem;
+    }
+
+    .breadcrumb {
+        background: transparent;
+        padding: 0;
+        margin-bottom: 1rem;
+    }
+
+    .breadcrumb-item a {
+        color: rgba(255, 255, 255, 0.8);
+        text-decoration: none;
+        transition: all 0.3s ease;
+    }
+
+    .breadcrumb-item a:hover {
+        color: white;
+    }
+
+    .breadcrumb-item.active {
+        color: white;
+    }
+
+    .breadcrumb-item + .breadcrumb-item::before {
+        color: rgba(255, 255, 255, 0.5);
+    }
+
+    .header-actions {
+        display: flex;
+        gap: 0.75rem;
+        flex-wrap: wrap;
+        align-items: center;
+        position: relative;
+        z-index: 10;
+    }
+
+    .fk-btn {
+        padding: 0.6rem 1.2rem;
+        border-radius: 10px;
+        font-weight: 500;
+        display: inline-flex;
+        align-items: center;
+        gap: 0.5rem;
+        transition: all 0.3s ease;
+        border: none;
+        cursor: pointer;
+        font-size: 0.9rem;
+        text-decoration: none;
+        z-index: 10;
+        position: relative;
+    }
+
+    .fk-btn-primary {
+        background: linear-gradient(135deg, #0066CC, #3B82F6);
+        color: white;
+        box-shadow: 0 5px 15px rgba(0, 102, 204, 0.3);
+    }
+
+    .fk-btn-primary:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 10px 25px rgba(0, 102, 204, 0.4);
+        color: white;
+    }
+
+    .fk-btn-secondary {
+        background: rgba(255, 255, 255, 0.15);
+        border: 1px solid rgba(255, 255, 255, 0.3);
+        color: white;
+    }
+
+    .fk-btn-secondary:hover {
+        background: rgba(255, 255, 255, 0.25);
+        transform: translateY(-2px);
+        color: white;
+    }
+
+    .fk-btn-success {
+        background: linear-gradient(135deg, #0D9488, #14B8A6);
+        color: white;
+    }
+
+    .fk-btn-success:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 10px 25px rgba(13, 148, 136, 0.4);
+        color: white;
+    }
+
+    .fk-btn-warning {
+        background: linear-gradient(135deg, #F59E0B, #FBBF24);
+        color: white;
+    }
+
+    .fk-btn-outline-light {
+        background: rgba(255, 255, 255, 0.1);
+        backdrop-filter: blur(10px);
+        border: 1px solid rgba(255, 255, 255, 0.2);
+        color: white;
+    }
+
+    .fk-btn-outline-light:hover {
+        background: rgba(255, 255, 255, 0.2);
+        transform: translateY(-2px);
+        color: white;
+    }
+
+    /* ========== STATISTIQUES ========== */
+    .stats-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+        gap: 1.5rem;
+        margin-bottom: 2rem;
+    }
+
+    .stat-card {
+        background: white;
+        border: 1px solid #e2e8f0;
+        border-radius: 16px;
+        padding: 1.5rem;
+        display: flex;
+        align-items: center;
+        gap: 1rem;
+        transition: all 0.3s ease;
+        box-shadow: 0 4px 20px rgba(0, 0, 0, 0.08);
+    }
+
+    .stat-card:hover {
+        transform: translateY(-4px);
+        box-shadow: 0 8px 30px rgba(0, 0, 0, 0.12);
+    }
+
+    [data-bs-theme="dark"] .stat-card {
+        background: #1e293b;
+        border-color: #334155;
+    }
+
+    .stat-icon {
+        width: 56px;
+        height: 56px;
+        border-radius: 12px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 1.5rem;
+        color: white;
+        flex-shrink: 0;
+    }
+
+    .stat-icon.primary { background: linear-gradient(135deg, #0066CC, #3B82F6); }
+    .stat-icon.success { background: linear-gradient(135deg, #0D9488, #14B8A6); }
+    .stat-icon.warning { background: linear-gradient(135deg, #F59E0B, #FBBF24); }
+    .stat-icon.info { background: linear-gradient(135deg, #3B82F6, #6366F1); }
+    .stat-icon.danger { background: linear-gradient(135deg, #DC2626, #EF4444); }
+
+    .stat-content {
+        flex: 1;
+    }
+
+    .stat-label {
+        font-size: 0.75rem;
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+        color: #64748b;
+        margin-bottom: 0.25rem;
+    }
+
+    [data-bs-theme="dark"] .stat-label {
+        color: #94a3b8;
+    }
+
+    .stat-value {
+        font-size: 1.75rem;
+        font-weight: 700;
+        color: #0f172a;
+        line-height: 1.2;
+    }
+
+    [data-bs-theme="dark"] .stat-value {
+        color: #f1f5f9;
+    }
+
+    .stat-trend {
+        font-size: 0.8rem;
+        color: #0D9488;
+        margin-top: 0.25rem;
+    }
+
+    /* ========== FILTRES ========== */
+    .filters-section {
+        background: white;
+        border: 1px solid #e2e8f0;
+        border-radius: 16px;
+        padding: 1rem 1.5rem;
+        margin-bottom: 1.5rem;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        flex-wrap: wrap;
+        gap: 1rem;
+        box-shadow: 0 4px 20px rgba(0, 0, 0, 0.08);
+    }
+
+    [data-bs-theme="dark"] .filters-section {
+        background: #1e293b;
+        border-color: #334155;
+    }
+
+    .filter-group {
+        display: flex;
+        gap: 0.5rem;
+        flex-wrap: wrap;
+    }
+
+    .filter-btn {
+        padding: 0.5rem 1rem;
+        border-radius: 30px;
+        font-size: 0.85rem;
+        font-weight: 500;
+        background: #f1f5f9;
+        color: #64748b;
+        border: 1px solid #e2e8f0;
+        transition: all 0.3s ease;
+        cursor: pointer;
+    }
+
+    .filter-btn:hover {
+        background: #e2e8f0;
+    }
+
+    .filter-btn.active {
+        background: #0066CC;
+        color: white;
+        border-color: #0066CC;
+    }
+
+    [data-bs-theme="dark"] .filter-btn {
+        background: #0f172a;
+        border-color: #334155;
+        color: #94a3b8;
+    }
+
+    [data-bs-theme="dark"] .filter-btn:hover {
+        background: #1e293b;
+    }
+
+    [data-bs-theme="dark"] .filter-btn.active {
+        background: #3B82F6;
+        color: white;
+    }
+
+    /* ========== TABLEAU ========== */
+    .fk-card-modern {
+        background: white;
+        border: 1px solid #e2e8f0;
+        border-radius: 16px;
+        margin-bottom: 1.5rem;
+        overflow: hidden;
+        box-shadow: 0 4px 20px rgba(0, 0, 0, 0.08);
+        transition: all 0.3s ease;
+    }
+
+    .fk-card-modern:hover {
+        box-shadow: 0 8px 30px rgba(0, 0, 0, 0.12);
+    }
+
+    [data-bs-theme="dark"] .fk-card-modern {
+        background: #1e293b;
+        border-color: #334155;
+    }
+
+    .fk-card-header {
+        padding: 1.25rem 1.5rem;
+        border-bottom: 1px solid #e2e8f0;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        flex-wrap: wrap;
+        gap: 1rem;
+        background: #f8fafc;
+        color: #0f172a;
+    }
+
+    .fk-card-header.primary {
+        background: linear-gradient(135deg, #0A1929 0%, #1A3C6B 100%);
+        color: white;
+        border-bottom: none;
+    }
+
+    .fk-card-header.success {
+        background: linear-gradient(135deg, #0D9488, #14B8A6);
+        color: white;
+        border-bottom: none;
+    }
+
+    .header-icon-sm {
+        width: 40px;
+        height: 40px;
+        background: rgba(255, 255, 255, 0.2);
+        border-radius: 8px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 1.2rem;
+        color: white;
+    }
+
+    .badge-modern {
+        display: inline-block;
+        padding: 0.35rem 0.75rem;
+        border-radius: 50px;
+        font-size: 0.75rem;
+        font-weight: 600;
+        text-align: center;
+        white-space: nowrap;
+        border: 1px solid transparent;
+    }
+
+    .badge-primary { background: #0066CC; color: white; }
+    .badge-success { background: #0D9488; color: white; }
+    .badge-warning { background: #F59E0B; color: white; }
+    .badge-danger { background: #DC2626; color: white; }
+    .badge-info { background: #3B82F6; color: white; }
+    .badge-secondary { background: #64748b; color: white; }
+
+    .fk-table-modern {
+        width: 100%;
+        border-collapse: collapse;
+        font-size: 0.9rem;
+    }
+
+    .fk-table-modern thead th {
+        padding: 0.75rem 1rem;
+        font-size: 0.7rem;
+        font-weight: 600;
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+        color: #64748b;
+        border-bottom: 2px solid #e2e8f0;
+        background: #f8fafc;
+        white-space: nowrap;
+    }
+
+    .fk-table-modern tbody td {
+        padding: 1rem;
+        border-bottom: 1px solid #e2e8f0;
+        color: #0f172a;
+        vertical-align: middle;
+    }
+
+    .fk-table-modern tbody tr:hover {
+        background: #f1f5f9;
+    }
+
+    .fk-table-modern tbody tr {
+        transition: all 0.2s ease;
+    }
+
+    [data-bs-theme="dark"] .fk-table-modern thead th {
+        color: #94a3b8;
+        border-bottom-color: #334155;
+        background: #0f172a;
+    }
+
+    [data-bs-theme="dark"] .fk-table-modern tbody td {
+        border-bottom-color: #334155;
+        color: #f1f5f9;
+    }
+
+    [data-bs-theme="dark"] .fk-table-modern tbody tr:hover {
+        background: #1e293b;
+    }
+
+    /* Barres de progression */
+    .progress-modern {
+        background: #e2e8f0;
+        border-radius: 50px;
+        height: 8px;
+        overflow: hidden;
+        width: 100%;
+    }
+
+    [data-bs-theme="dark"] .progress-modern {
+        background: #334155;
+    }
+
+    .progress-modern-bar {
+        height: 100%;
+        border-radius: 50px;
+        transition: width 0.3s ease;
+    }
+
+    .progress-modern-bar.success { background: #0D9488; }
+    .progress-modern-bar.warning { background: #F59E0B; }
+    .progress-modern-bar.danger { background: #DC2626; }
+    .progress-modern-bar.primary { background: #0066CC; }
+
+    /* Boutons d'action */
+    .action-buttons {
+        display: flex;
+        gap: 0.5rem;
+        justify-content: flex-end;
+        flex-wrap: wrap;
+    }
+
+    .btn-action {
+        width: 36px;
+        height: 36px;
+        border-radius: 8px;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        background: #f1f5f9;
+        border: 1px solid #e2e8f0;
+        color: #64748b;
+        transition: all 0.3s ease;
+        cursor: pointer;
+        text-decoration: none;
+        z-index: 10;
+        position: relative;
+    }
+
+    .btn-action:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 4px 20px rgba(0, 0, 0, 0.08);
+        background: #ffffff;
+        text-decoration: none;
+    }
+
+    [data-bs-theme="dark"] .btn-action {
+        background: #1e293b;
+        border-color: #334155;
+        color: #94a3b8;
+    }
+
+    [data-bs-theme="dark"] .btn-action:hover {
+        background: #0f172a;
+    }
+
+    .btn-action.primary:hover { background: #0066CC; color: white; border-color: #0066CC; }
+    .btn-action.success:hover { background: #0D9488; color: white; border-color: #0D9488; }
+    .btn-action.warning:hover { background: #F59E0B; color: white; border-color: #F59E0B; }
+    .btn-action.danger:hover { background: #DC2626; color: white; border-color: #DC2626; }
+    .btn-action.info:hover { background: #3B82F6; color: white; border-color: #3B82F6; }
+
+    /* ========== BADGES STATUT ========== */
+    .badge-statut {
+        display: inline-block;
+        padding: 0.35rem 0.75rem;
+        border-radius: 50px;
+        font-size: 0.75rem;
+        font-weight: 600;
+        text-align: center;
+    }
+
+    .badge-statut.actif {
+        background: rgba(13, 148, 136, 0.15);
+        color: #0D9488;
+        border: 1px solid rgba(13, 148, 136, 0.3);
+    }
+
+    .badge-statut.inactif {
+        background: rgba(100, 116, 139, 0.15);
+        color: #64748b;
+        border: 1px solid rgba(100, 116, 139, 0.3);
+    }
+
+    .badge-statut.en_cours {
+        background: rgba(245, 158, 11, 0.15);
+        color: #F59E0B;
+        border: 1px solid rgba(245, 158, 11, 0.3);
+    }
+
+    .badge-statut.obsolete {
+        background: rgba(220, 38, 38, 0.15);
+        color: #DC2626;
+        border: 1px solid rgba(220, 38, 38, 0.3);
+    }
+
+    [data-bs-theme="dark"] .badge-statut.actif {
+        background: rgba(13, 148, 136, 0.25);
+        color: #2dd4bf;
+    }
+
+    /* ========== BADGES TYPE ========== */
+    .badge-type {
+        display: inline-block;
+        padding: 0.25rem 0.6rem;
+        border-radius: 4px;
+        font-size: 0.7rem;
+        font-weight: 600;
+        text-transform: uppercase;
+    }
+
+    .badge-type.preventif {
+        background: #0D9488;
+        color: white;
+    }
+
+    .badge-type.detectif {
+        background: #F59E0B;
+        color: white;
+    }
+
+    .badge-type.correctif {
+        background: #DC2626;
+        color: white;
+    }
+
+    .badge-type.default {
+        background: #64748b;
+        color: white;
+    }
+
+    /* ========== VIDE ========== */
+    .empty-state {
+        text-align: center;
+        padding: 3rem;
+        background: white;
+        border-radius: 16px;
+        border: 1px solid #e2e8f0;
+    }
+
+    [data-bs-theme="dark"] .empty-state {
+        background: #1e293b;
+        border-color: #334155;
+    }
+
+    .empty-icon {
+        width: 80px;
+        height: 80px;
+        background: #f1f5f9;
+        border-radius: 20px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 2rem;
+        color: #64748b;
+        margin: 0 auto 1.5rem;
+    }
+
+    [data-bs-theme="dark"] .empty-icon {
+        background: #0f172a;
+        color: #94a3b8;
+    }
+
+    .empty-title {
+        font-size: 1.25rem;
+        font-weight: 600;
+        color: #0f172a;
+        margin-bottom: 0.5rem;
+    }
+
+    .empty-text {
+        color: #64748b;
+        margin-bottom: 1.5rem;
+    }
+
+    /* ========== GRAPHIQUES ========== */
+    .charts-row {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+        gap: 1.5rem;
+        margin-top: 1.5rem;
+    }
+
+    .chart-card {
+        background: white;
+        border: 1px solid #e2e8f0;
+        border-radius: 16px;
+        padding: 1.5rem;
+        box-shadow: 0 4px 20px rgba(0, 0, 0, 0.08);
+    }
+
+    [data-bs-theme="dark"] .chart-card {
+        background: #1e293b;
+        border-color: #334155;
+    }
+
+    .chart-title {
+        font-size: 0.9rem;
+        font-weight: 600;
+        color: #0f172a;
+        margin-bottom: 1rem;
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+    }
+
+    [data-bs-theme="dark"] .chart-title {
+        color: #f1f5f9;
+    }
+
+    /* ========== MODAL ========== */
+    .modal-content {
+        border-radius: 16px;
+        border: none;
+        box-shadow: 0 30px 60px rgba(0, 0, 0, 0.3);
+    }
+
+    .modal-header {
+        border-bottom: 1px solid #e2e8f0;
+        padding: 1.25rem 1.5rem;
+    }
+
+    .modal-header.bg-warning {
+        background: linear-gradient(135deg, #F59E0B, #FBBF24) !important;
+        color: white;
+    }
+
+    .modal-header.bg-warning .btn-close {
+        filter: brightness(0) invert(1);
+    }
+
+    .modal-footer {
+        border-top: 1px solid #e2e8f0;
+        padding: 1.25rem 1.5rem;
+    }
+
+    /* ========== ANIMATIONS ========== */
+    @keyframes fadeIn {
+        from {
+            opacity: 0;
+            transform: translateY(20px);
+        }
+        to {
+            opacity: 1;
+            transform: translateY(0);
+        }
+    }
+
+    .animate-in {
+        animation: fadeIn 0.5s ease-out forwards;
+    }
+
+    /* ========== RESPONSIVE ========== */
+    @media (max-width: 768px) {
+        .page-header {
+            padding: 1.5rem;
+        }
+
+        .page-title {
+            font-size: 1.5rem;
+        }
+
+        .header-actions {
+            flex-direction: column;
+            width: 100%;
+        }
+
+        .header-actions .fk-btn {
+            width: 100%;
+            justify-content: center;
+        }
+
+        .stats-grid {
+            grid-template-columns: 1fr;
+        }
+
+        .fk-table-modern {
+            display: block;
+            overflow-x: auto;
+        }
+
+        .action-buttons {
+            flex-wrap: wrap;
+            justify-content: center;
+        }
+
+        .filters-section {
+            flex-direction: column;
+            align-items: flex-start;
+        }
+
+        .filter-group {
+            width: 100%;
+            overflow-x: auto;
+            padding-bottom: 0.5rem;
+        }
+
+        .filter-btn {
+            white-space: nowrap;
+        }
+    }
+</style>
+
+<div class="list-container">
+    <!-- En-tête de page -->
+    <div class="page-header animate-in">
+        <div class="page-header-content">
+            <div class="row align-items-center">
+                <div class="col">
+                    <nav aria-label="breadcrumb">
+                        <ol class="breadcrumb">
+                            <li class="breadcrumb-item"><a href="{{ url_for('liste_cartographies') }}">Cartographies</a></li>
+                            <li class="breadcrumb-item"><a href="{{ url_for('detail_cartographie', id=risque.cartographie_id) }}">{{ risque.cartographie.nom }}</a></li>
+                            <li class="breadcrumb-item"><a href="{{ url_for('detail_risque', id=risque.id) }}">{{ risque.reference }}</a></li>
+                            <li class="breadcrumb-item active">Dispositifs de maîtrise</li>
+                        </ol>
+                    </nav>
+                    
+                    <div class="page-title">
+                        <i class="fas fa-shield-alt me-2"></i>Dispositifs de maîtrise
+                    </div>
+                    
+                    <p class="text-white-50 mb-0">{{ risque.reference }} - {{ risque.intitule }}</p>
+                </div>
+                
+                <div class="col-auto">
+                    <div class="header-actions">
+                        <a href="{{ url_for('detail_risque', id=risque.id) }}" class="fk-btn fk-btn-secondary">
+                            <i class="fas fa-arrow-left"></i> Retour au risque
+                        </a>
+                        <a href="{{ url_for('nouveau_dispositif', risque_id=risque.id) }}" class="fk-btn fk-btn-success">
+                            <i class="fas fa-plus"></i> Nouveau dispositif
+                        </a>
+                        <a href="{{ url_for('dispositifs_archives') }}?retour={{ url_for('liste_dispositifs_risque', risque_id=risque.id) }}" class="fk-btn fk-btn-outline-light">
+                            <i class="fas fa-archive"></i> Archives
+                            {% if nb_archives > 0 %}
+                            <span class="badge-modern badge-secondary ms-1">{{ nb_archives }}</span>
+                            {% endif %}
+                        </a>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Cartes de statistiques -->
+    <div class="stats-grid">
+        <div class="stat-card animate-in">
+            <div class="stat-icon primary">
+                <i class="fas fa-shield-alt"></i>
+            </div>
+            <div class="stat-content">
+                <div class="stat-label">Total dispositifs</div>
+                <div class="stat-value">{{ stats.total }}</div>
+            </div>
+        </div>
+
+        <div class="stat-card animate-in">
+            <div class="stat-icon success">
+                <i class="fas fa-check-circle"></i>
+            </div>
+            <div class="stat-content">
+                <div class="stat-label">Efficaces (≥4/5)</div>
+                <div class="stat-value">{{ stats.efficaces }}</div>
+                <div class="stat-trend">
+                    {{ ((stats.efficaces / stats.total) * 100 if stats.total > 0 else 0)|round|int }}% des dispositifs
+                </div>
+            </div>
+        </div>
+
+        <div class="stat-card animate-in">
+            <div class="stat-icon warning">
+                <i class="fas fa-clock"></i>
+            </div>
+            <div class="stat-content">
+                <div class="stat-label">À évaluer</div>
+                <div class="stat-value">{{ stats.non_evalues }}</div>
+            </div>
+        </div>
+
+        <div class="stat-card animate-in">
+            <div class="stat-icon info">
+                <i class="fas fa-tasks"></i>
+            </div>
+            <div class="stat-content">
+                <div class="stat-label">Avec plans d'action</div>
+                <div class="stat-value">{{ stats.avec_plan }}</div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Section des filtres -->
+    <div class="filters-section animate-in">
+        <div class="filter-group">
+            <button class="filter-btn active" onclick="filtrerTableau('tous')">
+                <i class="fas fa-list me-1"></i>Tous
             </button>
-            <ul class="dropdown-menu dropdown-menu-end">
-                <li><a class="dropdown-item" href="#" onclick="filtrerTableau('tous')">Tous</a></li>
-                <li><hr class="dropdown-divider"></li>
-                <li><a class="dropdown-item" href="#" onclick="filtrerTableau('preventif')">Préventifs</a></li>
-                <li><a class="dropdown-item" href="#" onclick="filtrerTableau('detectif')">Détectifs</a></li>
-                <li><a class="dropdown-item" href="#" onclick="filtrerTableau('correctif')">Correctifs</a></li>
-                <li><hr class="dropdown-divider"></li>
-                <li><a class="dropdown-item" href="#" onclick="filtrerTableau('efficace')">Efficaces (≥4/5)</a></li>
-                <li><a class="dropdown-item" href="#" onclick="filtrerTableau('non_efficace')">Non efficaces</a></li>
-            </ul>
+            <button class="filter-btn" onclick="filtrerTableau('preventif')">
+                <span class="badge-type preventif me-1">P</span>Préventifs
+            </button>
+            <button class="filter-btn" onclick="filtrerTableau('detectif')">
+                <span class="badge-type detectif me-1">D</span>Détectifs
+            </button>
+            <button class="filter-btn" onclick="filtrerTableau('correctif')">
+                <span class="badge-type correctif me-1">C</span>Correctifs
+            </button>
+        </div>
+        <div class="filter-group">
+            <button class="filter-btn" onclick="filtrerTableau('efficace')">
+                <i class="fas fa-star text-success me-1"></i>Efficaces
+            </button>
+            <button class="filter-btn" onclick="filtrerTableau('non_efficace')">
+                <i class="fas fa-exclamation-triangle text-warning me-1"></i>À améliorer
+            </button>
         </div>
     </div>
-    <div class="card-body">
-        {% if dispositifs %}
-        <div class="table-responsive">
-            <table class="table table-hover" id="tableDispositifs">
-                <thead>
-                    <tr>
-                        <th>RÉFÉRENCE</th>
-                        <th>NOM</th>
-                        <th>TYPE</th>
-                        <th>EFFICACITÉ</th>
-                        <th>STATUT</th>
-                        <th>DERNIÈRE VÉRIF</th>
-                        <th>PLAN D'ACTION</th>
-                        <th class="text-end">ACTIONS</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    {% for dispositif in dispositifs %}
-                    <tr data-type="{{ dispositif.type_dispositif|lower }}"
-                        data-efficacite="{{ dispositif.efficacite_reelle or 0 }}">
-                        <td>
-                            <strong>{{ dispositif.reference }}</strong>
-                        </td>
-                        <td>
-                            <div class="fw-bold">{{ dispositif.nom|truncate(40) }}</div>
-                            {% if dispositif.description %}
-                            <small class="text-muted">{{ dispositif.description|truncate(60) }}</small>
-                            {% endif %}
-                        </td>
-                        <td>
-                            {% if dispositif.type_dispositif == 'Préventif' %}
-                            <span class="badge bg-success">{{ dispositif.type_dispositif }}</span>
-                            {% elif dispositif.type_dispositif == 'Détectif' %}
-                            <span class="badge bg-warning text-dark">{{ dispositif.type_dispositif }}</span>
-                            {% elif dispositif.type_dispositif == 'Correctif' %}
-                            <span class="badge bg-danger">{{ dispositif.type_dispositif }}</span>
-                            {% else %}
-                            <span class="badge bg-secondary">{{ dispositif.type_dispositif }}</span>
-                            {% endif %}
-                            <br>
-                            <small class="text-muted">{{ dispositif.nature }}</small>
-                        </td>
-                        <td>
-                            {% if dispositif.efficacite_reelle %}
-                            <div class="d-flex align-items-center">
-                                <div class="progress flex-grow-1" style="height: 10px;">
-                                    <div class="progress-bar 
-                                        {% if dispositif.efficacite_reelle >= 4 %}bg-success
-                                        {% elif dispositif.efficacite_reelle >= 3 %}bg-warning
-                                        {% else %}bg-danger{% endif %}" 
-                                         style="width: {{ (dispositif.efficacite_reelle / 5) * 100 }}%">
+
+    <!-- Tableau des dispositifs -->
+    <div class="fk-card-modern animate-in">
+        <div class="fk-card-header primary">
+            <div class="d-flex align-items-center gap-3">
+                <div class="header-icon-sm">
+                    <i class="fas fa-list"></i>
+                </div>
+                <h5 class="mb-0">Liste des dispositifs de maîtrise</h5>
+            </div>
+            <span class="badge-modern badge-secondary">{{ dispositifs|length }}</span>
+        </div>
+
+        <div class="fk-card-body p-0">
+            {% if dispositifs %}
+            <div class="table-responsive">
+                <table class="fk-table-modern" id="tableDispositifs">
+                    <thead>
+                        <tr>
+                            <th>Référence</th>
+                            <th>Nom</th>
+                            <th>Type</th>
+                            <th>Efficacité</th>
+                            <th>Statut</th>
+                            <th>Dernière vérif.</th>
+                            <th>Plan d'action</th>
+                            <th class="text-end">Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for dispositif in dispositifs %}
+                        <tr data-type="{{ dispositif.type_dispositif|lower }}"
+                            data-efficacite="{{ dispositif.efficacite_reelle or 0 }}">
+                            <td>
+                                <strong>{{ dispositif.reference }}</strong>
+                            </td>
+                            <td>
+                                <div class="fw-bold">{{ dispositif.nom|truncate(40) }}</div>
+                                {% if dispositif.description %}
+                                <small class="text-muted">{{ dispositif.description|truncate(60) }}</small>
+                                {% endif %}
+                            </td>
+                            <td>
+                                {% if dispositif.type_dispositif == 'Préventif' %}
+                                <span class="badge-type preventif">{{ dispositif.type_dispositif }}</span>
+                                {% elif dispositif.type_dispositif == 'Détectif' %}
+                                <span class="badge-type detectif">{{ dispositif.type_dispositif }}</span>
+                                {% elif dispositif.type_dispositif == 'Correctif' %}
+                                <span class="badge-type correctif">{{ dispositif.type_dispositif }}</span>
+                                {% else %}
+                                <span class="badge-type default">{{ dispositif.type_dispositif }}</span>
+                                {% endif %}
+                                <br>
+                                <small class="text-muted">{{ dispositif.nature }}</small>
+                            </td>
+                            <td style="min-width: 150px;">
+                                {% if dispositif.efficacite_reelle %}
+                                <div class="d-flex align-items-center">
+                                    <div class="progress-modern flex-grow-1 me-2">
+                                        <div class="progress-modern-bar 
+                                            {% if dispositif.efficacite_reelle >= 4 %}success
+                                            {% elif dispositif.efficacite_reelle >= 3 %}warning
+                                            {% else %}danger{% endif %}" 
+                                            style="width: {{ (dispositif.efficacite_reelle / 5) * 100 }}%">
+                                        </div>
                                     </div>
+                                    <span class="fw-bold">{{ dispositif.efficacite_reelle }}/5</span>
                                 </div>
-                                <span class="ms-2 fw-bold">{{ dispositif.efficacite_reelle }}/5</span>
-                            </div>
-                            {% if dispositif.efficacite_attendue %}
-                            <small class="text-muted">Attendu: {{ dispositif.efficacite_attendue }}/5</small>
-                            {% endif %}
-                            {% else %}
-                            <span class="badge bg-secondary">Non évalué</span>
-                            {% endif %}
-                        </td>
-                        <td>
-                            {% if dispositif.statut == 'actif' %}
-                            <span class="badge bg-success">Actif</span>
-                            {% elif dispositif.statut == 'inactif' %}
-                            <span class="badge bg-secondary">Inactif</span>
-                            {% elif dispositif.statut == 'en_cours' %}
-                            <span class="badge bg-warning text-dark">En cours</span>
-                            {% else %}
-                            <span class="badge bg-danger">Obsolète</span>
-                            {% endif %}
-                        </td>
-                        <td>
-                            {% if dispositif.date_derniere_verification %}
-                            {{ dispositif.date_derniere_verification.strftime('%d/%m/%Y') }}
-                            {% else %}
-                            <span class="badge bg-warning text-dark">Jamais</span>
-                            {% endif %}
-                            {% if dispositif.prochaine_verification %}
-                            <br>
-                            <small class="text-muted">Prochaine: {{ dispositif.prochaine_verification.strftime('%d/%m/%Y') }}</small>
-                            {% endif %}
-                        </td>
-                        <td>
-                            {% if dispositif.plan_action %}
-                            <a href="{{ url_for('detail_plan_action_risque', plan_id=dispositif.plan_action.id) }}" 
-                               class="badge bg-info text-decoration-none">
-                                {{ dispositif.plan_action.reference }}
-                            </a>
-                            {% else %}
-                            <button class="btn btn-sm btn-outline-primary" 
-                                    onclick="lierPlanAction({{ dispositif.id }})">
-                                <i class="fas fa-link"></i> Lier
-                            </button>
-                            {% endif %}
-                        </td>
-                        <td>
-                            <div class="btn-group btn-group-sm">
-                                <a href="{{ url_for('detail_dispositif', dispositif_id=dispositif.id) }}" 
-                                   class="btn btn-outline-info" title="Détails">
-                                    <i class="fas fa-eye"></i>
+                                {% if dispositif.efficacite_attendue %}
+                                <small class="text-muted">Attendu: {{ dispositif.efficacite_attendue }}/5</small>
+                                {% endif %}
+                                {% else %}
+                                <span class="badge-statut inactif">Non évalué</span>
+                                {% endif %}
+                            </td>
+                            <td>
+                                {% if dispositif.statut == 'actif' %}
+                                <span class="badge-statut actif">Actif</span>
+                                {% elif dispositif.statut == 'inactif' %}
+                                <span class="badge-statut inactif">Inactif</span>
+                                {% elif dispositif.statut == 'en_cours' %}
+                                <span class="badge-statut en_cours">En cours</span>
+                                {% else %}
+                                <span class="badge-statut obsolete">Obsolète</span>
+                                {% endif %}
+                            </td>
+                            <td>
+                                {% if dispositif.date_derniere_verification %}
+                                <i class="fas fa-calendar-check text-success me-1"></i>
+                                {{ dispositif.date_derniere_verification.strftime('%d/%m/%Y') }}
+                                {% else %}
+                                <span class="badge-statut en_cours">Jamais</span>
+                                {% endif %}
+                                {% if dispositif.prochaine_verification %}
+                                <br>
+                                <small class="text-muted">
+                                    <i class="fas fa-clock me-1"></i>Prochaine: {{ dispositif.prochaine_verification.strftime('%d/%m/%Y') }}
+                                </small>
+                                {% endif %}
+                            </td>
+                            <td>
+                                {% if dispositif.plan_action %}
+                                <a href="{{ url_for('detail_plan_action_risque', plan_id=dispositif.plan_action.id) }}" 
+                                   class="badge-modern badge-info text-decoration-none">
+                                    <i class="fas fa-link me-1"></i>{{ dispositif.plan_action.reference }}
                                 </a>
-                                <a href="{{ url_for('evaluer_dispositif', dispositif_id=dispositif.id) }}" 
-                                   class="btn btn-outline-warning" title="Évaluer">
-                                    <i class="fas fa-chart-bar"></i>
-                                </a>
-                                <a href="{{ url_for('modifier_dispositif', dispositif_id=dispositif.id) }}" 
-                                   class="btn btn-outline-secondary" title="Modifier">
-                                    <i class="fas fa-edit"></i>
-                                </a>
-                            </div>
-                        </td>
-                    </tr>
-                    {% endfor %}
-                </tbody>
-            </table>
+                                {% else %}
+                                <button class="btn-action primary" 
+                                        onclick="lierPlanAction({{ dispositif.id }})"
+                                        title="Lier un plan d'action">
+                                    <i class="fas fa-link"></i>
+                                </button>
+                                {% endif %}
+                            </td>
+                            <td>
+                                <div class="action-buttons">
+                                    <a href="{{ url_for('detail_dispositif', dispositif_id=dispositif.id) }}" 
+                                       class="btn-action info" title="Détails">
+                                        <i class="fas fa-eye"></i>
+                                    </a>
+                                    <a href="{{ url_for('evaluer_dispositif', dispositif_id=dispositif.id) }}" 
+                                       class="btn-action warning" title="Évaluer">
+                                        <i class="fas fa-chart-bar"></i>
+                                    </a>
+                                    <a href="{{ url_for('modifier_dispositif', dispositif_id=dispositif.id) }}" 
+                                       class="btn-action primary" title="Modifier">
+                                        <i class="fas fa-edit"></i>
+                                    </a>
+                                    {% if current_user.has_permission('can_archive_data') %}
+                                    <button type="button" 
+                                            class="btn-action danger" 
+                                            title="Archiver"
+                                            onclick="archiverDispositif({{ dispositif.id }}, '{{ dispositif.reference }}')">
+                                        <i class="fas fa-archive"></i>
+                                    </button>
+                                    {% endif %}
+                                </div>
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+            {% else %}
+            <!-- État vide -->
+            <div class="empty-state">
+                <div class="empty-icon">
+                    <i class="fas fa-shield-alt"></i>
+                </div>
+                <h4 class="empty-title">Aucun dispositif de maîtrise</h4>
+                <p class="empty-text">Créez votre premier dispositif pour renforcer la maîtrise de ce risque</p>
+                <a href="{{ url_for('nouveau_dispositif', risque_id=risque.id) }}" class="fk-btn fk-btn-primary">
+                    <i class="fas fa-plus me-2"></i>Créer le premier dispositif
+                </a>
+            </div>
+            {% endif %}
         </div>
-        {% else %}
-        <div class="text-center py-5">
-            <i class="fas fa-shield-alt fa-4x text-muted mb-3"></i>
-            <h4 class="text-muted">Aucun dispositif de maîtrise</h4>
-            <p class="text-muted">Créez votre premier dispositif pour renforcer la maîtrise de ce risque</p>
-            <a href="{{ url_for('nouveau_dispositif', risque_id=risque.id) }}" class="btn btn-primary">
-                <i class="fas fa-plus me-2"></i>Créer le premier dispositif
-            </a>
+    </div>
+
+    <!-- Vue synthèse - Graphiques -->
+    <div class="charts-row">
+        <div class="chart-card animate-in">
+            <div class="chart-title">
+                <i class="fas fa-chart-pie text-primary"></i>
+                Répartition par type
+            </div>
+            <canvas id="chartTypeDispositif" height="200"></canvas>
         </div>
-        {% endif %}
+
+        <div class="chart-card animate-in">
+            <div class="chart-title">
+                <i class="fas fa-chart-bar text-success"></i>
+                Efficacité des dispositifs
+            </div>
+            <canvas id="chartEfficacite" height="200"></canvas>
+        </div>
     </div>
 </div>
 
-<!-- Vue synthèse -->
-<div class="card shadow mt-4">
-    <div class="card-header bg-light">
-        <h6 class="mb-0"><i class="fas fa-chart-pie me-2"></i>Synthèse par type</h6>
-    </div>
-    <div class="card-body">
-        <div class="row">
-            <div class="col-md-6">
-                <canvas id="chartTypeDispositif" height="200"></canvas>
+<!-- Modal générique pour lier un plan d'action -->
+<div class="modal fade" id="genericModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="genericModalTitle">
+                    <i class="fas fa-link me-2"></i>Lier un plan d'action
+                </h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
             </div>
-            <div class="col-md-6">
-                <canvas id="chartEfficacite" height="200"></canvas>
+            <div class="modal-body" id="genericModalBody">
+                <!-- Contenu chargé dynamiquement -->
+            </div>
+            <div class="modal-footer" id="genericModalFooter">
+                <!-- Pied chargé dynamiquement -->
             </div>
         </div>
     </div>
 </div>
+
+<!-- Modal de confirmation d'archivage -->
+<div class="modal fade" id="modalArchiver" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header bg-warning">
+                <h5 class="modal-title">
+                    <i class="fas fa-archive me-2"></i>
+                    Confirmer l'archivage
+                </h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <p>Êtes-vous sûr de vouloir archiver le dispositif <strong id="modalDispositifNom"></strong> ?</p>
+                <p class="text-muted small">Le dispositif ne sera plus visible dans les listes actives.</p>
+            </div>
+            <div class="modal-footer">
+                <form method="POST" action="" id="formArchiver">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                    <button type="button" class="fk-btn fk-btn-outline-secondary" data-bs-dismiss="modal">Annuler</button>
+                    <button type="submit" class="fk-btn fk-btn-warning">
+                        <i class="fas fa-archive me-1"></i>Archiver
+                    </button>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Token CSRF pour les requêtes -->
+<meta name="csrf-token" content="{{ csrf_token() }}">
 {% endblock %}
 
 {% block scripts %}
 <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 <script>
-    // Fonction de test
-function testLierPlanAction(dispositifId) {
-    console.log('🟡 DEBUG: testLierPlanAction appelée avec ID:', dispositifId);
-    console.log('🟡 Risque ID:', {{ risque.id if risque else dispositif.risque_id }});
-    
-    // Test 1: Vérifier si bootstrap est chargé
-    if (typeof bootstrap === 'undefined') {
-        console.error('❌ Bootstrap non chargé!');
-        alert('Erreur: Bootstrap JS non chargé');
-        return;
-    }
-    
-    // Test 2: Vérifier si la modal existe
-    const modalElement = document.getElementById('genericModal');
-    if (!modalElement) {
-        console.error('❌ Modal #genericModal non trouvée!');
-        alert('Erreur: Modal non trouvée');
-        return;
-    }
-    
-    console.log('✅ Bootstrap et modal OK');
-    
-    // Afficher un message simple d'abord
-    const modal = new bootstrap.Modal(modalElement);
-    document.getElementById('genericModalTitle').innerHTML = 'DEBUG - Lier plan';
-    document.getElementById('genericModalBody').innerHTML = `
-        <div class="alert alert-success">
-            <p>✅ Fonction appelée avec succès!</p>
-            <p>Dispositif ID: ${dispositifId}</p>
-            <p>Risque ID: {{ risque.id if risque else dispositif.risque_id }}</p>
-        </div>
-        <button class="btn btn-primary" onclick="chargerVraiFormulaire(${dispositifId})">
-            Charger le vrai formulaire
-        </button>
-    `;
-    document.getElementById('genericModalFooter').innerHTML = `
-        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Fermer</button>
-    `;
-    
-    modal.show();
-}
+// ============================================
+// VARIABLES GLOBALES
+// ============================================
+const risqueId = {{ risque.id }};
+const csrfToken = document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') || '{{ csrf_token() }}';
 
-// Fonction pour charger le vrai formulaire
-function chargerVraiFormulaire(dispositifId) {
-    console.log('🔄 Chargement du formulaire pour ID:', dispositifId);
-    
-    // Appel API
-    fetch(`/api/plans-action/disponibles?risque_id={{ risque.id if risque else dispositif.risque_id }}`)
-        .then(response => {
-            console.log('Response status:', response.status);
-            return response.json();
-        })
-        .then(data => {
-            console.log('API Data:', data);
-            
-            let html = `
-                <h5>Résultat API:</h5>
-                <pre>${JSON.stringify(data, null, 2)}</pre>
-            `;
-            
-            if (data.success) {
-                html += `<p>✅ API fonctionne! ${data.plans.length} plans trouvés.</p>`;
-            } else {
-                html += `<p class="text-danger">❌ Erreur API: ${data.error}</p>`;
-            }
-            
-            document.getElementById('genericModalBody').innerHTML = html;
-        })
-        .catch(error => {
-            console.error('Fetch error:', error);
-            document.getElementById('genericModalBody').innerHTML = `
-                <div class="alert alert-danger">
-                    <p>❌ Erreur fetch:</p>
-                    <pre>${error}</pre>
-                </div>
-            `;
-        });
-}
-
-// Au chargement de la page
-document.addEventListener('DOMContentLoaded', function() {
-    console.log('📄 Page dispositifs chargée');
-    console.log('Risque:', {{ risque.id if risque else 'N/A' }});
-    
-    // Ajouter un bouton de test dans la page
-    const testButton = document.createElement('button');
-    testButton.className = 'btn btn-danger position-fixed';
-    testButton.style = 'bottom: 20px; right: 20px; z-index: 9999;';
-    testButton.textContent = 'TEST LIER';
-    testButton.onclick = function() {
-        const firstDispositifId = document.querySelector('[data-id]')?.getAttribute('data-id') || 
-                                {{ dispositifs[0].id if dispositifs and dispositifs[0] else 'null' }};
-        if (firstDispositifId && firstDispositifId !== 'null') {
-            testLierPlanAction(firstDispositifId);
-        } else {
-            alert('Aucun dispositif trouvé pour test');
-        }
-    };
-    document.body.appendChild(testButton);
-});
-// Filtrage du tableau
+// ============================================
+// FONCTIONS DE FILTRAGE
+// ============================================
 function filtrerTableau(filtre) {
     const lignes = document.querySelectorAll('#tableDispositifs tbody tr');
+    const filtres = document.querySelectorAll('.filter-btn');
     
+    // Mise à jour des classes actives
+    filtres.forEach(btn => {
+        btn.classList.remove('active');
+        if (btn.textContent.toLowerCase().includes(filtre) || 
+            (filtre === 'tous' && btn.textContent.trim() === 'Tous')) {
+            btn.classList.add('active');
+        }
+    });
+    
+    // Filtrage
     lignes.forEach(ligne => {
         const type = ligne.getAttribute('data-type');
         const efficacite = parseFloat(ligne.getAttribute('data-efficacite'));
@@ -341,10 +1122,10 @@ function filtrerTableau(filtre) {
         
         switch(filtre) {
             case 'preventif':
-                afficher = type === 'préventif';
+                afficher = type === 'préventif' || type === 'preventif';
                 break;
             case 'detectif':
-                afficher = type === 'détectif';
+                afficher = type === 'détectif' || type === 'detectif';
                 break;
             case 'correctif':
                 afficher = type === 'correctif';
@@ -364,11 +1145,14 @@ function filtrerTableau(filtre) {
     });
 }
 
-// Fonction pour lier un plan d'action (version corrigée)
+// ============================================
+// FONCTION POUR LIER UN PLAN D'ACTION
+// ============================================
 function lierPlanAction(dispositifId) {
-    // Afficher le modal avec chargement
     const modal = new bootstrap.Modal(document.getElementById('genericModal'));
-    document.getElementById('genericModalTitle').innerHTML = 'Lier à un plan d\'action';
+    
+    // Afficher le modal avec chargement
+    document.getElementById('genericModalTitle').innerHTML = '<i class="fas fa-link me-2"></i>Lier à un plan d\'action';
     document.getElementById('genericModalBody').innerHTML = `
         <div class="text-center py-4">
             <div class="spinner-border text-primary" role="status">
@@ -380,39 +1164,33 @@ function lierPlanAction(dispositifId) {
     document.getElementById('genericModalFooter').innerHTML = '';
     modal.show();
     
-    // Récupérer le token CSRF
-    const csrfToken = document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') || '{{ csrf_token() }}';
-    
-    // Appeler l'API avec gestion d'erreur
-    fetch(`/api/plans-action/disponibles?risque_id={{ risque.id }}`, {
+    // Appel API
+    fetch(`/api/plans-action/disponibles?risque_id=${risqueId}`, {
         headers: {
             'X-CSRFToken': csrfToken,
             'Accept': 'application/json'
         }
     })
     .then(response => {
-        if (!response.ok) {
-            throw new Error(`Erreur HTTP: ${response.status}`);
-        }
+        if (!response.ok) throw new Error(`Erreur HTTP: ${response.status}`);
         return response.json();
     })
     .then(data => {
-        console.log('API Response:', data); // Pour débogage
+        console.log('API Response:', data);
         
         if (data.success && data.plans && data.plans.length > 0) {
             let options = '<option value="">-- Choisir un plan d\'action --</option>';
             
             data.plans.forEach(plan => {
-                // Vérifier si le plan n'est pas déjà lié à un autre dispositif
                 if (!plan.dispositif_id || plan.dispositif_id == dispositifId) {
-                    const statutBadge = plan.statut === 'en_cours' ? '🟡' : 
+                    const statutIcon = plan.statut === 'en_cours' ? '🟡' : 
                                       plan.statut === 'en_retard' ? '🔴' : 
                                       plan.statut === 'termine' ? '🟢' : '⚪';
                     
                     const alreadyLinked = plan.dispositif_id == dispositifId ? ' (déjà lié)' : '';
                     
                     options += `<option value="${plan.id}">
-                        ${statutBadge} ${plan.reference} - ${plan.nom}
+                        ${statutIcon} ${plan.reference} - ${plan.nom}
                         ${plan.date_echeance ? `(échéance: ${plan.date_echeance})` : ''}
                         ${alreadyLinked}
                     </option>`;
@@ -425,15 +1203,15 @@ function lierPlanAction(dispositifId) {
                     
                     <div class="mb-3">
                         <label class="form-label fw-bold">Sélectionner un plan d'action :</label>
-                        <select class="form-select" name="plan_action_id" required>
+                        <select class="fk-form-control" name="plan_action_id" required>
                             ${options}
                         </select>
                         <small class="text-muted">
-                            Seuls les plans avec statut "en cours", "en retard" ou "en attente" sont affichés.
+                            Seuls les plans disponibles sont affichés.
                         </small>
                     </div>
                     
-                    <div class="alert alert-info">
+                    <div class="fk-alert-modern info">
                         <i class="fas fa-info-circle me-2"></i>
                         <strong>Information :</strong> Vous pouvez également 
                         <a href="{{ url_for('nouveau_plan_action_pour_risque', risque_id=risque.id) }}?dispositif_id=${dispositifId}" 
@@ -446,16 +1224,15 @@ function lierPlanAction(dispositifId) {
             
             document.getElementById('genericModalBody').innerHTML = html;
             document.getElementById('genericModalFooter').innerHTML = `
-                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Annuler</button>
-                <button type="submit" class="btn btn-primary" form="formLiaison">
+                <button type="button" class="fk-btn fk-btn-outline-secondary" data-bs-dismiss="modal">Annuler</button>
+                <button type="submit" class="fk-btn fk-btn-primary" form="formLiaison">
                     Lier le plan
                 </button>
             `;
             
         } else {
-            // Aucun plan disponible
             const html = `
-                <div class="alert alert-warning">
+                <div class="fk-alert-modern warning">
                     <i class="fas fa-exclamation-triangle me-2"></i>
                     <strong>Aucun plan d'action disponible</strong>
                     <p class="mb-0 mt-2">Il n'y a pas de plan d'action disponible pour ce risque.</p>
@@ -463,7 +1240,7 @@ function lierPlanAction(dispositifId) {
                 
                 <div class="text-center mt-3">
                     <a href="{{ url_for('nouveau_plan_action_pour_risque', risque_id=risque.id) }}?dispositif_id=${dispositifId}" 
-                       class="btn btn-primary">
+                       class="fk-btn fk-btn-primary">
                         <i class="fas fa-plus me-1"></i> Créer un nouveau plan d'action
                     </a>
                 </div>
@@ -471,15 +1248,14 @@ function lierPlanAction(dispositifId) {
             
             document.getElementById('genericModalBody').innerHTML = html;
             document.getElementById('genericModalFooter').innerHTML = `
-                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Fermer</button>
+                <button type="button" class="fk-btn fk-btn-outline-secondary" data-bs-dismiss="modal">Fermer</button>
             `;
         }
     })
     .catch(error => {
         console.error('Erreur:', error);
-        
         document.getElementById('genericModalBody').innerHTML = `
-            <div class="alert alert-danger">
+            <div class="fk-alert-modern danger">
                 <i class="fas fa-exclamation-triangle me-2"></i>
                 <strong>Erreur de chargement</strong>
                 <p class="mb-0 mt-2">Impossible de charger la liste des plans d'action.</p>
@@ -488,25 +1264,71 @@ function lierPlanAction(dispositifId) {
             
             <div class="text-center mt-3">
                 <a href="{{ url_for('nouveau_plan_action_pour_risque', risque_id=risque.id) }}?dispositif_id=${dispositifId}" 
-                   class="btn btn-primary">
+                   class="fk-btn fk-btn-primary">
                     <i class="fas fa-plus me-1"></i> Créer un nouveau plan d'action
                 </a>
             </div>
         `;
         document.getElementById('genericModalFooter').innerHTML = `
-            <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Fermer</button>
+            <button type="button" class="fk-btn fk-btn-outline-secondary" data-bs-dismiss="modal">Fermer</button>
         `;
     });
 }
 
-// Graphiques
+// ============================================
+// FONCTION D'ARCHIVAGE
+// ============================================
+function archiverDispositif(dispositifId, dispositifRef) {
+    console.log('📦 Tentative archivage:', dispositifId, dispositifRef);
+    
+    if (typeof bootstrap === 'undefined') {
+        console.error('❌ Bootstrap non chargé');
+        alert('Erreur technique: Bootstrap non chargé. Rechargez la page.');
+        return;
+    }
+    
+    const modalElement = document.getElementById('modalArchiver');
+    if (!modalElement) {
+        console.error('❌ Modal non trouvé');
+        alert('Erreur technique: Modal non trouvé');
+        return;
+    }
+    
+    const nomElement = document.getElementById('modalDispositifNom');
+    if (nomElement) {
+        nomElement.textContent = dispositifRef;
+    }
+    
+    const form = document.getElementById('formArchiver');
+    if (form) {
+        form.action = `/dispositif/${dispositifId}/archiver`;
+        console.log('✅ Action du formulaire mise à jour:', form.action);
+    }
+    
+    try {
+        const modal = new bootstrap.Modal(modalElement);
+        modal.show();
+    } catch (error) {
+        console.error('❌ Erreur affichage modal:', error);
+    }
+}
+
+// ============================================
+// GRAPHIQUES
+// ============================================
 document.addEventListener('DOMContentLoaded', function() {
+    console.log('📄 Page dispositifs chargée');
+    console.log('Risque ID:', risqueId);
+    console.log('Nombre de dispositifs:', {{ dispositifs|length }});
+    
     // Données pour les graphiques
     const statsType = {{ stats.par_type|tojson }};
-    const statsStatut = {{ stats.par_statut|tojson }};
+    const efficaces = {{ stats.efficaces }};
+    const nonEfficaces = {{ stats.non_efficaces }};
+    const nonEvalues = {{ stats.non_evalues }};
     
     // Graphique par type
-    const ctxType = document.getElementById('chartTypeDispositif').getContext('2d');
+    const ctxType = document.getElementById('chartTypeDispositif');
     if (ctxType) {
         new Chart(ctxType, {
             type: 'doughnut',
@@ -515,22 +1337,22 @@ document.addEventListener('DOMContentLoaded', function() {
                 datasets: [{
                     data: Object.values(statsType),
                     backgroundColor: [
-                        '#28a745', // Préventif - vert
-                        '#ffc107', // Détectif - jaune
-                        '#dc3545', // Correctif - rouge
-                        '#6c757d'  // Autres - gris
-                    ]
+                        '#0D9488', // Préventif - vert
+                        '#F59E0B', // Détectif - jaune
+                        '#DC2626', // Correctif - rouge
+                        '#64748b'  // Autres - gris
+                    ],
+                    borderWidth: 0
                 }]
             },
             options: {
                 responsive: true,
                 plugins: {
                     legend: {
-                        position: 'bottom'
-                    },
-                    title: {
-                        display: true,
-                        text: 'Répartition par type'
+                        position: 'bottom',
+                        labels: {
+                            color: document.documentElement.getAttribute('data-bs-theme') === 'dark' ? '#f1f5f9' : '#0f172a'
+                        }
                     }
                 }
             }
@@ -538,18 +1360,20 @@ document.addEventListener('DOMContentLoaded', function() {
     }
     
     // Graphique d'efficacité
-    const efficaces = {{ stats.efficaces }};
-    const nonEfficaces = {{ stats.total }} - efficaces;
-    
-    const ctxEff = document.getElementById('chartEfficacite').getContext('2d');
+    const ctxEff = document.getElementById('chartEfficacite');
     if (ctxEff) {
         new Chart(ctxEff, {
             type: 'bar',
             data: {
-                labels: ['Efficaces (≥4/5)', 'À améliorer'],
+                labels: ['Efficaces (≥4/5)', 'Non efficaces', 'Non évalués'],
                 datasets: [{
-                    data: [efficaces, nonEfficaces],
-                    backgroundColor: ['#28a745', '#ffc107']
+                    data: [efficaces, nonEfficaces, nonEvalues],
+                    backgroundColor: [
+                        '#0D9488',
+                        '#DC2626',
+                        '#64748b'
+                    ],
+                    borderRadius: 6
                 }]
             },
             options: {
@@ -558,38 +1382,45 @@ document.addEventListener('DOMContentLoaded', function() {
                     y: {
                         beginAtZero: true,
                         ticks: {
-                            stepSize: 1
+                            stepSize: 1,
+                            color: document.documentElement.getAttribute('data-bs-theme') === 'dark' ? '#94a3b8' : '#64748b'
+                        },
+                        grid: {
+                            color: document.documentElement.getAttribute('data-bs-theme') === 'dark' ? '#334155' : '#e2e8f0'
+                        }
+                    },
+                    x: {
+                        ticks: {
+                            color: document.documentElement.getAttribute('data-bs-theme') === 'dark' ? '#f1f5f9' : '#0f172a'
+                        },
+                        grid: {
+                            display: false
                         }
                     }
                 },
                 plugins: {
                     legend: {
                         display: false
-                    },
-                    title: {
-                        display: true,
-                        text: 'Efficacité des dispositifs'
                     }
                 }
             }
         });
     }
+    
+    // Fonctions de test pour la console
+    window.testLierPlanAction = lierPlanAction;
 });
 
-// Débogage
-console.log('Risque ID:', {{ risque.id }});
-// Dans les deux templates (liste.html et detail.html), ajoutez ceci en haut du script
-console.log('Script chargé pour dispositifs');
-
-// Ajoutez un gestionnaire d'événement de débogage
+// ============================================
+// INITIALISATION DU FORMULAIRE D'ARCHIVAGE
+// ============================================
 document.addEventListener('DOMContentLoaded', function() {
-    console.log('Page chargée, dispositif ID:', {{ dispositif.id if dispositif else risque.id }});
-    
-    // Testez manuellement la fonction dans la console
-    window.testLierPlanAction = function(id) {
-        console.log('Test appel avec ID:', id);
-        lierPlanAction(id);
-    };
+    const form = document.getElementById('formArchiver');
+    if (form) {
+        form.addEventListener('submit', function(e) {
+            console.log('📤 Formulaire soumis:', this.action);
+        });
+    }
 });
 </script>
 {% endblock %}
