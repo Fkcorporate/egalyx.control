@@ -1,255 +1,954 @@
 {% extends "base.html" %}
 
 {% block content %}
-<div class="d-flex justify-content-between align-items-center mb-4">
-    <div>
-        <h2>
-            <i class="fas fa-tasks me-2" style="color: #28a745;"></i>
-            Plans d'action indépendants
-        </h2>
-        <nav aria-label="breadcrumb">
-            <ol class="breadcrumb">
-                <li class="breadcrumb-item"><a href="{{ url_for('dashboard') }}">Dashboard</a></li>
-                <li class="breadcrumb-item active">Plans indépendants</li>
-            </ol>
-        </nav>
-    </div>
-    <div class="btn-toolbar">
-        <a href="{{ url_for('nouveau_plan_action_independant') }}" class="btn btn-success me-2">
-            <i class="fas fa-plus me-1"></i> Nouveau plan indépendant
-        </a>
-        <div class="btn-group">
-            <a href="{{ url_for('liste_plans_action_independants') }}?archives=non" 
-               class="btn btn-outline-primary {{ 'active' if not voir_archives else '' }}">
-                <i class="fas fa-list me-1"></i> Actifs
-            </a>
-            <a href="{{ url_for('liste_plans_action_independants') }}?archives=oui" 
-               class="btn btn-outline-secondary {{ 'active' if voir_archives else '' }}">
-                <i class="fas fa-archive me-1"></i> Archives
-            </a>
-        </div>
-    </div>
-</div>
+<style>
+    /* ============================================
+       STYLES SPÉCIFIQUES - LISTE PLANS INDÉPENDANTS
+       ============================================ */
+    
+    /* ========== VARIABLES CSS POUR LE MODE SOMBRE ========== */
+    :root {
+        --bg-primary: #ffffff;
+        --bg-secondary: #f8fafc;
+        --bg-tertiary: #f1f5f9;
+        --border-color: #e2e8f0;
+        --text-primary: #0f172a;
+        --text-secondary: #64748b;
+        --text-muted: #64748b;
+        --shadow-color: rgba(0, 0, 0, 0.08);
+        --success: #28a745;
+        --success-light: rgba(40, 167, 69, 0.15);
+        --warning: #ffc107;
+        --warning-light: rgba(255, 193, 7, 0.15);
+        --danger: #dc3545;
+        --danger-light: rgba(220, 53, 69, 0.15);
+        --info: #17a2b8;
+        --info-light: rgba(23, 162, 184, 0.15);
+        --primary: #0d6efd;
+        --primary-light: rgba(13, 110, 253, 0.15);
+    }
 
-<!-- Cartes de statistiques -->
-<div class="row mb-4">
-    <div class="col-md-3">
-        <div class="card border-start border-primary border-4">
-            <div class="card-body">
-                <div class="d-flex justify-content-between align-items-center">
-                    <div>
-                        <h3 class="text-primary">{{ stats.total }}</h3>
-                        <p class="text-muted mb-0">Plans actifs</p>
-                    </div>
-                    <i class="fas fa-tasks fa-3x text-primary"></i>
-                </div>
-            </div>
-        </div>
-    </div>
-    <div class="col-md-3">
-        <div class="card border-start border-warning border-4">
-            <div class="card-body">
-                <div class="d-flex justify-content-between align-items-center">
-                    <div>
-                        <h3 class="text-warning">{{ stats.en_cours }}</h3>
-                        <p class="text-muted mb-0">En cours</p>
-                    </div>
-                    <i class="fas fa-spinner fa-3x text-warning"></i>
-                </div>
-            </div>
-        </div>
-    </div>
-    <div class="col-md-3">
-        <div class="card border-start border-success border-4">
-            <div class="card-body">
-                <div class="d-flex justify-content-between align-items-center">
-                    <div>
-                        <h3 class="text-success">{{ stats.termines }}</h3>
-                        <p class="text-muted mb-0">Terminés</p>
-                    </div>
-                    <i class="fas fa-check-circle fa-3x text-success"></i>
-                </div>
-            </div>
-        </div>
-    </div>
-    <div class="col-md-3">
-        <div class="card border-start border-danger border-4">
-            <div class="card-body">
-                <div class="d-flex justify-content-between align-items-center">
-                    <div>
-                        <h3 class="text-danger">{{ stats.en_retard }}</h3>
-                        <p class="text-muted mb-0">En retard</p>
-                    </div>
-                    <i class="fas fa-exclamation-triangle fa-3x text-danger"></i>
-                </div>
-            </div>
-        </div>
-    </div>
-</div>
+    [data-bs-theme="dark"] {
+        --bg-primary: #1e293b;
+        --bg-secondary: #0f172a;
+        --bg-tertiary: #1e293b;
+        --border-color: #334155;
+        --text-primary: #f1f5f9;
+        --text-secondary: #94a3b8;
+        --text-muted: #94a3b8;
+        --shadow-color: rgba(0, 0, 0, 0.3);
+        --success: #34ce57;
+        --success-light: rgba(52, 206, 87, 0.25);
+        --warning: #ffcd39;
+        --warning-light: rgba(255, 205, 57, 0.25);
+        --danger: #e4606d;
+        --danger-light: rgba(228, 96, 109, 0.25);
+        --info: #3dd5f3;
+        --info-light: rgba(61, 213, 243, 0.25);
+        --primary: #3d8bfd;
+        --primary-light: rgba(61, 139, 253, 0.25);
+    }
 
-<!-- Liste des plans -->
-<div class="card">
-    <div class="card-header d-flex justify-content-between align-items-center">
-        <h5 class="mb-0">
-            <i class="fas fa-list me-2"></i>
-            {{ 'Plans archivés' if voir_archives else 'Plans d\'action indépendants' }}
-            <span class="badge bg-secondary ms-2">{{ plans|length }}</span>
-        </h5>
-        <div class="input-group" style="width: 300px;">
-            <input type="text" class="form-control" id="searchPlan" placeholder="Rechercher...">
-            <button class="btn btn-outline-secondary" type="button">
-                <i class="fas fa-search"></i>
-            </button>
+    /* Classes utilitaires */
+    .bg-adaptive-primary {
+        background: var(--bg-primary) !important;
+        border-color: var(--border-color) !important;
+        color: var(--text-primary) !important;
+    }
+
+    .bg-adaptive-secondary {
+        background: var(--bg-secondary) !important;
+        border-color: var(--border-color) !important;
+        color: var(--text-primary) !important;
+    }
+
+    .text-adaptive {
+        color: var(--text-primary) !important;
+    }
+
+    .text-adaptive-secondary {
+        color: var(--text-secondary) !important;
+    }
+
+    .border-adaptive {
+        border-color: var(--border-color) !important;
+    }
+
+    /* Variables de base */
+    .plans-container {
+        max-width: 1600px;
+        margin: 0 auto;
+    }
+
+    /* ========== EN-TÊTE DE PAGE ========== */
+    .page-header {
+        background: linear-gradient(135deg, #0A1929 0%, #1A3C6B 100%);
+        border-radius: 24px;
+        padding: 2rem;
+        margin-bottom: 2rem;
+        color: white;
+        box-shadow: 0 10px 30px rgba(0, 0, 0, 0.15);
+        position: relative;
+        overflow: hidden;
+        z-index: 1;
+    }
+
+    .page-header::before {
+        content: '';
+        position: absolute;
+        top: -50%;
+        right: -5%;
+        width: 300px;
+        height: 300px;
+        background: rgba(255, 255, 255, 0.08);
+        border-radius: 50%;
+        transform: rotate(25deg);
+        pointer-events: none;
+        z-index: 0;
+    }
+
+    .page-header::after {
+        content: '';
+        position: absolute;
+        bottom: -50%;
+        left: -5%;
+        width: 400px;
+        height: 400px;
+        background: rgba(255, 255, 255, 0.05);
+        border-radius: 50%;
+        transform: rotate(-15deg);
+        pointer-events: none;
+        z-index: 0;
+    }
+
+    .page-header-content {
+        position: relative;
+        z-index: 2;
+    }
+
+    .page-title {
+        font-size: 2.2rem;
+        font-weight: 700;
+        margin-bottom: 0.75rem;
+        display: flex;
+        align-items: center;
+        gap: 1rem;
+        flex-wrap: wrap;
+    }
+
+    .breadcrumb {
+        background: transparent;
+        padding: 0;
+        margin-bottom: 1rem;
+    }
+
+    .breadcrumb-item a {
+        color: rgba(255, 255, 255, 0.8);
+        text-decoration: none;
+        transition: all 0.3s ease;
+        font-weight: 500;
+    }
+
+    .breadcrumb-item a:hover {
+        color: white;
+        transform: translateX(2px);
+    }
+
+    .breadcrumb-item.active {
+        color: white;
+        font-weight: 500;
+    }
+
+    .breadcrumb-item + .breadcrumb-item::before {
+        color: rgba(255, 255, 255, 0.5);
+    }
+
+    .header-actions {
+        display: flex;
+        gap: 0.75rem;
+        flex-wrap: wrap;
+        align-items: center;
+        position: relative;
+        z-index: 10;
+    }
+
+    .fk-btn {
+        padding: 0.7rem 1.4rem;
+        border-radius: 12px;
+        font-weight: 600;
+        display: inline-flex;
+        align-items: center;
+        gap: 0.6rem;
+        transition: all 0.3s ease;
+        border: none;
+        cursor: pointer;
+        font-size: 0.95rem;
+        text-decoration: none;
+        z-index: 10;
+        position: relative;
+        letter-spacing: 0.3px;
+    }
+
+    .fk-btn-success {
+        background: linear-gradient(135deg, #28a745, #34ce57);
+        color: white;
+        box-shadow: 0 8px 20px rgba(40, 167, 69, 0.3);
+    }
+
+    .fk-btn-success:hover {
+        transform: translateY(-3px);
+        box-shadow: 0 12px 25px rgba(40, 167, 69, 0.4);
+        color: white;
+    }
+
+    .fk-btn-outline-primary {
+        background: transparent;
+        border: 2px solid var(--primary);
+        color: var(--primary);
+    }
+
+    .fk-btn-outline-primary:hover {
+        background: var(--primary-light);
+        border-color: var(--primary);
+        color: var(--primary);
+        transform: translateY(-2px);
+    }
+
+    .fk-btn-outline-secondary {
+        background: transparent;
+        border: 2px solid var(--text-secondary);
+        color: var(--text-secondary);
+    }
+
+    .fk-btn-outline-secondary:hover {
+        background: rgba(100, 116, 139, 0.15);
+        border-color: var(--text-secondary);
+        color: var(--text-secondary);
+        transform: translateY(-2px);
+    }
+
+    .fk-btn-outline-primary.active,
+    .fk-btn-outline-secondary.active {
+        background: var(--success) !important;
+        border-color: var(--success) !important;
+        color: white !important;
+        box-shadow: 0 4px 12px rgba(40, 167, 69, 0.3);
+    }
+
+    /* ========== STATISTIQUES ========== */
+    .stats-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+        gap: 1.5rem;
+        margin-bottom: 2rem;
+    }
+
+    .stat-card {
+        background: var(--bg-primary);
+        border: 1px solid var(--border-color);
+        border-radius: 20px;
+        padding: 1.5rem;
+        box-shadow: 0 4px 20px var(--shadow-color);
+        transition: all 0.3s ease;
+        position: relative;
+        overflow: hidden;
+    }
+
+    .stat-card:hover {
+        transform: translateY(-4px);
+        box-shadow: 0 12px 30px var(--shadow-color);
+    }
+
+    .stat-card::before {
+        content: '';
+        position: absolute;
+        top: 0;
+        left: 0;
+        width: 4px;
+        height: 100%;
+    }
+
+    .stat-card.primary::before { background: var(--primary); }
+    .stat-card.warning::before { background: var(--warning); }
+    .stat-card.success::before { background: var(--success); }
+    .stat-card.danger::before { background: var(--danger); }
+
+    .stat-content {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+    }
+
+    .stat-value {
+        font-size: 2.2rem;
+        font-weight: 700;
+        color: var(--text-primary);
+        line-height: 1.2;
+        margin-bottom: 0.25rem;
+    }
+
+    .stat-label {
+        font-size: 0.9rem;
+        color: var(--text-secondary);
+    }
+
+    .stat-icon {
+        font-size: 2.5rem;
+        opacity: 0.8;
+    }
+
+    .stat-icon.primary { color: var(--primary); }
+    .stat-icon.warning { color: var(--warning); }
+    .stat-icon.success { color: var(--success); }
+    .stat-icon.danger { color: var(--danger); }
+
+    /* ========== CARTE PRINCIPALE ========== */
+    .fk-card-modern {
+        background: var(--bg-primary);
+        border: 1px solid var(--border-color);
+        border-radius: 24px;
+        overflow: hidden;
+        box-shadow: 0 4px 20px var(--shadow-color);
+        transition: all 0.3s ease;
+    }
+
+    .fk-card-modern:hover {
+        box-shadow: 0 8px 30px var(--shadow-color);
+    }
+
+    .fk-card-header {
+        background: var(--bg-secondary);
+        padding: 1.25rem 1.5rem;
+        border-bottom: 1px solid var(--border-color);
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        flex-wrap: wrap;
+        gap: 1rem;
+    }
+
+    .fk-card-header h5 {
+        margin: 0;
+        display: flex;
+        align-items: center;
+        gap: 0.75rem;
+        font-weight: 700;
+        color: var(--text-primary);
+    }
+
+    .fk-card-header h5 i {
+        color: var(--success);
+    }
+
+    .header-badge {
+        background: var(--success);
+        color: white;
+        padding: 0.3rem 1rem;
+        border-radius: 30px;
+        font-size: 0.85rem;
+        font-weight: 600;
+        margin-left: 0.75rem;
+    }
+
+    .search-container {
+        width: 300px;
+        position: relative;
+    }
+
+    .search-input {
+        width: 100%;
+        padding: 0.6rem 1rem 0.6rem 2.5rem;
+        border: 2px solid var(--border-color);
+        border-radius: 30px;
+        background: var(--bg-primary);
+        color: var(--text-primary);
+        transition: all 0.3s ease;
+    }
+
+    .search-input:focus {
+        border-color: var(--success);
+        box-shadow: 0 0 0 3px rgba(40, 167, 69, 0.25);
+        outline: none;
+    }
+
+    .search-icon {
+        position: absolute;
+        left: 1rem;
+        top: 50%;
+        transform: translateY(-50%);
+        color: var(--text-secondary);
+    }
+
+    /* ========== TABLEAU ========== */
+    .fk-table-modern {
+        width: 100%;
+        border-collapse: collapse;
+        font-size: 0.95rem;
+    }
+
+    .fk-table-modern thead th {
+        padding: 1rem;
+        font-size: 0.8rem;
+        font-weight: 700;
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+        color: var(--text-secondary);
+        border-bottom: 2px solid var(--border-color);
+        background: var(--bg-secondary);
+        white-space: nowrap;
+    }
+
+    .fk-table-modern tbody td {
+        padding: 1rem;
+        border-bottom: 1px solid var(--border-color);
+        color: var(--text-primary);
+        vertical-align: middle;
+    }
+
+    .fk-table-modern tbody tr {
+        transition: all 0.2s ease;
+    }
+
+    .fk-table-modern tbody tr:hover {
+        background: var(--bg-tertiary);
+    }
+
+    /* ========== BADGES ========== */
+    .badge-reference {
+        background: var(--info-light);
+        color: var(--info);
+        padding: 0.4rem 1rem;
+        border-radius: 30px;
+        font-size: 0.8rem;
+        font-weight: 600;
+        border: 1px solid rgba(23, 162, 184, 0.3);
+    }
+
+    .badge-statut {
+        display: inline-block;
+        padding: 0.4rem 1rem;
+        border-radius: 30px;
+        font-size: 0.8rem;
+        font-weight: 600;
+    }
+
+    .badge-statut.secondary { background: rgba(100, 116, 139, 0.25); color: var(--text-secondary); }
+    .badge-statut.warning { background: var(--warning-light); color: var(--warning); }
+    .badge-statut.success { background: var(--success-light); color: var(--success); }
+    .badge-statut.info { background: var(--info-light); color: var(--info); }
+    .badge-statut.danger { background: var(--danger-light); color: var(--danger); }
+
+    .badge-retard {
+        background: var(--danger-light);
+        color: var(--danger);
+        padding: 0.2rem 0.6rem;
+        border-radius: 30px;
+        font-size: 0.7rem;
+        font-weight: 600;
+        margin-top: 0.25rem;
+        display: inline-block;
+    }
+
+    /* ========== PROGRESS BAR ========== */
+    .progress-modern {
+        background: var(--border-color);
+        border-radius: 50px;
+        height: 8px;
+        overflow: hidden;
+        flex: 1;
+    }
+
+    .progress-modern-bar {
+        height: 100%;
+        border-radius: 50px;
+        transition: width 0.3s ease;
+    }
+
+    .progress-modern-bar.success { background: var(--success); }
+    .progress-modern-bar.warning { background: var(--warning); }
+    .progress-modern-bar.danger { background: var(--danger); }
+
+    /* ========== BOUTONS D'ACTION ========== */
+    .action-buttons {
+        display: flex;
+        gap: 0.5rem;
+    }
+
+    .btn-action {
+        width: 36px;
+        height: 36px;
+        border-radius: 8px;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        background: var(--bg-tertiary);
+        border: 1px solid var(--border-color);
+        color: var(--text-secondary);
+        transition: all 0.3s ease;
+        cursor: pointer;
+        text-decoration: none;
+        padding: 0;
+    }
+
+    .btn-action:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 4px 12px var(--shadow-color);
+        background: var(--bg-primary);
+    }
+
+    .btn-action.primary:hover { background: var(--primary); color: white; border-color: var(--primary); }
+    .btn-action.warning:hover { background: var(--warning); color: #212529; border-color: var(--warning); }
+    .btn-action.secondary:hover { background: var(--text-secondary); color: white; border-color: var(--text-secondary); }
+
+    /* ========== ÉTAT VIDE ========== */
+    .empty-state {
+        text-align: center;
+        padding: 4rem 2rem;
+    }
+
+    .empty-icon {
+        width: 100px;
+        height: 100px;
+        background: var(--bg-tertiary);
+        border-radius: 30px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 3rem;
+        color: var(--text-secondary);
+        margin: 0 auto 1.5rem;
+    }
+
+    .empty-title {
+        font-size: 1.5rem;
+        font-weight: 700;
+        color: var(--text-primary);
+        margin-bottom: 0.5rem;
+    }
+
+    .empty-text {
+        color: var(--text-secondary);
+        margin-bottom: 2rem;
+    }
+
+    /* ========== ANIMATIONS ========== */
+    @keyframes fadeInUp {
+        from {
+            opacity: 0;
+            transform: translateY(30px);
+        }
+        to {
+            opacity: 1;
+            transform: translateY(0);
+        }
+    }
+
+    .animate-in {
+        animation: fadeInUp 0.6s ease-out forwards;
+    }
+
+    /* ========== RESPONSIVE ========== */
+    @media (max-width: 768px) {
+        .page-header {
+            padding: 1.5rem;
+        }
+
+        .page-title {
+            font-size: 1.8rem;
+        }
+
+        .header-actions {
+            flex-direction: column;
+            width: 100%;
+        }
+
+        .header-actions .fk-btn {
+            width: 100%;
+            justify-content: center;
+        }
+
+        .stats-grid {
+            grid-template-columns: 1fr;
+        }
+
+        .fk-card-header {
+            flex-direction: column;
+            align-items: stretch;
+        }
+
+        .search-container {
+            width: 100%;
+        }
+
+        .fk-table-modern {
+            display: block;
+            overflow-x: auto;
+        }
+
+        .action-buttons {
+            flex-wrap: wrap;
+        }
+    }
+</style>
+
+<div class="plans-container">
+    <!-- ========== EN-TÊTE ========== -->
+    <div class="page-header animate-in">
+        <div class="page-header-content">
+            <div class="row align-items-center">
+                <div class="col">
+                    <nav aria-label="breadcrumb">
+                        <ol class="breadcrumb">
+                            <li class="breadcrumb-item"><a href="{{ url_for('dashboard') }}">Dashboard</a></li>
+                            <li class="breadcrumb-item active">Plans indépendants</li>
+                        </ol>
+                    </nav>
+                    
+                    <div class="page-title">
+                        <i class="fas fa-tasks me-2" style="color: #28a745;"></i>
+                        Plans d'action indépendants
+                    </div>
+                    
+                    <p class="text-white-50 mb-0">
+                        Gérez vos plans d'action sans risque associé
+                    </p>
+                </div>
+                
+                <div class="col-auto">
+                    <div class="header-actions">
+                        <a href="{{ url_for('nouveau_plan_action_independant') }}" class="fk-btn fk-btn-success">
+                            <i class="fas fa-plus"></i> Nouveau plan
+                        </a>
+                        <div class="btn-group" role="group">
+                            <a href="{{ url_for('liste_plans_action_independants') }}?archives=non" 
+                               class="fk-btn fk-btn-outline-primary {% if not voir_archives %}active{% endif %}">
+                                <i class="fas fa-list me-1"></i> Actifs
+                            </a>
+                            <a href="{{ url_for('liste_plans_action_independants') }}?archives=oui" 
+                               class="fk-btn fk-btn-outline-secondary {% if voir_archives %}active{% endif %}">
+                                <i class="fas fa-archive me-1"></i> Archives
+                            </a>
+                        </div>
+                    </div>
+                </div>
+            </div>
         </div>
     </div>
-    <div class="card-body">
-        {% if plans %}
-        <div class="table-responsive">
-            <table class="table table-hover" id="plansTable">
-                <thead>
-                    <tr>
-                        <th>Référence</th>
-                        <th>Nom</th>
-                        <th>Responsable</th>
-                        <th>Dates</th>
-                        <th>Statut</th>
-                        <th>Progression</th>
-                        <th>Actions</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    {% for plan in plans %}
-                    <tr>
-                        <td>
-                            <span class="badge bg-info">{{ plan.reference }}</span>
-                        </td>
-                        <td>
-                            <strong>{{ plan.nom }}</strong>
-                            {% if plan.description %}
-                            <br><small class="text-muted">{{ plan.description[:50] }}...</small>
-                            {% endif %}
-                        </td>
-                        <td>
-                            {% if plan.responsable %}
-                            <div class="d-flex align-items-center">
-                                <i class="fas fa-user me-2 text-primary"></i>
-                                {{ plan.responsable.username }}
-                            </div>
-                            {% else %}
-                            <span class="text-muted"><i class="fas fa-user-slash me-1"></i>Non assigné</span>
-                            {% endif %}
-                        </td>
-                        <td>
-                            <div class="small">
-                                <div><i class="far fa-calendar-alt me-1"></i>Début: {{ plan.date_debut.strftime('%d/%m/%Y') if plan.date_debut else '-' }}</div>
-                                <div><i class="far fa-flag me-1"></i>Fin: {{ plan.date_fin_prevue.strftime('%d/%m/%Y') if plan.date_fin_prevue else '-' }}</div>
-                            </div>
-                        </td>
-                        <td>
-                            {% if voir_archives %}
-                                <span class="badge bg-secondary">Archivé</span>
-                            {% else %}
-                                {% set statut_badge = {
-                                    'en_attente': 'secondary',
-                                    'en_cours': 'warning',
-                                    'termine': 'success',
-                                    'suspendu': 'info',
-                                    'annule': 'danger',
-                                    'retarde': 'danger'
-                                } %}
-                                <span class="badge bg-{{ statut_badge.get(plan.statut, 'secondary') }}">
-                                    {{ plan.statut|replace('_', ' ')|title }}
-                                </span>
-                                {% if plan.est_en_retard %}
-                                <br><span class="badge bg-danger mt-1">RETARD</span>
+
+    <!-- ========== STATISTIQUES ========== -->
+    <div class="stats-grid animate-in">
+        <div class="stat-card primary">
+            <div class="stat-content">
+                <div>
+                    <div class="stat-value">{{ stats.total }}</div>
+                    <div class="stat-label">Plans actifs</div>
+                </div>
+                <i class="fas fa-tasks stat-icon primary"></i>
+            </div>
+        </div>
+
+        <div class="stat-card warning">
+            <div class="stat-content">
+                <div>
+                    <div class="stat-value">{{ stats.en_cours }}</div>
+                    <div class="stat-label">En cours</div>
+                </div>
+                <i class="fas fa-spinner stat-icon warning"></i>
+            </div>
+        </div>
+
+        <div class="stat-card success">
+            <div class="stat-content">
+                <div>
+                    <div class="stat-value">{{ stats.termines }}</div>
+                    <div class="stat-label">Terminés</div>
+                </div>
+                <i class="fas fa-check-circle stat-icon success"></i>
+            </div>
+        </div>
+
+        <div class="stat-card danger">
+            <div class="stat-content">
+                <div>
+                    <div class="stat-value">{{ stats.en_retard }}</div>
+                    <div class="stat-label">En retard</div>
+                </div>
+                <i class="fas fa-exclamation-triangle stat-icon danger"></i>
+            </div>
+        </div>
+    </div>
+
+    <!-- ========== LISTE DES PLANS ========== -->
+    <div class="fk-card-modern animate-in">
+        <div class="fk-card-header">
+            <h5>
+                <i class="fas fa-list me-2"></i>
+                {{ 'Plans archivés' if voir_archives else 'Plans d\'action indépendants' }}
+                <span class="header-badge">{{ plans|length }}</span>
+            </h5>
+            <div class="search-container">
+                <i class="fas fa-search search-icon"></i>
+                <input type="text" class="search-input" id="searchPlan" placeholder="Rechercher un plan...">
+            </div>
+        </div>
+
+        <div class="p-0">
+            {% if plans %}
+            <div class="table-responsive">
+                <table class="fk-table-modern" id="plansTable">
+                    <thead>
+                        <tr>
+                            <th>Référence</th>
+                            <th>Nom</th>
+                            <th>Responsable</th>
+                            <th>Dates</th>
+                            <th>Statut</th>
+                            <th>Progression</th>
+                            <th class="text-center">Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for plan in plans %}
+                        <tr class="plan-row">
+                            <td>
+                                <span class="badge-reference">{{ plan.reference }}</span>
+                            </td>
+                            <td>
+                                <div class="fw-bold text-adaptive">{{ plan.nom }}</div>
+                                {% if plan.description %}
+                                <small class="text-adaptive-secondary">{{ plan.description[:50] }}{% if plan.description|length > 50 %}...{% endif %}</small>
                                 {% endif %}
-                            {% endif %}
-                        </td>
-                        <td style="min-width: 120px;">
-                            <div class="d-flex align-items-center">
-                                <div class="progress flex-grow-1" style="height: 8px;">
-                                    <div class="progress-bar 
-                                        {% if plan.pourcentage_realisation >= 100 %}bg-success
-                                        {% elif plan.pourcentage_realisation >= 50 %}bg-warning
-                                        {% else %}bg-danger{% endif %}" 
-                                         style="width: {{ plan.pourcentage_realisation }}%">
+                            </td>
+                            <td>
+                                {% if plan.responsable %}
+                                <div class="d-flex align-items-center">
+                                    <i class="fas fa-user-circle me-2 text-adaptive-secondary"></i>
+                                    <span class="text-adaptive">{{ plan.responsable.username }}</span>
+                                </div>
+                                {% else %}
+                                <span class="text-adaptive-secondary">
+                                    <i class="fas fa-user-slash me-1"></i>Non assigné
+                                </span>
+                                {% endif %}
+                            </td>
+                            <td>
+                                <div class="small">
+                                    <div class="text-adaptive-secondary">
+                                        <i class="far fa-calendar-alt me-1"></i>Début: {{ plan.date_debut.strftime('%d/%m/%Y') if plan.date_debut else '-' }}
+                                    </div>
+                                    <div class="text-adaptive-secondary">
+                                        <i class="far fa-flag me-1"></i>Fin: {{ plan.date_fin_prevue.strftime('%d/%m/%Y') if plan.date_fin_prevue else '-' }}
                                     </div>
                                 </div>
-                                <span class="ms-2 small">{{ plan.pourcentage_realisation }}%</span>
-                            </div>
-                        </td>
-                        <td>
-                            <div class="btn-group btn-group-sm">
-                                <a href="{{ url_for('detail_plan_action_independant', plan_id=plan.id) }}" 
-                                   class="btn btn-outline-primary" title="Détails">
-                                    <i class="fas fa-eye"></i>
-                                </a>
-                                {% if not voir_archives %}
-                                <a href="{{ url_for('modifier_plan_action_independant', plan_id=plan.id) }}" 
-                                   class="btn btn-outline-warning" title="Modifier">
-                                    <i class="fas fa-edit"></i>
-                                </a>
-                                <button class="btn btn-outline-secondary" 
-                                        onclick="archiverPlan({{ plan.id }})"
-                                        title="Archiver">
-                                    <i class="fas fa-archive"></i>
-                                </button>
+                            </td>
+                            <td>
+                                {% if voir_archives %}
+                                    <span class="badge-statut secondary">Archivé</span>
+                                {% else %}
+                                    {% set statut_badge = {
+                                        'en_attente': 'secondary',
+                                        'en_cours': 'warning',
+                                        'termine': 'success',
+                                        'suspendu': 'info',
+                                        'annule': 'danger',
+                                        'retarde': 'danger'
+                                    } %}
+                                    <span class="badge-statut {{ statut_badge.get(plan.statut, 'secondary') }}">
+                                        {{ plan.statut|replace('_', ' ')|title }}
+                                    </span>
+                                    {% if plan.est_en_retard %}
+                                    <span class="badge-retard">RETARD</span>
+                                    {% endif %}
                                 {% endif %}
-                            </div>
-                        </td>
-                    </tr>
-                    {% endfor %}
-                </tbody>
-            </table>
+                            </td>
+                            <td style="min-width: 120px;">
+                                <div class="d-flex align-items-center gap-2">
+                                    <div class="progress-modern">
+                                        <div class="progress-modern-bar 
+                                            {% if plan.pourcentage_realisation >= 100 %}success
+                                            {% elif plan.pourcentage_realisation >= 50 %}warning
+                                            {% else %}danger{% endif %}" 
+                                             style="width: {{ plan.pourcentage_realisation }}%">
+                                        </div>
+                                    </div>
+                                    <span class="small fw-bold text-adaptive">{{ plan.pourcentage_realisation }}%</span>
+                                </div>
+                            </td>
+                            <td>
+                                <div class="action-buttons">
+                                    <a href="{{ url_for('detail_plan_action_independant', plan_id=plan.id) }}" 
+                                       class="btn-action primary" title="Détails">
+                                        <i class="fas fa-eye"></i>
+                                    </a>
+                                    {% if not voir_archives %}
+                                    <a href="{{ url_for('modifier_plan_action_independant', plan_id=plan.id) }}" 
+                                       class="btn-action warning" title="Modifier">
+                                        <i class="fas fa-edit"></i>
+                                    </a>
+                                    <button class="btn-action secondary" 
+                                            onclick="archiverPlan({{ plan.id }}, '{{ plan.reference }}')"
+                                            title="Archiver">
+                                        <i class="fas fa-archive"></i>
+                                    </button>
+                                    {% endif %}
+                                </div>
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+            {% else %}
+            <div class="empty-state">
+                <div class="empty-icon">
+                    <i class="fas fa-tasks"></i>
+                </div>
+                <h4 class="empty-title">
+                    {% if voir_archives %}
+                    Aucun plan archivé
+                    {% else %}
+                    Aucun plan d'action indépendant
+                    {% endif %}
+                </h4>
+                <p class="empty-text">
+                    {% if voir_archives %}
+                    Aucun plan d'action n'a été archivé pour le moment.
+                    {% else %}
+                    Créez votre premier plan d'action indépendant.
+                    {% endif %}
+                </p>
+                <div class="d-flex gap-3 justify-content-center">
+                    {% if voir_archives %}
+                    <a href="{{ url_for('liste_plans_action_independants') }}" class="fk-btn fk-btn-success">
+                        <i class="fas fa-eye me-2"></i>Voir les plans actifs
+                    </a>
+                    {% else %}
+                    <a href="{{ url_for('nouveau_plan_action_independant') }}" class="fk-btn fk-btn-success">
+                        <i class="fas fa-plus me-2"></i>Créer un plan indépendant
+                    </a>
+                    {% endif %}
+                </div>
+            </div>
+            {% endif %}
         </div>
-        {% else %}
-        <div class="text-center py-5">
-            <i class="fas fa-tasks fa-4x text-muted mb-3"></i>
-            <h4 class="text-muted">Aucun plan d'action indépendant</h4>
-            <p class="text-muted mb-4">Créez votre premier plan d'action indépendant</p>
-            <a href="{{ url_for('nouveau_plan_action_independant') }}" class="btn btn-success btn-lg">
-                <i class="fas fa-plus me-2"></i>Créer un plan indépendant
-            </a>
-        </div>
-        {% endif %}
     </div>
 </div>
 
-<!-- Scripts -->
+<!-- Token CSRF -->
+<meta name="csrf-token" content="{{ csrf_token() }}">
+{% endblock %}
+
+{% block scripts %}
 <script>
-function archiverPlan(planId) {
-    if (confirm('Archiver ce plan d\'action ?')) {
+// ============================================
+// VARIABLES GLOBALES
+// ============================================
+const csrfToken = document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') || '{{ csrf_token() }}';
+const voirArchives = {{ 'true' if voir_archives else 'false' }};
+
+// ============================================
+// RECHERCHE EN TEMPS RÉEL
+// ============================================
+document.addEventListener('DOMContentLoaded', function() {
+    const searchInput = document.getElementById('searchPlan');
+    if (searchInput) {
+        searchInput.addEventListener('keyup', function() {
+            const searchTerm = this.value.toLowerCase().trim();
+            const rows = document.querySelectorAll('#plansTable tbody tr');
+            
+            rows.forEach(row => {
+                const text = row.textContent.toLowerCase();
+                row.style.display = text.includes(searchTerm) ? '' : 'none';
+            });
+        });
+    }
+    
+    console.log('🚀 Page plans indépendants chargée');
+    console.log('Vue archives:', voirArchives);
+});
+
+// ============================================
+// ARCHIVER UN PLAN
+// ============================================
+function archiverPlan(planId, planRef) {
+    const message = `Archiver le plan "${planRef}" ?\n\nIl sera déplacé dans les archives.`;
+    
+    if (confirm(message)) {
+        const formData = new FormData();
+        formData.append('csrf_token', csrfToken);
+        
         fetch(`/plan-action-independant/${planId}/archiver`, {
             method: 'POST',
             headers: {
-                'X-CSRFToken': '{{ csrf_token() }}',
-                'Content-Type': 'application/json'
+                'X-CSRFToken': csrfToken
             }
         })
         .then(response => response.json())
         .then(data => {
             if (data.success) {
-                location.reload();
+                showToast('success', '✅ Plan archivé avec succès');
+                setTimeout(() => location.reload(), 1000);
             } else {
-                alert('Erreur lors de l\'archivage');
+                showToast('error', '❌ ' + (data.error || 'Erreur lors de l\'archivage'));
             }
         })
         .catch(error => {
             console.error('Error:', error);
-            alert('Erreur réseau');
+            showToast('error', '❌ Erreur réseau');
         });
     }
 }
 
-// Recherche en temps réel
-document.getElementById('searchPlan').addEventListener('keyup', function() {
-    const searchTerm = this.value.toLowerCase();
-    const rows = document.querySelectorAll('#plansTable tbody tr');
+// ============================================
+// TOAST NOTIFICATION
+// ============================================
+function showToast(type, message) {
+    const titles = {
+        'success': 'Succès',
+        'error': 'Erreur',
+        'warning': 'Attention',
+        'info': 'Information'
+    };
     
-    rows.forEach(row => {
-        const text = row.textContent.toLowerCase();
-        row.style.display = text.includes(searchTerm) ? '' : 'none';
-    });
-});
+    const toast = document.createElement('div');
+    toast.className = `alert alert-${type} position-fixed top-0 end-0 m-3`;
+    toast.style.zIndex = '9999';
+    toast.style.minWidth = '300px';
+    toast.style.boxShadow = '0 10px 30px rgba(0,0,0,0.2)';
+    toast.style.animation = 'slideInRight 0.3s ease';
+    toast.innerHTML = `
+        <div class="d-flex align-items-center">
+            <i class="fas fa-${type === 'success' ? 'check-circle' : type === 'error' ? 'exclamation-circle' : type === 'warning' ? 'exclamation-triangle' : 'info-circle'} me-2 fa-lg"></i>
+            <div>
+                <strong>${titles[type]}</strong><br>
+                <span>${message}</span>
+            </div>
+        </div>
+    `;
+    
+    document.body.appendChild(toast);
+    
+    setTimeout(() => {
+        toast.style.transition = 'opacity 0.3s ease';
+        toast.style.opacity = '0';
+        setTimeout(() => toast.remove(), 300);
+    }, 3000);
+}
+
+// Ajout de l'animation pour le toast
+const style = document.createElement('style');
+style.textContent = `
+    @keyframes slideInRight {
+        from {
+            transform: translateX(100%);
+            opacity: 0;
+        }
+        to {
+            transform: translateX(0);
+            opacity: 1;
+        }
+    }
+`;
+document.head.appendChild(style);
 </script>
 {% endblock %}
