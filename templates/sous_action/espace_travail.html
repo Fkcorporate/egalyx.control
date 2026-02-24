@@ -1,520 +1,1090 @@
 {% extends "base.html" %}
 
 {% block content %}
-<div class="container-fluid">
-    <!-- En-tête -->
-    <div class="d-flex justify-content-between align-items-center mb-4">
-        <div>
-            <h2>
-                <i class="fas fa-comments me-2"></i> 
-                Espace de travail - {{ sous_action.reference if sous_action.reference else "SA-%03d"|format(sous_action.id) }}
-            </h2>
-            <nav aria-label="breadcrumb">
-                <ol class="breadcrumb">
-                    {% if is_risque_plan %}
-                    <li class="breadcrumb-item">
-                        <a href="{{ url_for('voir_plans_action_risque', risque_id=sous_action.plan_action.risque_id) }}">
-                            Plans d'action
+<style>
+    /* ============================================
+       STYLES SPÉCIFIQUES - ESPACE DE TRAVAIL SOUS-ACTION
+       ============================================ */
+    
+    /* ========== VARIABLES CSS POUR LE MODE SOMBRE ========== */
+    :root {
+        --bg-primary: #ffffff;
+        --bg-secondary: #f8fafc;
+        --bg-tertiary: #f1f5f9;
+        --border-color: #e2e8f0;
+        --text-primary: #0f172a;
+        --text-secondary: #64748b;
+        --text-muted: #64748b;
+        --shadow-color: rgba(0, 0, 0, 0.08);
+        --success: #28a745;
+        --success-light: rgba(40, 167, 69, 0.1);
+        --success-border: rgba(40, 167, 69, 0.3);
+        --warning: #ffc107;
+        --warning-light: rgba(255, 193, 7, 0.1);
+        --warning-border: rgba(255, 193, 7, 0.3);
+        --danger: #dc3545;
+        --danger-light: rgba(220, 53, 69, 0.1);
+        --danger-border: rgba(220, 53, 69, 0.3);
+        --info: #17a2b8;
+        --info-light: rgba(23, 162, 184, 0.1);
+        --info-border: rgba(23, 162, 184, 0.3);
+        --primary: #0d6efd;
+        --primary-light: rgba(13, 110, 253, 0.1);
+        --primary-border: rgba(13, 110, 253, 0.3);
+    }
+
+    [data-bs-theme="dark"] {
+        --bg-primary: #1e293b;
+        --bg-secondary: #0f172a;
+        --bg-tertiary: #1e293b;
+        --border-color: #334155;
+        --text-primary: #f1f5f9;
+        --text-secondary: #94a3b8;
+        --text-muted: #94a3b8;
+        --shadow-color: rgba(0, 0, 0, 0.3);
+        --success: #34ce57;
+        --success-light: rgba(52, 206, 87, 0.15);
+        --success-border: rgba(52, 206, 87, 0.4);
+        --warning: #ffcd39;
+        --warning-light: rgba(255, 205, 57, 0.15);
+        --warning-border: rgba(255, 205, 57, 0.4);
+        --danger: #e4606d;
+        --danger-light: rgba(228, 96, 109, 0.15);
+        --danger-border: rgba(228, 96, 109, 0.4);
+        --info: #3dd5f3;
+        --info-light: rgba(61, 213, 243, 0.15);
+        --info-border: rgba(61, 213, 243, 0.4);
+        --primary: #0d6efd;
+        --primary-light: rgba(13, 110, 253, 0.15);
+        --primary-border: rgba(13, 110, 253, 0.4);
+    }
+
+    /* Classes utilitaires */
+    .bg-adaptive {
+        background: var(--bg-primary) !important;
+        color: var(--text-primary) !important;
+    }
+
+    .bg-adaptive-secondary {
+        background: var(--bg-secondary) !important;
+        color: var(--text-primary) !important;
+    }
+
+    .border-adaptive {
+        border-color: var(--border-color) !important;
+    }
+
+    .text-adaptive {
+        color: var(--text-primary) !important;
+    }
+
+    .text-adaptive-secondary {
+        color: var(--text-secondary) !important;
+    }
+
+    /* ========== EN-TÊTE ========== */
+    .page-header {
+        background: linear-gradient(135deg, #0A1929 0%, #1A3C6B 100%);
+        border-radius: 24px;
+        padding: 2rem;
+        margin-bottom: 2rem;
+        color: white;
+        box-shadow: 0 10px 30px rgba(0, 0, 0, 0.15);
+        position: relative;
+        overflow: hidden;
+    }
+
+    .page-header::before {
+        content: '';
+        position: absolute;
+        top: -50%;
+        right: -5%;
+        width: 300px;
+        height: 300px;
+        background: rgba(255, 255, 255, 0.08);
+        border-radius: 50%;
+        transform: rotate(25deg);
+        pointer-events: none;
+    }
+
+    .page-header::after {
+        content: '';
+        position: absolute;
+        bottom: -50%;
+        left: -5%;
+        width: 400px;
+        height: 400px;
+        background: rgba(255, 255, 255, 0.05);
+        border-radius: 50%;
+        transform: rotate(-15deg);
+        pointer-events: none;
+    }
+
+    .page-header-content {
+        position: relative;
+        z-index: 2;
+    }
+
+    .page-title {
+        font-size: 2rem;
+        font-weight: 700;
+        margin-bottom: 0.5rem;
+    }
+
+    .page-subtitle {
+        color: rgba(255, 255, 255, 0.7);
+        font-size: 1rem;
+    }
+
+    .breadcrumb {
+        background: transparent;
+        padding: 0;
+        margin-bottom: 1rem;
+    }
+
+    .breadcrumb-item a {
+        color: rgba(255, 255, 255, 0.8);
+        text-decoration: none;
+        transition: all 0.3s ease;
+    }
+
+    .breadcrumb-item a:hover {
+        color: white;
+        transform: translateX(2px);
+    }
+
+    .breadcrumb-item.active {
+        color: white;
+    }
+
+    .breadcrumb-item + .breadcrumb-item::before {
+        color: rgba(255, 255, 255, 0.5);
+    }
+
+    .header-actions {
+        display: flex;
+        gap: 1rem;
+        align-items: center;
+    }
+
+    .fk-btn {
+        padding: 0.7rem 1.4rem;
+        border-radius: 12px;
+        font-weight: 600;
+        display: inline-flex;
+        align-items: center;
+        gap: 0.6rem;
+        transition: all 0.3s ease;
+        border: none;
+        cursor: pointer;
+        font-size: 0.95rem;
+        text-decoration: none;
+    }
+
+    .fk-btn-success {
+        background: linear-gradient(135deg, #28a745, #34ce57);
+        color: white;
+        box-shadow: 0 8px 20px rgba(40, 167, 69, 0.3);
+    }
+
+    .fk-btn-success:hover {
+        transform: translateY(-3px);
+        box-shadow: 0 12px 25px rgba(40, 167, 69, 0.4);
+        color: white;
+    }
+
+    .fk-btn-outline-success {
+        background: transparent;
+        border: 2px solid var(--success);
+        color: var(--success);
+    }
+
+    .fk-btn-outline-success:hover {
+        background: var(--success);
+        color: white;
+        transform: translateY(-3px);
+    }
+
+    .fk-btn-outline-info {
+        background: transparent;
+        border: 2px solid var(--info);
+        color: var(--info);
+    }
+
+    .fk-btn-outline-info:hover {
+        background: var(--info);
+        color: white;
+        transform: translateY(-3px);
+    }
+
+    /* ========== CARTES ========== */
+    .fk-card {
+        background: var(--bg-primary);
+        border: 1px solid var(--border-color);
+        border-radius: 20px;
+        overflow: hidden;
+        box-shadow: 0 4px 20px var(--shadow-color);
+        transition: all 0.3s ease;
+        margin-bottom: 1.5rem;
+    }
+
+    .fk-card:hover {
+        box-shadow: 0 8px 30px var(--shadow-color);
+    }
+
+    .fk-card-header {
+        background: linear-gradient(135deg, #17a2b8, #3dd5f3);
+        color: white;
+        padding: 1.25rem 1.5rem;
+        border-bottom: 1px solid var(--border-color);
+    }
+
+    .fk-card-header.success {
+        background: linear-gradient(135deg, #28a745, #34ce57);
+    }
+
+    .fk-card-header.info {
+        background: linear-gradient(135deg, #17a2b8, #3dd5f3);
+    }
+
+    .fk-card-header.warning {
+        background: linear-gradient(135deg, #ffc107, #ffcd39);
+        color: #212529;
+    }
+
+    .fk-card-header.primary {
+        background: linear-gradient(135deg, #0d6efd, #0b5ed7);
+    }
+
+    .fk-card-body {
+        padding: 1.5rem;
+        background: var(--bg-primary);
+        color: var(--text-primary);
+    }
+
+    /* ========== INFORMATIONS ========== */
+    .info-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+        gap: 1rem;
+    }
+
+    .info-item {
+        background: var(--bg-secondary);
+        border: 1px solid var(--border-color);
+        border-radius: 12px;
+        padding: 1rem;
+        transition: all 0.2s ease;
+    }
+
+    .info-item:hover {
+        background: var(--bg-tertiary);
+        transform: translateY(-2px);
+        box-shadow: 0 4px 12px var(--shadow-color);
+    }
+
+    .info-label {
+        font-size: 0.7rem;
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+        color: var(--text-secondary);
+        margin-bottom: 0.5rem;
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+    }
+
+    .info-label i {
+        color: var(--info);
+        font-size: 0.9rem;
+    }
+
+    .info-value {
+        font-size: 1rem;
+        font-weight: 600;
+        color: var(--text-primary);
+    }
+
+    /* ========== BADGES ========== */
+    .badge-custom {
+        display: inline-block;
+        padding: 0.4rem 1rem;
+        border-radius: 30px;
+        font-size: 0.8rem;
+        font-weight: 600;
+        text-align: center;
+    }
+
+    .badge-custom.a_faire {
+        background: var(--bg-tertiary);
+        color: var(--text-secondary);
+        border: 1px solid var(--border-color);
+    }
+
+    .badge-custom.en_cours {
+        background: var(--warning-light);
+        color: var(--warning);
+        border: 1px solid var(--warning-border);
+    }
+
+    .badge-custom.termine {
+        background: var(--success-light);
+        color: var(--success);
+        border: 1px solid var(--success-border);
+    }
+
+    .badge-custom.retarde {
+        background: var(--danger-light);
+        color: var(--danger);
+        border: 1px solid var(--danger-border);
+    }
+
+    /* ========== PROGRESS ========== */
+    .progress-modern {
+        background: var(--border-color);
+        border-radius: 50px;
+        height: 8px;
+        overflow: hidden;
+        width: 100%;
+    }
+
+    .progress-modern-bar {
+        height: 100%;
+        border-radius: 50px;
+        transition: width 0.3s ease;
+    }
+
+    .progress-modern-bar.success { background: var(--success); }
+    .progress-modern-bar.warning { background: var(--warning); }
+    .progress-modern-bar.danger { background: var(--danger); }
+    .progress-modern-bar.info { background: var(--info); }
+
+    /* ========== FORMULAIRES ========== */
+    .fk-form-control {
+        background: var(--bg-secondary);
+        border: 2px solid var(--border-color);
+        color: var(--text-primary);
+        border-radius: 12px;
+        padding: 0.75rem 1rem;
+        transition: all 0.3s ease;
+        width: 100%;
+    }
+
+    .fk-form-control:focus {
+        border-color: var(--info);
+        box-shadow: 0 0 0 3px rgba(23, 162, 184, 0.25);
+        outline: none;
+    }
+
+    .fk-form-control::placeholder {
+        color: var(--text-muted);
+        opacity: 0.7;
+    }
+
+    /* ========== COMMENTAIRES ========== */
+    .comment-card {
+        background: var(--bg-primary);
+        border: 1px solid var(--border-color);
+        border-radius: 16px;
+        padding: 1.5rem;
+        margin-bottom: 1rem;
+        transition: all 0.2s ease;
+    }
+
+    .comment-card:hover {
+        box-shadow: 0 8px 20px var(--shadow-color);
+        transform: translateY(-2px);
+    }
+
+    .comment-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: flex-start;
+        margin-bottom: 1rem;
+    }
+
+    .comment-author {
+        display: flex;
+        align-items: center;
+        gap: 1rem;
+    }
+
+    .avatar {
+        width: 48px;
+        height: 48px;
+        border-radius: 12px;
+        background: linear-gradient(135deg, var(--info), #3dd5f3);
+        color: white;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-weight: 700;
+        font-size: 1.2rem;
+        flex-shrink: 0;
+    }
+
+    .author-info h6 {
+        margin: 0;
+        color: var(--text-primary);
+        font-weight: 700;
+    }
+
+    .author-meta {
+        color: var(--text-secondary);
+        font-size: 0.8rem;
+        margin-top: 0.25rem;
+    }
+
+    .comment-content {
+        line-height: 1.6;
+        color: var(--text-primary);
+        white-space: pre-wrap;
+        margin-bottom: 1rem;
+    }
+
+    /* ========== FICHIERS ========== */
+    .files-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+        gap: 0.75rem;
+        margin-top: 1rem;
+    }
+
+    .file-item {
+        background: var(--bg-secondary);
+        border: 1px solid var(--border-color);
+        border-radius: 10px;
+        padding: 0.75rem;
+        display: flex;
+        align-items: center;
+        gap: 0.75rem;
+        transition: all 0.2s ease;
+    }
+
+    .file-item:hover {
+        background: var(--bg-tertiary);
+        transform: translateY(-2px);
+        box-shadow: 0 4px 12px var(--shadow-color);
+    }
+
+    .file-icon {
+        width: 32px;
+        height: 32px;
+        border-radius: 6px;
+        background: var(--info-light);
+        color: var(--info);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 1rem;
+        flex-shrink: 0;
+    }
+
+    .file-info {
+        flex: 1;
+        min-width: 0;
+    }
+
+    .file-name {
+        color: var(--text-primary);
+        font-weight: 600;
+        font-size: 0.8rem;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+    }
+
+    .file-size {
+        color: var(--text-secondary);
+        font-size: 0.7rem;
+    }
+
+    .file-actions {
+        opacity: 0.5;
+        transition: opacity 0.2s ease;
+    }
+
+    .file-item:hover .file-actions {
+        opacity: 1;
+    }
+
+    /* ========== BOUTONS D'ACTION ========== */
+    .btn-action {
+        width: 32px;
+        height: 32px;
+        border-radius: 6px;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        background: var(--bg-tertiary);
+        border: 1px solid var(--border-color);
+        color: var(--text-secondary);
+        transition: all 0.2s ease;
+        cursor: pointer;
+        text-decoration: none;
+    }
+
+    .btn-action:hover {
+        transform: translateY(-2px);
+        background: var(--bg-secondary);
+        color: var(--text-primary);
+    }
+
+    .btn-action.danger:hover {
+        background: var(--danger-light);
+        color: var(--danger);
+        border-color: var(--danger-border);
+    }
+
+    /* ========== DROPDOWN ========== */
+    .dropdown-menu {
+        background: var(--bg-primary);
+        border: 1px solid var(--border-color);
+        border-radius: 16px;
+        box-shadow: 0 20px 40px var(--shadow-color);
+        padding: 0.75rem;
+        min-width: 180px;
+    }
+
+    .dropdown-item {
+        padding: 0.75rem 1rem;
+        border-radius: 10px;
+        color: var(--text-primary);
+        transition: all 0.2s ease;
+        display: flex;
+        align-items: center;
+        gap: 0.75rem;
+        cursor: pointer;
+        text-decoration: none;
+        width: 100%;
+        border: none;
+        background: transparent;
+        font-size: 0.9rem;
+    }
+
+    .dropdown-item i {
+        width: 20px;
+        font-size: 1rem;
+    }
+
+    .dropdown-item:hover {
+        background: var(--info-light);
+        color: var(--info);
+        transform: translateX(5px);
+    }
+
+    .dropdown-item.text-danger:hover {
+        background: var(--danger-light);
+        color: var(--danger) !important;
+    }
+
+    /* Style pour les formulaires dans les dropdowns */
+    .dropdown-form {
+        padding: 0;
+        margin: 0;
+        border: none;
+        background: transparent;
+        width: 100%;
+    }
+
+    .dropdown-form .dropdown-item {
+        width: 100%;
+        border: none;
+        background: transparent;
+    }
+
+    /* ========== ANIMATIONS ========== */
+    @keyframes fadeInUp {
+        from {
+            opacity: 0;
+            transform: translateY(30px);
+        }
+        to {
+            opacity: 1;
+            transform: translateY(0);
+        }
+    }
+
+    .animate-in {
+        animation: fadeInUp 0.6s ease-out forwards;
+    }
+
+    /* ========== RESPONSIVE ========== */
+    @media (max-width: 768px) {
+        .page-header {
+            padding: 1.5rem;
+        }
+
+        .page-title {
+            font-size: 1.5rem;
+        }
+
+        .header-actions {
+            flex-direction: column;
+            width: 100%;
+        }
+
+        .header-actions .fk-btn {
+            width: 100%;
+            justify-content: center;
+        }
+
+        .info-grid {
+            grid-template-columns: 1fr;
+        }
+
+        .comment-header {
+            flex-direction: column;
+            gap: 1rem;
+        }
+
+        .files-grid {
+            grid-template-columns: 1fr;
+        }
+    }
+</style>
+
+<div class="container-fluid px-4">
+    <!-- ========== EN-TÊTE ========== -->
+    <div class="page-header animate-in">
+        <div class="page-header-content">
+            <div class="row align-items-center">
+                <div class="col">
+                    <nav aria-label="breadcrumb">
+                        <ol class="breadcrumb">
+                            <li class="breadcrumb-item"><a href="{{ url_for('dashboard') }}">Dashboard</a></li>
+                            
+                            {% if plan_type == 'risque' %}
+                                <!-- Breadcrumb pour plan risque -->
+                                <li class="breadcrumb-item"><a href="{{ url_for('liste_cartographies') }}">Cartographies</a></li>
+                                {% if plan_action.risque and plan_action.risque.cartographie %}
+                                <li class="breadcrumb-item"><a href="{{ url_for('detail_cartographie', id=plan_action.risque.cartographie_id) }}">{{ plan_action.risque.cartographie.nom }}</a></li>
+                                {% endif %}
+                                <li class="breadcrumb-item"><a href="{{ url_for('detail_risque', id=plan_action.risque_id) }}">{{ plan_action.risque.reference if plan_action.risque else 'Risque' }}</a></li>
+                                <li class="breadcrumb-item"><a href="{{ url_for('detail_plan_action_risque', plan_id=plan_action.id) }}">{{ plan_action.reference }}</a></li>
+                            
+                            {% elif plan_type == 'audit' %}
+                                <!-- Breadcrumb pour plan audit -->
+                                <li class="breadcrumb-item"><a href="{{ url_for('liste_audits') }}">Audits</a></li>
+                                {% if plan_action.audit %}
+                                <li class="breadcrumb-item"><a href="{{ url_for('detail_audit', id=plan_action.audit.id) }}">{{ plan_action.audit.reference }}</a></li>
+                                {% endif %}
+                                <li class="breadcrumb-item"><a href="{{ url_for('detail_plan_action_risque', plan_id=plan_action.id) }}">{{ plan_action.reference }}</a></li>
+                            
+                            {% else %}
+                                <!-- Breadcrumb pour plan indépendant -->
+                                <li class="breadcrumb-item"><a href="{{ url_for('liste_plans_action_independants') }}">Plans indépendants</a></li>
+                                <li class="breadcrumb-item"><a href="{{ url_for('detail_plan_action_independant', plan_id=plan_action.id) }}">{{ plan_action.reference }}</a></li>
+                            {% endif %}
+                            
+                            <li class="breadcrumb-item active">{{ sous_action.reference or 'Sous-action' }}</li>
+                        </ol>
+                    </nav>
+                    
+                    <div class="page-title">
+                        <i class="fas fa-comments me-2" style="color: #17a2b8;"></i> Espace de Travail
+                    </div>
+                    
+                    <p class="page-subtitle">{{ sous_action.description|truncate(100) }}</p>
+                </div>
+                
+                <div class="col-auto">
+                    <div class="header-actions">
+                        <!-- Bouton de retour selon le type de plan -->
+                        {% if plan_type == 'risque' %}
+                        <a href="{{ url_for('detail_plan_action_risque', plan_id=plan_action.id) }}" 
+                           class="fk-btn fk-btn-outline-success">
+                            <i class="fas fa-arrow-left me-1"></i> Retour au plan risque
                         </a>
-                    </li>
-                    <li class="breadcrumb-item">
-                        <a href="{{ url_for('detail_plan_action_risque', plan_id=sous_action.plan_action.id) }}">
-                            {{ sous_action.plan_action.reference }}
+                        {% elif plan_type == 'audit' %}
+                        <a href="{{ url_for('detail_plan_action_risque', plan_id=plan_action.id) }}" 
+                           class="fk-btn fk-btn-outline-success">
+                            <i class="fas fa-arrow-left me-1"></i> Retour au plan audit
                         </a>
-                    </li>
-                    {% else %}
-                    <li class="breadcrumb-item">
-                        <a href="{{ url_for('detail_audit', id=sous_action.plan_action.audit.id) }}">
-                            Audit: {{ sous_action.plan_action.audit.reference }}
+                        {% else %}
+                        <a href="{{ url_for('detail_plan_action_independant', plan_id=plan_action.id) }}" 
+                           class="fk-btn fk-btn-outline-success">
+                            <i class="fas fa-arrow-left me-1"></i> Retour au plan indépendant
                         </a>
-                    </li>
-                    <li class="breadcrumb-item">
-                        <a href="{{ url_for('detail_plan_action', plan_id=sous_action.plan_action.id) }}">
-                            {{ sous_action.plan_action.nom|truncate(30) }}
-                        </a>
-                    </li>
-                    {% endif %}
-                    <li class="breadcrumb-item active">Espace travail</li>
-                </ol>
-            </nav>
-        </div>
-        <div class="btn-group">
-            {% if is_risque_plan %}
-            <a href="{{ url_for('detail_plan_action_risque', plan_id=sous_action.plan_action.id) }}" 
-               class="btn btn-outline-primary">
-                <i class="fas fa-arrow-left me-1"></i> Retour au plan
-            </a>
-            {% else %}
-            <a href="{{ url_for('detail_plan_action', plan_id=sous_action.plan_action.id) }}" 
-               class="btn btn-outline-primary">
-                <i class="fas fa-arrow-left me-1"></i> Retour au plan
-            </a>
-            {% endif %}
+                        {% endif %}
+                        
+                        <button class="fk-btn fk-btn-success" data-bs-toggle="modal" data-bs-target="#nouveauCommentaireModal">
+                            <i class="fas fa-plus me-1"></i> Nouveau commentaire
+                        </button>
+                    </div>
+                </div>
+            </div>
         </div>
     </div>
 
-    <div class="row">
-        <!-- Colonne gauche : Infos sous-action -->
-        <div class="col-lg-4">
-            <div class="card mb-4">
-                <div class="card-header bg-primary text-white">
-                    <h5 class="mb-0"><i class="fas fa-info-circle me-2"></i> Informations</h5>
+    <!-- ========== INFORMATIONS DE LA SOUS-ACTION ========== -->
+    <div class="row mb-4">
+        <div class="col-md-8">
+            <div class="fk-card animate-in">
+                <div class="fk-card-header info">
+                    <h6 class="mb-0"><i class="fas fa-info-circle me-2"></i> Informations de la sous-action</h6>
                 </div>
-                <div class="card-body">
-                    <table class="table table-sm table-borderless">
-                        <tr>
-                            <th width="40%">Référence:</th>
-                            <!-- LIGNE 68 CORRIGÉE -->
-                            <td><strong class="text-primary">{{ sous_action.reference if sous_action.reference else "SA-%03d"|format(sous_action.id) }}</strong></td>
-                        </tr>
-                        <tr>
-                            <th>Description:</th>
-                            <td>{{ sous_action.description|truncate(100) }}</td>
-                        </tr>
-                        <tr>
-                            <th>Statut:</th>
-                            <td>
-                                <span class="badge bg-{{ 'success' if sous_action.statut == 'termine' else 'warning' if sous_action.statut == 'en_cours' else 'secondary' }}">
+                <div class="fk-card-body">
+                    <div class="info-grid">
+                        <div class="info-item">
+                            <div class="info-label">
+                                <i class="fas fa-hashtag"></i> Référence
+                            </div>
+                            <div class="info-value">{{ sous_action.reference or 'Non définie' }}</div>
+                        </div>
+                        
+                        <div class="info-item">
+                            <div class="info-label">
+                                <i class="fas fa-tag"></i> Statut
+                            </div>
+                            <div class="info-value">
+                                <span class="badge-custom {{ sous_action.statut }}">
                                     {{ sous_action.statut|replace('_', ' ')|title }}
                                 </span>
-                            </td>
-                        </tr>
-                        <tr>
-                            <th>Progression:</th>
-                            <td>
-                                <div class="progress" style="height: 10px;">
-                                    <div class="progress-bar 
-                                        {% if sous_action.pourcentage_realisation >= 100 %}bg-success
-                                        {% elif sous_action.pourcentage_realisation >= 50 %}bg-warning
-                                        {% else %}bg-danger{% endif %}" 
-                                         style="width: {{ sous_action.pourcentage_realisation }}%">
-                                    </div>
-                                </div>
-                                <small>{{ sous_action.pourcentage_realisation }}%</small>
-                            </td>
-                        </tr>
-                        <tr>
-                            <th>Responsable:</th>
-                            <td>
-                                {% if sous_action.responsable %}
-                                <i class="fas fa-user me-1"></i>{{ sous_action.responsable.username }}
-                                {% else %}
-                                <span class="text-muted">Non assigné</span>
-                                {% endif %}
-                            </td>
-                        </tr>
-                        <tr>
-                            <th>Dates:</th>
-                            <td>
-                                {% if sous_action.date_debut %}
-                                <div>Début: {{ sous_action.date_debut.strftime('%d/%m/%Y') }}</div>
-                                {% endif %}
-                                {% if sous_action.date_fin_prevue %}
-                                <div>Échéance: {{ sous_action.date_fin_prevue.strftime('%d/%m/%Y') }}</div>
-                                {% endif %}
-                                {% if sous_action.est_en_retard %}
-                                <div class="text-danger">
-                                    <i class="fas fa-exclamation-triangle"></i> En retard
-                                </div>
-                                {% endif %}
-                            </td>
-                        </tr>
-                    </table>
+                            </div>
+                        </div>
+                        
+                        <div class="info-item">
+                            <div class="info-label">
+                                <i class="fas fa-calendar-alt"></i> Date début
+                            </div>
+                            <div class="info-value">{{ sous_action.date_debut.strftime('%d/%m/%Y') if sous_action.date_debut else 'Non définie' }}</div>
+                        </div>
+                        
+                        <div class="info-item">
+                            <div class="info-label">
+                                <i class="fas fa-flag-checkered"></i> Date fin prévue
+                            </div>
+                            <div class="info-value">{{ sous_action.date_fin_prevue.strftime('%d/%m/%Y') if sous_action.date_fin_prevue else 'Non définie' }}</div>
+                        </div>
+                    </div>
                     
-                    <!-- Actions rapides -->
-                    <div class="mt-3">
-                        <div class="d-grid gap-2">
-                            <button class="btn btn-sm btn-outline-primary" onclick="changerStatutSousAction()">
-                                <i class="fas fa-flag me-1"></i> Changer statut
-                            </button>
-                            <button class="btn btn-sm btn-outline-success" onclick="terminerSousAction()">
-                                <i class="fas fa-check me-1"></i> Terminer la tâche
-                            </button>
+                    {% if sous_action.description %}
+                    <div class="mt-4">
+                        <div class="info-label mb-2">
+                            <i class="fas fa-align-left"></i> Description
+                        </div>
+                        <div class="p-3 bg-adaptive-secondary border-adaptive rounded">
+                            {{ sous_action.description }}
+                        </div>
+                    </div>
+                    {% endif %}
+                    
+                    <!-- Progression -->
+                    <div class="mt-4">
+                        <div class="d-flex justify-content-between align-items-center mb-2">
+                            <span class="info-label mb-0">
+                                <i class="fas fa-chart-line"></i> Progression
+                            </span>
+                            <span class="fw-bold" style="color: var(--info);" id="progressionValue">{{ sous_action.pourcentage_realisation }}%</span>
+                        </div>
+                        <div class="progress-modern">
+                            <div class="progress-modern-bar {% if sous_action.pourcentage_realisation >= 100 %}success{% elif sous_action.pourcentage_realisation >= 50 %}warning{% else %}danger{% endif %}" 
+                                 id="progressionBar" style="width: {{ sous_action.pourcentage_realisation }}%;"></div>
                         </div>
                     </div>
                 </div>
             </div>
-
-            <!-- Fichiers attachés -->
-            <div class="card mb-4">
-                <div class="card-header">
-                    <h5 class="mb-0"><i class="fas fa-paperclip me-2"></i> Fichiers ({{ fichiers|length }})</h5>
+        </div>
+        
+        <div class="col-md-4">
+            <!-- Plan parent -->
+            <div class="fk-card animate-in">
+                <div class="fk-card-header primary">
+                    <h6 class="mb-0"><i class="fas fa-tasks me-2"></i> Plan parent</h6>
                 </div>
-                <div class="card-body">
-                    {% if fichiers %}
-                    <div class="list-group list-group-flush">
-                        {% for fichier in fichiers %}
-                        <div class="list-group-item px-0">
-                            <div class="d-flex align-items-center">
-                                <div class="me-3">
-                                    <i class="{{ fichier.icon_class }} fa-2x"></i>
+                <div class="fk-card-body">
+                    <div class="d-flex align-items-center gap-3 mb-3">
+                        <div class="avatar" style="background: linear-gradient(135deg, #0d6efd, #0b5ed7);">
+                            <i class="fas fa-tasks"></i>
+                        </div>
+                        <div>
+                            <h6 class="mb-0 text-adaptive">{{ plan_action.reference }}</h6>
+                            <small class="text-adaptive-secondary">{{ plan_action.nom|truncate(40) }}</small>
+                        </div>
+                    </div>
+                    
+                    <div class="mb-3">
+                        <span class="badge-custom {{ plan_action.statut }}">
+                            {{ plan_action.statut|replace('_', ' ')|title }}
+                        </span>
+                        
+                        <!-- Badge de type de plan -->
+                        {% if plan_type == 'risque' %}
+                        <span class="badge-custom ms-1" style="background: var(--warning-light); color: var(--warning); border: 1px solid var(--warning-border);">
+                            <i class="fas fa-exclamation-triangle me-1"></i> Plan risque
+                        </span>
+                        {% elif plan_type == 'audit' %}
+                        <span class="badge-custom ms-1" style="background: var(--primary-light); color: var(--primary); border: 1px solid var(--primary-border);">
+                            <i class="fas fa-clipboard-check me-1"></i> Plan audit
+                        </span>
+                        {% else %}
+                        <span class="badge-custom ms-1" style="background: var(--success-light); color: var(--success); border: 1px solid var(--success-border);">
+                            <i class="fas fa-star me-1"></i> Plan indépendant
+                        </span>
+                        {% endif %}
+                    </div>
+                    
+                    <!-- Lien vers le plan parent selon le type -->
+                    {% if plan_type == 'risque' %}
+                    <a href="{{ url_for('detail_plan_action_risque', plan_id=plan_action.id) }}" 
+                       class="btn w-100 mt-2" style="border-radius: 10px; background: var(--bg-secondary); color: var(--text-primary); border: 1px solid var(--border-color);">
+                        <i class="fas fa-eye me-2"></i> Voir le plan
+                    </a>
+                    {% elif plan_type == 'audit' %}
+                    <a href="{{ url_for('detail_plan_action_risque', plan_id=plan_action.id) }}" 
+                       class="btn w-100 mt-2" style="border-radius: 10px; background: var(--bg-secondary); color: var(--text-primary); border: 1px solid var(--border-color);">
+                        <i class="fas fa-eye me-2"></i> Voir le plan
+                    </a>
+                    {% else %}
+                    <a href="{{ url_for('detail_plan_action_independant', plan_id=plan_action.id) }}" 
+                       class="btn w-100 mt-2" style="border-radius: 10px; background: var(--bg-secondary); color: var(--text-primary); border: 1px solid var(--border-color);">
+                        <i class="fas fa-eye me-2"></i> Voir le plan
+                    </a>
+                    {% endif %}
+                    
+                    <!-- Lien vers l'entité source (risque ou audit) -->
+                    {% if plan_type == 'risque' and plan_action.risque %}
+                    <div class="mt-3 pt-3" style="border-top: 1px solid var(--border-color);">
+                        <small class="text-adaptive-secondary">Risque associé:</small>
+                        <div class="d-flex align-items-center mt-2">
+                            <i class="fas fa-exclamation-triangle me-2" style="color: var(--warning);"></i>
+                            <a href="{{ url_for('detail_risque', id=plan_action.risque.id) }}" 
+                               class="text-decoration-none" style="color: var(--warning);">
+                                {{ plan_action.risque.reference }} - {{ plan_action.risque.intitule|truncate(30) }}
+                            </a>
+                        </div>
+                    </div>
+                    {% elif plan_type == 'audit' and plan_action.audit %}
+                    <div class="mt-3 pt-3" style="border-top: 1px solid var(--border-color);">
+                        <small class="text-adaptive-secondary">Audit associé:</small>
+                        <div class="d-flex align-items-center mt-2">
+                            <i class="fas fa-clipboard-check me-2" style="color: var(--primary);"></i>
+                            <a href="{{ url_for('detail_audit', id=plan_action.audit.id) }}" 
+                               class="text-decoration-none" style="color: var(--primary);">
+                                {{ plan_action.audit.reference }} - {{ plan_action.audit.titre|truncate(30) if plan_action.audit.titre else '' }}
+                            </a>
+                        </div>
+                    </div>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- ========== COMMENTAIRES ========== -->
+    <div class="fk-card animate-in">
+        <div class="fk-card-header success">
+            <h6 class="mb-0"><i class="fas fa-comments me-2"></i> Commentaires ({{ commentaires|length }})</h6>
+        </div>
+        <div class="fk-card-body">
+            <!-- Formulaire de commentaire -->
+            <div class="mb-4 p-4 bg-adaptive-secondary border-adaptive rounded">
+                <form method="POST" action="{{ url_for('espace_travail_sous_action', sous_action_id=sous_action.id) }}" 
+                      enctype="multipart/form-data">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                    
+                    <textarea class="fk-form-control mb-3" name="contenu" rows="3" 
+                              placeholder="Ajouter un commentaire..." required></textarea>
+                    
+                    <div class="d-flex justify-content-between align-items-center">
+                        <div>
+                            <button type="button" class="btn-action me-2" onclick="document.getElementById('fichiersSousAction').click()">
+                                <i class="fas fa-paperclip"></i>
+                            </button>
+                            <input type="file" id="fichiersSousAction" name="fichiers" 
+                                   multiple style="display: none;" 
+                                   onchange="afficherFichiersSelectionnes(this)">
+                            <span class="small text-adaptive-secondary" id="fileCount"></span>
+                        </div>
+                        <button type="submit" class="fk-btn fk-btn-success btn-sm">
+                            <i class="fas fa-paper-plane me-1"></i> Commenter
+                        </button>
+                    </div>
+                    
+                    <!-- Aperçu fichiers -->
+                    <div id="apercuFichiers" class="mt-3" style="display: none;">
+                        <div class="files-grid" id="listeFichiers"></div>
+                    </div>
+                </form>
+            </div>
+            
+            <!-- Liste des commentaires -->
+            {% if commentaires %}
+            <div class="comments-list">
+                {% for commentaire in commentaires %}
+                <div class="comment-card">
+                    <div class="comment-header">
+                        <div class="comment-author">
+                            <div class="avatar">
+                                {{ commentaire.utilisateur.username[0].upper() if commentaire.utilisateur else '?' }}
+                            </div>
+                            <div class="author-info">
+                                <h6>{{ commentaire.utilisateur.username if commentaire.utilisateur else 'Système' }}</h6>
+                                <div class="author-meta">
+                                    <i class="far fa-clock me-1"></i> {{ commentaire.created_at.strftime('%d/%m/%Y à %H:%M') }}
                                 </div>
-                                <div class="flex-grow-1">
-                                    <div class="fw-bold small text-truncate" title="{{ fichier.nom_fichier }}">
-                                        {{ fichier.nom_fichier|truncate(25) }}
+                            </div>
+                        </div>
+                        <div class="dropdown">
+                            <button class="btn-action" type="button" data-bs-toggle="dropdown" aria-expanded="false">
+                                <i class="fas fa-ellipsis-v"></i>
+                            </button>
+                            <ul class="dropdown-menu">
+                                {% if commentaire.utilisateur_id == current_user.id or current_user.is_client_admin %}
+                                <li>
+                                    <form method="POST" action="{{ url_for('supprimer_commentaire_sous_action', sous_action_id=sous_action.id, commentaire_id=commentaire.id) }}" 
+                                          class="dropdown-form">
+                                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                                        <button type="submit" class="dropdown-item text-danger" 
+                                                onclick="return confirm('Supprimer ce commentaire ?')">
+                                            <i class="fas fa-trash me-2"></i>Supprimer
+                                        </button>
+                                    </form>
+                                </li>
+                                {% endif %}
+                            </ul>
+                        </div>
+                    </div>
+                    
+                    <div class="comment-content">
+                        {{ commentaire.contenu|nl2br|safe }}
+                    </div>
+                    
+                    {% if commentaire.fichiers %}
+                    <div class="mt-3">
+                        <small class="text-adaptive-secondary">
+                            <i class="fas fa-paperclip me-1"></i> Fichiers joints ({{ commentaire.fichiers|length }})
+                        </small>
+                        <div class="files-grid mt-2">
+                            {% for fichier in commentaire.fichiers %}
+                            <div class="file-item">
+                                <div class="file-icon">
+                                    <i class="fas fa-file"></i>
+                                </div>
+                                <div class="file-info">
+                                    <div class="file-name" title="{{ fichier.nom_fichier }}">
+                                        {{ fichier.nom_fichier|truncate(15) }}
                                     </div>
-                                    <div class="text-muted smaller">
-                                        {{ fichier.taille_formatee }}
-                                        <i class="fas fa-user ms-2 me-1"></i>{{ fichier.uploader.username }}
+                                    <div class="file-size">
+                                        {{ (fichier.taille / 1024)|round(1) if fichier.taille else 0 }} Ko
                                     </div>
                                 </div>
-                                <div class="dropdown">
-                                    <button class="btn btn-sm btn-outline-secondary border-0" 
-                                            type="button" data-bs-toggle="dropdown">
+                                <div class="file-actions dropdown">
+                                    <button class="btn-action" type="button" data-bs-toggle="dropdown" aria-expanded="false">
                                         <i class="fas fa-ellipsis-v"></i>
                                     </button>
                                     <ul class="dropdown-menu">
                                         <li>
                                             <a class="dropdown-item" 
-                                               href="{{ url_for('telecharger_fichier_plan_action', fichier_id=fichier.id) }}">
+                                               href="{{ url_for('telecharger_fichier_sous_action', fichier_id=fichier.id) }}">
                                                 <i class="fas fa-download me-2"></i>Télécharger
                                             </a>
                                         </li>
-                                        {% if fichier.get_preview_url() %}
-                                        <li>
-                                            <a class="dropdown-item" href="{{ fichier.get_preview_url() }}" target="_blank">
-                                                <i class="fas fa-eye me-2"></i>Voir
-                                            </a>
-                                        </li>
-                                        {% endif %}
                                         {% if current_user.id == fichier.uploaded_by or current_user.is_client_admin %}
                                         <li>
-                                            <a class="dropdown-item text-danger" 
-                                               href="{{ url_for('supprimer_fichier_plan_action', fichier_id=fichier.id) }}"
-                                               onclick="return confirm('Supprimer ce fichier ?')">
-                                                <i class="fas fa-trash me-2"></i>Supprimer
-                                            </a>
+                                            <form method="POST" action="{{ url_for('supprimer_fichier_sous_action', fichier_id=fichier.id) }}" 
+                                                  class="dropdown-form">
+                                                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                                                <button type="submit" class="dropdown-item text-danger" 
+                                                        onclick="return confirm('Supprimer ce fichier ?')">
+                                                    <i class="fas fa-trash me-2"></i>Supprimer
+                                                </button>
+                                            </form>
                                         </li>
                                         {% endif %}
                                     </ul>
                                 </div>
                             </div>
+                            {% endfor %}
                         </div>
-                        {% endfor %}
-                    </div>
-                    {% else %}
-                    <div class="text-center py-3 text-muted">
-                        <i class="fas fa-paperclip fa-3x mb-2"></i>
-                        <p>Aucun fichier joint</p>
-                    </div>
-                    {% endif %}
-                    
-                    <!-- Upload rapide -->
-                    <div class="mt-3">
-                        <form id="formUploadRapide" enctype="multipart/form-data">
-                            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                            <div class="input-group">
-                                <input type="file" class="form-control" id="fichierRapide" name="fichiers" 
-                                       multiple style="display: none;" 
-                                       onchange="uploadFichiersRapides(this)">
-                                <button type="button" class="btn btn-outline-primary w-100" 
-                                        onclick="document.getElementById('fichierRapide').click()">
-                                    <i class="fas fa-plus me-1"></i> Ajouter des fichiers
-                                </button>
-                            </div>
-                        </form>
-                    </div>
-                </div>
-            </div>
-        </div>
-
-        <!-- Colonne droite : Commentaires -->
-        <div class="col-lg-8">
-            <!-- Formulaire de commentaire -->
-            <div class="card mb-4">
-                <div class="card-body">
-                    <form method="POST" action="{{ url_for('ajouter_commentaire_sous_action', sous_action_id=sous_action.id) }}" 
-                          enctype="multipart/form-data" id="formCommentaire">
-                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                        
-                        <div class="mb-3">
-                            <textarea class="form-control" name="contenu" rows="3" 
-                                      placeholder="Partagez une mise à jour, posez une question, signalez un blocage..."
-                                      required></textarea>
-                        </div>
-                        
-                        <div class="d-flex justify-content-between align-items-center">
-                            <div class="btn-group">
-                                <button type="button" class="btn btn-outline-secondary btn-sm" 
-                                        onclick="document.getElementById('fichiersCommentaire').click()">
-                                    <i class="fas fa-paperclip me-1"></i> Fichiers
-                                </button>
-                                <input type="file" id="fichiersCommentaire" name="fichiers" 
-                                       multiple style="display: none;" 
-                                       onchange="afficherFichiersSelectionnes(this)">
-                                <button type="button" class="btn btn-outline-secondary btn-sm" 
-                                        data-bs-toggle="collapse" data-bs-target="#optionsAvancees">
-                                    <i class="fas fa-cog me-1"></i> Options
-                                </button>
-                            </div>
-                            <button type="submit" class="btn btn-primary">
-                                <i class="fas fa-paper-plane me-1"></i> Publier
-                            </button>
-                        </div>
-                        
-                        <!-- Options avancées -->
-                        <div class="collapse mt-3" id="optionsAvancees">
-                            <div class="border rounded p-3 bg-light">
-                                <div class="row">
-                                    <div class="col-md-6">
-                                        <div class="mb-3">
-                                            <label class="form-label">Type</label>
-                                            <select class="form-select" name="type_contenu">
-                                                <option value="commentaire">Commentaire général</option>
-                                                <option value="note">Note importante</option>
-                                                <option value="mise_a_jour">Mise à jour de progression</option>
-                                                <option value="question">Question</option>
-                                                <option value="blocage">Signalement de blocage</option>
-                                                <option value="reussite">Succès accompli</option>
-                                            </select>
-                                        </div>
-                                    </div>
-                                    <div class="col-md-6">
-                                        <div class="mb-3">
-                                            <label class="form-label">Tags (séparés par des virgules)</label>
-                                            <input type="text" class="form-control" name="tags" 
-                                                   placeholder="important, question, blocage...">
-                                        </div>
-                                    </div>
-                                </div>
-                                <div class="form-check">
-                                    <input type="checkbox" class="form-check-input" name="est_prive" id="est_prive">
-                                    <label class="form-check-label" for="est_prive">
-                                        Commentaire privé (admin/responsable seulement)
-                                    </label>
-                                </div>
-                            </div>
-                        </div>
-                        
-                        <!-- Aperçu fichiers -->
-                        <div id="apercuFichiers" class="mt-2" style="display: none;">
-                            <small class="text-muted">Fichiers sélectionnés :</small>
-                            <div id="listeFichiers" class="mt-1"></div>
-                        </div>
-                    </form>
-                </div>
-            </div>
-
-            <!-- Liste des commentaires -->
-            <div class="card">
-                <div class="card-header d-flex justify-content-between align-items-center">
-                    <h5 class="mb-0"><i class="fas fa-comments me-2"></i> Discussions ({{ commentaires|length }})</h5>
-                    <div class="btn-group">
-                        <button class="btn btn-sm btn-outline-secondary" onclick="filtrerCommentaires('tous')">Tous</button>
-                        <button class="btn btn-sm btn-outline-primary" onclick="filtrerCommentaires('note')">Notes</button>
-                        <button class="btn btn-sm btn-outline-success" onclick="filtrerCommentaires('mise_a_jour')">Mises à jour</button>
-                    </div>
-                </div>
-                <div class="card-body">
-                    {% if commentaires %}
-                    <div class="timeline" id="commentairesList">
-                        {% for commentaire in commentaires %}
-                        {% if not commentaire.est_prive or current_user.is_client_admin or current_user.id == sous_action.responsable_id %}
-                        <div class="timeline-item commentaire-item" data-type="{{ commentaire.type_contenu }}">
-                            <div class="timeline-marker 
-                                {% if commentaire.type_contenu == 'note' %}bg-primary
-                                {% elif commentaire.type_contenu == 'mise_a_jour' %}bg-success
-                                {% elif commentaire.type_contenu == 'question' %}bg-warning
-                                {% elif commentaire.type_contenu == 'blocage' %}bg-danger
-                                {% elif commentaire.type_contenu == 'reussite' %}bg-info
-                                {% else %}bg-secondary{% endif %}">
-                            </div>
-                            <div class="timeline-content">
-                                <div class="card {% if commentaire.est_prive %}border-warning{% endif %} mb-3">
-                                    <div class="card-body">
-                                        <!-- En-tête -->
-                                        <div class="d-flex justify-content-between align-items-start mb-3">
-                                            <div class="d-flex align-items-center">
-                                                <div class="avatar-sm bg-primary rounded-circle text-white d-flex align-items-center justify-content-center me-3"
-                                                     style="width: 40px; height: 40px;">
-                                                    {{ commentaire.utilisateur.username[0].upper() }}
-                                                </div>
-                                                <div>
-                                                    <h6 class="mb-0">{{ commentaire.utilisateur.username }}</h6>
-                                                    <div class="text-muted small">
-                                                        <i class="far fa-clock me-1"></i> {{ commentaire.created_at.strftime('%d/%m/%Y à %H:%M') }}
-                                                        {% if commentaire.est_prive %}
-                                                        <span class="badge bg-warning ms-2">
-                                                            <i class="fas fa-lock me-1"></i> Privé
-                                                        </span>
-                                                        {% endif %}
-                                                        <span class="badge bg-{% if commentaire.type_contenu == 'note' %}primary
-                                                        {% elif commentaire.type_contenu == 'mise_a_jour' %}success
-                                                        {% elif commentaire.type_contenu == 'question' %}warning
-                                                        {% elif commentaire.type_contenu == 'blocage' %}danger
-                                                        {% elif commentaire.type_contenu == 'reussite' %}info
-                                                        {% else %}secondary{% endif %} ms-1">
-                                                            {{ commentaire.type_contenu|replace('_', ' ')|title }}
-                                                        </span>
-                                                    </div>
-                                                </div>
-                                            </div>
-                                            <div class="dropdown">
-                                                <button class="btn btn-sm btn-outline-secondary" type="button" 
-                                                        data-bs-toggle="dropdown">
-                                                    <i class="fas fa-ellipsis-v"></i>
-                                                </button>
-                                                <ul class="dropdown-menu">
-                                                    <li>
-                                                        <form method="POST" 
-                                                              action="{{ url_for('supprimer_commentaire_sous_action', sous_action_id=sous_action.id, commentaire_id=commentaire.id) }}" 
-                                                              class="d-inline">
-                                                            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                                                            <button type="submit" class="dropdown-item text-danger" 
-                                                                    onclick="return confirm('Supprimer ce commentaire ?')">
-                                                                <i class="fas fa-trash me-2"></i>Supprimer
-                                                            </button>
-                                                        </form>
-                                                    </li>
-                                                </ul>
-                                            </div>
-                                        </div>
-                                        
-                                        <!-- Tags -->
-                                        {% if commentaire.tags %}
-                                        <div class="mb-3">
-                                            {% for tag in commentaire.tags %}
-                                            <span class="badge bg-light text-dark border me-1">
-                                                <i class="fas fa-tag me-1"></i>{{ tag }}
-                                            </span>
-                                            {% endfor %}
-                                        </div>
-                                        {% endif %}
-                                        
-                                        <!-- Contenu -->
-                                        <div class="commentaire-contenu mb-3">
-                                            {{ commentaire.contenu|nl2br|safe }}
-                                        </div>
-                                        
-                                        <!-- Fichiers joints -->
-                                        {% if commentaire.fichiers %}
-                                        <div class="fichiers-joints mb-3">
-                                            <h6 class="mb-2">
-                                                <i class="fas fa-paperclip me-2"></i>Fichiers joints ({{ commentaire.fichiers|length }})
-                                            </h6>
-                                            <div class="row">
-                                                {% for fichier in commentaire.fichiers %}
-                                                <div class="col-md-4 mb-2">
-                                                    <div class="card fichier-card">
-                                                        <div class="card-body p-2">
-                                                            <div class="d-flex align-items-center">
-                                                                <div class="me-2">
-                                                                    <i class="{{ fichier.icon_class }} fa-2x"></i>
-                                                                </div>
-                                                                <div class="flex-grow-1">
-                                                                    <div class="small text-truncate" title="{{ fichier.nom_fichier }}">
-                                                                        {{ fichier.nom_fichier|truncate(20) }}
-                                                                    </div>
-                                                                    <div class="text-muted smaller">
-                                                                        {{ fichier.taille_formatee }}
-                                                                        {% if fichier.extension %}
-                                                                        <span class="badge bg-light text-dark ms-1">
-                                                                            .{{ fichier.extension|upper }}
-                                                                        </span>
-                                                                        {% endif %}
-                                                                    </div>
-                                                                </div>
-                                                                <div class="dropdown">
-                                                                    <button class="btn btn-sm btn-outline-secondary border-0" 
-                                                                            type="button" data-bs-toggle="dropdown">
-                                                                        <i class="fas fa-ellipsis-v"></i>
-                                                                    </button>
-                                                                    <ul class="dropdown-menu">
-                                                                        <li>
-                                                                            <a class="dropdown-item" 
-                                                                               href="{{ url_for('telecharger_fichier_plan_action', fichier_id=fichier.id) }}">
-                                                                                <i class="fas fa-download me-2"></i>Télécharger
-                                                                            </a>
-                                                                        </li>
-                                                                        {% if fichier.get_preview_url() %}
-                                                                        <li>
-                                                                            <a class="dropdown-item" href="{{ fichier.get_preview_url() }}" target="_blank">
-                                                                                <i class="fas fa-eye me-2"></i>Voir
-                                                                            </a>
-                                                                        </li>
-                                                                        {% endif %}
-                                                                    </ul>
-                                                                </div>
-                                                            </div>
-                                                        </div>
-                                                    </div>
-                                                </div>
-                                                {% endfor %}
-                                            </div>
-                                        </div>
-                                        {% endif %}
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
-                        {% endif %}
-                        {% endfor %}
-                    </div>
-                    {% else %}
-                    <div class="text-center py-5">
-                        <i class="fas fa-comments fa-4x text-muted mb-3"></i>
-                        <h4 class="text-muted">Aucun commentaire</h4>
-                        <p class="text-muted">Soyez le premier à commenter cette sous-action !</p>
                     </div>
                     {% endif %}
                 </div>
+                {% endfor %}
             </div>
+            {% else %}
+            <div class="text-center py-5">
+                <i class="fas fa-comments fa-4x text-adaptive-secondary mb-3"></i>
+                <h5 class="text-adaptive">Aucun commentaire</h5>
+                <p class="text-adaptive-secondary">Soyez le premier à commenter cette sous-action !</p>
+            </div>
+            {% endif %}
         </div>
     </div>
 </div>
 
-<!-- Modal pour changer statut -->
-<div class="modal fade" id="modalChangerStatut" tabindex="-1" aria-hidden="true">
-    <div class="modal-dialog">
+<!-- ========== MODAL POUR NOUVEAU COMMENTAIRE ========== -->
+<div class="modal fade" id="nouveauCommentaireModal" tabindex="-1">
+    <div class="modal-dialog modal-lg">
         <div class="modal-content">
-            <div class="modal-header">
-                <h5 class="modal-title">Changer le statut</h5>
-                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            <div class="modal-header" style="background: linear-gradient(135deg, #28a745, #34ce57); color: white;">
+                <h5 class="modal-title">
+                    <i class="fas fa-plus-circle me-2"></i>Nouveau commentaire
+                </h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
             </div>
-            <div class="modal-body">
-                <select class="form-select" id="selectStatut">
-                    <option value="a_faire" {% if sous_action.statut == 'a_faire' %}selected{% endif %}>À faire</option>
-                    <option value="en_cours" {% if sous_action.statut == 'en_cours' %}selected{% endif %}>En cours</option>
-                    <option value="termine" {% if sous_action.statut == 'termine' %}selected{% endif %}>Terminé</option>
-                </select>
-            </div>
-            <div class="modal-footer">
-                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Annuler</button>
-                <button type="button" class="btn btn-primary" onclick="appliquerChangementStatut()">Appliquer</button>
-            </div>
+            <form method="POST" action="{{ url_for('espace_travail_sous_action', sous_action_id=sous_action.id) }}" 
+                  enctype="multipart/form-data">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                <div class="modal-body" style="background: var(--bg-primary); color: var(--text-primary);">
+                    <div class="mb-3">
+                        <label class="form-label text-adaptive">Commentaire</label>
+                        <textarea class="fk-form-control" name="contenu" rows="5" required></textarea>
+                    </div>
+                    
+                    <div class="mb-3">
+                        <label class="form-label text-adaptive">Fichiers joints</label>
+                        <input type="file" class="fk-form-control" name="fichiers" multiple>
+                    </div>
+                </div>
+                <div class="modal-footer" style="background: var(--bg-secondary); border-top: 1px solid var(--border-color);">
+                    <button type="button" class="btn-action" data-bs-dismiss="modal">Annuler</button>
+                    <button type="submit" class="fk-btn fk-btn-success">Publier</button>
+                </div>
+            </form>
         </div>
     </div>
 </div>
+
+<!-- Token CSRF -->
+<meta name="csrf-token" content="{{ csrf_token() }}">
 {% endblock %}
 
 {% block scripts %}
 <script>
-// Variables globales
+// ============================================
+// VARIABLES GLOBALES
+// ============================================
 let fichiersSelectionnes = [];
 
-// Afficher les fichiers sélectionnés
+// ============================================
+// GESTION DES FICHIERS
+// ============================================
 function afficherFichiersSelectionnes(input) {
     const listeFichiers = document.getElementById('listeFichiers');
     const apercuDiv = document.getElementById('apercuFichiers');
+    const fileCount = document.getElementById('fileCount');
     
     listeFichiers.innerHTML = '';
     fichiersSelectionnes = Array.from(input.files);
     
     if (fichiersSelectionnes.length > 0) {
         apercuDiv.style.display = 'block';
+        fileCount.textContent = fichiersSelectionnes.length + ' fichier(s) sélectionné(s)';
         
         fichiersSelectionnes.forEach((file, index) => {
             const div = document.createElement('div');
-            div.className = 'd-flex justify-content-between align-items-center border rounded p-2 mb-1';
+            div.className = 'file-item';
             div.innerHTML = `
-                <div class="d-flex align-items-center">
-                    <i class="fas fa-file me-2 text-secondary"></i>
-                    <div>
-                        <div class="small">${file.name}</div>
-                        <div class="text-muted smaller">${formatTaille(file.size)}</div>
-                    </div>
+                <div class="file-icon">
+                    <i class="fas fa-file"></i>
                 </div>
-                <button type="button" class="btn btn-sm btn-outline-danger border-0" 
+                <div class="file-info">
+                    <div class="file-name" title="${file.name}">${file.name}</div>
+                    <div class="file-size">${(file.size / 1024).toFixed(1)} Ko</div>
+                </div>
+                <button type="button" class="btn-action danger" 
                         onclick="supprimerFichierSelectionne(${index})">
                     <i class="fas fa-times"></i>
                 </button>
@@ -523,270 +1093,93 @@ function afficherFichiersSelectionnes(input) {
         });
     } else {
         apercuDiv.style.display = 'none';
+        fileCount.textContent = '';
     }
 }
 
-// Supprimer un fichier sélectionné
 function supprimerFichierSelectionne(index) {
     const input = document.querySelector('input[name="fichiers"]');
     const dt = new DataTransfer();
-    
     fichiersSelectionnes.forEach((file, i) => {
-        if (i !== index) {
-            dt.items.add(file);
-        }
+        if (i !== index) dt.items.add(file);
     });
-    
     fichiersSelectionnes = Array.from(dt.files);
     input.files = dt.files;
     afficherFichiersSelectionnes(input);
 }
 
-// Formater la taille des fichiers
-function formatTaille(bytes) {
-    if (bytes === 0) return '0 B';
-    const k = 1024;
-    const sizes = ['B', 'KB', 'MB', 'GB'];
-    const i = Math.floor(Math.log(bytes) / Math.log(k));
-    return parseFloat((bytes / Math.pow(k, i)).toFixed(1)) + ' ' + sizes[i];
+// ============================================
+// FONCTION POUR AFFICHER UNE SOUS-ACTION
+// ============================================
+function afficherSousAction(sousActionId) {
+    {% if plan_type == 'independant' %}
+    window.location.href = "{{ url_for('detail_plan_action_independant', plan_id=plan_action.id) }}#sous-action-" + sousActionId;
+    {% elif plan_type == 'risque' %}
+    window.location.href = "{{ url_for('detail_plan_action_risque', plan_id=plan_action.id) }}#sous-action-" + sousActionId;
+    {% elif plan_type == 'audit' %}
+    window.location.href = "{{ url_for('detail_plan_action_audit', plan_id=plan_action.id) }}#sous-action-" + sousActionId;
+    {% endif %}
 }
 
-// Upload de fichiers rapides
-function uploadFichiersRapides(input) {
-    if (input.files.length === 0) return;
-    
-    const formData = new FormData();
-    formData.append('csrf_token', '{{ csrf_token() }}');
-    
-    Array.from(input.files).forEach(file => {
-        formData.append('fichiers', file);
-    });
-    
-    fetch('/sous-action/{{ sous_action.id }}/fichier/upload', {
-        method: 'POST',
-        body: formData
-    })
-    .then(response => response.json())
-    .then(data => {
-        if (data.success) {
-            showToast('success', `✅ ${data.message}`);
-            setTimeout(() => location.reload(), 1000);
-        } else {
-            showToast('error', `❌ ${data.error}`);
-        }
-    })
-    .catch(error => {
-        console.error('Error:', error);
-        showToast('error', '❌ Erreur réseau');
-    });
-}
-
-// Filtrer les commentaires
-function filtrerCommentaires(type) {
-    const commentaires = document.querySelectorAll('.commentaire-item');
-    
-    commentaires.forEach(com => {
-        if (type === 'tous' || com.dataset.type === type) {
-            com.style.display = 'block';
-        } else {
-            com.style.display = 'none';
-        }
-    });
-    
-    // Mettre à jour les boutons actifs
-    document.querySelectorAll('.btn-group .btn').forEach(btn => {
-        btn.classList.remove('active');
-    });
-    event.target.classList.add('active');
-}
-
-// Changer le statut
-function changerStatutSousAction() {
-    const modal = new bootstrap.Modal(document.getElementById('modalChangerStatut'));
-    modal.show();
-}
-
-function appliquerChangementStatut() {
-    const nouveauStatut = document.getElementById('selectStatut').value;
-    
-    fetch(`/sous-action-risque/{{ sous_action.id }}/changer-statut`, {
-        method: 'POST',
-        headers: {
-            'X-CSRFToken': '{{ csrf_token() }}',
-            'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({ 
-            statut: nouveauStatut,
-            progression: nouveauStatut === 'termine' ? 100 : 
-                        nouveauStatut === 'en_cours' ? 50 : 25
-        })
-    })
-    .then(response => response.json())
-    .then(data => {
-        if (data.success) {
-            showToast('success', '✅ Statut mis à jour');
-            setTimeout(() => location.reload(), 1000);
-        } else {
-            showToast('error', '❌ Erreur: ' + data.error);
-        }
-    })
-    .catch(error => {
-        console.error('Error:', error);
-        showToast('error', '❌ Erreur réseau');
-    });
-}
-
-// Terminer la sous-action
-function terminerSousAction() {
-    if (confirm('Terminer cette sous-action à 100% ?')) {
-        fetch(`/sous-action-risque/{{ sous_action.id }}/terminer`, {
-            method: 'POST',
-            headers: {
-                'X-CSRFToken': '{{ csrf_token() }}'
-            }
-        })
-        .then(response => response.json())
-        .then(data => {
-            if (data.success) {
-                showToast('success', '✅ Sous-action terminée');
-                setTimeout(() => location.reload(), 1000);
-            } else {
-                showToast('error', '❌ Erreur: ' + data.error);
-            }
-        })
-    }
-}
-
-// Fonction pour afficher des toasts
-function showToast(type, message) {
-    const toastContainer = document.getElementById('toastContainer') || createToastContainer();
-    
-    const toastId = 'toast-' + Date.now();
-    const toast = document.createElement('div');
-    toast.className = `toast align-items-center text-white bg-${type === 'success' ? 'success' : 'danger'} border-0`;
-    toast.id = toastId;
-    toast.setAttribute('role', 'alert');
-    toast.setAttribute('aria-live', 'assertive');
-    toast.setAttribute('aria-atomic', 'true');
-    
-    toast.innerHTML = `
-        <div class="d-flex">
-            <div class="toast-body">
-                ${message}
-            </div>
-            <button type="button" class="btn-close btn-close-white me-2 m-auto" 
-                    data-bs-dismiss="toast"></button>
-        </div>
-    `;
-    
-    toastContainer.appendChild(toast);
-    const bsToast = new bootstrap.Toast(toast);
-    bsToast.show();
-    
-    toast.addEventListener('hidden.bs.toast', function () {
-        toast.remove();
-    });
-}
-
-function createToastContainer() {
-    const container = document.createElement('div');
-    container.id = 'toastContainer';
-    container.className = 'toast-container position-fixed bottom-0 end-0 p-3';
-    container.style.zIndex = '9999';
-    document.body.appendChild(container);
-    return container;
-}
-
-// Initialisation
+// ============================================
+// GESTION DES DROPDOWNS - VERSION CORRIGÉE
+// ============================================
 document.addEventListener('DOMContentLoaded', function() {
-    if (!document.getElementById('toastContainer')) {
-        createToastContainer();
+    console.log('🚀 Initialisation des dropdowns...');
+    
+    // Vérifier si Bootstrap est chargé
+    if (typeof bootstrap !== 'undefined') {
+        console.log('✅ Bootstrap trouvé');
+        
+        // Initialiser tous les dropdowns avec Bootstrap
+        var dropdownElementList = [].slice.call(document.querySelectorAll('[data-bs-toggle="dropdown"]'));
+        dropdownElementList.forEach(function(dropdownToggleEl) {
+            try {
+                new bootstrap.Dropdown(dropdownToggleEl);
+            } catch(e) {
+                console.warn('Erreur initialisation dropdown:', e);
+            }
+        });
+        console.log('✅', dropdownElementList.length, 'dropdowns initialisés avec Bootstrap');
+        
+    } else {
+        console.warn('⚠️ Bootstrap non trouvé, utilisation du fallback manuel');
+        
+        // Fallback manuel si Bootstrap n'est pas chargé
+        document.querySelectorAll('[data-bs-toggle="dropdown"]').forEach(toggle => {
+            toggle.addEventListener('click', function(e) {
+                e.preventDefault();
+                e.stopPropagation();
+                
+                const dropdown = this.nextElementSibling;
+                
+                // Fermer tous les autres dropdowns
+                document.querySelectorAll('.dropdown-menu.show').forEach(menu => {
+                    if (menu !== dropdown) {
+                        menu.classList.remove('show');
+                    }
+                });
+                
+                // Ouvrir/fermer celui-ci
+                if (dropdown) {
+                    dropdown.classList.toggle('show');
+                }
+            });
+        });
+        
+        // Fermer les dropdowns en cliquant ailleurs
+        document.addEventListener('click', function(e) {
+            if (!e.target.closest('.dropdown')) {
+                document.querySelectorAll('.dropdown-menu.show').forEach(menu => {
+                    menu.classList.remove('show');
+                });
+            }
+        });
     }
     
-    // Tooltips
-    const tooltips = document.querySelectorAll('[data-bs-toggle="tooltip"]');
-    tooltips.forEach(tooltip => new bootstrap.Tooltip(tooltip));
+    console.log('🚀 Espace de travail sous-action chargé');
+    console.log('Type de plan:', '{{ plan_type }}');
+    console.log('Plan ID:', {{ plan_action.id }});
 });
 </script>
-
-<style>
-.timeline {
-    position: relative;
-    padding-left: 30px;
-}
-
-.timeline::before {
-    content: '';
-    position: absolute;
-    left: 15px;
-    top: 0;
-    bottom: 0;
-    width: 2px;
-    background-color: #dee2e6;
-}
-
-.timeline-item {
-    position: relative;
-    margin-bottom: 20px;
-}
-
-.timeline-marker {
-    position: absolute;
-    left: -30px;
-    top: 20px;
-    width: 15px;
-    height: 15px;
-    border-radius: 50%;
-    border: 3px solid #fff;
-    box-shadow: 0 0 0 3px #dee2e6;
-    z-index: 1;
-}
-
-.timeline-content {
-    padding-left: 20px;
-}
-
-.avatar-sm {
-    display: flex;
-    align-items-center;
-    justify-content: center;
-    font-weight: bold;
-}
-
-.fichier-card {
-    transition: all 0.3s ease;
-    cursor: pointer;
-}
-
-.fichier-card:hover {
-    transform: translateY(-2px);
-    box-shadow: 0 4px 8px rgba(0,0,0,0.1);
-}
-
-.commentaire-contenu {
-    line-height: 1.6;
-    white-space: pre-wrap;
-    word-break: break-word;
-}
-
-.badge.bg-success { background-color: #198754 !important; }
-.badge.bg-warning { background-color: #ffc107 !important; color: #000 !important; }
-.badge.bg-danger { background-color: #dc3545 !important; }
-.badge.bg-secondary { background-color: #6c757d !important; }
-.badge.bg-info { background-color: #0dcaf0 !important; }
-
-@media (max-width: 768px) {
-    .timeline {
-        padding-left: 20px;
-    }
-    
-    .timeline::before {
-        left: 10px;
-    }
-    
-    .timeline-marker {
-        left: -20px;
-    }
-}
-</style>
 {% endblock %}
