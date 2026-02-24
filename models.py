@@ -5398,7 +5398,7 @@ class FichierRapport(db.Model):
 
 
 
-# models.py - Ajoutez ces classes
+
 # models.py - Ajoutez ces classes
 class DispositifMaitrise(db.Model):
     __tablename__ = 'dispositifs_maitrise'
@@ -5528,61 +5528,6 @@ class DispositifMaitrise(db.Model):
         
         return round(min(reduction_finale, reduction_max), 1)
 
-    def stress_test_avance(self):
-        """Version plus complète avec multiples scénarios"""
-        
-        scenarios = {
-            'cyber': {
-                'nom': '💻 Cyberattaque',
-                'facteur_humain': 0.3,    # Plus de personnel
-                'facteur_technique': 0.2,   # Systèmes compromis
-                'duree': '72h',
-                'description': 'Ransomware, systèmes indisponibles'
-            },
-            'humain': {
-                'nom': '👥 Absence critique',
-                'facteur_humain': 0.1,     # 90% du personnel absent
-                'facteur_technique': 0.9,   # Systèmes OK
-                'duree': '2 semaines',
-                'description': 'Grève, épidémie, départ simultané'
-            },
-            'technique': {
-                'nom': '🔧 Panne majeure',
-                'facteur_humain': 0.8,     # Personnel présent
-                'facteur_technique': 0.3,   # 70% des systèmes en panne
-                'duree': '48h',
-                'description': 'Incendie datacenter, coupure électrique'
-            },
-            'naturel': {
-                'nom': '🌪️ Catastrophe naturelle',
-                'facteur_humain': 0.4,     # Accès limité
-                'facteur_technique': 0.5,   # Infrastructures endommagées
-                'duree': '1 mois',
-                'description': 'Inondation, tremblement de terre'
-            }
-        }
-        
-        # Calcul de résilience spécifique
-        resultats = {}
-        for key, scenario in scenarios.items():
-            # Ponderer selon la nature du dispositif
-            if self.nature == 'Automatique':
-                facteur_global = scenario['facteur_technique']
-            elif self.nature == 'Humaine':
-                facteur_global = scenario['facteur_humain']
-            else:
-                facteur_global = (scenario['facteur_humain'] + scenario['facteur_technique']) / 2
-            
-            efficacite_stress = (self.efficacite_reelle or 0) * facteur_global
-            resultats[key] = {
-                'scenario': scenario['nom'],
-                'efficacite': round(efficacite_stress, 1),
-                'facteur': facteur_global,
-                'duree': scenario['duree']
-            }
-        
-        return resultats
-
     def get_reduction_risque_detaille(self):
         """
         Retourne le calcul détaillé avec explications
@@ -5699,97 +5644,6 @@ class DispositifMaitrise(db.Model):
         
         return details
 
-    def stress_test(self, scenario='severe'):
-    """
-    Simule l'efficacité du dispositif dans des conditions extrêmes
-    Scénarios: 'modere', 'severe', 'extreme'
-    """
-    if not self.efficacite_reelle:
-        return {'error': 'Dispositif non évalué'}
-    
-    details = self.get_reduction_risque_detaille()
-    
-    # Coefficients de stress par scénario
-    scenarios = {
-        'modere': {
-            'nom': '🌧️ Modéré',
-            'facteur_efficacite': 0.8,   # Perte de 20% d'efficacité
-            'facteur_couverture': 0.85,   # Perte de 15% de couverture
-            'couleur': 'warning',
-            'description': 'Perturbation modérée (panne partielle, absence temporaire)'
-        },
-        'severe': {
-            'nom': '⚡ Sévère',
-            'facteur_efficacite': 0.5,    # Perte de 50% d'efficacité
-            'facteur_couverture': 0.6,     # Perte de 40% de couverture
-            'couleur': 'danger',
-            'description': 'Perturbation sévère (panne majeure, absence prolongée)'
-        },
-        'extreme': {
-            'nom': '🔥 Extrême',
-            'facteur_efficacite': 0.2,    # Perte de 80% d'efficacité
-            'facteur_couverture': 0.3,     # Perte de 70% de couverture
-            'couleur': 'dark',
-            'description': 'Situation catastrophique (sinistre, crise majeure)'
-        }
-    }
-    
-    config = scenarios.get(scenario, scenarios['severe'])
-    
-    # Calcul sous stress
-    efficacite_stressee = (self.efficacite_reelle or 0) * config['facteur_efficacite']
-    couverture_stressee = (self.couverture or 0) * config['facteur_couverture']
-    
-    # Sauvegarder les valeurs originales pour restauration
-    efficacite_originale = self.efficacite_reelle
-    couverture_originale = self.couverture
-    
-    # Appliquer temporairement les valeurs stressées
-    self.efficacite_reelle = efficacite_stressee
-    self.couverture = couverture_stressee
-    
-    # Calculer la réduction sous stress
-    details_stress = self.get_reduction_risque_detaille()
-    
-    # Restaurer les valeurs originales
-    self.efficacite_reelle = efficacite_originale
-    self.couverture = couverture_originale
-    
-    # Calcul des impacts
-    reduction_normale = details['reduction_finale']
-    reduction_stress = details_stress['reduction_finale']
-    perte = reduction_normale - reduction_stress
-    
-    # Déterminer la résilience
-    if perte < 10:
-        resilience = "🛡️ EXCELLENTE"
-        conseil = "Le dispositif résiste très bien au stress"
-    elif perte < 25:
-        resilience = "👍 BONNE"
-        conseil = "Le dispositif résiste bien, mais des améliorations sont possibles"
-    elif perte < 50:
-        resilience = "⚠️ MODÉRÉE"
-        conseil = "Le dispositif montre des faiblesses en conditions de stress"
-    else:
-        resilience = "🔴 FAIBLE"
-        conseil = "Le dispositif est vulnérable - Plan de continuité recommandé"
-    
-    return {
-        'scenario': config['nom'],
-        'couleur': config['couleur'],
-        'description_scenario': config['description'],
-        'efficacite_normale': round(efficacite_originale, 1),
-        'efficacite_stress': round(efficacite_stressee, 1),
-        'couverture_normale': round(couverture_originale, 1),
-        'couverture_stress': round(couverture_stressee, 1),
-        'reduction_normale': reduction_normale,
-        'reduction_stress': reduction_stress,
-        'perte': round(perte, 1),
-        'perte_pourcentage': round((perte / reduction_normale * 100) if reduction_normale > 0 else 0, 1),
-        'resilience': resilience,
-        'conseil': conseil,
-        'risque_residuel': max(1, round(3 * (1 - reduction_stress/100)))  # Estimation
-    }
     @classmethod
     def get_benchmark_dispositifs(cls, client_id=None, type_dispositif=None):
         """
@@ -6000,8 +5854,326 @@ class DispositifMaitrise(db.Model):
                 'score': efficacite_pct,
                 'etoiles': 1
             }
+
+    def stress_test(self, scenario='severe'):
+        """
+        Simule l'efficacité du dispositif dans des conditions extrêmes
+        Scénarios: 'modere', 'severe', 'extreme'
+        """
+        if not self.efficacite_reelle:
+            return {'error': 'Dispositif non évalué'}
         
-    
+        details = self.get_reduction_risque_detaille()
+        
+        # Coefficients de stress par scénario
+        scenarios = {
+            'modere': {
+                'nom': '🌧️ Modéré',
+                'facteur_efficacite': 0.8,   # Perte de 20% d'efficacité
+                'facteur_couverture': 0.85,   # Perte de 15% de couverture
+                'couleur': 'warning',
+                'description': 'Perturbation modérée (panne partielle, absence temporaire)'
+            },
+            'severe': {
+                'nom': '⚡ Sévère',
+                'facteur_efficacite': 0.5,    # Perte de 50% d'efficacité
+                'facteur_couverture': 0.6,     # Perte de 40% de couverture
+                'couleur': 'danger',
+                'description': 'Perturbation sévère (panne majeure, absence prolongée)'
+            },
+            'extreme': {
+                'nom': '🔥 Extrême',
+                'facteur_efficacite': 0.2,    # Perte de 80% d'efficacité
+                'facteur_couverture': 0.3,     # Perte de 70% de couverture
+                'couleur': 'dark',
+                'description': 'Situation catastrophique (sinistre, crise majeure)'
+            }
+        }
+        
+        config = scenarios.get(scenario, scenarios['severe'])
+        
+        # Calcul sous stress
+        efficacite_stressee = (self.efficacite_reelle or 0) * config['facteur_efficacite']
+        couverture_stressee = (self.couverture or 0) * config['facteur_couverture']
+        
+        # Sauvegarder les valeurs originales pour restauration
+        efficacite_originale = self.efficacite_reelle
+        couverture_originale = self.couverture
+        
+        # Appliquer temporairement les valeurs stressées
+        self.efficacite_reelle = efficacite_stressee
+        self.couverture = couverture_stressee
+        
+        # Calculer la réduction sous stress
+        details_stress = self.get_reduction_risque_detaille()
+        
+        # Restaurer les valeurs originales
+        self.efficacite_reelle = efficacite_originale
+        self.couverture = couverture_originale
+        
+        # Calcul des impacts
+        reduction_normale = details['reduction_finale']
+        reduction_stress = details_stress['reduction_finale']
+        perte = reduction_normale - reduction_stress
+        
+        # Déterminer la résilience
+        if perte < 10:
+            resilience = "🛡️ EXCELLENTE"
+            conseil = "Le dispositif résiste très bien au stress"
+        elif perte < 25:
+            resilience = "👍 BONNE"
+            conseil = "Le dispositif résiste bien, mais des améliorations sont possibles"
+        elif perte < 50:
+            resilience = "⚠️ MODÉRÉE"
+            conseil = "Le dispositif montre des faiblesses en conditions de stress"
+        else:
+            resilience = "🔴 FAIBLE"
+            conseil = "Le dispositif est vulnérable - Plan de continuité recommandé"
+        
+        return {
+            'scenario': config['nom'],
+            'couleur': config['couleur'],
+            'description_scenario': config['description'],
+            'efficacite_normale': round(efficacite_originale, 1),
+            'efficacite_stress': round(efficacite_stressee, 1),
+            'couverture_normale': round(couverture_originale, 1),
+            'couverture_stress': round(couverture_stressee, 1),
+            'reduction_normale': reduction_normale,
+            'reduction_stress': reduction_stress,
+            'perte': round(perte, 1),
+            'perte_pourcentage': round((perte / reduction_normale * 100) if reduction_normale > 0 else 0, 1),
+            'resilience': resilience,
+            'conseil': conseil,
+            'risque_residuel': max(1, round(3 * (1 - reduction_stress/100)))  # Estimation
+        }
+
+    def stress_test_avance(self):
+        """Version complète avec 15 scénarios de stress"""
+        
+        scenarios = {
+            # CYBERSÉCURITÉ
+            'cyber_ransomware': {
+                'nom': '💣 Ransomware',
+                'facteur_humain': 0.2,
+                'facteur_technique': 0.1,
+                'duree': '7 jours',
+                'description': 'Chiffrement des données, systèmes bloqués, demande de rançon'
+            },
+            'cyber_ddos': {
+                'nom': '🌐 DDoS',
+                'facteur_humain': 0.8,
+                'facteur_technique': 0.3,
+                'duree': '48h',
+                'description': 'Indisponibilité réseau, perte de connectivité externe'
+            },
+            'cyber_phishing': {
+                'nom': '🎣 Phishing ciblé',
+                'facteur_humain': 0.4,
+                'facteur_technique': 0.6,
+                'duree': '72h',
+                'description': 'Compromission comptes utilisateurs, fuite de données'
+            },
+            'cyber_physique': {
+                'nom': '🔌 Intrusion physique',
+                'facteur_humain': 0.5,
+                'facteur_technique': 0.4,
+                'duree': '1 semaine',
+                'description': 'Accès non autorisé aux serveurs, sabotage matériel'
+            },
+            
+            # RESSOURCES HUMAINES
+            'humain_grève': {
+                'nom': '⚡ Grève générale',
+                'facteur_humain': 0.2,
+                'facteur_technique': 0.9,
+                'duree': '2 semaines',
+                'description': '80% du personnel absent, mouvements sociaux'
+            },
+            'humain_pandémie': {
+                'nom': '🦠 Pandémie',
+                'facteur_humain': 0.3,
+                'facteur_technique': 0.8,
+                'duree': '1 mois',
+                'description': '50% d\'absentéisme, télétravail imposé'
+            },
+            'humain_départ_masse': {
+                'nom': '🏃 Départs simultanés',
+                'facteur_humain': 0.2,
+                'facteur_technique': 0.7,
+                'duree': '3 mois',
+                'description': 'Perte des compétences clés, passation impossible'
+            },
+            'humain_erreur': {
+                'nom': '❌ Erreur humaine majeure',
+                'facteur_humain': 0.3,
+                'facteur_technique': 0.8,
+                'duree': '1 semaine',
+                'description': 'Manipulation erronée, perte de données critique'
+            },
+            
+            # TECHNIQUE & INFRASTRUCTURE
+            'tech_panne_elec': {
+                'nom': '⚡ Panne électrique',
+                'facteur_humain': 0.9,
+                'facteur_technique': 0.2,
+                'duree': '72h',
+                'description': 'Coupure générale, groupes électrogènes hors service'
+            },
+            'tech_incendie': {
+                'nom': '🔥 Incendie',
+                'facteur_humain': 0.6,
+                'facteur_technique': 0.2,
+                'duree': '1 mois',
+                'description': 'Destruction partielle datacenter, perte matérielle'
+            },
+            'tech_panne_reseau': {
+                'nom': '🌍 Panne réseau',
+                'facteur_humain': 0.8,
+                'facteur_technique': 0.3,
+                'duree': '48h',
+                'description': 'Fibre optique coupée, indisponibilité totale'
+            },
+            'tech_obsolescence': {
+                'nom': '📉 Obsolescence',
+                'facteur_humain': 0.7,
+                'facteur_technique': 0.4,
+                'duree': 'Permanent',
+                'description': 'Matériel non supporté, vulnérabilités critiques'
+            },
+            
+            # CATASTROPHES NATURELLES
+            'naturel_inondation': {
+                'nom': '🌊 Inondation',
+                'facteur_humain': 0.5,
+                'facteur_technique': 0.3,
+                'duree': '3 semaines',
+                'description': 'Locaux inaccessibles, matériel détruit'
+            },
+            'naturel_seisme': {
+                'nom': '🏚️ Séisme',
+                'facteur_humain': 0.4,
+                'facteur_technique': 0.2,
+                'duree': '2 mois',
+                'description': 'Bâtiment endommagé, infrastructure instable'
+            },
+            'naturel_tempete': {
+                'nom': '🌪️ Tempête',
+                'facteur_humain': 0.6,
+                'facteur_technique': 0.4,
+                'duree': '1 semaine',
+                'description': 'Dégâts toiture, lignes électriques coupées'
+            },
+            
+            # FINANCIER
+            'finance_crise': {
+                'nom': '📉 Crise financière',
+                'facteur_humain': 0.5,
+                'facteur_technique': 0.6,
+                'duree': '6 mois',
+                'description': 'Budget réduit 50%, gel des investissements'
+            },
+            'finance_fournisseur': {
+                'nom': '🏭 Faillite fournisseur',
+                'facteur_humain': 0.6,
+                'facteur_technique': 0.5,
+                'duree': '3 mois',
+                'description': 'Fournisseur critique en cessation d\'activité'
+            },
+            'finance_fraude': {
+                'nom': '💰 Fraude interne',
+                'facteur_humain': 0.3,
+                'facteur_technique': 0.5,
+                'duree': '1 mois',
+                'description': 'Détournement de fonds, contrôles contournés'
+            },
+            
+            # RÉGLEMENTAIRE
+            'legal_conformite': {
+                'nom': '📜 Nouvelle réglementation',
+                'facteur_humain': 0.5,
+                'facteur_technique': 0.5,
+                'duree': '30 jours',
+                'description': 'Mise en conformité urgente, risques de sanctions'
+            },
+            'legal_contentieux': {
+                'nom': '⚖️ Contentieux majeur',
+                'facteur_humain': 0.4,
+                'facteur_technique': 0.6,
+                'duree': '1 an',
+                'description': 'Procès, gel des activités, saisie possible'
+            },
+            'legal_audit': {
+                'nom': '🔍 Audit surprise',
+                'facteur_humain': 0.4,
+                'facteur_technique': 0.5,
+                'duree': '1 semaine',
+                'description': 'Contrôle inopiné, sanctions potentielles'
+            }
+        }
+        
+        # Si le dispositif n'est pas évalué
+        if not self.efficacite_reelle:
+            resultats = {}
+            for key, scenario in scenarios.items():
+                resultats[key] = {
+                    'scenario': scenario['nom'],
+                    'efficacite': 0,
+                    'facteur': 0,
+                    'duree': scenario['duree'],
+                    'description': scenario['description']
+                }
+            return resultats
+        
+        # Calcul pour tous les scénarios
+        resultats = {}
+        for key, scenario in scenarios.items():
+            # Ponderer selon la nature du dispositif
+            nature = (self.nature or '').lower()
+            
+            if 'automatique' in nature or 'technique' in nature or 'logiciel' in nature:
+                facteur_global = scenario['facteur_technique']
+            elif 'humain' in nature or 'manuel' in nature or 'procédurale' in nature:
+                facteur_global = scenario['facteur_humain']
+            else:
+                facteur_global = (scenario['facteur_humain'] + scenario['facteur_technique']) / 2
+            
+            efficacite_stress = (self.efficacite_reelle or 0) * facteur_global
+            resultats[key] = {
+                'scenario': scenario['nom'],
+                'efficacite': round(efficacite_stress, 1),
+                'facteur': round(facteur_global, 2),
+                'duree': scenario['duree'],
+                'description': scenario['description']
+            }
+        
+        return resultats
+
+    def get_score_resilience(self):
+        """Calcule un score de résilience global"""
+        try:
+            tests = self.stress_test_avance()
+            
+            scores = []
+            for resultat in tests.values():
+                scores.append(resultat['efficacite'])
+            
+            if not scores:
+                return "NON ÉVALUÉ", 0
+            
+            resilience_moyenne = sum(scores) / len(scores)
+            
+            if resilience_moyenne >= 4:
+                return "🟢 EXCELLENTE", resilience_moyenne
+            elif resilience_moyenne >= 3:
+                return "🟡 BONNE", resilience_moyenne
+            elif resilience_moyenne >= 2:
+                return "🟠 MODÉRÉE", resilience_moyenne
+            else:
+                return "🔴 FAIBLE", resilience_moyenne
+        except Exception as e:
+            print(f"Erreur calcul résilience: {e}")
+            return "ERREUR", 0
+
     def get_niveau_efficacite(self):
         """Retourne le niveau d'efficacité basé sur l'écart entre attendu et réel"""
         if self.efficacite_attendue and self.efficacite_reelle:
@@ -6013,6 +6185,7 @@ class DispositifMaitrise(db.Model):
             else:
                 return 'Insuffisant'
         return 'Non évalué'
+
 
 
 
