@@ -5399,6 +5399,7 @@ class FichierRapport(db.Model):
 
 
 # models.py - Ajoutez ces classes
+# models.py - Ajoutez ces classes
 class DispositifMaitrise(db.Model):
     __tablename__ = 'dispositifs_maitrise'
     
@@ -5530,59 +5531,330 @@ class DispositifMaitrise(db.Model):
     def get_reduction_risque_detaille(self):
         """
         Retourne le calcul détaillé avec explications
+        Version améliorée avec facteurs plus réalistes
         """
         details = {}
         
-        # Réduction max selon type
+        # 1. RÉDUCTION MAX PAR TYPE (normes sectorielles)
         reduction_max_par_type = {
-            'Préventif': 75, 'Détectif': 60, 'Correctif': 45, 'Dirigeant': 30
+            'Préventif': 75,
+            'Détectif': 60,
+            'Correctif': 45,
+            'Dirigeant': 30
         }
         
         type_dispositif = self.type_dispositif or 'Correctif'
         details['reduction_max_type'] = reduction_max_par_type.get(type_dispositif, 45)
         details['type'] = type_dispositif
         
-        # Scores
+        # 2. SCORES DE BASE
         details['efficacite'] = self.efficacite_reelle or 0
         details['couverture'] = self.couverture or 0
         details['efficacite_norm'] = (self.efficacite_reelle or 0) / 5
         details['couverture_norm'] = (self.couverture or 0) / 5
         
-        # Score de base pondéré (60% efficacité, 40% couverture)
+        # 3. SCORE PONDÉRÉ
         details['score_pondere'] = (details['efficacite_norm'] * 60) + (details['couverture_norm'] * 40)
         details['reduction_calcul'] = (details['score_pondere'] / 100) * details['reduction_max_type']
         
-        # Facteurs plus réalistes
+        # 4. FACTEURS MODÉRATEURS
         facteurs_nature = {
-            'Automatique': 1.0, 'Technique': 0.95, 'Procédurale': 0.85,
-            'Organisationnelle': 0.80, 'Humaine': 0.75
+            'Automatique': 1.0, 'Technique': 0.98, 'Logiciel': 0.98,
+            'Matériel': 0.97, 'Procédurale': 0.95, 'Organisationnelle': 0.92,
+            'Humaine': 0.88, 'Manuel': 0.88, 'Mixte': 0.95
         }
+        
         facteurs_frequence = {
-            'Permanente': 1.0, 'Continue': 0.95, 'Temps réel': 0.95,
-            'Quotidienne': 0.90, 'Hebdomadaire': 0.85, 'Mensuelle': 0.75,
-            'Trimestrielle': 0.65, 'Annuelle': 0.55
+            'Permanente': 1.0, 'Continue': 0.98, 'Temps réel': 0.98,
+            'Quotidienne': 0.95, 'Hebdomadaire': 0.92, 'Mensuelle': 0.88,
+            'Trimestrielle': 0.82, 'Semestrielle': 0.76, 'Annuelle': 0.70,
+            'Exceptionnelle': 0.60
         }
         
-        details['facteur_nature'] = facteurs_nature.get(self.nature or 'Procédurale', 0.85)
-        details['nature'] = self.nature or 'Procédurale'
-        details['facteur_frequence'] = facteurs_frequence.get(self.frequence or 'Mensuelle', 0.75)
-        details['frequence'] = self.frequence or 'Mensuelle'
+        # Mapping des valeurs
+        nature_map = {
+            'manuel': 'Manuel', 'automatique': 'Automatique', 'technique': 'Technique',
+            'procédurale': 'Procédurale', 'organisationnelle': 'Organisationnelle',
+            'humaine': 'Humaine', 'mixte': 'Mixte'
+        }
         
-        # Réduction finale
-        details['reduction_finale'] = details['reduction_calcul'] * details['facteur_nature'] * details['facteur_frequence']
+        frequence_map = {
+            'permanent': 'Permanente', 'continu': 'Continue', 'temps réel': 'Temps réel',
+            'quotidien': 'Quotidienne', 'hebdomadaire': 'Hebdomadaire', 'mensuel': 'Mensuelle',
+            'trimestriel': 'Trimestrielle', 'semestriel': 'Semestrielle', 'annuel': 'Annuelle'
+        }
         
-        # Garantir un minimum pour dispositif parfait
+        # Normalisation
+        nature_normalisee = nature_map.get(str(self.nature).lower() if self.nature else '', 'Procédurale')
+        frequence_normalisee = frequence_map.get(str(self.frequence).lower() if self.frequence else '', 'Mensuelle')
+        
+        details['nature'] = nature_normalisee
+        details['frequence'] = frequence_normalisee
+        details['facteur_nature'] = facteurs_nature.get(nature_normalisee, 0.92)
+        details['facteur_frequence'] = facteurs_frequence.get(frequence_normalisee, 0.85)
+        
+        # 5. CALCUL FINAL
+        facteur_global = (details['facteur_nature'] * details['facteur_frequence']) ** 0.5
+        details['facteur_global'] = round(facteur_global, 3)
+        details['reduction_finale'] = details['reduction_calcul'] * facteur_global
+        
+        # 6. BONUS (BIEN INDENTÉ)
         if details['efficacite'] == 5 and details['couverture'] == 5:
-            details['reduction_finale'] = max(details['reduction_finale'], details['reduction_max_type'] * 0.8)
+            seuil_min = details['reduction_max_type'] * 0.85
+            if details['reduction_finale'] < seuil_min:
+                details['reduction_finale'] = seuil_min
+                details['bonus_applique'] = True
             details['garantie_minimum'] = True
+            details['bonus_applique'] = False  # Initialisé
+        elif details['efficacite'] >= 4 and details['couverture'] >= 4:
+            if details['reduction_finale'] < details['reduction_max_type'] * 0.7:
+                details['reduction_finale'] = details['reduction_max_type'] * 0.7
+                details['bonus_applique'] = True
+            details['garantie_minimum'] = False
         else:
             details['garantie_minimum'] = False
+            details['bonus_applique'] = False
         
-        # Limiter au maximum du type
+        # 7. LIMITES
         details['reduction_finale'] = min(details['reduction_finale'], details['reduction_max_type'])
+        details['reduction_finale'] = max(details['reduction_finale'], 0)
         details['reduction_finale'] = round(details['reduction_finale'], 1)
         
+        # 8. NIVEAU D'IMPACT
+        if details['reduction_finale'] >= details['reduction_max_type'] * 0.8:
+            details['niveau_impact'] = 'TRÈS ÉLEVÉ'
+            details['classe_impact'] = 'success'
+            details['icone_impact'] = 'fa-check-circle'
+        elif details['reduction_finale'] >= details['reduction_max_type'] * 0.6:
+            details['niveau_impact'] = 'ÉLEVÉ'
+            details['classe_impact'] = 'success'
+            details['icone_impact'] = 'fa-check-circle'
+        elif details['reduction_finale'] >= details['reduction_max_type'] * 0.4:
+            details['niveau_impact'] = 'MODÉRÉ'
+            details['classe_impact'] = 'warning'
+            details['icone_impact'] = 'fa-exclamation-triangle'
+        elif details['reduction_finale'] >= details['reduction_max_type'] * 0.2:
+            details['niveau_impact'] = 'FAIBLE'
+            details['classe_impact'] = 'danger'
+            details['icone_impact'] = 'fa-times-circle'
+        else:
+            details['niveau_impact'] = 'TRÈS FAIBLE'
+            details['classe_impact'] = 'danger'
+            details['icone_impact'] = 'fa-times-circle'
+        
         return details
+
+    @classmethod
+    def get_benchmark_dispositifs(cls, client_id=None, type_dispositif=None):
+        """
+        Compare les dispositifs entre eux pour identifier les tendances
+        """
+        query = cls.query
+        
+        if client_id:
+            query = query.filter_by(client_id=client_id)
+        if type_dispositif:
+            query = query.filter_by(type_dispositif=type_dispositif)
+        
+        dispositifs = query.all()
+        
+        stats = {
+            'total': len(dispositifs),
+            'par_type': {},
+            'efficacite_moyenne': 0,
+            'couverture_moyenne': 0,
+            'reduction_moyenne': 0,
+            'top_performers': [],
+            'a_ameliorer': [],
+            'sans_evaluation': []
+        }
+        
+        total_efficacite = 0
+        total_couverture = 0
+        total_reduction = 0
+        count_evalue = 0
+        
+        for d in dispositifs:
+            # Stats par type
+            if d.type_dispositif not in stats['par_type']:
+                stats['par_type'][d.type_dispositif] = 0
+            stats['par_type'][d.type_dispositif] += 1
+            
+            # Moyennes
+            if d.efficacite_reelle:
+                total_efficacite += d.efficacite_reelle
+                total_couverture += (d.couverture or 0)
+                reduction = d.get_reduction_risque_detaille()['reduction_finale']
+                total_reduction += reduction
+                count_evalue += 1
+                
+                # Classification
+                if d.efficacite_reelle >= 4:
+                    stats['top_performers'].append({
+                        'id': d.id,
+                        'reference': d.reference,
+                        'efficacite': d.efficacite_reelle,
+                        'reduction': reduction
+                    })
+                elif d.efficacite_reelle < 3:
+                    stats['a_ameliorer'].append({
+                        'id': d.id,
+                        'reference': d.reference,
+                        'efficacite': d.efficacite_reelle,
+                        'ecart': (d.efficacite_attendue or 3) - d.efficacite_reelle
+                    })
+            else:
+                stats['sans_evaluation'].append({
+                    'id': d.id,
+                    'reference': d.reference
+                })
+        
+        if count_evalue > 0:
+            stats['efficacite_moyenne'] = round(total_efficacite / count_evalue, 1)
+            stats['couverture_moyenne'] = round(total_couverture / count_evalue, 1)
+            stats['reduction_moyenne'] = round(total_reduction / count_evalue, 1)
+        
+        return stats
+
+    def get_matrice_criticite(self):
+        """
+        Analyse la criticité du dispositif selon plusieurs dimensions
+        Retourne une matrice de décision
+        """
+        details = self.get_reduction_risque_detaille()
+        impact = self.get_impact_coso()
+        
+        # Calcul du score de criticité (0-100)
+        score_efficacite = (self.efficacite_reelle or 0) * 20  # 0-100
+        score_couverture = (self.couverture or 0) * 20        # 0-100
+        score_urgence = 100 - ((score_efficacite + score_couverture) / 2)
+        
+        # CORRECTION: Remplacer get_niveau_brut() par une valeur par défaut
+        # Niveau de risque résiduel
+        if self.risque:
+            # Si votre modèle Risque a un champ 'niveau' ou 'criticite'
+            risque_initial = getattr(self.risque, 'niveau', 3)  # Valeur par défaut 3
+            # Ou si vous avez une méthode existante
+            if hasattr(self.risque, 'get_niveau'):
+                risque_initial = self.risque.get_niveau()
+            elif hasattr(self.risque, 'get_criticite'):
+                risque_initial = self.risque.get_criticite()
+        else:
+            risque_initial = 3
+        
+        reduction = details['reduction_finale'] / 100
+        risque_residuel = max(1, round(risque_initial * (1 - reduction)))
+        
+        # Facteurs aggravants
+        facteurs_aggravants = []
+        if self.date_derniere_verification:
+            jours_depuis = (datetime.now().date() - self.date_derniere_verification).days
+            if jours_depuis > 365:
+                facteurs_aggravants.append("Non vérifié depuis plus d'un an")
+        if self.statut != 'actif':
+            facteurs_aggravants.append(f"Statut: {self.statut}")
+        if not self.responsable:
+            facteurs_aggravants.append("Aucun responsable assigné")
+        
+        return {
+            'urgence': min(100, max(0, score_urgence)),
+            'criticite': 'CRITIQUE' if score_urgence > 70 else 'ÉLEVÉE' if score_urgence > 50 else 'MODÉRÉE' if score_urgence > 30 else 'FAIBLE',
+            'risque_initial': risque_initial,
+            'risque_residuel': risque_residuel,
+            'reduction_reelle': details['reduction_finale'],
+            'facteurs_aggravants': facteurs_aggravants,
+            'recommandation': self.get_recommandation_automatique()
+        }
+
+    def get_recommandation_automatique(self):
+        """Génère une recommandation automatique basée sur l'analyse"""
+        if not self.efficacite_reelle:
+            return "🔴 ÉVALUATION REQUISE - Évaluez ce dispositif d'urgence"
+        
+        if self.efficacite_reelle < self.efficacite_attendue:
+            if self.efficacite_attendue - self.efficacite_reelle >= 2:
+                return "🔴 ACTION IMMÉDIATE - Écart critique, plan d'action urgent"
+            else:
+                return "🟠 AMÉLIORATION NÉCESSAIRE - Plan d'action à programmer"
+        
+        if self.prochaine_verification:
+            jours_restants = (self.prochaine_verification - datetime.now().date()).days
+            if jours_restants < 0:
+                return f"🔴 VÉRIFICATION EN RETARD de {abs(jours_restants)} jours"
+            elif jours_restants < 30:
+                return f"🟠 VÉRIFICATION PROCHAINE dans {jours_restants} jours"
+        
+        return "🟢 CONFORME - Surveillance normale"
+
+    def get_impact_coso(self):
+        """
+        Retourne l'analyse d'impact selon les normes COSO
+        Basé sur l'échelle : 5/5=90-100%, 4/5=70-89%, 3/5=50-69%, 2/5=30-49%, 1/5=<30%
+        """
+        if not self.efficacite_reelle:
+            return {
+                'niveau': 'Non évalué',
+                'classe': 'secondary',
+                'icone': 'fa-question-circle',
+                'description': 'Évaluez le dispositif pour déterminer son impact',
+                'action': 'Évaluation requise'
+            }
+        
+        # Calculer le pourcentage d'efficacité
+        efficacite_pct = (self.efficacite_reelle / 5) * 100
+        
+        # Déterminer le niveau selon l'échelle COSO
+        if efficacite_pct >= 90:
+            return {
+                'niveau': '🔒 CONTRÔLE ROBUSTE',
+                'classe': 'success',
+                'icone': 'fa-check-circle',
+                'description': 'Automatisé ou formalisé, traçabilité complète, aucune défaillance constatée',
+                'action': 'Maintenir - Surveillance normale',
+                'score': efficacite_pct,
+                'etoiles': 5
+            }
+        elif efficacite_pct >= 70:
+            return {
+                'niveau': '✅ CONTRÔLE FORT',
+                'classe': 'info',
+                'icone': 'fa-check-circle',
+                'description': 'Fiable mais avec quelques faiblesses mineures',
+                'action': 'Optimiser - Améliorations mineures possibles',
+                'score': efficacite_pct,
+                'etoiles': 4
+            }
+        elif efficacite_pct >= 50:
+            return {
+                'niveau': '⚠️ CONTRÔLE MODÉRÉ',
+                'classe': 'warning',
+                'icone': 'fa-exclamation-triangle',
+                'description': 'Des déficiences mais compensées',
+                'action': 'Surveiller - Plan d\'action à prévoir',
+                'score': efficacite_pct,
+                'etoiles': 3
+            }
+        elif efficacite_pct >= 30:
+            return {
+                'niveau': '🔴 CONTRÔLE FAIBLE',
+                'classe': 'danger',
+                'icone': 'fa-times-circle',
+                'description': 'Déficiences significatives',
+                'action': 'CORRIGER - Plan d\'action urgent',
+                'score': efficacite_pct,
+                'etoiles': 2
+            }
+        else:
+            return {
+                'niveau': '⛔ CONTRÔLE INEXISTANT',
+                'classe': 'dark',
+                'icone': 'fa-times-circle',
+                'description': 'Contrôle inexistant ou totalement inefficace',
+                'action': 'CRÉER - Action immédiate',
+                'score': efficacite_pct,
+                'etoiles': 1
+            }
+        
     
     def get_niveau_efficacite(self):
         """Retourne le niveau d'efficacité basé sur l'écart entre attendu et réel"""
@@ -5595,6 +5867,7 @@ class DispositifMaitrise(db.Model):
             else:
                 return 'Insuffisant'
         return 'Non évalué'
+
 
 
 class DocumentDispositif(db.Model):
