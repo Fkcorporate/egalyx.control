@@ -1,420 +1,1298 @@
 {% extends "base.html" %}
 
 {% block content %}
-<div class="d-flex justify-content-between align-items-center mb-4">
-    <h2>
-        <i class="fas fa-tasks me-2"></i> Plans d'action - {{ risque.reference }}
-    </h2>
-    <div class="btn-toolbar">
-        <a href="{{ url_for('detail_risque', id=risque.id) }}" class="btn btn-secondary me-2">
-            <i class="fas fa-arrow-left me-1"></i> Retour au risque
-        </a>
-        <a href="{{ url_for('nouveau_plan_action_pour_risque', risque_id=risque.id) }}" 
-           class="btn btn-primary">
-            <i class="fas fa-plus me-1"></i> Nouveau plan
-        </a>
-    </div>
-</div>
-
-<!-- Filtres rapides -->
-<div class="card shadow mb-4">
-    <div class="card-header bg-light">
-        <h6 class="mb-0"><i class="fas fa-filter me-2"></i> Filtres</h6>
-    </div>
-    <div class="card-body">
-        <div class="row g-2">
-            <div class="col-md-3">
-                <select class="form-select" id="filterStatut" onchange="filtrerTable()">
-                    <option value="">Tous les statuts</option>
-                    <option value="en_attente">En attente</option>
-                    <option value="en_cours">En cours</option>
-                    <option value="termine">Terminé</option>
-                    <option value="suspendu">Suspendu</option>
-                    <option value="annule">Annulé</option>
-                </select>
-            </div>
-            <div class="col-md-3">
-                <select class="form-select" id="filterPriorite" onchange="filtrerTable()">
-                    <option value="">Toutes les priorités</option>
-                    <option value="critique">Critique</option>
-                    <option value="haute">Haute</option>
-                    <option value="moyenne">Moyenne</option>
-                    <option value="basse">Basse</option>
-                </select>
-            </div>
-            <div class="col-md-3">
-                <select class="form-select" id="filterResponsable" onchange="filtrerTable()">
-                    <option value="">Tous les responsables</option>
-                    {% for responsable in responsables_uniques %}
-                    <option value="{{ responsable.id }}">{{ responsable.username }}</option>
-                    {% endfor %}
-                </select>
-            </div>
-            <div class="col-md-3">
-                <button class="btn btn-outline-secondary w-100" onclick="resetFiltres()">
-                    <i class="fas fa-redo me-1"></i> Réinitialiser
-                </button>
-            </div>
-        </div>
-    </div>
-</div>
-
-<!-- Statistiques avec indicateur d'archives -->
-<div class="row mb-4">
-    <div class="col-md-2">
-        <div class="card text-center border-primary">
-            <div class="card-body">
-                <h3 class="text-primary">{{ stats.total }}</h3>
-                <p class="text-muted mb-0">Actifs</p>
-            </div>
-        </div>
-    </div>
-    <div class="col-md-2">
-        <div class="card text-center border-warning">
-            <div class="card-body">
-                <h3 class="text-warning">{{ stats.en_cours }}</h3>
-                <p class="text-muted mb-0">En cours</p>
-            </div>
-        </div>
-    </div>
-    <div class="col-md-2">
-        <div class="card text-center border-success">
-            <div class="card-body">
-                <h3 class="text-success">{{ stats.termines }}</h3>
-                <p class="text-muted mb-0">Terminés</p>
-            </div>
-        </div>
-    </div>
-    <div class="col-md-2">
-        <div class="card text-center border-danger">
-            <div class="card-body">
-                <h3 class="text-danger">{{ stats.en_retard }}</h3>
-                <p class="text-muted mb-0">En retard</p>
-            </div>
-        </div>
-    </div>
-    <div class="col-md-2">
-        <div class="card text-center border-secondary">
-            <div class="card-body">
-                <h3 class="text-secondary">{{ stats.archives }}</h3>
-                <p class="text-muted mb-0">Archives</p>
-            </div>
-        </div>
-    </div>
-    <div class="col-md-2">
-        <div class="card text-center border-info">
-            <div class="card-body">
-                <h3 class="text-info">{{ plans_action|length }}</h3>
-                <p class="text-muted mb-0">Total affiché</p>
-            </div>
-        </div>
-    </div>
-</div>
-
-<!-- Indicateur de vue actuelle -->
-<div class="alert alert-{{ 'warning' if voir_archives else 'info' }} d-flex justify-content-between align-items-center mb-3">
-    <div>
-        <i class="fas fa-{{ 'archive' if voir_archives else 'eye' }} me-2"></i>
-        {% if voir_archives %}
-        <strong>Vue archives</strong> - Affichage des plans archivés
-        {% else %}
-        <strong>Vue active</strong> - Affichage des plans en cours
-        {% endif %}
-        <span class="badge bg-{{ 'warning' if voir_archives else 'info' }} ms-2">
-            {{ plans_action|length }} plan(s)
-        </span>
-    </div>
-    <div>
-        {% if voir_archives %}
-        <a href="{{ url_for('voir_plans_action_risque', risque_id=risque.id) }}" 
-           class="btn btn-sm btn-info">
-            <i class="fas fa-eye me-1"></i> Voir les actifs
-        </a>
-        {% else %}
-        <a href="{{ url_for('voir_plans_action_risque', risque_id=risque.id, archives='oui') }}" 
-           class="btn btn-sm btn-warning">
-            <i class="fas fa-archive me-1"></i> Voir les archives ({{ stats.archives }})
-        </a>
-        {% endif %}
-    </div>
-</div>
-
-<div class="card shadow">
-    <div class="card-header bg-light d-flex justify-content-between align-items-center">
-        <h6 class="mb-0">
-            <i class="fas fa-list me-2"></i>
-            Plans d'action pour le risque {{ risque.reference }} - {{ risque.intitule }}
-            <span class="badge bg-{{ 'warning' if voir_archives else 'primary' }} ms-2">
-                {{ plans_action|length }}
-            </span>
-            {% if voir_archives %}
-            <span class="badge bg-warning ms-1">
-                <i class="fas fa-archive"></i> Vue archives
-            </span>
-            {% endif %}
-        </h6>
-        <div class="btn-group">
-            <button class="btn btn-sm btn-outline-secondary" onclick="exporterTable()">
-                <i class="fas fa-download me-1"></i> Exporter
-            </button>
-            <div class="dropdown">
-                <button class="btn btn-sm btn-outline-secondary dropdown-toggle" type="button" 
-                        data-bs-toggle="dropdown">
-                    <i class="fas fa-eye me-1"></i> Vue
-                </button>
-                <ul class="dropdown-menu dropdown-menu-end">
-                    <li>
-                        <a class="dropdown-item" href="{{ url_for('voir_plans_action_risque', risque_id=risque.id) }}">
-                            <i class="fas fa-eye text-primary me-2"></i> Voir actifs
-                        </a>
-                    </li>
-                    <li>
-                        <a class="dropdown-item" href="{{ url_for('voir_plans_action_risque', risque_id=risque.id, archives='oui') }}">
-                            <i class="fas fa-archive text-warning me-2"></i> Voir archives
-                        </a>
-                    </li>
-                </ul>
-            </div>
-        </div>
-    </div>
+<style>
+    /* ============================================
+       STYLES SPÉCIFIQUES - LISTE PLANS D'ACTION
+       ============================================ */
     
-    <div class="card-body p-0">
-        {% if plans_action %}
-        <div class="table-responsive">
-            <table class="table table-hover mb-0" id="plansTable">
-                <thead class="table-light">
-                    <tr>
-                        <th width="10%">Référence</th>
-                        <th width="20%">Nom</th>
-                        <th width="10%">Statut</th>
-                        <th width="10%">Priorité</th>
-                        <th width="10%">Progression</th>
-                        <th width="15%">Dates</th>
-                        <th width="15%">Responsable</th>
-                        <th width="10%" class="text-center">Actions</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    {% for plan in plans_action %}
-                    <tr class="plan-row {% if plan.is_archived or plan.statut_archive|default('actif') == 'archive' %}table-secondary archive-row{% endif %}" 
-                        data-plan-id="{{ plan.id }}"
-                        data-statut="{{ plan.statut }}"
-                        data-priorite="{{ plan.priorite }}"
-                        data-responsable="{{ plan.responsable_id }}"
-                        data-archived="{% if plan.is_archived or plan.statut_archive|default('actif') == 'archive' %}true{% else %}false{% endif %}"
-                        data-statut-archive="{{ plan.statut_archive|default('actif') }}">
-                        
-                        <td>
-                            {% if plan.is_archived or plan.statut_archive|default('actif') == 'archive' %}
-                            <div class="d-flex align-items-center">
-                                <i class="fas fa-archive text-secondary me-2" title="Archivé"></i>
-                                <div>
-                                    <strong class="text-muted">{{ plan.reference }}</strong>
-                                    <br>
-                                    <small class="text-muted">
-                                        <i class="fas fa-calendar-alt"></i>
-                                        {{ plan.updated_at.strftime('%d/%m/%Y') if plan.updated_at else 'Non daté' }}
-                                    </small>
-                                </div>
-                            </div>
-                            {% else %}
-                            <strong class="text-dark">{{ plan.reference }}</strong>
-                            {% endif %}
-                        </td>
-                        
-                        <td>
-                            <div class="fw-semibold {% if plan.is_archived or plan.statut_archive|default('actif') == 'archive' %}text-muted{% endif %}">
-                                {{ plan.nom|truncate(40) }}
-                            </div>
-                            {% if plan.description %}
-                            <small class="text-muted">{{ plan.description|truncate(60) }}</small>
-                            {% endif %}
-                        </td>
-                        
-                        <td>
-                            <div class="d-flex align-items-center">
-                                <span class="badge bg-{{ plan.couleur_statut }} me-2">
-                                    {{ plan.statut|replace('_', ' ')|title }}
-                                </span>
-                                {% if plan.est_en_retard and not plan.is_archived %}
-                                <i class="fas fa-exclamation-triangle text-danger" title="En retard"></i>
-                                {% endif %}
-                            </div>
-                        </td>
-                        
-                        <td>
-                            {% if plan.priorite == 'critique' %}
-                            <span class="badge bg-danger">{{ plan.priorite|title }}</span>
-                            {% elif plan.priorite == 'haute' %}
-                            <span class="badge bg-warning text-dark">{{ plan.priorite|title }}</span>
-                            {% elif plan.priorite == 'moyenne' %}
-                            <span class="badge bg-info">{{ plan.priorite|title }}</span>
-                            {% elif plan.priorite == 'basse' %}
-                            <span class="badge bg-secondary">{{ plan.priorite|title }}</span>
-                            {% else %}
-                            <span class="text-muted">-</span>
-                            {% endif %}
-                        </td>
-                        
-                        <td>
-                            <div class="d-flex align-items-center">
-                                <div class="progress flex-grow-1" style="height: 10px;">
-                                    <div class="progress-bar 
-                                        {% if plan.progression_reelle >= 80 %}bg-success
-                                        {% elif plan.progression_reelle >= 50 %}bg-warning
-                                        {% else %}bg-danger{% endif %}" 
-                                         style="width: {{ plan.progression_reelle }}%">
-                                    </div>
-                                </div>
-                                <span class="ms-2 small">{{ plan.progression_reelle }}%</span>
-                            </div>
-                            {% if plan.sous_actions %}
-                            <small class="text-muted">
-                                {{ plan.sous_actions|selectattr('statut', 'equalto', 'termine')|list|length }}/{{ plan.sous_actions|length }}
-                            </small>
-                            {% endif %}
-                        </td>
-                        
-                        <td>
-                            <div class="small">
-                                <div>Début: {{ plan.date_debut.strftime('%d/%m/%y') if plan.date_debut else '-' }}</div>
-                                <div>Échéance: {{ plan.date_fin_prevue.strftime('%d/%m/%y') if plan.date_fin_prevue else '-' }}</div>
-                                {% if plan.is_archived or plan.statut_archive|default('actif') == 'archive' %}
-                                <div class="text-secondary">
-                                    <small><i class="fas fa-archive"></i> Archivé: {{ plan.updated_at.strftime('%d/%m/%y') if plan.updated_at else '-' }}</small>
-                                </div>
-                                {% endif %}
-                            </div>
-                        </td>
-                        
-                        <td>
-                            {% if plan.responsable %}
-                            <div class="d-flex align-items-center">
-                                <i class="fas fa-user me-2 text-muted"></i>
-                                {{ plan.responsable.username }}
-                            </div>
-                            {% else %}
-                            <span class="text-muted">Non assigné</span>
-                            {% endif %}
-                        </td>
-                        
-                        <td>
-                            <div class="btn-group btn-group-sm d-flex justify-content-center">
-                                <!-- Bouton Voir -->
-                                <a href="{{ url_for('detail_plan_action_risque', plan_id=plan.id) }}" 
-                                   class="btn btn-outline-primary" title="Voir">
-                                    <i class="fas fa-eye"></i>
-                                </a>
-                                
-                                {% if not voir_archives %}
-                                <!-- Bouton Modifier - SEULEMENT dans la vue actifs -->
-                                {% if plan.statut_archive|default('actif') == 'actif' %}
-                                <a href="{{ url_for('modifier_plan_action_risque', plan_id=plan.id) }}" 
-                                   class="btn btn-outline-warning" title="Modifier">
-                                    <i class="fas fa-edit"></i>
-                                </a>
-                                {% endif %}
-                                
-                                <!-- Bouton Archiver - SEULEMENT dans la vue actifs -->
-                                <form method="POST" action="{{ url_for('archiver_plan_risque', plan_id=plan.id) }}" 
-                                      class="d-inline">
-                                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                                    <button type="submit" class="btn btn-outline-secondary" 
-                                            title="Archiver"
-                                            onclick="return confirm('Archiver le plan \'{{ plan.reference }}\' ?');">
-                                        <i class="fas fa-archive"></i>
-                                    </button>
-                                </form>
-                                
-                                {% else %}
-                                <!-- Bouton Désarchiver - SEULEMENT dans la vue archives -->
-                                <form method="POST" action="{{ url_for('desarchiver_plan_risque', plan_id=plan.id) }}" 
-                                      class="d-inline">
-                                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                                    <button type="submit" class="btn btn-outline-success" 
-                                            title="Désarchiver"
-                                            onclick="return confirm('Désarchiver le plan \'{{ plan.reference }}\' ?');">
-                                        <i class="fas fa-box-open"></i>
-                                    </button>
-                                </form>
-                                
-                                <!-- Bouton Supprimer - SEULEMENT dans la vue archives -->
-                                <button class="btn btn-outline-danger" 
-                                        title="Supprimer définitivement"
-                                        onclick="supprimerPlan({{ plan.id }}, '{{ plan.reference }}')">
-                                    <i class="fas fa-trash"></i>
-                                </button>
-                                {% endif %}
-                            </div>
-                        </td>
-                    </tr>
-                    {% endfor %}
-                </tbody>
-            </table>
+    /* Variables de base */
+    .plans-container {
+        max-width: 1600px;
+        margin: 0 auto;
+    }
+
+    /* ========== EN-TÊTE DE PAGE ========== */
+    .page-header {
+        background: linear-gradient(135deg, #0A1929 0%, #1A3C6B 100%);
+        border-radius: 24px;
+        padding: 2rem;
+        margin-bottom: 2rem;
+        color: white;
+        box-shadow: 0 10px 30px rgba(0, 0, 0, 0.15);
+        position: relative;
+        overflow: hidden;
+        z-index: 1;
+    }
+
+    .page-header::before {
+        content: '';
+        position: absolute;
+        top: -50%;
+        right: -5%;
+        width: 300px;
+        height: 300px;
+        background: rgba(255, 255, 255, 0.08);
+        border-radius: 50%;
+        transform: rotate(25deg);
+        pointer-events: none;
+        z-index: 0;
+    }
+
+    .page-header::after {
+        content: '';
+        position: absolute;
+        bottom: -50%;
+        left: -5%;
+        width: 400px;
+        height: 400px;
+        background: rgba(255, 255, 255, 0.05);
+        border-radius: 50%;
+        transform: rotate(-15deg);
+        pointer-events: none;
+        z-index: 0;
+    }
+
+    .page-header-content {
+        position: relative;
+        z-index: 2;
+    }
+
+    .page-title {
+        font-size: 2.2rem;
+        font-weight: 700;
+        margin-bottom: 0.75rem;
+        display: flex;
+        align-items: center;
+        gap: 1rem;
+        flex-wrap: wrap;
+    }
+
+    .breadcrumb {
+        background: transparent;
+        padding: 0;
+        margin-bottom: 1rem;
+    }
+
+    .breadcrumb-item a {
+        color: rgba(255, 255, 255, 0.8);
+        text-decoration: none;
+        transition: all 0.3s ease;
+        font-weight: 500;
+    }
+
+    .breadcrumb-item a:hover {
+        color: white;
+        transform: translateX(2px);
+    }
+
+    .breadcrumb-item.active {
+        color: white;
+        font-weight: 500;
+    }
+
+    .breadcrumb-item + .breadcrumb-item::before {
+        color: rgba(255, 255, 255, 0.5);
+    }
+
+    .header-actions {
+        display: flex;
+        gap: 0.75rem;
+        flex-wrap: wrap;
+        align-items: center;
+        position: relative;
+        z-index: 10;
+    }
+
+    .fk-btn {
+        padding: 0.7rem 1.4rem;
+        border-radius: 12px;
+        font-weight: 600;
+        display: inline-flex;
+        align-items: center;
+        gap: 0.6rem;
+        transition: all 0.3s ease;
+        border: none;
+        cursor: pointer;
+        font-size: 0.95rem;
+        text-decoration: none;
+        z-index: 10;
+        position: relative;
+        letter-spacing: 0.3px;
+    }
+
+    .fk-btn-primary {
+        background: linear-gradient(135deg, #0066CC, #3B82F6);
+        color: white;
+        box-shadow: 0 8px 20px rgba(0, 102, 204, 0.3);
+    }
+
+    .fk-btn-primary:hover {
+        transform: translateY(-3px);
+        box-shadow: 0 12px 25px rgba(0, 102, 204, 0.4);
+        color: white;
+    }
+
+    .fk-btn-secondary {
+        background: rgba(255, 255, 255, 0.15);
+        backdrop-filter: blur(10px);
+        border: 1px solid rgba(255, 255, 255, 0.25);
+        color: white;
+    }
+
+    .fk-btn-secondary:hover {
+        background: rgba(255, 255, 255, 0.25);
+        transform: translateY(-3px);
+        color: white;
+    }
+
+    .fk-btn-outline-light {
+        background: transparent;
+        border: 2px solid rgba(255, 255, 255, 0.3);
+        color: white;
+    }
+
+    .fk-btn-outline-light:hover {
+        background: rgba(255, 255, 255, 0.1);
+        border-color: white;
+        transform: translateY(-3px);
+    }
+
+    /* ========== BADGES ========== */
+    .badge-modern {
+        display: inline-block;
+        padding: 0.4rem 1rem;
+        border-radius: 30px;
+        font-size: 0.8rem;
+        font-weight: 600;
+        text-align: center;
+        white-space: nowrap;
+    }
+
+    .badge-statut {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.5rem;
+        padding: 0.4rem 1rem;
+        border-radius: 30px;
+        font-size: 0.8rem;
+        font-weight: 600;
+    }
+
+    .badge-statut.en_attente {
+        background: rgba(100, 116, 139, 0.15);
+        color: #64748b;
+        border: 1px solid rgba(100, 116, 139, 0.3);
+    }
+
+    .badge-statut.en_cours {
+        background: rgba(245, 158, 11, 0.15);
+        color: #F59E0B;
+        border: 1px solid rgba(245, 158, 11, 0.3);
+    }
+
+    .badge-statut.termine {
+        background: rgba(13, 148, 136, 0.15);
+        color: #0D9488;
+        border: 1px solid rgba(13, 148, 136, 0.3);
+    }
+
+    .badge-statut.suspendu {
+        background: rgba(102, 16, 242, 0.15);
+        color: #6610f2;
+        border: 1px solid rgba(102, 16, 242, 0.3);
+    }
+
+    .badge-statut.annule {
+        background: rgba(220, 38, 38, 0.15);
+        color: #DC2626;
+        border: 1px solid rgba(220, 38, 38, 0.3);
+    }
+
+    .badge-priorite {
+        display: inline-block;
+        padding: 0.3rem 0.8rem;
+        border-radius: 30px;
+        font-size: 0.75rem;
+        font-weight: 600;
+        text-transform: uppercase;
+    }
+
+    .badge-priorite.critique {
+        background: #DC2626;
+        color: white;
+    }
+
+    .badge-priorite.haute {
+        background: #F59E0B;
+        color: white;
+    }
+
+    .badge-priorite.moyenne {
+        background: #3B82F6;
+        color: white;
+    }
+
+    .badge-priorite.basse {
+        background: #64748b;
+        color: white;
+    }
+
+    /* ========== STATISTIQUES ========== */
+    .stats-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+        gap: 1rem;
+        margin-bottom: 2rem;
+    }
+
+    .stat-card-modern {
+        background: white;
+        border: 1px solid #e2e8f0;
+        border-radius: 20px;
+        padding: 1.5rem;
+        display: flex;
+        align-items: center;
+        gap: 1rem;
+        transition: all 0.3s ease;
+        box-shadow: 0 4px 20px rgba(0, 0, 0, 0.08);
+    }
+
+    .stat-card-modern:hover {
+        transform: translateY(-4px);
+        box-shadow: 0 12px 30px rgba(0, 0, 0, 0.12);
+    }
+
+    [data-bs-theme="dark"] .stat-card-modern {
+        background: #1e293b;
+        border-color: #334155;
+    }
+
+    .stat-icon {
+        width: 56px;
+        height: 56px;
+        border-radius: 16px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 1.5rem;
+        color: white;
+        flex-shrink: 0;
+    }
+
+    .stat-icon.primary { background: linear-gradient(135deg, #0066CC, #3B82F6); }
+    .stat-icon.warning { background: linear-gradient(135deg, #F59E0B, #FBBF24); }
+    .stat-icon.success { background: linear-gradient(135deg, #0D9488, #14B8A6); }
+    .stat-icon.danger { background: linear-gradient(135deg, #DC2626, #EF4444); }
+    .stat-icon.secondary { background: linear-gradient(135deg, #64748b, #94a3b8); }
+    .stat-icon.info { background: linear-gradient(135deg, #3B82F6, #6366F1); }
+
+    .stat-content {
+        flex: 1;
+    }
+
+    .stat-label {
+        font-size: 0.75rem;
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+        color: #64748b;
+        margin-bottom: 0.25rem;
+    }
+
+    .stat-value {
+        font-size: 1.8rem;
+        font-weight: 700;
+        color: #0f172a;
+        line-height: 1.2;
+    }
+
+    [data-bs-theme="dark"] .stat-value {
+        color: #f1f5f9;
+    }
+
+    /* ========== FILTRES ========== */
+    .filters-card {
+        background: white;
+        border: 1px solid #e2e8f0;
+        border-radius: 20px;
+        margin-bottom: 1.5rem;
+        overflow: hidden;
+        box-shadow: 0 4px 20px rgba(0, 0, 0, 0.08);
+    }
+
+    .filters-header {
+        background: #f8fafc;
+        padding: 1rem 1.5rem;
+        border-bottom: 1px solid #e2e8f0;
+        display: flex;
+        align-items: center;
+        gap: 0.75rem;
+    }
+
+    .filters-header i {
+        color: #0066CC;
+        font-size: 1.1rem;
+    }
+
+    .filters-header h6 {
+        margin: 0;
+        font-weight: 600;
+        color: #0f172a;
+    }
+
+    .filters-body {
+        padding: 1.5rem;
+    }
+
+    .fk-form-select {
+        width: 100%;
+        border: 2px solid #e2e8f0;
+        border-radius: 12px;
+        padding: 0.6rem 1rem;
+        font-size: 0.95rem;
+        transition: all 0.3s ease;
+        background: white url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3e%3cpath fill='none' stroke='%23343a40' stroke-linecap='round' stroke-linejoin='round' stroke-width='2' d='M2 5l6 6 6-6'/%3e%3c/svg%3e") no-repeat right 0.75rem center/16px 12px;
+        appearance: none;
+    }
+
+    .fk-form-select:focus {
+        border-color: #0066CC;
+        box-shadow: 0 0 0 3px rgba(0, 102, 204, 0.1);
+        outline: none;
+    }
+
+    [data-bs-theme="dark"] .fk-form-select {
+        background: #0f172a url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3e%3cpath fill='none' stroke='%2394a3b8' stroke-linecap='round' stroke-linejoin='round' stroke-width='2' d='M2 5l6 6 6-6'/%3e%3c/svg%3e") no-repeat right 0.75rem center/16px 12px;
+        border-color: #334155;
+        color: #f1f5f9;
+    }
+
+    .fk-btn-outline-secondary {
+        background: #f1f5f9;
+        border: 1px solid #e2e8f0;
+        color: #64748b;
+        padding: 0.6rem 1rem;
+        border-radius: 12px;
+        font-weight: 500;
+        transition: all 0.3s ease;
+        width: 100%;
+    }
+
+    .fk-btn-outline-secondary:hover {
+        background: #e2e8f0;
+        color: #0f172a;
+        transform: translateY(-2px);
+    }
+
+    /* ========== ALERTE VUE ========== */
+    .view-alert {
+        background: white;
+        border: 1px solid #e2e8f0;
+        border-radius: 16px;
+        padding: 1rem 1.5rem;
+        margin-bottom: 1.5rem;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        flex-wrap: wrap;
+        gap: 1rem;
+        box-shadow: 0 4px 20px rgba(0, 0, 0, 0.08);
+    }
+
+    .view-alert.active {
+        border-left: 4px solid #0066CC;
+    }
+
+    .view-alert.archive {
+        border-left: 4px solid #F59E0B;
+    }
+
+    .view-info {
+        display: flex;
+        align-items: center;
+        gap: 1rem;
+    }
+
+    .view-icon {
+        width: 40px;
+        height: 40px;
+        border-radius: 10px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 1.2rem;
+    }
+
+    .view-icon.active {
+        background: rgba(0, 102, 204, 0.15);
+        color: #0066CC;
+    }
+
+    .view-icon.archive {
+        background: rgba(245, 158, 11, 0.15);
+        color: #F59E0B;
+    }
+
+    .view-badge {
+        background: #0066CC;
+        color: white;
+        padding: 0.3rem 1rem;
+        border-radius: 30px;
+        font-size: 0.85rem;
+        font-weight: 600;
+    }
+
+    .view-badge.archive {
+        background: #F59E0B;
+    }
+
+    /* ========== TABLEAU ========== */
+    .fk-card-modern {
+        background: white;
+        border: 1px solid #e2e8f0;
+        border-radius: 24px;
+        margin-bottom: 1.5rem;
+        overflow: hidden;
+        box-shadow: 0 4px 20px rgba(0, 0, 0, 0.08);
+        transition: all 0.3s ease;
+    }
+
+    .fk-card-modern:hover {
+        box-shadow: 0 8px 30px rgba(0, 0, 0, 0.12);
+    }
+
+    [data-bs-theme="dark"] .fk-card-modern {
+        background: #1e293b;
+        border-color: #334155;
+    }
+
+    .fk-card-header {
+        padding: 1.25rem 1.5rem;
+        border-bottom: 1px solid #e2e8f0;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        flex-wrap: wrap;
+        gap: 1rem;
+        background: #f8fafc;
+        color: #0f172a;
+    }
+
+    .fk-card-header h6 {
+        margin: 0;
+        display: flex;
+        align-items: center;
+        gap: 0.75rem;
+        font-weight: 700;
+    }
+
+    .fk-card-header h6 i {
+        color: #0066CC;
+    }
+
+    .header-icon-sm {
+        width: 40px;
+        height: 40px;
+        background: #0066CC;
+        border-radius: 10px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        color: white;
+        font-size: 1.2rem;
+    }
+
+    .fk-table-modern {
+        width: 100%;
+        border-collapse: collapse;
+        font-size: 0.9rem;
+    }
+
+    .fk-table-modern thead th {
+        padding: 1rem;
+        font-size: 0.75rem;
+        font-weight: 700;
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+        color: #64748b;
+        border-bottom: 2px solid #e2e8f0;
+        background: #f8fafc;
+        white-space: nowrap;
+    }
+
+    .fk-table-modern tbody td {
+        padding: 1rem;
+        border-bottom: 1px solid #e2e8f0;
+        color: #0f172a;
+        vertical-align: middle;
+    }
+
+    .fk-table-modern tbody tr {
+        transition: all 0.2s ease;
+    }
+
+    .fk-table-modern tbody tr:hover {
+        background: #f1f5f9;
+    }
+
+    .fk-table-modern tbody tr.archive-row {
+        opacity: 0.85;
+        background: #f8fafc;
+    }
+
+    .fk-table-modern tbody tr.archive-row:hover {
+        opacity: 1;
+        background: #f1f5f9;
+    }
+
+    [data-bs-theme="dark"] .fk-table-modern thead th {
+        color: #94a3b8;
+        border-bottom-color: #334155;
+        background: #0f172a;
+    }
+
+    [data-bs-theme="dark"] .fk-table-modern tbody td {
+        border-bottom-color: #334155;
+        color: #f1f5f9;
+    }
+
+    [data-bs-theme="dark"] .fk-table-modern tbody tr:hover {
+        background: #1e293b;
+    }
+
+    /* ========== PROGRESS BAR ========== */
+    .progress-modern {
+        background: #e2e8f0;
+        border-radius: 50px;
+        height: 8px;
+        overflow: hidden;
+        width: 100%;
+    }
+
+    [data-bs-theme="dark"] .progress-modern {
+        background: #334155;
+    }
+
+    .progress-modern-bar {
+        height: 100%;
+        border-radius: 50px;
+        transition: width 0.3s ease;
+    }
+
+    .progress-modern-bar.success { background: #0D9488; }
+    .progress-modern-bar.warning { background: #F59E0B; }
+    .progress-modern-bar.danger { background: #DC2626; }
+
+    /* ========== BOUTONS D'ACTION ========== */
+    .action-buttons {
+        display: flex;
+        gap: 0.5rem;
+        justify-content: center;
+    }
+
+    .btn-action {
+        width: 36px;
+        height: 36px;
+        border-radius: 8px;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        background: #f1f5f9;
+        border: 1px solid #e2e8f0;
+        color: #64748b;
+        transition: all 0.3s ease;
+        cursor: pointer;
+        text-decoration: none;
+        padding: 0;
+    }
+
+    .btn-action:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+        background: white;
+        text-decoration: none;
+    }
+
+    .btn-action.primary:hover { background: #0066CC; color: white; border-color: #0066CC; }
+    .btn-action.warning:hover { background: #F59E0B; color: white; border-color: #F59E0B; }
+    .btn-action.success:hover { background: #0D9488; color: white; border-color: #0D9488; }
+    .btn-action.danger:hover { background: #DC2626; color: white; border-color: #DC2626; }
+    .btn-action.info:hover { background: #3B82F6; color: white; border-color: #3B82F6; }
+
+    /* ========== ÉTAT VIDE ========== */
+    .empty-state {
+        text-align: center;
+        padding: 4rem 2rem;
+        background: white;
+        border-radius: 24px;
+        border: 1px solid #e2e8f0;
+    }
+
+    [data-bs-theme="dark"] .empty-state {
+        background: #1e293b;
+        border-color: #334155;
+    }
+
+    .empty-icon {
+        width: 100px;
+        height: 100px;
+        background: #f1f5f9;
+        border-radius: 30px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 3rem;
+        color: #64748b;
+        margin: 0 auto 1.5rem;
+    }
+
+    [data-bs-theme="dark"] .empty-icon {
+        background: #0f172a;
+        color: #94a3b8;
+    }
+
+    .empty-title {
+        font-size: 1.5rem;
+        font-weight: 700;
+        color: #0f172a;
+        margin-bottom: 0.5rem;
+    }
+
+    .empty-text {
+        color: #64748b;
+        margin-bottom: 2rem;
+        font-size: 1rem;
+    }
+
+    /* ========== GRAPHIQUES ========== */
+    .charts-row {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(400px, 1fr));
+        gap: 1.5rem;
+        margin-top: 1.5rem;
+    }
+
+    .chart-card {
+        background: white;
+        border: 1px solid #e2e8f0;
+        border-radius: 20px;
+        padding: 1.5rem;
+        box-shadow: 0 4px 20px rgba(0, 0, 0, 0.08);
+    }
+
+    [data-bs-theme="dark"] .chart-card {
+        background: #1e293b;
+        border-color: #334155;
+    }
+
+    .chart-title {
+        font-size: 1rem;
+        font-weight: 700;
+        color: #0f172a;
+        margin-bottom: 1rem;
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+    }
+
+    .chart-title i {
+        color: #0066CC;
+    }
+
+    /* ========== PAGINATION ========== */
+    .pagination-modern {
+        display: flex;
+        gap: 0.5rem;
+        justify-content: center;
+        margin: 1.5rem 0;
+    }
+
+    .page-item-modern {
+        min-width: 40px;
+        height: 40px;
+        border-radius: 10px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        background: #f1f5f9;
+        border: 1px solid #e2e8f0;
+        color: #64748b;
+        transition: all 0.3s ease;
+        cursor: pointer;
+        text-decoration: none;
+        font-weight: 500;
+    }
+
+    .page-item-modern:hover {
+        background: #0066CC;
+        color: white;
+        border-color: #0066CC;
+        transform: translateY(-2px);
+    }
+
+    .page-item-modern.active {
+        background: #0066CC;
+        color: white;
+        border-color: #0066CC;
+    }
+
+    /* ========== ANIMATIONS ========== */
+    @keyframes fadeInUp {
+        from {
+            opacity: 0;
+            transform: translateY(30px);
+        }
+        to {
+            opacity: 1;
+            transform: translateY(0);
+        }
+    }
+
+    @keyframes fadeOutDelete {
+        from {
+            opacity: 1;
+            transform: scale(1);
+        }
+        to {
+            opacity: 0;
+            transform: scale(0.95);
+        }
+    }
+
+    .animate-in {
+        animation: fadeInUp 0.6s ease-out forwards;
+    }
+
+    .delete-animation {
+        animation: fadeOutDelete 0.5s ease forwards;
+    }
+
+    /* ========== RESPONSIVE ========== */
+    @media (max-width: 768px) {
+        .page-header {
+            padding: 1.5rem;
+        }
+
+        .page-title {
+            font-size: 1.8rem;
+        }
+
+        .header-actions {
+            flex-direction: column;
+            width: 100%;
+        }
+
+        .header-actions .fk-btn {
+            width: 100%;
+            justify-content: center;
+        }
+
+        .stats-grid {
+            grid-template-columns: 1fr;
+        }
+
+        .fk-table-modern {
+            display: block;
+            overflow-x: auto;
+        }
+
+        .action-buttons {
+            flex-wrap: wrap;
+        }
+
+        .charts-row {
+            grid-template-columns: 1fr;
+        }
+
+        .view-alert {
+            flex-direction: column;
+            align-items: flex-start;
+        }
+    }
+</style>
+
+<div class="plans-container">
+    <!-- ========== EN-TÊTE ========== -->
+    <div class="page-header animate-in">
+        <div class="page-header-content">
+            <div class="row align-items-center">
+                <div class="col">
+                    <nav aria-label="breadcrumb">
+                        <ol class="breadcrumb">
+                            <li class="breadcrumb-item"><a href="{{ url_for('dashboard') }}">Dashboard</a></li>
+                            <li class="breadcrumb-item"><a href="{{ url_for('liste_cartographies') }}">Cartographies</a></li>
+                            <li class="breadcrumb-item"><a href="{{ url_for('detail_cartographie', id=risque.cartographie_id) }}">{{ risque.cartographie.nom }}</a></li>
+                            <li class="breadcrumb-item"><a href="{{ url_for('detail_risque', id=risque.id) }}">{{ risque.reference }}</a></li>
+                            <li class="breadcrumb-item active">Plans d'action</li>
+                        </ol>
+                    </nav>
+                    
+                    <div class="page-title">
+                        <i class="fas fa-tasks me-2"></i>Plans d'action
+                        <span class="badge-statut-modern" style="background: rgba(255,255,255,0.15);">
+                            <i class="fas fa-tag"></i> {{ risque.reference }}
+                        </span>
+                    </div>
+                    
+                    <p class="text-white-50 mb-0">{{ risque.intitule }}</p>
+                </div>
+                
+                <div class="col-auto">
+                    <div class="header-actions">
+                        <a href="{{ url_for('detail_risque', id=risque.id) }}" class="fk-btn fk-btn-outline-light">
+                            <i class="fas fa-arrow-left"></i> Retour au risque
+                        </a>
+                        <a href="{{ url_for('nouveau_plan_action_pour_risque', risque_id=risque.id) }}" 
+                           class="fk-btn fk-btn-primary">
+                            <i class="fas fa-plus"></i> Nouveau plan
+                        </a>
+                    </div>
+                </div>
+            </div>
         </div>
-        {% else %}
-        <div class="text-center py-5">
+    </div>
+
+    <!-- ========== STATISTIQUES ========== -->
+    <div class="stats-grid animate-in">
+        <div class="stat-card-modern">
+            <div class="stat-icon primary">
+                <i class="fas fa-tasks"></i>
+            </div>
+            <div class="stat-content">
+                <div class="stat-label">Total actifs</div>
+                <div class="stat-value">{{ stats.total }}</div>
+            </div>
+        </div>
+
+        <div class="stat-card-modern">
+            <div class="stat-icon warning">
+                <i class="fas fa-clock"></i>
+            </div>
+            <div class="stat-content">
+                <div class="stat-label">En cours</div>
+                <div class="stat-value">{{ stats.en_cours }}</div>
+            </div>
+        </div>
+
+        <div class="stat-card-modern">
+            <div class="stat-icon success">
+                <i class="fas fa-check-circle"></i>
+            </div>
+            <div class="stat-content">
+                <div class="stat-label">Terminés</div>
+                <div class="stat-value">{{ stats.termines }}</div>
+            </div>
+        </div>
+
+        <div class="stat-card-modern">
+            <div class="stat-icon danger">
+                <i class="fas fa-exclamation-triangle"></i>
+            </div>
+            <div class="stat-content">
+                <div class="stat-label">En retard</div>
+                <div class="stat-value">{{ stats.en_retard }}</div>
+            </div>
+        </div>
+
+        <div class="stat-card-modern">
+            <div class="stat-icon secondary">
+                <i class="fas fa-archive"></i>
+            </div>
+            <div class="stat-content">
+                <div class="stat-label">Archivés</div>
+                <div class="stat-value">{{ stats.archives }}</div>
+            </div>
+        </div>
+
+        <div class="stat-card-modern">
+            <div class="stat-icon info">
+                <i class="fas fa-eye"></i>
+            </div>
+            <div class="stat-content">
+                <div class="stat-label">Affichés</div>
+                <div class="stat-value">{{ plans_action|length }}</div>
+            </div>
+        </div>
+    </div>
+
+    <!-- ========== FILTRES ========== -->
+    <div class="filters-card animate-in">
+        <div class="filters-header">
+            <i class="fas fa-filter"></i>
+            <h6>Filtres</h6>
+        </div>
+        <div class="filters-body">
+            <div class="row g-3">
+                <div class="col-md-3">
+                    <select class="fk-form-select" id="filterStatut" onchange="filtrerTable()">
+                        <option value="">Tous les statuts</option>
+                        <option value="en_attente">En attente</option>
+                        <option value="en_cours">En cours</option>
+                        <option value="termine">Terminé</option>
+                        <option value="suspendu">Suspendu</option>
+                        <option value="annule">Annulé</option>
+                    </select>
+                </div>
+                <div class="col-md-3">
+                    <select class="fk-form-select" id="filterPriorite" onchange="filtrerTable()">
+                        <option value="">Toutes les priorités</option>
+                        <option value="critique">Critique</option>
+                        <option value="haute">Haute</option>
+                        <option value="moyenne">Moyenne</option>
+                        <option value="basse">Basse</option>
+                    </select>
+                </div>
+                <div class="col-md-3">
+                    <select class="fk-form-select" id="filterResponsable" onchange="filtrerTable()">
+                        <option value="">Tous les responsables</option>
+                        {% for responsable in responsables_uniques %}
+                        <option value="{{ responsable.id }}">{{ responsable.username }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="col-md-3">
+                    <button class="fk-btn-outline-secondary" onclick="resetFiltres()">
+                        <i class="fas fa-redo me-1"></i> Réinitialiser
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- ========== ALERTE VUE ========== -->
+    <div class="view-alert {% if voir_archives %}archive{% else %}active{% endif %} animate-in">
+        <div class="view-info">
+            <div class="view-icon {% if voir_archives %}archive{% else %}active{% endif %}">
+                <i class="fas fa-{% if voir_archives %}archive{% else %}eye{% endif %}"></i>
+            </div>
+            <div>
+                <strong>{% if voir_archives %}Vue archives{% else %}Vue active{% endif %}</strong>
+                <p class="mb-0 text-muted small">
+                    {% if voir_archives %}
+                    Affichage des plans archivés
+                    {% else %}
+                    Affichage des plans en cours
+                    {% endif %}
+                </p>
+            </div>
+            <span class="view-badge {% if voir_archives %}archive{% endif %}">
+                {{ plans_action|length }} plan(s)
+            </span>
+        </div>
+        <div>
             {% if voir_archives %}
-            <i class="fas fa-archive fa-4x text-muted mb-3"></i>
-            <h5 class="text-muted">Aucun plan d'action archivé</h5>
-            <p class="text-muted mb-4">Aucun plan d'action n'a été archivé pour ce risque.</p>
-            <a href="{{ url_for('voir_plans_action_risque', risque_id=risque.id) }}" class="btn btn-info">
-                <i class="fas fa-eye me-1"></i> Voir les plans actifs
+            <a href="{{ url_for('voir_plans_action_risque', risque_id=risque.id) }}" 
+               class="fk-btn fk-btn-primary btn-sm">
+                <i class="fas fa-eye me-1"></i> Voir les actifs
             </a>
             {% else %}
-            <i class="fas fa-tasks fa-4x text-muted mb-3"></i>
-            <h5 class="text-muted">Aucun plan d'action</h5>
-            <p class="text-muted mb-4">Aucun plan d'action n'a été créé pour ce risque.</p>
-            <a href="{{ url_for('nouveau_plan_action_pour_risque', risque_id=risque.id) }}" class="btn btn-primary">
-                <i class="fas fa-plus me-1"></i> Créer un premier plan d'action
+            <a href="{{ url_for('voir_plans_action_risque', risque_id=risque.id, archives='oui') }}" 
+               class="fk-btn fk-btn-warning btn-sm">
+                <i class="fas fa-archive me-1"></i> Voir les archives ({{ stats.archives }})
             </a>
             {% endif %}
         </div>
+    </div>
+
+    <!-- ========== TABLEAU DES PLANS ========== -->
+    <div class="fk-card-modern animate-in">
+        <div class="fk-card-header">
+            <h6>
+                <div class="header-icon-sm me-2">
+                    <i class="fas fa-list"></i>
+                </div>
+                Plans d'action pour le risque {{ risque.reference }}
+            </h6>
+            <div class="btn-group">
+                <button class="btn-action info" onclick="exporterTable()" title="Exporter CSV">
+                    <i class="fas fa-download"></i>
+                </button>
+                <div class="dropdown" style="margin-left: 0.5rem;">
+                    <button class="btn-action" type="button" data-bs-toggle="dropdown" title="Changer de vue">
+                        <i class="fas fa-eye"></i>
+                    </button>
+                    <ul class="dropdown-menu">
+                        <li>
+                            <a class="dropdown-item" href="{{ url_for('voir_plans_action_risque', risque_id=risque.id) }}">
+                                <i class="fas fa-eye text-primary me-2"></i> Voir actifs
+                            </a>
+                        </li>
+                        <li>
+                            <a class="dropdown-item" href="{{ url_for('voir_plans_action_risque', risque_id=risque.id, archives='oui') }}">
+                                <i class="fas fa-archive text-warning me-2"></i> Voir archives
+                            </a>
+                        </li>
+                    </ul>
+                </div>
+            </div>
+        </div>
+        
+        <div class="p-0">
+            {% if plans_action %}
+            <div class="table-responsive">
+                <table class="fk-table-modern" id="plansTable">
+                    <thead>
+                        <tr>
+                            <th>Référence</th>
+                            <th>Nom</th>
+                            <th>Statut</th>
+                            <th>Priorité</th>
+                            <th>Progression</th>
+                            <th>Dates</th>
+                            <th>Responsable</th>
+                            <th class="text-center">Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for plan in plans_action %}
+                        <tr class="plan-row {% if plan.is_archived or plan.statut_archive|default('actif') == 'archive' %}archive-row{% endif %}" 
+                            data-plan-id="{{ plan.id }}"
+                            data-statut="{{ plan.statut }}"
+                            data-priorite="{{ plan.priorite }}"
+                            data-responsable="{{ plan.responsable_id }}"
+                            data-archived="{% if plan.is_archived or plan.statut_archive|default('actif') == 'archive' %}true{% else %}false{% endif %}"
+                            data-statut-archive="{{ plan.statut_archive|default('actif') }}">
+                            
+                            <td>
+                                {% if plan.is_archived or plan.statut_archive|default('actif') == 'archive' %}
+                                <div class="d-flex align-items-center">
+                                    <i class="fas fa-archive text-secondary me-2" title="Archivé"></i>
+                                    <div>
+                                        <strong>{{ plan.reference }}</strong>
+                                        <br>
+                                        <small class="text-muted">
+                                            {{ plan.updated_at.strftime('%d/%m/%Y') if plan.updated_at else '' }}
+                                        </small>
+                                    </div>
+                                </div>
+                                {% else %}
+                                <strong>{{ plan.reference }}</strong>
+                                {% endif %}
+                            </td>
+                            
+                            <td>
+                                <div class="fw-semibold">{{ plan.nom|truncate(40) }}</div>
+                                {% if plan.description %}
+                                <small class="text-muted">{{ plan.description|truncate(60) }}</small>
+                                {% endif %}
+                            </td>
+                            
+                            <td>
+                                <div class="d-flex align-items-center gap-2">
+                                    <span class="badge-statut {{ plan.statut }}">
+                                        {{ plan.statut|replace('_', ' ')|title }}
+                                    </span>
+                                    {% if plan.est_en_retard and not plan.is_archived %}
+                                    <i class="fas fa-exclamation-triangle text-danger" title="En retard"></i>
+                                    {% endif %}
+                                </div>
+                            </td>
+                            
+                            <td>
+                                <span class="badge-priorite {{ plan.priorite }}">
+                                    {{ plan.priorite|title if plan.priorite else 'Non définie' }}
+                                </span>
+                            </td>
+                            
+                            <td style="min-width: 120px;">
+                                <div class="d-flex align-items-center gap-2">
+                                    <div class="progress-modern flex-grow-1">
+                                        <div class="progress-modern-bar 
+                                            {% if plan.progression_reelle >= 80 %}success
+                                            {% elif plan.progression_reelle >= 50 %}warning
+                                            {% else %}danger{% endif %}" 
+                                            style="width: {{ plan.progression_reelle }}%">
+                                        </div>
+                                    </div>
+                                    <span class="small fw-bold">{{ plan.progression_reelle }}%</span>
+                                </div>
+                                {% if plan.sous_actions %}
+                                <small class="text-muted">
+                                    {{ plan.sous_actions|selectattr('statut', 'equalto', 'termine')|list|length }}/{{ plan.sous_actions|length }} tâches
+                                </small>
+                                {% endif %}
+                            </td>
+                            
+                            <td>
+                                <div class="small">
+                                    <i class="fas fa-calendar-alt me-1 text-muted"></i>
+                                    Début: {{ plan.date_debut.strftime('%d/%m/%y') if plan.date_debut else '-' }}
+                                    <br>
+                                    <i class="fas fa-hourglass-end me-1 text-muted"></i>
+                                    Échéance: {{ plan.date_fin_prevue.strftime('%d/%m/%y') if plan.date_fin_prevue else '-' }}
+                                </div>
+                            </td>
+                            
+                            <td>
+                                {% if plan.responsable %}
+                                <div class="d-flex align-items-center">
+                                    <i class="fas fa-user-circle me-2 text-muted"></i>
+                                    {{ plan.responsable.username }}
+                                </div>
+                                {% else %}
+                                <span class="text-muted"><i class="fas fa-user-slash me-1"></i>Non assigné</span>
+                                {% endif %}
+                            </td>
+                            
+                            <td>
+                                <div class="action-buttons">
+                                    <!-- Bouton Voir -->
+                                    <a href="{{ url_for('detail_plan_action_risque', plan_id=plan.id) }}" 
+                                       class="btn-action info" title="Voir détails">
+                                        <i class="fas fa-eye"></i>
+                                    </a>
+                                    
+                                    {% if not voir_archives %}
+                                    <!-- Bouton Modifier - VUE ACTIFS -->
+                                    {% if plan.statut_archive|default('actif') == 'actif' %}
+                                    <a href="{{ url_for('modifier_plan_action_risque', plan_id=plan.id) }}" 
+                                       class="btn-action warning" title="Modifier">
+                                        <i class="fas fa-edit"></i>
+                                    </a>
+                                    {% endif %}
+                                    
+                                    <!-- Bouton Archiver - VUE ACTIFS -->
+                                    <form method="POST" action="{{ url_for('archiver_plan_risque', plan_id=plan.id) }}" 
+                                          class="d-inline">
+                                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                                        <button type="submit" class="btn-action secondary" 
+                                                title="Archiver"
+                                                onclick="return confirm('Archiver le plan \'{{ plan.reference }}\' ?');">
+                                            <i class="fas fa-archive"></i>
+                                        </button>
+                                    </form>
+                                    
+                                    {% else %}
+                                    <!-- Bouton Désarchiver - VUE ARCHIVES -->
+                                    <form method="POST" action="{{ url_for('desarchiver_plan_risque', plan_id=plan.id) }}" 
+                                          class="d-inline">
+                                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                                        <button type="submit" class="btn-action success" 
+                                                title="Désarchiver"
+                                                onclick="return confirm('Désarchiver le plan \'{{ plan.reference }}\' ?');">
+                                            <i class="fas fa-box-open"></i>
+                                        </button>
+                                    </form>
+                                    
+                                    <!-- Bouton Supprimer - VUE ARCHIVES -->
+                                    <button class="btn-action danger" 
+                                            title="Supprimer définitivement"
+                                            onclick="supprimerPlan({{ plan.id }}, '{{ plan.reference }}')">
+                                        <i class="fas fa-trash"></i>
+                                    </button>
+                                    {% endif %}
+                                </div>
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+            {% else %}
+            <div class="empty-state">
+                <div class="empty-icon">
+                    <i class="fas fa-tasks"></i>
+                </div>
+                <h4 class="empty-title">
+                    {% if voir_archives %}
+                    Aucun plan d'action archivé
+                    {% else %}
+                    Aucun plan d'action
+                    {% endif %}
+                </h4>
+                <p class="empty-text">
+                    {% if voir_archives %}
+                    Aucun plan d'action n'a été archivé pour ce risque.
+                    {% else %}
+                    Aucun plan d'action n'a été créé pour ce risque.
+                    {% endif %}
+                </p>
+                <div class="d-flex gap-3 justify-content-center">
+                    {% if voir_archives %}
+                    <a href="{{ url_for('voir_plans_action_risque', risque_id=risque.id) }}" 
+                       class="fk-btn fk-btn-primary">
+                        <i class="fas fa-eye me-2"></i>Voir les plans actifs
+                    </a>
+                    {% else %}
+                    <a href="{{ url_for('nouveau_plan_action_pour_risque', risque_id=risque.id) }}" 
+                       class="fk-btn fk-btn-primary">
+                        <i class="fas fa-plus me-2"></i>Créer un premier plan
+                    </a>
+                    {% endif %}
+                </div>
+            </div>
+            {% endif %}
+        </div>
+        
+        <!-- Pagination -->
+        {% if plans_action|length > 10 %}
+        <div class="p-3 border-top">
+            <div class="pagination-modern">
+                <a href="#" class="page-item-modern"><i class="fas fa-chevron-left"></i></a>
+                <a href="#" class="page-item-modern active">1</a>
+                <a href="#" class="page-item-modern">2</a>
+                <a href="#" class="page-item-modern">3</a>
+                <a href="#" class="page-item-modern">4</a>
+                <a href="#" class="page-item-modern">5</a>
+                <a href="#" class="page-item-modern"><i class="fas fa-chevron-right"></i></a>
+            </div>
+        </div>
         {% endif %}
     </div>
-    
-    <!-- Pagination -->
-    {% if plans_action|length > 10 %}
-    <div class="card-footer">
-        <nav aria-label="Navigation des plans">
-            <ul class="pagination justify-content-center mb-0">
-                <li class="page-item disabled">
-                    <a class="page-link" href="#" tabindex="-1">Précédent</a>
-                </li>
-                <li class="page-item active"><a class="page-link" href="#">1</a></li>
-                <li class="page-item"><a class="page-link" href="#">2</a></li>
-                <li class="page-item"><a class="page-link" href="#">3</a></li>
-                <li class="page-item">
-                    <a class="page-link" href="#">Suivant</a>
-                </li>
-            </ul>
-        </nav>
+
+    <!-- ========== VUE SYNTHÈSE ========== -->
+    <div class="charts-row">
+        <div class="chart-card animate-in">
+            <div class="chart-title">
+                <i class="fas fa-chart-pie"></i>
+                {% if voir_archives %}Répartition par statut (archives){% else %}Répartition par statut{% endif %}
+            </div>
+            <canvas id="chartStatut" height="200"></canvas>
+        </div>
+
+        <div class="chart-card animate-in">
+            <div class="chart-title">
+                <i class="fas fa-chart-bar"></i>
+                {% if voir_archives %}Distribution de la progression (archives){% else %}Distribution de la progression{% endif %}
+            </div>
+            <canvas id="chartProgression" height="200"></canvas>
+        </div>
     </div>
-    {% endif %}
 </div>
 
-<!-- Vue synthèse -->
-<div class="card shadow mt-4">
-    <div class="card-header bg-light">
-        <h6 class="mb-0"><i class="fas fa-chart-bar me-2"></i> Vue synthèse</h6>
-    </div>
-    <div class="card-body">
-        <div class="row">
-            <div class="col-md-6">
-                <canvas id="chartStatut" height="200"></canvas>
+<!-- Modal générique -->
+<div class="modal fade" id="genericModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="genericModalTitle">Modal title</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
             </div>
-            <div class="col-md-6">
-                <canvas id="chartProgression" height="200"></canvas>
+            <div class="modal-body" id="genericModalBody"></div>
+            <div class="modal-footer" id="genericModalFooter">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Fermer</button>
             </div>
         </div>
     </div>
 </div>
+
+<!-- Token CSRF -->
+<meta name="csrf-token" content="{{ csrf_token() }}">
 {% endblock %}
 
 {% block scripts %}
 <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 <script>
-// Filtrage de la table
+// ============================================
+// VARIABLES GLOBALES
+// ============================================
+const csrfToken = document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') || '{{ csrf_token() }}';
+const risqueId = {{ risque.id }};
+const voirArchives = {{ 'true' if voir_archives else 'false' }};
+
+// ============================================
+// FILTRAGE
+// ============================================
 function filtrerTable() {
     const filterStatut = document.getElementById('filterStatut').value;
     const filterPriorite = document.getElementById('filterPriorite').value;
@@ -429,26 +1307,14 @@ function filtrerTable() {
         
         let afficher = true;
         
-        // Filtre statut
-        if (filterStatut && statut !== filterStatut) {
-            afficher = false;
-        }
-        
-        // Filtre priorité
-        if (filterPriorite && priorite !== filterPriorite) {
-            afficher = false;
-        }
-        
-        // Filtre responsable
-        if (filterResponsable && responsable !== filterResponsable) {
-            afficher = false;
-        }
+        if (filterStatut && statut !== filterStatut) afficher = false;
+        if (filterPriorite && priorite !== filterPriorite) afficher = false;
+        if (filterResponsable && responsable !== filterResponsable) afficher = false;
         
         row.style.display = afficher ? '' : 'none';
     });
 }
 
-// Réinitialiser les filtres
 function resetFiltres() {
     document.getElementById('filterStatut').value = '';
     document.getElementById('filterPriorite').value = '';
@@ -456,22 +1322,20 @@ function resetFiltres() {
     filtrerTable();
 }
 
-// Exporter la table
+// ============================================
+// EXPORT CSV
+// ============================================
 function exporterTable() {
-    // Simple export CSV
     let csv = 'Référence,Nom,Statut,Priorité,Progression,Début,Échéance,Responsable,Statut_Archive\n';
     
     document.querySelectorAll('.plan-row').forEach(row => {
         if (row.style.display !== 'none') {
             const cells = row.querySelectorAll('td');
             const rowData = Array.from(cells).slice(0, 7).map(cell => {
-                let text = cell.textContent.trim();
-                // Nettoyer le texte pour CSV
-                text = text.replace(/\n/g, ' ').replace(/,/g, ';');
+                let text = cell.textContent.trim().replace(/\n/g, ' ').replace(/,/g, ';');
                 return `"${text}"`;
             });
             
-            // Ajouter le statut d'archive
             const isArchived = row.getAttribute('data-archived') === 'true';
             rowData.push(`"${isArchived ? 'Archivé' : 'Actif'}"`);
             
@@ -479,82 +1343,24 @@ function exporterTable() {
         }
     });
     
-    // Créer et télécharger le fichier
     const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
     const link = document.createElement('a');
     const url = URL.createObjectURL(blob);
     link.setAttribute('href', url);
-    link.setAttribute('download', `plans-action-risque-{{ risque.reference }}-${new Date().toISOString().split('T')[0]}.csv`);
+    link.setAttribute('download', `plans-action-{{ risque.reference }}-${new Date().toISOString().split('T')[0]}.csv`);
     link.style.visibility = 'hidden';
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
 }
 
-// Actions rapides (pour les plans actifs seulement)
-function changerStatutRapide(planId) {
-    const html = `
-        <form id="formStatutRapide">
-            <div class="mb-3">
-                <label class="form-label">Nouveau statut :</label>
-                <select class="form-select" name="statut" required>
-                    <option value="en_attente">En attente</option>
-                    <option value="en_cours">En cours</option>
-                    <option value="termine">Terminé</option>
-                    <option value="suspendu">Suspendu</option>
-                    <option value="annule">Annulé</option>
-                </select>
-            </div>
-        </form>
-    `;
-    
-    const modal = new bootstrap.Modal(document.getElementById('genericModal'));
-    document.getElementById('genericModalTitle').innerHTML = 'Changer statut du plan';
-    document.getElementById('genericModalBody').innerHTML = html;
-    document.getElementById('genericModalFooter').innerHTML = `
-        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Annuler</button>
-        <button type="button" class="btn btn-primary" onclick="confirmerChangerStatut(${planId})">
-            Enregistrer
-        </button>
-    `;
-    modal.show();
-}
-
-function confirmerChangerStatut(planId) {
-    const statut = document.querySelector('#formStatutRapide select').value;
-    const csrfToken = document.querySelector('meta[name="csrf-token"]')?.content || '{{ csrf_token() }}';
-    
-    fetch(`/plan-action-risque/${planId}/changer-statut-rapide`, {
-        method: 'POST',
-        headers: {
-            'X-CSRFToken': csrfToken,
-            'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({ statut: statut })
-    })
-    .then(response => response.json())
-    .then(data => {
-        if (data.success) {
-            const modal = bootstrap.Modal.getInstance(document.getElementById('genericModal'));
-            modal.hide();
-            location.reload();
-        } else {
-            alert('Erreur: ' + data.error);
-        }
-    })
-    .catch(error => {
-        console.error('Error:', error);
-        alert('Erreur réseau');
-    });
-}
-
-// Fonction pour supprimer définitivement un plan (ARCHIVES SEULEMENT)
+// ============================================
+// SUPPRESSION DÉFINITIVE
+// ============================================
 function supprimerPlan(planId, reference) {
-    const confirmationMessage = `Êtes-vous sûr de vouloir supprimer DÉFINITIVEMENT le plan d'action archivé "${reference}" ?\n\n⚠️ Cette action est irréversible !\n\nLe plan et toutes ses sous-actions associées seront définitivement supprimés.`;
+    const message = `Êtes-vous sûr de vouloir supprimer DÉFINITIVEMENT le plan d'action archivé "${reference}" ?\n\n⚠️ Cette action est irréversible !`;
     
-    if (confirm(confirmationMessage)) {
-        const csrfToken = document.querySelector('meta[name="csrf-token"]')?.content || '{{ csrf_token() }}';
-        
+    if (confirm(message)) {
         fetch(`/plan-action-risque/${planId}/supprimer`, {
             method: 'DELETE',
             headers: {
@@ -565,48 +1371,63 @@ function supprimerPlan(planId, reference) {
         .then(response => response.json())
         .then(data => {
             if (data.success) {
-                // Afficher un message de succès
-                const alertDiv = document.createElement('div');
-                alertDiv.className = 'alert alert-success alert-dismissible fade show position-fixed top-0 start-50 translate-middle-x mt-3';
-                alertDiv.style.zIndex = '1050';
-                alertDiv.innerHTML = `
-                    <strong>✅ Suppression réussie !</strong> Le plan a été supprimé définitivement.
-                    <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
-                `;
-                document.body.appendChild(alertDiv);
+                const row = document.querySelector(`tr[data-plan-id="${planId}"]`);
+                if (row) {
+                    row.classList.add('delete-animation');
+                    setTimeout(() => {
+                        row.remove();
+                        if (document.querySelectorAll('.plan-row').length === 0) {
+                            location.reload();
+                        }
+                    }, 500);
+                }
                 
-                // Fermer l'alerte après 3 secondes
-                setTimeout(() => {
-                    const bsAlert = new bootstrap.Alert(alertDiv);
-                    bsAlert.close();
-                }, 3000);
-                
-                // Rafraîchir la page après un court délai
-                setTimeout(() => {
-                    if (data.redirect) {
-                        window.location.href = data.redirect;
-                    } else {
-                        location.reload();
-                    }
-                }, 1000);
+                // Message de succès
+                showAlert('success', '✅ Plan supprimé définitivement');
             } else {
-                alert('❌ Erreur: ' + data.error);
+                showAlert('danger', '❌ ' + (data.error || 'Erreur lors de la suppression'));
             }
         })
         .catch(error => {
             console.error('Error:', error);
-            alert('❌ Erreur réseau lors de la suppression');
+            showAlert('danger', '❌ Erreur réseau');
         });
     }
 }
 
-// Graphiques
+// ============================================
+// ALERTE FLOTTANTE
+// ============================================
+function showAlert(type, message) {
+    const alertDiv = document.createElement('div');
+    alertDiv.className = `alert alert-${type} alert-dismissible fade show position-fixed top-0 start-50 translate-middle-x mt-3`;
+    alertDiv.style.zIndex = '9999';
+    alertDiv.style.minWidth = '300px';
+    alertDiv.style.boxShadow = '0 10px 30px rgba(0,0,0,0.2)';
+    alertDiv.innerHTML = `
+        ${message}
+        <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+    `;
+    document.body.appendChild(alertDiv);
+    
+    setTimeout(() => {
+        if (alertDiv) {
+            const bsAlert = new bootstrap.Alert(alertDiv);
+            bsAlert.close();
+        }
+    }, 3000);
+}
+
+// ============================================
+// GRAPHIQUES
+// ============================================
 document.addEventListener('DOMContentLoaded', function() {
+    // Données des plans pour les graphiques
+    const plansAffiches = {{ plans_action_json|tojson|safe }};
+    
     // Graphique des statuts
     const ctxStatut = document.getElementById('chartStatut');
     if (ctxStatut) {
-        const plansAffiches = {{ plans_action_json|tojson|safe }};
-        
         const statuts = {
             'en_attente': plansAffiches.filter(p => p.statut === 'en_attente').length,
             'en_cours': plansAffiches.filter(p => p.statut === 'en_cours').length,
@@ -622,25 +1443,17 @@ document.addEventListener('DOMContentLoaded', function() {
                 datasets: [{
                     data: Object.values(statuts),
                     backgroundColor: [
-                        '#6c757d',
-                        '#ffc107',
-                        '#198754',
-                        '#6610f2',
-                        '#dc3545'
-                    ]
+                        '#64748b', '#F59E0B', '#0D9488', '#6610f2', '#DC2626'
+                    ],
+                    borderWidth: 0
                 }]
             },
             options: {
                 responsive: true,
                 plugins: {
-                    legend: {
-                        position: 'bottom'
-                    },
-                    title: {
-                        display: true,
-                        text: '{{ "Répartition par statut (archives)" if voir_archives else "Répartition par statut (actifs)" }}'
-                    }
-                }
+                    legend: { position: 'bottom' }
+                },
+                cutout: '60%'
             }
         });
     }
@@ -648,8 +1461,6 @@ document.addEventListener('DOMContentLoaded', function() {
     // Graphique de progression
     const ctxProgression = document.getElementById('chartProgression');
     if (ctxProgression) {
-        const plansAffiches = {{ plans_action_json|tojson|safe }};
-        
         const progressions = {
             '0-25': plansAffiches.filter(p => (p.progression_reelle || 0) <= 25).length,
             '26-50': plansAffiches.filter(p => (p.progression_reelle || 0) > 25 && (p.progression_reelle || 0) <= 50).length,
@@ -665,7 +1476,8 @@ document.addEventListener('DOMContentLoaded', function() {
                 datasets: [{
                     label: 'Nombre de plans',
                     data: Object.values(progressions),
-                    backgroundColor: '{{ "#ffc107" if voir_archives else "#0d6efd" }}'
+                    backgroundColor: voirArchives ? '#F59E0B' : '#0066CC',
+                    borderRadius: 8
                 }]
             },
             options: {
@@ -673,87 +1485,20 @@ document.addEventListener('DOMContentLoaded', function() {
                 scales: {
                     y: {
                         beginAtZero: true,
-                        ticks: {
-                            stepSize: 1
-                        }
+                        ticks: { stepSize: 1 }
                     }
                 },
                 plugins: {
-                    title: {
-                        display: true,
-                        text: '{{ "Distribution de la progression (archives)" if voir_archives else "Distribution de la progression" }}'
-                    }
+                    legend: { display: false }
                 }
             }
         });
     }
+    
+    console.log('🚀 Page plans d\'action chargée');
+    console.log('Risque:', '{{ risque.reference }}');
+    console.log('Plans affichés:', plansAffiches.length);
+    console.log('Vue archives:', voirArchives);
 });
 </script>
-
-<style>
-.archive-row {
-    opacity: 0.9;
-}
-
-.archive-row:hover {
-    background-color: #f8f9fa !important;
-    opacity: 1;
-}
-
-.fa-archive {
-    color: #6c757d;
-}
-
-.badge.bg-secondary {
-    background-color: #6c757d !important;
-}
-
-.card {
-    transition: all 0.3s ease;
-}
-
-.card:hover {
-    transform: translateY(-2px);
-    box-shadow: 0 4px 8px rgba(0,0,0,0.1);
-}
-
-.archive-row .btn-outline-warning {
-    opacity: 0.7;
-}
-
-.archive-row .btn-outline-warning:hover {
-    opacity: 1;
-}
-
-/* Style pour les boutons d'action */
-.btn-group .btn {
-    border-radius: 4px !important;
-}
-
-.btn-group .btn:not(:last-child) {
-    margin-right: 2px;
-}
-
-/* Style spécifique pour le bouton supprimer dans les archives */
-.btn-outline-danger:hover {
-    background-color: #dc3545;
-    color: white;
-}
-
-/* Animation pour la suppression */
-@keyframes fadeOutDelete {
-    from { 
-        opacity: 1;
-        transform: scale(1);
-    }
-    to { 
-        opacity: 0;
-        transform: scale(0.95);
-    }
-}
-
-.delete-animation {
-    animation: fadeOutDelete 0.5s ease forwards;
-}
-</style>
 {% endblock %}
