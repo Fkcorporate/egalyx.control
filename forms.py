@@ -1545,6 +1545,20 @@ class CommentaireForm(FlaskForm):
     type_entite = HiddenField()  # 'audit', 'constatation', 'recommandation', 'plan_action'
     entite_id = HiddenField()
     
+    # Nouveaux champs pour l'espace de travail
+    type_contenu = SelectField('Type', choices=[
+        ('commentaire', 'Commentaire général'),
+        ('note', 'Note importante'),
+        ('mise_a_jour', 'Mise à jour de progression'),
+        ('question', 'Question'),
+        ('blocage', 'Signalement de blocage'),
+        ('reussite', 'Succès accompli')
+    ], default='commentaire', validators=[Optional()])
+    
+    sous_action_id = SelectField('Lier à une sous-action', coerce=int, choices=[], validators=[Optional()])
+    tags = StringField('Tags', validators=[Optional()])
+    est_prive = BooleanField('Privé')
+    
     submit = SubmitField('Ajouter le commentaire')
 
 
