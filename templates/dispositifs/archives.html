@@ -1,121 +1,799 @@
 {% extends "base.html" %}
 
 {% block content %}
-<div class="d-flex justify-content-between flex-wrap flex-md-nowrap align-items-center pt-3 pb-2 mb-3 border-bottom">
-    <h1 class="h2">
-        <i class="fas fa-archive"></i> Dispositifs de maîtrise archivés
-    </h1>
-    <div class="btn-toolbar mb-2 mb-md-0">
-        <a href="{{ retour_url }}" class="btn btn-secondary me-2">
-            <i class="fas fa-arrow-left"></i> Retour
-        </a>
-    </div>
-</div>
+<style>
+    /* ============================================
+       STYLES SPÉCIFIQUES - DISPOSITIFS ARCHIVÉS
+       ============================================ */
+    
+    /* Variables de base */
+    .archives-container {
+        max-width: 1400px;
+        margin: 0 auto;
+    }
 
-{% if dispositifs %}
-<div class="card shadow">
-    <div class="card-header bg-light">
-        <h6 class="mb-0">
-            <i class="fas fa-list me-2"></i>Liste des dispositifs archivés ({{ dispositifs|length }})
-        </h6>
-    </div>
-    <div class="card-body">
-        <div class="table-responsive">
-            <table class="table table-hover">
-                <thead>
-                    <tr>
-                        <th>Référence</th>
-                        <th>Nom</th>
-                        <th>Risque associé</th>
-                        <th>Type</th>
-                        <th>Archivé le</th>
-                        <th>Archivé par</th>
-                        <th class="text-end">Actions</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    {% for dispositif in dispositifs %}
-                    <tr>
-                        <td>
-                            <strong>{{ dispositif.reference }}</strong>
-                        </td>
-                        <td>
-                            {{ dispositif.nom }}
-                            {% if dispositif.description %}
-                            <br><small class="text-muted">{{ dispositif.description|truncate(50) }}</small>
-                            {% endif %}
-                        </td>
-                        <td>
-                            {% if dispositif.risque %}
-                            <a href="{{ url_for('detail_risque', id=dispositif.risque_id) }}" class="text-decoration-none">
-                                {{ dispositif.risque.reference }}
-                            </a>
-                            <br><small>{{ dispositif.risque.intitule|truncate(40) }}</small>
+    /* ========== EN-TÊTE DE PAGE ========== */
+    .page-header {
+        background: linear-gradient(135deg, #0A1929 0%, #1A3C6B 100%);
+        border-radius: 20px;
+        padding: 2rem;
+        margin-bottom: 2rem;
+        color: white;
+        box-shadow: 0 4px 20px rgba(0, 0, 0, 0.08);
+        position: relative;
+        overflow: hidden;
+        z-index: 1;
+    }
+
+    .page-header::before {
+        content: '';
+        position: absolute;
+        top: -50%;
+        right: -10%;
+        width: 300px;
+        height: 300px;
+        background: rgba(255, 255, 255, 0.1);
+        border-radius: 50%;
+        transform: rotate(25deg);
+        pointer-events: none;
+        z-index: 0;
+    }
+
+    .page-header::after {
+        content: '';
+        position: absolute;
+        bottom: -50%;
+        left: -10%;
+        width: 400px;
+        height: 400px;
+        background: rgba(255, 255, 255, 0.05);
+        border-radius: 50%;
+        transform: rotate(-15deg);
+        pointer-events: none;
+        z-index: 0;
+    }
+
+    .page-header-content {
+        position: relative;
+        z-index: 2;
+    }
+
+    .page-title {
+        font-size: 2rem;
+        font-weight: 600;
+        margin-bottom: 0.5rem;
+        display: flex;
+        align-items: center;
+        gap: 1rem;
+        flex-wrap: wrap;
+    }
+
+    .breadcrumb {
+        background: transparent;
+        padding: 0;
+        margin-bottom: 1rem;
+    }
+
+    .breadcrumb-item a {
+        color: rgba(255, 255, 255, 0.8);
+        text-decoration: none;
+        transition: all 0.3s ease;
+    }
+
+    .breadcrumb-item a:hover {
+        color: white;
+    }
+
+    .breadcrumb-item.active {
+        color: white;
+    }
+
+    .breadcrumb-item + .breadcrumb-item::before {
+        color: rgba(255, 255, 255, 0.5);
+    }
+
+    .header-actions {
+        display: flex;
+        gap: 0.75rem;
+        flex-wrap: wrap;
+        align-items: center;
+        position: relative;
+        z-index: 10;
+    }
+
+    .fk-btn {
+        padding: 0.6rem 1.2rem;
+        border-radius: 10px;
+        font-weight: 500;
+        display: inline-flex;
+        align-items: center;
+        gap: 0.5rem;
+        transition: all 0.3s ease;
+        border: none;
+        cursor: pointer;
+        font-size: 0.9rem;
+        text-decoration: none;
+        z-index: 10;
+        position: relative;
+    }
+
+    .fk-btn-primary {
+        background: linear-gradient(135deg, #0066CC, #3B82F6);
+        color: white;
+        box-shadow: 0 5px 15px rgba(0, 102, 204, 0.3);
+    }
+
+    .fk-btn-primary:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 10px 25px rgba(0, 102, 204, 0.4);
+        color: white;
+    }
+
+    .fk-btn-secondary {
+        background: rgba(255, 255, 255, 0.15);
+        border: 1px solid rgba(255, 255, 255, 0.3);
+        color: white;
+    }
+
+    .fk-btn-secondary:hover {
+        background: rgba(255, 255, 255, 0.25);
+        transform: translateY(-2px);
+        color: white;
+    }
+
+    .fk-btn-outline-light {
+        background: rgba(255, 255, 255, 0.1);
+        backdrop-filter: blur(10px);
+        border: 1px solid rgba(255, 255, 255, 0.2);
+        color: white;
+    }
+
+    .fk-btn-outline-light:hover {
+        background: rgba(255, 255, 255, 0.2);
+        transform: translateY(-2px);
+        color: white;
+    }
+
+    /* ========== STATISTIQUES ========== */
+    .stats-banner {
+        background: white;
+        border: 1px solid #e2e8f0;
+        border-radius: 16px;
+        padding: 1.5rem;
+        margin-bottom: 2rem;
+        display: flex;
+        align-items: center;
+        gap: 2rem;
+        flex-wrap: wrap;
+        box-shadow: 0 4px 20px rgba(0, 0, 0, 0.08);
+    }
+
+    [data-bs-theme="dark"] .stats-banner {
+        background: #1e293b;
+        border-color: #334155;
+    }
+
+    .stat-item {
+        display: flex;
+        align-items: center;
+        gap: 1rem;
+    }
+
+    .stat-icon {
+        width: 48px;
+        height: 48px;
+        background: rgba(100, 116, 139, 0.15);
+        border-radius: 12px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 1.5rem;
+        color: #64748b;
+    }
+
+    [data-bs-theme="dark"] .stat-icon {
+        background: rgba(148, 163, 184, 0.15);
+        color: #94a3b8;
+    }
+
+    .stat-content {
+        flex: 1;
+    }
+
+    .stat-label {
+        font-size: 0.7rem;
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+        color: #64748b;
+        margin-bottom: 0.25rem;
+    }
+
+    [data-bs-theme="dark"] .stat-label {
+        color: #94a3b8;
+    }
+
+    .stat-value {
+        font-size: 1.5rem;
+        font-weight: 700;
+        color: #0f172a;
+        line-height: 1.2;
+    }
+
+    [data-bs-theme="dark"] .stat-value {
+        color: #f1f5f9;
+    }
+
+    /* ========== CARTES ========== */
+    .fk-card-modern {
+        background: white;
+        border: 1px solid #e2e8f0;
+        border-radius: 16px;
+        margin-bottom: 1.5rem;
+        overflow: hidden;
+        box-shadow: 0 4px 20px rgba(0, 0, 0, 0.08);
+        transition: all 0.3s ease;
+    }
+
+    .fk-card-modern:hover {
+        box-shadow: 0 8px 30px rgba(0, 0, 0, 0.12);
+    }
+
+    [data-bs-theme="dark"] .fk-card-modern {
+        background: #1e293b;
+        border-color: #334155;
+    }
+
+    .fk-card-header {
+        padding: 1.25rem 1.5rem;
+        border-bottom: 1px solid #e2e8f0;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        flex-wrap: wrap;
+        gap: 1rem;
+        background: #f8fafc;
+        color: #0f172a;
+    }
+
+    .fk-card-header.secondary {
+        background: linear-gradient(135deg, #64748b, #94a3b8);
+        color: white;
+        border-bottom: none;
+    }
+
+    .header-icon-sm {
+        width: 40px;
+        height: 40px;
+        background: rgba(255, 255, 255, 0.2);
+        border-radius: 8px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 1.2rem;
+        color: white;
+    }
+
+    .fk-card-body {
+        padding: 1.5rem;
+        background: white;
+        color: #0f172a;
+    }
+
+    [data-bs-theme="dark"] .fk-card-body {
+        background: #1e293b;
+        color: #f1f5f9;
+    }
+
+    /* ========== BADGES ========== */
+    .badge-modern {
+        display: inline-block;
+        padding: 0.35rem 0.75rem;
+        border-radius: 50px;
+        font-size: 0.75rem;
+        font-weight: 600;
+        text-align: center;
+        white-space: nowrap;
+        border: 1px solid transparent;
+    }
+
+    .badge-primary { background: #0066CC; color: white; }
+    .badge-success { background: #0D9488; color: white; }
+    .badge-warning { background: #F59E0B; color: white; }
+    .badge-danger { background: #DC2626; color: white; }
+    .badge-info { background: #3B82F6; color: white; }
+    .badge-secondary { background: #64748b; color: white; }
+
+    .badge-type {
+        display: inline-block;
+        padding: 0.25rem 0.6rem;
+        border-radius: 4px;
+        font-size: 0.7rem;
+        font-weight: 600;
+        text-transform: uppercase;
+    }
+
+    .badge-type.preventif {
+        background: #0D9488;
+        color: white;
+    }
+
+    .badge-type.detectif {
+        background: #F59E0B;
+        color: white;
+    }
+
+    .badge-type.correctif {
+        background: #DC2626;
+        color: white;
+    }
+
+    .badge-type.default {
+        background: #64748b;
+        color: white;
+    }
+
+    /* ========== TABLEAU ========== */
+    .fk-table-modern {
+        width: 100%;
+        border-collapse: collapse;
+        font-size: 0.9rem;
+    }
+
+    .fk-table-modern thead th {
+        padding: 0.75rem 1rem;
+        font-size: 0.7rem;
+        font-weight: 600;
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+        color: #64748b;
+        border-bottom: 2px solid #e2e8f0;
+        background: #f8fafc;
+        white-space: nowrap;
+    }
+
+    .fk-table-modern tbody td {
+        padding: 1rem;
+        border-bottom: 1px solid #e2e8f0;
+        color: #0f172a;
+        vertical-align: middle;
+    }
+
+    .fk-table-modern tbody tr {
+        transition: all 0.2s ease;
+    }
+
+    .fk-table-modern tbody tr:hover {
+        background: #f1f5f9;
+    }
+
+    [data-bs-theme="dark"] .fk-table-modern thead th {
+        color: #94a3b8;
+        border-bottom-color: #334155;
+        background: #0f172a;
+    }
+
+    [data-bs-theme="dark"] .fk-table-modern tbody td {
+        border-bottom-color: #334155;
+        color: #f1f5f9;
+    }
+
+    [data-bs-theme="dark"] .fk-table-modern tbody tr:hover {
+        background: #1e293b;
+    }
+
+    /* ========== BOUTONS D'ACTION ========== */
+    .action-buttons {
+        display: flex;
+        gap: 0.5rem;
+        justify-content: flex-end;
+        flex-wrap: wrap;
+    }
+
+    .btn-action {
+        width: 36px;
+        height: 36px;
+        border-radius: 8px;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        background: #f1f5f9;
+        border: 1px solid #e2e8f0;
+        color: #64748b;
+        transition: all 0.3s ease;
+        cursor: pointer;
+        text-decoration: none;
+        z-index: 10;
+        position: relative;
+    }
+
+    .btn-action:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 4px 20px rgba(0, 0, 0, 0.08);
+        background: #ffffff;
+        text-decoration: none;
+    }
+
+    [data-bs-theme="dark"] .btn-action {
+        background: #1e293b;
+        border-color: #334155;
+        color: #94a3b8;
+    }
+
+    [data-bs-theme="dark"] .btn-action:hover {
+        background: #0f172a;
+    }
+
+    .btn-action.info:hover { background: #3B82F6; color: white; border-color: #3B82F6; }
+    .btn-action.success:hover { background: #0D9488; color: white; border-color: #0D9488; }
+    .btn-action.danger:hover { background: #DC2626; color: white; border-color: #DC2626; }
+
+    /* ========== ÉTAT VIDE ========== */
+    .empty-state {
+        text-align: center;
+        padding: 3rem;
+        background: white;
+        border-radius: 16px;
+        border: 1px solid #e2e8f0;
+    }
+
+    [data-bs-theme="dark"] .empty-state {
+        background: #1e293b;
+        border-color: #334155;
+    }
+
+    .empty-icon {
+        width: 80px;
+        height: 80px;
+        background: #f1f5f9;
+        border-radius: 20px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 2rem;
+        color: #64748b;
+        margin: 0 auto 1.5rem;
+    }
+
+    [data-bs-theme="dark"] .empty-icon {
+        background: #0f172a;
+        color: #94a3b8;
+    }
+
+    .empty-title {
+        font-size: 1.25rem;
+        font-weight: 600;
+        color: #0f172a;
+        margin-bottom: 0.5rem;
+    }
+
+    .empty-text {
+        color: #64748b;
+        margin-bottom: 1.5rem;
+    }
+
+    /* ========== MODAL ========== */
+    .modal-content {
+        border-radius: 16px;
+        border: none;
+        box-shadow: 0 30px 60px rgba(0, 0, 0, 0.3);
+    }
+
+    .modal-header {
+        border-bottom: 1px solid #e2e8f0;
+        padding: 1.25rem 1.5rem;
+        background: #f8fafc;
+        border-top-left-radius: 16px;
+        border-top-right-radius: 16px;
+    }
+
+    .modal-header.bg-danger {
+        background: linear-gradient(135deg, #DC2626, #EF4444) !important;
+        color: white;
+    }
+
+    .modal-header.bg-danger .btn-close {
+        filter: brightness(0) invert(1);
+    }
+
+    .modal-footer {
+        border-top: 1px solid #e2e8f0;
+        padding: 1.25rem 1.5rem;
+    }
+
+    /* ========== ANIMATIONS ========== */
+    @keyframes fadeIn {
+        from {
+            opacity: 0;
+            transform: translateY(20px);
+        }
+        to {
+            opacity: 1;
+            transform: translateY(0);
+        }
+    }
+
+    .animate-in {
+        animation: fadeIn 0.5s ease-out forwards;
+    }
+
+    /* ========== RESPONSIVE ========== */
+    @media (max-width: 768px) {
+        .page-header {
+            padding: 1.5rem;
+        }
+
+        .page-title {
+            font-size: 1.5rem;
+        }
+
+        .header-actions {
+            flex-direction: column;
+            width: 100%;
+        }
+
+        .header-actions .fk-btn {
+            width: 100%;
+            justify-content: center;
+        }
+
+        .stats-banner {
+            flex-direction: column;
+            align-items: flex-start;
+            gap: 1rem;
+        }
+
+        .stat-item {
+            width: 100%;
+        }
+
+        .fk-table-modern {
+            display: block;
+            overflow-x: auto;
+        }
+
+        .action-buttons {
+            justify-content: flex-start;
+        }
+    }
+</style>
+
+<div class="archives-container">
+    <!-- En-tête de page -->
+    <div class="page-header animate-in">
+        <div class="page-header-content">
+            <div class="row align-items-center">
+                <div class="col">
+                    <nav aria-label="breadcrumb">
+                        <ol class="breadcrumb">
+                            <li class="breadcrumb-item"><a href="{{ url_for('dashboard') }}">Dashboard</a></li>
+                            <li class="breadcrumb-item"><a href="{{ url_for('liste_cartographies') }}">Cartographies</a></li>
+                            {% if risque_id %}
+                            <li class="breadcrumb-item"><a href="{{ url_for('liste_dispositifs_risque', risque_id=risque_id) }}">Dispositifs</a></li>
                             {% else %}
-                            <span class="text-muted">Risque supprimé</span>
+                            <li class="breadcrumb-item"><a href="{{ url_for('benchmark_dispositifs') }}">Pilotage</a></li>
                             {% endif %}
-                        </td>
-                        <td>
-                            {% if dispositif.type_dispositif == 'Préventif' %}
-                            <span class="badge bg-success">{{ dispositif.type_dispositif }}</span>
-                            {% elif dispositif.type_dispositif == 'Détectif' %}
-                            <span class="badge bg-warning text-dark">{{ dispositif.type_dispositif }}</span>
-                            {% elif dispositif.type_dispositif == 'Correctif' %}
-                            <span class="badge bg-danger">{{ dispositif.type_dispositif }}</span>
-                            {% else %}
-                            <span class="badge bg-secondary">{{ dispositif.type_dispositif }}</span>
-                            {% endif %}
-                        </td>
-                        <td>
-                            {{ dispositif.archived_at.strftime('%d/%m/%Y %H:%M') if dispositif.archived_at }}
-                        </td>
-                        <td>
-                            {% if dispositif.archiveur %}
-                            {{ dispositif.archiveur.username }}
-                            {% else %}
-                            <span class="text-muted">Inconnu</span>
-                            {% endif %}
-                        </td>
-                        <td class="text-end">
-                            <div class="btn-group btn-group-sm">
-                                {% if dispositif.risque %}
-                                <a href="{{ url_for('detail_risque', id=dispositif.risque_id) }}" 
-                                   class="btn btn-outline-info" title="Voir le risque">
-                                    <i class="fas fa-eye"></i>
-                                </a>
-                                {% endif %}
-                                
-                                <form action="{{ url_for('desarchiver_dispositif', dispositif_id=dispositif.id) }}" 
-                                      method="POST" class="d-inline">
-                                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                                    <button type="submit" class="btn btn-outline-success" 
-                                            title="Désarchiver"
-                                            onclick="return confirm('Désarchiver ce dispositif ? Il sera à nouveau visible.')">
-                                        <i class="fas fa-box-open"></i>
-                                    </button>
-                                </form>
-                                
-                                <button class="btn btn-outline-danger" 
-                                        title="Supprimer définitivement"
-                                        onclick="supprimerDefinitivement({{ dispositif.id }})">
-                                    <i class="fas fa-trash-alt"></i>
-                                </button>
-                            </div>
-                        </td>
-                    </tr>
-                    {% endfor %}
-                </tbody>
-            </table>
+                            <li class="breadcrumb-item active">Archives</li>
+                        </ol>
+                    </nav>
+                    
+                    <div class="page-title">
+                        <i class="fas fa-archive me-2"></i>Dispositifs de maîtrise archivés
+                    </div>
+                    
+                    <p class="text-white-50 mb-0">
+                        {% if dispositifs %}
+                        {{ dispositifs|length }} dispositif(s) archivé(s) - Conservation des données historiques
+                        {% else %}
+                        Aucun dispositif archivé pour le moment
+                        {% endif %}
+                    </p>
+                </div>
+                
+                <div class="col-auto">
+                    <div class="header-actions">
+                        <a href="{{ retour_url }}" class="fk-btn fk-btn-secondary">
+                            <i class="fas fa-arrow-left"></i> Retour
+                        </a>
+                    </div>
+                </div>
+            </div>
         </div>
     </div>
+
+    {% if dispositifs %}
+    <!-- Statistiques rapides -->
+    <div class="stats-banner animate-in">
+        <div class="stat-item">
+            <div class="stat-icon">
+                <i class="fas fa-shield-alt"></i>
+            </div>
+            <div class="stat-content">
+                <div class="stat-label">Total archivés</div>
+                <div class="stat-value">{{ dispositifs|length }}</div>
+            </div>
+        </div>
+        
+        <div class="stat-item">
+            <div class="stat-icon">
+                <i class="fas fa-tag"></i>
+            </div>
+            <div class="stat-content">
+                <div class="stat-label">Par type</div>
+                <div class="stat-value">
+                    {% set preventifs = dispositifs|selectattr('type_dispositif', '==', 'Préventif')|list|length %}
+                    {% set detectifs = dispositifs|selectattr('type_dispositif', '==', 'Détectif')|list|length %}
+                    {% set correctifs = dispositifs|selectattr('type_dispositif', '==', 'Correctif')|list|length %}
+                    <span class="badge-type preventif me-1" title="Préventifs">{{ preventifs }}</span>
+                    <span class="badge-type detectif me-1" title="Détectifs">{{ detectifs }}</span>
+                    <span class="badge-type correctif" title="Correctifs">{{ correctifs }}</span>
+                </div>
+            </div>
+        </div>
+        
+        <div class="stat-item">
+            <div class="stat-icon">
+                <i class="fas fa-calendar-alt"></i>
+            </div>
+            <div class="stat-content">
+                <div class="stat-label">Plus ancien</div>
+                <div class="stat-value">
+                    {% set dates = dispositifs|map(attribute='archived_at')|select('!=', none)|list %}
+                    {% if dates %}
+                    {{ (dates|min).strftime('%d/%m/%Y') }}
+                    {% else %}
+                    -
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+        
+        <div class="stat-item">
+            <div class="stat-icon">
+                <i class="fas fa-user"></i>
+            </div>
+            <div class="stat-content">
+                <div class="stat-label">Dernier archivage</div>
+                <div class="stat-value">
+                    {% set dates = dispositifs|map(attribute='archived_at')|select('!=', none)|list %}
+                    {% if dates %}
+                    {{ (dates|max).strftime('%d/%m/%Y') }}
+                    {% else %}
+                    -
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Tableau des dispositifs archivés -->
+    <div class="fk-card-modern animate-in">
+        <div class="fk-card-header secondary">
+            <div class="d-flex align-items-center gap-3">
+                <div class="header-icon-sm">
+                    <i class="fas fa-list"></i>
+                </div>
+                <h5 class="mb-0">Liste des dispositifs archivés</h5>
+            </div>
+            <span class="badge-modern badge-secondary">{{ dispositifs|length }}</span>
+        </div>
+
+        <div class="fk-card-body p-0">
+            <div class="table-responsive">
+                <table class="fk-table-modern">
+                    <thead>
+                        <tr>
+                            <th>Référence</th>
+                            <th>Nom</th>
+                            <th>Risque associé</th>
+                            <th>Type</th>
+                            <th>Archivé le</th>
+                            <th>Archivé par</th>
+                            <th class="text-end">Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for dispositif in dispositifs %}
+                        <tr>
+                            <td>
+                                <strong>{{ dispositif.reference }}</strong>
+                            </td>
+                            <td>
+                                <div class="fw-bold">{{ dispositif.nom }}</div>
+                                {% if dispositif.description %}
+                                <small class="text-muted">{{ dispositif.description|truncate(50) }}</small>
+                                {% endif %}
+                            </td>
+                            <td>
+                                {% if dispositif.risque %}
+                                <a href="{{ url_for('detail_risque', id=dispositif.risque_id) }}" class="text-decoration-none">
+                                    <strong>{{ dispositif.risque.reference }}</strong>
+                                </a>
+                                <br>
+                                <small class="text-muted">{{ dispositif.risque.intitule|truncate(40) }}</small>
+                                {% else %}
+                                <span class="badge-modern badge-secondary">Risque supprimé</span>
+                                {% endif %}
+                            </td>
+                            <td>
+                                <span class="badge-type 
+                                    {% if dispositif.type_dispositif == 'Préventif' %}preventif
+                                    {% elif dispositif.type_dispositif == 'Détectif' %}detectif
+                                    {% elif dispositif.type_dispositif == 'Correctif' %}correctif
+                                    {% else %}default{% endif %}">
+                                    {{ dispositif.type_dispositif or 'Non spécifié' }}
+                                </span>
+                            </td>
+                            <td>
+                                {% if dispositif.archived_at %}
+                                <i class="fas fa-calendar-alt me-1 text-muted"></i>
+                                {{ dispositif.archived_at.strftime('%d/%m/%Y') }}
+                                <br>
+                                <small class="text-muted">{{ dispositif.archived_at.strftime('%H:%M') }}</small>
+                                {% else %}
+                                <span class="text-muted">-</span>
+                                {% endif %}
+                            </td>
+                            <td>
+                                {% if dispositif.archiveur %}
+                                <div class="d-flex align-items-center">
+                                    <i class="fas fa-user-circle me-2 text-muted"></i>
+                                    {{ dispositif.archiveur.username }}
+                                </div>
+                                {% else %}
+                                <span class="text-muted">
+                                    <i class="fas fa-user-slash me-1"></i>Inconnu
+                                </span>
+                                {% endif %}
+                            </td>
+                            <td class="text-end">
+                                <div class="action-buttons">
+                                    {% if dispositif.risque %}
+                                    <a href="{{ url_for('detail_risque', id=dispositif.risque_id) }}" 
+                                       class="btn-action info" 
+                                       title="Voir le risque">
+                                        <i class="fas fa-eye"></i>
+                                    </a>
+                                    {% endif %}
+                                    
+                                    <form action="{{ url_for('desarchiver_dispositif', dispositif_id=dispositif.id) }}" 
+                                          method="POST" class="d-inline">
+                                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                                        <button type="submit" class="btn-action success" 
+                                                title="Désarchiver"
+                                                onclick="return confirm('Désarchiver ce dispositif ? Il sera à nouveau visible dans les listes actives.')">
+                                            <i class="fas fa-box-open"></i>
+                                        </button>
+                                    </form>
+                                    
+                                    <button class="btn-action danger" 
+                                            title="Supprimer définitivement"
+                                            onclick="supprimerDefinitivement({{ dispositif.id }}, '{{ dispositif.reference }}')">
+                                        <i class="fas fa-trash-alt"></i>
+                                    </button>
+                                </div>
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+    
+    {% else %}
+    <!-- État vide -->
+    <div class="empty-state animate-in">
+        <div class="empty-icon">
+            <i class="fas fa-archive"></i>
+        </div>
+        <h4 class="empty-title">Aucun dispositif archivé</h4>
+        <p class="empty-text">Les dispositifs que vous archivez apparaîtront ici pour conservation.</p>
+        <a href="{{ retour_url }}" class="fk-btn fk-btn-primary">
+            <i class="fas fa-arrow-left me-2"></i>Retour
+        </a>
+    </div>
+    {% endif %}
 </div>
-{% else %}
-<div class="text-center py-5">
-    <i class="fas fa-archive fa-4x text-muted mb-3"></i>
-    <h4 class="text-muted">Aucun dispositif archivé</h4>
-    <p class="text-muted">Les dispositifs que vous archivez apparaîtront ici.</p>
-</div>
-{% endif %}
 
 <!-- Modal de confirmation pour suppression définitive -->
 <div class="modal fade" id="modalSuppressionDefinitive" tabindex="-1">
@@ -129,15 +807,33 @@
                 <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
             </div>
             <div class="modal-body">
-                <p><strong>Attention !</strong> Cette action est irréversible.</p>
-                <p>Le dispositif sera définitivement supprimé de la base de données.</p>
-                <p class="mb-0 text-danger">Toutes les données associées (vérifications, documents, etc.) seront également supprimées.</p>
+                <div class="fk-alert-modern danger mb-4">
+                    <i class="fas fa-exclamation-circle fa-2x"></i>
+                    <div>
+                        <strong>Attention ! Cette action est irréversible.</strong>
+                    </div>
+                </div>
+                
+                <p>Vous êtes sur le point de supprimer définitivement le dispositif :</p>
+                <p class="text-center fw-bold fs-5" id="modalDispositifRef">-</p>
+                
+                <div class="fk-alert-modern warning">
+                    <i class="fas fa-trash-alt"></i>
+                    <div>
+                        <strong>Toutes les données associées seront également supprimées :</strong>
+                        <ul class="mb-0 mt-2">
+                            <li>Vérifications et historiques</li>
+                            <li>Documents attachés</li>
+                            <li>Liens avec les plans d'action</li>
+                        </ul>
+                    </div>
+                </div>
             </div>
             <div class="modal-footer">
                 <form method="POST" action="" id="formSuppressionDefinitive">
                     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Annuler</button>
-                    <button type="submit" class="btn btn-danger">
+                    <button type="button" class="fk-btn fk-btn-outline-secondary" data-bs-dismiss="modal">Annuler</button>
+                    <button type="submit" class="fk-btn fk-btn-danger">
                         <i class="fas fa-trash-alt me-1"></i>Supprimer définitivement
                     </button>
                 </form>
@@ -146,18 +842,75 @@
     </div>
 </div>
 
+<!-- Token CSRF pour les requêtes AJAX -->
+<meta name="csrf-token" content="{{ csrf_token() }}">
 {% endblock %}
 
 {% block scripts %}
 <script>
-function supprimerDefinitivement(dispositifId) {
+// ============================================
+// VARIABLES GLOBALES
+// ============================================
+const csrfToken = document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') || '{{ csrf_token() }}';
+
+// ============================================
+// FONCTION DE SUPPRESSION DÉFINITIVE
+// ============================================
+function supprimerDefinitivement(dispositifId, dispositifRef) {
+    console.log('🗑️ Suppression définitive:', dispositifId, dispositifRef);
+    
+    if (typeof bootstrap === 'undefined') {
+        console.error('❌ Bootstrap non chargé');
+        alert('Erreur technique: Bootstrap non chargé. Rechargez la page.');
+        return;
+    }
+    
+    const modalElement = document.getElementById('modalSuppressionDefinitive');
+    if (!modalElement) {
+        console.error('❌ Modal non trouvé');
+        alert('Erreur technique: Modal non trouvé');
+        return;
+    }
+    
+    // Mettre à jour la référence du dispositif
+    const refElement = document.getElementById('modalDispositifRef');
+    if (refElement) {
+        refElement.textContent = dispositifRef;
+    }
+    
     // Mettre à jour l'action du formulaire
     const form = document.getElementById('formSuppressionDefinitive');
-    form.action = `/dispositif/${dispositifId}/supprimer-definitivement`; // Vous devrez créer cette route
+    if (form) {
+        form.action = `/dispositif/${dispositifId}/supprimer-definitivement`;
+        console.log('✅ Action du formulaire mise à jour:', form.action);
+    } else {
+        console.error('❌ Formulaire non trouvé');
+        return;
+    }
     
     // Afficher la modal
-    const modal = new bootstrap.Modal(document.getElementById('modalSuppressionDefinitive'));
-    modal.show();
+    try {
+        const modal = new bootstrap.Modal(modalElement);
+        modal.show();
+    } catch (error) {
+        console.error('❌ Erreur affichage modal:', error);
+        alert('Erreur lors de l\'affichage du modal');
+    }
 }
+
+// ============================================
+// INITIALISATION
+// ============================================
+document.addEventListener('DOMContentLoaded', function() {
+    console.log('🚀 Page archives chargée');
+    console.log('Nombre de dispositifs:', {{ dispositifs|length }});
+    
+    // Vérifier le token CSRF
+    const csrfMeta = document.querySelector('meta[name="csrf-token"]');
+    console.log('🔑 Meta CSRF:', csrfMeta ? 'Présent' : 'MANQUANT');
+    
+    // Fonctions de test pour la console
+    window.testSuppression = supprimerDefinitivement;
+});
 </script>
 {% endblock %}
