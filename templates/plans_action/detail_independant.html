@@ -722,6 +722,76 @@
             width: 80px;
         }
     }
+    /* Dans la section STYLES, ajoutez/modifiez : */
+
+/* ========== DROPDOWN CORRIGÉ ========== */
+.page-header {
+    /* Assurez-vous que overflow est visible */
+    overflow: visible !important;
+    z-index: 1000;
+}
+
+.header-actions {
+    position: relative;
+    z-index: 1001;
+}
+
+.dropdown {
+    position: relative !important;
+    z-index: 1002;
+}
+
+.dropdown-menu {
+    background: var(--bg-primary) !important;
+    border: 1px solid var(--border-color) !important;
+    border-radius: 16px !important;
+    box-shadow: 0 20px 40px rgba(0, 0, 0, 0.3) !important;
+    padding: 0.75rem !important;
+    min-width: 260px !important;
+    z-index: 999999 !important;
+    position: absolute !important;
+    top: 100% !important;
+    right: 0 !important;
+    left: auto !important;
+    margin-top: 0.5rem !important;
+    display: none;
+}
+
+.dropdown-menu.show {
+    display: block !important;
+}
+
+.dropdown-item {
+    padding: 0.75rem 1rem !important;
+    border-radius: 10px !important;
+    display: flex !important;
+    align-items: center !important;
+    gap: 0.75rem !important;
+    color: var(--text-primary) !important;
+    transition: all 0.2s ease;
+    cursor: pointer !important;
+    font-size: 0.95rem !important;
+}
+
+.dropdown-item i {
+    width: 22px;
+    color: var(--success);
+}
+
+.dropdown-item:hover {
+    background: var(--success-light) !important;
+    color: var(--success) !important;
+    transform: translateX(5px);
+}
+
+.dropdown-item.text-warning i {
+    color: var(--warning);
+}
+
+.dropdown-item.text-warning:hover {
+    background: var(--warning-light) !important;
+    color: var(--warning) !important;
+}
 </style>
 
 <div class="plan-container">
@@ -1180,10 +1250,11 @@
                                 </div>
                                 <div class="d-flex align-items-center mt-2">
                                     <input type="range" class="form-range progression-slider" 
-                                           min="0" max="100" step="25"
-                                           value="{{ action.pourcentage_realisation }}"
-                                           data-id="{{ action.id }}"
-                                           onchange="changerProgressionSousAction({{ action.id }}, this.value)">
+                                            min="0" max="100" step="25"
+                                            value="{{ action.pourcentage_realisation }}"
+                                            data-id="{{ action.id }}"
+                                            onmousedown="this.setAttribute('data-old-value', this.value)"
+                                            onchange="changerProgressionSousAction({{ action.id }}, this.value)">
                                     <button class="btn btn-sm btn-outline-success ms-2" 
                                             onclick="appliquerProgressionFixe({{ action.id }}, 100)"
                                             title="Terminer à 100%">
@@ -1541,6 +1612,7 @@ function updateSousActionUI(sousActionId, progression, statut) {
     const row = document.getElementById(`sous-action-${sousActionId}`);
     if (!row) return;
     
+    // Mise à jour de la barre de progression
     const progressBar = document.getElementById(`progress-bar-${sousActionId}`);
     if (progressBar) {
         progressBar.style.width = progression + '%';
@@ -1550,17 +1622,96 @@ function updateSousActionUI(sousActionId, progression, statut) {
         }`;
     }
     
+    // Mise à jour du pourcentage affiché
     const percentageSpan = document.getElementById(`percentage-${sousActionId}`);
     if (percentageSpan) percentageSpan.textContent = progression + '%';
     
+    // Mise à jour du slider
     const slider = row.querySelector('.progression-slider');
     if (slider) slider.value = progression;
     
+    // Mise à jour du select de statut
     const select = row.querySelector('.statut-select');
     if (select) select.value = statut;
     
+    // Effet visuel
     row.classList.add('highlight-update');
     setTimeout(() => row.classList.remove('highlight-update'), 1000);
+    
+    // IMPORTANT: Rafraîchir la progression globale après chaque mise à jour
+    rafraichirProgression();
+}
+function mettreAJourStatutPlan() {
+    fetch(`/plan-action-independant/${planId}/progression-detail`)
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            // Mettre à jour le badge de statut dans l'en-tête
+            const statutBadge = document.querySelector('.badge-statut:not([style*="rgba(220,53,69)"])');
+            if (statutBadge) {
+                // Logique pour déterminer le nouveau statut basé sur la progression
+                if (data.details.progression >= 100) {
+                    statutBadge.className = 'badge-statut termine';
+                    statutBadge.textContent = 'Terminé';
+                } else if (data.details.progression >= 50) {
+                    statutBadge.className = 'badge-statut en_cours';
+                    statutBadge.textContent = 'En Cours';
+                } else if (data.details.progression > 0) {
+                    statutBadge.className = 'badge-statut en_attente';
+                    statutBadge.textContent = 'En Attente';
+                } else {
+                    statutBadge.className = 'badge-statut en_attente';
+                    statutBadge.textContent = 'En Attente';
+                }
+            }
+        }
+    })
+    .catch(error => console.error('Erreur:', error));
+}
+function changerProgressionSousAction(sousActionId, progression) {
+    progression = Math.round(progression / 25) * 25;
+    
+    fetch(`/sous-action-independant/${sousActionId}/changer-progression`, {
+        method: 'POST',
+        headers: {
+            'X-CSRFToken': csrfToken,
+            'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ progression: parseInt(progression) })
+    })
+    .then(response => {
+        if (!response.ok) {
+            throw new Error(`HTTP error! status: ${response.status}`);
+        }
+        return response.json();
+    })
+    .then(data => {
+        if (data.success) {
+            updateSousActionUI(sousActionId, progression, data.statut);
+            // Ne pas appeler rafraichirProgression() ici car updateSousActionUI le fait déjà
+        } else {
+            showToast('error', '❌ ' + (data.error || 'Erreur inconnue'));
+        }
+    })
+    .catch(error => {
+        console.error('Error:', error);
+        showToast('error', '❌ Erreur réseau: ' + error.message);
+        // Restaurer la valeur précédente
+        const slider = document.querySelector(`.progression-slider[data-id="${sousActionId}"]`);
+        if (slider) {
+            const oldValue = slider.getAttribute('data-old-value') || slider.value;
+            slider.value = oldValue;
+            const percentageSpan = document.getElementById(`percentage-${sousActionId}`);
+            if (percentageSpan) {
+                percentageSpan.textContent = oldValue + '%';
+            }
+        }
+    });
+}
+
+// Ajoutez cette fonction pour sauvegarder la valeur avant changement
+function onSliderStart(slider) {
+    slider.setAttribute('data-old-value', slider.value);
 }
 
 // ============================================
@@ -1679,27 +1830,33 @@ function rafraichirProgression() {
     .then(response => response.json())
     .then(data => {
         if (data.success) {
+            // Mise à jour de la progression globale
             document.getElementById('progressionGlobale').textContent = data.details.progression + '%';
             document.getElementById('progressionBar').style.width = data.details.progression + '%';
             
+            // Mise à jour des compteurs
             document.getElementById('sousActionsTerminees').textContent = data.details.terminees;
             document.getElementById('totalSousActions').textContent = data.details.total;
+            
+            // Mise à jour du détail de progression
             document.getElementById('countTerminees').textContent = data.details.terminees;
             document.getElementById('countEnCours').textContent = data.details.en_cours;
             document.getElementById('countAFaire').textContent = data.details.a_faire;
             document.getElementById('countRetardees').textContent = data.details.retardees;
             
+            // Mise à jour des barres de progression
             const total = data.details.total || 1;
             document.getElementById('barTerminees').style.width = (data.details.terminees / total * 100) + '%';
             document.getElementById('barEnCours').style.width = (data.details.en_cours / total * 100) + '%';
             document.getElementById('barAFaire').style.width = (data.details.a_faire / total * 100) + '%';
             document.getElementById('barRetardees').style.width = (data.details.retardees / total * 100) + '%';
             
-            showToast('info', '🔄 Progression mise à jour');
+            // Optionnel : afficher un petit indicateur
+            console.log('✅ Progression mise à jour:', data.details.progression + '%');
         }
     })
     .catch(error => {
-        console.error('Error:', error);
+        console.error('❌ Erreur rafraichirProgression:', error);
     });
 }
 
@@ -1869,6 +2026,67 @@ document.addEventListener('DOMContentLoaded', function() {
             });
         }
     });
+});
+// ============================================
+// GESTION DU DROPDOWN
+// ============================================
+document.addEventListener('DOMContentLoaded', function() {
+    // Gestion manuelle des dropdowns
+    document.querySelectorAll('[data-bs-toggle="dropdown"]').forEach(toggle => {
+        toggle.addEventListener('click', function(e) {
+            e.preventDefault();
+            e.stopPropagation();
+            
+            const dropdown = this.nextElementSibling;
+            
+            // Fermer tous les autres dropdowns
+            document.querySelectorAll('.dropdown-menu.show').forEach(menu => {
+                if (menu !== dropdown) {
+                    menu.classList.remove('show');
+                    const btn = menu.previousElementSibling;
+                    if (btn) btn.setAttribute('aria-expanded', 'false');
+                }
+            });
+            
+            // Ouvrir/fermer celui-ci
+            if (dropdown) {
+                dropdown.classList.toggle('show');
+                this.setAttribute('aria-expanded', dropdown.classList.contains('show'));
+            }
+        });
+    });
+    
+    // Fermer les dropdowns en cliquant ailleurs
+    document.addEventListener('click', function(e) {
+        if (!e.target.closest('.dropdown')) {
+            document.querySelectorAll('.dropdown-menu.show').forEach(menu => {
+                menu.classList.remove('show');
+                const btn = menu.previousElementSibling;
+                if (btn) btn.setAttribute('aria-expanded', 'false');
+            });
+        }
+    });
+});
+function mettreAJourProgressionGlobale() {
+    // Vérifier que tous les éléments existent
+    const progressionGlobale = document.getElementById('progressionGlobale');
+    const progressionBar = document.getElementById('progressionBar');
+    const sousActionsTerminees = document.getElementById('sousActionsTerminees');
+    const totalSousActions = document.getElementById('totalSousActions');
+    
+    if (!progressionGlobale || !progressionBar || !sousActionsTerminees || !totalSousActions) {
+        console.warn('⚠️ Éléments de progression non trouvés, attente...');
+        return;
+    }
+    
+    // Appeler rafraichirProgression
+    rafraichirProgression();
+}
+
+// Appeler cette fonction au chargement et après chaque mise à jour
+document.addEventListener('DOMContentLoaded', function() {
+    // Attendre un peu que le DOM soit complètement chargé
+    setTimeout(mettreAJourProgressionGlobale, 100);
 });
 </script>
 {% endblock %}
