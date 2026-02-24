@@ -1,0 +1,163 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="d-flex justify-content-between flex-wrap flex-md-nowrap align-items-center pt-3 pb-2 mb-3 border-bottom">
+    <h1 class="h2">
+        <i class="fas fa-archive"></i> Dispositifs de maîtrise archivés
+    </h1>
+    <div class="btn-toolbar mb-2 mb-md-0">
+        <a href="{{ retour_url }}" class="btn btn-secondary me-2">
+            <i class="fas fa-arrow-left"></i> Retour
+        </a>
+    </div>
+</div>
+
+{% if dispositifs %}
+<div class="card shadow">
+    <div class="card-header bg-light">
+        <h6 class="mb-0">
+            <i class="fas fa-list me-2"></i>Liste des dispositifs archivés ({{ dispositifs|length }})
+        </h6>
+    </div>
+    <div class="card-body">
+        <div class="table-responsive">
+            <table class="table table-hover">
+                <thead>
+                    <tr>
+                        <th>Référence</th>
+                        <th>Nom</th>
+                        <th>Risque associé</th>
+                        <th>Type</th>
+                        <th>Archivé le</th>
+                        <th>Archivé par</th>
+                        <th class="text-end">Actions</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for dispositif in dispositifs %}
+                    <tr>
+                        <td>
+                            <strong>{{ dispositif.reference }}</strong>
+                        </td>
+                        <td>
+                            {{ dispositif.nom }}
+                            {% if dispositif.description %}
+                            <br><small class="text-muted">{{ dispositif.description|truncate(50) }}</small>
+                            {% endif %}
+                        </td>
+                        <td>
+                            {% if dispositif.risque %}
+                            <a href="{{ url_for('detail_risque', id=dispositif.risque_id) }}" class="text-decoration-none">
+                                {{ dispositif.risque.reference }}
+                            </a>
+                            <br><small>{{ dispositif.risque.intitule|truncate(40) }}</small>
+                            {% else %}
+                            <span class="text-muted">Risque supprimé</span>
+                            {% endif %}
+                        </td>
+                        <td>
+                            {% if dispositif.type_dispositif == 'Préventif' %}
+                            <span class="badge bg-success">{{ dispositif.type_dispositif }}</span>
+                            {% elif dispositif.type_dispositif == 'Détectif' %}
+                            <span class="badge bg-warning text-dark">{{ dispositif.type_dispositif }}</span>
+                            {% elif dispositif.type_dispositif == 'Correctif' %}
+                            <span class="badge bg-danger">{{ dispositif.type_dispositif }}</span>
+                            {% else %}
+                            <span class="badge bg-secondary">{{ dispositif.type_dispositif }}</span>
+                            {% endif %}
+                        </td>
+                        <td>
+                            {{ dispositif.archived_at.strftime('%d/%m/%Y %H:%M') if dispositif.archived_at }}
+                        </td>
+                        <td>
+                            {% if dispositif.archiveur %}
+                            {{ dispositif.archiveur.username }}
+                            {% else %}
+                            <span class="text-muted">Inconnu</span>
+                            {% endif %}
+                        </td>
+                        <td class="text-end">
+                            <div class="btn-group btn-group-sm">
+                                {% if dispositif.risque %}
+                                <a href="{{ url_for('detail_risque', id=dispositif.risque_id) }}" 
+                                   class="btn btn-outline-info" title="Voir le risque">
+                                    <i class="fas fa-eye"></i>
+                                </a>
+                                {% endif %}
+                                
+                                <form action="{{ url_for('desarchiver_dispositif', dispositif_id=dispositif.id) }}" 
+                                      method="POST" class="d-inline">
+                                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                                    <button type="submit" class="btn btn-outline-success" 
+                                            title="Désarchiver"
+                                            onclick="return confirm('Désarchiver ce dispositif ? Il sera à nouveau visible.')">
+                                        <i class="fas fa-box-open"></i>
+                                    </button>
+                                </form>
+                                
+                                <button class="btn btn-outline-danger" 
+                                        title="Supprimer définitivement"
+                                        onclick="supprimerDefinitivement({{ dispositif.id }})">
+                                    <i class="fas fa-trash-alt"></i>
+                                </button>
+                            </div>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+{% else %}
+<div class="text-center py-5">
+    <i class="fas fa-archive fa-4x text-muted mb-3"></i>
+    <h4 class="text-muted">Aucun dispositif archivé</h4>
+    <p class="text-muted">Les dispositifs que vous archivez apparaîtront ici.</p>
+</div>
+{% endif %}
+
+<!-- Modal de confirmation pour suppression définitive -->
+<div class="modal fade" id="modalSuppressionDefinitive" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header bg-danger text-white">
+                <h5 class="modal-title">
+                    <i class="fas fa-exclamation-triangle me-2"></i>
+                    Suppression définitive
+                </h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <p><strong>Attention !</strong> Cette action est irréversible.</p>
+                <p>Le dispositif sera définitivement supprimé de la base de données.</p>
+                <p class="mb-0 text-danger">Toutes les données associées (vérifications, documents, etc.) seront également supprimées.</p>
+            </div>
+            <div class="modal-footer">
+                <form method="POST" action="" id="formSuppressionDefinitive">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Annuler</button>
+                    <button type="submit" class="btn btn-danger">
+                        <i class="fas fa-trash-alt me-1"></i>Supprimer définitivement
+                    </button>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+
+{% endblock %}
+
+{% block scripts %}
+<script>
+function supprimerDefinitivement(dispositifId) {
+    // Mettre à jour l'action du formulaire
+    const form = document.getElementById('formSuppressionDefinitive');
+    form.action = `/dispositif/${dispositifId}/supprimer-definitivement`; // Vous devrez créer cette route
+    
+    // Afficher la modal
+    const modal = new bootstrap.Modal(document.getElementById('modalSuppressionDefinitive'));
+    modal.show();
+}
+</script>
+{% endblock %}
