@@ -1,0 +1,320 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="container-fluid">
+    <!-- En-tête -->
+    <div class="d-flex justify-content-between flex-wrap flex-md-nowrap align-items-center pt-3 pb-2 mb-3 border-bottom">
+        <h1 class="h2">
+            <i class="fas fa-bolt text-warning"></i> 
+            Stress Test - {{ dispositif.reference }}
+        </h1>
+        <div class="btn-toolbar mb-2 mb-md-0">
+            <a href="{{ url_for('detail_dispositif', dispositif_id=dispositif.id) }}" class="btn btn-secondary me-2">
+                <i class="fas fa-arrow-left"></i> Retour au dispositif
+            </a>
+            <a href="{{ url_for('benchmark_dispositifs') }}" class="btn btn-info">
+                <i class="fas fa-chart-line"></i> Pilotage
+            </a>
+        </div>
+    </div>
+
+    <!-- Informations du dispositif -->
+    <div class="row mb-4">
+        <div class="col-md-12">
+            <div class="card shadow">
+                <div class="card-header bg-primary text-white">
+                    <h6 class="mb-0"><i class="fas fa-info-circle me-2"></i>Dispositif testé</h6>
+                </div>
+                <div class="card-body">
+                    <div class="row">
+                        <div class="col-md-3">
+                            <strong>Référence:</strong> {{ dispositif.reference }}
+                        </div>
+                        <div class="col-md-3">
+                            <strong>Nom:</strong> {{ dispositif.nom }}
+                        </div>
+                        <div class="col-md-2">
+                            <strong>Type:</strong> 
+                            <span class="badge bg-{{ 'success' if dispositif.type_dispositif == 'Préventif' else 'warning' if dispositif.type_dispositif == 'Détectif' else 'info' }}">
+                                {{ dispositif.type_dispositif }}
+                            </span>
+                        </div>
+                        <div class="col-md-2">
+                            <strong>Nature:</strong> {{ dispositif.nature or 'Non spécifiée' }}
+                        </div>
+                        <div class="col-md-2">
+                            <strong>Efficacité:</strong> 
+                            <span class="badge bg-success">{{ dispositif.efficacite_reelle or 'N/A' }}/5</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Configuration du test -->
+    <div class="row mb-4">
+        <div class="col-md-4">
+            <div class="card shadow h-100">
+                <div class="card-header bg-warning">
+                    <h6 class="mb-0"><i class="fas fa-sliders-h me-2"></i>Configuration du stress test</h6>
+                </div>
+                <div class="card-body">
+                    <form method="POST" action="{{ url_for('stress_test_dispositif', dispositif_id=dispositif.id) }}">
+                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                        
+                        <div class="mb-3">
+                            <label class="form-label fw-bold">Sélectionnez un scénario :</label>
+                            <select name="scenario" class="form-select" onchange="this.form.submit()">
+                                <option value="cyber" {% if scenario == 'cyber' %}selected{% endif %}>
+                                    💻 Cyberattaque - 72h
+                                </option>
+                                <option value="humain" {% if scenario == 'humain' %}selected{% endif %}>
+                                    👥 Absence critique - 2 semaines
+                                </option>
+                                <option value="technique" {% if scenario == 'technique' %}selected{% endif %}>
+                                    🔧 Panne majeure - 48h
+                                </option>
+                                <option value="naturel" {% if scenario == 'naturel' %}selected{% endif %}>
+                                    🌪️ Catastrophe naturelle - 1 mois
+                                </option>
+                            </select>
+                        </div>
+                        
+                        <button type="submit" class="btn btn-warning w-100">
+                            <i class="fas fa-play me-2"></i>Lancer le stress test
+                        </button>
+                    </form>
+                </div>
+            </div>
+        </div>
+
+        <div class="col-md-8">
+            <div class="card shadow h-100">
+                <div class="card-header bg-info text-white">
+                    <h6 class="mb-0"><i class="fas fa-info-circle me-2"></i>Description du scénario</h6>
+                </div>
+                <div class="card-body">
+                    {% if resultats %}
+                        <h5>{{ resultats.scenario }}</h5>
+                        <p class="lead">{{ resultats.description_scenario }}</p>
+                        <div class="alert alert-info">
+                            <i class="fas fa-clock me-2"></i>
+                            <strong>Durée estimée:</strong> {{ resultats.duree }}
+                        </div>
+                    {% else %}
+                        <p class="text-center text-muted py-4">
+                            <i class="fas fa-arrow-left fa-3x mb-3"></i>
+                            <br>Sélectionnez un scénario pour lancer le stress test
+                        </p>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Résultats du stress test -->
+    {% if resultats %}
+    <div class="row">
+        <div class="col-md-12">
+            <div class="card shadow mb-4">
+                <div class="card-header bg-{{ resultats.couleur }} text-white">
+                    <h6 class="mb-0"><i class="fas fa-chart-line me-2"></i>Résultats du stress test</h6>
+                </div>
+                <div class="card-body">
+                    <!-- Comparaison normale vs stress -->
+                    <div class="row mb-4">
+                        <div class="col-md-6">
+                            <div class="card h-100 border-success">
+                                <div class="card-header bg-success text-white">
+                                    <h6 class="mb-0">🌿 Conditions normales</h6>
+                                </div>
+                                <div class="card-body text-center">
+                                    <div class="display-1 text-success">{{ "%.1f"|format(resultats.efficacite_normale) }}/5</div>
+                                    <p class="mt-3">Efficacité normale</p>
+                                    <div class="progress" style="height: 20px;">
+                                        <div class="progress-bar bg-success" 
+                                             style="width: {{ (resultats.efficacite_normale / 5) * 100 }}%">
+                                            {{ "%.0f"|format((resultats.efficacite_normale / 5) * 100) }}%
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-md-6">
+                            <div class="card h-100 border-{{ resultats.couleur }}">
+                                <div class="card-header bg-{{ resultats.couleur }} text-white">
+                                    <h6 class="mb-0">⚡ Sous stress</h6>
+                                </div>
+                                <div class="card-body text-center">
+                                    <div class="display-1 text-{{ resultats.couleur }}">{{ resultats.efficacite_stress }}/5</div>
+                                    <p class="mt-3">Efficacité résiduelle</p>
+                                    <div class="progress" style="height: 20px;">
+                                        <div class="progress-bar bg-{{ resultats.couleur }}" 
+                                             style="width: {{ (resultats.efficacite_stress / 5) * 100 }}%">
+                                            {{ "%.0f"|format((resultats.efficacite_stress / 5) * 100) }}%
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Facteurs et pertes -->
+                    <div class="row mb-4">
+                        <div class="col-md-4">
+                            <div class="card">
+                                <div class="card-body text-center">
+                                    <h3 class="text-info">{{ resultats.facteur_global }}</h3>
+                                    <small class="text-muted">Facteur de résistance</small>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-md-4">
+                            <div class="card">
+                                <div class="card-body text-center">
+                                    <h3 class="text-danger">{{ "%.1f"|format(resultats.perte) }}%</h3>
+                                    <small class="text-muted">Perte d'efficacité</small>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-md-4">
+                            <div class="card">
+                                <div class="card-body text-center">
+                                    <h3 class="text-warning">{{ resultats.reduction_stress }}%</h3>
+                                    <small class="text-muted">Réduction sous stress</small>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Analyse de résilience -->
+                    <div class="alert alert-{{ resultats.couleur }}">
+                        <h5>🔍 Analyse de résilience</h5>
+                        <p><strong>{{ resultats.resilience }}</strong></p>
+                        <p>{{ resultats.conseil }}</p>
+                    </div>
+
+                    <!-- Recommandations -->
+                    <div class="card">
+                        <div class="card-header bg-light">
+                            <h6 class="mb-0">📋 Recommandations</h6>
+                        </div>
+                        <div class="card-body">
+                            {% if resultats.perte > 50 %}
+                                <div class="alert alert-danger">
+                                    <i class="fas fa-exclamation-triangle me-2"></i>
+                                    <strong>Action immédiate requise !</strong>
+                                    <ul class="mt-2">
+                                        <li>Mettre en place une redondance</li>
+                                        <li>Créer un plan de continuité</li>
+                                        <li>Former du personnel supplémentaire</li>
+                                    </ul>
+                                </div>
+                            {% elif resultats.perte > 30 %}
+                                <div class="alert alert-warning">
+                                    <i class="fas fa-exclamation-circle me-2"></i>
+                                    <strong>Améliorations recommandées</strong>
+                                    <ul class="mt-2">
+                                        <li>Renforcer les procédures de secours</li>
+                                        <li>Augmenter la fréquence des tests</li>
+                                        <li>Documenter les points de défaillance</li>
+                                    </ul>
+                                </div>
+                            {% else %}
+                                <div class="alert alert-success">
+                                    <i class="fas fa-check-circle me-2"></i>
+                                    <strong>Dispositif résilient</strong>
+                                    <ul class="mt-2">
+                                        <li>Maintenir la surveillance normale</li>
+                                        <li>Partager les bonnes pratiques</li>
+                                        <li>Planifier le prochain test dans 6 mois</li>
+                                    </ul>
+                                </div>
+                            {% endif %}
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Graphique comparatif -->
+    <div class="row">
+        <div class="col-md-12">
+            <div class="card shadow">
+                <div class="card-header bg-light">
+                    <h6 class="mb-0"><i class="fas fa-chart-bar me-2"></i>Comparaison avec autres scénarios</h6>
+                </div>
+                <div class="card-body">
+                    <canvas id="chartStress" height="300"></canvas>
+                </div>
+            </div>
+        </div>
+    </div>
+    {% endif %}
+</div>
+{% endblock %}
+
+{% block scripts %}
+{% if resultats %}
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    const ctx = document.getElementById('chartStress').getContext('2d');
+    
+    // Récupérer tous les scénarios de stress test
+    const stressTests = {{ dispositif.stress_test_avance()|tojson }};
+    
+    const labels = [];
+    const data = [];
+    const colors = [];
+    
+    for (const [key, test] of Object.entries(stressTests)) {
+        labels.push(test.scenario);
+        data.push(test.efficacite);
+        
+        // Couleurs selon le niveau d'efficacité
+        if (test.efficacite >= 4) colors.push('#28a745');
+        else if (test.efficacite >= 3) colors.push('#ffc107');
+        else if (test.efficacite >= 2) colors.push('#fd7e14');
+        else colors.push('#dc3545');
+    }
+    
+    new Chart(ctx, {
+        type: 'radar',
+        data: {
+            labels: labels,
+            datasets: [{
+                label: 'Efficacité sous stress',
+                data: data,
+                backgroundColor: 'rgba(255, 193, 7, 0.2)',
+                borderColor: '#ffc107',
+                pointBackgroundColor: colors,
+                pointBorderColor: '#fff',
+                pointHoverBackgroundColor: '#fff',
+                pointHoverBorderColor: '#ffc107'
+            }]
+        },
+        options: {
+            responsive: true,
+            scales: {
+                r: {
+                    beginAtZero: true,
+                    max: 5,
+                    ticks: {
+                        stepSize: 1
+                    }
+                }
+            },
+            plugins: {
+                legend: {
+                    display: false
+                }
+            }
+        }
+    });
+});
+</script>
+{% endif %}
+{% endblock %}
