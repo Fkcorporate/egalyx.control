@@ -101,6 +101,210 @@
         </div>
     </div>
 
+    <!-- SECTION STRESS TEST - Tableau de résilience -->
+    <div class="card shadow mb-4">
+        <div class="card-header bg-warning">
+            <h6 class="mb-0"><i class="fas fa-bolt me-2"></i>Analyse de résilience - Stress Tests avancés</h6>
+        </div>
+        <div class="card-body">
+            <div class="table-responsive">
+                <table class="table table-hover">
+                    <thead>
+                        <tr>
+                            <th>Dispositif</th>
+                            <th>Type</th>
+                            <th>Normal</th>
+                            <th class="bg-danger text-white">💻 Cyber</th>
+                            <th class="bg-warning">👥 Humain</th>
+                            <th class="bg-info">🔧 Technique</th>
+                            <th class="bg-secondary text-white">🌪️ Naturel</th>
+                            <th>Résilience</th>
+                            <th>Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for d in dispositifs %}
+                        {% if d.efficacite_reelle %}
+                        {% set stress_tests = d.stress_test_avance() %}
+                        {% set resilience = d.get_score_resilience() %}
+                        <tr>
+                            <td>
+                                <strong>{{ d.reference }}</strong>
+                                <br>
+                                <small class="text-muted">{{ d.nom|truncate(25) }}</small>
+                            </td>
+                            <td>
+                                <span class="badge bg-{{ 'success' if d.type_dispositif == 'Préventif' else 'warning' if d.type_dispositif == 'Détectif' else 'info' }}">
+                                    {{ d.type_dispositif }}
+                                </span>
+                            </td>
+                            <td>
+                                <span class="badge bg-success">{{ d.efficacite_reelle }}/5</span>
+                                <br>
+                                <small>{{ d.get_reduction_risque_detaille().reduction_finale }}%</small>
+                            </td>
+                            <td class="{% if stress_tests.cyber.efficacite < 3 %}table-danger{% elif stress_tests.cyber.efficacite < 4 %}table-warning{% endif %}">
+                                <strong>{{ stress_tests.cyber.efficacite }}/5</strong>
+                                <br>
+                                <small class="text-muted">{{ stress_tests.cyber.duree }}</small>
+                                <br>
+                                <span class="badge bg-{{ 'danger' if stress_tests.cyber.facteur < 0.3 else 'warning' if stress_tests.cyber.facteur < 0.6 else 'success' }}">
+                                    fact: {{ "%.2f"|format(stress_tests.cyber.facteur) }}
+                                </span>
+                            </td>
+                            <td class="{% if stress_tests.humain.efficacite < 3 %}table-danger{% elif stress_tests.humain.efficacite < 4 %}table-warning{% endif %}">
+                                <strong>{{ stress_tests.humain.efficacite }}/5</strong>
+                                <br>
+                                <small class="text-muted">{{ stress_tests.humain.duree }}</small>
+                                <br>
+                                <span class="badge bg-{{ 'danger' if stress_tests.humain.facteur < 0.3 else 'warning' if stress_tests.humain.facteur < 0.6 else 'success' }}">
+                                    fact: {{ "%.2f"|format(stress_tests.humain.facteur) }}
+                                </span>
+                            </td>
+                            <td class="{% if stress_tests.technique.efficacite < 3 %}table-danger{% elif stress_tests.technique.efficacite < 4 %}table-warning{% endif %}">
+                                <strong>{{ stress_tests.technique.efficacite }}/5</strong>
+                                <br>
+                                <small class="text-muted">{{ stress_tests.technique.duree }}</small>
+                                <br>
+                                <span class="badge bg-{{ 'danger' if stress_tests.technique.facteur < 0.3 else 'warning' if stress_tests.technique.facteur < 0.6 else 'success' }}">
+                                    fact: {{ "%.2f"|format(stress_tests.technique.facteur) }}
+                                </span>
+                            </td>
+                            <td class="{% if stress_tests.naturel.efficacite < 3 %}table-danger{% elif stress_tests.naturel.efficacite < 4 %}table-warning{% endif %}">
+                                <strong>{{ stress_tests.naturel.efficacite }}/5</strong>
+                                <br>
+                                <small class="text-muted">{{ stress_tests.naturel.duree }}</small>
+                                <br>
+                                <span class="badge bg-{{ 'danger' if stress_tests.naturel.facteur < 0.3 else 'warning' if stress_tests.naturel.facteur < 0.6 else 'success' }}">
+                                    fact: {{ "%.2f"|format(stress_tests.naturel.facteur) }}
+                                </span>
+                            </td>
+                            <td>
+                                <span class="badge bg-{{ 'success' if resilience[1] >= 4 else 'warning' if resilience[1] >= 3 else 'danger' }} p-2">
+                                    {{ resilience[0] }}
+                                    <br>
+                                    <strong>{{ "%.1f"|format(resilience[1]) }}/5</strong>
+                                </span>
+                            </td>
+                            <td>
+                                <div class="btn-group btn-group-sm">
+                                    <a href="{{ url_for('detail_dispositif', dispositif_id=d.id) }}" 
+                                       class="btn btn-outline-info" title="Détails">
+                                        <i class="fas fa-eye"></i>
+                                    </a>
+                                    <a href="{{ url_for('stress_test_dispositif', dispositif_id=d.id) }}" 
+                                       class="btn btn-outline-warning" title="Stress test détaillé">
+                                        <i class="fas fa-bolt"></i>
+                                    </a>
+                                </div>
+                            </td>
+                        </tr>
+                        {% endif %}
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <!-- Synthèse des vulnérabilités -->
+    <div class="row mb-4">
+        <div class="col-md-6">
+            <div class="card shadow h-100 border-danger">
+                <div class="card-header bg-danger text-white">
+                    <h6 class="mb-0"><i class="fas fa-exclamation-triangle me-2"></i>Points de vulnérabilité critiques</h6>
+                </div>
+                <div class="card-body">
+                    {% set vulns = [] %}
+                    {% for d in dispositifs %}
+                        {% if d.efficacite_reelle %}
+                            {% set tests = d.stress_test_avance() %}
+                            {% for key, test in tests.items() %}
+                                {% if test.efficacite < 2 %}
+                                    {% set vuln = vulns.append({
+                                        'dispositif': d.reference,
+                                        'scenario': test.scenario,
+                                        'efficacite': test.efficacite,
+                                        'id': d.id
+                                    }) %}
+                                {% endif %}
+                            {% endfor %}
+                        {% endif %}
+                    {% endfor %}
+                    
+                    {% if vulns %}
+                        {% for vuln in vulns %}
+                        <div class="alert alert-danger mb-2">
+                            <div class="d-flex justify-content-between align-items-center">
+                                <div>
+                                    <strong>{{ vuln.dispositif }}</strong> - {{ vuln.scenario }}
+                                    <br>
+                                    <small>Efficacité sous stress: {{ vuln.efficacite }}/5</small>
+                                </div>
+                                <a href="{{ url_for('stress_test_dispositif', dispositif_id=vuln.id) }}" 
+                                   class="btn btn-sm btn-outline-danger">
+                                    Analyser
+                                </a>
+                            </div>
+                        </div>
+                        {% endfor %}
+                    {% else %}
+                        <p class="text-center text-muted py-4">
+                            <i class="fas fa-check-circle fa-3x mb-3"></i>
+                            <br>Aucune vulnérabilité critique détectée
+                        </p>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+
+        <div class="col-md-6">
+            <div class="card shadow h-100 border-success">
+                <div class="card-header bg-success text-white">
+                    <h6 class="mb-0"><i class="fas fa-chart-line me-2"></i>Top résilience</h6>
+                </div>
+                <div class="card-body">
+                    {% set top_resilients = [] %}
+                    {% for d in dispositifs %}
+                        {% if d.efficacite_reelle %}
+                            {% set resilience = d.get_score_resilience() %}
+                            {% if resilience[1] >= 4 %}
+                                {% set top = top_resilients.append({
+                                    'dispositif': d.reference,
+                                    'score': resilience[1],
+                                    'id': d.id
+                                }) %}
+                            {% endif %}
+                        {% endif %}
+                    {% endfor %}
+                    
+                    {% if top_resilients %}
+                        {% for top in top_resilients|sort(attribute='score', reverse=true) %}
+                        <div class="alert alert-success mb-2">
+                            <div class="d-flex justify-content-between align-items-center">
+                                <div>
+                                    <strong>{{ top.dispositif }}</strong>
+                                    <br>
+                                    <small>Score résilience: {{ "%.1f"|format(top.score) }}/5</small>
+                                </div>
+                                <a href="{{ url_for('detail_dispositif', dispositif_id=top.id) }}" 
+                                   class="btn btn-sm btn-outline-success">
+                                    <i class="fas fa-eye"></i>
+                                </a>
+                            </div>
+                        </div>
+                        {% endfor %}
+                    {% else %}
+                        <p class="text-center text-muted py-4">
+                            <i class="fas fa-info-circle fa-3x mb-3"></i>
+                            <br>Aucun dispositif avec excellente résilience
+                        </p>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+
     <!-- Top Performers -->
     {% if stats.top_performers %}
     <div class="card shadow mb-4 border-success">
@@ -117,7 +321,7 @@
                             <th>Type</th>
                             <th>Efficacité</th>
                             <th>Réduction</th>
-                            <th>Dernière vérif</th>
+                            <th>Résilience</th>
                             <th>Action</th>
                         </tr>
                     </thead>
@@ -135,7 +339,10 @@
                                 <span class="badge bg-success">{{ perf.efficacite }}/5</span>
                             </td>
                             <td><strong>{{ perf.reduction }}%</strong></td>
-                            <td>{{ perf.derniere_verif or 'Jamais' }}</td>
+                            <td>
+                                {% set resilience = perf.resilience if perf.resilience else 'N/A' %}
+                                {{ resilience }}
+                            </td>
                             <td>
                                 <a href="{{ url_for('detail_dispositif', dispositif_id=perf.id) }}" 
                                    class="btn btn-sm btn-outline-primary">
@@ -193,28 +400,28 @@
                 </div>
                 <div class="card-body">
                     {% if stats.sans_evaluation %}
-                    <div class="list-group">
-                        {% for item in stats.sans_evaluation %}
-                        <div class="list-group-item">
-                            <div class="d-flex justify-content-between align-items-center">
-                                <div>
-                                    <strong>{{ item.reference }}</strong>
-                                    <br>
-                                    <small class="text-muted">{{ item.nom|truncate(40) }}</small>
+                        <div class="list-group">
+                            {% for item in stats.sans_evaluation %}
+                            <div class="list-group-item">
+                                <div class="d-flex justify-content-between align-items-center">
+                                    <div>
+                                        <strong>{{ item.reference }}</strong>
+                                        <br>
+                                        <small class="text-muted">{{ item.nom|truncate(40) }}</small>
+                                    </div>
+                                    <a href="{{ url_for('evaluer_dispositif', dispositif_id=item.id) }}" 
+                                       class="btn btn-sm btn-danger">
+                                        <i class="fas fa-chart-bar"></i> Évaluer
+                                    </a>
                                 </div>
-                                <a href="{{ url_for('evaluer_dispositif', dispositif_id=item.id) }}" 
-                                   class="btn btn-sm btn-danger">
-                                    <i class="fas fa-chart-bar"></i> Évaluer
-                                </a>
                             </div>
+                            {% endfor %}
                         </div>
-                        {% endfor %}
-                    </div>
                     {% else %}
-                    <p class="text-center text-muted py-4">
-                        <i class="fas fa-check-circle fa-3x mb-3"></i>
-                        <br>Tous les dispositifs sont évalués !
-                    </p>
+                        <p class="text-center text-muted py-4">
+                            <i class="fas fa-check-circle fa-3x mb-3"></i>
+                            <br>Tous les dispositifs sont évalués !
+                        </p>
                     {% endif %}
                 </div>
             </div>
