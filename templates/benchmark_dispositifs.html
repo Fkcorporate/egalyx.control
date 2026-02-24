@@ -1,0 +1,333 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="container-fluid">
+    <!-- En-tête -->
+    <div class="d-flex justify-content-between flex-wrap flex-md-nowrap align-items-center pt-3 pb-2 mb-3 border-bottom">
+        <h1 class="h2">
+            <i class="fas fa-chart-line text-primary"></i> 
+            Pilotage stratégique des dispositifs
+        </h1>
+        <div class="btn-toolbar mb-2 mb-md-0">
+            <a href="{{ url_for('exporter_rapport_dispositifs') }}" class="btn btn-outline-danger me-2">
+                <i class="fas fa-file-pdf"></i> Exporter rapport PDF
+            </a>
+            <button class="btn btn-outline-secondary" onclick="window.print()">
+                <i class="fas fa-print"></i> Imprimer
+            </button>
+        </div>
+    </div>
+
+    <!-- KPIs Cards -->
+    <div class="row mb-4">
+        <div class="col-md-3">
+            <div class="card bg-primary text-white h-100">
+                <div class="card-body">
+                    <div class="d-flex justify-content-between align-items-center">
+                        <div>
+                            <h6 class="card-title">Total dispositifs</h6>
+                            <h2 class="mb-0 display-4">{{ stats.total }}</h2>
+                        </div>
+                        <i class="fas fa-shield-alt fa-3x opacity-50"></i>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card bg-success text-white h-100">
+                <div class="card-body">
+                    <div class="d-flex justify-content-between align-items-center">
+                        <div>
+                            <h6 class="card-title">Efficacité moyenne</h6>
+                            <h2 class="mb-0 display-4">{{ stats.efficacite_moyenne }}/5</h2>
+                            <small>Réduction: {{ stats.reduction_moyenne }}%</small>
+                        </div>
+                        <i class="fas fa-star fa-3x opacity-50"></i>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card bg-warning h-100">
+                <div class="card-body">
+                    <div class="d-flex justify-content-between align-items-center">
+                        <div>
+                            <h6 class="card-title">À améliorer</h6>
+                            <h2 class="mb-0 display-4">{{ stats.a_ameliorer|length }}</h2>
+                            <small>Efficacité < 3/5</small>
+                        </div>
+                        <i class="fas fa-exclamation-triangle fa-3x opacity-50"></i>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card bg-info text-white h-100">
+                <div class="card-body">
+                    <div class="d-flex justify-content-between align-items-center">
+                        <div>
+                            <h6 class="card-title">Non évalués</h6>
+                            <h2 class="mb-0 display-4">{{ stats.sans_evaluation|length }}</h2>
+                            <small>Action requise</small>
+                        </div>
+                        <i class="fas fa-clock fa-3x opacity-50"></i>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Graphiques -->
+    <div class="row mb-4">
+        <div class="col-md-6">
+            <div class="card shadow h-100">
+                <div class="card-header bg-light">
+                    <h6 class="mb-0"><i class="fas fa-chart-pie me-2"></i>Répartition par type</h6>
+                </div>
+                <div class="card-body">
+                    <canvas id="chartType" height="300"></canvas>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-6">
+            <div class="card shadow h-100">
+                <div class="card-header bg-light">
+                    <h6 class="mb-0"><i class="fas fa-chart-bar me-2"></i>Distribution des efficacités</h6>
+                </div>
+                <div class="card-body">
+                    <canvas id="chartEfficacite" height="300"></canvas>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Top Performers -->
+    {% if stats.top_performers %}
+    <div class="card shadow mb-4 border-success">
+        <div class="card-header bg-success text-white">
+            <h6 class="mb-0"><i class="fas fa-trophy me-2"></i>Top Performers (efficacité ≥ 4/5)</h6>
+        </div>
+        <div class="card-body">
+            <div class="table-responsive">
+                <table class="table table-hover">
+                    <thead>
+                        <tr>
+                            <th>Référence</th>
+                            <th>Nom</th>
+                            <th>Type</th>
+                            <th>Efficacité</th>
+                            <th>Réduction</th>
+                            <th>Dernière vérif</th>
+                            <th>Action</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for perf in stats.top_performers %}
+                        <tr>
+                            <td><strong>{{ perf.reference }}</strong></td>
+                            <td>{{ perf.nom|truncate(30) }}</td>
+                            <td>
+                                <span class="badge bg-{{ 'success' if perf.type == 'Préventif' else 'warning' if perf.type == 'Détectif' else 'info' }}">
+                                    {{ perf.type }}
+                                </span>
+                            </td>
+                            <td>
+                                <span class="badge bg-success">{{ perf.efficacite }}/5</span>
+                            </td>
+                            <td><strong>{{ perf.reduction }}%</strong></td>
+                            <td>{{ perf.derniere_verif or 'Jamais' }}</td>
+                            <td>
+                                <a href="{{ url_for('detail_dispositif', dispositif_id=perf.id) }}" 
+                                   class="btn btn-sm btn-outline-primary">
+                                    <i class="fas fa-eye"></i>
+                                </a>
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+    {% endif %}
+
+    <!-- Dispositifs à améliorer -->
+    {% if stats.a_ameliorer %}
+    <div class="row mb-4">
+        <div class="col-md-6">
+            <div class="card shadow h-100 border-warning">
+                <div class="card-header bg-warning">
+                    <h6 class="mb-0"><i class="fas fa-exclamation-triangle me-2"></i>À améliorer (efficacité < 3/5)</h6>
+                </div>
+                <div class="card-body">
+                    <div class="list-group">
+                        {% for item in stats.a_ameliorer %}
+                        <div class="list-group-item">
+                            <div class="d-flex justify-content-between align-items-center">
+                                <div>
+                                    <strong>{{ item.reference }}</strong>
+                                    <br>
+                                    <small class="text-muted">{{ item.nom|truncate(40) }}</small>
+                                </div>
+                                <div>
+                                    <span class="badge bg-danger me-2">{{ item.efficacite }}/5</span>
+                                    <span class="badge bg-warning">Écart: {{ item.ecart }}</span>
+                                    <a href="{{ url_for('evaluer_dispositif', dispositif_id=item.id) }}" 
+                                       class="btn btn-sm btn-warning ms-2">
+                                        <i class="fas fa-chart-bar"></i>
+                                    </a>
+                                </div>
+                            </div>
+                        </div>
+                        {% endfor %}
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Dispositifs non évalués -->
+        <div class="col-md-6">
+            <div class="card shadow h-100 border-danger">
+                <div class="card-header bg-danger text-white">
+                    <h6 class="mb-0"><i class="fas fa-clock me-2"></i>Non évalués</h6>
+                </div>
+                <div class="card-body">
+                    {% if stats.sans_evaluation %}
+                    <div class="list-group">
+                        {% for item in stats.sans_evaluation %}
+                        <div class="list-group-item">
+                            <div class="d-flex justify-content-between align-items-center">
+                                <div>
+                                    <strong>{{ item.reference }}</strong>
+                                    <br>
+                                    <small class="text-muted">{{ item.nom|truncate(40) }}</small>
+                                </div>
+                                <a href="{{ url_for('evaluer_dispositif', dispositif_id=item.id) }}" 
+                                   class="btn btn-sm btn-danger">
+                                    <i class="fas fa-chart-bar"></i> Évaluer
+                                </a>
+                            </div>
+                        </div>
+                        {% endfor %}
+                    </div>
+                    {% else %}
+                    <p class="text-center text-muted py-4">
+                        <i class="fas fa-check-circle fa-3x mb-3"></i>
+                        <br>Tous les dispositifs sont évalués !
+                    </p>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+    {% endif %}
+
+    <!-- Vérifications en retard -->
+    <div class="card shadow mb-4 border-danger">
+        <div class="card-header bg-danger text-white">
+            <h6 class="mb-0"><i class="fas fa-exclamation-circle me-2"></i>Vérifications en retard</h6>
+        </div>
+        <div class="card-body">
+            {% set verifications_retard = dispositifs|selectattr('prochaine_verification', '!=', none)|selectattr('prochaine_verification', '<', datetime.now().date())|list %}
+            {% if verifications_retard %}
+            <div class="table-responsive">
+                <table class="table">
+                    <thead>
+                        <tr>
+                            <th>Dispositif</th>
+                            <th>Prochaine vérif</th>
+                            <th>Retard</th>
+                            <th>Responsable</th>
+                            <th>Action</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for d in verifications_retard %}
+                        <tr>
+                            <td>{{ d.reference }}</td>
+                            <td>{{ d.prochaine_verification.strftime('%d/%m/%Y') }}</td>
+                            <td>
+                                <span class="badge bg-danger">
+                                    {{ (datetime.now().date() - d.prochaine_verification).days }} jours
+                                </span>
+                            </td>
+                            <td>{{ d.responsable.username if d.responsable else 'Non assigné' }}</td>
+                            <td>
+                                <a href="{{ url_for('evaluer_dispositif', dispositif_id=d.id) }}" 
+                                   class="btn btn-sm btn-outline-danger">
+                                    <i class="fas fa-clock"></i> Vérifier
+                                </a>
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+            {% else %}
+            <p class="text-center text-muted py-3">
+                <i class="fas fa-check-circle text-success"></i>
+                Aucune vérification en retard
+            </p>
+            {% endif %}
+        </div>
+    </div>
+</div>
+
+{% endblock %}
+
+{% block scripts %}
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    // Graphique par type
+    const ctxType = document.getElementById('chartType').getContext('2d');
+    new Chart(ctxType, {
+        type: 'doughnut',
+        data: {
+            labels: {{ stats.par_type.keys()|list|tojson }},
+            datasets: [{
+                data: {{ stats.par_type.values()|list|tojson }},
+                backgroundColor: ['#28a745', '#ffc107', '#dc3545', '#17a2b8', '#6c757d'],
+                borderWidth: 0
+            }]
+        },
+        options: {
+            responsive: true,
+            plugins: {
+                legend: { position: 'bottom' }
+            }
+        }
+    });
+    
+    // Distribution efficacité
+    const ctxEff = document.getElementById('chartEfficacite').getContext('2d');
+    new Chart(ctxEff, {
+        type: 'bar',
+        data: {
+            labels: ['1/5', '2/5', '3/5', '4/5', '5/5'],
+            datasets: [{
+                label: 'Nombre de dispositifs',
+                data: [
+                    {{ dispositifs|selectattr('efficacite_reelle', '==', 1)|list|length }},
+                    {{ dispositifs|selectattr('efficacite_reelle', '==', 2)|list|length }},
+                    {{ dispositifs|selectattr('efficacite_reelle', '==', 3)|list|length }},
+                    {{ dispositifs|selectattr('efficacite_reelle', '==', 4)|list|length }},
+                    {{ dispositifs|selectattr('efficacite_reelle', '==', 5)|list|length }}
+                ],
+                backgroundColor: ['#dc3545', '#fd7e14', '#ffc107', '#28a745', '#20c997'],
+                borderRadius: 5
+            }]
+        },
+        options: {
+            responsive: true,
+            scales: {
+                y: {
+                    beginAtZero: true,
+                    ticks: { stepSize: 1 }
+                }
+            }
+        }
+    });
+});
+</script>
+{% endblock %}
