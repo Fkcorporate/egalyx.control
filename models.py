@@ -2567,6 +2567,9 @@ class HistoriqueRecommandation(db.Model):
 class PlanAction(db.Model):
     __tablename__ = 'plans_action'
     
+    # ============================================
+    # COLONNES DE BASE
+    # ============================================
     id = db.Column(db.Integer, primary_key=True)
     reference = db.Column(db.String(50), nullable=False)
     nom = db.Column(db.String(200), nullable=False)
@@ -2581,37 +2584,75 @@ class PlanAction(db.Model):
     commentaire_evaluation = db.Column(db.Text)
     priorite = db.Column(db.String(20), default='moyenne')
     espace_travail_actif = db.Column(db.Boolean, default=True)
-
     
-    # Colonnes d'archivage - LA NOUVELLE COLONNE EST AJOUTÉE
+    # ============================================
+    # RELATIONS AVEC AUTRES ENTITÉS
+    # ============================================
+    
+    # Relation plusieurs-à-plusieurs avec les dispositifs (NOUVEAU)
+    dispositifs = db.relationship('DispositifMaitrise',
+                                 secondary='plan_dispositifs',
+                                 back_populates='plans_action',  # Changé de backref à back_populates
+                                 lazy='dynamic')
+    
+    # Ancienne relation dispositif_id (à conserver temporairement pour compatibilité)
+    # À SUPPRIMER après migration
+    dispositif_id = db.Column(db.Integer, db.ForeignKey('dispositifs_maitrise.id'), nullable=True)
+    dispositif = db.relationship('DispositifMaitrise', foreign_keys=[dispositif_id])
+    
+    # Relation avec le risque principal (optionnel, pour compatibilité)
+    risque_id = db.Column(db.Integer, db.ForeignKey('risques.id'), nullable=True)
+    risque = db.relationship('Risque', foreign_keys=[risque_id], backref='plans_action_principaux')
+    
+    # Relations avec les audits et recommandations
+    audit_id = db.Column(db.Integer, db.ForeignKey('audits.id'), nullable=True)
+    recommandation_id = db.Column(db.Integer, db.ForeignKey('recommandations.id'), nullable=True)
+    constatations_ids = db.Column(db.String(500))
+    
+    # Relations utilisateurs
+    responsable_id = db.Column(db.Integer, db.ForeignKey('user.id'))
+    created_by = db.Column(db.Integer, db.ForeignKey('user.id'))
+    
+    # Relations de navigation
+    audit = db.relationship('Audit', back_populates='plans_action')
+    recommandation = db.relationship('Recommandation', back_populates='plan_action')
+    responsable = db.relationship('User', foreign_keys=[responsable_id])
+    createur = db.relationship('User', foreign_keys=[created_by])
+    
+    # Sous-actions
+    sous_actions = db.relationship('SousAction', 
+                                   backref='plan_action', 
+                                   lazy=True, 
+                                   cascade='all, delete-orphan',
+                                   order_by='SousAction.created_at')
+    
+    # ============================================
+    # COLONNES D'ARCHIVAGE
+    # ============================================
     is_archived = db.Column(db.Boolean, default=False)
     archived_at = db.Column(db.DateTime)
     archived_by = db.Column(db.Integer, db.ForeignKey('user.id'))
-    archive_reason = db.Column(db.Text)  # Cette colonne existe déjà dans votre base
-    statut_archive = db.Column(db.String(20), default='actif')  # NOUVELLE COLONNE
+    archive_reason = db.Column(db.Text)
+    statut_archive = db.Column(db.String(20), default='actif')
     
-    created_by = db.Column(db.Integer, db.ForeignKey('user.id'))
+    # ============================================
+    # TIMESTAMPS
+    # ============================================
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    
+    # ============================================
+    # MULTI-TENANT
+    # ============================================
     client_id = db.Column(db.Integer, db.ForeignKey('clients.id'), nullable=True)
     
-    # Relations multiples
-    audit_id = db.Column(db.Integer, db.ForeignKey('audits.id'), nullable=True)
-    recommandation_id = db.Column(db.Integer, db.ForeignKey('recommandations.id'), nullable=True)
-    risque_id = db.Column(db.Integer, db.ForeignKey('risques.id'), nullable=True)
-    dispositif_id = db.Column(db.Integer, db.ForeignKey('dispositifs_maitrise.id'), nullable=True)
-    constatations_ids = db.Column(db.String(500))
-    responsable_id = db.Column(db.Integer, db.ForeignKey('user.id'))
+    # Relations avec les utilisateurs d'archivage
+    archive_user = db.relationship('User', foreign_keys=[archived_by])
+    client = db.relationship('Client')
     
-    # Relations
-    audit = db.relationship('Audit', back_populates='plans_action')
-    recommandation = db.relationship('Recommandation', back_populates='plan_action')
-    risque = db.relationship('Risque', backref='plans_action')
-    dispositif = db.relationship('DispositifMaitrise', foreign_keys=[dispositif_id])
-    responsable = db.relationship('User', foreign_keys=[responsable_id])
-    createur = db.relationship('User', foreign_keys=[created_by])
-    sous_actions = db.relationship('SousAction', backref='plan_action', lazy=True, cascade='all, delete-orphan')
-    
+    # ============================================
+    # PROPRIÉTÉS CALCULÉES
+    # ============================================
     
     @property
     def progression_reelle(self):
@@ -2655,16 +2696,44 @@ class PlanAction(db.Model):
     def fichiers_recentes(self):
         """Retourne les 10 derniers fichiers"""
         return sorted(self.fichiers, key=lambda x: x.created_at, reverse=True)[:10]
-
+    
+    @property
+    def risques_concernes(self):
+        """
+        Retourne la liste des risques concernés par ce plan
+        via les dispositifs liés
+        """
+        risques = set()
+        for dispositif in self.dispositifs:
+            if dispositif.risque:
+                risques.add(dispositif.risque)
+        return list(risques)
+    
+    @property
+    def risque_principal(self):
+        """
+        Retourne le risque principal (pour compatibilité)
+        Priorité: risque_id direct > premier risque des dispositifs
+        """
+        if self.risque:
+            return self.risque
+        risques = self.risques_concernes
+        return risques[0] if risques else None
     
     @property
     def get_etapes_ordonnees(self):
         """Retourne les étapes/sous-actions triées"""
         if self.sous_actions:
             # Trier par date_fin_prevue, puis par création
+            from datetime import date
             return sorted(self.sous_actions, 
                          key=lambda x: (x.date_fin_prevue or date.max, x.created_at))
         return []
+    
+    @property
+    def dispositifs_concernes(self):
+        """Retourne la liste des dispositifs liés (pour compatibilité)"""
+        return list(self.dispositifs)
     
     def get_progression_detaillee(self):
         """Calcule la progression détaillée"""
@@ -2674,26 +2743,31 @@ class PlanAction(db.Model):
                 'terminees': 0,
                 'total': 0,
                 'en_cours': 0,
-                'a_faire': 0
+                'a_faire': 0,
+                'retardees': 0
             }
         
         total = len(self.sous_actions)
         terminees = len([sa for sa in self.sous_actions if sa.statut == 'termine'])
         en_cours = len([sa for sa in self.sous_actions if sa.statut == 'en_cours'])
         a_faire = len([sa for sa in self.sous_actions if sa.statut == 'a_faire'])
+        retardees = len([sa for sa in self.sous_actions if sa.est_en_retard])
         
         return {
             'pourcentage': round((terminees / total) * 100) if total > 0 else 0,
             'terminees': terminees,
             'total': total,
             'en_cours': en_cours,
-            'a_faire': a_faire
+            'a_faire': a_faire,
+            'retardees': retardees
         }
     
     @property
     def type_plan(self):
-        """Détermine le type de plan (risque ou audit)"""
-        if self.risque_id:
+        """Détermine le type de plan (risque, dispositif, audit)"""
+        if self.dispositifs.count() > 0:
+            return 'dispositif'
+        elif self.risque_id:
             return 'risque'
         elif self.audit_id:
             return 'audit'
@@ -2716,6 +2790,14 @@ class PlanAction(db.Model):
                 'reference': self.audit.reference,
                 'titre': self.audit.titre,
                 'url': url_for('detail_audit', id=self.audit_id)
+            }
+        elif self.dispositifs.count() > 0:
+            dispositif = self.dispositifs.first()
+            return {
+                'type': 'dispositif',
+                'reference': dispositif.reference if dispositif else 'N/A',
+                'intitule': dispositif.nom if dispositif else 'N/A',
+                'url': url_for('detail_dispositif', dispositif_id=dispositif.id) if dispositif else '#'
             }
         return {'type': 'autre', 'reference': 'N/A'}
     
@@ -2753,7 +2835,10 @@ class PlanAction(db.Model):
         }
         return couleurs.get(self.statut, 'secondary')
     
-    # Dans votre modèle PlanAction
+    # ============================================
+    # MÉTHODES D'ARCHIVAGE
+    # ============================================
+    
     def archiver(self, user_id, reason=None):
         """Archiver le plan"""
         self.is_archived = True
@@ -2773,6 +2858,10 @@ class PlanAction(db.Model):
         self.archive_reason = None
         self.updated_at = datetime.utcnow()
     
+    # ============================================
+    # MÉTHODES DE SÉRIALISATION
+    # ============================================
+    
     def to_dict(self):
         """Convertit l'objet PlanAction en dictionnaire pour la sérialisation JSON"""
         return {
@@ -2785,20 +2874,88 @@ class PlanAction(db.Model):
             'date_fin_reelle': self.date_fin_reelle.isoformat() if self.date_fin_reelle else None,
             'statut': self.statut,
             'pourcentage_realisation': self.pourcentage_realisation,
+            'priorite': self.priorite,
             'client_id': self.client_id,
             'progression_reelle': self.progression_reelle,
             'est_en_retard': self.est_en_retard,
             'couleur_statut': self.couleur_statut,
+            'couleur_priorite': self.couleur_priorite,
             'is_archived': self.is_archived,
             'statut_archive': self.statut_archive,
             'archived_at': self.archived_at.isoformat() if self.archived_at else None,
             'archived_by': self.archived_by,
+            'archive_reason': self.archive_reason,
+            'created_at': self.created_at.isoformat() if self.created_at else None,
+            'updated_at': self.updated_at.isoformat() if self.updated_at else None,
+            'type_plan': self.type_plan,
+            'dispositifs_count': self.dispositifs.count(),
+            'sous_actions_count': len(self.sous_actions),
+            'risques_concernes': [{
+                'id': r.id,
+                'reference': r.reference,
+                'intitule': r.intitule
+            } for r in self.risques_concernes]
+        }
+    
+    def to_dict_simple(self):
+        """Version simplifiée pour les listes"""
+        return {
+            'id': self.id,
+            'reference': self.reference,
+            'nom': self.nom,
+            'statut': self.statut,
+            'pourcentage_realisation': self.pourcentage_realisation,
             'priorite': self.priorite,
-            'archive_reason': self.archive_reason
+            'date_fin_prevue': self.date_fin_prevue.isoformat() if self.date_fin_prevue else None,
+            'est_en_retard': self.est_en_retard,
+            'dispositifs_count': self.dispositifs.count()
         }
     
     def __repr__(self):
         return f'<PlanAction {self.reference}: {self.nom}>'
+
+
+# ============================================
+# TABLE D'ASSOCIATION PLAN-DISPOSITIF
+# ============================================
+plan_dispositifs = db.Table('plan_dispositifs',
+    db.Column('plan_id', db.Integer, db.ForeignKey('plans_action.id'), primary_key=True),
+    db.Column('dispositif_id', db.Integer, db.ForeignKey('dispositifs_maitrise.id'), primary_key=True),
+    db.Column('created_at', db.DateTime, default=datetime.utcnow),
+    db.Column('created_by', db.Integer, db.ForeignKey('user.id'))
+)
+
+
+
+
+# ============================================
+# ÉTAPE PLAN ACTION (pour compatibilité)
+# ============================================
+class EtapePlanAction(db.Model):
+    __tablename__ = 'etapes_plan_action'
+    
+    id = db.Column(db.Integer, primary_key=True)
+    plan_action_id = db.Column(db.Integer, db.ForeignKey('plans_action.id'), nullable=False)
+    ordre = db.Column(db.Integer, nullable=False)
+    description = db.Column(db.Text, nullable=False)
+    date_echeance = db.Column(db.Date)
+    statut = db.Column(db.String(50), default='a_faire')
+    responsable_id = db.Column(db.Integer, db.ForeignKey('user.id'))
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    responsable = db.relationship('User', foreign_keys=[responsable_id])
+    
+    @property
+    def couleur_statut(self):
+        """Couleur Bootstrap pour le statut"""
+        couleurs = {
+            'a_faire': 'secondary',
+            'en_cours': 'warning',
+            'termine': 'success',
+            'retarde': 'danger'
+        }
+        return couleurs.get(self.statut, 'light')
 
 # -------------------- SOUS ACTION - CORRIGÉ --------------------
 class SousAction(db.Model):
@@ -2850,32 +3007,6 @@ class SousAction(db.Model):
         self.date_fin_reelle = datetime.utcnow().date()
         self.updated_at = datetime.utcnow()
 
-# -------------------- ETAPE PLAN ACTION - CORRIGÉ --------------------
-class EtapePlanAction(db.Model):
-    __tablename__ = 'etapes_plan_action'
-    
-    id = db.Column(db.Integer, primary_key=True)
-    plan_action_id = db.Column(db.Integer, db.ForeignKey('plans_action.id'), nullable=False)  # 'plans_action.id'
-    ordre = db.Column(db.Integer, nullable=False)
-    description = db.Column(db.Text, nullable=False)
-    date_echeance = db.Column(db.Date)
-    statut = db.Column(db.String(50), default='a_faire')
-    responsable_id = db.Column(db.Integer, db.ForeignKey('user.id'))
-    created_at = db.Column(db.DateTime, default=datetime.utcnow)
-    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
-
-    responsable = db.relationship('User', foreign_keys=[responsable_id])
-    
-    @property
-    def couleur_statut(self):
-        """Couleur Bootstrap pour le statut"""
-        couleurs = {
-            'a_faire': 'secondary',
-            'en_cours': 'warning',
-            'termine': 'success',
-            'retarde': 'danger'
-        }
-        return couleurs.get(self.statut, 'light')
 
 
 # -------------------- MATRICE MATURITE - CORRIGÉ --------------------
@@ -5414,8 +5545,9 @@ class DispositifMaitrise(db.Model):
     responsable_id = db.Column(db.Integer, db.ForeignKey('user.id'))
     direction_id = db.Column(db.Integer, db.ForeignKey('direction.id'))
     service_id = db.Column(db.Integer, db.ForeignKey('service.id'))
-    commentaire_evaluation = db.Column(db.Text)  # Commentaire de l'évaluation
+    commentaire_evaluation = db.Column(db.Text)
     reduction_risque_pourcentage = db.Column(db.Float, default=0.0)
+    
     # Évaluation du dispositif
     efficacite_attendue = db.Column(db.Integer)
     efficacite_reelle = db.Column(db.Integer)
@@ -5430,7 +5562,9 @@ class DispositifMaitrise(db.Model):
     
     # Liens avec audit
     audit_id = db.Column(db.Integer, db.ForeignKey('audits.id'))
-    plan_action_id = db.Column(db.Integer, db.ForeignKey('plans_action.id'))
+    
+    # SUPPRIMEZ cette ligne si vous passez à la nouvelle relation
+    # plan_action_id = db.Column(db.Integer, db.ForeignKey('plans_action.id'))
     
     # Traçabilité
     created_by = db.Column(db.Integer, db.ForeignKey('user.id'))
@@ -5450,8 +5584,11 @@ class DispositifMaitrise(db.Model):
     service = db.relationship('Service')
     audit = db.relationship('Audit')
     
-    # CORRECTION : Supprimez back_populates ou changez pour backref
-    plan_action = db.relationship('PlanAction', foreign_keys=[plan_action_id])  # Simple relation
+    # NOUVELLE RELATION plusieurs-à-plusieurs (seule)
+    plans_action = db.relationship('PlanAction',
+                                   secondary='plan_dispositifs',
+                                   back_populates='dispositifs',  # Correspond à ce qui est dans PlanAction
+                                   lazy='dynamic')
     
     createur = db.relationship('User', foreign_keys=[created_by])
     archive_user = db.relationship('User', foreign_keys=[archived_by])
@@ -5666,7 +5803,8 @@ class DispositifMaitrise(db.Model):
             'reduction_moyenne': 0,
             'top_performers': [],
             'a_ameliorer': [],
-            'sans_evaluation': []
+            'sans_evaluation': [],
+            'avec_plans': 0  # AJOUT
         }
         
         total_efficacite = 0
@@ -5679,6 +5817,10 @@ class DispositifMaitrise(db.Model):
             if d.type_dispositif not in stats['par_type']:
                 stats['par_type'][d.type_dispositif] = 0
             stats['par_type'][d.type_dispositif] += 1
+            
+            # Compter les dispositifs avec plans
+            if hasattr(d, 'plans_action_lies') and d.plans_action_lies.count() > 0:
+                stats['avec_plans'] += 1
             
             # Moyennes
             if d.efficacite_reelle:
@@ -5693,20 +5835,26 @@ class DispositifMaitrise(db.Model):
                     stats['top_performers'].append({
                         'id': d.id,
                         'reference': d.reference,
+                        'nom': d.nom,
+                        'type': d.type_dispositif,
                         'efficacite': d.efficacite_reelle,
-                        'reduction': reduction
+                        'reduction': reduction,
+                        'plans_count': d.plans_action_lies.count() if hasattr(d, 'plans_action_lies') else 0
                     })
                 elif d.efficacite_reelle < 3:
                     stats['a_ameliorer'].append({
                         'id': d.id,
                         'reference': d.reference,
+                        'nom': d.nom,
                         'efficacite': d.efficacite_reelle,
-                        'ecart': (d.efficacite_attendue or 3) - d.efficacite_reelle
+                        'ecart': (d.efficacite_attendue or 3) - d.efficacite_reelle,
+                        'plans_count': d.plans_action_lies.count() if hasattr(d, 'plans_action_lies') else 0
                     })
             else:
                 stats['sans_evaluation'].append({
                     'id': d.id,
-                    'reference': d.reference
+                    'reference': d.reference,
+                    'nom': d.nom
                 })
         
         if count_evalue > 0:
@@ -5714,7 +5862,19 @@ class DispositifMaitrise(db.Model):
             stats['couverture_moyenne'] = round(total_couverture / count_evalue, 1)
             stats['reduction_moyenne'] = round(total_reduction / count_evalue, 1)
         
+        # Ajouter les statistiques manquantes pour le template
+        stats['non_evalues'] = len(stats['sans_evaluation'])
+        stats['non_efficaces'] = len([d for d in dispositifs if d.efficacite_reelle and d.efficacite_reelle < 4])
+        
         return stats
+    
+    def get_plans_action(self):
+        """
+        Retourne tous les plans d'action liés à ce dispositif
+        """
+        if hasattr(self, 'plans_action_lies'):
+            return self.plans_action_lies.all()
+        return []
 
     def get_matrice_criticite(self):
         """
