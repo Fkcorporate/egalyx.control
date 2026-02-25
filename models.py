@@ -2563,7 +2563,20 @@ class HistoriqueRecommandation(db.Model):
     def __repr__(self):
         return f'<HistoriqueReco {self.action} pour rec {self.recommandation_id}>'
 
-# -------------------- PLAN ACTION - CORRIGÉ ET COMPLET --------------------
+
+# ============================================
+# 1. DÉFINIR LES TABLES D'ASSOCIATION EN PREMIER
+# ============================================
+
+# Table d'association pour la relation plusieurs-à-plusieurs entre plans et audits
+plan_audits = db.Table('plan_audits',
+    db.Column('plan_id', db.Integer, db.ForeignKey('plans_action.id'), primary_key=True),
+    db.Column('audit_id', db.Integer, db.ForeignKey('audits.id'), primary_key=True),
+    db.Column('created_at', db.DateTime, default=datetime.utcnow),
+    db.Column('created_by', db.Integer, db.ForeignKey('user.id'))
+)
+
+
 class PlanAction(db.Model):
     __tablename__ = 'plans_action'
     
@@ -2649,6 +2662,10 @@ class PlanAction(db.Model):
     # Relations avec les utilisateurs d'archivage
     archive_user = db.relationship('User', foreign_keys=[archived_by])
     client = db.relationship('Client')
+    audits = db.relationship('Audit',
+                             secondary='plan_audits',  # Utilise le nom de la table, pas la variable
+                             backref=db.backref('plans_action_multiples', lazy='dynamic'),
+                             lazy='dynamic')
     
     # ============================================
     # PROPRIÉTÉS CALCULÉES
@@ -2696,6 +2713,58 @@ class PlanAction(db.Model):
     def fichiers_recentes(self):
         """Retourne les 10 derniers fichiers"""
         return sorted(self.fichiers, key=lambda x: x.created_at, reverse=True)[:10]
+
+    @property
+    def tous_les_audits(self):
+        """Retourne tous les audits liés à ce plan"""
+        audits = list(self.audits)
+        if self.audit and self.audit not in audits:
+            audits.append(self.audit)
+        return audits
+    
+    @property
+    def source_info_complete(self):
+        """Retourne les informations sur toutes les sources du plan"""
+        sources = []
+        
+        # Audits multiples
+        for audit in self.audits:
+            sources.append({
+                'type': 'audit',
+                'reference': audit.reference,
+                'titre': audit.titre,
+                'url': url_for('detail_audit', id=audit.id)
+            })
+        
+        # Ancien audit simple (pour compatibilité)
+        if self.audit and self.audit not in self.audits:
+            sources.append({
+                'type': 'audit_principal',
+                'reference': self.audit.reference,
+                'titre': self.audit.titre,
+                'url': url_for('detail_audit', id=self.audit_id)
+            })
+        
+        # Risque
+        if self.risque:
+            sources.append({
+                'type': 'risque',
+                'reference': self.risque.reference,
+                'intitule': self.risque.intitule,
+                'url': url_for('detail_risque', id=self.risque_id)
+            })
+        
+        # Dispositifs
+        for dispositif in self.dispositifs:
+            sources.append({
+                'type': 'dispositif',
+                'reference': dispositif.reference,
+                'intitule': dispositif.nom,
+                'url': url_for('detail_dispositif', dispositif_id=dispositif.id)
+            })
+        
+        return sources
+    
     
     @property
     def risques_concernes(self):
