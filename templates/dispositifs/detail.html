@@ -1681,6 +1681,7 @@ const csrfToken = document.querySelector('meta[name="csrf-token"]')?.getAttribut
 // GESTION DES PLANS D'ACTION - VERSION CORRIGÉE
 // ============================================
 
+// Version corrigée de la fonction dans dispositifs/detail.html
 function ouvrirModalLierPlan() {
     const modal = new bootstrap.Modal(document.getElementById('modalLierPlan'));
     document.getElementById('modalLierPlanBody').innerHTML = `
@@ -1697,68 +1698,52 @@ function ouvrirModalLierPlan() {
             'Accept': 'application/json'
         }
     })
-    .then(response => response.json())
+    .then(response => {
+        if (!response.ok) {
+            throw new Error(`Erreur HTTP: ${response.status}`);
+        }
+        return response.json();
+    })
     .then(data => {
+        console.log('API Response:', data);
+        
         if (data.success && data.plans && data.plans.length > 0) {
-            let html = `<form id="formLierPlan" method="POST" action="/dispositif/${dispositifId}/lier-plan-action">`;
-            html += '<input type="hidden" name="csrf_token" value="' + csrfToken + '">';
-            html += '<div class="mb-3"><label class="form-label fw-bold">Sélectionner un plan</label>';
-            html += '<select class="form-select" name="plan_action_id" required>';
-            html += '<option value="">-- Choisir un plan --</option>';
+            let options = '<option value="">-- Choisir un plan --</option>';
             
             data.plans.forEach(plan => {
                 const statutIcon = plan.statut === 'en_cours' ? '🟡' : 
                                   plan.statut === 'en_retard' ? '🔴' : 
                                   plan.statut === 'termine' ? '🟢' : '⚪';
-                html += `<option value="${plan.id}">${statutIcon} ${plan.reference} - ${plan.nom} (${plan.statut})</option>`;
+                
+                options += `<option value="${plan.id}">
+                    ${statutIcon} ${plan.reference} - ${plan.nom} (${plan.statut})
+                </option>`;
             });
             
-            html += '</select></div>';
-            html += '<p class="small text-muted"><i class="fas fa-info-circle me-1"></i> Seuls les plans du même risque sont affichés</p>';
-            html += '</form>';
+            const html = `
+                <form id="formLierPlan" method="POST" action="/dispositif/${dispositifId}/lier-plan-action">
+                    <input type="hidden" name="csrf_token" value="${csrfToken}">
+                    
+                    <div class="mb-3">
+                        <label class="form-label fw-bold">Sélectionner un plan :</label>
+                        <select class="form-select" name="plan_action_id" required>
+                            ${options}
+                        </select>
+                        <small class="text-muted">Seuls les plans du même risque sont affichés.</small>
+                    </div>
+                    
+                    <div class="alert alert-info mt-2">
+                        <i class="fas fa-info-circle me-2"></i>
+                        Vous pouvez aussi <a href="/risque/${risqueId}/plan-action/nouveau?dispositif_id=${dispositifId}" target="_blank">créer un nouveau plan</a>
+                    </div>
+                </form>
+            `;
             
             document.getElementById('modalLierPlanBody').innerHTML = html;
             document.getElementById('modalLierPlanFooter').innerHTML = `
                 <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Annuler</button>
-                <button type="submit" class="btn btn-primary" form="formLierPlan">Lier le plan</button>
+                <button type="button" class="btn btn-primary" onclick="soumettreLiaison()">Lier le plan</button>
             `;
-            
-            // === CORRECTION : ÉCOUTEUR D'ÉVÉNEMENT ICI, APRÈS LA CRÉATION DU FORMULAIRE ===
-            document.getElementById('formLierPlan').addEventListener('submit', function(e) {
-                e.preventDefault();
-                
-                const formData = new FormData(this);
-                
-                fetch(this.action, {
-                    method: 'POST',
-                    body: formData,
-                    headers: {
-                        'X-CSRFToken': csrfToken
-                    }
-                })
-                .then(response => response.json())
-                .then(data => {
-                    if (data.success) {
-                        afficherNotification('✅ Plan lié avec succès', 'success');
-                        
-                        // NOTIFIER LES AUTRES PAGES
-                        localStorage.setItem('dispositif_updated', Date.now().toString());
-                        
-                        // Fermer le modal
-                        bootstrap.Modal.getInstance(document.getElementById('modalLierPlan')).hide();
-                        
-                        // Recharger la page après un court délai
-                        setTimeout(() => {
-                            location.reload();
-                        }, 1500);
-                    } else {
-                        afficherNotification('❌ Erreur: ' + data.error, 'danger');
-                    }
-                })
-                .catch(error => {
-                    afficherNotification('❌ Erreur: ' + error.message, 'danger');
-                });
-            });
             
         } else {
             document.getElementById('modalLierPlanBody').innerHTML = `
@@ -1766,10 +1751,10 @@ function ouvrirModalLierPlan() {
                     <i class="fas fa-exclamation-triangle me-2"></i>
                     <strong>Aucun plan disponible</strong>
                     <p class="mb-0 mt-2">Il n'y a pas de plan d'action disponible pour ce risque.</p>
-                    <hr>
-                    <a href="{{ url_for('nouveau_plan_action_pour_risque', risque_id=dispositif.risque_id) }}?dispositif_id=${dispositifId}" 
-                       class="btn btn-sm btn-primary mt-2">
-                        <i class="fas fa-plus me-1"></i>Créer un nouveau plan
+                </div>
+                <div class="text-center mt-3">
+                    <a href="/risque/${risqueId}/plan-action/nouveau?dispositif_id=${dispositifId}" class="btn btn-primary">
+                        <i class="fas fa-plus me-1"></i> Créer un nouveau plan
                     </a>
                 </div>
             `;
@@ -1790,6 +1775,42 @@ function ouvrirModalLierPlan() {
         document.getElementById('modalLierPlanFooter').innerHTML = `
             <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Fermer</button>
         `;
+    });
+}
+
+// Nouvelle fonction pour soumettre la liaison
+function soumettreLiaison() {
+    const form = document.getElementById('formLierPlan');
+    if (!form) return;
+    
+    const formData = new FormData(form);
+    
+    fetch(form.action, {
+        method: 'POST',
+        body: formData,
+        headers: {
+            'X-CSRFToken': csrfToken,
+            'X-Requested-With': 'XMLHttpRequest'
+        }
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            afficherNotification('✅ Plan lié avec succès', 'success');
+            
+            // Fermer le modal
+            bootstrap.Modal.getInstance(document.getElementById('modalLierPlan')).hide();
+            
+            // Recharger la page après un court délai
+            setTimeout(() => {
+                location.reload();
+            }, 1500);
+        } else {
+            afficherNotification('❌ Erreur: ' + data.error, 'danger');
+        }
+    })
+    .catch(error => {
+        afficherNotification('❌ Erreur: ' + error.message, 'danger');
     });
 }
 
