@@ -1219,15 +1219,17 @@ function filtrerTableau(filtre) {
 // ============================================
 // FONCTION POUR LIER UN PLAN D'ACTION
 // ============================================
+// ============================================
+// FONCTION POUR LIER UN PLAN D'ACTION - CORRIGÉE
+// ============================================
+// Version corrigée de lierPlanAction dans dispositifs/liste.html
 function lierPlanAction(dispositifId) {
     const modal = new bootstrap.Modal(document.getElementById('genericModal'));
     
     document.getElementById('genericModalTitle').innerHTML = '<i class="fas fa-link me-2"></i>Lier à un plan d\'action';
     document.getElementById('genericModalBody').innerHTML = `
         <div class="text-center py-4">
-            <div class="spinner-border text-primary" role="status">
-                <span class="visually-hidden">Chargement...</span>
-            </div>
+            <div class="spinner-border text-primary" role="status"></div>
             <p class="mt-2">Chargement des plans d'action...</p>
         </div>
     `;
@@ -1245,43 +1247,34 @@ function lierPlanAction(dispositifId) {
         return response.json();
     })
     .then(data => {
-        console.log('API Response:', data);
-        
         if (data.success && data.plans && data.plans.length > 0) {
             let options = '<option value="">-- Choisir un plan d\'action --</option>';
             
             data.plans.forEach(plan => {
-                if (!plan.dispositif_id || plan.dispositif_id == dispositifId) {
-                    const statutIcon = plan.statut === 'en_cours' ? '🟡' : 
-                                      plan.statut === 'en_retard' ? '🔴' : 
-                                      plan.statut === 'termine' ? '🟢' : '⚪';
-                    
-                    const alreadyLinked = plan.dispositif_id == dispositifId ? ' (déjà lié)' : '';
-                    
-                    options += `<option value="${plan.id}">
-                        ${statutIcon} ${plan.reference} - ${plan.nom}
-                        ${plan.date_echeance ? `(échéance: ${plan.date_echeance})` : ''}
-                        ${alreadyLinked}
-                    </option>`;
-                }
+                const statutIcon = plan.statut === 'en_cours' ? '🟡' : 
+                                  plan.statut === 'en_retard' ? '🔴' : 
+                                  plan.statut === 'termine' ? '🟢' : '⚪';
+                
+                options += `<option value="${plan.id}">
+                    ${statutIcon} ${plan.reference} - ${plan.nom} (${plan.statut})
+                </option>`;
             });
             
             const html = `
-                <form method="POST" action="/dispositif/${dispositifId}/lier-plan-action" id="formLiaison">
+                <form id="formLiaison">
                     <input type="hidden" name="csrf_token" value="${csrfToken}">
                     
                     <div class="mb-3">
                         <label class="form-label fw-bold">Sélectionner un plan d'action :</label>
-                        <select class="fk-form-control" name="plan_action_id" required>
+                        <select class="form-select" name="plan_action_id" required>
                             ${options}
                         </select>
-                        <small class="text-muted">Seuls les plans disponibles sont affichés.</small>
                     </div>
                     
-                    <div class="fk-alert-modern info">
+                    <div class="alert alert-info">
                         <i class="fas fa-info-circle me-2"></i>
-                        <strong>Information :</strong> Vous pouvez également 
-                        <a href="{{ url_for('nouveau_plan_action_pour_risque', risque_id=risque.id) }}?dispositif_id=${dispositifId}" 
+                        Vous pouvez également 
+                        <a href="/risque/${risqueId}/plan-action/nouveau?dispositif_id=${dispositifId}" 
                            class="alert-link" target="_blank">
                             créer un nouveau plan d'action
                         </a>
@@ -1291,90 +1284,80 @@ function lierPlanAction(dispositifId) {
             
             document.getElementById('genericModalBody').innerHTML = html;
             document.getElementById('genericModalFooter').innerHTML = `
-                <button type="button" class="fk-btn fk-btn-outline-secondary" data-bs-dismiss="modal">Annuler</button>
-                <button type="submit" class="fk-btn fk-btn-primary" form="formLiaison">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Annuler</button>
+                <button type="button" class="btn btn-primary" onclick="soumettreLiaisonListe(${dispositifId})">
                     Lier le plan
                 </button>
             `;
             
-            document.getElementById('formLiaison').addEventListener('submit', function(e) {
-                e.preventDefault();
-                
-                const formData = new FormData(this);
-                
-                fetch(this.action, {
-                    method: 'POST',
-                    body: formData,
-                    headers: {
-                        'X-CSRFToken': csrfToken
-                    }
-                })
-                .then(response => response.json())
-                .then(data => {
-                    if (data.success) {
-                        afficherNotification('✅ Plan lié avec succès', 'success');
-                        
-                        // Notifier les autres pages
-                        localStorage.setItem('dispositif_updated', Date.now().toString());
-                        
-                        bootstrap.Modal.getInstance(document.getElementById('genericModal')).hide();
-                        
-                        setTimeout(() => {
-                            location.reload();
-                        }, 1500);
-                    } else {
-                        afficherNotification('❌ Erreur: ' + data.error, 'danger');
-                    }
-                })
-                .catch(error => {
-                    afficherNotification('❌ Erreur: ' + error.message, 'danger');
-                });
-            });
-            
         } else {
-            const html = `
-                <div class="fk-alert-modern warning">
+            document.getElementById('genericModalBody').innerHTML = `
+                <div class="alert alert-warning">
                     <i class="fas fa-exclamation-triangle me-2"></i>
                     <strong>Aucun plan d'action disponible</strong>
                     <p class="mb-0 mt-2">Il n'y a pas de plan d'action disponible pour ce risque.</p>
                 </div>
-                
                 <div class="text-center mt-3">
-                    <a href="{{ url_for('nouveau_plan_action_pour_risque', risque_id=risque.id) }}?dispositif_id=${dispositifId}" 
-                       class="fk-btn fk-btn-primary">
+                    <a href="/risque/${risqueId}/plan-action/nouveau?dispositif_id=${dispositifId}" 
+                       class="btn btn-primary">
                         <i class="fas fa-plus me-1"></i> Créer un nouveau plan d'action
                     </a>
                 </div>
             `;
-            
-            document.getElementById('genericModalBody').innerHTML = html;
             document.getElementById('genericModalFooter').innerHTML = `
-                <button type="button" class="fk-btn fk-btn-outline-secondary" data-bs-dismiss="modal">Fermer</button>
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Fermer</button>
             `;
         }
     })
     .catch(error => {
-        console.error('Erreur:', error);
         document.getElementById('genericModalBody').innerHTML = `
-            <div class="fk-alert-modern danger">
+            <div class="alert alert-danger">
                 <i class="fas fa-exclamation-triangle me-2"></i>
                 <strong>Erreur de chargement</strong>
-                <p class="mb-0 mt-2">${error.message}</p>
-            </div>
-            
-            <div class="text-center mt-3">
-                <a href="{{ url_for('nouveau_plan_action_pour_risque', risque_id=risque.id) }}?dispositif_id=${dispositifId}" 
-                   class="fk-btn fk-btn-primary">
-                    <i class="fas fa-plus me-1"></i> Créer un nouveau plan d'action
-                </a>
+                <p class="mb-0">${error.message}</p>
             </div>
         `;
         document.getElementById('genericModalFooter').innerHTML = `
-            <button type="button" class="fk-btn fk-btn-outline-secondary" data-bs-dismiss="modal">Fermer</button>
+            <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Fermer</button>
         `;
     });
 }
 
+// Nouvelle fonction pour soumettre depuis la liste
+function soumettreLiaisonListe(dispositifId) {
+    const form = document.getElementById('formLiaison');
+    if (!form) return;
+    
+    const formData = new FormData(form);
+    
+    fetch(`/dispositif/${dispositifId}/lier-plan-action`, {
+        method: 'POST',
+        body: formData,
+        headers: {
+            'X-CSRFToken': csrfToken,
+            'X-Requested-With': 'XMLHttpRequest'
+        }
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            afficherNotification('✅ Plan lié avec succès', 'success');
+            
+            // Fermer le modal
+            bootstrap.Modal.getInstance(document.getElementById('genericModal')).hide();
+            
+            // Recharger la page après un court délai
+            setTimeout(() => {
+                location.reload();
+            }, 1500);
+        } else {
+            afficherNotification('❌ Erreur: ' + data.error, 'danger');
+        }
+    })
+    .catch(error => {
+        afficherNotification('❌ Erreur: ' + error.message, 'danger');
+    });
+}
 // ============================================
 // FONCTION D'ARCHIVAGE
 // ============================================
