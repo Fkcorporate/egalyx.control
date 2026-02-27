@@ -1084,7 +1084,46 @@
                             {% endif %}
                         </div>
                     </div>
-                    
+                    <!-- Dans la section des informations, après le responsable -->
+                    <div class="info-item-modern">
+                        <div class="info-item-label">
+                            <i class="fas fa-shield-alt"></i> Dispositifs concernés
+                        </div>
+                        <div class="info-item-value">
+                            {% if plan.dispositifs and plan.dispositifs.count() > 0 %}
+                            <div class="d-flex flex-wrap gap-2">
+                                {% for dispositif in plan.dispositifs %}
+                                <a href="{{ url_for('detail_dispositif', dispositif_id=dispositif.id) }}" 
+                                   class="badge bg-info text-decoration-none p-2">
+                                    <i class="fas fa-shield-alt me-1"></i>{{ dispositif.reference }}
+                                        <small class="ms-1 text-white-50">({{ dispositif.risque.reference if dispositif.risque else '?' }})</small>
+                                    </a>
+                                    {% endfor %}
+                                </div>
+                                <button class="btn btn-sm btn-outline-primary" onclick="gererDispositifs()">
+                                    <i class="fas fa-edit"></i> Gérer les dispositifs
+                                </button>
+                            {% else %}
+                                <span class="text-muted">Aucun dispositif associé</span>
+                                <button class="btn btn-sm btn-outline-primary ms-2" onclick="gererDispositifs()">
+                                    <i class="fas fa-plus"></i> Ajouter
+                                </button>
+                            {% endif %}
+                        </div>
+                    </div>
+
+                    <!-- Résumé des risques concernés (optionnel) -->
+                    {% if plan.risques_concernes %}
+                    <div class="mt-3 small">
+                        <i class="fas fa-exclamation-triangle text-muted me-1"></i>
+                        <span class="text-muted">Risques concernés:</span>
+                        {% for risque in plan.risques_concernes %}
+                        <a href="{{ url_for('detail_risque', id=risque.id) }}" class="text-decoration-none ms-2">
+                            <span class="badge bg-secondary">{{ risque.reference }}</span>
+                        </a>
+                        {% endfor %}
+                    </div>
+                    {% endif %}
                     <div class="info-item-modern">
                         <div class="info-item-label">
                             <i class="fas fa-calendar"></i> Dates
@@ -2068,5 +2107,107 @@ document.addEventListener('DOMContentLoaded', function() {
         }
     });
 });
+function gererDispositifs() {
+    const modal = new bootstrap.Modal(document.getElementById('genericModal'));
+    document.getElementById('genericModalTitle').innerHTML = '<i class="fas fa-shield-alt me-2"></i>Lier des dispositifs au plan';
+    document.getElementById('genericModalBody').innerHTML = `
+        <div class="text-center py-4">
+            <div class="spinner-border text-primary" role="status"></div>
+            <p class="mt-2">Chargement des dispositifs...</p>
+        </div>
+    `;
+    modal.show();
+    
+    fetch(`/api/plan-action/${planId}/dispositifs`, {
+        headers: {
+            'X-CSRFToken': csrfToken,
+            'Accept': 'application/json'
+        }
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            let html = `
+                <p class="text-muted mb-3">Sélectionnez les dispositifs concernés par ce plan d'action :</p>
+                <div class="list-group" style="max-height: 400px; overflow-y: auto;">
+            `;
+            
+            // Grouper par risque pour meilleure lisibilité
+            const parRisque = {};
+            data.dispositifs.forEach(d => {
+                const risqueKey = d.risque_id || 'autres';
+                if (!parRisque[risqueKey]) {
+                    parRisque[risqueKey] = {
+                        reference: d.risque_ref || 'Autres',
+                        dispositifs: []
+                    };
+                }
+                parRisque[risqueKey].dispositifs.push(d);
+            });
+            
+            for (const [risqueId, groupe] of Object.entries(parRisque)) {
+                html += `<div class="list-group-item bg-light fw-bold">${groupe.reference}</div>`;
+                groupe.dispositifs.forEach(d => {
+                    html += `
+                        <label class="list-group-item d-flex align-items-center ps-4">
+                            <input type="checkbox" name="dispositif_ids" value="${d.id}" 
+                                   class="form-check-input me-3" ${d.est_lie ? 'checked' : ''}>
+                            <div>
+                                <strong>${d.reference}</strong> - ${d.nom}
+                                <br>
+                                <small class="text-muted">Type: ${d.type || 'Non spécifié'}</small>
+                            </div>
+                        </label>
+                    `;
+                });
+            }
+            
+            html += '</div>';
+            
+            document.getElementById('genericModalBody').innerHTML = html;
+            document.getElementById('genericModalFooter').innerHTML = `
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Annuler</button>
+                <button type="button" class="btn btn-primary" onclick="sauvegarderDispositifs()">Enregistrer</button>
+            `;
+        }
+    })
+    .catch(error => {
+        document.getElementById('genericModalBody').innerHTML = `
+            <div class="alert alert-danger">Erreur: ${error.message}</div>
+        `;
+    });
+}
+
+function sauvegarderDispositifs() {
+    const checkboxes = document.querySelectorAll('input[name="dispositif_ids"]:checked');
+    const dispositif_ids = Array.from(checkboxes).map(cb => parseInt(cb.value));
+    
+    fetch(`/api/plan-action/${planId}/dispositifs`, {
+        method: 'PUT',
+        headers: {
+            'X-CSRFToken': csrfToken,
+            'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ dispositif_ids: dispositif_ids })
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            // Fermer le modal
+            bootstrap.Modal.getInstance(document.getElementById('genericModal')).hide();
+            
+            // Afficher notification
+            showToast('success', data.message);
+            
+            // Recharger la page après un court délai
+            setTimeout(() => location.reload(), 1000);
+        } else {
+            showToast('error', 'Erreur: ' + data.error);
+        }
+    })
+    .catch(error => {
+        showToast('error', 'Erreur: ' + error.message);
+    });
+}
 </script>
 {% endblock %}
