@@ -4366,57 +4366,57 @@ class Client(db.Model):
         self.derniere_activite = datetime.utcnow()
 
 # -------------------- ENVIRONNEMENT CLIENT --------------------
-    class EnvironnementClient(db.Model):
-        __tablename__ = 'environnements_client'
-        
-        id = db.Column(db.Integer, primary_key=True)
-        client_id = db.Column(db.Integer, db.ForeignKey('clients.id'), nullable=False)
-        nom = db.Column(db.String(100), nullable=False)
-        
-        # Serveur/Sous-domaine
-        sous_domaine = db.Column(db.String(100), unique=True)
-        url_acces = db.Column(db.String(500))
-        
-        # Base de données
-        db_host = db.Column(db.String(200))
-        db_name = db.Column(db.String(100))
-        db_user = db.Column(db.String(100))
-        db_password = db.Column(db.String(500))
+class EnvironnementClient(db.Model):
+    __tablename__ = 'environnements_client'
+    
+    id = db.Column(db.Integer, primary_key=True)
+    client_id = db.Column(db.Integer, db.ForeignKey('clients.id'), nullable=False)
+    nom = db.Column(db.String(100), nullable=False)
+    
+    # Serveur/Sous-domaine
+    sous_domaine = db.Column(db.String(100), unique=True)
+    url_acces = db.Column(db.String(500))
+    
+    # Base de données
+    db_host = db.Column(db.String(200))
+    db_name = db.Column(db.String(100))
+    db_user = db.Column(db.String(100))
+    db_password = db.Column(db.String(500))
 
-        # Configuration serveur
-        server_ip = db.Column(db.String(50))
-        server_port = db.Column(db.Integer, default=22)
-        server_ssh_user = db.Column(db.String(50))
-        server_ssh_key = db.Column(db.Text)
-        
-        # Statut
-        statut = db.Column(db.String(20), default='actif')  # actif, suspendu, en_maintenance, supprime
-        date_provision = db.Column(db.DateTime)
-        date_suspension = db.Column(db.DateTime)
-        
-        # Ressources
-        cpu_alloue = db.Column(db.String(50), default='1 core')
-        ram_alloue = db.Column(db.String(50), default='1GB')
-        stockage_alloue = db.Column(db.String(50), default='10GB')
-        
-        # Timestamps
-        created_at = db.Column(db.DateTime, default=datetime.utcnow)
-        updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
-        
-        # Relations
-        client = db.relationship('Client', back_populates='environnements')
+    # Configuration serveur
+    server_ip = db.Column(db.String(50))
+    server_port = db.Column(db.Integer, default=22)
+    server_ssh_user = db.Column(db.String(50))
+    server_ssh_key = db.Column(db.Text)
     
-    def __repr__(self):
-        return f'<Environnement {self.nom} pour client {self.client_id}>'
+    # Statut
+    statut = db.Column(db.String(20), default='actif')  # actif, suspendu, en_maintenance, supprime
+    date_provision = db.Column(db.DateTime)
+    date_suspension = db.Column(db.DateTime)
     
-    def get_db_connection_string(self):
-        """Retourne la chaîne de connexion à la base de données"""
-        return f"postgresql://{self.db_user}:{self.db_password}@{self.db_host}/{self.db_name}"
+    # Ressources
+    cpu_alloue = db.Column(db.String(50), default='1 core')
+    ram_alloue = db.Column(db.String(50), default='1GB')
+    stockage_alloue = db.Column(db.String(50), default='10GB')
     
-    def provisionner_serveur(self):
-        """Déclenche le provisionnement du serveur"""
-        # Cette méthode serait implémentée avec Ansible/Terraform/etc.
-        pass
+    # Timestamps
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    
+    # Relations
+    client = db.relationship('Client', back_populates='environnements')
+
+def __repr__(self):
+    return f'<Environnement {self.nom} pour client {self.client_id}>'
+
+def get_db_connection_string(self):
+    """Retourne la chaîne de connexion à la base de données"""
+    return f"postgresql://{self.db_user}:{self.db_password}@{self.db_host}/{self.db_name}"
+
+def provisionner_serveur(self):
+    """Déclenche le provisionnement du serveur"""
+    # Cette méthode serait implémentée avec Ansible/Terraform/etc.
+    pass
 
 # -------------------- JOURNAL ACTIVITÉ CLIENT --------------------
 class JournalActiviteClient(db.Model):
