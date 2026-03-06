@@ -47,23 +47,7 @@
     <meta property="og:locale" content="fr_FR">
     <meta property="og:locale:alternate" content="en_US">
     <meta property="og:locale:alternate" content="fr_CI">
-
-        <!-- ================================================ -->
-    <!-- ==========      OPEN GRAPH               ====== -->
-    <!-- ================================================ -->
-    <meta property="og:site_name" content="Egalyx Control">
-    <meta property="og:title" content="{% block og_title %}Egalyx Control – IA pour Audit Interne et Gestion des Risques{% endblock %}">
-    <meta property="og:description" content="{% block og_description %}Plateforme IA premium de gestion des risques, audit interne et contrôle interne pour les entreprises leaders en France et en Afrique.{% endblock %}">
-    <meta property="og:type" content="{% block og_type %}website{% endblock %}">
-    <meta property="og:url" content="{{ request.url }}">
-    <meta property="og:image" content="{% block og_image %}https://www.egalyx.com/static/images/og-image-1200x630.jpg{% endblock %}">
-    <meta property="og:image:width" content="1200">
-    <meta property="og:image:height" content="630">
-    <meta property="og:image:alt" content="Egalyx Control - Interface IA">
-    <meta property="og:locale" content="fr_FR">
-    <meta property="og:locale:alternate" content="en_US">
-    <meta property="og:locale:alternate" content="fr_CI">
-
+    
     <!-- ================================================ -->
     <!-- ==========      LIENS SEO ET SOUS-DOMAINES  ====== -->
     <!-- ================================================ -->
@@ -87,6 +71,7 @@
     <link rel="preconnect" href="https://www.egalyx.com">
     <link rel="preconnect" href="https://app.egalyx.com">
     <link rel="preconnect" href="https://blog.egalyx.com">
+    
     <!-- ================================================ -->
     <!-- ==========      TWITTER CARDS            ====== -->
     <!-- ================================================ -->
@@ -2442,10 +2427,44 @@
 
     {% block scripts %}{% endblock %}
 <!-- Widget de langue SIMPLE ET FONCTIONNEL -->
+<!-- ================================================ -->
+<!-- ==========   WIDGET LANGUE TOGGLE FONCTIONNEL ====== -->
+<!-- ================================================ -->
+
 <style>
-    .language-widget {
+    /* Bouton toggle principal */
+    .lang-toggle-main {
         position: fixed;
         bottom: 25px;
+        right: 25px;
+        z-index: 10000;
+        width: 56px;
+        height: 56px;
+        border-radius: 50%;
+        background: linear-gradient(135deg, #0066CC, #3B82F6);
+        color: white;
+        border: none;
+        box-shadow: 0 6px 20px rgba(0,0,0,0.25);
+        cursor: pointer;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 24px;
+        transition: all 0.3s ease;
+    }
+
+    .lang-toggle-main:hover {
+        transform: scale(1.1);
+    }
+
+    .lang-toggle-main.active i {
+        transform: rotate(180deg);
+    }
+
+    /* Widget de langue */
+    .language-widget {
+        position: fixed;
+        bottom: 90px;
         right: 25px;
         z-index: 9999;
         background: white;
@@ -2455,8 +2474,20 @@
         border: 2px solid #e9ecef;
         display: flex;
         gap: 8px;
+        transition: all 0.3s ease;
+        opacity: 0;
+        visibility: hidden;
+        transform: translateY(20px);
+        pointer-events: none;
     }
-    
+
+    .language-widget.visible {
+        opacity: 1;
+        visibility: visible;
+        transform: translateY(0);
+        pointer-events: all;
+    }
+
     .lang-btn {
         padding: 10px 20px;
         border: none;
@@ -2471,73 +2502,165 @@
         min-width: 80px;
         justify-content: center;
     }
-    
+
     .lang-btn.fr {
         background: linear-gradient(135deg, #007bff, #0056b3);
         color: white;
     }
-    
+
     .lang-btn.en {
         background: linear-gradient(135deg, #28a745, #1e7e34);
         color: white;
     }
-    
+
     .lang-btn:hover {
         transform: scale(1.05);
         box-shadow: 0 4px 12px rgba(0,0,0,0.2);
     }
-    
+
     .lang-btn.active {
         box-shadow: inset 0 2px 8px rgba(0,0,0,0.3);
         transform: scale(0.95);
     }
+
+    /* Mode sombre */
+    [data-bs-theme="dark"] .language-widget {
+        background: #1E293B;
+        border-color: #334155;
+    }
 </style>
 
+<!-- Bouton toggle -->
+<button class="lang-toggle-main" id="langToggleMain" title="Afficher/Masquer la langue">
+    <i class="fas fa-language"></i>
+</button>
+
+<!-- Widget de langue -->
 <div class="language-widget" id="languageWidget">
     <button class="lang-btn fr {% if current_lang == 'fr' %}active{% endif %}" 
-            onclick="translator.setLanguage('fr')">
-        <span class="flag"> {{ t("🇫🇷") }} </span>
-        <span class="text"> {{ t("FRANÇAIS") }} </span>
+            onclick="switchLang('fr')">
+        <span class="flag">🇫🇷</span>
+        <span class="text">FRANÇAIS</span>
     </button>
     <button class="lang-btn en {% if current_lang == 'en' %}active{% endif %}" 
-            onclick="translator.setLanguage('en')">
-        <span class="flag"> {{ t("🇬🇧") }} </span>
-        <span class="text"> {{ t("ENGLISH") }} </span>
+            onclick="switchLang('en')">
+        <span class="flag">🇬🇧</span>
+        <span class="text">ENGLISH</span>
     </button>
 </div>
 
-<!-- UN SEUL FICHIER JS -->
-<script src="{{ url_for('static', filename='js/translations.js') }}"></script><script src="{{ url_for('static', filename='js/translations.js') }}"></script>
+<!-- UN SEUL FICHIER JS (pas de double chargement) -->
+<script src="{{ url_for('static', filename='js/translations.js') }}"></script>
 
 <script>
-// FONCTION SIMPLE QUI MARCHE
+// ============================================
+// FONCTION UNIQUE DE CHANGEMENT DE LANGUE
+// ============================================
+
+// Fonction principale de changement de langue
 function switchLang(lang) {
     console.log('🌐 Changement vers:', lang);
     
-    // 1. Sauvegarder
+    // Sauvegarder la préférence
     localStorage.setItem('app_lang', lang);
     document.cookie = `lang=${lang};path=/;max-age=31536000`;
     
-    // 2. Recharger avec paramètre
-    const url = new URL(window.location);
-    url.searchParams.set('lang', lang);
-    window.location.href = url.toString();
+    // Afficher une notification
+    showNotification(lang);
+    
+    // Recharger la page avec le paramètre de langue
+    setTimeout(() => {
+        const url = new URL(window.location);
+        url.searchParams.set('lang', lang);
+        window.location.href = url.toString();
+    }, 300);
 }
 
-// Initialiser au chargement
-document.addEventListener('DOMContentLoaded', function() {
-    const currentLang = '{{ get_locale() }}';
-    console.log('🌐 Langue actuelle:', currentLang);
+// Notification de changement
+function showNotification(lang) {
+    const notification = document.createElement('div');
+    notification.style.cssText = `
+        position: fixed;
+        bottom: 160px;
+        right: 25px;
+        z-index: 10001;
+        background: ${lang === 'fr' ? '#007bff' : '#28a745'};
+        color: white;
+        padding: 12px 24px;
+        border-radius: 30px;
+        font-weight: 600;
+        box-shadow: 0 4px 15px rgba(0,0,0,0.2);
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        animation: slideIn 0.3s ease;
+    `;
+    notification.innerHTML = `
+        <i class="fas fa-check-circle"></i>
+        Langue changée en ${lang === 'fr' ? 'Français' : 'Anglais'}
+    `;
+    document.body.appendChild(notification);
     
-    // Mettre à jour les boutons
-    document.querySelectorAll('.lang-btn').forEach(btn => {
-        btn.classList.remove('active');
+    setTimeout(() => {
+        notification.remove();
+    }, 2000);
+}
+
+// Gestion du toggle du widget
+document.addEventListener('DOMContentLoaded', function() {
+    const toggleBtn = document.getElementById('langToggleMain');
+    const widget = document.getElementById('languageWidget');
+    
+    // Vérifier l'état sauvegardé
+    const isHidden = localStorage.getItem('langWidgetHidden') === 'true';
+    
+    // État initial
+    if (!isHidden) {
+        setTimeout(() => {
+            widget.classList.add('visible');
+        }, 500);
+    }
+    
+    // Toggle au clic sur le bouton
+    toggleBtn.addEventListener('click', function(e) {
+        e.stopPropagation();
+        
+        if (widget.classList.contains('visible')) {
+            widget.classList.remove('visible');
+            localStorage.setItem('langWidgetHidden', 'true');
+            this.classList.remove('active');
+        } else {
+            widget.classList.add('visible');
+            localStorage.setItem('langWidgetHidden', 'false');
+            this.classList.add('active');
+        }
     });
     
-    if (currentLang === 'fr') {
-        document.querySelector('.lang-btn[onclick*="fr"]')?.classList.add('active');
-    } else {
-        document.querySelector('.lang-btn[onclick*="en"]')?.classList.add('active');
+    // Fermer en cliquant ailleurs
+    document.addEventListener('click', function(e) {
+        if (!widget.contains(e.target) && !toggleBtn.contains(e.target)) {
+            widget.classList.remove('visible');
+            localStorage.setItem('langWidgetHidden', 'true');
+            toggleBtn.classList.remove('active');
+        }
+    });
+    
+    // Empêcher la fermeture quand on clique dans le widget
+    widget.addEventListener('click', function(e) {
+        e.stopPropagation();
+    });
+    
+    // Ajouter l'animation keyframes si elle n'existe pas
+    if (!document.querySelector('#langAnimationStyle')) {
+        const style = document.createElement('style');
+        style.id = 'langAnimationStyle';
+        style.textContent = `
+            @keyframes slideIn {
+                from { transform: translateX(100%); opacity: 0; }
+                to { transform: translateX(0); opacity: 1; }
+            }
+        `;
+        document.head.appendChild(style);
     }
 });
 </script>
