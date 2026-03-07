@@ -1,0 +1,596 @@
+<!-- templates/admin/nouvel-article.html -->
+{% extends "base.html" %}
+
+{% block title %}Créer un nouvel article - Administration Blog | Egalyx Control{% endblock %}
+
+{% block meta_description %}Interface d'administration pour créer et publier des articles sur le blog Egalyx Control. Réservé aux super administrateurs.{% endblock %}
+
+{% block meta_robots %}noindex, nofollow{% endblock %}
+
+{% block content %}
+<div class="container-fluid py-4">
+    <!-- En-tête de la page -->
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <div>
+            <h1 class="h2 mb-1">
+                <i class="fas fa-pen-fancy text-primary me-2"></i>
+                Créer un nouvel article
+            </h1>
+            <nav aria-label="breadcrumb">
+                <ol class="breadcrumb">
+                    <li class="breadcrumb-item"><a href="{{ url_for('dashboard') }}">Dashboard</a></li>
+                    <li class="breadcrumb-item"><a href="{{ url_for('admin_articles') }}">Articles</a></li>
+                    <li class="breadcrumb-item active" aria-current="page">Nouvel article</li>
+                </ol>
+            </nav>
+        </div>
+        <a href="{{ url_for('admin_articles') }}" class="btn btn-outline-secondary">
+            <i class="fas fa-arrow-left me-2"></i>Retour à la liste
+        </a>
+    </div>
+
+    <!-- Formulaire principal -->
+    <div class="row">
+        <div class="col-lg-8">
+            <div class="fk-card">
+                <div class="fk-card-header">
+                    <h5 class="mb-0 text-white">
+                        <i class="fas fa-edit me-2"></i>Contenu de l'article
+                    </h5>
+                </div>
+                <div class="fk-card-body">
+                    <form method="POST" id="articleForm" enctype="multipart/form-data">
+                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+
+                        <!-- Titre -->
+                        <div class="mb-3">
+                            <label for="titre" class="form-label fw-bold">
+                                Titre de l'article <span class="text-danger">*</span>
+                            </label>
+                            <input type="text" class="fk-form-control" id="titre" name="titre" 
+                                   placeholder="Ex: Comment l'IA transforme l'audit interne en 2024"
+                                   required maxlength="200">
+                            <div class="form-text">Titre accrocheur et optimisé SEO (max 200 caractères)</div>
+                        </div>
+
+                        <!-- Slug (URL) -->
+                        <div class="mb-3">
+                            <label for="slug" class="form-label fw-bold">
+                                Slug (URL) <span class="text-danger">*</span>
+                            </label>
+                            <div class="input-group">
+                                <span class="input-group-text bg-light">{{ request.host_url }}blog/</span>
+                                <input type="text" class="fk-form-control" id="slug" name="slug" 
+                                       placeholder="ia-transforme-audit-2024"
+                                       required pattern="[a-z0-9-]+" 
+                                       title="Uniquement lettres minuscules, chiffres et tirets">
+                            </div>
+                            <div class="form-text">
+                                <i class="fas fa-info-circle me-1"></i>
+                                Généré automatiquement à partir du titre si laissé vide
+                            </div>
+                        </div>
+
+                        <!-- Accroche -->
+                        <div class="mb-3">
+                            <label for="accroche" class="form-label fw-bold">Accroche</label>
+                            <textarea class="fk-form-control" id="accroche" name="accroche" 
+                                      rows="2" maxlength="300" placeholder="Résumé percutant de l'article..."></textarea>
+                            <div class="form-text">S'affiche en haut de l'article (max 300 caractères)</div>
+                        </div>
+
+                        <!-- Contenu (avec éditeur WYSIWYG) -->
+                        <div class="mb-3">
+                            <label for="contenu" class="form-label fw-bold">
+                                Contenu <span class="text-danger">*</span>
+                            </label>
+                            <textarea class="fk-form-control" id="contenu" name="contenu" 
+                                      rows="15" required placeholder="Rédigez votre article ici..."></textarea>
+                            <div class="form-text">Utilisez le format HTML pour structurer votre article</div>
+                        </div>
+
+                        <!-- Extrait (pour listings) -->
+                        <div class="mb-3">
+                            <label for="excerpt" class="form-label fw-bold">Extrait (résumé)</label>
+                            <textarea class="fk-form-control" id="excerpt" name="excerpt" 
+                                      rows="3" maxlength="300" placeholder="Version courte pour les listes d'articles..."></textarea>
+                            <div class="form-text">S'affiche sur la page d'accueil du blog</div>
+                        </div>
+
+                        <!-- Tags -->
+                        <div class="mb-3">
+                            <label for="tags" class="form-label fw-bold">Tags</label>
+                            <input type="text" class="fk-form-control" id="tags" name="tags" 
+                                   placeholder="audit, IA, risques, conformité">
+                            <div class="form-text">Séparés par des virgules. Ex: audit, IA, risques</div>
+                        </div>
+
+                        <!-- Image principale -->
+                        <div class="mb-3">
+                            <label for="image" class="form-label fw-bold">Image principale</label>
+                            <input type="file" class="fk-form-control" id="image" name="image" 
+                                   accept="image/jpeg,image/png,image/webp">
+                            <div class="form-text">Format recommandé : 1200x630px (JPG, PNG, WebP)</div>
+                            <div id="imagePreview" class="mt-2" style="display: none;">
+                                <img src="" alt="Aperçu" style="max-width: 200px; max-height: 150px;" class="img-thumbnail">
+                            </div>
+                        </div>
+
+                        <!-- Image Open Graph -->
+                        <div class="mb-3">
+                            <label for="image_og" class="form-label fw-bold">Image Open Graph (partage réseaux sociaux)</label>
+                            <input type="file" class="fk-form-control" id="image_og" name="image_og" 
+                                   accept="image/jpeg,image/png,image/webp">
+                            <div class="form-text">Format recommandé : 1200x630px. Si non fournie, l'image principale sera utilisée</div>
+                        </div>
+
+                        <!-- Meta description (SEO) -->
+                        <div class="mb-3">
+                            <label for="meta_description" class="form-label fw-bold">Meta description (SEO)</label>
+                            <textarea class="fk-form-control" id="meta_description" name="meta_description" 
+                                      rows="2" maxlength="300" placeholder="Description pour les moteurs de recherche..."></textarea>
+                            <div class="form-text">Si non fournie, l'accroche sera utilisée (max 300 caractères)</div>
+                        </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Colonne de droite : paramètres -->
+        <div class="col-lg-4">
+            <!-- Publication -->
+            <div class="fk-card mb-4">
+                <div class="fk-card-header">
+                    <h5 class="mb-0 text-white">
+                        <i class="fas fa-rocket me-2"></i>Publication
+                    </h5>
+                </div>
+                <div class="fk-card-body">
+                    <div class="mb-3">
+                        <div class="form-check form-switch">
+                            <input class="form-check-input" type="checkbox" id="est_publie" name="est_publie" checked>
+                            <label class="form-check-label fw-bold" for="est_publie">Publier immédiatement</label>
+                        </div>
+                        <div class="form-text">Si décoché, l'article sera enregistré comme brouillon</div>
+                    </div>
+
+                    <div class="mb-3">
+                        <label for="date_publication" class="form-label fw-bold">Date de publication</label>
+                        <input type="datetime-local" class="fk-form-control" id="date_publication" name="date_publication">
+                        <div class="form-text">Laisser vide pour utiliser la date actuelle</div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Catégorie -->
+            <div class="fk-card mb-4">
+                <div class="fk-card-header">
+                    <h5 class="mb-0 text-white">
+                        <i class="fas fa-folder me-2"></i>Catégorie
+                    </h5>
+                </div>
+                <div class="fk-card-body">
+                    <div class="mb-3">
+                        <label for="categorie_id" class="form-label fw-bold">Catégorie <span class="text-danger">*</span></label>
+                        <select class="fk-form-control" id="categorie_id" name="categorie_id" required>
+                            <option value="">-- Sélectionnez une catégorie --</option>
+                            {% for cat in categories %}
+                            <option value="{{ cat.id }}">{{ cat.nom }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div class="d-grid">
+                        <button type="button" class="btn btn-outline-primary btn-sm" data-bs-toggle="modal" data-bs-target="#newCategorieModal">
+                            <i class="fas fa-plus-circle me-2"></i>Nouvelle catégorie
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Auteur -->
+            <div class="fk-card mb-4">
+                <div class="fk-card-header">
+                    <h5 class="mb-0 text-white">
+                        <i class="fas fa-user me-2"></i>Auteur
+                    </h5>
+                </div>
+                <div class="fk-card-body">
+                    <div class="mb-3">
+                        <label for="auteur_id" class="form-label fw-bold">Auteur <span class="text-danger">*</span></label>
+                        <select class="fk-form-control" id="auteur_id" name="auteur_id" required>
+                            <option value="">-- Sélectionnez un auteur --</option>
+                            {% for auteur in auteurs %}
+                            <option value="{{ auteur.id }}" {% if auteur.id == current_user.id %}selected{% endif %}>
+                                {{ auteur.nom_complet }} ({{ auteur.fonction }})
+                            </option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div class="d-grid">
+                        <button type="button" class="btn btn-outline-primary btn-sm" data-bs-toggle="modal" data-bs-target="#newAuteurModal">
+                            <i class="fas fa-user-plus me-2"></i>Nouvel auteur
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Options avancées -->
+            <div class="fk-card mb-4">
+                <div class="fk-card-header">
+                    <h5 class="mb-0 text-white">
+                        <i class="fas fa-cog me-2"></i>Options avancées
+                    </h5>
+                </div>
+                <div class="fk-card-body">
+                    <div class="mb-3">
+                        <label for="temps_lecture" class="form-label fw-bold">Temps de lecture (minutes)</label>
+                        <input type="number" class="fk-form-control" id="temps_lecture" name="temps_lecture" 
+                               min="1" max="60" value="5">
+                    </div>
+
+                    <div class="mb-3">
+                        <label for="priority" class="form-label fw-bold">Priorité SEO</label>
+                        <select class="fk-form-control" id="priority" name="priority">
+                            <option value="0.3">Basse (0.3)</option>
+                            <option value="0.5" selected>Normale (0.5)</option>
+                            <option value="0.7">Haute (0.7)</option>
+                            <option value="1.0">Maximale (1.0)</option>
+                        </select>
+                        <div class="form-text">Priorité dans le sitemap</div>
+                    </div>
+
+                    <div class="mb-3">
+                        <label for="changefreq" class="form-label fw-bold">Fréquence de changement</label>
+                        <select class="fk-form-control" id="changefreq" name="changefreq">
+                            <option value="daily">Quotidienne</option>
+                            <option value="weekly" selected>Hebdomadaire</option>
+                            <option value="monthly">Mensuelle</option>
+                            <option value="yearly">Annuelle</option>
+                        </select>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Boutons d'action -->
+            <div class="d-grid gap-2">
+                <button type="submit" class="btn btn-primary btn-lg" id="submitBtn">
+                    <i class="fas fa-save me-2"></i>Publier l'article
+                </button>
+                <button type="button" class="btn btn-outline-secondary" id="saveDraftBtn">
+                    <i class="fas fa-pen me-2"></i>Enregistrer comme brouillon
+                </button>
+                <button type="button" class="btn btn-outline-danger" id="previewBtn">
+                    <i class="fas fa-eye me-2"></i>Aperçu
+                </button>
+            </div>
+        </div>
+    </div>
+    </form>
+</div>
+
+<!-- Modal Nouvelle Catégorie -->
+<div class="modal fade" id="newCategorieModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Nouvelle catégorie</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <form id="newCategorieForm">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                    
+                    <div class="mb-3">
+                        <label class="form-label">Nom de la catégorie *</label>
+                        <input type="text" class="fk-form-control" id="categorie_nom" required>
+                    </div>
+                    
+                    <div class="mb-3">
+                        <label class="form-label">Slug (URL)</label>
+                        <div class="input-group">
+                            <span class="input-group-text">/blog/categorie/</span>
+                            <input type="text" class="fk-form-control" id="categorie_slug">
+                        </div>
+                    </div>
+                    
+                    <div class="mb-3">
+                        <label class="form-label">Description</label>
+                        <textarea class="fk-form-control" id="categorie_description" rows="2"></textarea>
+                    </div>
+                </form>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Annuler</button>
+                <button type="button" class="btn btn-primary" onclick="creerCategorie()">Créer</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Modal Nouvel Auteur -->
+<div class="modal fade" id="newAuteurModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Nouvel auteur</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <form id="newAuteurForm">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                    
+                    <div class="row">
+                        <div class="col-md-6 mb-3">
+                            <label class="form-label">Prénom *</label>
+                            <input type="text" class="fk-form-control" id="auteur_prenom" required>
+                        </div>
+                        <div class="col-md-6 mb-3">
+                            <label class="form-label">Nom *</label>
+                            <input type="text" class="fk-form-control" id="auteur_nom" required>
+                        </div>
+                    </div>
+                    
+                    <div class="mb-3">
+                        <label class="form-label">Email</label>
+                        <input type="email" class="fk-form-control" id="auteur_email">
+                    </div>
+                    
+                    <div class="mb-3">
+                        <label class="form-label">Fonction</label>
+                        <input type="text" class="fk-form-control" id="auteur_fonction" placeholder="Expert Audit & Risques">
+                    </div>
+                    
+                    <div class="mb-3">
+                        <label class="form-label">Bio courte</label>
+                        <textarea class="fk-form-control" id="auteur_bio_courte" rows="2"></textarea>
+                    </div>
+                    
+                    <div class="mb-3">
+                        <label class="form-label">Bio complète</label>
+                        <textarea class="fk-form-control" id="auteur_bio" rows="3"></textarea>
+                    </div>
+                    
+                    <div class="mb-3">
+                        <label class="form-label">Photo</label>
+                        <input type="file" class="fk-form-control" id="auteur_image" accept="image/*">
+                    </div>
+                    
+                    <div class="mb-3">
+                        <label class="form-label">Expérience (années)</label>
+                        <input type="number" class="fk-form-control" id="auteur_experience" min="0" value="5">
+                    </div>
+                </form>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Annuler</button>
+                <button type="button" class="btn btn-primary" onclick="creerAuteur()">Créer</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Modal Aperçu -->
+<div class="modal fade" id="previewModal" tabindex="-1">
+    <div class="modal-dialog modal-xl">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Aperçu de l'article</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body" id="previewContent">
+                <!-- Le contenu sera injecté ici -->
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Fermer</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+{% endblock %}
+
+{% block scripts %}
+{{ super() }}
+<!-- TinyMCE pour l'éditeur WYSIWYG -->
+<script src="https://cdn.tiny.cloud/1/votre-cle-api/tinymce/6/tinymce.min.js" referrerpolicy="origin"></script>
+
+<script>
+// Initialisation de TinyMCE
+tinymce.init({
+    selector: '#contenu',
+    height: 500,
+    menubar: true,
+    plugins: [
+        'advlist', 'autolink', 'lists', 'link', 'image', 'charmap', 'preview',
+        'anchor', 'searchreplace', 'visualblocks', 'code', 'fullscreen',
+        'insertdatetime', 'media', 'table', 'help', 'wordcount'
+    ],
+    toolbar: 'undo redo | blocks | ' +
+        'bold italic backcolor | alignleft aligncenter ' +
+        'alignright alignjustify | bullist numlist outdent indent | ' +
+        'removeformat | help',
+    content_style: 'body { font-family:Inter,Helvetica,Arial,sans-serif; font-size:16px }'
+});
+
+// Génération automatique du slug
+document.getElementById('titre').addEventListener('input', function() {
+    const slugField = document.getElementById('slug');
+    if (!slugField.value) {
+        const titre = this.value;
+        const slug = titre.toLowerCase()
+            .normalize('NFD').replace(/[\u0300-\u036f]/g, '') // Enlève les accents
+            .replace(/[^a-z0-9]+/g, '-') // Remplace caractères spéciaux par tirets
+            .replace(/^-|-$/g, ''); // Enlève tirets début/fin
+        slugField.value = slug;
+    }
+});
+
+// Aperçu image
+document.getElementById('image').addEventListener('change', function(e) {
+    const file = e.target.files[0];
+    if (file) {
+        const reader = new FileReader();
+        reader.onload = function(e) {
+            const preview = document.getElementById('imagePreview');
+            preview.style.display = 'block';
+            preview.querySelector('img').src = e.target.result;
+        }
+        reader.readAsDataURL(file);
+    }
+});
+
+// Sauvegarde comme brouillon
+document.getElementById('saveDraftBtn').addEventListener('click', function(e) {
+    e.preventDefault();
+    document.getElementById('est_publie').checked = false;
+    document.getElementById('articleForm').submit();
+});
+
+// Aperçu
+document.getElementById('previewBtn').addEventListener('click', function(e) {
+    e.preventDefault();
+    
+    const titre = document.getElementById('titre').value || 'Titre de l\'article';
+    const accroche = document.getElementById('accroche').value || '';
+    const contenu = tinymce.get('contenu').getContent() || '<p>Contenu de l\'article...</p>';
+    
+    const previewHtml = `
+        <div class="container">
+            <h1 class="mb-4">${titre}</h1>
+            ${accroche ? `<div class="lead mb-4">${accroche}</div>` : ''}
+            <div class="blog-content">
+                ${contenu}
+            </div>
+        </div>
+    `;
+    
+    document.getElementById('previewContent').innerHTML = previewHtml;
+    new bootstrap.Modal(document.getElementById('previewModal')).show();
+});
+
+// Créer une catégorie via AJAX
+function creerCategorie() {
+    const data = {
+        nom: document.getElementById('categorie_nom').value,
+        slug: document.getElementById('categorie_slug').value,
+        description: document.getElementById('categorie_description').value
+    };
+    
+    fetch('/api/admin/categories', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            'X-CSRFToken': document.querySelector('meta[name="csrf-token"]').content
+        },
+        body: JSON.stringify(data)
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            // Ajouter l'option au select
+            const select = document.getElementById('categorie_id');
+            const option = new Option(data.categorie.nom, data.categorie.id);
+            select.add(option);
+            select.value = data.categorie.id;
+            
+            // Fermer le modal
+            bootstrap.Modal.getInstance(document.getElementById('newCategorieModal')).hide();
+            
+            // Notification
+            showToast('Catégorie créée avec succès', 'success');
+        } else {
+            showToast('Erreur: ' + data.message, 'error');
+        }
+    })
+    .catch(error => {
+        showToast('Erreur réseau', 'error');
+    });
+}
+
+// Créer un auteur via AJAX
+function creerAuteur() {
+    const formData = new FormData();
+    formData.append('prenom', document.getElementById('auteur_prenom').value);
+    formData.append('nom', document.getElementById('auteur_nom').value);
+    formData.append('email', document.getElementById('auteur_email').value);
+    formData.append('fonction', document.getElementById('auteur_fonction').value);
+    formData.append('bio_courte', document.getElementById('auteur_bio_courte').value);
+    formData.append('bio', document.getElementById('auteur_bio').value);
+    formData.append('experience', document.getElementById('auteur_experience').value);
+    
+    const imageFile = document.getElementById('auteur_image').files[0];
+    if (imageFile) {
+        formData.append('image', imageFile);
+    }
+    
+    fetch('/api/admin/auteurs', {
+        method: 'POST',
+        headers: {
+            'X-CSRFToken': document.querySelector('meta[name="csrf-token"]').content
+        },
+        body: formData
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            // Ajouter l'option au select
+            const select = document.getElementById('auteur_id');
+            const option = new Option(data.auteur.nom_complet, data.auteur.id);
+            select.add(option);
+            select.value = data.auteur.id;
+            
+            // Fermer le modal
+            bootstrap.Modal.getInstance(document.getElementById('newAuteurModal')).hide();
+            
+            // Notification
+            showToast('Auteur créé avec succès', 'success');
+        } else {
+            showToast('Erreur: ' + data.message, 'error');
+        }
+    })
+    .catch(error => {
+        showToast('Erreur réseau', 'error');
+    });
+}
+
+// Validation du formulaire
+document.getElementById('articleForm').addEventListener('submit', function(e) {
+    const submitBtn = document.getElementById('submitBtn');
+    submitBtn.disabled = true;
+    submitBtn.innerHTML = '<i class="fas fa-spinner fa-spin me-2"></i>Publication en cours...';
+    
+    // TinyMCE doit mettre à jour le textarea avant soumission
+    tinymce.triggerSave();
+});
+</script>
+
+<style>
+/* Style pour l'aperçu */
+#previewContent {
+    max-height: 70vh;
+    overflow-y: auto;
+}
+
+.blog-content h2 {
+    font-size: 1.8rem;
+    margin: 2rem 0 1rem;
+    color: var(--primary-navy);
+}
+
+.blog-content p {
+    line-height: 1.8;
+    margin-bottom: 1.5rem;
+}
+
+/* Style pour les badges */
+.badge-preview {
+    position: absolute;
+    top: 10px;
+    right: 10px;
+    background: rgba(0,0,0,0.6);
+    color: white;
+    padding: 4px 8px;
+    border-radius: 4px;
+    font-size: 0.8rem;
+}
+</style>
+{% endblock %}
