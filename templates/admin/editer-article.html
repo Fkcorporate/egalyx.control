@@ -1,0 +1,780 @@
+<!-- templates/admin/editer-article.html -->
+{% extends "base.html" %}
+
+{% block title %}Modifier l'article - Administration Blog | Egalyx Control{% endblock %}
+
+{% block meta_description %}Interface d'administration pour modifier un article du blog.{% endblock %}
+
+{% block meta_robots %}noindex, nofollow{% endblock %}
+
+{% block content %}
+<div class="container-fluid py-4">
+    <!-- En-tête de la page -->
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <div>
+            <h1 class="h2 mb-1">
+                <i class="fas fa-edit text-primary me-2"></i>
+                Modifier l'article
+            </h1>
+            <nav aria-label="breadcrumb">
+                <ol class="breadcrumb">
+                    <li class="breadcrumb-item"><a href="{{ url_for('dashboard') }}">Dashboard</a></li>
+                    <li class="breadcrumb-item"><a href="{{ url_for('admin_articles') }}">Articles</a></li>
+                    <li class="breadcrumb-item active" aria-current="page">{{ article.titre|truncate(50) }}</li>
+                </ol>
+            </nav>
+        </div>
+        <div class="d-flex gap-2">
+            <a href="/blog/{{ article.slug }}" target="_blank" class="btn btn-outline-primary">
+                <i class="fas fa-eye me-2"></i>Voir sur le site
+            </a>
+            <a href="{{ url_for('admin_articles') }}" class="btn btn-outline-secondary">
+                <i class="fas fa-arrow-left me-2"></i>Retour à la liste
+            </a>
+        </div>
+    </div>
+
+    <!-- Formulaire principal -->
+    <div class="row">
+        <div class="col-lg-8">
+            <div class="fk-card">
+                <div class="fk-card-header">
+                    <h5 class="mb-0 text-white">
+                        <i class="fas fa-edit me-2"></i>Contenu de l'article
+                    </h5>
+                </div>
+                <div class="fk-card-body">
+                    <form method="POST" id="articleForm" enctype="multipart/form-data">
+                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+
+                        <!-- Titre -->
+                        <div class="mb-3">
+                            <label for="titre" class="form-label fw-bold">
+                                Titre de l'article <span class="text-danger">*</span>
+                            </label>
+                            <input type="text" class="fk-form-control" id="titre" name="titre" 
+                                   value="{{ article.titre }}"
+                                   required maxlength="200">
+                            <div class="form-text">Titre accrocheur et optimisé SEO (max 200 caractères)</div>
+                        </div>
+
+                        <!-- Slug (URL) -->
+                        <div class="mb-3">
+                            <label for="slug" class="form-label fw-bold">
+                                Slug (URL) <span class="text-danger">*</span>
+                            </label>
+                            <div class="input-group">
+                                <span class="input-group-text bg-light">{{ request.host_url }}blog/</span>
+                                <input type="text" class="fk-form-control" id="slug" name="slug" 
+                                       value="{{ article.slug }}"
+                                       required pattern="[a-z0-9-]+" 
+                                       title="Uniquement lettres minuscules, chiffres et tirets">
+                            </div>
+                            <div class="form-text">
+                                <i class="fas fa-info-circle me-1"></i>
+                                Généré automatiquement à partir du titre si laissé vide
+                            </div>
+                        </div>
+
+                        <!-- Accroche -->
+                        <div class="mb-3">
+                            <label for="accroche" class="form-label fw-bold">Accroche</label>
+                            <textarea class="fk-form-control" id="accroche" name="accroche" 
+                                      rows="2" maxlength="300">{{ article.accroche or '' }}</textarea>
+                            <div class="form-text">S'affiche en haut de l'article (max 300 caractères)</div>
+                        </div>
+
+                        <!-- Contenu (avec CKEditor) -->
+                        <div class="mb-3">
+                            <label for="contenu" class="form-label fw-bold">
+                                Contenu <span class="text-danger">*</span>
+                            </label>
+                            <textarea class="fk-form-control" id="contenu" name="contenu" 
+                                      rows="15" required>{{ article.contenu }}</textarea>
+                            <div class="form-text">Utilisez l'éditeur pour structurer votre article</div>
+                        </div>
+
+                        <!-- Extrait (pour listings) -->
+                        <div class="mb-3">
+                            <label for="excerpt" class="form-label fw-bold">Extrait (résumé)</label>
+                            <textarea class="fk-form-control" id="excerpt" name="excerpt" 
+                                      rows="3" maxlength="300">{{ article.excerpt or '' }}</textarea>
+                            <div class="form-text">S'affiche sur la page d'accueil du blog</div>
+                        </div>
+
+                        <!-- Tags -->
+                        <div class="mb-3">
+                            <label for="tags" class="form-label fw-bold">Tags</label>
+                            <input type="text" class="fk-form-control" id="tags" name="tags" 
+                                   value="{{ article.tags or '' }}"
+                                   placeholder="audit, IA, risques, conformité">
+                            <div class="form-text">Séparés par des virgules. Ex: audit, IA, risques</div>
+                        </div>
+
+                        <!-- Image principale actuelle -->
+                        {% if article.image_principale and article.image_principale != '/static/images/blog/default-article.jpg' %}
+                        <div class="mb-3">
+                            <label class="form-label fw-bold">Image principale actuelle</label>
+                            <div class="d-flex align-items-center gap-3">
+                                <img src="{{ article.image_principale }}" alt="Image principale" 
+                                     style="width: 100px; height: 80px; object-fit: cover; border-radius: 4px;">
+                                <div>
+                                    <p class="mb-1">{{ article.image_principale.split('/')[-1] }}</p>
+                                    <button type="button" class="btn btn-sm btn-outline-danger" onclick="supprimerImage('principale')">
+                                        <i class="fas fa-trash me-1"></i>Supprimer
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                        {% endif %}
+
+                        <!-- Nouvelle image principale -->
+                        <div class="mb-3">
+                            <label for="image" class="form-label fw-bold">Nouvelle image principale</label>
+                            <input type="file" class="fk-form-control" id="image" name="image" 
+                                   accept="image/jpeg,image/png,image/webp">
+                            <div class="form-text">Format recommandé : 1200x630px (JPG, PNG, WebP)</div>
+                            <div id="imagePreview" class="mt-2" style="display: none;">
+                                <img src="" alt="Aperçu" style="max-width: 200px; max-height: 150px;" class="img-thumbnail">
+                            </div>
+                        </div>
+
+                        <!-- Image Open Graph actuelle -->
+                        {% if article.image_og and article.image_og != '/static/images/blog/default-og.jpg' %}
+                        <div class="mb-3">
+                            <label class="form-label fw-bold">Image Open Graph actuelle</label>
+                            <div class="d-flex align-items-center gap-3">
+                                <img src="{{ article.image_og }}" alt="Image OG" 
+                                     style="width: 100px; height: 80px; object-fit: cover; border-radius: 4px;">
+                                <div>
+                                    <p class="mb-1">{{ article.image_og.split('/')[-1] }}</p>
+                                    <button type="button" class="btn btn-sm btn-outline-danger" onclick="supprimerImage('og')">
+                                        <i class="fas fa-trash me-1"></i>Supprimer
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                        {% endif %}
+
+                        <!-- Nouvelle image Open Graph -->
+                        <div class="mb-3">
+                            <label for="image_og" class="form-label fw-bold">Nouvelle image Open Graph</label>
+                            <input type="file" class="fk-form-control" id="image_og" name="image_og" 
+                                   accept="image/jpeg,image/png,image/webp">
+                            <div class="form-text">Format recommandé : 1200x630px. Si non fournie, l'image principale sera utilisée</div>
+                        </div>
+
+                        <!-- Meta description (SEO) -->
+                        <div class="mb-3">
+                            <label for="meta_description" class="form-label fw-bold">Meta description (SEO)</label>
+                            <textarea class="fk-form-control" id="meta_description" name="meta_description" 
+                                      rows="2" maxlength="300">{{ article.meta_description or '' }}</textarea>
+                            <div class="form-text">Si non fournie, l'accroche sera utilisée (max 300 caractères)</div>
+                        </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Colonne de droite : paramètres -->
+        <div class="col-lg-4">
+            <!-- Publication -->
+            <div class="fk-card mb-4">
+                <div class="fk-card-header">
+                    <h5 class="mb-0 text-white">
+                        <i class="fas fa-rocket me-2"></i>Publication
+                    </h5>
+                </div>
+                <div class="fk-card-body">
+                    <div class="mb-3">
+                        <div class="form-check form-switch">
+                            <input class="form-check-input" type="checkbox" id="est_publie" name="est_publie" 
+                                   {% if article.est_publie %}checked{% endif %}>
+                            <label class="form-check-label fw-bold" for="est_publie">Publié</label>
+                        </div>
+                        <div class="form-text">
+                            <i class="fas fa-info-circle me-1"></i>
+                            Si coché, l'article est visible sur le blog. Si décoché, il est en brouillon.
+                        </div>
+                    </div>
+
+                    <div class="mb-3">
+                        <label class="form-label fw-bold">Date de création</label>
+                        <p class="form-control-static">{{ article.date_creation.strftime('%d/%m/%Y à %H:%M') }}</p>
+                    </div>
+
+                    <div class="mb-3">
+                        <label class="form-label fw-bold">Dernière modification</label>
+                        <p class="form-control-static">{{ article.date_modification.strftime('%d/%m/%Y à %H:%M') }}</p>
+                    </div>
+
+                    <div class="mb-3">
+                        <label class="form-label fw-bold">Vues</label>
+                        <p class="form-control-static">{{ article.nb_vues }}</p>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Catégorie -->
+            <div class="fk-card mb-4">
+                <div class="fk-card-header">
+                    <h5 class="mb-0 text-white">
+                        <i class="fas fa-folder me-2"></i>Catégorie
+                    </h5>
+                </div>
+                <div class="fk-card-body">
+                    <div class="mb-3">
+                        <label for="categorie_id" class="form-label fw-bold">Catégorie</label>
+                        <select class="fk-form-control" id="categorie_id" name="categorie_id">
+                            <option value="">-- Aucune catégorie --</option>
+                            {% for cat in categories %}
+                            <option value="{{ cat.id }}" {% if article.categorie_id == cat.id %}selected{% endif %}>
+                                {{ cat.nom }}
+                            </option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div class="d-grid">
+                        <button type="button" class="btn btn-outline-primary btn-sm" data-bs-toggle="modal" data-bs-target="#newCategorieModal">
+                            <i class="fas fa-plus-circle me-2"></i>Nouvelle catégorie
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Auteur -->
+            <div class="fk-card mb-4">
+                <div class="fk-card-header">
+                    <h5 class="mb-0 text-white">
+                        <i class="fas fa-user me-2"></i>Auteur
+                    </h5>
+                </div>
+                <div class="fk-card-body">
+                    <div class="mb-3">
+                        <label for="auteur_id" class="form-label fw-bold">Auteur</label>
+                        <select class="fk-form-control" id="auteur_id" name="auteur_id">
+                            <option value="">-- Aucun auteur --</option>
+                            {% for auteur in auteurs %}
+                            <option value="{{ auteur.id }}" {% if article.auteur_id == auteur.id %}selected{% endif %}>
+                                {{ auteur.nom_complet }} ({{ auteur.fonction }})
+                            </option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div class="d-grid">
+                        <button type="button" class="btn btn-outline-primary btn-sm" data-bs-toggle="modal" data-bs-target="#newAuteurModal">
+                            <i class="fas fa-user-plus me-2"></i>Nouvel auteur
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Options avancées -->
+            <div class="fk-card mb-4">
+                <div class="fk-card-header">
+                    <h5 class="mb-0 text-white">
+                        <i class="fas fa-cog me-2"></i>Options avancées
+                    </h5>
+                </div>
+                <div class="fk-card-body">
+                    <div class="mb-3">
+                        <label for="temps_lecture" class="form-label fw-bold">Temps de lecture (minutes)</label>
+                        <input type="number" class="fk-form-control" id="temps_lecture" name="temps_lecture" 
+                               min="1" max="60" value="{{ article.temps_lecture or 5 }}">
+                    </div>
+                </div>
+            </div>
+
+            <!-- Boutons d'action -->
+            <div class="d-grid gap-2">
+                <button type="submit" class="btn btn-primary btn-lg" id="submitBtn">
+                    <i class="fas fa-save me-2"></i>Enregistrer les modifications
+                </button>
+                <button type="button" class="btn btn-outline-danger" onclick="supprimerArticle()">
+                    <i class="fas fa-trash me-2"></i>Supprimer l'article
+                </button>
+                <button type="button" class="btn btn-outline-secondary" id="previewBtn">
+                    <i class="fas fa-eye me-2"></i>Aperçu
+                </button>
+            </div>
+        </div>
+    </div>
+    </form>
+</div>
+
+<!-- Modal Nouvelle Catégorie -->
+<div class="modal fade" id="newCategorieModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Nouvelle catégorie</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <form id="newCategorieForm">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                    
+                    <div class="mb-3">
+                        <label class="form-label">Nom de la catégorie *</label>
+                        <input type="text" class="fk-form-control" id="categorie_nom" required>
+                    </div>
+                    
+                    <div class="mb-3">
+                        <label class="form-label">Slug (URL)</label>
+                        <div class="input-group">
+                            <span class="input-group-text">/blog/categorie/</span>
+                            <input type="text" class="fk-form-control" id="categorie_slug">
+                        </div>
+                        <small class="text-muted">Laisser vide pour génération automatique</small>
+                    </div>
+                    
+                    <div class="mb-3">
+                        <label class="form-label">Description</label>
+                        <textarea class="fk-form-control" id="categorie_description" rows="2"></textarea>
+                    </div>
+                </form>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Annuler</button>
+                <button type="button" class="btn btn-primary" onclick="creerCategorie()">Créer</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Modal Nouvel Auteur -->
+<div class="modal fade" id="newAuteurModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Nouvel auteur</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <form id="newAuteurForm">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                    
+                    <div class="row">
+                        <div class="col-md-6 mb-3">
+                            <label class="form-label">Prénom *</label>
+                            <input type="text" class="fk-form-control" id="auteur_prenom" required>
+                        </div>
+                        <div class="col-md-6 mb-3">
+                            <label class="form-label">Nom *</label>
+                            <input type="text" class="fk-form-control" id="auteur_nom" required>
+                        </div>
+                    </div>
+                    
+                    <div class="mb-3">
+                        <label class="form-label">Email</label>
+                        <input type="email" class="fk-form-control" id="auteur_email">
+                    </div>
+                    
+                    <div class="mb-3">
+                        <label class="form-label">Fonction</label>
+                        <input type="text" class="fk-form-control" id="auteur_fonction" placeholder="Expert Audit & Risques">
+                    </div>
+                    
+                    <div class="mb-3">
+                        <label class="form-label">Bio courte</label>
+                        <textarea class="fk-form-control" id="auteur_bio_courte" rows="2" placeholder="Courte présentation..."></textarea>
+                    </div>
+                    
+                    <div class="mb-3">
+                        <label class="form-label">Bio complète</label>
+                        <textarea class="fk-form-control" id="auteur_bio" rows="3" placeholder="Biographie détaillée..."></textarea>
+                    </div>
+                    
+                    <div class="mb-3">
+                        <label class="form-label">Photo</label>
+                        <input type="file" class="fk-form-control" id="auteur_image" accept="image/*">
+                    </div>
+                    
+                    <div class="mb-3">
+                        <label class="form-label">Expérience (années)</label>
+                        <input type="number" class="fk-form-control" id="auteur_experience" min="0" value="5">
+                    </div>
+                </form>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Annuler</button>
+                <button type="button" class="btn btn-primary" onclick="creerAuteur()">Créer</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Modal Aperçu -->
+<div class="modal fade" id="previewModal" tabindex="-1">
+    <div class="modal-dialog modal-xl">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Aperçu de l'article</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body" id="previewContent">
+                <!-- Le contenu sera injecté ici -->
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Fermer</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Modal confirmation suppression -->
+<div class="modal fade" id="deleteModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Confirmer la suppression</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <p>Êtes-vous sûr de vouloir supprimer l'article <strong>{{ article.titre }}</strong> ?</p>
+                <p class="text-danger"><i class="fas fa-exclamation-triangle me-2"></i>Cette action est irréversible.</p>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Annuler</button>
+                <button type="button" class="btn btn-danger" id="confirmDeleteBtn">Supprimer</button>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+{{ super() }}
+
+<!-- CKEditor -->
+<script src="https://cdn.ckeditor.com/ckeditor5/39.0.1/classic/ckeditor.js"></script>
+
+<script>
+let editor;
+let deleteModal;
+
+// ============================================
+// INITIALISATION CKEDITOR
+// ============================================
+ClassicEditor
+    .create(document.querySelector('#contenu'), {
+        toolbar: {
+            items: [
+                'heading', '|',
+                'bold', 'italic', 'underline', 'strikethrough', '|',
+                'alignment', '|',
+                'bulletedList', 'numberedList', '|',
+                'outdent', 'indent', '|',
+                'link', 'blockQuote', 'insertTable', 'mediaEmbed', '|',
+                'undo', 'redo'
+            ]
+        },
+        heading: {
+            options: [
+                { model: 'paragraph', title: 'Paragraphe', class: 'ck-heading_paragraph' },
+                { model: 'heading1', view: 'h1', title: 'Titre 1', class: 'ck-heading_heading1' },
+                { model: 'heading2', view: 'h2', title: 'Titre 2', class: 'ck-heading_heading2' },
+                { model: 'heading3', view: 'h3', title: 'Titre 3', class: 'ck-heading_heading3' }
+            ]
+        },
+        language: 'fr',
+        placeholder: 'Rédigez votre article ici...'
+    })
+    .then(newEditor => {
+        editor = newEditor;
+        console.log('✅ CKEditor initialisé');
+        
+        // Mettre à jour le textarea initial
+        document.getElementById('contenu').value = editor.getData();
+        
+        // Mettre à jour à chaque changement
+        editor.model.document.on('change:data', () => {
+            document.getElementById('contenu').value = editor.getData();
+        });
+    })
+    .catch(error => {
+        console.error('❌ Erreur CKEditor:', error);
+    });
+
+// ============================================
+// GÉNÉRATION AUTOMATIQUE DU SLUG
+// ============================================
+document.getElementById('titre').addEventListener('input', function() {
+    const slugField = document.getElementById('slug');
+    if (!slugField.value || slugField.value === '{{ article.slug }}') {
+        const titre = this.value;
+        const slug = titre.toLowerCase()
+            .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+            .replace(/[^a-z0-9]+/g, '-')
+            .replace(/^-|-$/g, '');
+        if (slug) {
+            slugField.value = slug;
+        }
+    }
+});
+
+// ============================================
+// APERÇU IMAGE
+// ============================================
+document.getElementById('image').addEventListener('change', function(e) {
+    const file = e.target.files[0];
+    if (file) {
+        const reader = new FileReader();
+        reader.onload = function(e) {
+            const preview = document.getElementById('imagePreview');
+            preview.style.display = 'block';
+            preview.querySelector('img').src = e.target.result;
+        }
+        reader.readAsDataURL(file);
+    }
+});
+
+// ============================================
+// APERÇU DE L'ARTICLE
+// ============================================
+document.getElementById('previewBtn').addEventListener('click', function(e) {
+    e.preventDefault();
+    
+    const titre = document.getElementById('titre').value || 'Titre de l\'article';
+    const accroche = document.getElementById('accroche').value || '';
+    const contenu = editor.getData() || '<p>Contenu de l\'article...</p>';
+    
+    const previewHtml = `
+        <div class="container">
+            <h1 class="mb-4">${titre}</h1>
+            ${accroche ? `<div class="lead mb-4">${accroche}</div>` : ''}
+            <div class="blog-content">
+                ${contenu}
+            </div>
+        </div>
+    `;
+    
+    document.getElementById('previewContent').innerHTML = previewHtml;
+    new bootstrap.Modal(document.getElementById('previewModal')).show();
+});
+
+// ============================================
+// SOUMISSION DU FORMULAIRE
+// ============================================
+document.getElementById('articleForm').addEventListener('submit', function(e) {
+    const submitBtn = document.getElementById('submitBtn');
+    
+    document.getElementById('contenu').value = editor.getData();
+    
+    if (!document.getElementById('contenu').value.trim()) {
+        alert('Le contenu de l\'article ne peut pas être vide');
+        e.preventDefault();
+        return false;
+    }
+    
+    submitBtn.disabled = true;
+    submitBtn.innerHTML = '<i class="fas fa-spinner fa-spin me-2"></i>Enregistrement...';
+});
+
+// ============================================
+// SUPPRESSION D'ARTICLE
+// ============================================
+function supprimerArticle() {
+    deleteModal = new bootstrap.Modal(document.getElementById('deleteModal'));
+    deleteModal.show();
+}
+
+document.getElementById('confirmDeleteBtn')?.addEventListener('click', function() {
+    fetch(`/api/admin/articles/{{ article.id }}`, {
+        method: 'DELETE',
+        headers: {
+            'X-CSRFToken': document.querySelector('meta[name="csrf-token"]').content
+        }
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            window.location.href = "{{ url_for('admin_articles') }}";
+        } else {
+            alert('Erreur: ' + data.message);
+            deleteModal.hide();
+        }
+    })
+    .catch(error => {
+        alert('Erreur réseau');
+        deleteModal.hide();
+    });
+});
+
+// ============================================
+// SUPPRESSION D'IMAGE
+// ============================================
+function supprimerImage(type) {
+    if (!confirm(`Voulez-vous supprimer cette image ?`)) return;
+    
+    fetch(`/api/admin/articles/{{ article.id }}/image/${type}`, {
+        method: 'DELETE',
+        headers: {
+            'X-CSRFToken': document.querySelector('meta[name="csrf-token"]').content
+        }
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            location.reload();
+        } else {
+            alert('Erreur: ' + data.message);
+        }
+    })
+    .catch(error => {
+        alert('Erreur réseau');
+    });
+}
+
+// ============================================
+// CRÉER UNE CATÉGORIE VIA AJAX
+// ============================================
+function creerCategorie() {
+    const nom = document.getElementById('categorie_nom').value;
+    if (!nom) {
+        alert('Le nom de la catégorie est requis');
+        return;
+    }
+    
+    const data = {
+        nom: nom,
+        slug: document.getElementById('categorie_slug').value,
+        description: document.getElementById('categorie_description').value
+    };
+    
+    fetch('/api/admin/categories', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            'X-CSRFToken': document.querySelector('meta[name="csrf-token"]').content
+        },
+        body: JSON.stringify(data)
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            const select = document.getElementById('categorie_id');
+            const option = new Option(data.categorie.nom, data.categorie.id);
+            select.add(option);
+            select.value = data.categorie.id;
+            
+            bootstrap.Modal.getInstance(document.getElementById('newCategorieModal')).hide();
+            
+            document.getElementById('categorie_nom').value = '';
+            document.getElementById('categorie_slug').value = '';
+            document.getElementById('categorie_description').value = '';
+            
+            showToast('Catégorie créée avec succès', 'success');
+        } else {
+            showToast('Erreur: ' + data.message, 'error');
+        }
+    })
+    .catch(error => {
+        showToast('Erreur réseau', 'error');
+    });
+}
+
+// ============================================
+// CRÉER UN AUTEUR VIA AJAX
+// ============================================
+function creerAuteur() {
+    const prenom = document.getElementById('auteur_prenom').value;
+    const nom = document.getElementById('auteur_nom').value;
+    
+    if (!prenom || !nom) {
+        alert('Le prénom et le nom sont requis');
+        return;
+    }
+    
+    const formData = new FormData();
+    formData.append('prenom', prenom);
+    formData.append('nom', nom);
+    formData.append('email', document.getElementById('auteur_email').value);
+    formData.append('fonction', document.getElementById('auteur_fonction').value);
+    formData.append('bio_courte', document.getElementById('auteur_bio_courte').value);
+    formData.append('bio', document.getElementById('auteur_bio').value);
+    formData.append('experience', document.getElementById('auteur_experience').value);
+    
+    const imageFile = document.getElementById('auteur_image').files[0];
+    if (imageFile) {
+        formData.append('image', imageFile);
+    }
+    
+    fetch('/api/admin/auteurs', {
+        method: 'POST',
+        headers: {
+            'X-CSRFToken': document.querySelector('meta[name="csrf-token"]').content
+        },
+        body: formData
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            const select = document.getElementById('auteur_id');
+            const option = new Option(data.auteur.nom_complet, data.auteur.id);
+            select.add(option);
+            select.value = data.auteur.id;
+            
+            bootstrap.Modal.getInstance(document.getElementById('newAuteurModal')).hide();
+            
+            document.getElementById('auteur_prenom').value = '';
+            document.getElementById('auteur_nom').value = '';
+            document.getElementById('auteur_email').value = '';
+            document.getElementById('auteur_fonction').value = '';
+            document.getElementById('auteur_bio_courte').value = '';
+            document.getElementById('auteur_bio').value = '';
+            document.getElementById('auteur_experience').value = '5';
+            document.getElementById('auteur_image').value = '';
+            
+            showToast('Auteur créé avec succès', 'success');
+        } else {
+            showToast('Erreur: ' + data.message, 'error');
+        }
+    })
+    .catch(error => {
+        showToast('Erreur réseau', 'error');
+    });
+}
+
+// ============================================
+// FONCTION DE NOTIFICATION
+// ============================================
+if (typeof showToast !== 'function') {
+    window.showToast = function(message, type) {
+        alert(message);
+    };
+}
+</script>
+
+<style>
+.ck-editor__editable {
+    min-height: 400px;
+    max-height: 600px;
+}
+
+#previewContent {
+    max-height: 70vh;
+    overflow-y: auto;
+}
+
+.blog-content h2 {
+    font-size: 1.8rem;
+    margin: 2rem 0 1rem;
+    color: var(--primary-navy);
+}
+
+.blog-content p {
+    line-height: 1.8;
+    margin-bottom: 1.5rem;
+}
+
+.modal-xl {
+    max-width: 90%;
+}
+
+@media (min-width: 1200px) {
+    .modal-xl {
+        max-width: 1140px;
+    }
+}
+</style>
+{% endblock %}

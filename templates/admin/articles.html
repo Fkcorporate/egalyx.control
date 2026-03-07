@@ -1,0 +1,459 @@
+<!-- templates/admin/articles.html -->
+{% extends "base.html" %}
+
+{% block title %}Gestion des articles - Administration | Egalyx Control{% endblock %}
+
+{% block meta_description %}Interface d'administration pour gérer les articles du blog.{% endblock %}
+
+{% block meta_robots %}noindex, nofollow{% endblock %}
+
+{% block content %}
+<div class="container-fluid py-4">
+    <!-- En-tête -->
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <div>
+            <h1 class="h2 mb-1">
+                <i class="fas fa-newspaper text-primary me-2"></i>
+                Gestion des articles
+            </h1>
+            <nav aria-label="breadcrumb">
+                <ol class="breadcrumb">
+                    <li class="breadcrumb-item"><a href="{{ url_for('dashboard') }}">Dashboard</a></li>
+                    <li class="breadcrumb-item active" aria-current="page">Articles</li>
+                </ol>
+            </nav>
+        </div>
+        <div class="d-flex gap-2">
+            <button class="btn btn-success" data-bs-toggle="modal" data-bs-target="#generateModal">
+                <i class="fas fa-robot me-2"></i>Générer avec IA
+            </button>
+            <a href="{{ url_for('nouvel_article') }}" class="btn btn-primary">
+                <i class="fas fa-plus-circle me-2"></i>Nouvel article
+            </a>
+        </div>
+    </div>
+
+    <!-- Filtres et recherche -->
+    <div class="fk-card mb-4">
+        <div class="fk-card-body">
+            <div class="row g-3">
+                <div class="col-md-4">
+                    <input type="text" class="fk-form-control" id="searchInput" placeholder="Rechercher un article...">
+                </div>
+                <div class="col-md-3">
+                    <select class="fk-form-control" id="categorieFilter">
+                        <option value="">Toutes les catégories</option>
+                        {% for cat in categories %}
+                        <option value="{{ cat.id }}">{{ cat.nom }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="col-md-3">
+                    <select class="fk-form-control" id="statutFilter">
+                        <option value="">Tous les statuts</option>
+                        <option value="publie">Publié</option>
+                        <option value="brouillon">Brouillon</option>
+                    </select>
+                </div>
+                <div class="col-md-2">
+                    <button class="btn btn-outline-secondary w-100" onclick="resetFilters()">
+                        <i class="fas fa-undo me-2"></i>Réinitialiser
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Liste des articles -->
+    <div class="fk-card">
+        <div class="fk-card-header d-flex justify-content-between align-items-center">
+            <h5 class="mb-0 text-white">
+                <i class="fas fa-list me-2"></i>Tous les articles
+                <span class="badge bg-light text-dark ms-2">{{ articles|length }}</span>
+            </h5>
+            <div class="btn-group">
+                <button class="btn btn-sm btn-light" onclick="exportCSV()">
+                    <i class="fas fa-file-csv me-1"></i>CSV
+                </button>
+                <button class="btn btn-sm btn-light" onclick="exportPDF()">
+                    <i class="fas fa-file-pdf me-1"></i>PDF
+                </button>
+            </div>
+        </div>
+        <div class="fk-card-body p-0">
+            <div class="table-responsive">
+                <table class="fk-table table mb-0" id="articlesTable">
+                    <thead>
+                        <tr>
+                            <th style="width: 30px;">
+                                <input type="checkbox" id="selectAll">
+                            </th>
+                            <th>Image</th>
+                            <th>Titre</th>
+                            <th>Catégorie</th>
+                            <th>Auteur</th>
+                            <th>Date</th>
+                            <th>Statut</th>
+                            <th>Vues</th>
+                            <th style="width: 120px;">Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for article in articles %}
+                        <tr>
+                            <td>
+                                <input type="checkbox" class="article-select" value="{{ article.id }}">
+                            </td>
+                            <td>
+                                {% if article.image_principale %}
+                                <img src="{{ article.image_principale }}" alt="{{ article.titre }}" 
+                                     style="width: 50px; height: 40px; object-fit: cover; border-radius: 4px;">
+                                {% else %}
+                                <div style="width: 50px; height: 40px; background: #e9ecef; border-radius: 4px; display: flex; align-items: center; justify-content: center;">
+                                    <i class="fas fa-image text-muted"></i>
+                                </div>
+                                {% endif %}
+                            </td>
+                            <td>
+                                <strong>{{ article.titre }}</strong><br>
+                                <small class="text-muted">/blog/{{ article.slug }}</small>
+                            </td>
+                            <td>
+                                {% if article.categorie %}
+                                <span class="badge" style="background: linear-gradient(135deg, #0066CC, #3B82F6); color: white;">
+                                    {{ article.categorie.nom }}
+                                </span>
+                                {% else %}
+                                <span class="badge bg-secondary">Non catégorisé</span>
+                                {% endif %}
+                            </td>
+                            <td>
+                                {% if article.auteur %}
+                                {{ article.auteur.prenom }} {{ article.auteur.nom }}
+                                {% else %}
+                                <span class="text-muted">Inconnu</span>
+                                {% endif %}
+                            </td>
+                            <td>
+                                {{ article.date_publication.strftime('%d/%m/%Y') }}<br>
+                                <small class="text-muted">{{ article.date_publication.strftime('%H:%M') }}</small>
+                            </td>
+                            <td>
+                                {% if article.est_publie %}
+                                <span class="badge" style="background: #10b981; color: white;">
+                                    <i class="fas fa-check-circle me-1"></i>Publié
+                                </span>
+                                {% else %}
+                                <span class="badge" style="background: #6c757d; color: white;">
+                                    <i class="fas fa-pen me-1"></i>Brouillon
+                                </span>
+                                {% endif %}
+                            </td>
+                            <td class="text-center">
+                                <span class="badge bg-info">{{ article.nb_vues|default(0) }}</span>
+                            </td>
+                            <td>
+                                <div class="btn-group">
+                                    <a href="/blog/{{ article.slug }}" target="_blank" 
+                                       class="btn btn-sm btn-outline-primary" title="Voir">
+                                        <i class="fas fa-eye"></i>
+                                    </a>
+                                    <a href="{{ url_for('editer_article', id=article.id) }}" 
+                                       class="btn btn-sm btn-outline-warning" title="Modifier">
+                                        <i class="fas fa-edit"></i>
+                                    </a>
+                                    <button class="btn btn-sm btn-outline-danger" 
+                                            onclick="supprimerArticle({{ article.id }}, '{{ article.titre|escape }}')"
+                                            title="Supprimer">
+                                        <i class="fas fa-trash"></i>
+                                    </button>
+                                </div>
+                            </td>
+                        </tr>
+                        {% else %}
+                        <tr>
+                            <td colspan="9" class="text-center py-5">
+                                <i class="fas fa-newspaper fa-3x text-muted mb-3"></i>
+                                <h5>Aucun article trouvé</h5>
+                                <p class="text-muted">Commencez par créer votre premier article !</p>
+                                <a href="{{ url_for('nouvel_article') }}" class="btn btn-primary">
+                                    <i class="fas fa-plus-circle me-2"></i>Créer un article
+                                </a>
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+        <div class="fk-card-footer d-flex justify-content-between align-items-center p-3">
+            <div>
+                <button class="btn btn-sm btn-danger" onclick="supprimerSelection()" id="deleteSelectedBtn" style="display: none;">
+                    <i class="fas fa-trash me-2"></i>Supprimer la sélection
+                </button>
+            </div>
+            <nav>
+                <ul class="pagination mb-0">
+                    <li class="page-item disabled">
+                        <a class="page-link" href="#">Précédent</a>
+                    </li>
+                    <li class="page-item active"><a class="page-link" href="#">1</a></li>
+                    <li class="page-item"><a class="page-link" href="#">2</a></li>
+                    <li class="page-item"><a class="page-link" href="#">3</a></li>
+                    <li class="page-item">
+                        <a class="page-link" href="#">Suivant</a>
+                    </li>
+                </ul>
+            </nav>
+        </div>
+    </div>
+</div>
+
+<!-- Modal de confirmation suppression -->
+<div class="modal fade" id="deleteModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Confirmer la suppression</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <p>Êtes-vous sûr de vouloir supprimer l'article <strong id="articleTitre"></strong> ?</p>
+                <p class="text-danger"><i class="fas fa-exclamation-triangle me-2"></i>Cette action est irréversible.</p>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Annuler</button>
+                <button type="button" class="btn btn-danger" id="confirmDeleteBtn">Supprimer</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Modal de génération IA -->
+<div class="modal fade" id="generateModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Générer des articles avec IA</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <form id="generateForm">
+                    <div class="mb-3">
+                        <label class="form-label">Nombre d'articles</label>
+                        <input type="number" class="fk-form-control" id="nb_articles" min="1" max="20" value="5">
+                    </div>
+                    
+                    <div class="mb-3">
+                        <label class="form-label">Sujet principal (optionnel)</label>
+                        <input type="text" class="fk-form-control" id="sujet" 
+                               placeholder="Ex: Audit interne, Risques, Conformité...">
+                    </div>
+                    
+                    <div class="mb-3">
+                        <label class="form-label">Catégorie</label>
+                        <select class="fk-form-control" id="gen_categorie_id">
+                            {% for cat in categories %}
+                            <option value="{{ cat.id }}">{{ cat.nom }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    
+                    <div class="mb-3">
+                        <label class="form-label">Auteur</label>
+                        <select class="fk-form-control" id="gen_auteur_id">
+                            {% for auteur in auteurs %}
+                            <option value="{{ auteur.id }}">{{ auteur.nom_complet }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                </form>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Annuler</button>
+                <button type="button" class="btn btn-success" onclick="genererArticles()">
+                    <i class="fas fa-magic me-2"></i>Générer
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+{{ super() }}
+<script>
+let articleToDelete = null;
+let deleteModal = null;
+
+document.addEventListener('DOMContentLoaded', function() {
+    deleteModal = new bootstrap.Modal(document.getElementById('deleteModal'));
+    
+    // Recherche en temps réel
+    document.getElementById('searchInput').addEventListener('keyup', filterTable);
+    document.getElementById('categorieFilter').addEventListener('change', filterTable);
+    document.getElementById('statutFilter').addEventListener('change', filterTable);
+    
+    // Sélection multiple
+    document.getElementById('selectAll').addEventListener('change', function(e) {
+        document.querySelectorAll('.article-select').forEach(cb => {
+            cb.checked = e.target.checked;
+        });
+        updateDeleteSelectedBtn();
+    });
+    
+    document.querySelectorAll('.article-select').forEach(cb => {
+        cb.addEventListener('change', updateDeleteSelectedBtn);
+    });
+});
+
+function filterTable() {
+    const search = document.getElementById('searchInput').value.toLowerCase();
+    const categorie = document.getElementById('categorieFilter').value;
+    const statut = document.getElementById('statutFilter').value;
+    
+    document.querySelectorAll('#articlesTable tbody tr').forEach(row => {
+        let show = true;
+        
+        if (search) {
+            const titre = row.cells[2].innerText.toLowerCase();
+            if (!titre.includes(search)) show = false;
+        }
+        
+        if (categorie && show) {
+            const catCell = row.cells[3].innerText.trim();
+            if (!catCell.includes(categorie)) show = false;
+        }
+        
+        if (statut && show) {
+            const statutCell = row.cells[6].innerText.trim();
+            if (statut === 'publie' && !statutCell.includes('Publié')) show = false;
+            if (statut === 'brouillon' && !statutCell.includes('Brouillon')) show = false;
+        }
+        
+        row.style.display = show ? '' : 'none';
+    });
+}
+
+function resetFilters() {
+    document.getElementById('searchInput').value = '';
+    document.getElementById('categorieFilter').value = '';
+    document.getElementById('statutFilter').value = '';
+    filterTable();
+}
+
+function supprimerArticle(id, titre) {
+    articleToDelete = id;
+    document.getElementById('articleTitre').innerText = titre;
+    deleteModal.show();
+}
+
+document.getElementById('confirmDeleteBtn').addEventListener('click', function() {
+    if (articleToDelete) {
+        fetch(`/api/admin/articles/${articleToDelete}`, {
+            method: 'DELETE',
+            headers: {
+                'X-CSRFToken': document.querySelector('meta[name="csrf-token"]').content
+            }
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                location.reload();
+            } else {
+                alert('Erreur: ' + data.message);
+            }
+        })
+        .catch(error => {
+            alert('Erreur réseau');
+        });
+    }
+});
+
+function updateDeleteSelectedBtn() {
+    const selected = document.querySelectorAll('.article-select:checked').length;
+    const btn = document.getElementById('deleteSelectedBtn');
+    if (selected > 0) {
+        btn.style.display = 'inline-block';
+        btn.innerHTML = `<i class="fas fa-trash me-2"></i>Supprimer ${selected} article(s)`;
+    } else {
+        btn.style.display = 'none';
+    }
+}
+
+function supprimerSelection() {
+    const selected = Array.from(document.querySelectorAll('.article-select:checked'))
+        .map(cb => cb.value);
+    
+    if (selected.length === 0) return;
+    
+    if (confirm(`Voulez-vous vraiment supprimer ${selected.length} article(s) ?`)) {
+        fetch('/api/admin/articles/supprimer-multiple', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRFToken': document.querySelector('meta[name="csrf-token"]').content
+            },
+            body: JSON.stringify({ ids: selected })
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                location.reload();
+            } else {
+                alert('Erreur: ' + data.message);
+            }
+        })
+        .catch(error => {
+            alert('Erreur réseau');
+        });
+    }
+}
+
+function exportCSV() {
+    window.location.href = '/api/admin/articles/export/csv';
+}
+
+function exportPDF() {
+    alert('Export PDF - À implémenter');
+}
+
+function genererArticles() {
+    const btn = event.target;
+    const originalText = btn.innerHTML;
+    btn.innerHTML = '<i class="fas fa-spinner fa-spin me-2"></i>Génération en cours...';
+    btn.disabled = true;
+    
+    fetch('/api/admin/articles/generer', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            'X-CSRFToken': document.querySelector('meta[name="csrf-token"]').content
+        },
+        body: JSON.stringify({
+            nombre: document.getElementById('nb_articles').value,
+            sujet: document.getElementById('sujet').value,
+            categorie_id: document.getElementById('gen_categorie_id').value,
+            auteur_id: document.getElementById('gen_auteur_id').value
+        })
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            alert(`${data.articles} articles générés avec succès !`);
+            location.reload();
+        } else {
+            alert('Erreur: ' + data.message);
+        }
+    })
+    .catch(error => {
+        alert('Erreur réseau');
+    })
+    .finally(() => {
+        btn.innerHTML = originalText;
+        btn.disabled = false;
+        bootstrap.Modal.getInstance(document.getElementById('generateModal')).hide();
+    });
+}
+</script>
+{% endblock %}
