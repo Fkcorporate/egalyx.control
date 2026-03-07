@@ -6458,6 +6458,93 @@ class VerificationDispositif(db.Model):
     verificateur = db.relationship('User')
 
 
+class Article(db.Model):
+    __tablename__ = 'articles'
+    
+    id = db.Column(db.Integer, primary_key=True)
+    
+    # Informations de base
+    titre = db.Column(db.String(200), nullable=False)
+    slug = db.Column(db.String(200), unique=True, nullable=False)  # ← OBLIGATOIRE pour l'URL
+    accroche = db.Column(db.String(300))
+    contenu = db.Column(db.Text, nullable=False)
+    excerpt = db.Column(db.String(300))  # Résumé pour les listings
+    
+    # Images
+    image_principale = db.Column(db.String(500), default='/static/images/blog/default-article.jpg')
+    image_og = db.Column(db.String(500), default='/static/images/blog/default-og.jpg')
+    
+    # Catégorie et tags
+    categorie_id = db.Column(db.Integer, db.ForeignKey('categories.id'))
+    categorie = db.relationship('Categorie', backref='articles')
+    tags = db.Column(db.String(500))  # Stocké comme "tag1,tag2,tag3"
+    
+    # Auteur
+    auteur_id = db.Column(db.Integer, db.ForeignKey('auteurs.id'))
+    auteur = db.relationship('Auteur', backref='articles')
+    
+    # Dates (TRÈS IMPORTANT pour le sitemap)
+    date_publication = db.Column(db.DateTime, default=datetime.utcnow)
+    date_modification = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)  # ← OPTIONNEL mais RECOMMANDÉ
+    date_creation = db.Column(db.DateTime, default=datetime.utcnow)
+    
+    # Statistiques et statut
+    est_publie = db.Column(db.Boolean, default=True)  # ← OBLIGATOIRE (pour filtrer)
+    est_supprime = db.Column(db.Boolean, default=False)
+    nb_vues = db.Column(db.Integer, default=0)
+    temps_lecture = db.Column(db.Integer, default=5)  # en minutes
+    
+    # SEO
+    meta_description = db.Column(db.String(300))
+    meta_keywords = db.Column(db.String(500))
+    
+    def __repr__(self):
+        return f'<Article {self.titre}>'
+    
+    @property
+    def url(self):
+        return f"/blog/{self.slug}"
+    
+    @property
+    def tags_list(self):
+        if self.tags:
+            return self.tags.split(',')
+        return []
+
+class Auteur(db.Model):
+    __tablename__ = 'auteurs'
+    
+    id = db.Column(db.Integer, primary_key=True)
+    nom = db.Column(db.String(100), nullable=False)
+    prenom = db.Column(db.String(100), nullable=False)
+    slug = db.Column(db.String(200), unique=True)
+    email = db.Column(db.String(200))
+    bio = db.Column(db.Text)
+    bio_courte = db.Column(db.String(300))
+    fonction = db.Column(db.String(200))
+    image = db.Column(db.String(500), default='/static/images/authors/default.jpg')
+    experience = db.Column(db.Integer, default=0)  # années d'expérience
+    
+    def __repr__(self):
+        return f'{self.prenom} {self.nom}'
+    
+    @property
+    def nom_complet(self):
+        return f"{self.prenom} {self.nom}"
+
+
+class Categorie(db.Model):
+    __tablename__ = 'categories'
+    
+    id = db.Column(db.Integer, primary_key=True)
+    nom = db.Column(db.String(100), nullable=False, unique=True)
+    slug = db.Column(db.String(200), unique=True)
+    description = db.Column(db.String(500))
+    
+    def __repr__(self):
+        return self.nom
+
+
 class CommentairePlanAction(db.Model):
     __tablename__ = 'commentaires_plan_action'
     
