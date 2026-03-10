@@ -2395,6 +2395,36 @@ class Constatation(db.Model):
     def __repr__(self):
         return f'<Constatation {self.reference}: {self.description[:50]}...>'
 
+
+# models.py - À AJOUTER (par exemple après les autres modèles)
+
+class DemandeContact(db.Model):
+    """Modèle pour les demandes de contact"""
+    __tablename__ = 'demandes_contact'
+    
+    id = db.Column(db.Integer, primary_key=True)
+    reference = db.Column(db.String(50), unique=True, nullable=False)
+    nom_complet = db.Column(db.String(200), nullable=False)
+    email = db.Column(db.String(200), nullable=False)
+    societe = db.Column(db.String(200))
+    telephone = db.Column(db.String(50))
+    sujet = db.Column(db.String(200))
+    message = db.Column(db.Text, nullable=False)
+    
+    # Métadonnées
+    ip_address = db.Column(db.String(50))
+    user_agent = db.Column(db.String(500))
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    
+    # Statut
+    traite = db.Column(db.Boolean, default=False)
+    traite_le = db.Column(db.DateTime)
+    traite_par = db.Column(db.Integer, db.ForeignKey('users.id'))
+    notes = db.Column(db.Text)
+    
+    def __repr__(self):
+        return f'<DemandeContact {self.reference}>'
+
 class FichierMetadata(db.Model):
     __tablename__ = 'fichiers_metadata'
     
