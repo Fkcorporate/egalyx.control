@@ -1730,9 +1730,57 @@
     }
 
     function resetZoom() {
-        echelle = 1;
-        appliquerZoom();
-    }
+    echelle = 1;
+    
+    const conteneur = document.getElementById('conteneur-elements');
+    const svg = document.getElementById('svg-liens');
+    const editeur = document.getElementById('editeur-logigramme');
+    
+    // Réinitialiser les transformations
+    conteneur.style.transform = 'scale(1)';
+    svg.style.transform = 'scale(1)';
+    
+    // IMPORTANT : Réinitialiser aussi les dimensions du SVG
+    svg.style.width = '2000px';
+    svg.style.height = '2000px';
+    
+    // Réinitialiser la position de défilement pour voir toute la zone
+    editeur.scrollLeft = 0;
+    editeur.scrollTop = 0;
+    
+    // Forcer le redessin des liens
+    afficherLiens();
+    
+    afficherMessage('Zoom normal', 'info');
+}
+
+function zoomIn() {
+    echelle = Math.min(2, echelle + 0.2);
+    appliquerZoom();
+}
+
+function zoomOut() {
+    echelle = Math.max(0.5, echelle - 0.2);
+    appliquerZoom();
+}
+
+function appliquerZoom() {
+    const conteneur = document.getElementById('conteneur-elements');
+    const svg = document.getElementById('svg-liens');
+    
+    // Appliquer le zoom
+    conteneur.style.transform = `scale(${echelle})`;
+    svg.style.transform = `scale(${echelle})`;
+    
+    // Maintenir l'origine en haut à gauche
+    conteneur.style.transformOrigin = '0 0';
+    svg.style.transformOrigin = '0 0';
+    
+    // Redessiner les liens pour qu'ils s'adaptent au nouveau zoom
+    afficherLiens();
+    
+    afficherMessage(`Zoom: ${Math.round(echelle * 100)}%`, 'info');
+}
 
     function appliquerZoom() {
         const conteneur = document.getElementById('conteneur-elements');
@@ -1756,30 +1804,39 @@
     }
 
     // Gestion de la création de liens
-    function gererCreationLien(elementId) {
-        if (!elementSourceLien) {
-            // Premier clic - sélectionner la source
-            elementSourceLien = elementId;
-            const element = document.querySelector(`[data-id="${elementId}"]`);
-            element.classList.add('selected');
-            
-            // Afficher le modal pour choisir le type de lien
-            const modal = new bootstrap.Modal(document.getElementById('modal-type-lien'));
-            modal.show();
-            
+    // CORRECTION : Modifiez cette fonction
+function gererCreationLien(elementId) {
+    if (!elementSourceLien) {
+        // Premier clic - sélectionner la source
+        elementSourceLien = elementId;
+        const element = document.querySelector(`[data-id="${elementId}"]`);
+        element.classList.add('selected');
+        
+        // Afficher le modal pour choisir le type de lien
+        const modal = new bootstrap.Modal(document.getElementById('modal-type-lien'));
+        modal.show();
+        
+        // AJOUTEZ CETTE PARTIE : Attendre la sélection du type
+        const typeButtons = document.querySelectorAll('[data-lien-type]');
+        typeButtons.forEach(btn => {
+            btn.addEventListener('click', function(e) {
+                typeLienSelectionne = this.dataset.lienType;
+                modal.hide();
+            }, { once: true }); // Utiliser { once: true } pour ne s'exécuter qu'une fois
+        });
+        
+    } else {
+        // Second clic - créer le lien
+        if (elementSourceLien !== elementId) {
+            creerLien(elementSourceLien, elementId, typeLienSelectionne);
         } else {
-            // Second clic - créer le lien
-            if (elementSourceLien !== elementId) {
-                creerLien(elementSourceLien, elementId, typeLienSelectionne);
-            } else {
-                afficherMessage('Impossible de créer un lien vers le même élément', 'warning');
-            }
-            
-            // Réinitialiser
-            reinitialiserSelectionLien();
-            typeLienSelectionne = 'normal';
+            afficherMessage('Impossible de créer un lien vers le même élément', 'warning');
         }
+        
+        // Réinitialiser
+        reinitialiserSelectionLien();
     }
+}
 
     function reinitialiserSelectionLien() {
         document.querySelectorAll('.element-processus.selected').forEach(el => {
