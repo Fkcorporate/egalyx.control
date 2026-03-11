@@ -42,41 +42,112 @@
                         {% endfor %}
                     </div>
                     
+                    <!-- 🔴 NOUVEAU: Sélection du Pôle (optionnel) -->
+                    <div class="mb-3">
+                        <label class="form-label fw-bold">
+                            <i class="fas fa-layer-group text-primary me-2"></i>
+                            Pôle / Filiale (optionnel)
+                        </label>
+                        <select class="form-select" name="pole_id" id="pole_id">
+                            <option value="0">--- Aucun pôle ---</option>
+                            {% if form.pole_id.choices %}
+                                {% for value, label in form.pole_id.choices if value != 0 %}
+                                <option value="{{ value }}" 
+                                        {% if form.pole_id.data == value %}selected{% endif %}
+                                        {% if pole_couleurs and value in pole_couleurs %}
+                                        data-couleur="{{ pole_couleurs[value] }}"
+                                        style="border-left: 3px solid {{ pole_couleurs[value] }};"
+                                        {% endif %}>
+                                    {{ label }}
+                                </option>
+                                {% endfor %}
+                            {% endif %}
+                        </select>
+                        <small class="form-text text-muted">
+                            <i class="fas fa-info-circle me-1"></i>
+                            Permet de rattacher cette cartographie à un pôle ou une filiale
+                        </small>
+                        {% for error in form.pole_id.errors %}
+                        <div class="text-danger">{{ error }}</div>
+                        {% endfor %}
+                    </div>
+                    
                     <!-- Type de cartographie -->
                     <div class="mb-3">
-                        <label class="form-label">Type de cartographie *</label>
+                        <label class="form-label fw-bold">Type de cartographie *</label>
                         <div class="form-check">
-                            <input class="form-check-input" type="radio" name="type_cartographie" id="type_direction" 
-                                   value="direction" {{ 'checked' if not cartographie or not cartographie.service_id else '' }}>
+                            <input class="form-check-input" type="radio" name="type_cartographie" 
+                                   id="type_direction" value="direction" 
+                                   {% if form.type_cartographie.data == 'direction' or not form.type_cartographie.data %}checked{% endif %}>
                             <label class="form-check-label" for="type_direction">
                                 <i class="fas fa-building me-1"></i> Cartographie par Direction
                             </label>
                         </div>
                         <div class="form-check">
-                            <input class="form-check-input" type="radio" name="type_cartographie" id="type_service" 
-                                   value="service" {{ 'checked' if cartographie and cartographie.service_id else '' }}>
+                            <input class="form-check-input" type="radio" name="type_cartographie" 
+                                   id="type_service" value="service"
+                                   {% if form.type_cartographie.data == 'service' %}checked{% endif %}>
                             <label class="form-check-label" for="type_service">
-                                <i class="fas fa-cogs me-1"></i> Cartographie par Service
+                                <i class="fas fa-cubes me-1"></i> Cartographie par Service
                             </label>
                         </div>
                     </div>
                     
-                    <!-- Sélection Direction (toujours visible) -->
+                    <!-- Sélection Direction -->
                     <div class="mb-3" id="directionField">
-                        {{ form.direction_id.label(class="form-label") }}
-                        {{ form.direction_id(class="form-select") }}
+                        {{ form.direction_id.label(class="form-label fw-bold") }}
+                        <select class="form-select" name="direction_id" id="direction_id">
+                            <option value="0">--- Sélectionner une direction ---</option>
+                            {% if form.direction_id.choices %}
+                                {% for value, label in form.direction_id.choices if value != 0 %}
+                                <option value="{{ value }}" 
+                                        {% if form.direction_id.data == value %}selected{% endif %}
+                                        {% if direction_poles and value in direction_poles %}
+                                        data-pole="{{ direction_poles[value] }}"
+                                        {% endif %}>
+                                    {{ label }}
+                                </option>
+                                {% endfor %}
+                            {% endif %}
+                        </select>
                         {% for error in form.direction_id.errors %}
                         <div class="text-danger small">{{ error }}</div>
                         {% endfor %}
+                        <small class="form-text text-muted direction-hint" id="directionHint"></small>
                     </div>
                     
                     <!-- Sélection Service (caché par défaut) -->
-                    <div class="mb-3" id="serviceField" style="display: {{ 'block' if cartographie and cartographie.service_id else 'none' }};">
-                        {{ form.service_id.label(class="form-label") }}
-                        {{ form.service_id(class="form-select") }}
+                    <div class="mb-3" id="serviceField" style="display: none;">
+                        {{ form.service_id.label(class="form-label fw-bold") }}
+                        <select class="form-select" name="service_id" id="service_id">
+                            <option value="0">--- Sélectionnez d'abord une direction ---</option>
+                            {% if form.service_id.choices %}
+                                {% for value, label in form.service_id.choices if value != 0 %}
+                                <option value="{{ value }}" {% if form.service_id.data == value %}selected{% endif %}>
+                                    {{ label }}
+                                </option>
+                                {% endfor %}
+                            {% endif %}
+                        </select>
                         {% for error in form.service_id.errors %}
                         <div class="text-danger small">{{ error }}</div>
                         {% endfor %}
+                        <small class="form-text text-muted service-loading" id="serviceLoading" style="display: none;">
+                            <i class="fas fa-spinner fa-spin me-1"></i> Chargement des services...
+                        </small>
+                    </div>
+                    
+                    <!-- 🔴 NOUVEAU: Aperçu de la hiérarchie -->
+                    <div class="card bg-light mt-4" id="hierarchyPreview" style="display: none;">
+                        <div class="card-body">
+                            <h6 class="card-subtitle mb-2 text-muted">
+                                <i class="fas fa-sitemap me-2"></i>Aperçu de la hiérarchie
+                            </h6>
+                            <div class="d-flex align-items-center flex-wrap gap-2" id="hierarchyPath">
+                                <!-- Rempli dynamiquement par JavaScript -->
+                            </div>
+                            <div class="mt-2 small text-muted" id="hierarchyDescription"></div>
+                        </div>
                     </div>
                     
                     <!-- Informations supplémentaires pour la modification -->
@@ -115,13 +186,13 @@
                 <p><strong>Ce que vous pouvez modifier :</strong></p>
                 <ul class="small">
                     <li>Nom et description de la cartographie</li>
-                    <li>Direction et/ou service associé</li>
+                    <li>Pôle, direction et/ou service associé</li>
                     <li>Type de cartographie</li>
                 </ul>
                 
                 <p><strong>Effets de la modification :</strong></p>
                 <ul class="small">
-                    <li>Tous les risques seront mis à jour avec la nouvelle direction/service</li>
+                    <li>Tous les risques seront mis à jour avec la nouvelle hiérarchie</li>
                     <li>Les indicateurs seront recalculés automatiquement</li>
                     <li>Les matrices seront régénérées</li>
                 </ul>
@@ -134,6 +205,23 @@
                 </div>
                 
                 {% else %}
+                <!-- 🔴 Informations sur la hiérarchie -->
+                <div class="alert alert-primary">
+                    <h6 class="alert-heading fw-bold">
+                        <i class="fas fa-layer-group me-2"></i>Nouveau : Pôles / Filiales
+                    </h6>
+                    <p class="small mb-2">
+                        Les pôles permettent de regrouper plusieurs directions sous une même entité.
+                    </p>
+                    <div class="hierarchy-demo bg-white p-2 rounded small">
+                        <span class="badge bg-primary">Pôle Finance</span>
+                        <i class="fas fa-arrow-right text-muted mx-1"></i>
+                        <span class="badge bg-success">Direction Financière</span>
+                        <i class="fas fa-arrow-right text-muted mx-1"></i>
+                        <span class="badge bg-info">Service Comptabilité</span>
+                    </div>
+                </div>
+                
                 <p><strong>Types de cartographie :</strong></p>
                 <ul class="small">
                     <li><strong>Par Direction :</strong> Couvre l'ensemble des risques d'une direction</li>
@@ -142,6 +230,7 @@
                 
                 <p><strong>Exemples :</strong></p>
                 <ul class="small">
+                    <li><strong>Pôle + Direction :</strong> "Risques - Pôle Finance / Dir. Financière"</li>
                     <li><strong>Direction :</strong> "Cartographie Direction Financière"</li>
                     <li><strong>Service :</strong> "Cartographie Service Comptabilité"</li>
                 </ul>
@@ -168,69 +257,270 @@ document.addEventListener('DOMContentLoaded', function() {
     const serviceField = document.getElementById('serviceField');
     const directionSelect = document.getElementById('direction_id');
     const serviceSelect = document.getElementById('service_id');
+    const poleSelect = document.getElementById('pole_id');
+    const hierarchyPreview = document.getElementById('hierarchyPreview');
+    const hierarchyPath = document.getElementById('hierarchyPath');
+    const hierarchyDescription = document.getElementById('hierarchyDescription');
+    const serviceLoading = document.getElementById('serviceLoading');
+    const directionHint = document.getElementById('directionHint');
     
-    // Gestion du changement de type
-    function updateFormFields() {
-        if (typeDirection.checked) {
-            directionField.style.display = 'block';
-            serviceField.style.display = 'none';
-            // Réinitialiser la sélection du service
-            serviceSelect.value = '';
-        } else {
+    // Dictionnaire des directions par pôle (pour validation)
+    const directionsByPole = {};
+    {% if direction_poles %}
+        {% for dir_id, pole_id in direction_poles.items() %}
+            if (!directionsByPole[{{ pole_id }}]) directionsByPole[{{ pole_id }}] = [];
+            directionsByPole[{{ pole_id }}].push({{ dir_id }});
+        {% endfor %}
+    {% endif %}
+    
+    // 🔴 Gestion de l'affichage des champs selon le type
+    function toggleFields() {
+        if (typeService.checked) {
             directionField.style.display = 'block';
             serviceField.style.display = 'block';
+            directionSelect.setAttribute('required', 'required');
+            
+            // Si une direction est sélectionnée, charger ses services
+            if (directionSelect.value && directionSelect.value != 0) {
+                chargerServices(directionSelect.value);
+            }
+        } else {
+            directionField.style.display = 'block';
+            serviceField.style.display = 'none';
+            directionSelect.removeAttribute('required');
+            serviceSelect.value = 0; // Réinitialiser la sélection du service
         }
+        updateHierarchyPreview();
     }
     
-    // Écouter les changements
-    if (typeDirection) typeDirection.addEventListener('change', updateFormFields);
-    if (typeService) typeService.addEventListener('change', updateFormFields);
-    
-    // Chargement dynamique des services
-    if (directionSelect && serviceSelect) {
-        // Initialiser les services si une direction est déjà sélectionnée
-        if (directionSelect.value) {
-            chargerServices(directionSelect.value);
-        }
-        
-        directionSelect.addEventListener('change', function() {
-            const directionId = this.value;
-            chargerServices(directionId);
-        });
-        
-        // Initialiser l'état du formulaire
-        updateFormFields();
-    }
-    
+    // 🔴 Charger les services d'une direction (AJAX)
     function chargerServices(directionId) {
-        if (!directionId || directionId === '0') {
-            serviceSelect.innerHTML = '<option value="">Sélectionnez d\'abord une direction</option>';
+        if (!directionId || directionId == 0) {
+            serviceSelect.innerHTML = '<option value="0">--- Sélectionnez d\'abord une direction ---</option>';
             return;
         }
         
-        serviceSelect.innerHTML = '<option value="">Chargement...</option>';
+        // Afficher l'indicateur de chargement
+        serviceLoading.style.display = 'block';
+        serviceSelect.disabled = true;
         
         fetch(`/api/services/${directionId}`)
             .then(response => {
                 if (!response.ok) {
-                    throw new Error('Erreur réseau');
+                    if (response.status === 403) {
+                        throw new Error('Accès non autorisé');
+                    } else if (response.status === 404) {
+                        throw new Error('Direction non trouvée');
+                    }
+                    throw new Error('Erreur serveur');
                 }
                 return response.json();
             })
-            .then(services => {
-                let options = '<option value="">Sélectionnez un service</option>';
+            .then(data => {
+                serviceSelect.disabled = false;
+                serviceLoading.style.display = 'none';
                 
-                services.forEach(service => {
-                    const selected = service.id == {{ cartographie.service_id if cartographie else 0 }} ? 'selected' : '';
-                    options += `<option value="${service.id}" ${selected}>${service.nom}</option>`;
+                let options = '<option value="0">--- Sélectionner un service ---</option>';
+                
+                // Gérer les deux formats possibles (tableau simple ou objet avec 'services')
+                const services = Array.isArray(data) ? data : (data.services || []);
+                
+                services.forEach(s => {
+                    let label = s.nom;
+                    if (s.responsable && s.responsable !== 'Non assigné') {
+                        label += ` (Resp: ${s.responsable})`;
+                    }
+                    options += `<option value="${s.id}">${label}</option>`;
                 });
                 
                 serviceSelect.innerHTML = options;
+                
+                // Restaurer la valeur précédente si elle existe
+                {% if form.service_id.data %}
+                if (serviceSelect.querySelector(`option[value="{{ form.service_id.data }}"]`)) {
+                    serviceSelect.value = "{{ form.service_id.data }}";
+                }
+                {% endif %}
+                
+                updateHierarchyPreview();
             })
             .catch(error => {
                 console.error('Erreur:', error);
-                serviceSelect.innerHTML = '<option value="">Erreur de chargement</option>';
+                serviceSelect.disabled = false;
+                serviceLoading.style.display = 'none';
+                serviceSelect.innerHTML = `<option value="0">Erreur: ${error.message}</option>`;
+                
+                // Notification à l'utilisateur
+                if (typeof showNotification === 'function') {
+                    showNotification('error', 'Erreur de chargement des services');
+                }
             });
+    }
+    
+    // 🔴 Mettre à jour l'aperçu de la hiérarchie
+    function updateHierarchyPreview() {
+        const poleId = poleSelect.value;
+        const directionId = directionSelect.value;
+        const serviceId = serviceSelect.value;
+        const cartographieNom = document.querySelector('input[name="nom"]').value || 'Cartographie';
+        
+        let path = '';
+        let description = '';
+        let hasHierarchy = false;
+        
+        // Construire le chemin hiérarchique
+        if (poleId && poleId != 0) {
+            const poleOption = poleSelect.options[poleSelect.selectedIndex];
+            const poleNom = poleOption ? poleOption.text : 'Pôle';
+            const poleCouleur = poleOption ? poleOption.dataset.couleur : '#3b82f6';
+            path += `<span class="badge" style="background-color: ${poleCouleur};">${poleNom}</span>`;
+            path += ` <i class="fas fa-chevron-right text-muted mx-1"></i> `;
+            hasHierarchy = true;
+        }
+        
+        if (directionId && directionId != 0) {
+            const dirOption = directionSelect.options[directionSelect.selectedIndex];
+            const dirNom = dirOption ? dirOption.text.split(' (')[0] : 'Direction';
+            path += `<span class="badge bg-success">${dirNom}</span>`;
+            path += ` <i class="fas fa-chevron-right text-muted mx-1"></i> `;
+            hasHierarchy = true;
+        }
+        
+        if (serviceId && serviceId != 0 && typeService.checked) {
+            const servOption = serviceSelect.options[serviceSelect.selectedIndex];
+            const servNom = servOption ? servOption.text.split(' (')[0] : 'Service';
+            path += `<span class="badge bg-info">${servNom}</span>`;
+            hasHierarchy = true;
+        }
+        
+        // Ajouter la cartographie à la fin
+        if (path) {
+            path += ` <i class="fas fa-chevron-right text-muted mx-1"></i> `;
+        }
+        path += `<span class="badge bg-dark">${cartographieNom || 'Cartographie'}</span>`;
+        
+        if (hasHierarchy) {
+            hierarchyPath.innerHTML = path;
+            
+            // Description
+            if (poleId && poleId != 0 && directionId && directionId != 0 && serviceId && serviceId != 0) {
+                description = 'Cartographie au niveau service, rattachée à une direction et un pôle.';
+            } else if (poleId && poleId != 0 && directionId && directionId != 0) {
+                description = 'Cartographie au niveau direction, rattachée à un pôle.';
+            } else if (poleId && poleId != 0) {
+                description = 'Cartographie au niveau pôle (vision macro).';
+            } else if (directionId && directionId != 0) {
+                description = 'Cartographie au niveau direction.';
+            } else {
+                description = 'Cartographie sans rattachement hiérarchique.';
+            }
+            
+            hierarchyDescription.textContent = description;
+            hierarchyPreview.style.display = 'block';
+        } else {
+            hierarchyPreview.style.display = 'none';
+        }
+    }
+    
+    // 🔴 Vérifier la cohérence pôle/direction
+    function checkPoleDirectionCoherence() {
+        const poleId = poleSelect.value;
+        const directionId = directionSelect.value;
+        
+        if (poleId && poleId != 0 && directionId && directionId != 0) {
+            // Vérifier si la direction appartient au pôle sélectionné
+            const dirOption = directionSelect.options[directionSelect.selectedIndex];
+            const dirPoleId = dirOption ? dirOption.dataset.pole : null;
+            
+            if (dirPoleId && dirPoleId != poleId) {
+                directionHint.innerHTML = '<i class="fas fa-exclamation-triangle text-warning me-1"></i> Cette direction n\'appartient pas au pôle sélectionné';
+                directionHint.className = 'form-text text-warning';
+                return false;
+            } else {
+                directionHint.innerHTML = '<i class="fas fa-check-circle text-success me-1"></i> Direction compatible avec le pôle';
+                directionHint.className = 'form-text text-success';
+                return true;
+            }
+        } else {
+            directionHint.innerHTML = '';
+            return true;
+        }
+    }
+    
+    // Écouter les changements
+    if (typeDirection) typeDirection.addEventListener('change', toggleFields);
+    if (typeService) typeService.addEventListener('change', toggleFields);
+    
+    if (directionSelect) {
+        directionSelect.addEventListener('change', function() {
+            if (typeService.checked) {
+                chargerServices(this.value);
+            }
+            checkPoleDirectionCoherence();
+            updateHierarchyPreview();
+        });
+    }
+    
+    if (poleSelect) {
+        poleSelect.addEventListener('change', function() {
+            checkPoleDirectionCoherence();
+            updateHierarchyPreview();
+            
+            // Filtrer les directions par pôle (optionnel)
+            if (this.value && this.value != 0) {
+                filterDirectionsByPole(this.value);
+            } else {
+                resetDirectionFilter();
+            }
+        });
+    }
+    
+    document.querySelector('input[name="nom"]').addEventListener('input', updateHierarchyPreview);
+    
+    if (serviceSelect) {
+        serviceSelect.addEventListener('change', updateHierarchyPreview);
+    }
+    
+    // 🔴 Filtrer les directions par pôle
+    function filterDirectionsByPole(poleId) {
+        const options = directionSelect.options;
+        let hasVisible = false;
+        
+        for (let i = 1; i < options.length; i++) {
+            const option = options[i];
+            const optionPoleId = option.dataset.pole;
+            
+            if (optionPoleId && optionPoleId == poleId) {
+                option.style.display = '';
+                hasVisible = true;
+            } else {
+                option.style.display = 'none';
+            }
+        }
+        
+        if (!hasVisible) {
+            directionHint.innerHTML = '<i class="fas fa-info-circle me-1"></i> Aucune direction dans ce pôle';
+            directionHint.className = 'form-text text-info';
+        }
+        
+        // Réinitialiser la sélection si elle n'est plus visible
+        if (directionSelect.value != 0) {
+            const selectedOption = directionSelect.options[directionSelect.selectedIndex];
+            if (selectedOption && selectedOption.style.display === 'none') {
+                directionSelect.value = 0;
+                if (typeService.checked) {
+                    chargerServices(0);
+                }
+            }
+        }
+    }
+    
+    function resetDirectionFilter() {
+        const options = directionSelect.options;
+        for (let i = 1; i < options.length; i++) {
+            options[i].style.display = '';
+        }
+        directionHint.innerHTML = '';
     }
     
     // Validation du formulaire
@@ -238,6 +528,8 @@ document.addEventListener('DOMContentLoaded', function() {
     if (form) {
         form.addEventListener('submit', function(e) {
             const typeCartographie = document.querySelector('input[name="type_cartographie"]:checked');
+            const poleId = poleSelect.value;
+            const directionId = directionSelect.value;
             
             if (!typeCartographie) {
                 e.preventDefault();
@@ -245,16 +537,26 @@ document.addEventListener('DOMContentLoaded', function() {
                 return false;
             }
             
-            if (typeCartographie.value === 'service' && (!serviceSelect.value || serviceSelect.value === '0')) {
-                e.preventDefault();
-                alert('Veuillez sélectionner un service pour une cartographie par service.');
-                return false;
+            if (typeCartographie.value === 'service') {
+                if (!serviceSelect.value || serviceSelect.value == 0) {
+                    e.preventDefault();
+                    alert('Veuillez sélectionner un service pour une cartographie par service.');
+                    return false;
+                }
+            } else {
+                if (!directionId || directionId == 0) {
+                    e.preventDefault();
+                    alert('Veuillez sélectionner une direction pour une cartographie par direction.');
+                    return false;
+                }
             }
             
-            if (!directionSelect.value || directionSelect.value === '0') {
+            // Vérifier la cohérence pôle/direction
+            if (!checkPoleDirectionCoherence()) {
                 e.preventDefault();
-                alert('Veuillez sélectionner une direction.');
-                return false;
+                if (!confirm('La direction sélectionnée n\'appartient pas au pôle choisi. Voulez-vous continuer quand même ?')) {
+                    return false;
+                }
             }
             
             // Message de confirmation pour la modification
@@ -266,6 +568,778 @@ document.addEventListener('DOMContentLoaded', function() {
             }
         });
     }
+    
+    // Initialisation
+    toggleFields();
+    
+    // Si une direction est pré-sélectionnée, charger ses services
+    {% if form.direction_id.data and form.direction_id.data != 0 %}
+    chargerServices({{ form.direction_id.data }});
+    {% endif %}
+    
+    // Initialiser l'aperçu
+    setTimeout(updateHierarchyPreview, 200);
+    
+    // Appliquer le filtre initial si un pôle est pré-sélectionné
+    {% if form.pole_id.data and form.pole_id.data != 0 %}
+    filterDirectionsByPole({{ form.pole_id.data }});
+    {% endif %}
 });
 </script>
+
+<style>
+/* Styles pour l'aperçu de hiérarchie */
+#hierarchyPreview {
+    border-left: 4px solid #3b82f6;
+    transition: all 0.3s ease;
+}
+
+#hierarchyPath {
+    min-height: 40px;
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 0.25rem;
+}
+
+#hierarchyPath .badge {
+    font-size: 0.85rem;
+    padding: 0.5rem 1rem;
+    border-radius: 20px;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+}
+
+#hierarchyPath .badge.bg-success {
+    background: linear-gradient(135deg, #10b981, #059669) !important;
+}
+
+#hierarchyPath .badge.bg-info {
+    background: linear-gradient(135deg, #06b6d4, #0891b2) !important;
+}
+
+#hierarchyPath .badge.bg-dark {
+    background: linear-gradient(135deg, #1f2937, #111827) !important;
+}
+
+/* Indicateurs de chargement */
+.service-loading {
+    color: #6c757d;
+    font-style: italic;
+}
+
+/* Hints */
+.direction-hint {
+    margin-top: 0.25rem;
+    font-size: 0.8rem;
+}
+
+/* Démo hiérarchie */
+.hierarchy-demo {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-wrap: wrap;
+    gap: 0.25rem;
+    border: 1px solid #dee2e6;
+}
+
+/* Animation */
+@keyframes slideIn {
+    from { opacity: 0; transform: translateY(-10px); }
+    to { opacity: 1; transform: translateY(0); }
+}
+
+#hierarchyPreview {
+    animation: slideIn 0.3s ease;
+}
+
+/* Responsive */
+@media (max-width: 768px) {
+    #hierarchyPath {
+        justify-content: center;
+    }
+    
+    .hierarchy-demo {
+        flex-direction: column;
+        text-align: center;
+    }
+    
+    .hierarchy-demo .fa-arrow-right {
+        transform: rotate(90deg);
+        margin: 0.25rem 0;
+    }
+}
+</style>
+{% endblock %}{% extends "base.html" %}
+
+{% block content %}
+<div class="d-flex justify-content-between flex-wrap flex-md-nowrap align-items-center pt-3 pb-2 mb-3 border-bottom">
+    <h1 class="h2">
+        <i class="fas fa-{{ 'edit' if action == 'modifier' else 'plus' }}"></i> 
+        {{ 'Modifier' if action == 'modifier' else 'Nouvelle' }} Cartographie des Risques
+    </h1>
+</div>
+
+<div class="row">
+    <div class="col-md-8">
+        <div class="card shadow">
+            <div class="card-header {{ 'bg-info' if action == 'modifier' else 'bg-primary' }} text-white">
+                <h5 class="mb-0">{{ 'Modification' if action == 'modifier' else 'Création' }} de la Cartographie</h5>
+            </div>
+            <div class="card-body">
+                <form method="POST" id="cartographieForm">
+                    {{ form.hidden_tag() }}
+                    
+                    {% if action == 'modifier' and cartographie %}
+                    <input type="hidden" name="cartographie_id" value="{{ cartographie.id }}">
+                    <div class="alert alert-info mb-3">
+                        <i class="fas fa-info-circle"></i> Modification de la cartographie : 
+                        <strong>{{ cartographie.nom }}</strong>
+                    </div>
+                    {% endif %}
+                    
+                    <div class="mb-3">
+                        {{ form.nom.label(class="form-label") }}
+                        {{ form.nom(class="form-control", placeholder="Ex: Cartographie des risques - Direction Financière") }}
+                        {% for error in form.nom.errors %}
+                        <div class="text-danger small">{{ error }}</div>
+                        {% endfor %}
+                    </div>
+                    
+                    <div class="mb-3">
+                        {{ form.description.label(class="form-label") }}
+                        {{ form.description(class="form-control", rows="4", placeholder="Description de la cartographie...") }}
+                        {% for error in form.description.errors %}
+                        <div class="text-danger small">{{ error }}</div>
+                        {% endfor %}
+                    </div>
+                    
+                    <!-- 🔴 NOUVEAU: Sélection du Pôle (optionnel) -->
+                    <div class="mb-3">
+                        <label class="form-label fw-bold">
+                            <i class="fas fa-layer-group text-primary me-2"></i>
+                            Pôle / Filiale (optionnel)
+                        </label>
+                        <select class="form-select" name="pole_id" id="pole_id">
+                            <option value="0">--- Aucun pôle ---</option>
+                            {% if form.pole_id.choices %}
+                                {% for value, label in form.pole_id.choices if value != 0 %}
+                                <option value="{{ value }}" 
+                                        {% if form.pole_id.data == value %}selected{% endif %}
+                                        {% if pole_couleurs and value in pole_couleurs %}
+                                        data-couleur="{{ pole_couleurs[value] }}"
+                                        style="border-left: 3px solid {{ pole_couleurs[value] }};"
+                                        {% endif %}>
+                                    {{ label }}
+                                </option>
+                                {% endfor %}
+                            {% endif %}
+                        </select>
+                        <small class="form-text text-muted">
+                            <i class="fas fa-info-circle me-1"></i>
+                            Permet de rattacher cette cartographie à un pôle ou une filiale
+                        </small>
+                        {% for error in form.pole_id.errors %}
+                        <div class="text-danger">{{ error }}</div>
+                        {% endfor %}
+                    </div>
+                    
+                    <!-- Type de cartographie -->
+                    <div class="mb-3">
+                        <label class="form-label fw-bold">Type de cartographie *</label>
+                        <div class="form-check">
+                            <input class="form-check-input" type="radio" name="type_cartographie" 
+                                   id="type_direction" value="direction" 
+                                   {% if form.type_cartographie.data == 'direction' or not form.type_cartographie.data %}checked{% endif %}>
+                            <label class="form-check-label" for="type_direction">
+                                <i class="fas fa-building me-1"></i> Cartographie par Direction
+                            </label>
+                        </div>
+                        <div class="form-check">
+                            <input class="form-check-input" type="radio" name="type_cartographie" 
+                                   id="type_service" value="service"
+                                   {% if form.type_cartographie.data == 'service' %}checked{% endif %}>
+                            <label class="form-check-label" for="type_service">
+                                <i class="fas fa-cubes me-1"></i> Cartographie par Service
+                            </label>
+                        </div>
+                    </div>
+                    
+                    <!-- Sélection Direction -->
+                    <div class="mb-3" id="directionField">
+                        {{ form.direction_id.label(class="form-label fw-bold") }}
+                        <select class="form-select" name="direction_id" id="direction_id">
+                            <option value="0">--- Sélectionner une direction ---</option>
+                            {% if form.direction_id.choices %}
+                                {% for value, label in form.direction_id.choices if value != 0 %}
+                                <option value="{{ value }}" 
+                                        {% if form.direction_id.data == value %}selected{% endif %}
+                                        {% if direction_poles and value in direction_poles %}
+                                        data-pole="{{ direction_poles[value] }}"
+                                        {% endif %}>
+                                    {{ label }}
+                                </option>
+                                {% endfor %}
+                            {% endif %}
+                        </select>
+                        {% for error in form.direction_id.errors %}
+                        <div class="text-danger small">{{ error }}</div>
+                        {% endfor %}
+                        <small class="form-text text-muted direction-hint" id="directionHint"></small>
+                    </div>
+                    
+                    <!-- Sélection Service (caché par défaut) -->
+                    <div class="mb-3" id="serviceField" style="display: none;">
+                        {{ form.service_id.label(class="form-label fw-bold") }}
+                        <select class="form-select" name="service_id" id="service_id">
+                            <option value="0">--- Sélectionnez d'abord une direction ---</option>
+                            {% if form.service_id.choices %}
+                                {% for value, label in form.service_id.choices if value != 0 %}
+                                <option value="{{ value }}" {% if form.service_id.data == value %}selected{% endif %}>
+                                    {{ label }}
+                                </option>
+                                {% endfor %}
+                            {% endif %}
+                        </select>
+                        {% for error in form.service_id.errors %}
+                        <div class="text-danger small">{{ error }}</div>
+                        {% endfor %}
+                        <small class="form-text text-muted service-loading" id="serviceLoading" style="display: none;">
+                            <i class="fas fa-spinner fa-spin me-1"></i> Chargement des services...
+                        </small>
+                    </div>
+                    
+                    <!-- 🔴 NOUVEAU: Aperçu de la hiérarchie -->
+                    <div class="card bg-light mt-4" id="hierarchyPreview" style="display: none;">
+                        <div class="card-body">
+                            <h6 class="card-subtitle mb-2 text-muted">
+                                <i class="fas fa-sitemap me-2"></i>Aperçu de la hiérarchie
+                            </h6>
+                            <div class="d-flex align-items-center flex-wrap gap-2" id="hierarchyPath">
+                                <!-- Rempli dynamiquement par JavaScript -->
+                            </div>
+                            <div class="mt-2 small text-muted" id="hierarchyDescription"></div>
+                        </div>
+                    </div>
+                    
+                    <!-- Informations supplémentaires pour la modification -->
+                    {% if action == 'modifier' and cartographie %}
+                    <div class="alert alert-warning mt-4">
+                        <i class="fas fa-exclamation-triangle"></i>
+                        <strong>Note importante :</strong> La modification d'une cartographie existante déclenchera une 
+                        synchronisation automatique de tous les risques associés.
+                    </div>
+                    {% endif %}
+                    
+                    <div class="d-grid gap-2 d-md-flex justify-content-md-end mt-4">
+                        <a href="{{ url_for('liste_cartographies') }}" class="btn btn-secondary me-md-2">
+                            <i class="fas fa-arrow-left"></i> Retour à la liste
+                        </a>
+                        <button type="submit" class="btn {{ 'btn-info' if action == 'modifier' else 'btn-primary' }}">
+                            <i class="fas fa-{{ 'save' if action == 'modifier' else 'plus-circle' }}"></i> 
+                            {{ 'Enregistrer les modifications' if action == 'modifier' else 'Créer la Cartographie' }}
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+    
+    <div class="col-md-4">
+        <div class="card shadow">
+            <div class="card-header {{ 'bg-warning' if action == 'modifier' else 'bg-info' }} text-white">
+                <h6 class="mb-0">
+                    <i class="fas fa-{{ 'edit' if action == 'modifier' else 'info-circle' }}"></i> 
+                    {{ 'Modification' if action == 'modifier' else 'Guide' }}
+                </h6>
+            </div>
+            <div class="card-body">
+                {% if action == 'modifier' %}
+                <p><strong>Ce que vous pouvez modifier :</strong></p>
+                <ul class="small">
+                    <li>Nom et description de la cartographie</li>
+                    <li>Pôle, direction et/ou service associé</li>
+                    <li>Type de cartographie</li>
+                </ul>
+                
+                <p><strong>Effets de la modification :</strong></p>
+                <ul class="small">
+                    <li>Tous les risques seront mis à jour avec la nouvelle hiérarchie</li>
+                    <li>Les indicateurs seront recalculés automatiquement</li>
+                    <li>Les matrices seront régénérées</li>
+                </ul>
+                
+                <div class="alert alert-info mt-3">
+                    <small>
+                        <i class="fas fa-sync-alt"></i>
+                        <strong>Synchronisation :</strong> Les modifications déclenchent une synchronisation complète.
+                    </small>
+                </div>
+                
+                {% else %}
+                <!-- 🔴 Informations sur la hiérarchie -->
+                <div class="alert alert-primary">
+                    <h6 class="alert-heading fw-bold">
+                        <i class="fas fa-layer-group me-2"></i>Nouveau : Pôles / Filiales
+                    </h6>
+                    <p class="small mb-2">
+                        Les pôles permettent de regrouper plusieurs directions sous une même entité.
+                    </p>
+                    <div class="hierarchy-demo bg-white p-2 rounded small">
+                        <span class="badge bg-primary">Pôle Finance</span>
+                        <i class="fas fa-arrow-right text-muted mx-1"></i>
+                        <span class="badge bg-success">Direction Financière</span>
+                        <i class="fas fa-arrow-right text-muted mx-1"></i>
+                        <span class="badge bg-info">Service Comptabilité</span>
+                    </div>
+                </div>
+                
+                <p><strong>Types de cartographie :</strong></p>
+                <ul class="small">
+                    <li><strong>Par Direction :</strong> Couvre l'ensemble des risques d'une direction</li>
+                    <li><strong>Par Service :</strong> Se concentre sur les risques spécifiques d'un service</li>
+                </ul>
+                
+                <p><strong>Exemples :</strong></p>
+                <ul class="small">
+                    <li><strong>Pôle + Direction :</strong> "Risques - Pôle Finance / Dir. Financière"</li>
+                    <li><strong>Direction :</strong> "Cartographie Direction Financière"</li>
+                    <li><strong>Service :</strong> "Cartographie Service Comptabilité"</li>
+                </ul>
+                
+                <div class="alert alert-warning mt-3">
+                    <small>
+                        <i class="fas fa-exclamation-triangle"></i>
+                        <strong>Important :</strong> Une cartographie ne peut être associée qu'à une direction OU à un service, pas aux deux.
+                    </small>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    const typeDirection = document.getElementById('type_direction');
+    const typeService = document.getElementById('type_service');
+    const directionField = document.getElementById('directionField');
+    const serviceField = document.getElementById('serviceField');
+    const directionSelect = document.getElementById('direction_id');
+    const serviceSelect = document.getElementById('service_id');
+    const poleSelect = document.getElementById('pole_id');
+    const hierarchyPreview = document.getElementById('hierarchyPreview');
+    const hierarchyPath = document.getElementById('hierarchyPath');
+    const hierarchyDescription = document.getElementById('hierarchyDescription');
+    const serviceLoading = document.getElementById('serviceLoading');
+    const directionHint = document.getElementById('directionHint');
+    
+    // Dictionnaire des directions par pôle (pour validation)
+    const directionsByPole = {};
+    {% if direction_poles %}
+        {% for dir_id, pole_id in direction_poles.items() %}
+            if (!directionsByPole[{{ pole_id }}]) directionsByPole[{{ pole_id }}] = [];
+            directionsByPole[{{ pole_id }}].push({{ dir_id }});
+        {% endfor %}
+    {% endif %}
+    
+    // 🔴 Gestion de l'affichage des champs selon le type
+    function toggleFields() {
+        if (typeService.checked) {
+            directionField.style.display = 'block';
+            serviceField.style.display = 'block';
+            directionSelect.setAttribute('required', 'required');
+            
+            // Si une direction est sélectionnée, charger ses services
+            if (directionSelect.value && directionSelect.value != 0) {
+                chargerServices(directionSelect.value);
+            }
+        } else {
+            directionField.style.display = 'block';
+            serviceField.style.display = 'none';
+            directionSelect.removeAttribute('required');
+            serviceSelect.value = 0; // Réinitialiser la sélection du service
+        }
+        updateHierarchyPreview();
+    }
+    
+    // 🔴 Charger les services d'une direction (AJAX)
+    function chargerServices(directionId) {
+        if (!directionId || directionId == 0) {
+            serviceSelect.innerHTML = '<option value="0">--- Sélectionnez d\'abord une direction ---</option>';
+            return;
+        }
+        
+        // Afficher l'indicateur de chargement
+        serviceLoading.style.display = 'block';
+        serviceSelect.disabled = true;
+        
+        fetch(`/api/services/${directionId}`)
+            .then(response => {
+                if (!response.ok) {
+                    if (response.status === 403) {
+                        throw new Error('Accès non autorisé');
+                    } else if (response.status === 404) {
+                        throw new Error('Direction non trouvée');
+                    }
+                    throw new Error('Erreur serveur');
+                }
+                return response.json();
+            })
+            .then(data => {
+                serviceSelect.disabled = false;
+                serviceLoading.style.display = 'none';
+                
+                let options = '<option value="0">--- Sélectionner un service ---</option>';
+                
+                // Gérer les deux formats possibles (tableau simple ou objet avec 'services')
+                const services = Array.isArray(data) ? data : (data.services || []);
+                
+                services.forEach(s => {
+                    let label = s.nom;
+                    if (s.responsable && s.responsable !== 'Non assigné') {
+                        label += ` (Resp: ${s.responsable})`;
+                    }
+                    options += `<option value="${s.id}">${label}</option>`;
+                });
+                
+                serviceSelect.innerHTML = options;
+                
+                // Restaurer la valeur précédente si elle existe
+                {% if form.service_id.data %}
+                if (serviceSelect.querySelector(`option[value="{{ form.service_id.data }}"]`)) {
+                    serviceSelect.value = "{{ form.service_id.data }}";
+                }
+                {% endif %}
+                
+                updateHierarchyPreview();
+            })
+            .catch(error => {
+                console.error('Erreur:', error);
+                serviceSelect.disabled = false;
+                serviceLoading.style.display = 'none';
+                serviceSelect.innerHTML = `<option value="0">Erreur: ${error.message}</option>`;
+                
+                // Notification à l'utilisateur
+                if (typeof showNotification === 'function') {
+                    showNotification('error', 'Erreur de chargement des services');
+                }
+            });
+    }
+    
+    // 🔴 Mettre à jour l'aperçu de la hiérarchie
+    function updateHierarchyPreview() {
+        const poleId = poleSelect.value;
+        const directionId = directionSelect.value;
+        const serviceId = serviceSelect.value;
+        const cartographieNom = document.querySelector('input[name="nom"]').value || 'Cartographie';
+        
+        let path = '';
+        let description = '';
+        let hasHierarchy = false;
+        
+        // Construire le chemin hiérarchique
+        if (poleId && poleId != 0) {
+            const poleOption = poleSelect.options[poleSelect.selectedIndex];
+            const poleNom = poleOption ? poleOption.text : 'Pôle';
+            const poleCouleur = poleOption ? poleOption.dataset.couleur : '#3b82f6';
+            path += `<span class="badge" style="background-color: ${poleCouleur};">${poleNom}</span>`;
+            path += ` <i class="fas fa-chevron-right text-muted mx-1"></i> `;
+            hasHierarchy = true;
+        }
+        
+        if (directionId && directionId != 0) {
+            const dirOption = directionSelect.options[directionSelect.selectedIndex];
+            const dirNom = dirOption ? dirOption.text.split(' (')[0] : 'Direction';
+            path += `<span class="badge bg-success">${dirNom}</span>`;
+            path += ` <i class="fas fa-chevron-right text-muted mx-1"></i> `;
+            hasHierarchy = true;
+        }
+        
+        if (serviceId && serviceId != 0 && typeService.checked) {
+            const servOption = serviceSelect.options[serviceSelect.selectedIndex];
+            const servNom = servOption ? servOption.text.split(' (')[0] : 'Service';
+            path += `<span class="badge bg-info">${servNom}</span>`;
+            hasHierarchy = true;
+        }
+        
+        // Ajouter la cartographie à la fin
+        if (path) {
+            path += ` <i class="fas fa-chevron-right text-muted mx-1"></i> `;
+        }
+        path += `<span class="badge bg-dark">${cartographieNom || 'Cartographie'}</span>`;
+        
+        if (hasHierarchy) {
+            hierarchyPath.innerHTML = path;
+            
+            // Description
+            if (poleId && poleId != 0 && directionId && directionId != 0 && serviceId && serviceId != 0) {
+                description = 'Cartographie au niveau service, rattachée à une direction et un pôle.';
+            } else if (poleId && poleId != 0 && directionId && directionId != 0) {
+                description = 'Cartographie au niveau direction, rattachée à un pôle.';
+            } else if (poleId && poleId != 0) {
+                description = 'Cartographie au niveau pôle (vision macro).';
+            } else if (directionId && directionId != 0) {
+                description = 'Cartographie au niveau direction.';
+            } else {
+                description = 'Cartographie sans rattachement hiérarchique.';
+            }
+            
+            hierarchyDescription.textContent = description;
+            hierarchyPreview.style.display = 'block';
+        } else {
+            hierarchyPreview.style.display = 'none';
+        }
+    }
+    
+    // 🔴 Vérifier la cohérence pôle/direction
+    function checkPoleDirectionCoherence() {
+        const poleId = poleSelect.value;
+        const directionId = directionSelect.value;
+        
+        if (poleId && poleId != 0 && directionId && directionId != 0) {
+            // Vérifier si la direction appartient au pôle sélectionné
+            const dirOption = directionSelect.options[directionSelect.selectedIndex];
+            const dirPoleId = dirOption ? dirOption.dataset.pole : null;
+            
+            if (dirPoleId && dirPoleId != poleId) {
+                directionHint.innerHTML = '<i class="fas fa-exclamation-triangle text-warning me-1"></i> Cette direction n\'appartient pas au pôle sélectionné';
+                directionHint.className = 'form-text text-warning';
+                return false;
+            } else {
+                directionHint.innerHTML = '<i class="fas fa-check-circle text-success me-1"></i> Direction compatible avec le pôle';
+                directionHint.className = 'form-text text-success';
+                return true;
+            }
+        } else {
+            directionHint.innerHTML = '';
+            return true;
+        }
+    }
+    
+    // Écouter les changements
+    if (typeDirection) typeDirection.addEventListener('change', toggleFields);
+    if (typeService) typeService.addEventListener('change', toggleFields);
+    
+    if (directionSelect) {
+        directionSelect.addEventListener('change', function() {
+            if (typeService.checked) {
+                chargerServices(this.value);
+            }
+            checkPoleDirectionCoherence();
+            updateHierarchyPreview();
+        });
+    }
+    
+    if (poleSelect) {
+        poleSelect.addEventListener('change', function() {
+            checkPoleDirectionCoherence();
+            updateHierarchyPreview();
+            
+            // Filtrer les directions par pôle (optionnel)
+            if (this.value && this.value != 0) {
+                filterDirectionsByPole(this.value);
+            } else {
+                resetDirectionFilter();
+            }
+        });
+    }
+    
+    document.querySelector('input[name="nom"]').addEventListener('input', updateHierarchyPreview);
+    
+    if (serviceSelect) {
+        serviceSelect.addEventListener('change', updateHierarchyPreview);
+    }
+    
+    // 🔴 Filtrer les directions par pôle
+    function filterDirectionsByPole(poleId) {
+        const options = directionSelect.options;
+        let hasVisible = false;
+        
+        for (let i = 1; i < options.length; i++) {
+            const option = options[i];
+            const optionPoleId = option.dataset.pole;
+            
+            if (optionPoleId && optionPoleId == poleId) {
+                option.style.display = '';
+                hasVisible = true;
+            } else {
+                option.style.display = 'none';
+            }
+        }
+        
+        if (!hasVisible) {
+            directionHint.innerHTML = '<i class="fas fa-info-circle me-1"></i> Aucune direction dans ce pôle';
+            directionHint.className = 'form-text text-info';
+        }
+        
+        // Réinitialiser la sélection si elle n'est plus visible
+        if (directionSelect.value != 0) {
+            const selectedOption = directionSelect.options[directionSelect.selectedIndex];
+            if (selectedOption && selectedOption.style.display === 'none') {
+                directionSelect.value = 0;
+                if (typeService.checked) {
+                    chargerServices(0);
+                }
+            }
+        }
+    }
+    
+    function resetDirectionFilter() {
+        const options = directionSelect.options;
+        for (let i = 1; i < options.length; i++) {
+            options[i].style.display = '';
+        }
+        directionHint.innerHTML = '';
+    }
+    
+    // Validation du formulaire
+    const form = document.getElementById('cartographieForm');
+    if (form) {
+        form.addEventListener('submit', function(e) {
+            const typeCartographie = document.querySelector('input[name="type_cartographie"]:checked');
+            const poleId = poleSelect.value;
+            const directionId = directionSelect.value;
+            
+            if (!typeCartographie) {
+                e.preventDefault();
+                alert('Veuillez sélectionner un type de cartographie.');
+                return false;
+            }
+            
+            if (typeCartographie.value === 'service') {
+                if (!serviceSelect.value || serviceSelect.value == 0) {
+                    e.preventDefault();
+                    alert('Veuillez sélectionner un service pour une cartographie par service.');
+                    return false;
+                }
+            } else {
+                if (!directionId || directionId == 0) {
+                    e.preventDefault();
+                    alert('Veuillez sélectionner une direction pour une cartographie par direction.');
+                    return false;
+                }
+            }
+            
+            // Vérifier la cohérence pôle/direction
+            if (!checkPoleDirectionCoherence()) {
+                e.preventDefault();
+                if (!confirm('La direction sélectionnée n\'appartient pas au pôle choisi. Voulez-vous continuer quand même ?')) {
+                    return false;
+                }
+            }
+            
+            // Message de confirmation pour la modification
+            if ('{{ action }}' === 'modifier') {
+                if (!confirm('Confirmez-vous la modification de cette cartographie ?\n\nCette action synchronisera tous les risques associés.')) {
+                    e.preventDefault();
+                    return false;
+                }
+            }
+        });
+    }
+    
+    // Initialisation
+    toggleFields();
+    
+    // Si une direction est pré-sélectionnée, charger ses services
+    {% if form.direction_id.data and form.direction_id.data != 0 %}
+    chargerServices({{ form.direction_id.data }});
+    {% endif %}
+    
+    // Initialiser l'aperçu
+    setTimeout(updateHierarchyPreview, 200);
+    
+    // Appliquer le filtre initial si un pôle est pré-sélectionné
+    {% if form.pole_id.data and form.pole_id.data != 0 %}
+    filterDirectionsByPole({{ form.pole_id.data }});
+    {% endif %}
+});
+</script>
+
+<style>
+/* Styles pour l'aperçu de hiérarchie */
+#hierarchyPreview {
+    border-left: 4px solid #3b82f6;
+    transition: all 0.3s ease;
+}
+
+#hierarchyPath {
+    min-height: 40px;
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 0.25rem;
+}
+
+#hierarchyPath .badge {
+    font-size: 0.85rem;
+    padding: 0.5rem 1rem;
+    border-radius: 20px;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+}
+
+#hierarchyPath .badge.bg-success {
+    background: linear-gradient(135deg, #10b981, #059669) !important;
+}
+
+#hierarchyPath .badge.bg-info {
+    background: linear-gradient(135deg, #06b6d4, #0891b2) !important;
+}
+
+#hierarchyPath .badge.bg-dark {
+    background: linear-gradient(135deg, #1f2937, #111827) !important;
+}
+
+/* Indicateurs de chargement */
+.service-loading {
+    color: #6c757d;
+    font-style: italic;
+}
+
+/* Hints */
+.direction-hint {
+    margin-top: 0.25rem;
+    font-size: 0.8rem;
+}
+
+/* Démo hiérarchie */
+.hierarchy-demo {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-wrap: wrap;
+    gap: 0.25rem;
+    border: 1px solid #dee2e6;
+}
+
+/* Animation */
+@keyframes slideIn {
+    from { opacity: 0; transform: translateY(-10px); }
+    to { opacity: 1; transform: translateY(0); }
+}
+
+#hierarchyPreview {
+    animation: slideIn 0.3s ease;
+}
+
+/* Responsive */
+@media (max-width: 768px) {
+    #hierarchyPath {
+        justify-content: center;
+    }
+    
+    .hierarchy-demo {
+        flex-direction: column;
+        text-align: center;
+    }
+    
+    .hierarchy-demo .fa-arrow-right {
+        transform: rotate(90deg);
+        margin: 0.25rem 0;
+    }
+}
+</style>
 {% endblock %}
