@@ -2398,8 +2398,10 @@ class Constatation(db.Model):
 
 # models.py - À AJOUTER (par exemple après les autres modèles)
 
+# models.py - Version corrigée de DemandeContact
+
 class DemandeContact(db.Model):
-    """Modèle pour les demandes de contact"""
+    """Modèle pour les demandes de contact - SANS clé étrangère problématique"""
     __tablename__ = 'demandes_contact'
     
     id = db.Column(db.Integer, primary_key=True)
@@ -2416,10 +2418,10 @@ class DemandeContact(db.Model):
     user_agent = db.Column(db.String(500))
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     
-    # Statut
+    # Statut - SANS foreign key pour éviter l'erreur
     traite = db.Column(db.Boolean, default=False)
     traite_le = db.Column(db.DateTime)
-    traite_par = db.Column(db.Integer, db.ForeignKey('users.id'))
+    traite_par = db.Column(db.Integer)  # Juste l'ID, sans contrainte FK
     notes = db.Column(db.Text)
     
     def __repr__(self):
