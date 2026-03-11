@@ -1,0 +1,198 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="d-flex justify-content-between flex-wrap flex-md-nowrap align-items-center pt-3 pb-2 mb-3 border-bottom">
+    <h1 class="h2">
+        <i class="fas fa-layer-group"></i> 
+        {{ 'Modifier' if pole else 'Nouveau' }} Pôle / Filiale
+    </h1>
+</div>
+
+<div class="row">
+    <div class="col-md-8">
+        <div class="card shadow">
+            <div class="card-header bg-primary text-white">
+                <h5 class="mb-0">{{ 'Modification' if pole else 'Création' }} du Pôle</h5>
+            </div>
+            <div class="card-body">
+                <form method="POST" id="poleForm">
+                    {{ form.hidden_tag() }}
+                    
+                    <div class="mb-3">
+                        {{ form.nom.label(class="form-label fw-bold") }}
+                        {{ form.nom(class="form-control", placeholder="Ex: Pôle Finance, Pôle Industriel...") }}
+                        {% for error in form.nom.errors %}
+                        <div class="text-danger">{{ error }}</div>
+                        {% endfor %}
+                    </div>
+                    
+                    <div class="mb-3">
+                        {{ form.description.label(class="form-label fw-bold") }}
+                        {{ form.description(class="form-control", rows="4", placeholder="Description du pôle...") }}
+                        {% for error in form.description.errors %}
+                        <div class="text-danger">{{ error }}</div>
+                        {% endfor %}
+                    </div>
+                    
+                    <div class="mb-3">
+                        {{ form.couleur.label(class="form-label fw-bold") }}
+                        <div class="input-group">
+                            <span class="input-group-text p-0" style="width: 40px;">
+                                <input type="color" class="form-control form-control-color border-0 p-0" 
+                                       name="couleur" value="{{ form.couleur.data or '#3b82f6' }}" 
+                                       style="height: 38px; width: 100%; cursor: pointer;">
+                            </span>
+                            <input type="text" class="form-control" id="couleur_text" 
+                                   value="{{ form.couleur.data or '#3b82f6' }}" 
+                                   placeholder="#3b82f6" pattern="^#[0-9A-Fa-f]{6}$">
+                        </div>
+                        <small class="form-text text-muted">Couleur d'identification du pôle dans l'organigramme</small>
+                        {% for error in form.couleur.errors %}
+                        <div class="text-danger">{{ error }}</div>
+                        {% endfor %}
+                    </div>
+                    
+                    <!-- Type de responsable -->
+                    <div class="mb-3">
+                        <label class="form-label fw-bold">{{ form.type_responsable.label }}</label>
+                        <div class="card bg-light">
+                            <div class="card-body">
+                                <div class="mb-3">
+                                    {% for subfield in form.type_responsable %}
+                                    <div class="form-check">
+                                        {{ subfield(class="form-check-input", onclick="toggleResponsableType()") }}
+                                        {{ subfield.label(class="form-check-label") }}
+                                    </div>
+                                    {% endfor %}
+                                </div>
+                                
+                                <!-- Zone de sélection utilisateur -->
+                                <div id="zone_utilisateur" class="mb-3">
+                                    {{ form.responsable_id.label(class="form-label") }}
+                                    <select class="form-select" name="responsable_id" id="responsable_id">
+                                        <option value="0">--- Aucun responsable ---</option>
+                                        {% for value, label in form.responsable_id.choices if value != 0 %}
+                                        <option value="{{ value }}" {% if form.responsable_id.data == value %}selected{% endif %}>
+                                            {{ label }}
+                                        </option>
+                                        {% endfor %}
+                                    </select>
+                                    {% for error in form.responsable_id.errors %}
+                                    <div class="text-danger">{{ error }}</div>
+                                    {% endfor %}
+                                    <small class="form-text text-muted">Sélectionnez un utilisateur existant</small>
+                                </div>
+                                
+                                <!-- Zone de saisie manuelle -->
+                                <div id="zone_manuel" style="display: none;" class="mb-3">
+                                    {{ form.responsable_nom_manuel.label(class="form-label") }}
+                                    {{ form.responsable_nom_manuel(class="form-control", placeholder="Ex: Jean Dupont") }}
+                                    {% for error in form.responsable_nom_manuel.errors %}
+                                    <div class="text-danger">{{ error }}</div>
+                                    {% endfor %}
+                                    <small class="form-text text-muted">Saisissez le nom du responsable (ne sera pas lié à un compte utilisateur)</small>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="mb-3">
+                        {{ form.ordre.label(class="form-label fw-bold") }}
+                        {{ form.ordre(class="form-control", type="number", min="0", placeholder="0") }}
+                        <small class="form-text text-muted">Ordre d'affichage (les plus petits en premier)</small>
+                        {% for error in form.ordre.errors %}
+                        <div class="text-danger">{{ error }}</div>
+                        {% endfor %}
+                    </div>
+                    
+                    <div class="d-grid gap-2 d-md-flex justify-content-md-end">
+                        <a href="{{ url_for('admin_poles') }}" class="btn btn-secondary me-md-2">
+                            <i class="fas fa-arrow-left"></i> Annuler
+                        </a>
+                        <button type="submit" class="btn btn-primary">
+                            <i class="fas fa-save"></i> {{ 'Mettre à jour' if pole else 'Créer le pôle' }}
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+    
+    <div class="col-md-4">
+        <div class="card shadow">
+            <div class="card-header bg-info text-white">
+                <h6 class="mb-0"><i class="fas fa-info-circle"></i> Informations</h6>
+            </div>
+            <div class="card-body">
+                <p><strong>Qu'est-ce qu'un pôle ?</strong></p>
+                <p>Un pôle (ou filiale) est une entité qui regroupe plusieurs directions.</p>
+                
+                <p><strong>Exemple :</strong></p>
+                <ul>
+                    <li><strong>Pôle Finance</strong>
+                        <ul>
+                            <li>Direction Financière</li>
+                            <li>Direction Comptable</li>
+                            <li>Direction du Contrôle de Gestion</li>
+                        </ul>
+                    </li>
+                    <li><strong>Pôle Industriel</strong>
+                        <ul>
+                            <li>Direction Production</li>
+                            <li>Direction Logistique</li>
+                            <li>Direction Maintenance</li>
+                        </ul>
+                    </li>
+                </ul>
+                
+                <div class="alert alert-primary mt-3">
+                    <i class="fas fa-lightbulb me-2"></i>
+                    <strong>Astuce :</strong> Les pôles sont optionnels. Si votre organisation est petite, vous pouvez vous passer de cette hiérarchie.
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+function toggleResponsableType() {
+    const typeUtilisateur = document.getElementById('type_responsable-0')?.checked;
+    const zoneUtilisateur = document.getElementById('zone_utilisateur');
+    const zoneManuel = document.getElementById('zone_manuel');
+    
+    if (typeUtilisateur) {
+        zoneUtilisateur.style.display = 'block';
+        zoneManuel.style.display = 'none';
+        document.getElementById('responsable_nom_manuel').value = '';
+    } else {
+        zoneUtilisateur.style.display = 'none';
+        zoneManuel.style.display = 'block';
+        document.getElementById('responsable_id').value = '0';
+    }
+}
+
+// Gestion de la couleur
+document.addEventListener('DOMContentLoaded', function() {
+    toggleResponsableType();
+    
+    const colorInput = document.querySelector('input[type="color"]');
+    const colorText = document.getElementById('couleur_text');
+    
+    if (colorInput && colorText) {
+        colorInput.addEventListener('input', function(e) {
+            colorText.value = e.target.value;
+        });
+        
+        colorText.addEventListener('input', function(e) {
+            let value = e.target.value;
+            if (!value.startsWith('#')) {
+                value = '#' + value;
+            }
+            if (/^#[0-9A-F]{6}$/i.test(value)) {
+                colorInput.value = value;
+            }
+        });
+    }
+});
+</script>
+{% endblock %}

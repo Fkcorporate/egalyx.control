@@ -1,0 +1,863 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="container-fluid">
+    <!-- ========== EN-TÊTE AVEC ACTIONS - STYLE FK ========== -->
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <div>
+            <h2 class="h4 mb-2">
+                <i class="fas fa-layer-group text-primary me-2"></i>
+                Gestion des Pôles et Filiales
+            </h2>
+            <nav aria-label="breadcrumb">
+                <ol class="breadcrumb mb-0">
+                    <li class="breadcrumb-item"><a href="{{ url_for('dashboard') }}">Tableau de bord</a></li>
+                    <li class="breadcrumb-item"><a href="{{ url_for('admin_directions') }}">Directions</a></li>
+                    <li class="breadcrumb-item active">Pôles</li>
+                </ol>
+            </nav>
+        </div>
+        <div class="d-flex gap-2">
+            <a href="{{ url_for('admin_directions') }}" class="fk-btn fk-btn-outline-secondary">
+                <i class="fas fa-building me-2"></i>Directions
+            </a>
+            <a href="{{ url_for('nouveau_pole') }}" class="fk-btn fk-btn-primary">
+                <i class="fas fa-plus me-2"></i>Nouveau Pôle
+            </a>
+        </div>
+    </div>
+
+    <!-- ========== STATISTIQUES - STYLE FK ========== -->
+    <div class="row g-3 mb-4">
+        <div class="col-md-3">
+            <div class="fk-card h-100">
+                <div class="fk-card-body">
+                    <div class="d-flex align-items-center">
+                        <div class="stat-icon bg-primary bg-opacity-10 rounded-3 p-3 me-3">
+                            <i class="fas fa-layer-group fa-2x text-primary"></i>
+                        </div>
+                        <div>
+                            <span class="text-muted small text-uppercase">Pôles actifs</span>
+                            <h3 class="mb-0 fw-bold">{{ stats.total_poles }}</h3>
+                            <small class="text-success">
+                                <i class="fas fa-arrow-up me-1"></i>{{ poles_avec_resp|default(0) }} avec resp.
+                            </small>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <div class="col-md-3">
+            <div class="fk-card h-100">
+                <div class="fk-card-body">
+                    <div class="d-flex align-items-center">
+                        <div class="stat-icon bg-success bg-opacity-10 rounded-3 p-3 me-3">
+                            <i class="fas fa-building fa-2x text-success"></i>
+                        </div>
+                        <div>
+                            <span class="text-muted small text-uppercase">Directions</span>
+                            <h3 class="mb-0 fw-bold">{{ stats.total_directions }}</h3>
+                            <small class="text-info">{{ stats.directions_rattachees }} rattachées</small>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <div class="col-md-3">
+            <div class="fk-card h-100">
+                <div class="fk-card-body">
+                    <div class="d-flex align-items-center">
+                        <div class="stat-icon bg-info bg-opacity-10 rounded-3 p-3 me-3">
+                            <i class="fas fa-cubes fa-2x text-info"></i>
+                        </div>
+                        <div>
+                            <span class="text-muted small text-uppercase">Services</span>
+                            <h3 class="mb-0 fw-bold">{{ stats.total_services }}</h3>
+                            <small>Moy. {{ "%.1f"|format(stats.total_services / stats.total_directions if stats.total_directions > 0 else 0) }}/dir.</small>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <div class="col-md-3">
+            <div class="fk-card h-100">
+                <div class="fk-card-body">
+                    <div class="d-flex align-items-center">
+                        <div class="stat-icon bg-warning bg-opacity-10 rounded-3 p-3 me-3">
+                            <i class="fas fa-chart-pie fa-2x text-warning"></i>
+                        </div>
+                        <div>
+                            <span class="text-muted small text-uppercase">Taux couverture</span>
+                            <h3 class="mb-0 fw-bold">{{ stats.taux_couverture }}%</h3>
+                            <div class="progress mt-2" style="height: 5px;">
+                                <div class="progress-bar bg-success" style="width: {{ stats.taux_couverture }}%"></div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- ========== BARRE DE RECHERCHE ET FILTRES - STYLE FK ========== -->
+    <div class="fk-card mb-4">
+        <div class="fk-card-body">
+            <div class="row g-3">
+                <div class="col-md-6">
+                    <div class="input-group">
+                        <span class="input-group-text bg-white">
+                            <i class="fas fa-search text-muted"></i>
+                        </span>
+                        <input type="text" 
+                               class="form-control" 
+                               id="searchPole" 
+                               placeholder="Rechercher un pôle, une direction..."
+                               value="{{ request.args.get('search', '') }}">
+                    </div>
+                </div>
+                <div class="col-md-4">
+                    <select class="form-select" id="filterResponsable" onchange="appliquerFiltres()">
+                        <option value="tous" {% if request.args.get('resp') == 'tous' %}selected{% endif %}>Tous les pôles</option>
+                        <option value="avec" {% if request.args.get('resp') == 'avec' %}selected{% endif %}>Avec responsable</option>
+                        <option value="sans" {% if request.args.get('resp') == 'sans' %}selected{% endif %}>Sans responsable</option>
+                    </select>
+                </div>
+                <div class="col-md-2 text-end">
+                    <span class="badge bg-light text-dark p-2" id="resultCount">
+                        <i class="fas fa-layer-group me-1"></i>{{ poles|length }} pôle(s)
+                    </span>
+                </div>
+            </div>
+            
+            <!-- Résumé des filtres actifs -->
+            {% if request.args.get('search') or request.args.get('resp') and request.args.get('resp') != 'tous' %}
+            <div class="row mt-3">
+                <div class="col-12">
+                    <div class="d-flex align-items-center gap-2">
+                        <i class="fas fa-filter text-primary small"></i>
+                        <span class="text-muted small">Filtres actifs:</span>
+                        
+                        {% if request.args.get('search') %}
+                        <span class="badge bg-info">
+                            <i class="fas fa-search me-1"></i>{{ request.args.get('search') }}
+                            <a href="?{{ request.args|replace('search', '')|urlencode }}" class="text-white ms-2 text-decoration-none">×</a>
+                        </span>
+                        {% endif %}
+                        
+                        {% if request.args.get('resp') == 'avec' %}
+                        <span class="badge bg-success">
+                            <i class="fas fa-user-check me-1"></i>Avec responsable
+                            <a href="?{{ request.args|replace('resp', '')|urlencode }}" class="text-white ms-2 text-decoration-none">×</a>
+                        </span>
+                        {% elif request.args.get('resp') == 'sans' %}
+                        <span class="badge bg-warning">
+                            <i class="fas fa-user-slash me-1"></i>Sans responsable
+                            <a href="?{{ request.args|replace('resp', '')|urlencode }}" class="text-white ms-2 text-decoration-none">×</a>
+                        </span>
+                        {% endif %}
+                        
+                        <button class="btn btn-sm btn-link text-danger p-0 ms-2" onclick="reinitialiserFiltres()">
+                            <i class="fas fa-times me-1"></i>Tout effacer
+                        </button>
+                    </div>
+                </div>
+            </div>
+            {% endif %}
+        </div>
+    </div>
+
+    <!-- ========== LISTE DES PÔLES - STYLE FK ========== -->
+    <div class="row" id="polesContainer">
+        {% for pole in poles %}
+        <div class="col-12 mb-4 pole-item" 
+             data-nom="{{ pole.nom|lower }}"
+             data-responsable="{{ 'oui' if pole.a_responsable else 'non' }}">
+            
+            <div class="fk-card">
+                <!-- En-tête du pôle avec couleurs -->
+                <div class="fk-card-header" style="background-color: {{ pole.couleur }}; border-bottom: none;">
+                    <div class="d-flex justify-content-between align-items-center flex-wrap gap-2">
+                        <div class="d-flex align-items-center gap-3">
+                            <h3 class="h5 mb-0 fw-bold text-white">
+                                <i class="fas fa-layer-group me-2"></i>
+                                {{ pole.nom }}
+                            </h3>
+                            {% if pole.ordre %}
+                            <span class="badge bg-white" style="color: {{ pole.couleur }};">Ordre: {{ pole.ordre }}</span>
+                            {% endif %}
+                        </div>
+                        
+                        <div class="btn-group">
+                            <a href="{{ url_for('nouvelle_direction') }}?pole_id={{ pole.id }}" 
+                               class="fk-btn fk-btn-outline-light btn-sm" 
+                               title="Ajouter une direction">
+                                <i class="fas fa-plus-circle me-1"></i>Direction
+                            </a>
+                            <a href="{{ url_for('editer_pole', id=pole.id) }}" 
+                               class="fk-btn fk-btn-outline-light btn-sm" 
+                               title="Modifier">
+                                <i class="fas fa-edit"></i>
+                            </a>
+                            <button class="fk-btn fk-btn-outline-light btn-sm" 
+                                    onclick="supprimerPole({{ pole.id }}, '{{ pole.nom }}')"
+                                    title="Supprimer">
+                                <i class="fas fa-trash"></i>
+                            </button>
+                        </div>
+                    </div>
+                    
+                    <!-- Responsable du pôle -->
+                    {% if pole.a_responsable %}
+                    <div class="mt-3 p-2 bg-white bg-opacity-25 rounded">
+                        <div class="d-flex align-items-center">
+                            <i class="fas fa-user-tie me-2 text-white"></i>
+                            <div class="flex-grow-1">
+                                <small class="text-white-50">Responsable:</small>
+                                <div class="fw-semibold text-white">
+                                    {% if pole.responsable_id and pole.responsable %}
+                                        <span class="badge bg-white" style="color: {{ pole.couleur }};">
+                                            <i class="fas fa-user-circle me-1"></i>{{ pole.responsable.username }}
+                                        </span>
+                                        <small class="text-white-50 ms-2">(utilisateur)</small>
+                                    {% elif pole.responsable_nom_manuel %}
+                                        <span class="badge bg-white" style="color: {{ pole.couleur }};">
+                                            <i class="fas fa-pen me-1"></i>{{ pole.responsable_nom_manuel }}
+                                        </span>
+                                        <small class="text-white-50 ms-2">(externe)</small>
+                                    {% endif %}
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    {% endif %}
+                </div>
+                
+                <!-- Corps de la carte -->
+                <div class="fk-card-body">
+                    {% if pole.description %}
+                    <div class="alert alert-light border-0 bg-light mb-4">
+                        <i class="fas fa-align-left me-2 text-muted"></i>
+                        {{ pole.description }}
+                    </div>
+                    {% endif %}
+                    
+                    <!-- Section des directions -->
+                    <div class="d-flex justify-content-between align-items-center mb-3">
+                        <h5 class="fw-semibold mb-0">
+                            <i class="fas fa-building text-success me-2"></i>
+                            Directions rattachées
+                            <span class="badge bg-success ms-2">{{ pole.directions|selectattr('is_active')|list|length }}</span>
+                        </h5>
+                        
+                        <button class="fk-btn fk-btn-outline-primary btn-sm" 
+                                onclick="ouvrirModalRattachement({{ pole.id }}, '{{ pole.nom }}')">
+                            <i class="fas fa-link me-1"></i>Gérer
+                        </button>
+                    </div>
+                    
+                    <!-- Liste des directions -->
+                    {% set directions_actives = pole.directions|selectattr('is_active')|list %}
+                    {% if directions_actives %}
+                    <div class="table-responsive">
+                        <table class="table table-hover align-middle">
+                            <thead class="table-light">
+                                <tr>
+                                    <th>Direction</th>
+                                    <th>Responsable</th>
+                                    <th>Services</th>
+                                    <th class="text-end">Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for direction in directions_actives %}
+                                <tr>
+                                    <td>
+                                        <div class="fw-semibold">{{ direction.nom }}</div>
+                                        {% if direction.description %}
+                                        <small class="text-muted">{{ direction.description|truncate(50) }}</small>
+                                        {% endif %}
+                                    </td>
+                                    <td>
+                                        {% if direction.responsable_id and direction.responsable %}
+                                            <span class="badge bg-primary">
+                                                <i class="fas fa-user-circle me-1"></i>{{ direction.responsable.username }}
+                                            </span>
+                                        {% elif direction.responsable_nom_manuel %}
+                                            <span class="badge bg-info">
+                                                <i class="fas fa-pen me-1"></i>{{ direction.responsable_nom_manuel }}
+                                            </span>
+                                        {% else %}
+                                            <span class="badge bg-secondary">Non assigné</span>
+                                        {% endif %}
+                                    </td>
+                                    <td>
+                                        <span class="badge bg-light text-dark">
+                                            {{ direction.services|selectattr('is_active')|list|length }}
+                                        </span>
+                                    </td>
+                                    <td class="text-end">
+                                        <div class="btn-group btn-group-sm">
+                                            <a href="{{ url_for('modifier_direction', direction_id=direction.id) }}" 
+                                               class="btn btn-outline-primary" 
+                                               title="Modifier">
+                                                <i class="fas fa-edit"></i>
+                                            </a>
+                                            <button class="btn btn-outline-warning" 
+                                                    onclick="detacherDirection({{ direction.id }}, '{{ direction.nom }}', {{ pole.id }})"
+                                                    title="Détacher">
+                                                <i class="fas fa-unlink"></i>
+                                            </button>
+                                        </div>
+                                    </td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                    {% else %}
+                    <div class="text-center py-5 bg-light rounded-3">
+                        <i class="fas fa-folder-open fa-3x text-muted mb-3"></i>
+                        <h6 class="text-muted">Aucune direction rattachée</h6>
+                        <p class="text-muted small mb-3">Ce pôle ne contient pas encore de direction</p>
+                        <div class="d-flex gap-2 justify-content-center">
+                            <a href="{{ url_for('nouvelle_direction') }}?pole_id={{ pole.id }}" 
+                               class="fk-btn fk-btn-primary btn-sm">
+                                <i class="fas fa-plus-circle me-1"></i>Créer
+                            </a>
+                            <button class="fk-btn fk-btn-outline-primary btn-sm" 
+                                    onclick="rattacherDirectionExistante({{ pole.id }})">
+                                <i class="fas fa-link me-1"></i>Rattacher
+                            </button>
+                        </div>
+                    </div>
+                    {% endif %}
+                    
+                    <!-- Statistiques additionnelles -->
+                    <div class="row g-3 mt-3 pt-3 border-top">
+                        <div class="col-md-4">
+                            <div class="d-flex align-items-center">
+                                <i class="fas fa-cubes text-info me-2"></i>
+                                <small class="text-muted">Services: <strong>{{ directions_actives|map(attribute='services')|selectattr('is_active')|list|length }}</strong></small>
+                            </div>
+                        </div>
+                        <div class="col-md-4">
+                            <div class="d-flex align-items-center">
+                                <i class="fas fa-user-tie text-success me-2"></i>
+                                <small class="text-muted">Responsables: <strong>{{ directions_actives|selectattr('responsable_id')|list|length }}</strong></small>
+                            </div>
+                        </div>
+                        <div class="col-md-4">
+                            <div class="d-flex align-items-center">
+                                <i class="fas fa-calendar-alt text-warning me-2"></i>
+                                <small class="text-muted">Créé le: <strong>{{ pole.created_at.strftime('%d/%m/%Y') if pole.created_at }}</strong></small>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        {% else %}
+        <!-- État vide -->
+        <div class="col-12">
+            <div class="fk-card">
+                <div class="fk-card-body text-center py-5">
+                    <div class="mb-4">
+                        <i class="fas fa-layer-group fa-4x text-muted opacity-25"></i>
+                    </div>
+                    <h4 class="mb-3">Aucun pôle créé</h4>
+                    <p class="text-muted mb-4">
+                        Les pôles vous permettent de regrouper plusieurs directions sous une même entité.<br>
+                        Commencez par créer votre premier pôle.
+                    </p>
+                    <a href="{{ url_for('nouveau_pole') }}" class="fk-btn fk-btn-primary">
+                        <i class="fas fa-plus me-2"></i>Créer mon premier pôle
+                    </a>
+                </div>
+            </div>
+        </div>
+        {% endfor %}
+    </div>
+</div>
+
+<!-- ========== MODAL DE RATTACHEMENT ========== -->
+<div class="modal fade" id="rattachementModal" tabindex="-1">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header bg-primary text-white">
+                <h5 class="modal-title text-white">
+                    <i class="fas fa-link me-2"></i>
+                    Rattacher des directions au pôle <span id="modalPoleName"></span>
+                </h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <input type="hidden" id="modalPoleId">
+                
+                <div class="alert alert-info">
+                    <i class="fas fa-info-circle me-2"></i>
+                    Sélectionnez les directions à rattacher à ce pôle.
+                </div>
+                
+                <div class="mb-3">
+                    <div class="input-group">
+                        <span class="input-group-text bg-white">
+                            <i class="fas fa-search text-muted"></i>
+                        </span>
+                        <input type="text" class="form-control" id="modalSearch" 
+                               placeholder="Rechercher une direction...">
+                    </div>
+                </div>
+                
+                <div class="list-group" id="directionsList" style="max-height: 400px; overflow-y: auto;">
+                    <!-- Rempli dynamiquement -->
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="fk-btn fk-btn-outline-secondary" data-bs-dismiss="modal">Annuler</button>
+                <button type="button" class="fk-btn fk-btn-primary" onclick="confirmerRattachement()">
+                    <i class="fas fa-save me-2"></i>Rattacher
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Styles FK -->
+<style>
+.fk-card {
+    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    border: 1px solid #e2e8f0;
+    border-radius: 12px;
+    overflow: hidden;
+    background: white;
+}
+
+.fk-card:hover {
+    transform: translateY(-5px);
+    box-shadow: 0 12px 24px rgba(0, 0, 0, 0.08);
+    border-color: #3498db;
+}
+
+.fk-card-header {
+    border-bottom: 1px solid #e2e8f0;
+    padding: 1.25rem 1.5rem;
+    background-color: #f8fafc;
+}
+
+.fk-card-body {
+    padding: 1.5rem;
+}
+
+.fk-card-footer {
+    padding: 1rem 1.5rem;
+    background-color: #f8fafc;
+}
+
+.fk-btn {
+    border-radius: 8px;
+    padding: 0.5rem 1rem;
+    font-weight: 500;
+    transition: all 0.2s;
+    display: inline-block;
+    text-decoration: none;
+    border: 2px solid transparent;
+}
+
+.fk-btn-primary {
+    background-color: #3498db;
+    color: white;
+    border-color: #3498db;
+}
+
+.fk-btn-primary:hover {
+    background-color: #2980b9;
+    border-color: #2980b9;
+    color: white;
+}
+
+.fk-btn-outline-primary {
+    border: 2px solid #3498db;
+    color: #3498db;
+    background: transparent;
+}
+
+.fk-btn-outline-primary:hover {
+    background-color: #3498db;
+    color: white;
+}
+
+.fk-btn-outline-secondary {
+    border: 2px solid #95a5a6;
+    color: #7f8c8d;
+    background: transparent;
+}
+
+.fk-btn-outline-secondary:hover {
+    background-color: #95a5a6;
+    color: white;
+}
+
+.fk-btn-outline-success {
+    border: 2px solid #27ae60;
+    color: #27ae60;
+    background: transparent;
+}
+
+.fk-btn-outline-success:hover {
+    background-color: #27ae60;
+    color: white;
+}
+
+.fk-btn-outline-warning {
+    border: 2px solid #f39c12;
+    color: #f39c12;
+    background: transparent;
+}
+
+.fk-btn-outline-warning:hover {
+    background-color: #f39c12;
+    color: white;
+}
+
+.fk-btn-outline-danger {
+    border: 2px solid #e74c3c;
+    color: #e74c3c;
+    background: transparent;
+}
+
+.fk-btn-outline-danger:hover {
+    background-color: #e74c3c;
+    color: white;
+}
+
+.fk-btn-outline-light {
+    border: 2px solid rgba(255,255,255,0.5);
+    color: white;
+    background: transparent;
+}
+
+.fk-btn-outline-light:hover {
+    background-color: white;
+    color: #333;
+    border-color: white;
+}
+
+.fk-btn.btn-sm {
+    padding: 0.25rem 0.5rem;
+    font-size: 0.875rem;
+}
+
+.stat-icon {
+    width: 3rem;
+    height: 3rem;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 0.75rem;
+}
+
+.badge {
+    font-weight: 500;
+    padding: 0.5rem 0.75rem;
+    font-size: 0.75rem;
+}
+
+/* Animation */
+@keyframes fadeIn {
+    from { opacity: 0; transform: translateY(10px); }
+    to { opacity: 1; transform: translateY(0); }
+}
+
+.pole-item {
+    animation: fadeIn 0.3s ease forwards;
+}
+
+/* Scrollbar */
+#directionsList::-webkit-scrollbar {
+    width: 8px;
+}
+
+#directionsList::-webkit-scrollbar-track {
+    background: #f1f5f9;
+    border-radius: 10px;
+}
+
+#directionsList::-webkit-scrollbar-thumb {
+    background: #cbd5e1;
+    border-radius: 10px;
+}
+
+/* Badge de filtre */
+.badge a {
+    text-decoration: none;
+    font-weight: bold;
+}
+
+.badge a:hover {
+    opacity: 0.8;
+}
+
+/* Responsive */
+@media (max-width: 768px) {
+    .fk-card-body {
+        padding: 1rem;
+    }
+    
+    .btn-group {
+        flex-wrap: wrap;
+    }
+    
+    .table {
+        font-size: 0.85rem;
+    }
+}
+</style>
+
+<script>
+// Variables globales
+let poleActuelId = null;
+let toutesDirections = [];
+
+// Appliquer les filtres
+function appliquerFiltres() {
+    const resp = document.getElementById('filterResponsable').value;
+    const search = document.getElementById('searchPole').value;
+    
+    let url = new URL(window.location.href);
+    url.searchParams.set('resp', resp);
+    if (search) {
+        url.searchParams.set('search', search);
+    } else {
+        url.searchParams.delete('search');
+    }
+    
+    window.location.href = url.toString();
+}
+
+// Réinitialiser les filtres
+function reinitialiserFiltres() {
+    window.location.href = "{{ url_for('admin_poles') }}";
+}
+
+// Initialisation
+document.addEventListener('DOMContentLoaded', function() {
+    // Charger toutes les directions pour le modal
+    fetch('/api/directions-disponibles')
+        .then(response => response.json())
+        .then(data => {
+            toutesDirections = data;
+        })
+        .catch(error => console.error('Erreur chargement directions:', error));
+    
+    // Recherche en temps réel (optionnel)
+    const searchInput = document.getElementById('searchPole');
+    if (searchInput) {
+        searchInput.addEventListener('keypress', function(e) {
+            if (e.key === 'Enter') {
+                appliquerFiltres();
+            }
+        });
+    }
+});
+
+// Ouvrir le modal de rattachement
+function ouvrirModalRattachement(poleId, poleNom) {
+    poleActuelId = poleId;
+    document.getElementById('modalPoleName').textContent = poleNom;
+    document.getElementById('modalPoleId').value = poleId;
+    
+    const directionsDisponibles = toutesDirections.filter(d => 
+        !d.pole_id || d.pole_id === poleId
+    );
+    
+    afficherDirectionsListe(directionsDisponibles);
+    
+    new bootstrap.Modal(document.getElementById('rattachementModal')).show();
+}
+
+// Afficher la liste des directions
+function afficherDirectionsListe(directions) {
+    const container = document.getElementById('directionsList');
+    
+    if (directions.length === 0) {
+        container.innerHTML = `
+            <div class="text-center py-4">
+                <i class="fas fa-folder-open fa-3x text-muted mb-3"></i>
+                <p class="text-muted">Aucune direction disponible</p>
+                <a href="{{ url_for('nouvelle_direction') }}" class="fk-btn fk-btn-primary btn-sm">
+                    <i class="fas fa-plus-circle me-1"></i>Créer une direction
+                </a>
+            </div>
+        `;
+        return;
+    }
+    
+    let html = '';
+    directions.forEach(dir => {
+        const rattachee = (dir.pole_id === poleActuelId);
+        html += `
+            <div class="list-group-item direction-item" data-nom="${dir.nom.toLowerCase()}">
+                <div class="d-flex justify-content-between align-items-center">
+                    <div class="d-flex align-items-center">
+                        <input class="form-check-input me-3" type="checkbox" 
+                               value="${dir.id}" id="dir_${dir.id}"
+                               ${rattachee ? 'checked' : ''}>
+                        <div>
+                            <label class="fw-semibold" for="dir_${dir.id}">${dir.nom}</label>
+                            <div class="small">
+                                ${dir.responsable_nom ? 
+                                  `<span class="badge bg-light text-dark me-2">
+                                      <i class="fas fa-user-tie me-1"></i>${dir.responsable_nom}
+                                   </span>` : ''}
+                                <span class="badge bg-light text-dark">
+                                    <i class="fas fa-cubes me-1"></i>${dir.nb_services || 0} services
+                                </span>
+                            </div>
+                        </div>
+                    </div>
+                    ${dir.pole_nom && dir.pole_id !== poleActuelId ? 
+                      `<span class="badge bg-warning">Dans: ${dir.pole_nom}</span>` : 
+                      rattachee ? 
+                      `<span class="badge bg-success"><i class="fas fa-check me-1"></i>Déjà rattachée</span>` : ''}
+                </div>
+            </div>
+        `;
+    });
+    
+    container.innerHTML = html;
+    
+    const modalSearch = document.getElementById('modalSearch');
+    modalSearch.oninput = function(e) {
+        const term = e.target.value.toLowerCase();
+        document.querySelectorAll('.direction-item').forEach(item => {
+            const nom = item.dataset.nom;
+            item.style.display = nom.includes(term) ? '' : 'none';
+        });
+    };
+}
+
+// Confirmer le rattachement
+function confirmerRattachement() {
+    const poleId = document.getElementById('modalPoleId').value;
+    const selectedIds = [];
+    
+    document.querySelectorAll('#directionsList input[type="checkbox"]:checked').forEach(cb => {
+        selectedIds.push(cb.value);
+    });
+    
+    if (selectedIds.length === 0) {
+        alert('Veuillez sélectionner au moins une direction');
+        return;
+    }
+    
+    fetch('/api/rattacher-directions', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            'X-CSRFToken': '{{ csrf_token() }}'
+        },
+        body: JSON.stringify({
+            pole_id: poleId,
+            direction_ids: selectedIds
+        })
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            showNotification('success', `${selectedIds.length} direction(s) rattachée(s)`);
+            setTimeout(() => location.reload(), 1000);
+        } else {
+            showNotification('error', 'Erreur: ' + data.error);
+        }
+    })
+    .catch(error => {
+        showNotification('error', 'Erreur réseau');
+    });
+}
+
+// Détacher une direction
+function detacherDirection(directionId, directionNom, poleId) {
+    if (confirm(`Détacher la direction "${directionNom}" de ce pôle ?`)) {
+        fetch('/api/detacher-direction', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRFToken': '{{ csrf_token() }}'
+            },
+            body: JSON.stringify({
+                direction_id: directionId,
+                pole_id: poleId
+            })
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                showNotification('success', `Direction détachée`);
+                setTimeout(() => location.reload(), 1000);
+            } else {
+                showNotification('error', 'Erreur: ' + data.error);
+            }
+        })
+        .catch(error => {
+            showNotification('error', 'Erreur réseau');
+        });
+    }
+}
+
+// Rattacher une direction existante
+function rattacherDirectionExistante(poleId) {
+    fetch('/api/pole/' + poleId)
+        .then(response => response.json())
+        .then(pole => {
+            ouvrirModalRattachement(poleId, pole.nom);
+        });
+}
+
+// Supprimer un pôle
+function supprimerPole(poleId, poleNom) {
+    if (confirm(`Supprimer le pôle "${poleNom}" ?`)) {
+        fetch(`/admin/pole/${poleId}/supprimer`, {
+            method: 'DELETE',
+            headers: {
+                'X-CSRFToken': '{{ csrf_token() }}',
+                'Content-Type': 'application/json'
+            }
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                showNotification('success', data.message);
+                setTimeout(() => location.reload(), 1000);
+            } else {
+                showNotification('error', data.error);
+            }
+        })
+        .catch(error => {
+            showNotification('error', 'Erreur réseau');
+        });
+    }
+}
+
+// Notification
+function showNotification(type, message) {
+    const toast = document.createElement('div');
+    toast.className = `toast align-items-center text-white bg-${type} border-0 position-fixed top-0 end-0 m-3`;
+    toast.setAttribute('role', 'alert');
+    toast.innerHTML = `
+        <div class="d-flex">
+            <div class="toast-body">
+                <i class="fas fa-${type === 'success' ? 'check-circle' : 'exclamation-circle'} me-2"></i>
+                ${message}
+            </div>
+            <button type="button" class="btn-close btn-close-white me-2 m-auto" data-bs-dismiss="toast"></button>
+        </div>
+    `;
+    document.body.appendChild(toast);
+    new bootstrap.Toast(toast, { delay: 3000 }).show();
+    setTimeout(() => toast.remove(), 3500);
+}
+</script>
+{% endblock %}
