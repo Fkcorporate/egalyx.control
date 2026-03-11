@@ -70,92 +70,181 @@ class UserForm(FlaskForm):
     is_active = BooleanField('Actif')
     submit = SubmitField('Enregistrer')
 
+class PoleForm(FlaskForm):
+    nom = StringField('Nom du pôle / filiale', validators=[DataRequired()])
+    description = TextAreaField('Description', validators=[Optional()])
+    couleur = StringField('Couleur', validators=[Optional()], default='#3b82f6')
+
+    # Type de responsable (utilisateur ou manuel)
+    type_responsable = RadioField(
+        'Type de responsable',
+        choices=[
+            ('utilisateur', 'Sélectionner un utilisateur'),
+            ('manuel', 'Saisie manuelle')
+        ],
+        default='utilisateur'
+    )
+
+    responsable_id = SelectField(
+        'Responsable',
+        coerce=coerce_int_or_none,
+        validators=[Optional()]
+    )
+
+    responsable_nom_manuel = StringField(
+        'Nom du responsable',
+        validators=[Optional()]
+    )
+
+    ordre = IntegerField("Ordre d'affichage", default=0)
+
+    submit = SubmitField('Enregistrer')
+
+    def __init__(self, *args, **kwargs):
+        super(PoleForm, self).__init__(*args, **kwargs)
+        self.responsable_id.choices = [
+            (0, '--- Aucun responsable ---')
+        ]
+
+    def validate(self, extra_validators=None):
+        if not super(PoleForm, self).validate(extra_validators):
+            return False
+
+        # Validation du responsable selon le type
+        if self.type_responsable.data == 'utilisateur' and self.responsable_id.data in (0, None):
+            self.responsable_id.errors.append(
+                'Veuillez sélectionner un responsable'
+            )
+            return False
+
+        if self.type_responsable.data == 'manuel' and not self.responsable_nom_manuel.data:
+            self.responsable_nom_manuel.errors.append(
+                'Veuillez saisir le nom du responsable'
+            )
+            return False
+
+        return True
+
+
 class DirectionForm(FlaskForm):
     nom = StringField('Nom de la direction', validators=[DataRequired()])
-    description = TextAreaField('Description')
+    description = TextAreaField('Description', validators=[Optional()])
     
-    # Type de responsable (utilisateur ou manuel)
+    # 🔴 NOUVEAU: Lien vers le pôle
+    pole_id = SelectField('Pôle / Filiale', coerce=coerce_int_or_none, validators=[Optional()])
+    
+    # 🔴 NOUVEAU: Type de responsable (RadioField)
     type_responsable = RadioField('Type de responsable', 
-                                 choices=[('utilisateur', 'Sélectionner un utilisateur existant'),
-                                          ('manuel', 'Saisir un nom manuellement')],
-                                 default='utilisateur')
+                                  choices=[('utilisateur', 'Sélectionner un utilisateur'),
+                                          ('manuel', 'Saisie manuelle')],
+                                  default='utilisateur',
+                                  validators=[Optional()])
     
-    # 🔴 CORRECTION: Utiliser la fonction coerce_int_or_none améliorée
-    responsable_id = SelectField('Sélectionner un responsable', 
-                                coerce=coerce_int_or_none, 
-                                validators=[Optional()])
-    
-    # Pour la saisie manuelle
+    responsable_id = SelectField('Responsable (utilisateur)', coerce=coerce_int_or_none, validators=[Optional()])
     responsable_nom_manuel = StringField('Nom du responsable', validators=[Optional()])
     
     submit = SubmitField('Créer la direction')
     
-    def validate(self, *args, **kwargs):
-        if not super().validate(*args, **kwargs):
+    def __init__(self, *args, **kwargs):
+        super(DirectionForm, self).__init__(*args, **kwargs)
+        self.pole_id.choices = [(0, '--- Aucun pôle ---')]
+        self.responsable_id.choices = [(0, '--- Aucun responsable ---')]
+    
+    def validate(self, extra_validators=None):
+        if not super(DirectionForm, self).validate(extra_validators):
             return False
         
-        # Vérifier qu'au moins un type de responsable est renseigné
+        # Validation du responsable selon le type
         if self.type_responsable.data == 'utilisateur':
-            if not self.responsable_id.data:  # Maintenant None pour '0'
-                self.responsable_id.errors.append('Veuillez sélectionner un responsable ou choisir "Saisie manuelle"')
+            if self.responsable_id.data in (0, None):
+                self.responsable_id.errors.append('Veuillez sélectionner un responsable')
                 return False
-        elif self.type_responsable.data == 'manuel' and not self.responsable_nom_manuel.data:
-            self.responsable_nom_manuel.errors.append('Veuillez saisir un nom')
-            return False
+        elif self.type_responsable.data == 'manuel':
+            if not self.responsable_nom_manuel.data or not self.responsable_nom_manuel.data.strip():
+                self.responsable_nom_manuel.errors.append('Veuillez saisir le nom du responsable')
+                return False
         
         return True
-
 
 class ServiceForm(FlaskForm):
     nom = StringField('Nom du service', validators=[DataRequired()])
-    description = TextAreaField('Description')
-    direction_id = SelectField('Direction', coerce=int, validators=[DataRequired()])
+    description = TextAreaField('Description', validators=[Optional()])
+    direction_id = SelectField('Direction', coerce=coerce_int_or_none, validators=[DataRequired()])
     
-    # Type de responsable (utilisateur ou manuel)
+    # 🔴 AJOUTER CES CHAMPS MANQUANTS
     type_responsable = RadioField('Type de responsable', 
-                                 choices=[('utilisateur', 'Sélectionner un utilisateur existant'),
-                                          ('manuel', 'Saisir un nom manuellement')],
-                                 default='utilisateur')
+                                  choices=[('utilisateur', 'Sélectionner un utilisateur'),
+                                          ('manuel', 'Saisie manuelle')],
+                                  default='utilisateur',
+                                  validators=[Optional()])
     
-    # 🔴 CORRECTION: Utiliser la fonction coerce_int_or_none améliorée
-    responsable_id = SelectField('Sélectionner un responsable', 
-                                coerce=coerce_int_or_none, 
-                                validators=[Optional()])
-    
-    # Pour la saisie manuelle
+    responsable_id = SelectField('Responsable (utilisateur)', coerce=coerce_int_or_none, validators=[Optional()])
     responsable_nom_manuel = StringField('Nom du responsable', validators=[Optional()])
     
-    # Membres de l'équipe (champ dynamique)
-    equipe_membres = TextAreaField('Membres de l\'équipe (un par ligne)', 
-                                  validators=[Optional()],
-                                  description='Saisissez un nom par ligne')
+    # 🔴 AJOUTER LE CHAMP ÉQUIPE
+    equipe_membres = TextAreaField('Membres de l\'équipe', validators=[Optional()],
+                                   description="Saisissez un nom par ligne")
     
     submit = SubmitField('Créer le service')
     
-    def validate(self, *args, **kwargs):
-        if not super().validate(*args, **kwargs):
+    def __init__(self, *args, **kwargs):
+        super(ServiceForm, self).__init__(*args, **kwargs)
+        self.direction_id.choices = [(0, '--- Sélectionner ---')]
+        self.responsable_id.choices = [(0, '--- Aucun responsable ---')]
+    
+    def validate(self, extra_validators=None):
+        if not super(ServiceForm, self).validate(extra_validators):
             return False
         
-        # Vérifier qu'au moins un type de responsable est renseigné
+        # Validation du responsable selon le type
         if self.type_responsable.data == 'utilisateur':
-            if not self.responsable_id.data:  # Maintenant None pour '0'
-                self.responsable_id.errors.append('Veuillez sélectionner un responsable ou choisir "Saisie manuelle"')
+            if self.responsable_id.data in (0, None):
+                self.responsable_id.errors.append('Veuillez sélectionner un responsable')
                 return False
-        elif self.type_responsable.data == 'manuel' and not self.responsable_nom_manuel.data:
-            self.responsable_nom_manuel.errors.append('Veuillez saisir un nom')
-            return False
+        elif self.type_responsable.data == 'manuel':
+            if not self.responsable_nom_manuel.data or not self.responsable_nom_manuel.data.strip():
+                self.responsable_nom_manuel.errors.append('Veuillez saisir le nom du responsable')
+                return False
         
         return True
-        
+
 class CartographieForm(FlaskForm):
     nom = StringField('Nom de la cartographie', validators=[DataRequired()])
-    description = TextAreaField('Description')
+    description = TextAreaField('Description', validators=[Optional()])
+    
+    # 🔴 NOUVEAU: Lien direct vers le pôle (optionnel)
+    pole_id = SelectField('Pôle / Filiale', coerce=coerce_int_or_none, validators=[Optional()])
+    
     direction_id = SelectField('Direction', coerce=coerce_int_or_none, validators=[Optional()])
     service_id = SelectField('Service', coerce=coerce_int_or_none, validators=[Optional()])
+    
     type_cartographie = RadioField('Type de cartographie', 
-                                  choices=[('direction', 'Par Direction'), ('service', 'Par Service')],
+                                  choices=[('direction', 'Par Direction'), 
+                                          ('service', 'Par Service')],
                                   default='direction')
     submit = SubmitField('Créer la cartographie')
+    
+    def __init__(self, *args, **kwargs):
+        super(CartographieForm, self).__init__(*args, **kwargs)
+        self.pole_id.choices = [(0, '--- Aucun pôle ---')]
+        self.direction_id.choices = [(0, '--- Sélectionner ---')]
+        self.service_id.choices = [(0, '--- Sélectionner ---')]
+    
+    def validate(self, extra_validators=None):
+        if not super(CartographieForm, self).validate(extra_validators):
+            return False
+        
+        # Validation selon le type
+        if self.type_cartographie.data == 'service':
+            if self.service_id.data in (0, None):
+                self.service_id.errors.append('Veuillez sélectionner un service')
+                return False
+        elif self.type_cartographie.data == 'direction':
+            if self.direction_id.data in (0, None):
+                self.direction_id.errors.append('Veuillez sélectionner une direction')
+                return False
+        
+        return True
 
 class RisqueForm(FlaskForm):
     intitule = StringField('Intitulé du risque', validators=[DataRequired()])
