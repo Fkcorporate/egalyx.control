@@ -33,7 +33,35 @@
                         {% endfor %}
                     </div>
                     
-                    <!-- 🔴 NOUVEAU: Type de responsable -->
+                    <!-- 🔴 NOUVEAU: Sélection du Pôle (optionnel) -->
+                    <div class="mb-3">
+                        <label class="form-label fw-bold">
+                            <i class="fas fa-layer-group text-primary me-2"></i>
+                            {{ t("Pôle / Filiale (optionnel)") }}
+                        </label>
+                        <select class="form-select" name="pole_id" id="pole_id">
+                            <option value="0">--- {{ t("Aucun pôle") }} ---</option>
+                            {% if poles is defined and poles %}
+                                {% for pole in poles %}
+                                <option value="{{ pole.id }}" 
+                                        {% if (form.pole_id.data == pole.id) or (preselected_pole == pole.id) %}selected{% endif %}
+                                        {% if pole.couleur %}style="border-left: 3px solid {{ pole.couleur }};"{% endif %}>
+                                    {{ pole.nom }}
+                                    {% if pole.responsable_nom %} ({{ t("Resp") }}: {{ pole.responsable_nom }}){% endif %}
+                                </option>
+                                {% endfor %}
+                            {% endif %}
+                        </select>
+                        <small class="form-text text-muted">
+                            <i class="fas fa-info-circle me-1"></i>
+                            {{ t("Rattachez cette direction à un pôle existant") }}
+                        </small>
+                        {% for error in form.pole_id.errors %}
+                        <div class="text-danger">{{ error }}</div>
+                        {% endfor %}
+                    </div>
+                    
+                    <!-- Type de responsable -->
                     <div class="mb-3">
                         <label class="form-label fw-bold">{{ t("Responsable de la direction") }}</label>
                         <div class="card bg-light">
@@ -51,7 +79,16 @@
                                 <!-- Zone de sélection utilisateur -->
                                 <div id="zone_utilisateur" class="mb-3">
                                     {{ form.responsable_id.label(class="form-label") }}
-                                    {{ form.responsable_id(class="form-select") }}
+                                    <select class="form-select" name="responsable_id" id="responsable_id">
+                                        <option value="0">--- {{ t("Aucun responsable") }} ---</option>
+                                        {% if users is defined and users %}
+                                            {% for user in users %}
+                                            <option value="{{ user.id }}" {% if form.responsable_id.data == user.id %}selected{% endif %}>
+                                                {{ user.username }}
+                                            </option>
+                                            {% endfor %}
+                                        {% endif %}
+                                    </select>
                                     {% for error in form.responsable_id.errors %}
                                     <div class="text-danger">{{ error }}</div>
                                     {% endfor %}
@@ -91,11 +128,60 @@
             </div>
             <div class="card-body">
                 <p>{{ t("Les directions représentent les principales unités organisationnelles.") }}</p>
+                
+                <!-- Informations sur les pôles -->
+                <div class="alert alert-primary mt-3">
+                    <h6 class="alert-heading fw-bold">
+                        <i class="fas fa-layer-group me-2"></i>{{ t("Nouveau : Pôles / Filiales") }}
+                    </h6>
+                    <p class="small mb-0">
+                        {{ t("Les pôles permettent de regrouper plusieurs directions sous une même entité. Exemple : 'Pôle Finance' regroupe 'Direction Financière' et 'Direction Comptable'.") }}
+                    </p>
+                </div>
+                
                 <p><strong>{{ t("Responsable :") }}</strong></p>
                 <ul>
                     <li>{{ t("Sélectionner un utilisateur : lie la direction à un compte existant") }}</li>
                     <li>{{ t("Saisie manuelle : simple texte (utile pour des personnes externes)") }}</li>
                 </ul>
+                
+                <!-- Aperçu de la hiérarchie -->
+                <div class="border-top pt-3 mt-3">
+                    <h6 class="fw-bold">{{ t("Hiérarchie") }}</h6>
+                    <div class="d-flex align-items-center mb-2 flex-wrap">
+                        <span class="badge bg-primary me-2" id="previewPole">Pôle</span>
+                        <i class="fas fa-arrow-right text-muted mx-1"></i>
+                        <span class="badge bg-success" id="previewDirection">Direction</span>
+                    </div>
+                    <p class="small text-muted" id="previewDescription">
+                        {{ t("Sélectionnez un pôle pour voir l'aperçu") }}
+                    </p>
+                </div>
+                
+                <!-- Liste des pôles existants (raccourci) -->
+                {% if poles is defined and poles %}
+                <div class="mt-3">
+                    <h6 class="fw-bold">{{ t("Pôles existants") }}</h6>
+                    <div class="list-group small">
+                        {% for pole in poles[:3] %}
+                        <div class="list-group-item d-flex justify-content-between align-items-center">
+                            <span>
+                                <i class="fas fa-layer-group me-2" style="color: {{ pole.couleur }};"></i>
+                                {{ pole.nom }}
+                            </span>
+                            <span class="badge bg-secondary">{{ pole.nb_directions }} dir.</span>
+                        </div>
+                        {% endfor %}
+                        {% if poles|length > 3 %}
+                        <div class="text-center mt-2">
+                            <a href="{{ url_for('admin_poles') }}" class="small">
+                                {{ t("Voir tous les pôles") }} ({{ poles|length }})
+                            </a>
+                        </div>
+                        {% endif %}
+                    </div>
+                </div>
+                {% endif %}
             </div>
         </div>
     </div>
@@ -103,7 +189,7 @@
 
 <script>
 function toggleResponsableType() {
-    const typeUtilisateur = document.getElementById('type_responsable-0').checked;
+    const typeUtilisateur = document.getElementById('type_responsable-0')?.checked;
     const zoneUtilisateur = document.getElementById('zone_utilisateur');
     const zoneManuel = document.getElementById('zone_manuel');
     
@@ -118,9 +204,144 @@ function toggleResponsableType() {
     }
 }
 
+// Fonction pour mettre à jour l'aperçu du pôle
+function updatePolePreview() {
+    const poleSelect = document.getElementById('pole_id');
+    const previewPole = document.getElementById('previewPole');
+    const previewDirection = document.getElementById('previewDirection');
+    const previewDescription = document.getElementById('previewDescription');
+    const directionNom = document.querySelector('input[name="nom"]')?.value || 'Direction';
+    
+    if (poleSelect && poleSelect.value && poleSelect.value != '0') {
+        const selectedOption = poleSelect.options[poleSelect.selectedIndex];
+        const poleNom = selectedOption.text.split(' (')[0]; // Enlever le "(Resp: ...)"
+        previewPole.textContent = poleNom;
+        previewPole.className = 'badge bg-primary me-2';
+        previewDirection.textContent = directionNom;
+        previewDescription.innerHTML = `<i class="fas fa-check-circle text-success me-1"></i>La direction sera rattachée au pôle <strong>${poleNom}</strong>`;
+    } else {
+        previewPole.textContent = 'Aucun pôle';
+        previewPole.className = 'badge bg-secondary me-2';
+        previewDirection.textContent = directionNom;
+        previewDescription.innerHTML = '<i class="fas fa-info-circle text-info me-1"></i>Direction sans pôle (niveau entreprise)';
+    }
+}
+
 // Initialisation au chargement
 document.addEventListener('DOMContentLoaded', function() {
     toggleResponsableType();
+    
+    // Écouter les changements du pôle et du nom
+    const poleSelect = document.getElementById('pole_id');
+    const nomInput = document.querySelector('input[name="nom"]');
+    
+    if (poleSelect) {
+        poleSelect.addEventListener('change', updatePolePreview);
+    }
+    
+    if (nomInput) {
+        nomInput.addEventListener('input', updatePolePreview);
+    }
+    
+    // Initialiser l'aperçu
+    setTimeout(updatePolePreview, 100);
+    
+    // Validation du formulaire
+    const form = document.getElementById('directionForm');
+    if (form) {
+        form.addEventListener('submit', function(e) {
+            const nom = document.querySelector('input[name="nom"]')?.value;
+            if (!nom || nom.trim() === '') {
+                e.preventDefault();
+                alert('{{ t("Le nom de la direction est requis") }}');
+                return false;
+            }
+            
+            // Vérification du responsable selon le type
+            const typeUtilisateur = document.getElementById('type_responsable-0')?.checked;
+            const responsableId = document.getElementById('responsable_id')?.value;
+            const responsableNomManuel = document.getElementById('responsable_nom_manuel')?.value;
+            
+            if (typeUtilisateur && (!responsableId || responsableId === '0')) {
+                e.preventDefault();
+                alert('{{ t("Veuillez sélectionner un responsable ou choisir la saisie manuelle") }}');
+                return false;
+            }
+            
+            if (!typeUtilisateur && (!responsableNomManuel || responsableNomManuel.trim() === '')) {
+                e.preventDefault();
+                alert('{{ t("Veuillez saisir le nom du responsable") }}');
+                return false;
+            }
+        });
+    }
 });
 </script>
+
+<style>
+/* Styles pour l'aperçu */
+#previewPole, #previewDirection {
+    font-size: 0.9rem;
+    padding: 0.5rem 1rem;
+    transition: all 0.3s ease;
+}
+
+.badge.bg-primary {
+    background-color: #3b82f6 !important;
+}
+
+.badge.bg-success {
+    background-color: #10b981 !important;
+}
+
+.badge.bg-secondary {
+    background-color: #6c757d !important;
+}
+
+/* Animation pour l'aperçu */
+@keyframes fadeIn {
+    from { opacity: 0; transform: translateY(-5px); }
+    to { opacity: 1; transform: translateY(0); }
+}
+
+#previewDescription {
+    animation: fadeIn 0.3s ease;
+}
+
+/* Style pour le select du pôle */
+#pole_id option {
+    padding: 0.5rem;
+    font-weight: normal;
+}
+
+/* Style pour les options avec couleur */
+#pole_id option[style*="border-left"] {
+    background-repeat: no-repeat;
+    background-position: left center;
+    padding-left: 10px;
+}
+
+/* Amélioration de l'affichage des cartes */
+.card.bg-light {
+    background-color: #f8f9fa !important;
+    border: 1px solid #e9ecef;
+}
+
+.alert-primary {
+    background-color: #e8f0fe;
+    border-left: 4px solid #3b82f6;
+    color: #1e3a8a;
+}
+
+/* Liste des pôles dans la sidebar */
+.list-group-item {
+    padding: 0.5rem 0.75rem;
+    font-size: 0.85rem;
+}
+
+.list-group-item i {
+    width: 16px;
+    text-align: center;
+}
+</style>
 {% endblock %}
