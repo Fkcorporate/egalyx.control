@@ -75,6 +75,11 @@ class User(UserMixin, db.Model):
         })
     
     # Relations - CORRECTION : Spécifier foreign_keys
+    poles_geres = db.relationship('Pole', 
+                                  back_populates='responsable', 
+                                  foreign_keys='Pole.responsable_id',
+                                  lazy=True)
+    
     directions_managees = db.relationship('Direction', 
                                          back_populates='responsable', 
                                          foreign_keys='Direction.responsable_id',  # AJOUTÉ
@@ -918,10 +923,13 @@ class Direction(db.Model):
     nom = db.Column(db.String(100), nullable=False)
     description = db.Column(db.Text)
     
-    # 🔴 NOUVEAU: Responsable peut être soit un utilisateur (ID) soit un nom saisi manuellement
+    # 🔴 NOUVEAU: Lien vers le pôle/filiale
+    pole_id = db.Column(db.Integer, db.ForeignKey('poles.id'), nullable=True)
+    
+    # Responsable peut être soit un utilisateur (ID) soit un nom saisi manuellement
     responsable_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=True)
-    responsable_nom_manuel = db.Column(db.String(200), nullable=True)  # Nom saisi manuellement
-    responsable_type = db.Column(db.String(20), default='utilisateur')  # 'utilisateur' ou 'manuel'
+    responsable_nom_manuel = db.Column(db.String(200), nullable=True)
+    responsable_type = db.Column(db.String(20), default='utilisateur')
     
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     is_active = db.Column(db.Boolean, default=True)
@@ -931,6 +939,8 @@ class Direction(db.Model):
     client_id = db.Column(db.Integer, db.ForeignKey('clients.id'), nullable=True)
 
     # Relations
+    pole = db.relationship('Pole', back_populates='directions')
+    
     responsable = db.relationship('User', 
                                  back_populates='directions_managees', 
                                  foreign_keys=[responsable_id])
@@ -943,7 +953,6 @@ class Direction(db.Model):
     cartographies = db.relationship('Cartographie', back_populates='direction', lazy=True)
     processus = db.relationship('Processus', back_populates='direction', lazy=True)
     
-    # Propriété pour obtenir le nom du responsable (quel que soit le mode)
     @property
     def responsable_nom(self):
         if self.responsable_id and self.responsable:
@@ -953,11 +962,9 @@ class Direction(db.Model):
         else:
             return "Non assigné"
     
-    # Propriété pour savoir si le responsable est assigné
     @property
     def a_responsable(self):
         return bool(self.responsable_id or self.responsable_nom_manuel)
-
 
 # -------------------- SERVICE --------------------
 class Service(db.Model):
@@ -1029,6 +1036,70 @@ class Service(db.Model):
     def nb_membres_equipe(self):
         return len(self.equipe_membres) if self.equipe_membres else 0
 
+
+class Pole(db.Model):
+    """Pôle ou Filiale - niveau hiérarchique au-dessus des directions"""
+    __tablename__ = 'poles'
+    
+    id = db.Column(db.Integer, primary_key=True)
+    nom = db.Column(db.String(100), nullable=False)
+    description = db.Column(db.Text)
+    
+    # Responsable du pôle (optionnel)
+    responsable_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=True)
+    responsable_nom_manuel = db.Column(db.String(200), nullable=True)
+    responsable_type = db.Column(db.String(20), default='utilisateur')
+    
+    # Couleur personnalisée pour ce pôle (optionnel)
+    couleur = db.Column(db.String(20), default='#3b82f6')
+    
+    # Multi-tenant
+    client_id = db.Column(db.Integer, db.ForeignKey('clients.id'), nullable=True)
+    
+    # Métadonnées
+    created_by = db.Column(db.Integer, db.ForeignKey('user.id'))
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    
+    # Archivage
+    is_archived = db.Column(db.Boolean, default=False)
+    archived_at = db.Column(db.DateTime)
+    archived_by = db.Column(db.Integer, db.ForeignKey('user.id'))
+    ordre = db.Column(db.Integer, default=0)  # Pour ordonner l'affichage
+    
+    # Relations
+    responsable = db.relationship('User', foreign_keys=[responsable_id],
+                                  back_populates='poles_geres')
+    directions = db.relationship('Direction', back_populates='pole', lazy=True)
+    createur = db.relationship('User', foreign_keys=[created_by])
+    archive_user = db.relationship('User', foreign_keys=[archived_by])
+    
+    @property
+    def responsable_nom(self):
+        if self.responsable_id and self.responsable:
+            return self.responsable.username
+        elif self.responsable_nom_manuel:
+            return self.responsable_nom_manuel
+        return "Non assigné"
+    
+    @property
+    def a_responsable(self):
+        return bool(self.responsable_id or self.responsable_nom_manuel)
+    
+    @property
+    def nb_directions(self):
+        return len([d for d in self.directions if not d.is_archived and d.is_active])
+    
+    @property
+    def nb_services(self):
+        total = 0
+        for direction in self.directions:
+            if not direction.is_archived and direction.is_active:
+                total += len([s for s in direction.services 
+                             if not s.is_archived and s.is_active])
+        return total
+
+
 # -------------------- CONFIGURATION ORGANIGRAMME --------------------
 class ConfigurationOrganigramme(db.Model):
     """Configuration de l'organigramme pour chaque client"""
@@ -1054,19 +1125,26 @@ class Cartographie(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     nom = db.Column(db.String(200), nullable=False)
     description = db.Column(db.Text)
+    
+    # 🔴 AJOUTER CETTE LIGNE
+    pole_id = db.Column(db.Integer, db.ForeignKey('poles.id'), nullable=True)
+    
     direction_id = db.Column(db.Integer, db.ForeignKey('direction.id'))
     service_id = db.Column(db.Integer, db.ForeignKey('service.id'))
     type_cartographie = db.Column(db.String(50), default='direction')
     created_by = db.Column(db.Integer, db.ForeignKey('user.id'))
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     processus_id = db.Column(db.Integer, db.ForeignKey('processus.id')) 
-    # NOUVEAUX CHAMPS POUR L'ARCHIVAGE
+    
     is_archived = db.Column(db.Boolean, default=False)
     archived_at = db.Column(db.DateTime)
     archived_by = db.Column(db.Integer, db.ForeignKey('user.id'))
     archive_reason = db.Column(db.Text)
     
     # Relations
+    # 🔴 AJOUTER CETTE RELATION
+    pole = db.relationship('Pole', backref='cartographies')
+    
     direction = db.relationship('Direction', back_populates='cartographies')
     service = db.relationship('Service', back_populates='cartographies')
     createur = db.relationship('User', foreign_keys=[created_by])
@@ -1075,6 +1153,24 @@ class Cartographie(db.Model):
     campagnes = db.relationship('CampagneEvaluation', back_populates='cartographie', cascade='all, delete-orphan')
     client_id = db.Column(db.Integer, db.ForeignKey('clients.id'), nullable=True)
     processus = db.relationship('Processus', backref='cartographies')
+    
+    @property
+    def nom_complet(self):
+        if self.pole:
+            return f"{self.pole.nom} > {self.nom}"
+        return self.nom
+    
+    @property
+    def hierarchie_complete(self):
+        parts = []
+        if self.pole:
+            parts.append(self.pole.nom)
+        if self.direction:
+            parts.append(self.direction.nom)
+        if self.service:
+            parts.append(self.service.nom)
+        return " > ".join(parts)
+    
 # -------------------- RISQUE --------------------
 class Risque(db.Model):
     __tablename__ = 'risques'
