@@ -10,7 +10,7 @@
             margin: 2cm 1.5cm;
             
             @top-center {
-                content: "{{ cartographie.nom }} - Campagne {{ campagne.nom }}";
+                content: "{{ cartographie.nom }} - {% if campagnes is defined and campagnes and campagnes|length > 0 %}Campagne {{ campagnes[0].nom }}{% else %}Rapport complet{% endif %}";
                 font-size: 8pt;
                 color: #6c757d;
                 font-family: 'Helvetica', sans-serif;
@@ -585,7 +585,16 @@
         <div class="rapport-meta">
             <div class="meta-item">
                 <div class="meta-label">Campagne</div>
-                <div class="meta-value">{{ campagne.nom }}</div>
+                <div class="meta-value">
+                    {# Vérification multiple pour éviter l'erreur #}
+                    {% if campagnes is defined and campagnes and campagnes|length > 0 %}
+                        {{ campagnes[0].nom }}
+                    {% elif campagne is defined and campagne %}
+                        {{ campagne.nom }}
+                    {% else %}
+                        Rapport complet
+                    {% endif %}
+                </div>
             </div>
             <div class="meta-item">
                 <div class="meta-label">Date du rapport</div>
@@ -616,7 +625,11 @@
             <div class="info-item">
                 <span class="info-label">Période d'évaluation</span>
                 <span class="info-value">
-                    {% if campagne.date_debut %}
+                    {# Utiliser campagnes[0] si disponible, sinon campagne, sinon message par défaut #}
+                    {% if campagnes is defined and campagnes and campagnes|length > 0 and campagnes[0].date_debut %}
+                        du {{ campagnes[0].date_debut.strftime('%d/%m/%Y') }}
+                        {% if campagnes[0].date_fin %} au {{ campagnes[0].date_fin.strftime('%d/%m/%Y') }}{% endif %}
+                    {% elif campagne is defined and campagne and campagne.date_debut %}
                         du {{ campagne.date_debut.strftime('%d/%m/%Y') }}
                         {% if campagne.date_fin %} au {{ campagne.date_fin.strftime('%d/%m/%Y') }}{% endif %}
                     {% else %}
@@ -628,12 +641,24 @@
             <div class="info-item">
                 <span class="info-label">Statut de la campagne</span>
                 <span class="info-value">
-                    {% if campagne.statut == 'en_cours' %}
-                        <span class="risk-badge medium">En cours</span>
-                    {% elif campagne.statut == 'terminee' %}
-                        <span class="risk-badge low">Terminée</span>
+                    {% if campagnes is defined and campagnes and campagnes|length > 0 %}
+                        {% if campagnes[0].statut == 'en_cours' %}
+                            <span class="risk-badge medium">En cours</span>
+                        {% elif campagnes[0].statut == 'terminee' %}
+                            <span class="risk-badge low">Terminée</span>
+                        {% else %}
+                            {{ campagnes[0].statut }}
+                        {% endif %}
+                    {% elif campagne is defined and campagne %}
+                        {% if campagne.statut == 'en_cours' %}
+                            <span class="risk-badge medium">En cours</span>
+                        {% elif campagne.statut == 'terminee' %}
+                            <span class="risk-badge low">Terminée</span>
+                        {% else %}
+                            {{ campagne.statut }}
+                        {% endif %}
                     {% else %}
-                        {{ campagne.statut }}
+                        <span class="risk-badge na">Aucune campagne</span>
                     {% endif %}
                 </span>
             </div>
@@ -692,13 +717,21 @@
     
     <!-- ========== MATRICE DES RISQUES ========== -->
     <div class="page-break"></div>
-    <h2>Matrice des risques - {{ campagne.nom }}</h2>
+    <h2>Matrice des risques - 
+        {% if campagnes is defined and campagnes and campagnes|length > 0 %}
+            {{ campagnes[0].nom }}
+        {% elif campagne is defined and campagne %}
+            {{ campagne.nom }}
+        {% else %}
+            Rapport complet
+        {% endif %}
+    </h2>
 
     {% if has_matrices and matrice_classique %}
         <div style="text-align: center; margin: 20px 0;" class="no-break">
             <div style="background: #f8f9fa; padding: 20px; border-radius: 10px;">
                 <img src="data:image/png;base64,{{ matrice_classique }}" 
-                    alt="Matrice des risques - {{ campagne.nom }}" 
+                    alt="Matrice des risques" 
                     style="max-width: 100%; height: auto; border-radius: 8px; box-shadow: 0 4px 8px rgba(0,0,0,0.1);">
                 
                 <p style="color: #6c757d; margin-top: 15px; font-size: 9pt;">
@@ -738,12 +771,12 @@
                     Matrice non disponible
                 </p>
                 <p style="color: #95a5a6; font-size: 10pt;">
-                    {{ nb_risques_evalues }}/{{ nb_risques_total }} risques évalués dans cette campagne
+                    {{ nb_risques_evalues }}/{{ nb_risques_total }} risques évalués
                 </p>
                 {% if nb_risques_evalues == 0 %}
                     <p style="color: #e74c3c; font-size: 9pt; margin-top: 15px;">
                         <i class="fas fa-exclamation-triangle"></i>
-                        Aucun risque n'a encore été évalué dans la campagne "{{ campagne.nom }}"
+                        Aucun risque n'a encore été évalué
                     </p>
                 {% endif %}
             </div>
