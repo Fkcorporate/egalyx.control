@@ -10,6 +10,9 @@ db = SQLAlchemy()
 class User(UserMixin, db.Model):
     __tablename__ = 'user'
     
+    # ============================================
+    # CHAMPS EXISTANTS (conservés)
+    # ============================================
     id = db.Column(db.Integer, primary_key=True)
     username = db.Column(db.String(80), unique=True, nullable=False)
     email = db.Column(db.String(120), unique=True, nullable=False)
@@ -27,142 +30,91 @@ class User(UserMixin, db.Model):
     deleted_at = db.Column(db.DateTime, nullable=True)
     deleted_by = db.Column(db.Integer, nullable=True)
     
-
-    # AJOUTER CES DEUX CHAMPS :
+    # Multi-tenant
     client_id = db.Column(db.Integer, db.ForeignKey('clients.id'))
     is_client_admin = db.Column(db.Boolean, default=False)
     can_manage_users = db.Column(db.Boolean, default=False)
-
     can_view_users_list = db.Column(db.Boolean, default=False)
     
-    # MODIFIER LA RELATION :
+    # Relation client
     client = db.relationship('Client', back_populates='utilisateurs')
     
-    # Permissions spécifiques (JSON pour flexibilité)
+    # ============================================
+    # NOUVEAUX CHAMPS POUR LA SÉCURITÉ DES MOTS DE PASSE
+    # ============================================
+    
+    # Historique des mots de passe (pour éviter la réutilisation)
+    password_history = db.Column(db.JSON, default=[])
+    
+    # Date du dernier changement de mot de passe
+    password_changed_at = db.Column(db.DateTime, nullable=True)
+    
+    # Tentatives de connexion échouées
+    failed_login_attempts = db.Column(db.Integer, default=0)
+    
+    # Date du dernier échec de connexion
+    last_failed_login = db.Column(db.DateTime, nullable=True)
+    
+    # Date d'expiration du mot de passe (90 jours par défaut)
+    password_expires_at = db.Column(db.DateTime, nullable=True)
+    
+    # Token de réinitialisation de mot de passe
+    reset_password_token = db.Column(db.String(100), nullable=True, unique=True)
+    
+    # Date d'expiration du token
+    reset_password_expires = db.Column(db.DateTime, nullable=True)
+    
+    # Forcer le changement de mot de passe à la prochaine connexion
+    force_password_change = db.Column(db.Boolean, default=False)
+    
+    # Verrouillage temporaire du compte
+    locked_until = db.Column(db.DateTime, nullable=True)
+    lock_reason = db.Column(db.String(255), nullable=True)
+    
+    # Token de session pour invalider toutes les sessions
+    session_token = db.Column(db.String(100), nullable=True)
+    
+    # ============================================
+    # PERMISSIONS (JSON)
+    # ============================================
     permissions = db.Column(db.JSON, default={
-            'can_view_dashboard': True,
-            'can_manage_risks': False,
-            'can_manage_kri': False,
-            'can_manage_audit': False,
-            'can_manage_regulatory': False,
-            'can_manage_logigram': False,
-            'can_manage_settings': False,
-            'can_export_data': False,
-            'can_view_reports': True,
-            'can_delete_data': False,
-            'can_access_all_departments': False,
-            'can_archive_data': False,
-            'can_validate_risks': False,
-            'can_confirm_evaluations': False,
-            'can_view_departments': False,
-            'can_manage_departments': False,
-            'can_view_users_list': False,
-            'can_edit_users': False,
-            'can_create_users': False,
-            'can_deactivate_users': False,
-            'can_delete_users': False,
-            'can_block_users': False,  # Nouveau : Bloquer des utilisateurs
-            'can_manage_permissions': False,  # Réactivé pour gestionnaires
-            # Permissions spécifiques aux modules
-            'module_cartographie': True,
-            'module_kri': True,
-            'module_audit': True,
-            'module_veille': True,
-            'module_processus': True,
-            'module_questionnaires': True,
-            'module_plans_action': True,
-            'module_analyse_ia': False
-        })
+        'can_view_dashboard': True,
+        'can_manage_risks': False,
+        'can_manage_kri': False,
+        'can_manage_audit': False,
+        'can_manage_regulatory': False,
+        'can_manage_logigram': False,
+        'can_manage_settings': False,
+        'can_export_data': False,
+        'can_view_reports': True,
+        'can_delete_data': False,
+        'can_access_all_departments': False,
+        'can_archive_data': False,
+        'can_validate_risks': False,
+        'can_confirm_evaluations': False,
+        'can_view_departments': False,
+        'can_manage_departments': False,
+        'can_view_users_list': False,
+        'can_edit_users': False,
+        'can_create_users': False,
+        'can_deactivate_users': False,
+        'can_delete_users': False,
+        'can_block_users': False,
+        'can_manage_permissions': False,
+        # Modules
+        'module_cartographie': True,
+        'module_kri': True,
+        'module_audit': True,
+        'module_veille': True,
+        'module_processus': True,
+        'module_questionnaires': True,
+        'module_plans_action': True,
+        'module_analyse_ia': False
+    })
     
-    # Relations - CORRECTION : Spécifier foreign_keys
-    poles_geres = db.relationship('Pole', 
-                                  back_populates='responsable', 
-                                  foreign_keys='Pole.responsable_id',
-                                  lazy=True)
-    
-    directions_managees = db.relationship('Direction', 
-                                         back_populates='responsable', 
-                                         foreign_keys='Direction.responsable_id',  # AJOUTÉ
-                                         lazy=True)
-    
-    services_managees = db.relationship('Service', 
-                                       back_populates='responsable', 
-                                       foreign_keys='Service.responsable_id',  # AJOUTÉ
-                                       lazy=True)
-    
-    processus_geres = db.relationship('Processus', 
-                                     back_populates='responsable', 
-                                     foreign_keys='Processus.responsable_id',  # AJOUTÉ
-                                     lazy=True)
-    
-    # Relations avec les directions archivées (séparée)
-    directions_archivees = db.relationship('Direction', 
-                                         back_populates='archived_by_user', 
-                                         foreign_keys='Direction.archived_by',  # AJOUTÉ
-                                         lazy=True)
-    
-    # Relations avec les services archivés (séparée)
-    services_archivees = db.relationship('Service', 
-                                       back_populates='archived_by_user', 
-                                       foreign_keys='Service.archived_by',  # AJOUTÉ
-                                       lazy=True)
-    
-    # Relations avec EvaluationRisque
-    evaluations_faites = db.relationship('EvaluationRisque', back_populates='evaluateur_final',
-                                        foreign_keys='EvaluationRisque.evaluateur_final_id', lazy=True)
-    
-    validations_faites = db.relationship('EvaluationRisque', back_populates='validateur',
-                                        foreign_keys='EvaluationRisque.validateur_id', lazy=True)
-    
-    pre_evaluations_faites = db.relationship('EvaluationRisque', back_populates='referent_pre_evaluation',
-                                            foreign_keys='EvaluationRisque.referent_pre_evaluation_id', lazy=True)
-    
-    # Relations avec Cartographie
-    cartographies_crees = db.relationship('Cartographie', back_populates='createur',
-                                         foreign_keys='Cartographie.created_by', lazy=True)
-    
-    # Relations avec Risque
-    risques_crees = db.relationship('Risque', back_populates='createur',
-                                   foreign_keys='Risque.created_by', lazy=True)
-    risques_archives = db.relationship('Risque', back_populates='archive_user',
-                                       foreign_keys='Risque.archived_by', lazy=True)
-    
-    # Relations avec KRI
-    kris_geres = db.relationship('KRI', back_populates='responsable_mesure', 
-                                foreign_keys='KRI.responsable_mesure_id', lazy=True)
-    
-    kris_crees = db.relationship('KRI', back_populates='createur',
-                                foreign_keys='KRI.created_by', lazy=True)
-    
-    kris_archives = db.relationship('KRI', back_populates='archive_par',
-                                   foreign_keys='KRI.archived_by', lazy=True)
-    
-    # Relations avec Audit
-    audits_realises = db.relationship('Audit', back_populates='responsable',
-                                     foreign_keys='Audit.responsable_id', lazy=True)
-    
-    audits_crees = db.relationship('Audit', back_populates='createur',
-                                  foreign_keys='Audit.created_by', lazy=True)
-    
-    # Relations avec autres modèles
-    mesures_prises = db.relationship('MesureKRI', back_populates='createur', lazy=True)
-    veilles_crees = db.relationship('VeilleReglementaire', back_populates='createur', lazy=True)
-    actions_conformite = db.relationship('ActionConformite', back_populates='responsable', lazy=True)
-    documents_veille = db.relationship('VeilleDocument', back_populates='uploader', 
-                                      foreign_keys='VeilleDocument.uploaded_by', lazy=True)
-    
-    # Relations avec Logigramme
-    logigrammes_crees = db.relationship('ProcessusActivite', back_populates='createur',
-                                       foreign_keys='ProcessusActivite.created_by', lazy=True)
-    
-    # Journal d'activité
-    activites = db.relationship('JournalActivite', back_populates='utilisateur',
-                               foreign_keys='JournalActivite.utilisateur_id', lazy=True)
-    
-    # Plans d'action
-    plans_action = db.relationship('PlanAction', back_populates='responsable',
-                                  foreign_keys='PlanAction.responsable_id', lazy=True)
-    
+    # ============================================
+    # PRÉFÉRENCES NOTIFICATIONS
+    # ============================================
     preferences_notifications = db.Column(db.JSON, default={
         'web': {
             'nouvelle_constatation': True,
@@ -194,157 +146,471 @@ class User(UserMixin, db.Model):
         'pause_until': None
     })
     
+    # ============================================
+    # RELATIONS
+    # ============================================
+    
+    # Pôles
+    poles_geres = db.relationship('Pole', 
+                                  back_populates='responsable', 
+                                  foreign_keys='Pole.responsable_id',
+                                  lazy=True)
+    
+    # Directions
+    directions_managees = db.relationship('Direction', 
+                                         back_populates='responsable', 
+                                         foreign_keys='Direction.responsable_id',
+                                         lazy=True)
+    
+    directions_archivees = db.relationship('Direction', 
+                                         back_populates='archived_by_user', 
+                                         foreign_keys='Direction.archived_by',
+                                         lazy=True)
+    
+    # Services
+    services_managees = db.relationship('Service', 
+                                       back_populates='responsable', 
+                                       foreign_keys='Service.responsable_id',
+                                       lazy=True)
+    
+    services_archivees = db.relationship('Service', 
+                                       back_populates='archived_by_user', 
+                                       foreign_keys='Service.archived_by',
+                                       lazy=True)
+    
+    # Processus
+    processus_geres = db.relationship('Processus', 
+                                     back_populates='responsable', 
+                                     foreign_keys='Processus.responsable_id',
+                                     lazy=True)
+    
+    # Évaluations
+    evaluations_faites = db.relationship('EvaluationRisque', 
+                                        back_populates='evaluateur_final',
+                                        foreign_keys='EvaluationRisque.evaluateur_final_id', 
+                                        lazy=True)
+    
+    validations_faites = db.relationship('EvaluationRisque', 
+                                        back_populates='validateur',
+                                        foreign_keys='EvaluationRisque.validateur_id', 
+                                        lazy=True)
+    
+    pre_evaluations_faites = db.relationship('EvaluationRisque', 
+                                            back_populates='referent_pre_evaluation',
+                                            foreign_keys='EvaluationRisque.referent_pre_evaluation_id', 
+                                            lazy=True)
+    
+    # Cartographies
+    cartographies_crees = db.relationship('Cartographie', 
+                                         back_populates='createur',
+                                         foreign_keys='Cartographie.created_by', 
+                                         lazy=True)
+    
+    # Risques
+    risques_crees = db.relationship('Risque', 
+                                   back_populates='createur',
+                                   foreign_keys='Risque.created_by', 
+                                   lazy=True)
+    
+    risques_archives = db.relationship('Risque', 
+                                      back_populates='archive_user',
+                                      foreign_keys='Risque.archived_by', 
+                                      lazy=True)
+    
+    # KRI
+    kris_geres = db.relationship('KRI', 
+                                back_populates='responsable_mesure', 
+                                foreign_keys='KRI.responsable_mesure_id', 
+                                lazy=True)
+    
+    kris_crees = db.relationship('KRI', 
+                                back_populates='createur',
+                                foreign_keys='KRI.created_by', 
+                                lazy=True)
+    
+    kris_archives = db.relationship('KRI', 
+                                   back_populates='archive_par',
+                                   foreign_keys='KRI.archived_by', 
+                                   lazy=True)
+    
+    # Audits
+    audits_realises = db.relationship('Audit', 
+                                     back_populates='responsable',
+                                     foreign_keys='Audit.responsable_id', 
+                                     lazy=True)
+    
+    audits_crees = db.relationship('Audit', 
+                                  back_populates='createur',
+                                  foreign_keys='Audit.created_by', 
+                                  lazy=True)
+    
+    # Mesures KRI
+    mesures_prises = db.relationship('MesureKRI', 
+                                    back_populates='createur', 
+                                    lazy=True)
+    
+    # Veille
+    veilles_crees = db.relationship('VeilleReglementaire', 
+                                   back_populates='createur', 
+                                   lazy=True)
+    
+    actions_conformite = db.relationship('ActionConformite', 
+                                        back_populates='responsable', 
+                                        lazy=True)
+    
+    documents_veille = db.relationship('VeilleDocument', 
+                                      back_populates='uploader', 
+                                      foreign_keys='VeilleDocument.uploaded_by', 
+                                      lazy=True)
+    
+    # Logigrammes
+    logigrammes_crees = db.relationship('ProcessusActivite', 
+                                       back_populates='createur',
+                                       foreign_keys='ProcessusActivite.created_by', 
+                                       lazy=True)
+    
+    # Journal d'activité
+    activites = db.relationship('JournalActivite', 
+                               back_populates='utilisateur',
+                               foreign_keys='JournalActivite.utilisateur_id', 
+                               lazy=True)
+    
+    # Plans d'action
+    plans_action = db.relationship('PlanAction', 
+                                  back_populates='responsable',
+                                  foreign_keys='PlanAction.responsable_id', 
+                                  lazy=True)
+    
+    # Notifications
     notifications_recues = db.relationship('Notification', 
                                           back_populates='destinataire',
                                           foreign_keys='Notification.destinataire_id',
                                           lazy=True,
                                           order_by='Notification.created_at.desc()')
 
-    # Méthodes pour les permissions
-    def set_password(self, password):
+    # ============================================
+    # MÉTHODES DE GESTION DES MOTS DE PASSE
+    # ============================================
+    
+    def set_password(self, password, check_history=True):
+        """
+        Définit le mot de passe avec validation de force et historique
+        
+        Args:
+            password: Le nouveau mot de passe
+            check_history: Vérifier l'historique (True pour changement)
+        
+        Raises:
+            ValueError: Si le mot de passe ne respecte pas les critères
+        """
+        import re
+        from datetime import datetime, timedelta
+        from werkzeug.security import generate_password_hash
+        
+        # ============================================
+        # 1. VALIDATION DE LA FORCE DU MOT DE PASSE
+        # ============================================
+        
+        # Minimum 12 caractères (recommandation ANSSI)
+        if len(password) < 12:
+            raise ValueError("Le mot de passe doit contenir au moins 12 caractères")
+        
+        # Au moins une majuscule
+        if not re.search(r"[A-Z]", password):
+            raise ValueError("Le mot de passe doit contenir au moins une majuscule")
+        
+        # Au moins une minuscule
+        if not re.search(r"[a-z]", password):
+            raise ValueError("Le mot de passe doit contenir au moins une minuscule")
+        
+        # Au moins un chiffre
+        if not re.search(r"[0-9]", password):
+            raise ValueError("Le mot de passe doit contenir au moins un chiffre")
+        
+        # Au moins un caractère spécial
+        if not re.search(r"[!@#$%^&*(),.?\":{}|<>]", password):
+            raise ValueError("Le mot de passe doit contenir au moins un caractère spécial")
+        
+        # Pas d'espaces
+        if " " in password:
+            raise ValueError("Le mot de passe ne doit pas contenir d'espaces")
+        
+        # Pas de séquences évidentes
+        common_patterns = [
+            r"123456", r"password", r"motdepasse", r"azerty", r"qwerty",
+            r"admin", r"root", r"test", r"123456789", r"0123456789"
+        ]
+        password_lower = password.lower()
+        for pattern in common_patterns:
+            if pattern in password_lower:
+                raise ValueError(f"Le mot de passe contient une séquence trop simple: '{pattern}'")
+        
+        # Pas de répétitions (aaaa, 1111, etc.)
+        if re.search(r"(.)\1{3,}", password):
+            raise ValueError("Le mot de passe contient trop de caractères répétés")
+        
+        # ============================================
+        # 2. VÉRIFICATION DE L'HISTORIQUE
+        # ============================================
+        
+        if check_history and self.password_history:
+            # Vérifier les 5 derniers mots de passe
+            for old_hash in self.password_history[-5:]:
+                if check_password_hash(old_hash, password):
+                    raise ValueError("Vous ne pouvez pas réutiliser un des 5 derniers mots de passe")
+        
+        # ============================================
+        # 3. SAUVEGARDE DE L'ANCIEN MOT DE PASSE
+        # ============================================
+        
+        if self.password_hash and self.id:  # Si c'est une modification
+            if not self.password_history:
+                self.password_history = []
+            
+            # Ajouter l'ancien hash à l'historique
+            self.password_history.append(self.password_hash)
+            
+            # Garder seulement les 10 derniers
+            if len(self.password_history) > 10:
+                self.password_history = self.password_history[-10:]
+        
+        # ============================================
+        # 4. HASHAGE DU NOUVEAU MOT DE PASSE
+        # ============================================
+        
         self.password_hash = generate_password_hash(password)
+        self.password_changed_at = datetime.utcnow()
+        self.failed_login_attempts = 0  # Réinitialiser les tentatives
+        self.force_password_change = False  # Désactiver le flag
+        
+        # Date d'expiration (90 jours)
+        self.password_expires_at = datetime.utcnow() + timedelta(days=90)
+        
+        # Nouveau token de session (invalide les anciennes sessions)
+        import secrets
+        self.session_token = secrets.token_urlsafe(32)
 
     def check_password(self, password):
-        return check_password_hash(self.password_hash, password)
+        """
+        Vérifie le mot de passe avec gestion des tentatives échouées
+        
+        Args:
+            password: Le mot de passe à vérifier
+        
+        Returns:
+            bool: True si le mot de passe est correct
+            
+        Raises:
+            ValueError: Si le compte est bloqué
+        """
+        from datetime import datetime
+        from werkzeug.security import check_password_hash
+        
+        # ============================================
+        # 1. VÉRIFIER SI LE COMPTE EST BLOQUÉ
+        # ============================================
+        
+        if self.is_blocked:
+            # Vérifier si le blocage est temporaire
+            if self.locked_until and self.locked_until > datetime.utcnow():
+                raise ValueError(f"Compte temporairement bloqué jusqu'au {self.locked_until.strftime('%d/%m/%Y %H:%M')}")
+            elif self.locked_until and self.locked_until <= datetime.utcnow():
+                # Débloquer automatiquement
+                self.is_blocked = False
+                self.locked_until = None
+                self.failed_login_attempts = 0
+                self.lock_reason = None
+            else:
+                raise ValueError("Ce compte est bloqué. Contactez l'administrateur.")
+        
+        # ============================================
+        # 2. VÉRIFIER LE MOT DE PASSE
+        # ============================================
+        
+        is_valid = check_password_hash(self.password_hash, password)
+        
+        if is_valid:
+            # Succès : réinitialiser les tentatives échouées
+            self.failed_login_attempts = 0
+            self.last_failed_login = None
+            return True
+        
+        else:
+            # Échec : incrémenter le compteur
+            self.failed_login_attempts += 1
+            self.last_failed_login = datetime.utcnow()
+            
+            # ============================================
+            # 3. POLITIQUE DE BLOCAGE PROGRESSIVE
+            # ============================================
+            
+            if self.failed_login_attempts >= 10:
+                # Blocage définitif après 10 tentatives
+                self.is_blocked = True
+                self.blocked_at = datetime.utcnow()
+                self.blocked_reason = "Trop de tentatives de connexion échouées (10+)"
+                raise ValueError("Compte bloqué pour sécurité. Contactez l'administrateur.")
+            
+            elif self.failed_login_attempts >= 5:
+                # Blocage temporaire de 30 minutes après 5 tentatives
+                self.locked_until = datetime.utcnow() + timedelta(minutes=30)
+                self.lock_reason = f"Trop de tentatives échouées ({self.failed_login_attempts})"
+                raise ValueError(f"Trop de tentatives. Compte bloqué 30 minutes.")
+            
+            elif self.failed_login_attempts >= 3:
+                # Alerte après 3 tentatives
+                raise ValueError(f"Mot de passe incorrect. Tentative {self.failed_login_attempts}/5")
+            
+            else:
+                raise ValueError("Nom d'utilisateur ou mot de passe incorrect")
+    
+    def is_password_expired(self):
+        """Vérifie si le mot de passe a expiré"""
+        from datetime import datetime
+        if not self.password_expires_at:
+            return False
+        return datetime.utcnow() > self.password_expires_at
+    
+    def generate_reset_token(self, expires_in=3600):
+        """
+        Génère un token de réinitialisation de mot de passe
+        
+        Args:
+            expires_in: Durée de validité en secondes (défaut: 1 heure)
+        
+        Returns:
+            str: Le token de réinitialisation
+        """
+        import secrets
+        from datetime import datetime, timedelta
+        
+        self.reset_password_token = secrets.token_urlsafe(32)
+        self.reset_password_expires = datetime.utcnow() + timedelta(seconds=expires_in)
+        db.session.commit()
+        return self.reset_password_token
+    
+    def verify_reset_token(self, token):
+        """
+        Vérifie si un token de réinitialisation est valide
+        
+        Args:
+            token: Le token à vérifier
+        
+        Returns:
+            bool: True si le token est valide
+        """
+        from datetime import datetime
+        
+        if not self.reset_password_token or not self.reset_password_expires:
+            return False
+        
+        if self.reset_password_token != token:
+            return False
+        
+        if datetime.utcnow() > self.reset_password_expires:
+            return False
+        
+        return True
+    
+    def invalidate_sessions(self):
+        """Invalide toutes les sessions de l'utilisateur"""
+        import secrets
+        self.session_token = secrets.token_urlsafe(32)
+        db.session.commit()
+
+    # ============================================
+    # MÉTHODES DE PERMISSIONS
+    # ============================================
     
     def has_permission(self, permission):
-        """Vérifie si l'utilisateur a une permission spécifique - VERSION DÉFINITIVE"""
+        """Vérifie si l'utilisateur a une permission spécifique"""
         
-        print(f"🔐 [DEBUG] Vérification permission '{permission}' pour {self.username} (rôle: {self.role}, client_admin: {self.is_client_admin})")
+        print(f"🔐 [DEBUG] Vérification permission '{permission}' pour {self.username} (rôle: {self.role})")
         
-        # 1. SUPER ADMIN : TOUJOURS AUTORISÉ (sauf exceptions)
+        # 1. SUPER ADMIN : TOUJOURS AUTORISÉ
         if self.role == 'super_admin':
             print(f"   ✅ Super admin - accès immédiat")
             return True
         
-        # 2. Vérifier si l'utilisateur est un ADMIN CLIENT (deux façons de vérifier)
+        # 2. ADMIN CLIENT
         is_admin_client = (self.role == 'admin') or (getattr(self, 'is_client_admin', False))
         
         if is_admin_client:
             print(f"   👑 Utilisateur est un ADMIN CLIENT")
             
-            # Liste COMPLÈTE des permissions OBLIGATOIRES pour admin client
             permissions_admin_obligatoires = {
-                # Tableau de bord et visualisation
                 'can_view_dashboard': True,
                 'can_view_reports': True,
                 'can_view_departments': True,
                 'can_view_notifications': True,
-                
-                # Gestion des risques
                 'can_manage_risks': True,
                 'can_validate_risks': True,
-                
-                # Gestion des KRI
                 'can_manage_kri': True,
-                
-                # Gestion des audits
                 'can_manage_audit': True,
                 'can_confirm_evaluations': True,
-                
-                # Plans d'action
                 'can_manage_action_plans': True,
                 'can_view_action_plans': True,
-                
-                # Gestion des utilisateurs
                 'can_view_users_list': True,
                 'can_edit_users': True,
                 'can_manage_users': True,
                 'can_create_users': True,
                 'can_deactivate_users': True,
                 'can_delete_users': True,
-                
-                # Gestion des départements
                 'can_manage_departments': True,
                 'can_access_all_departments': True,
-                
-                # Administration
                 'can_manage_settings': True,
                 'can_archive_data': True,
                 'can_export_data': True,
-                
-                # Veille règlementaire (si module activé)
-                'can_manage_regulatory': True if self.client and self.client.formule and 
-                                               self.client.formule.modules.get('veille_reglementaire', False) else False,
-                
-                # Processus (si module activé)
-                'can_manage_logigram': True if self.client and self.client.formule and 
-                                             self.client.formule.modules.get('gestion_processus', False) else False,
-                
-                # Permissions à TOUJOURS FALSE pour admin client
+                'can_manage_regulatory': self.client and self.client.formule and 
+                                          self.client.formule.modules.get('veille_reglementaire', False) if self.client else False,
+                'can_manage_logigram': self.client and self.client.formule and 
+                                        self.client.formule.modules.get('gestion_processus', False) if self.client else False,
                 'can_manage_clients': False,
                 'can_provision_servers': False,
-                'can_manage_permissions': True,  # ADMIN client peut gérer les permissions de SES utilisateurs
+                'can_manage_permissions': True,
             }
             
-            # Vérifier si la permission est dans la liste des permissions admin obligatoires
             if permission in permissions_admin_obligatoires:
-                value = permissions_admin_obligatoires[permission]
-                print(f"   📋 Permission admin obligatoire '{permission}': {value}")
-                return value
+                return permissions_admin_obligatoires[permission]
         
-        # 3. Vérifier si l'utilisateur est un GESTIONNAIRE (manager)
-        # 3. Vérifier si l'utilisateur est un GESTIONNAIRE (manager)
+        # 3. GESTIONNAIRE (manager)
         if self.role == 'manager':
-            print(f"   👤 Utilisateur est un GESTIONNAIRE (manager)")
+            print(f"   👤 Utilisateur est un GESTIONNAIRE")
             
-            permissions_manager_base = {
-                # Visualisation de base
+            permissions_manager = {
                 'can_view_dashboard': True,
                 'can_view_reports': True,
                 'can_view_departments': True,
                 'can_view_notifications': True,
-                
-                # Gestion des risques
                 'can_manage_risks': True,
                 'can_validate_risks': True,
-                
-                # KRI
                 'can_manage_kri': True,
-                
-                # Audit
                 'can_manage_audit': True,
-                
-                # Plans d'action
                 'can_view_action_plans': True,
                 'can_manage_action_plans': True,
-                
-                # Accès aux départements
                 'can_access_all_departments': True,
-                
-                # Export
                 'can_export_data': True,
-                
-                # Gestion des utilisateurs - CORRECTION ICI !
                 'can_manage_users': True,
                 'can_edit_users': True,
                 'can_view_users_list': True,
-                'can_create_users': True,           # AJOUTÉ
-                'can_deactivate_users': True,       # AJOUTÉ
-                'can_delete_users': True,           # AJOUTÉ
-                'can_manage_permissions': True,     # AJOUTÉ
-                
-                # Administration limitée
-                'can_manage_settings': True,        # Peut gérer certains paramètres
-                'can_manage_departments': True,     # Peut gérer les départements
-                
-                # Permissions réservées aux admin (toujours false pour manager)
+                'can_create_users': True,
+                'can_deactivate_users': True,
+                'can_delete_users': True,
+                'can_manage_permissions': True,
+                'can_manage_settings': True,
+                'can_manage_departments': True,
                 'can_manage_clients': False,
                 'can_provision_servers': False,
             }
             
-            if permission in permissions_manager_base:
-                value = permissions_manager_base[permission]
-                print(f"   📋 Permission manager '{permission}': {value}")
-                return value
+            if permission in permissions_manager:
+                return permissions_manager[permission]
         
-        # 4. Vérifier les permissions EXPLICITES dans user.permissions
+        # 4. PERMISSIONS EXPLICITES DANS LA BASE
         if self.permissions and permission in self.permissions:
-            value = bool(self.permissions[permission])
-            print(f"   📋 Permission explicite dans DB: {value}")
-            return value
+            return bool(self.permissions[permission])
         
-        # 5. Permissions par DÉFAUT selon le rôle (pour les rôles simples)
+        # 5. PERMISSIONS PAR DÉFAUT SELON LE RÔLE
         role_defaults = {
             'auditeur': {
                 'can_view_dashboard': True,
@@ -359,7 +625,7 @@ class User(UserMixin, db.Model):
                 'can_view_reports': True,
                 'can_view_departments': True,
                 'can_view_notifications': True,
-                'can_view_action_plans': True,  # Peut voir les plans qui le concernent
+                'can_view_action_plans': True,
             },
             'compliance': {
                 'can_view_dashboard': True,
@@ -372,130 +638,118 @@ class User(UserMixin, db.Model):
                 'can_view_dashboard': True,
                 'can_view_reports': True,
                 'can_view_departments': True,
-                'can_create_users': True,
             }
         }
         
         if self.role in role_defaults and permission in role_defaults[self.role]:
-            value = role_defaults[self.role][permission]
-            print(f"   📋 Permission par défaut pour rôle '{self.role}': {value}")
-            return value
+            return role_defaults[self.role][permission]
         
-        # 6. Vérifier la formule du client pour les permissions liées aux modules
-        if self.client and self.client.formule:
-            formule = self.client.formule
-            
-            # Mapping des permissions liées aux modules
-            permission_to_module = {
-                'can_manage_regulatory': 'veille_reglementaire',
-                'can_manage_logigram': 'gestion_processus',
-                'can_manage_action_plans': 'audit_interne',
-                'can_view_action_plans': 'audit_interne',
-                'can_manage_risks': 'cartographie',
-                'can_manage_kri': 'suivi_kri',
-                'can_manage_audit': 'audit_interne',
-            }
-            
-            if permission in permission_to_module:
-                module_name = permission_to_module[permission]
-                if module_name in formule.modules:
-                    is_module_active = formule.modules[module_name]
-                    print(f"   🔍 Permission liée au module '{module_name}': {is_module_active}")
-                    
-                    # Si le module est activé, la permission est accordée
-                    if is_module_active:
-                        return True
-                    else:
-                        print(f"   ❌ Module '{module_name}' désactivé dans la formule")
-                        return False
-        
-        print(f"   ❌ Permission '{permission}' REFUSÉE par défaut")
+        print(f"   ❌ Permission '{permission}' REFUSÉE")
         return False
-
     
-    def get_allowed_sections(self):
-        """Retourne les sections accessibles par l'utilisateur"""
-        sections = []
-        
-        if self.has_permission('can_view_dashboard'):
-            sections.append('dashboard')
-        
-        if self.has_permission('can_manage_risks'):
-            sections.extend(['cartographie', 'risques', 'matrices'])
-        
-        if self.has_permission('can_manage_kri'):
-            sections.append('kri')
-        
-        if self.has_permission('can_manage_audit'):
-            sections.extend(['audit', 'plans_action', 'constatations'])
-        
-        if self.has_permission('can_manage_regulatory'):
-            sections.append('veille')
-        
-        if self.has_permission('can_manage_logigram'):
-            sections.append('logigrammes')
-        
-        if self.has_permission('can_manage_users'):
-            sections.append('administration')
-        
-        if self.has_permission('can_view_reports'):
-            sections.append('rapports')
-        
-        return sections
-
-    # Dans votre modèle User, ajoutez cette méthode :
+    # ============================================
+    # MÉTHODES DE GESTION DES UTILISATEURS
+    # ============================================
+    
     def can_manage_user(self, target_user):
         """Vérifie si l'utilisateur peut gérer un autre utilisateur"""
         
-        # 1. On ne peut pas gérer soi-même
+        # On ne peut pas gérer soi-même
         if self.id == target_user.id:
             return False
         
-        # 2. Vérifier qu'ils sont dans le même client
+        # Même client
         if self.client_id != target_user.client_id:
             return False
         
-        # 3. SUPER ADMIN : peut gérer tout le monde
+        # SUPER ADMIN
         if self.role == 'super_admin':
             return True
         
-        # 4. CLIENT ADMIN : peut gérer tout le monde sauf autres admin
+        # ADMIN CLIENT
         if self.is_client_admin:
-            # Un admin client peut gérer tout le monde SAUF :
-            # - Lui-même (déjà exclu)
-            # - D'autres admin client
             return not target_user.is_client_admin
         
-        # 5. GESTIONNAIRE : peut gérer seulement les non-admin et non-gestionnaires
+        # GESTIONNAIRE
         if self.can_manage_users:
-            # Un gestionnaire ne peut pas gérer :
-            # - Lui-même (déjà exclu)
-            # - Les admin client
-            # - Les autres gestionnaires
             return (not target_user.is_client_admin and 
                     not target_user.can_manage_users)
         
-        # 6. Par défaut : non
         return False
     
+    def can_edit_plan(self, plan):
+        """Vérifie si l'utilisateur peut modifier un plan d'action"""
+        
+        # SUPER ADMIN
+        if self.role == 'super_admin':
+            return True
+        
+        # Même client
+        plan_client_id = getattr(plan, 'client_id', None)
+        if plan_client_id and self.client_id != plan_client_id:
+            return False
+        
+        # ADMIN CLIENT
+        if self.is_client_admin:
+            return True
+        
+        # Créateur du plan
+        if hasattr(plan, 'created_by') and self.id == plan.created_by:
+            return True
+        
+        # Responsable du plan
+        if hasattr(plan, 'responsable_id') and self.id == plan.responsable_id:
+            return True
+        
+        # Permission spécifique
+        return self.has_permission('can_manage_action_plans')
+    
+    def can_archive_audit(self, audit):
+        """Vérifie si l'utilisateur peut archiver un audit"""
+        
+        if self.role == 'super_admin':
+            return True
+        
+        audit_client_id = getattr(audit, 'client_id', None)
+        
+        if audit_client_id is None:
+            if hasattr(audit, 'created_by') and self.id == audit.created_by:
+                return True
+            if hasattr(audit, 'responsable_id') and self.id == audit.responsable_id:
+                return True
+            return False
+        
+        if audit_client_id != self.client_id:
+            return False
+        
+        if self.is_client_admin:
+            return True
+        
+        if self.id == getattr(audit, 'created_by', None) or \
+           self.id == getattr(audit, 'responsable_id', None):
+            return True
+        
+        return self.has_permission('can_manage_audit')
+    
+    # ============================================
+    # MÉTHODES DE NOTIFICATIONS
+    # ============================================
+    
     def get_notification_preference(self, channel, event):
-        """Obtenir la préférence de notification (corrigé)"""
+        """Obtenir la préférence de notification"""
         if not self.preferences_notifications:
-            return True  # Par défaut, activé
-            
+            return True
         if channel not in self.preferences_notifications:
             return True
-            
         return self.preferences_notifications[channel].get(event, True)
     
     def should_receive_notification(self, notification_type, channel='web'):
-        """
-        Vérifie si l'utilisateur devrait recevoir une notification
-        basée sur ses préférences
-        """
-        # Vérifier si les notifications sont en pause
+        """Vérifie si l'utilisateur devrait recevoir une notification"""
+        
+        # Vérifier pause
         if self.preferences_notifications and self.preferences_notifications.get('pause_until'):
             try:
+                from datetime import datetime
                 pause_date = self.preferences_notifications['pause_until']
                 if isinstance(pause_date, str):
                     pause_date = datetime.strptime(pause_date, '%Y-%m-%d').date()
@@ -504,17 +758,10 @@ class User(UserMixin, db.Model):
                 
                 if pause_date and pause_date >= datetime.utcnow().date():
                     return False
-            except Exception as e:
-                print(f"⚠️ Erreur vérification pause: {e}")
+            except Exception:
+                pass
         
-        # Vérifier la préférence spécifique
         return self.get_notification_preference(channel, notification_type)
-    
-    def set_notification_preference(self, channel, event, value):
-        """Définir une préférence de notification"""
-        if channel not in self.preferences_notifications:
-            self.preferences_notifications[channel] = {}
-        self.preferences_notifications[channel][event] = value
     
     def get_notifications_non_lues_count(self):
         """Compter les notifications non lues"""
@@ -523,25 +770,6 @@ class User(UserMixin, db.Model):
             destinataire_id=self.id,
             est_lue=False
         ).count()
-
-    def get_accessible_data(self):
-        """Retourne uniquement les données accessibles par l'utilisateur"""
-        if self.role == 'super_admin':
-            # Super admin voit tout
-            return {}
-        
-        if self.is_client_admin:
-            # Admin client voit les données de son client
-            return {'client_id': self.client_id}
-        
-        # Utilisateur standard voit ses propres données + données de son client
-        return {'client_id': self.client_id, 'created_by': self.id}
-    
-    def can_access_client(self, client_id):
-        """Vérifie si l'utilisateur peut accéder à un client"""
-        if self.role == 'super_admin':
-            return True
-        return self.client_id == client_id
     
     def get_notifications_recentes(self, limit=10):
         """Obtenir les notifications récentes"""
@@ -552,6 +780,10 @@ class User(UserMixin, db.Model):
             Notification.created_at.desc()
         ).limit(limit).all()
     
+    # ============================================
+    # MÉTHODES UTILITAIRES
+    # ============================================
+    
     def get_role_display_name(self):
         """Retourne le nom d'affichage du rôle"""
         role_names = {
@@ -560,361 +792,42 @@ class User(UserMixin, db.Model):
             'auditeur': 'Auditeur',
             'compliance': 'Responsable Conformité',
             'consultant': 'Consultant',
-            'utilisateur': 'Utilisateur'
+            'utilisateur': 'Utilisateur',
+            'super_admin': 'Super Administrateur'
         }
         return role_names.get(self.role, self.role.title())
     
     def update_last_login(self):
         """Met à jour la date de dernière connexion"""
+        from datetime import datetime
         self.last_login = datetime.utcnow()
         db.session.commit()
-    # Dans le modèle User, remplacer la propriété nom_complet par :
-    @property
-    def nom_complet(self):
-        """Retourne le nom complet de l'utilisateur"""
-        # Si vous avez des champs prenom et nom
-        if hasattr(self, 'prenom') and hasattr(self, 'nom') and self.prenom and self.nom:
-            return f"{self.prenom} {self.nom}"
-        # Sinon, utiliser username uniquement
-        return self.username
-    def can_access_department(self, department_id):
-        """Vérifie si l'utilisateur peut accéder à un département spécifique"""
-        if self.has_permission('can_access_all_departments'):
-            return True
-        
-        # Vérifier si l'utilisateur est responsable de ce département
-        from models import Direction, Service
-        if department_id:
-            # Vérifier dans les directions
-            direction = Direction.query.get(department_id)
-            if direction and direction.responsable_id == self.id:
-                return True
-            
-            # Vérifier dans les services
-            service = Service.query.get(department_id)
-            if service and service.responsable_id == self.id:
-                return True
-        
-        return False
     
-    # NOUVELLES MÉTHODES POUR LES AUDITS
-    def can_edit_audit(self, audit):
-        """Vérifie si l'utilisateur peut modifier un audit"""
-        return (self.role in ['admin', 'referent'] or 
-                self.id == audit.responsable_id or 
-                self.id == audit.created_by)
-    
-    def can_edit_plan(self, plan):
-        """Vérifie si l'utilisateur peut modifier un plan d'action - VERSION MULTI-TENANT"""
-        
-        # 1. SUPER ADMIN : peut tout faire
-        if self.role == 'super_admin':
-            return True
-        
-        # 2. Récupérer le client_id du plan
-        plan_client_id = getattr(plan, 'client_id', None)
-        
-        # 3. Si le plan n'a pas de client_id, essayer de le trouver via les relations
-        if plan_client_id is None:
-            # Essayer de trouver le client_id via le risque
-            if hasattr(plan, 'risque') and plan.risque:
-                plan_client_id = getattr(plan.risque, 'client_id', None)
-            # Essayer de trouver via l'audit
-            elif hasattr(plan, 'audit') and plan.audit:
-                plan_client_id = getattr(plan.audit, 'client_id', None)
-            # Essayer de trouver via le créateur
-            elif hasattr(plan, 'created_by'):
-                createur = User.query.get(plan.created_by)
-                if createur:
-                    plan_client_id = createur.client_id
-        
-        # 4. Vérifier que l'utilisateur est dans le même client que le plan
-        user_client_id = getattr(self, 'client_id', None)
-        
-        if plan_client_id is not None and user_client_id != plan_client_id:
-            print(f"❌ Rejeté: client mismatch (user: {user_client_id}, plan: {plan_client_id})")
-            return False
-        
-        # 5. ADMIN CLIENT : peut modifier tous les plans de son client
-        if self.is_client_admin:
-            print(f"✅ Admin client autorisé pour plan {plan.id}")
-            return True
-        
-        # 6. CRÉATEUR DU PLAN : peut modifier
-        if hasattr(plan, 'created_by') and self.id == plan.created_by:
-            print(f"✅ Créateur du plan autorisé")
-            return True
-        
-        # 7. RESPONSABLE DU PLAN : peut modifier
-        if hasattr(plan, 'responsable_id') and self.id == plan.responsable_id:
-            print(f"✅ Responsable du plan autorisé")
-            return True
-        
-        # 8. RESPONSABLE DU RISQUE : peut modifier
-        if hasattr(plan, 'risque') and plan.risque:
-            if hasattr(plan.risque, 'created_by') and self.id == plan.risque.created_by:
-                print(f"✅ Créateur du risque autorisé")
-                return True
-        
-        # 9. RESPONSABLE DE L'AUDIT : peut modifier
-        if hasattr(plan, 'audit') and plan.audit:
-            if hasattr(plan.audit, 'responsable_id') and self.id == plan.audit.responsable_id:
-                print(f"✅ Responsable de l'audit autorisé")
-                return True
-            if hasattr(plan.audit, 'created_by') and self.id == plan.audit.created_by:
-                print(f"✅ Créateur de l'audit autorisé")
-                return True
-        
-        # 10. Vérifier la permission can_manage_action_plans
-        has_permission = self.has_permission('can_manage_action_plans')
-        print(f"📋 Permission can_manage_action_plans: {has_permission}")
-        
-        return has_permission
-    
-    def can_add_constatation(self, audit):
-        """Vérifie si l'utilisateur peut ajouter une constatation"""
-        return (self.role in ['admin', 'referent', 'auditeur'] or 
-                self.id == audit.responsable_id or 
-                str(self.id) in (audit.equipe_audit_ids or '').split(','))
-    
-    def can_edit_plan(self, plan):
-        """Vérifie si l'utilisateur peut modifier un plan d'action"""
-        return (self.role in ['admin', 'referent'] or 
-                self.id == plan.responsable_id or 
-                self.id == plan.audit.responsable_id)
-    
-    def get_assigned_departments(self):
-        """Retourne les départements assignés à l'utilisateur"""
-        from models import Direction, Service
-        
-        departments = []
-        
-        # Directions managées
-        for direction in self.directions_managees:
-            departments.append({
-                'id': direction.id,
-                'name': direction.nom,
-                'type': 'direction'
-            })
-        
-        # Services managés
-        for service in self.services_managees:
-            departments.append({
-                'id': service.id,
-                'name': service.nom,
-                'type': 'service'
-            })
-        
-        return departments
-
-    def can_add_constatation_audit(self, audit):
-        """Vérifie si l'utilisateur peut ajouter une constatation"""
-        if self.role == 'super_admin':
-            return True
-        
+    def get_allowed_sections(self):
+        """Retourne les sections accessibles"""
+        sections = []
+        if self.has_permission('can_view_dashboard'):
+            sections.append('dashboard')
+        if self.has_permission('can_manage_risks'):
+            sections.extend(['cartographie', 'risques'])
+        if self.has_permission('can_manage_kri'):
+            sections.append('kri')
         if self.has_permission('can_manage_audit'):
-            return True
-        
-        # Audit en cours et utilisateur fait partie de l'équipe
-        if audit.statut in ['en_cours', 'en_redaction']:
-            if self.id == audit.created_by:
-                return True
-            if audit.responsable_id == self.id:
-                return True
-            if audit.equipe_audit_ids:
-                try:
-                    equipe_ids = [int(id.strip()) for id in audit.equipe_audit_ids.split(',') if id.strip()]
-                    if self.id in equipe_ids:
-                        return True
-                except (ValueError, AttributeError):
-                    pass
-        
-        return False
-    
-    def can_add_recommandation(self, audit):
-        """Vérifie si l'utilisateur peut ajouter une recommandation"""
-        if self.role == 'super_admin':
-            return True
-        
-        if self.has_permission('can_manage_audit'):
-            return True
-        
-        # Audit en cours ou en rédaction
-        if audit.statut in ['en_cours', 'en_redaction', 'en_validation']:
-            if self.id == audit.created_by:
-                return True
-            if audit.responsable_id == self.id:
-                return True
-            if audit.equipe_audit_ids:
-                try:
-                    equipe_ids = [int(id.strip()) for id in audit.equipe_audit_ids.split(',') if id.strip()]
-                    if self.id in equipe_ids:
-                        return True
-                except (ValueError, AttributeError):
-                    pass
-        
-        return False
-    
-    def can_edit_audit_detailed(self, audit):
-        """Vérifie si l'utilisateur peut modifier l'audit"""
-        if self.role == 'super_admin':
-            return True
-        
-        if self.has_permission('can_manage_audit'):
-            return True
-        
-        # Créateur, responsable ou membre de l'équipe
-        if self.id == audit.created_by:
-            return True
-        if self.id == audit.responsable_id:
-            return True
-        
-        # Vérifier si dans l'équipe d'audit
-        if audit.equipe_audit_ids:
-            try:
-                equipe_ids = [int(id.strip()) for id in audit.equipe_audit_ids.split(',') if id.strip()]
-                if self.id in equipe_ids:
-                    return True
-            except (ValueError, AttributeError):
-                pass
-        
-        return False
-    def can_modify_user(self, target_user):
-        """
-        Vérifie si cet utilisateur peut modifier un autre utilisateur
-        
-        Args:
-            target_user: L'utilisateur cible à modifier
-        
-        Returns:
-            bool: True si modification autorisée, False sinon
-        """
-        
-        # 1. On ne peut pas modifier soi-même (sauf profil personnel via autre route)
-        # Note: Pour modifier son propre profil, on utilise une route spécifique
-        if self.id == target_user.id:
-            return False  # Ou True selon votre logique, mais généralement False pour admin
-        
-        # 2. SUPER ADMIN : peut tout modifier
-        if self.role == 'super_admin':
-            return True
-        
-        # 3. Vérifier qu'ils sont dans le même client
-        if self.client_id != target_user.client_id:
-            return False
-        
-        # 4. CLIENT ADMIN : peut modifier tout le monde SAUF autres client_admin
-        if self.is_client_admin:
-            return not target_user.is_client_admin
-        
-        # 5. GESTIONNAIRE : peut modifier seulement les non-admin et non-gestionnaires
-        if self.can_manage_users and self.has_permission('can_edit_users'):
-            return not (target_user.is_client_admin or 
-                       (target_user.can_manage_users and target_user.id != self.id))
-        
-        # 6. Par défaut : non
-        return False
-
-
-    def can_archive_audit(self, audit):
-        """Vérifie si l'utilisateur peut archiver un audit - VERSION CORRIGÉE"""
-        
-        # 1. Super admin peut tout faire
-        if self.role == 'super_admin':
-            return True
-        
-        # 2. Vérifier si l'audit a un client_id
-        audit_client_id = getattr(audit, 'client_id', None)
-        user_client_id = getattr(self, 'client_id', None)
-        
-        # 3. Si l'audit n'a pas de client_id, vérifier par le créateur
-        if audit_client_id is None:
-            # Vérifier si l'utilisateur est le créateur
-            if hasattr(audit, 'created_by') and self.id == audit.created_by:
-                return True
-            # Vérifier si l'utilisateur est le responsable
-            if hasattr(audit, 'responsable_id') and self.id == audit.responsable_id:
-                return True
-            # Sinon, refuser par sécurité
-            return False
-        
-        # 4. Vérifier que les client_id correspondent
-        if audit_client_id != user_client_id:
-            return False
-        
-        # 5. Admin client peut archiver
-        if self.is_client_admin:
-            return True
-        
-        # 6. Créateur ou responsable peut archiver
-        if self.id == getattr(audit, 'created_by', None) or \
-           self.id == getattr(audit, 'responsable_id', None):
-            return True
-        
-        # 7. Vérifier permission can_manage_audit
-        return self.has_permission('can_manage_audit')
-
-    def can_restore_audit(self, audit):
-        """Vérifie si l'utilisateur peut restaurer un audit"""
-        if self.role == 'super_admin':
-            return True
-        
-        # Admin client peut restaurer tous les audits archivés de son client
-        if self.is_client_admin:
-            return audit.client_id == self.client_id
-        
-        # Créateur ou responsable de l'audit
-        if self.id == audit.created_by or self.id == audit.responsable_id:
-            return True
-        
-        # Vérifier la permission can_manage_audit
-        return self.has_permission('can_manage_audit')
-
-    def can_delete_audit(self, audit):
-        """Vérifie si l'utilisateur peut supprimer définitivement un audit"""
-        # Seuls super_admin et admin client peuvent supprimer définitivement
-        if self.role == 'super_admin':
-            return True
-        
-        # Admin client peut supprimer les audits archivés de son client
-        if self.is_client_admin:
-            return audit.client_id == self.client_id and audit.is_archived
-        
-        return False
-    
-    def can_generate_report(self, audit):
-        """Vérifie si l'utilisateur peut générer un rapport"""
-        if self.role == 'super_admin':
-            return True
-        
-        if self.has_permission('can_export_data') or self.has_permission('can_view_reports'):
-            return True
-        
-        # Créateur, responsable ou membre de l'équipe
-        if self.id == audit.created_by:
-            return True
-        if self.id == audit.responsable_id:
-            return True
-        
-        # Pour les rapports, autoriser aussi les observateurs
-        if audit.observateurs_ids:
-            try:
-                observateur_ids = [int(id.strip()) for id in audit.observateurs_ids.split(',') if id.strip()]
-                if self.id in observateur_ids:
-                    return True
-            except (ValueError, AttributeError):
-                pass
-        
-        return False
-    
-    def has_role(self, role_name):
-        """Vérifie si l'utilisateur a un rôle spécifique"""
-        return self.role == role_name
+            sections.extend(['audit', 'plans_action'])
+        if self.has_permission('can_manage_regulatory'):
+            sections.append('veille')
+        if self.has_permission('can_manage_logigram'):
+            sections.append('logigrammes')
+        if self.has_permission('can_manage_users'):
+            sections.append('administration')
+        if self.has_permission('can_view_reports'):
+            sections.append('rapports')
+        return sections
     
     def __repr__(self):
         return f'<User {self.username} ({self.role})>'
-    
-# -------------------- DIRECTION AVEC CHAMP NOM_RESPONSABLE_MANUEL --------------------
+
+
 # -------------------- DIRECTION --------------------
 class Direction(db.Model):
     __tablename__ = 'direction'
