@@ -69,6 +69,110 @@ class UserForm(FlaskForm):
     department = StringField('Département')
     is_active = BooleanField('Actif')
     submit = SubmitField('Enregistrer')
+# ============================================
+# FORMULAIRES POUR LA GESTION DES MOTS DE PASSE
+# ============================================
+
+class ForgotPasswordForm(FlaskForm):
+    """Formulaire de demande de réinitialisation"""
+    email = StringField('Email', validators=[
+        DataRequired(message='L\'email est requis'),
+        Email(message='Format d\'email invalide')
+    ])
+    submit = SubmitField('Envoyer le lien de réinitialisation')
+
+
+class ResetPasswordForm(FlaskForm):
+    """Formulaire de réinitialisation avec token"""
+    password = PasswordField('Nouveau mot de passe', validators=[
+        DataRequired(message='Le mot de passe est requis'),
+        Length(min=12, message='Le mot de passe doit contenir au moins 12 caractères')
+    ])
+    confirm_password = PasswordField('Confirmer le mot de passe', validators=[
+        DataRequired(message='Veuillez confirmer le mot de passe'),
+        EqualTo('password', message='Les mots de passe doivent correspondre')
+    ])
+    submit = SubmitField('Réinitialiser mon mot de passe')
+    
+    def validate_password(self, field):
+        """Validation personnalisée de la force du mot de passe"""
+        password = field.data
+        
+        if not re.search(r"[A-Z]", password):
+            raise ValidationError("Le mot de passe doit contenir au moins une majuscule")
+        
+        if not re.search(r"[a-z]", password):
+            raise ValidationError("Le mot de passe doit contenir au moins une minuscule")
+        
+        if not re.search(r"[0-9]", password):
+            raise ValidationError("Le mot de passe doit contenir au moins un chiffre")
+        
+        if not re.search(r"[!@#$%^&*(),.?\":{}|<>]", password):
+            raise ValidationError("Le mot de passe doit contenir au moins un caractère spécial")
+        
+        if " " in password:
+            raise ValidationError("Le mot de passe ne doit pas contenir d'espaces")
+
+
+class ChangePasswordForm(FlaskForm):
+    """Formulaire de changement de mot de passe (connecté)"""
+    current_password = PasswordField('Mot de passe actuel', validators=[
+        DataRequired(message='Le mot de passe actuel est requis')
+    ])
+    new_password = PasswordField('Nouveau mot de passe', validators=[
+        DataRequired(message='Le nouveau mot de passe est requis'),
+        Length(min=12, message='Le mot de passe doit contenir au moins 12 caractères')
+    ])
+    confirm_password = PasswordField('Confirmer le nouveau mot de passe', validators=[
+        DataRequired(message='Veuillez confirmer le mot de passe'),
+        EqualTo('new_password', message='Les mots de passe doivent correspondre')
+    ])
+    submit = SubmitField('Changer mon mot de passe')
+    
+    def validate_new_password(self, field):
+        """Validation personnalisée"""
+        password = field.data
+        
+        if not re.search(r"[A-Z]", password):
+            raise ValidationError("Le mot de passe doit contenir au moins une majuscule")
+        
+        if not re.search(r"[a-z]", password):
+            raise ValidationError("Le mot de passe doit contenir au moins une minuscule")
+        
+        if not re.search(r"[0-9]", password):
+            raise ValidationError("Le mot de passe doit contenir au moins un chiffre")
+        
+        if not re.search(r"[!@#$%^&*(),.?\":{}|<>]", password):
+            raise ValidationError("Le mot de passe doit contenir au moins un caractère spécial")
+        
+        if " " in password:
+            raise ValidationError("Le mot de passe ne doit pas contenir d'espaces")
+
+
+class ForceChangePasswordForm(FlaskForm):
+    """Formulaire pour changement forcé (après expiration)"""
+    new_password = PasswordField('Nouveau mot de passe', validators=[
+        DataRequired(message='Le nouveau mot de passe est requis'),
+        Length(min=12, message='Le mot de passe doit contenir au moins 12 caractères')
+    ])
+    confirm_password = PasswordField('Confirmer le nouveau mot de passe', validators=[
+        DataRequired(message='Veuillez confirmer le mot de passe'),
+        EqualTo('new_password', message='Les mots de passe doivent correspondre')
+    ])
+    submit = SubmitField('Changer mon mot de passe et continuer')
+    
+    def validate_new_password(self, field):
+        """Même validation que ci-dessus"""
+        password = field.data
+        if not re.search(r"[A-Z]", password):
+            raise ValidationError("Le mot de passe doit contenir au moins une majuscule")
+        if not re.search(r"[a-z]", password):
+            raise ValidationError("Le mot de passe doit contenir au moins une minuscule")
+        if not re.search(r"[0-9]", password):
+            raise ValidationError("Le mot de passe doit contenir au moins un chiffre")
+        if not re.search(r"[!@#$%^&*(),.?\":{}|<>]", password):
+            raise ValidationError("Le mot de passe doit contenir au moins un caractère spécial")
+
 
 class PoleForm(FlaskForm):
     nom = StringField('Nom du pôle / filiale', validators=[DataRequired()])
