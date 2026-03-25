@@ -394,26 +394,16 @@ class User(UserMixin, db.Model):
         """
         Vérifie le mot de passe avec gestion des tentatives échouées
         
-        Args:
-            password: Le mot de passe à vérifier
-        
         Returns:
-            bool: True si le mot de passe est correct
-            
-        Raises:
-            ValueError: Si le compte est bloqué
+            tuple: (success, message) - success est un booléen, message est un string
         """
         from datetime import datetime
         from werkzeug.security import check_password_hash
         
-        # ============================================
         # 1. VÉRIFIER SI LE COMPTE EST BLOQUÉ
-        # ============================================
-        
         if self.is_blocked:
-            # Vérifier si le blocage est temporaire
             if self.locked_until and self.locked_until > datetime.utcnow():
-                raise ValueError(f"Compte temporairement bloqué jusqu'au {self.locked_until.strftime('%d/%m/%Y %H:%M')}")
+                return False, f"Compte temporairement bloqué jusqu'au {self.locked_until.strftime('%d/%m/%Y %H:%M')}"
             elif self.locked_until and self.locked_until <= datetime.utcnow():
                 # Débloquer automatiquement
                 self.is_blocked = False
@@ -421,48 +411,37 @@ class User(UserMixin, db.Model):
                 self.failed_login_attempts = 0
                 self.lock_reason = None
             else:
-                raise ValueError("Ce compte est bloqué. Contactez l'administrateur.")
+                return False, "Ce compte est bloqué. Contactez l'administrateur."
         
-        # ============================================
         # 2. VÉRIFIER LE MOT DE PASSE
-        # ============================================
-        
         is_valid = check_password_hash(self.password_hash, password)
         
         if is_valid:
-            # Succès : réinitialiser les tentatives échouées
             self.failed_login_attempts = 0
             self.last_failed_login = None
-            return True
+            return True, "Connexion réussie"
+        
+        # Échec : incrémenter le compteur
+        self.failed_login_attempts += 1
+        self.last_failed_login = datetime.utcnow()
+        
+        # 3. POLITIQUE DE BLOCAGE PROGRESSIVE
+        if self.failed_login_attempts >= 10:
+            self.is_blocked = True
+            self.blocked_at = datetime.utcnow()
+            self.blocked_reason = "Trop de tentatives de connexion échouées (10+)"
+            return False, "Compte bloqué pour sécurité. Contactez l'administrateur."
+        
+        elif self.failed_login_attempts >= 5:
+            self.locked_until = datetime.utcnow() + timedelta(minutes=30)
+            self.lock_reason = f"Trop de tentatives échouées ({self.failed_login_attempts})"
+            return False, f"Trop de tentatives. Compte bloqué 30 minutes."
+        
+        elif self.failed_login_attempts >= 3:
+            return False, f"Mot de passe incorrect. Tentative {self.failed_login_attempts}/5"
         
         else:
-            # Échec : incrémenter le compteur
-            self.failed_login_attempts += 1
-            self.last_failed_login = datetime.utcnow()
-            
-            # ============================================
-            # 3. POLITIQUE DE BLOCAGE PROGRESSIVE
-            # ============================================
-            
-            if self.failed_login_attempts >= 10:
-                # Blocage définitif après 10 tentatives
-                self.is_blocked = True
-                self.blocked_at = datetime.utcnow()
-                self.blocked_reason = "Trop de tentatives de connexion échouées (10+)"
-                raise ValueError("Compte bloqué pour sécurité. Contactez l'administrateur.")
-            
-            elif self.failed_login_attempts >= 5:
-                # Blocage temporaire de 30 minutes après 5 tentatives
-                self.locked_until = datetime.utcnow() + timedelta(minutes=30)
-                self.lock_reason = f"Trop de tentatives échouées ({self.failed_login_attempts})"
-                raise ValueError(f"Trop de tentatives. Compte bloqué 30 minutes.")
-            
-            elif self.failed_login_attempts >= 3:
-                # Alerte après 3 tentatives
-                raise ValueError(f"Mot de passe incorrect. Tentative {self.failed_login_attempts}/5")
-            
-            else:
-                raise ValueError("Nom d'utilisateur ou mot de passe incorrect")
+            return False, "Nom d'utilisateur ou mot de passe incorrect"
     
     def is_password_expired(self):
         """Vérifie si le mot de passe a expiré"""
