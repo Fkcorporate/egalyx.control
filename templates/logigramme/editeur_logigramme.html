@@ -1,884 +1,812 @@
+<!-- templates/logigramme/editeur_logigramme.html -->
 {% extends "base.html" %}
 
 {% block title %}Éditeur de Logigramme - {{ activite.nom }}{% endblock %}
 
 {% block styles %}
 <style>
+    /* Variables CSS Modernes */
+    :root {
+        --editor-bg: #f8fafc;
+        --canvas-bg: #ffffff;
+        --grid-color: rgba(0, 0, 0, 0.05);
+        --primary: #3b82f6;
+        --primary-dark: #2563eb;
+        --success: #10b981;
+        --warning: #f59e0b;
+        --danger: #ef4444;
+        --danger-dark: #dc2626;
+        --gray-50: #f9fafb;
+        --gray-100: #f3f4f6;
+        --gray-200: #e5e7eb;
+        --gray-300: #d1d5db;
+        --gray-400: #9ca3af;
+        --gray-500: #6b7280;
+        --gray-600: #4b5563;
+        --gray-700: #374151;
+        --gray-800: #1f2937;
+        --gray-900: #111827;
+        --shadow-sm: 0 1px 2px 0 rgb(0 0 0 / 0.05);
+        --shadow-md: 0 4px 6px -1px rgb(0 0 0 / 0.1);
+        --shadow-lg: 0 10px 15px -3px rgb(0 0 0 / 0.1);
+        --shadow-xl: 0 20px 25px -5px rgb(0 0 0 / 0.1);
+        --radius-sm: 0.375rem;
+        --radius-md: 0.5rem;
+        --radius-lg: 0.75rem;
+        --radius-xl: 1rem;
+        --font-sans: 'Inter', system-ui, -apple-system, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+    }
+
+    * {
+        margin: 0;
+        padding: 0;
+        box-sizing: border-box;
+    }
+
+    body {
+        font-family: var(--font-sans);
+        background: var(--editor-bg);
+    }
+
+    /* Éditeur Container */
     .editor-container {
-        background: linear-gradient(135deg, #f8fafc 0%, #e2e8f0 100%);
-        border-radius: var(--border-radius-xl);
-        padding: 1rem;
-        min-height: 85vh;
+        min-height: calc(100vh - 80px);
+        padding: 1.5rem;
+        background: linear-gradient(135deg, #f8fafc 0%, #f1f5f9 100%);
     }
 
-    #editeur-logigramme {
-        width: 100%;
-        height: 75vh;
-        background: white;
-        border: 2px solid #e2e8f0;
-        border-radius: var(--border-radius-lg);
-        box-shadow: var(--shadow-soft);
-        position: relative;
-        overflow: auto;
-        background-image: 
-            linear-gradient(rgba(0,0,0,0.03) 1px, transparent 1px),
-            linear-gradient(90deg, rgba(0,0,0,0.03) 1px, transparent 1px);
-        background-size: 20px 20px;
-    }
-
-    #conteneur-elements {
-        position: relative;
-        width: 2000px;
-        height: 2000px;
-        min-width: 2000px;
-        min-height: 2000px;
-        transform-origin: 0 0;
-    }
-
+    /* Toolbar Moderne */
     .toolbar-modern {
         background: white;
-        border-radius: var(--border-radius-lg);
-        padding: 1.5rem;
-        margin-bottom: 1rem;
-        box-shadow: var(--shadow-medium);
-        border: 1px solid #f1f5f9;
+        border-radius: var(--radius-xl);
+        padding: 0.75rem 1.5rem;
+        margin-bottom: 1.5rem;
+        box-shadow: var(--shadow-md);
+        border: 1px solid rgba(0, 0, 0, 0.05);
+        position: relative;
+        z-index: 100;
     }
 
-    .info-panel {
-        background: white;
-        border-radius: var(--border-radius-lg);
-        padding: 1.5rem;
-        box-shadow: var(--shadow-medium);
-        border: 1px solid #f1f5f9;
-        margin-bottom: 1rem;
-    }
-
-    .palette-modern {
-        background: white;
-        border-radius: var(--border-radius-lg);
-        padding: 1.5rem;
-        box-shadow: var(--shadow-medium);
-        border: 1px solid #f1f5f9;
-        margin-bottom: 1rem;
-        max-height: 80vh;
-        overflow-y: auto;
-    }
-
-    .palette-title {
-        font-size: 0.9rem;
-        font-weight: 600;
-        color: #475569;
-        text-transform: uppercase;
-        letter-spacing: 0.5px;
-        margin-bottom: 1rem;
+    .toolbar-group {
         display: flex;
+        gap: 0.5rem;
+        align-items: center;
+        padding: 0 0.5rem;
+        border-right: 1px solid var(--gray-200);
+    }
+
+    .toolbar-group:last-child {
+        border-right: none;
+    }
+
+    .btn-tool {
+        background: white;
+        border: 1px solid var(--gray-200);
+        border-radius: var(--radius-md);
+        padding: 0.625rem 1rem;
+        font-size: 0.875rem;
+        font-weight: 500;
+        color: var(--gray-600);
+        transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+        cursor: pointer;
+        display: inline-flex;
         align-items: center;
         gap: 0.5rem;
+    }
+
+    .btn-tool:hover {
+        background: var(--gray-50);
+        border-color: var(--gray-300);
+        transform: translateY(-1px);
+    }
+
+    .btn-tool.active {
+        background: var(--primary);
+        border-color: var(--primary);
+        color: white;
+    }
+
+    .btn-tool-danger {
+        background: white;
+        border: 1px solid var(--danger);
+        color: var(--danger);
+    }
+
+    .btn-tool-danger:hover {
+        background: var(--danger);
+        border-color: var(--danger);
+        color: white;
+    }
+
+    .btn-tool i {
+        font-size: 1rem;
+    }
+
+    /* Dropdown fixe */
+    .dropdown-menu {
+        z-index: 1050 !important;
+        position: absolute !important;
+        top: 100% !important;
+        left: 0 !important;
+        right: auto !important;
+        transform: none !important;
+        margin-top: 0.5rem !important;
+    }
+
+    /* Palette d'éléments */
+    .palette-modern {
+        background: white;
+        border-radius: var(--radius-xl);
+        padding: 1.25rem;
+        box-shadow: var(--shadow-md);
+        border: 1px solid rgba(0, 0, 0, 0.05);
+        position: sticky;
+        top: 1.5rem;
     }
 
     .palette-section {
         margin-bottom: 1.5rem;
     }
 
+    .palette-title {
+        font-size: 0.75rem;
+        font-weight: 600;
+        text-transform: uppercase;
+        letter-spacing: 0.05em;
+        color: var(--gray-500);
+        margin-bottom: 1rem;
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+    }
+
     .palette-grid {
         display: grid;
-        grid-template-columns: 1fr;
+        grid-template-columns: repeat(2, 1fr);
         gap: 0.75rem;
     }
 
     .palette-item {
         background: white;
-        border: 2px dashed #cbd5e1;
-        border-radius: var(--border-radius-md);
-        padding: 1rem;
+        border: 2px solid var(--gray-200);
+        border-radius: var(--radius-md);
+        padding: 0.75rem;
         text-align: center;
         cursor: grab;
-        transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+        transition: all 0.2s ease;
         display: flex;
         flex-direction: column;
         align-items: center;
         gap: 0.5rem;
+        font-size: 0.75rem;
+        font-weight: 500;
+        color: var(--gray-700);
     }
 
     .palette-item:hover {
-        border-color: #3b82f6;
-        background: #f8fafc;
+        border-color: var(--primary);
+        background: var(--gray-50);
         transform: translateY(-2px);
-        box-shadow: var(--shadow-soft);
+        box-shadow: var(--shadow-md);
+    }
+
+    .palette-item:active {
+        cursor: grabbing;
     }
 
     .palette-item i {
         font-size: 1.25rem;
-        margin-bottom: 0.25rem;
     }
 
-    .palette-item small {
-        font-weight: 500;
-        color: #475569;
+    /* Canvas d'édition */
+    .canvas-wrapper {
+        background: white;
+        border-radius: var(--radius-xl);
+        box-shadow: var(--shadow-lg);
+        overflow: hidden;
+        border: 1px solid rgba(0, 0, 0, 0.05);
+        position: relative;
     }
 
-    /* Éléments du Processus - Design Moderne */
-    .element-processus {
+    #editeur-logigramme {
+        position: relative;
+        width: 100%;
+        height: 70vh;
+        background: var(--canvas-bg);
+        overflow: auto;
+        background-image: 
+            linear-gradient(var(--grid-color) 1px, transparent 1px),
+            linear-gradient(90deg, var(--grid-color) 1px, transparent 1px);
+        background-size: 20px 20px;
+        cursor: default;
+    }
+
+    #conteneur-elements {
+        position: relative;
+        width: 3000px;
+        height: 3000px;
+        min-width: 100%;
+        min-height: 100%;
+        transform-origin: 0 0;
+    }
+
+    #svg-liens {
         position: absolute;
-        cursor: move;
-        user-select: none;
-        border-radius: var(--border-radius-md);
-        padding: 1.25rem 1.5rem;
-        text-align: center;
-        min-width: 160px;
-        box-shadow: var(--shadow-soft);
-        transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-        backdrop-filter: blur(10px);
-        border: 2px solid transparent;
+        top: 0;
+        left: 0;
+        width: 3000px;
+        height: 3000px;
+        pointer-events: none;
         z-index: 10;
     }
 
+    /* Styles des éléments */
+    .element-processus {
+        position: absolute;
+        cursor: pointer;
+        user-select: none;
+        border-radius: var(--radius-md);
+        padding: 0.75rem 1rem;
+        min-width: 120px;
+        max-width: 250px;
+        box-shadow: var(--shadow-sm);
+        transition: all 0.2s ease;
+        z-index: 20;
+        border: 2px solid transparent;
+        background-clip: padding-box;
+    }
+
     .element-processus:hover {
-        transform: translateY(-2px) scale(1.02);
-        box-shadow: var(--shadow-medium);
-        z-index: 100;
+        transform: translateY(-2px);
+        box-shadow: var(--shadow-lg);
+        z-index: 30;
     }
 
     .element-processus.selected {
-        border-color: #3b82f6 !important;
-        box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1), var(--shadow-medium);
+        border-color: var(--primary) !important;
+        box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.2), var(--shadow-md);
     }
 
+    .element-processus.dragging {
+        opacity: 0.8;
+        cursor: grabbing;
+    }
+
+    /* Types d'éléments */
     .element-debut {
-        background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+        background: linear-gradient(135deg, #10b981, #059669);
         color: white;
-        border-radius: 50px;
-        border: 3px solid #047857;
+        border-radius: 40px;
     }
 
     .element-action {
-        background: linear-gradient(135deg, #3b82f6 0%, #1d4ed8 100%);
+        background: linear-gradient(135deg, #3b82f6, #2563eb);
         color: white;
-        border: 2px solid #1e40af;
     }
 
     .element-controle {
-        background: linear-gradient(135deg, #f59e0b 0%, #d97706 100%);
+        background: linear-gradient(135deg, #f59e0b, #d97706);
         color: white;
-        border: 2px solid #b45309;
     }
 
     .element-risque {
-        background: linear-gradient(135deg, #ef4444 0%, #dc2626 100%);
+        background: linear-gradient(135deg, #ef4444, #dc2626);
         color: white;
-        border: 2px solid #b91c1c;
     }
 
     .element-fin {
-        background: linear-gradient(135deg, #6b7280 0%, #4b5563 100%);
+        background: linear-gradient(135deg, #6b7280, #4b5563);
         color: white;
-        border-radius: 50px;
-        border: 3px solid #374151;
+        border-radius: 40px;
     }
 
+    /* SÉPARATEUR D'ORGANISATION - REDIMENSIONNABLE */
     .element-organisation {
-        background: linear-gradient(135deg, #8b5cf6 0%, #7c3aed 100%);
+        background: linear-gradient(135deg, #8b5cf6, #7c3aed);
         color: white;
-        border: 2px dashed #6d28d9;
-        min-width: 20px;
-        min-height: 100%;
-        padding: 1rem 0.5rem;
-        writing-mode: vertical-lr;
-        text-orientation: mixed;
+        min-width: 25px !important;
+        width: 25px !important;
+        padding: 1rem 0 !important;
+        text-align: center;
+        border-radius: 8px !important;
+        box-shadow: var(--shadow-md);
+        border: 2px solid rgba(255, 255, 255, 0.3) !important;
+        cursor: pointer;
+        transition: all 0.2s ease;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        gap: 0.5rem;
+        position: relative;
+    }
+
+    .element-organisation::before {
+        content: '';
+        position: absolute;
+        left: -5px;
+        top: 0;
+        width: 5px;
+        height: 100%;
+        cursor: ew-resize;
+        background: transparent;
+        z-index: 10;
+    }
+
+    .element-organisation::after {
+        content: '';
+        position: absolute;
+        right: -5px;
+        top: 0;
+        width: 5px;
+        height: 100%;
+        cursor: ew-resize;
+        background: transparent;
+        z-index: 10;
+    }
+
+    .element-organisation:hover {
+        transform: scaleX(1.02);
+        box-shadow: var(--shadow-lg);
+        background: linear-gradient(135deg, #9b6eff, #8b5cf6);
+    }
+
+    .element-organisation.resizing {
+        transition: none;
+    }
+
+    .element-organisation .element-content {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 0.5rem;
+        writing-mode: horizontal-tb !important;
+    }
+
+    .element-organisation .element-title {
+        font-size: 0.7rem;
+        font-weight: 600;
+        white-space: nowrap;
+        transform: rotate(0deg);
+        letter-spacing: 0.5px;
+        writing-mode: horizontal-tb;
+    }
+
+    .element-organisation i {
+        font-size: 1rem;
+        margin-bottom: 0.25rem;
+    }
+
+    /* Poignée de redimensionnement */
+    .resize-handle {
+        position: absolute;
+        right: -8px;
+        bottom: -8px;
+        width: 16px;
+        height: 16px;
+        background: var(--primary);
+        border-radius: 50%;
+        cursor: nw-resize;
+        z-index: 100;
+        opacity: 0;
+        transition: opacity 0.2s;
+    }
+
+    .element-processus:hover .resize-handle {
+        opacity: 1;
     }
 
     .element-titre {
         background: white;
-        color: #1e293b;
-        border: 2px solid #e2e8f0;
-        font-size: 1.1rem;
-        font-weight: 700;
-        padding: 1.5rem 2rem;
-        box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
-    }
-
-    .element-titre:hover {
-        border-color: #3b82f6;
-        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
-    }
-
-    .element-content {
-        pointer-events: none;
-    }
-
-    .element-title {
+        color: var(--gray-800);
+        border: 2px solid var(--gray-200);
         font-weight: 600;
-        font-size: 0.9rem;
-        margin-bottom: 0.25rem;
-        line-height: 1.3;
+        font-size: 1rem;
+        text-align: center;
     }
 
-    .element-description {
-        font-size: 0.75rem;
-        opacity: 0.9;
-        line-height: 1.2;
-    }
-
-    /* Liens Modernes avec Labels */
+    /* Liens */
     .lien-processus {
-        stroke: #475569;
-        stroke-width: 2.5;
-        marker-end: url(#arrowhead-modern);
+        stroke: var(--gray-400);
+        stroke-width: 2;
         fill: none;
-        transition: all 0.3s ease;
-    }
-
-    .lien-oui {
-        stroke: #10b981;
-        stroke-width: 2.5;
-        marker-end: url(#arrowhead-oui);
-    }
-
-    .lien-non {
-        stroke: #ef4444;
-        stroke-width: 2.5;
-        marker-end: url(#arrowhead-non);
-        stroke-dasharray: 5,5;
+        transition: all 0.2s ease;
+        cursor: pointer;
+        pointer-events: stroke;
     }
 
     .lien-processus:hover {
-        stroke-width: 3.5;
+        stroke-width: 3;
+        filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.1));
+    }
+
+    .lien-oui {
+        stroke: var(--success);
+    }
+
+    .lien-non {
+        stroke: var(--danger);
+        stroke-dasharray: 6 4;
+    }
+
+    .lien-label {
+        font-size: 11px;
+        font-weight: 600;
+        fill: white;
+        stroke: var(--gray-700);
+        stroke-width: 2;
+        paint-order: stroke;
+        pointer-events: none;
+    }
+
+    /* Mini-carte */
+    .minimap {
+        position: absolute;
+        bottom: 1rem;
+        right: 1rem;
+        background: white;
+        border-radius: var(--radius-md);
+        box-shadow: var(--shadow-lg);
+        padding: 0.5rem;
+        border: 1px solid var(--gray-200);
+        z-index: 40;
+        width: 180px;
+        height: 120px;
+        overflow: hidden;
         cursor: pointer;
     }
 
-    .lien-oui:hover {
-        stroke: #059669;
+    .minimap-canvas {
+        width: 100%;
+        height: 100%;
+        background: var(--gray-100);
+        border-radius: var(--radius-sm);
     }
 
-    .lien-non:hover {
-        stroke: #dc2626;
+    /* Modal moderne */
+    .modal-modern .modal-content {
+        border: none;
+        border-radius: var(--radius-xl);
+        box-shadow: var(--shadow-xl);
     }
 
-    /* Labels sur les liens */
-    .lien-label {
-        pointer-events: none;
-        font-size: 12px;
-        font-weight: 600;
-        fill: white;
-        paint-order: stroke;
-        stroke: #000;
-        stroke-width: 2;
-        stroke-linecap: round;
-        stroke-linejoin: round;
-    }
-
-    .lien-label-oui {
-        fill: #10b981;
-    }
-
-    .lien-label-non {
-        fill: #ef4444;
-    }
-
-    #arrowhead-modern {
-        fill: #475569;
-    }
-
-    #arrowhead-oui {
-        fill: #10b981;
-    }
-
-    #arrowhead-non {
-        fill: #ef4444;
-    }
-
-    /* Boutons Modernes */
-    .btn-tool {
-        background: white;
-        border: 2px solid #e2e8f0;
-        border-radius: var(--border-radius-md);
-        padding: 0.75rem 1rem;
-        font-weight: 500;
-        color: #475569;
-        transition: all 0.3s ease;
-        display: flex;
-        align-items: center;
-        gap: 0.5rem;
-    }
-
-    .btn-tool:hover {
-        border-color: #3b82f6;
-        color: #3b82f6;
-        transform: translateY(-1px);
-    }
-
-    .btn-tool.active {
-        background: var(--primary-gradient);
-        border-color: transparent;
-        color: white;
-        box-shadow: var(--shadow-soft);
-    }
-
-    .btn-action {
-        background: var(--primary-gradient);
+    .modal-modern .modal-header {
+        background: linear-gradient(135deg, var(--primary), var(--primary-dark));
         color: white;
         border: none;
-        border-radius: var(--border-radius-md);
-        padding: 0.75rem 1.5rem;
-        font-weight: 600;
-        transition: all 0.3s ease;
-        display: flex;
-        align-items: center;
-        gap: 0.5rem;
+        border-radius: var(--radius-xl) var(--radius-xl) 0 0;
+        padding: 1.25rem 1.5rem;
     }
 
-    .btn-action:hover {
-        transform: translateY(-2px);
-        box-shadow: var(--shadow-medium);
+    /* Animation pour le modal */
+    .modal.fade .modal-dialog {
+        transform: scale(0.95);
+        transition: transform 0.2s ease-out;
     }
 
-    /* Indicateurs de Mode */
-    .mode-indicator {
-        background: #f1f5f9;
-        border-radius: var(--border-radius-md);
-        padding: 0.75rem 1rem;
-        font-size: 0.875rem;
-        font-weight: 500;
-        color: #475569;
-        display: flex;
-        align-items: center;
-        gap: 0.5rem;
+    .modal.show .modal-dialog {
+        transform: scale(1);
     }
 
-    .mode-active {
-        background: var(--success-gradient);
-        color: white;
+    /* Toast Notifications */
+    .toast-notification {
+        position: fixed;
+        bottom: 2rem;
+        right: 2rem;
+        z-index: 9999;
+        animation: slideInRight 0.3s ease-out;
     }
 
-    /* Statistiques */
-    .stats-container {
-        background: white;
-        border-radius: var(--border-radius-lg);
-        padding: 1.5rem;
-        box-shadow: var(--shadow-soft);
-        border: 1px solid #f1f5f9;
-    }
-
-    .stat-item {
-        text-align: center;
-        padding: 1rem;
-    }
-
-    .stat-number {
-        font-size: 1.5rem;
-        font-weight: 700;
-        color: #1e293b;
-        display: block;
-    }
-
-    .stat-label {
-        font-size: 0.75rem;
-        color: #64748b;
-        text-transform: uppercase;
-        letter-spacing: 0.5px;
-        font-weight: 600;
-    }
-
-    /* Responsive */
-    @media (min-width: 992px) {
-        .palette-grid {
-            grid-template-columns: 1fr 1fr;
-        }
-    }
-
-    @media (max-width: 768px) {
-        .editor-container {
-            padding: 0.5rem;
-        }
-        
-        .toolbar-modern {
-            padding: 1rem;
-        }
-    }
-
-    /* Animation */
-    @keyframes slideInUp {
+    @keyframes slideInRight {
         from {
+            transform: translateX(100%);
             opacity: 0;
-            transform: translateY(20px);
         }
         to {
+            transform: translateX(0);
             opacity: 1;
-            transform: translateY(0);
         }
     }
 
-    .animate-in {
-        animation: slideInUp 0.5s ease-out;
-    }
-
-    /* Overlay d'instructions */
-    .instructions-overlay {
-        background: rgba(255, 255, 255, 0.95);
-        backdrop-filter: blur(10px);
-        border: 2px dashed #cbd5e1;
-    }
-
-    /* Text Gradient */
-    .text-gradient {
-        background: var(--primary-gradient);
-        -webkit-background-clip: text;
-        -webkit-text-fill-color: transparent;
-        background-clip: text;
-    }
-
-    /* Styles pour l'impression */
-    @media print {
-        .no-print {
-            display: none !important;
+    @keyframes slideOutRight {
+        from {
+            transform: translateX(0);
+            opacity: 1;
         }
-        
-        #editeur-logigramme {
-            height: auto !important;
-            overflow: visible !important;
-            border: none !important;
-            box-shadow: none !important;
-            background: white !important;
-        }
-        
-        #conteneur-elements {
-            width: auto !important;
-            height: auto !important;
-            min-width: auto !important;
-            min-height: auto !important;
-            transform: none !important;
-        }
-        
-        .element-processus {
-            position: static !important;
-            margin: 10px;
-            break-inside: avoid;
+        to {
+            transform: translateX(100%);
+            opacity: 0;
         }
     }
 
-    /* Contrôles de navigation */
-    .navigation-controls {
-        position: absolute;
-        bottom: 20px;
-        right: 20px;
-        z-index: 1000;
-        background: white;
-        border-radius: var(--border-radius-md);
-        padding: 0.5rem;
-        box-shadow: var(--shadow-medium);
-        display: flex;
-        gap: 0.5rem;
-    }
-
-    .btn-navigation {
-        width: 40px;
-        height: 40px;
+    /* Overlay de chargement */
+    .loading-overlay {
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        background: rgba(0, 0, 0, 0.5);
+        z-index: 9998;
         display: flex;
         align-items: center;
         justify-content: center;
-        border: 1px solid #e2e8f0;
-        border-radius: var(--border-radius-md);
-        background: white;
-        color: #475569;
+        opacity: 0;
+        visibility: hidden;
         transition: all 0.3s ease;
     }
 
-    .btn-navigation:hover {
-        border-color: #3b82f6;
-        color: #3b82f6;
+    .loading-overlay.active {
+        opacity: 1;
+        visibility: visible;
     }
 
-    /* Menu contextuel pour les liens */
-    .context-menu-lien {
-        position: absolute;
+    .loading-spinner {
         background: white;
-        border-radius: var(--border-radius-md);
-        box-shadow: var(--shadow-medium);
-        padding: 0.5rem;
-        z-index: 1000;
-        min-width: 150px;
+        padding: 2rem;
+        border-radius: var(--radius-xl);
+        box-shadow: var(--shadow-xl);
+        text-align: center;
     }
 
-    .context-menu-item {
-        padding: 0.5rem 1rem;
-        cursor: pointer;
-        border-radius: 4px;
-        transition: background-color 0.2s;
-        display: flex;
-        align-items: center;
-        gap: 0.5rem;
+    .loading-spinner i {
+        font-size: 2rem;
+        color: var(--primary);
+        animation: spin 1s linear infinite;
     }
 
-    .context-menu-item:hover {
-        background: #f1f5f9;
+    @keyframes spin {
+        from {
+            transform: rotate(0deg);
+        }
+        to {
+            transform: rotate(360deg);
+        }
     }
 
-    .context-menu-item.text-danger:hover {
-        background: #fef2f2;
+    /* Sélection rectangulaire */
+    .selection-rect {
+        position: absolute;
+        border: 2px dashed var(--primary);
+        background: rgba(59, 130, 246, 0.1);
+        pointer-events: none;
+        z-index: 100;
     }
 
-    /* Informations du logigramme */
-    .info-badges {
-        display: flex;
-        gap: 0.5rem;
-        flex-wrap: wrap;
-    }
-
-    .info-form {
-        background: #f8fafc;
-        border-radius: var(--border-radius-md);
-        padding: 1rem;
+    /* Responsive */
+    @media (max-width: 992px) {
+        .editor-container {
+            padding: 1rem;
+        }
+        
+        .toolbar-group {
+            flex-wrap: wrap;
+        }
+        
+        .palette-grid {
+            grid-template-columns: 1fr;
+        }
     }
 </style>
 {% endblock %}
 
 {% block content %}
-<div class="container-fluid editor-container">
-    <!-- En-tête -->
-    <div class="row mb-4 animate-in">
-        <div class="col">
-            <div class="d-flex justify-content-between align-items-center">
-                <div>
-                    <h1 class="h2 mb-2 fw-bold text-gradient">Éditeur de Logigramme</h1>
-                    <div class="d-flex align-items-center gap-3">
-                        <span class="badge bg-primary fs-6" id="logigramme-nom">{{ activite.nom }}</span>
-                        {% if activite.description %}
-                        <span class="text-muted">•</span>
-                        <p class="text-muted mb-0" id="logigramme-description">{{ activite.description }}</p>
-                        {% endif %}
-                    </div>
-                    <div class="info-badges mt-2">
-                        {% if activite.direction %}
-                        <span class="badge bg-info">
-                            <i class="fas fa-sitemap me-1"></i>{{ activite.direction.nom }}
-                        </span>
-                        {% endif %}
-                        {% if activite.service %}
-                        <span class="badge bg-secondary">
-                            <i class="fas fa-building me-1"></i>{{ activite.service.nom }}
-                        </span>
-                        {% endif %}
-                    </div>
-                </div>
-                <!-- Dans le en-tête -->
-                <!-- Ajoutez ces boutons -->
-<div class="btn-group">
-    <button id="btn-imprimer" class="btn btn-action no-print">
-        <i class="fas fa-print me-2"></i>Imprimer
-    </button>
-    
-    <!-- Menu déroulant pour les exports -->
-    <div class="dropdown">
-        <button class="btn btn-action dropdown-toggle" type="button" id="dropdownExport" data-bs-toggle="dropdown">
-            <i class="fas fa-file-export me-2"></i>Exporter
-        </button>
-        <ul class="dropdown-menu">
-            <li>
-                <a class="dropdown-item" href="/logigramme/{{ activite.id }}/export-pdf">
-                    <i class="fas fa-file-alt text-primary me-2"></i>Rapport PDF
-                </a>
-            </li>
-            <li>
-                <a class="dropdown-item" href="/logigramme/{{ activite.id }}/export-visuel">
-                    <i class="fas fa-project-diagram text-success me-2"></i>Diagramme visuel
-                </a>
-            </li>
-            <li>
-                <a class="dropdown-item" href="/logigramme/{{ activite.id }}/export-diagramme">
-                    <i class="fas fa-sitemap text-info me-2"></i>Diagramme complet
-                </a>
-            </li>
-            <li><hr class="dropdown-divider"></li>
-            <li>
-                <a class="dropdown-item" href="#" id="btn-export-json">
-                    <i class="fas fa-code text-warning me-2"></i>Données JSON
-                </a>
-            </li>
-        </ul>
+<div class="editor-container">
+    <!-- Overlay de chargement -->
+    <div id="loading-overlay" class="loading-overlay">
+        <div class="loading-spinner">
+            <i class="fas fa-spinner fa-spin fa-2x mb-3"></i>
+            <p class="mb-0">Chargement...</p>
+        </div>
     </div>
-    
-    <button id="btn-sauvegarder" class="btn btn-action no-print">
-        <i class="fas fa-save me-2"></i>Sauvegarder
-    </button>
-    <a href="{{ url_for('liste_logigrammes') }}" class="btn btn-tool no-print">
-        <i class="fas fa-arrow-left me-2"></i>Retour
-    </a>
-</div>
+
+    <!-- Toolbar -->
+    <div class="toolbar-modern animate-in">
+        <div class="d-flex flex-wrap align-items-center justify-content-between gap-3">
+            <div class="d-flex gap-2 flex-wrap">
+                <div class="toolbar-group">
+                    <button class="btn-tool active" id="btn-select" data-mode="select">
+                        <i class="fas fa-mouse-pointer"></i>
+                        Sélection
+                    </button>
+                    <button class="btn-tool" id="btn-connect" data-mode="connect">
+                        <i class="fas fa-link"></i>
+                        Connexion
+                    </button>
+                </div>
+                <div class="toolbar-group">
+                    <button class="btn-tool" id="btn-zoom-out" title="Zoom arrière">
+                        <i class="fas fa-search-minus"></i>
+                    </button>
+                    <span id="zoom-level" class="text-sm text-gray-600" style="font-size: 0.875rem;">100%</span>
+                    <button class="btn-tool" id="btn-zoom-in" title="Zoom avant">
+                        <i class="fas fa-search-plus"></i>
+                    </button>
+                    <button class="btn-tool" id="btn-reset-zoom" title="Réinitialiser">
+                        <i class="fas fa-expand-alt"></i>
+                    </button>
+                </div>
+                <div class="toolbar-group">
+                    <button class="btn-tool" id="btn-align-left">
+                        <i class="fas fa-align-left"></i>
+                    </button>
+                    <button class="btn-tool" id="btn-align-center">
+                        <i class="fas fa-align-center"></i>
+                    </button>
+                    <button class="btn-tool" id="btn-align-right">
+                        <i class="fas fa-align-right"></i>
+                    </button>
+                </div>
+                <div class="toolbar-group">
+                    <button class="btn-tool" id="btn-undo" disabled>
+                        <i class="fas fa-undo"></i>
+                    </button>
+                    <button class="btn-tool" id="btn-redo" disabled>
+                        <i class="fas fa-redo"></i>
+                    </button>
+                </div>
+                <div class="toolbar-group">
+                    <button class="btn-tool btn-tool-danger" id="btn-delete-selected">
+                        <i class="fas fa-trash-alt"></i>
+                        Supprimer la sélection
+                    </button>
+                </div>
+            </div>
+            <div class="d-flex gap-2">
+                <button class="btn-tool" id="btn-save">
+                    <i class="fas fa-save"></i>
+                    Sauvegarder
+                </button>
+                <div class="dropdown" style="position: relative;">
+                    <button class="btn-tool dropdown-toggle" type="button" data-bs-toggle="dropdown" aria-expanded="false">
+                        <i class="fas fa-download"></i>
+                        Exporter
+                    </button>
+                    <ul class="dropdown-menu dropdown-menu-end" style="position: absolute; z-index: 1050;">
+                        <li><a class="dropdown-item" href="#" id="export-pdf"><i class="fas fa-file-pdf me-2"></i> PDF</a></li>
+                        <li><a class="dropdown-item" href="#" id="export-png"><i class="fas fa-image me-2"></i> PNG</a></li>
+                        <li><a class="dropdown-item" href="#" id="export-svg"><i class="fas fa-code me-2"></i> SVG</a></li>
+                        <li><hr class="dropdown-divider"></li>
+                        <li><a class="dropdown-item" href="#" id="export-json"><i class="fas fa-file-code me-2"></i> JSON</a></li>
+                    </ul>
+                </div>
             </div>
         </div>
     </div>
 
-    <div class="row">
-        <!-- Sidebar Gauche - Palette et Informations -->
-        <div class="col-lg-2 no-print">
-            <!-- Informations du logigramme -->
-            <div class="info-panel animate-in" style="animation-delay: 0.1s;">
-                <div class="palette-title">
-                    <i class="fas fa-info-circle"></i>
-                    Informations
-                </div>
-                <div class="info-form">
-                    <div class="mb-2">
-                        <small class="text-muted d-block">Nom</small>
-                        <strong id="info-nom">{{ activite.nom }}</strong>
-                    </div>
-                    {% if activite.description %}
-                    <div class="mb-2">
-                        <small class="text-muted d-block">Description</small>
-                        <small id="info-description">{{ activite.description }}</small>
-                    </div>
-                    {% endif %}
-                    {% if activite.direction %}
-                    <div class="mb-2">
-                        <small class="text-muted d-block">Direction</small>
-                        <small>{{ activite.direction.nom }}</small>
-                    </div>
-                    {% endif %}
-                    {% if activite.service %}
-                    <div class="mb-2">
-                        <small class="text-muted d-block">Service</small>
-                        <small>{{ activite.service.nom }}</small>
-                    </div>
-                    {% endif %}
-                    <div class="mb-0">
-                        <small class="text-muted d-block">Créé le</small>
-                        <small>{{ activite.created_at.strftime('%d/%m/%Y') }}</small>
-                    </div>
-                </div>
-            </div>
-
-            <div class="palette-modern animate-in" style="animation-delay: 0.1s;">
-                <!-- Éléments de Base -->
+    <div class="row g-3">
+        <!-- Palette -->
+        <div class="col-lg-2">
+            <div class="palette-modern animate-in">
                 <div class="palette-section">
                     <div class="palette-title">
                         <i class="fas fa-shapes"></i>
                         Éléments
                     </div>
                     <div class="palette-grid">
-                        <div class="palette-item element-debut" data-type="debut" draggable="true">
+                        <div class="palette-item" data-type="debut" draggable="true">
                             <i class="fas fa-play-circle"></i>
-                            <small>Début</small>
+                            <span>Début</span>
                         </div>
-                        <div class="palette-item element-action" data-type="action" draggable="true">
+                        <div class="palette-item" data-type="action" draggable="true">
                             <i class="fas fa-cogs"></i>
-                            <small>Action</small>
+                            <span>Action</span>
                         </div>
-                        <div class="palette-item element-controle" data-type="controle" draggable="true">
+                        <div class="palette-item" data-type="controle" draggable="true">
                             <i class="fas fa-check-double"></i>
-                            <small>Contrôle</small>
+                            <span>Contrôle</span>
                         </div>
-                        <div class="palette-item element-risque" data-type="risque" draggable="true">
+                        <div class="palette-item" data-type="risque" draggable="true">
                             <i class="fas fa-exclamation-triangle"></i>
-                            <small>Risque</small>
+                            <span>Risque</span>
                         </div>
-                        <div class="palette-item element-fin" data-type="fin" draggable="true">
+                        <div class="palette-item" data-type="fin" draggable="true">
                             <i class="fas fa-flag-checkered"></i>
-                            <small>Fin</small>
+                            <span>Fin</span>
                         </div>
-                    </div>
-                </div>
-
-                <!-- Organisation -->
-                <div class="palette-section">
-                    <div class="palette-title">
-                        <i class="fas fa-sitemap"></i>
-                        Organisation
-                    </div>
-                    <div class="palette-grid">
-                        <div class="palette-item element-organisation" data-type="organisation" draggable="true">
-                            <i class="fas fa-grip-lines-vertical"></i>
-                            <small>Séparation</small>
-                        </div>
-                        <div class="palette-item element-titre" data-type="titre" draggable="true">
+                        <div class="palette-item" data-type="titre" draggable="true">
                             <i class="fas fa-heading"></i>
-                            <small>Titre</small>
+                            <span>Titre</span>
+                        </div>
+                        <div class="palette-item" data-type="organisation" draggable="true">
+                            <i class="fas fa-grip-vertical"></i>
+                            <span>Séparateur</span>
                         </div>
                     </div>
                 </div>
 
-                <!-- Types de Liens -->
                 <div class="palette-section">
                     <div class="palette-title">
-                        <i class="fas fa-link"></i>
-                        Connexions
+                        <i class="fas fa-chart-line"></i>
+                        Statistiques
                     </div>
-                    <div class="palette-grid">
-                        <div class="palette-item" data-type="lien-normal" draggable="false" style="border-color: #475569; cursor: default;">
-                            <i class="fas fa-arrow-right" style="color: #475569;"></i>
-                            <small>Lien Normal</small>
+                    <div class="stats-info">
+                        <div class="d-flex justify-content-between mb-2">
+                            <span class="text-sm text-gray-600">Éléments:</span>
+                            <span class="fw-bold" id="stat-elements">0</span>
                         </div>
-                        <div class="palette-item" data-type="lien-oui" draggable="false" style="border-color: #10b981; cursor: default;">
-                            <i class="fas fa-check" style="color: #10b981;"></i>
-                            <small>Lien Oui</small>
+                        <div class="d-flex justify-content-between mb-2">
+                            <span class="text-sm text-gray-600">Connexions:</span>
+                            <span class="fw-bold" id="stat-liens">0</span>
                         </div>
-                        <div class="palette-item" data-type="lien-non" draggable="false" style="border-color: #ef4444; cursor: default;">
-                            <i class="fas fa-times" style="color: #ef4444;"></i>
-                            <small>Lien Non</small>
-                        </div>
-                    </div>
-                </div>
-            </div>
-
-            <!-- Statistiques -->
-            <div class="stats-container animate-in no-print" style="animation-delay: 0.2s;">
-                <div class="row text-center">
-                    <div class="col-6">
-                        <div class="stat-item">
-                            <span class="stat-number" id="stat-elements">0</span>
-                            <span class="stat-label">Éléments</span>
-                        </div>
-                    </div>
-                    <div class="col-6">
-                        <div class="stat-item">
-                            <span class="stat-number" id="stat-liens">0</span>
-                            <span class="stat-label">Connexions</span>
+                        <div class="d-flex justify-content-between">
+                            <span class="text-sm text-gray-600">Sélectionnés:</span>
+                            <span class="fw-bold" id="stat-selected">0</span>
                         </div>
                     </div>
                 </div>
             </div>
         </div>
 
-        <!-- Zone d'Édition Principale -->
+        <!-- Canvas -->
         <div class="col-lg-10">
-            <!-- Barre d'Outils -->
-            <div class="toolbar-modern mb-3 animate-in no-print" style="animation-delay: 0.3s;">
-                <div class="row align-items-center">
-                    <div class="col-md-6">
-                        <div class="d-flex flex-wrap gap-2">
-                            <button class="btn-tool active" id="btn-mode-selection" data-mode="selection">
-                                <i class="fas fa-mouse-pointer"></i>
-                                Sélection
-                            </button>
-                            <button class="btn-tool" id="btn-mode-lien" data-mode="lien">
-                                <i class="fas fa-link"></i>
-                                Connexions
-                            </button>
-                            <div class="btn-group">
-                                <button class="btn-tool" id="btn-zoom-out" title="Zoom arrière">
-                                    <i class="fas fa-search-minus"></i>
-                                </button>
-                                <button class="btn-tool" id="btn-reset-zoom" title="Zoom normal">
-                                    <i class="fas fa-expand-arrows-alt"></i>
-                                </button>
-                                <button class="btn-tool" id="btn-zoom-in" title="Zoom avant">
-                                    <i class="fas fa-search-plus"></i>
-                                </button>
-                            </div>
-                            <button class="btn-tool" id="btn-supprimer-selection" title="Supprimer la sélection">
-                                <i class="fas fa-trash"></i>
-                                Supprimer
-                            </button>
-                        </div>
-                    </div>
-                    <div class="col-md-6">
-                        <div class="d-flex justify-content-end gap-3 align-items-center">
-                            <div class="mode-indicator" id="mode-indicator">
-                                <i class="fas fa-mouse-pointer"></i>
-                                Mode Sélection
-                            </div>
-                            <button class="btn-tool text-danger" id="btn-effacer-tout" title="Tout effacer">
-                                <i class="fas fa-broom"></i>
-                                Tout Effacer
-                            </button>
-                        </div>
-                    </div>
-                </div>
-            </div>
-
-            <!-- Éditeur -->
-            <div class="position-relative animate-in" style="animation-delay: 0.4s;">
+            <div class="canvas-wrapper animate-in">
                 <div id="editeur-logigramme">
-                    <svg id="svg-liens" style="position: absolute; top: 0; left: 0; width: 2000px; height: 2000px; pointer-events: none; z-index: 5;"></svg>
+                    <svg id="svg-liens"></svg>
                     <div id="conteneur-elements"></div>
                 </div>
                 
-                <!-- Overlay d'instructions -->
-                <div id="instructions-overlay" class="position-absolute top-50 start-50 translate-middle text-center instructions-overlay rounded-3 p-5" style="z-index: 1; pointer-events: none;">
-                    <i class="fas fa-project-diagram fa-4x text-muted mb-4"></i>
-                    <h4 class="text-muted mb-3">Commencer votre logigramme</h4>
-                    <p class="text-muted mb-4">Glissez des éléments depuis la palette pour démarrer la conception de votre processus</p>
-                    <div class="d-flex justify-content-center gap-3 flex-wrap">
-                        <span class="badge bg-light text-dark p-2">
-                            <i class="fas fa-mouse-pointer me-1"></i>Cliquer pour sélectionner
-                        </span>
-                        <span class="badge bg-light text-dark p-2">
-                            <i class="fas fa-link me-1"></i>Mode Connexions pour créer des liens
-                        </span>
-                        <span class="badge bg-light text-dark p-2">
-                            <i class="fas fa-trash me-1"></i>Suppr pour supprimer
-                        </span>
-                    </div>
+                <!-- Mini-carte -->
+                <div class="minimap" id="minimap">
+                    <canvas id="minimap-canvas" width="180" height="120" class="minimap-canvas"></canvas>
                 </div>
 
-                <!-- Contrôles de navigation -->
-                <div class="navigation-controls no-print">
-                    <button class="btn-navigation" id="btn-deplacer-gauche" title="Déplacer à gauche">
-                        <i class="fas fa-arrow-left"></i>
-                    </button>
-                    <button class="btn-navigation" id="btn-deplacer-droite" title="Déplacer à droite">
-                        <i class="fas fa-arrow-right"></i>
-                    </button>
-                    <button class="btn-navigation" id="btn-deplacer-haut" title="Déplacer vers le haut">
-                        <i class="fas fa-arrow-up"></i>
-                    </button>
-                    <button class="btn-navigation" id="btn-deplacer-bas" title="Déplacer vers le bas">
-                        <i class="fas fa-arrow-down"></i>
-                    </button>
+                <!-- Indicateur de mode -->
+                <div class="position-absolute top-0 end-0 m-3">
+                    <div class="badge bg-dark bg-opacity-75 px-3 py-2" id="mode-indicator">
+                        <i class="fas fa-mouse-pointer me-1"></i>
+                        Mode Sélection
+                    </div>
                 </div>
             </div>
         </div>
     </div>
 </div>
 
-<!-- Modal Édition Élément -->
-<div class="modal fade" id="modal-editer-element" tabindex="-1">
+<!-- Modal Édition -->
+<div class="modal fade modal-modern" id="edit-modal" tabindex="-1" data-bs-backdrop="static" data-bs-keyboard="false">
     <div class="modal-dialog modal-lg">
         <div class="modal-content">
-            <div class="modal-header bg-gradient-primary text-white">
+            <div class="modal-header">
                 <h5 class="modal-title">
                     <i class="fas fa-edit me-2"></i>
-                    Éditer l'Élément
+                    Éditer l'élément
                 </h5>
                 <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
             </div>
             <div class="modal-body">
-                <form id="form-element">
+                <form id="element-form">
                     <input type="hidden" id="element-id">
                     <div class="row">
                         <div class="col-md-8">
                             <div class="mb-3">
-                                <label for="element-libelle" class="form-label fw-semibold">Libellé *</label>
-                                <input type="text" class="form-control form-control-lg" id="element-libelle" required 
-                                       placeholder="Saisissez le libellé de l'élément...">
+                                <label class="form-label fw-semibold">Libellé *</label>
+                                <input type="text" class="form-control form-control-lg" id="element-libelle" required>
                             </div>
                             <div class="mb-3">
-                                <label for="element-description" class="form-label fw-semibold">Description</label>
-                                <textarea class="form-control" id="element-description" rows="4" 
-                                          placeholder="Description détaillée de l'élément..."></textarea>
+                                <label class="form-label fw-semibold">Description</label>
+                                <textarea class="form-control" id="element-description" rows="4"></textarea>
                             </div>
                         </div>
                         <div class="col-md-4">
-                            <div class="card bg-light">
-                                <div class="card-body">
-                                    <h6 class="card-title fw-semibold">Informations</h6>
-                                    <div class="mb-3">
-                                        <label class="form-label small text-muted">Type d'élément</label>
-                                        <input type="text" class="form-control" id="element-type" disabled>
-                                    </div>
-                                    <div class="mb-3">
-                                        <label class="form-label small text-muted">Position</label>
-                                        <div class="d-flex gap-2">
-                                            <input type="number" class="form-control form-control-sm" id="element-pos-x" placeholder="X">
-                                            <input type="number" class="form-control form-control-sm" id="element-pos-y" placeholder="Y">
-                                        </div>
-                                    </div>
-                                    <div class="mb-3">
-                                        <label class="form-label small text-muted">Dimensions</label>
-                                        <div class="d-flex gap-2">
-                                            <input type="number" class="form-control form-control-sm" id="element-width" placeholder="Largeur" min="100">
-                                            <input type="number" class="form-control form-control-sm" id="element-height" placeholder="Hauteur" min="50">
-                                        </div>
-                                    </div>
+                            <div class="bg-light p-3 rounded">
+                                <h6 class="fw-semibold mb-3">Propriétés</h6>
+                                <div class="mb-2">
+                                    <label class="text-sm text-gray-600">Type</label>
+                                    <input type="text" class="form-control form-control-sm" id="element-type" disabled>
+                                </div>
+                                <div class="mb-2">
+                                    <label class="text-sm text-gray-600">Position X</label>
+                                    <input type="number" class="form-control form-control-sm" id="element-x">
+                                </div>
+                                <div class="mb-2">
+                                    <label class="text-sm text-gray-600">Position Y</label>
+                                    <input type="number" class="form-control form-control-sm" id="element-y">
+                                </div>
+                                <div class="mb-2" id="separator-width-group" style="display: none;">
+                                    <label class="text-sm text-gray-600">Largeur (px)</label>
+                                    <input type="range" class="form-range" id="separator-width" min="15" max="80" step="1">
+                                    <span id="width-value" class="text-sm">25px</span>
                                 </div>
                             </div>
                         </div>
@@ -886,13 +814,13 @@
                 </form>
             </div>
             <div class="modal-footer">
-                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">
+                <button type="button" class="btn btn-light" data-bs-dismiss="modal">
                     <i class="fas fa-times me-2"></i>Annuler
                 </button>
-                <button type="button" class="btn btn-danger" id="btn-supprimer-element">
+                <button type="button" class="btn btn-danger" id="delete-element">
                     <i class="fas fa-trash me-2"></i>Supprimer
                 </button>
-                <button type="button" class="btn btn-modern btn-modern-primary" id="btn-sauvegarder-element">
+                <button type="button" class="btn btn-primary" id="save-element">
                     <i class="fas fa-save me-2"></i>Sauvegarder
                 </button>
             </div>
@@ -900,125 +828,29 @@
     </div>
 </div>
 
-<!-- Modal Informations Logigramme -->
-<div class="modal fade" id="modal-infos-logigramme" tabindex="-1">
-    <div class="modal-dialog modal-lg">
-        <div class="modal-content">
-            <div class="modal-header bg-gradient-info text-white">
-                <h5 class="modal-title">
-                    <i class="fas fa-info-circle me-2"></i>
-                    Informations du Logigramme
-                </h5>
-                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
-            </div>
-            <div class="modal-body">
-                <form id="form-infos-logigramme">
-                    <div class="row">
-                        <div class="col-md-8">
-                            <div class="mb-3">
-                                <label for="logigramme-nom" class="form-label fw-semibold">Nom du logigramme *</label>
-                                <input type="text" class="form-control form-control-lg" id="logigramme-nom-input" required 
-                                       value="{{ activite.nom }}">
-                            </div>
-                            <div class="mb-3">
-                                <label for="logigramme-description" class="form-label fw-semibold">Description</label>
-                                <textarea class="form-control" id="logigramme-description-input" rows="4">{{ activite.description or '' }}</textarea>
-                            </div>
-                        </div>
-                        <div class="col-md-4">
-                            <div class="card bg-light">
-                                <div class="card-body">
-                                    <h6 class="card-title fw-semibold">Affectation</h6>
-                                    <div class="mb-3">
-                                        <label for="logigramme-direction" class="form-label small">Direction</label>
-                                        <select class="form-select" id="logigramme-direction-input">
-                                            <option value="">Sélectionner une direction</option>
-                                            {% for direction in directions %}
-                                            <option value="{{ direction.id }}" {% if activite.direction_id == direction.id %}selected{% endif %}>
-                                                {{ direction.nom }}
-                                            </option>
-                                            {% endfor %}
-                                        </select>
-                                    </div>
-                                    <div class="mb-3">
-                                        <label for="logigramme-service" class="form-label small">Service</label>
-                                        <select class="form-select" id="logigramme-service-input">
-                                            <option value="">Sélectionner un service</option>
-                                            {% for service in services %}
-                                            <option value="{{ service.id }}" data-direction="{{ service.direction_id }}" {% if activite.service_id == service.id %}selected{% endif %}>
-                                                {{ service.nom }}
-                                            </option>
-                                            {% endfor %}
-                                        </select>
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-                </form>
-            </div>
-            <div class="modal-footer">
-                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">
-                    <i class="fas fa-times me-2"></i>Annuler
-                </button>
-                <button type="button" class="btn btn-modern btn-modern-primary" id="btn-sauvegarder-infos">
-                    <i class="fas fa-save me-2"></i>Sauvegarder
-                </button>
-            </div>
-        </div>
-    </div>
-</div>
-
-<!-- Modal Sélection Type Lien -->
-<div class="modal fade" id="modal-type-lien" tabindex="-1">
+<!-- Modal Type de lien -->
+<div class="modal fade" id="link-type-modal" tabindex="-1" data-bs-backdrop="static">
     <div class="modal-dialog modal-sm">
         <div class="modal-content">
             <div class="modal-header bg-info text-white">
                 <h5 class="modal-title">
                     <i class="fas fa-link me-2"></i>
-                    Type de Lien
+                    Type de connexion
                 </h5>
                 <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
             </div>
             <div class="modal-body text-center">
-                <p class="mb-4">Choisissez le type de lien :</p>
                 <div class="d-grid gap-2">
-                    <button type="button" class="btn btn-outline-dark btn-lg" data-lien-type="normal">
-                        <i class="fas fa-arrow-right me-2"></i>Lien Normal
+                    <button class="btn btn-outline-secondary" data-link-type="normal">
+                        <i class="fas fa-arrow-right me-2"></i>Normal
                     </button>
-                    <button type="button" class="btn btn-outline-success btn-lg" data-lien-type="oui">
-                        <i class="fas fa-check me-2"></i>Lien Oui
+                    <button class="btn btn-outline-success" data-link-type="oui">
+                        <i class="fas fa-check me-2"></i>Oui
                     </button>
-                    <button type="button" class="btn btn-outline-danger btn-lg" data-lien-type="non">
-                        <i class="fas fa-times me-2"></i>Lien Non
+                    <button class="btn btn-outline-danger" data-link-type="non">
+                        <i class="fas fa-times me-2"></i>Non
                     </button>
                 </div>
-            </div>
-        </div>
-    </div>
-</div>
-
-<!-- Modal Confirmation -->
-<div class="modal fade" id="modal-confirmation" tabindex="-1">
-    <div class="modal-dialog">
-        <div class="modal-content">
-            <div class="modal-header bg-warning text-dark">
-                <h5 class="modal-title">
-                    <i class="fas fa-exclamation-triangle me-2"></i>
-                    Confirmation
-                </h5>
-                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
-            </div>
-            <div class="modal-body">
-                <p id="message-confirmation" class="mb-0">Êtes-vous sûr de vouloir effectuer cette action ?</p>
-            </div>
-            <div class="modal-footer">
-                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">
-                    <i class="fas fa-times me-2"></i>Annuler
-                </button>
-                <button type="button" class="btn btn-warning" id="btn-confirmer-action">
-                    <i class="fas fa-check me-2"></i>Confirmer
-                </button>
             </div>
         </div>
     </div>
@@ -1027,1231 +859,1377 @@
 
 {% block scripts %}
 <script>
-    // Variables globales
-    const ACTIVITE_ID = {{ activite.id }};
-    let elements = [];
-    let liens = [];
-    let modeActuel = 'selection';
-    let elementSelectionne = null;
-    let elementSourceLien = null;
-    let echelle = 1;
-    let elementEnDeplacement = null;
-    let typeLienSelectionne = 'normal';
-    let menuContextuelLien = null;
+// ============================================
+// LOGIGRAMME ÉDITEUR AVANCÉ - VERSION PRO
+// ============================================
 
-    // Initialisation
-    document.addEventListener('DOMContentLoaded', function() {
-        initialiserEditeur();
-        chargerLogigramme();
-        initialiserEvenements();
-        mettreAJourStats();
-        initialiserFiltrageServices();
+class LogigrammeEditor {
+    constructor(activiteId) {
+        this.activiteId = activiteId;
+        this.elements = [];
+        this.links = [];
+        this.selectedElements = new Set();
+        this.mode = 'select';
+        this.linkSource = null;
+        this.zoom = 1;
+        this.history = [];
+        this.historyIndex = -1;
+        this.isSelecting = false;
+        this.selectStart = null;
+        this.selectionRect = null;
+        this.isLoading = false;
+        this.resizingElement = null;
         
-        {% if activite.is_archived %}
-            afficherMessage('Ce logigramme est archivé et ne peut pas être modifié', 'warning');
-            
-            // Désactiver toutes les interactions
-            document.querySelectorAll('.palette-item, .btn-tool, #editeur-logigramme').forEach(el => {
-                el.style.pointerEvents = 'none';
-                el.style.opacity = '0.6';
-            });
-        {% endif %}
-    });
-
-    function initialiserEditeur() {
-        initialiserGlisserDeposer();
-        cacherInstructions();
-        initialiserNavigation();
-        initialiserDefsSVG();
+        this.init();
     }
 
-    function initialiserDefsSVG() {
-        const svg = document.getElementById('svg-liens');
-        const defs = document.createElementNS('http://www.w3.org/2000/svg', 'defs');
-        
-        // Arrowhead pour lien normal
-        const arrowheadNormal = document.createElementNS('http://www.w3.org/2000/svg', 'marker');
-        arrowheadNormal.setAttribute('id', 'arrowhead-modern');
-        arrowheadNormal.setAttribute('markerWidth', '10');
-        arrowheadNormal.setAttribute('markerHeight', '7');
-        arrowheadNormal.setAttribute('refX', '9');
-        arrowheadNormal.setAttribute('refY', '3.5');
-        arrowheadNormal.setAttribute('orient', 'auto');
-        arrowheadNormal.innerHTML = '<polygon points="0 0, 10 3.5, 0 7" fill="#475569"/>';
-        
-        // Arrowhead pour lien oui
-        const arrowheadOui = document.createElementNS('http://www.w3.org/2000/svg', 'marker');
-        arrowheadOui.setAttribute('id', 'arrowhead-oui');
-        arrowheadOui.setAttribute('markerWidth', '10');
-        arrowheadOui.setAttribute('markerHeight', '7');
-        arrowheadOui.setAttribute('refX', '9');
-        arrowheadOui.setAttribute('refY', '3.5');
-        arrowheadOui.setAttribute('orient', 'auto');
-        arrowheadOui.innerHTML = '<polygon points="0 0, 10 3.5, 0 7" fill="#10b981"/>';
-        
-        // Arrowhead pour lien non
-        const arrowheadNon = document.createElementNS('http://www.w3.org/2000/svg', 'marker');
-        arrowheadNon.setAttribute('id', 'arrowhead-non');
-        arrowheadNon.setAttribute('markerWidth', '10');
-        arrowheadNon.setAttribute('markerHeight', '7');
-        arrowheadNon.setAttribute('refX', '9');
-        arrowheadNon.setAttribute('refY', '3.5');
-        arrowheadNon.setAttribute('orient', 'auto');
-        arrowheadNon.innerHTML = '<polygon points="0 0, 10 3.5, 0 7" fill="#ef4444"/>';
-        
-        defs.appendChild(arrowheadNormal);
-        defs.appendChild(arrowheadOui);
-        defs.appendChild(arrowheadNon);
-        svg.appendChild(defs);
+    async init() {
+        this.cacheDom();
+        this.bindEvents();
+        await this.loadData();
+        this.setupDragAndDrop();
+        this.setupKeyboardShortcuts();
+        this.updateStats();
+        this.updateZoomDisplay();
+        this.initMinimap();
+        this.showToast('Logigramme chargé avec succès', 'success');
     }
 
-    function initialiserNavigation() {
-        // Navigation avec les flèches
-        document.getElementById('btn-deplacer-gauche').addEventListener('click', () => deplacerVue(-100, 0));
-        document.getElementById('btn-deplacer-droite').addEventListener('click', () => deplacerVue(100, 0));
-        document.getElementById('btn-deplacer-haut').addEventListener('click', () => deplacerVue(0, -100));
-        document.getElementById('btn-deplacer-bas').addEventListener('click', () => deplacerVue(0, 100));
-    }
-
-    function initialiserFiltrageServices() {
-        const directionSelect = document.getElementById('logigramme-direction-input');
-        const serviceSelect = document.getElementById('logigramme-service-input');
-        
-        if (directionSelect && serviceSelect) {
-            directionSelect.addEventListener('change', function() {
-                const directionId = this.value;
-                const services = serviceSelect.querySelectorAll('option');
-                
-                services.forEach(option => {
-                    if (option.value === '') return; // Garder l'option par défaut
-                    
-                    if (!directionId || option.getAttribute('data-direction') === directionId) {
-                        option.style.display = 'block';
-                        option.disabled = false;
-                    } else {
-                        option.style.display = 'none';
-                        option.disabled = true;
-                    }
-                });
-                
-                // Réinitialiser la sélection du service si incompatible
-                if (directionId && serviceSelect.value) {
-                    const selectedOption = serviceSelect.querySelector(`option[value="${serviceSelect.value}"]`);
-                    if (selectedOption && selectedOption.getAttribute('data-direction') !== directionId) {
-                        serviceSelect.value = '';
-                    }
-                }
-            });
-        }
-    }
-
-    function deplacerVue(deltaX, deltaY) {
-        const editeur = document.getElementById('editeur-logigramme');
-        editeur.scrollLeft += deltaX;
-        editeur.scrollTop += deltaY;
-    }
-
-    function cacherInstructions() {
-        const overlay = document.getElementById('instructions-overlay');
+    showLoading(show) {
+        this.isLoading = show;
+        const overlay = document.getElementById('loading-overlay');
         if (overlay) {
-            overlay.style.display = 'none';
-        }
-    }
-
-    function montrerInstructions() {
-        const overlay = document.getElementById('instructions-overlay');
-        if (overlay && elements.length === 0) {
-            overlay.style.display = 'block';
-        }
-    }
-
-    // Charger les éléments et liens existants
-    async function chargerLogigramme() {
-        try {
-            const reponseElements = await fetchWithCSRF(`/api/logigramme/${ACTIVITE_ID}/elements`);
-            if (!reponseElements.ok) throw new Error('Erreur chargement éléments');
-            elements = await reponseElements.json();
-            
-            const reponseLiens = await fetchWithCSRF(`/api/logigramme/${ACTIVITE_ID}/liens`);
-            if (!reponseLiens.ok) throw new Error('Erreur chargement liens');
-            const liensData = await reponseLiens.json();
-            liens = liensData.map(lien => ({
-                ...lien,
-                type: lien.style?.type || 'normal'
-            }));
-            
-            afficherElements();
-            afficherLiens();
-            mettreAJourStats();
-            
-            if (elements.length > 0) {
-                cacherInstructions();
+            if (show) {
+                overlay.classList.add('active');
             } else {
-                montrerInstructions();
+                overlay.classList.remove('active');
             }
-            
-        } catch (erreur) {
-            console.error('Erreur chargement:', erreur);
-            afficherMessage('Erreur lors du chargement du logigramme', 'error');
         }
     }
 
-    // Afficher les éléments
-    function afficherElements() {
-        const conteneur = document.getElementById('conteneur-elements');
-        conteneur.innerHTML = '';
+    cacheDom() {
+        this.container = document.getElementById('editeur-logigramme');
+        this.elementsContainer = document.getElementById('conteneur-elements');
+        this.svgContainer = document.getElementById('svg-liens');
+        this.minimapCanvas = document.getElementById('minimap-canvas');
         
-        elements.forEach(element => {
-            const divElement = creerElementDOM(element);
-            conteneur.appendChild(divElement);
-        });
+        this.buttons = {
+            select: document.getElementById('btn-select'),
+            connect: document.getElementById('btn-connect'),
+            zoomIn: document.getElementById('btn-zoom-in'),
+            zoomOut: document.getElementById('btn-zoom-out'),
+            resetZoom: document.getElementById('btn-reset-zoom'),
+            save: document.getElementById('btn-save'),
+            undo: document.getElementById('btn-undo'),
+            redo: document.getElementById('btn-redo'),
+            alignLeft: document.getElementById('btn-align-left'),
+            alignCenter: document.getElementById('btn-align-center'),
+            alignRight: document.getElementById('btn-align-right'),
+            deleteSelected: document.getElementById('btn-delete-selected')
+        };
+        
+        this.stats = {
+            elements: document.getElementById('stat-elements'),
+            liens: document.getElementById('stat-liens'),
+            selected: document.getElementById('stat-selected')
+        };
+        
+        this.modeIndicator = document.getElementById('mode-indicator');
+        this.separatorWidthGroup = document.getElementById('separator-width-group');
+        this.separatorWidthSlider = document.getElementById('separator-width');
+        this.widthValueSpan = document.getElementById('width-value');
     }
 
-    // Créer un élément DOM moderne
-    function creerElementDOM(element) {
-        const div = document.createElement('div');
-        div.className = `element-processus element-${element.type}`;
-        div.dataset.id = element.id;
-        div.style.left = element.position_x + 'px';
-        div.style.top = element.position_y + 'px';
+    bindEvents() {
+        this.buttons.select.addEventListener('click', () => this.setMode('select'));
+        this.buttons.connect.addEventListener('click', () => this.setMode('connect'));
+        this.buttons.zoomIn.addEventListener('click', () => this.zoomIn());
+        this.buttons.zoomOut.addEventListener('click', () => this.zoomOut());
+        this.buttons.resetZoom.addEventListener('click', () => this.resetZoom());
+        this.buttons.save.addEventListener('click', () => this.save());
+        this.buttons.undo.addEventListener('click', () => this.undo());
+        this.buttons.redo.addEventListener('click', () => this.redo());
+        this.buttons.deleteSelected.addEventListener('click', () => this.deleteSelectedElements());
+        this.buttons.alignLeft.addEventListener('click', () => this.alignElements('left'));
+        this.buttons.alignCenter.addEventListener('click', () => this.alignElements('center'));
+        this.buttons.alignRight.addEventListener('click', () => this.alignElements('right'));
         
-        // Appliquer les dimensions personnalisées
-        if (element.style && element.style.width) {
-            div.style.width = element.style.width + 'px';
-        }
-        if (element.style && element.style.height) {
-            div.style.height = element.style.height + 'px';
-        }
-        
-        div.innerHTML = `
-            <div class="element-content">
-                <div class="element-title">${element.libelle}</div>
-                ${element.description ? `<div class="element-description">${element.description}</div>` : ''}
-            </div>
-        `;
-        
-        // Événements
-        div.addEventListener('dblclick', () => editerElement(element.id));
-        div.addEventListener('contextmenu', (e) => {
+        // Exports avec preventDefault
+        document.getElementById('export-pdf').addEventListener('click', (e) => {
             e.preventDefault();
-            afficherMenuContextuel(e, element.id);
-        });
-        
-        div.addEventListener('click', (e) => {
             e.stopPropagation();
-            
-            if (modeActuel === 'selection') {
-                selectionnerElement(element.id);
-            } else if (modeActuel === 'lien') {
-                gererCreationLien(element.id);
+            this.exportPDF();
+        });
+        document.getElementById('export-png').addEventListener('click', (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            this.exportPNG();
+        });
+        document.getElementById('export-svg').addEventListener('click', (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            this.exportSVG();
+        });
+        document.getElementById('export-json').addEventListener('click', (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            this.exportJSON();
+        });
+        
+        // Sélection rectangulaire
+        this.container.addEventListener('mousedown', (e) => {
+            if (this.mode === 'select' && e.target === this.container && !this.isLoading) {
+                this.startSelectionRect(e);
             }
         });
         
-        // Glisser-déposer
-        rendreDraggable(div, element.id);
+        this.container.addEventListener('mousemove', (e) => {
+            if (this.isSelecting) {
+                this.updateSelectionRect(e);
+            }
+        });
         
-        return div;
-    }
-
-    // Afficher les liens avec labels
-    function afficherLiens() {
-        const svg = document.getElementById('svg-liens');
-        // Garder seulement les defs
-        const defs = svg.querySelector('defs');
-        svg.innerHTML = '';
-        if (defs) svg.appendChild(defs);
+        this.container.addEventListener('mouseup', () => {
+            if (this.isSelecting) {
+                this.endSelectionRect();
+            }
+        });
         
-        liens.forEach(lien => {
-            const source = elements.find(el => el.id === lien.source_id);
-            const cible = elements.find(el => el.id === lien.cible_id);
-            
-            if (source && cible) {
-                // Calculer les positions
-                const x1 = source.position_x + (source.style?.width || 160) / 2;
-                const y1 = source.position_y + (source.style?.height || 80) / 2;
-                const x2 = cible.position_x + (cible.style?.width || 160) / 2;
-                const y2 = cible.position_y + (cible.style?.height || 80) / 2;
-                
-                // Créer la ligne
-                const ligne = document.createElementNS('http://www.w3.org/2000/svg', 'line');
-                const typeLien = lien.type || 'normal';
-                ligne.setAttribute('class', `lien-processus lien-${typeLien}`);
-                ligne.setAttribute('x1', x1);
-                ligne.setAttribute('y1', y1);
-                ligne.setAttribute('x2', x2);
-                ligne.setAttribute('y2', y2);
-                ligne.setAttribute('marker-end', `url(#arrowhead-${typeLien})`);
-                ligne.dataset.id = lien.id;
-                
-                // Ajouter des événements pour la suppression
-                ligne.addEventListener('contextmenu', (e) => {
-                    e.preventDefault();
-                    afficherMenuContextuelLien(e, lien.id);
-                });
-                
-                ligne.addEventListener('click', (e) => {
-                    if (e.ctrlKey) {
-                        supprimerLien(lien.id);
-                    }
-                });
-                
-                svg.appendChild(ligne);
-                
-                // Ajouter le label pour les liens Oui/Non
-                if (typeLien === 'oui' || typeLien === 'non') {
-                    const labelX = (x1 + x2) / 2;
-                    const labelY = (y1 + y2) / 2;
-                    
-                    const label = document.createElementNS('http://www.w3.org/2000/svg', 'text');
-                    label.setAttribute('class', `lien-label lien-label-${typeLien}`);
-                    label.setAttribute('x', labelX);
-                    label.setAttribute('y', labelY);
-                    label.setAttribute('text-anchor', 'middle');
-                    label.setAttribute('dy', '0.3em');
-                    label.textContent = typeLien === 'oui' ? 'OUI' : 'NON';
-                    label.dataset.lienId = lien.id;
-                    
-                    svg.appendChild(label);
+        this.container.addEventListener('scroll', () => this.updateMinimap());
+        window.addEventListener('resize', () => {
+            this.renderLinks();
+            this.updateMinimap();
+        });
+        
+        // Redimensionnement du séparateur
+        if (this.separatorWidthSlider) {
+            this.separatorWidthSlider.addEventListener('input', (e) => {
+                const width = e.target.value;
+                this.widthValueSpan.textContent = width + 'px';
+                const elementId = parseInt(document.getElementById('element-id').value);
+                const element = this.elements.find(el => el.id === elementId);
+                if (element && element.type === 'organisation') {
+                    element.style = element.style || {};
+                    element.style.width = parseInt(width);
                 }
+            });
+        }
+    }
+
+    setupKeyboardShortcuts() {
+        document.addEventListener('keydown', (e) => {
+            if (this.isLoading) return;
+            
+            if (e.ctrlKey && e.key === 'z') {
+                e.preventDefault();
+                this.undo();
+            } else if (e.ctrlKey && (e.key === 'y' || (e.shiftKey && e.key === 'Z'))) {
+                e.preventDefault();
+                this.redo();
+            } else if (e.ctrlKey && e.key === 's') {
+                e.preventDefault();
+                this.save();
+            } else if (e.key === 'Delete' && this.selectedElements.size > 0) {
+                this.deleteSelectedElements();
+            } else if (e.key === 'Escape') {
+                this.clearSelection();
+                if (this.mode === 'connect') {
+                    this.setMode('select');
+                }
+            } else if (e.ctrlKey && e.key === 'a') {
+                e.preventDefault();
+                this.selectAllElements();
             }
         });
     }
 
-    // Menu contextuel pour les liens
-    function afficherMenuContextuelLien(e, lienId) {
-        // Supprimer l'ancien menu s'il existe
-        if (menuContextuelLien) {
-            menuContextuelLien.remove();
-        }
-        
-        // Créer le nouveau menu
-        menuContextuelLien = document.createElement('div');
-        menuContextuelLien.className = 'context-menu-lien';
-        menuContextuelLien.style.left = e.clientX + 'px';
-        menuContextuelLien.style.top = e.clientY + 'px';
-        
-        menuContextuelLien.innerHTML = `
-            <div class="context-menu-item" data-action="changer-type">
-                <i class="fas fa-palette"></i>
-                Changer le type
-            </div>
-            <div class="context-menu-item text-danger" data-action="supprimer">
-                <i class="fas fa-trash"></i>
-                Supprimer le lien
-            </div>
-        `;
-        
-        document.body.appendChild(menuContextuelLien);
-        
-        // Gérer les clics sur le menu
-        menuContextuelLien.querySelector('[data-action="changer-type"]').addEventListener('click', () => {
-            changerTypeLien(lienId);
-            menuContextuelLien.remove();
-            menuContextuelLien = null;
-        });
-        
-        menuContextuelLien.querySelector('[data-action="supprimer"]').addEventListener('click', () => {
-            supprimerLien(lienId);
-            menuContextuelLien.remove();
-            menuContextuelLien = null;
-        });
-        
-        // Fermer le menu en cliquant ailleurs
-        setTimeout(() => {
-            document.addEventListener('click', fermerMenuContextuel);
-        }, 100);
-    }
-
-    function fermerMenuContextuel() {
-        if (menuContextuelLien) {
-            menuContextuelLien.remove();
-            menuContextuelLien = null;
-        }
-        document.removeEventListener('click', fermerMenuContextuel);
-    }
-
-    // Gestion du glisser-déposer depuis la palette
-    function initialiserGlisserDeposer() {
-        const paletteItems = document.querySelectorAll('.palette-item');
-        const editeur = document.getElementById('editeur-logigramme');
-        
+    setupDragAndDrop() {
+        const paletteItems = document.querySelectorAll('.palette-item[data-type]');
         paletteItems.forEach(item => {
-            if (item.dataset.type && !item.dataset.type.includes('lien-')) {
-                item.addEventListener('dragstart', (e) => {
-                    e.dataTransfer.setData('type', item.dataset.type);
-                    e.dataTransfer.effectAllowed = 'copy';
-                });
-            }
+            item.addEventListener('dragstart', (e) => {
+                e.dataTransfer.setData('text/plain', item.dataset.type);
+                e.dataTransfer.effectAllowed = 'copy';
+            });
         });
         
-        editeur.addEventListener('dragover', (e) => {
+        this.container.addEventListener('dragover', (e) => {
             e.preventDefault();
             e.dataTransfer.dropEffect = 'copy';
         });
         
-        editeur.addEventListener('drop', (e) => {
+        this.container.addEventListener('drop', async (e) => {
             e.preventDefault();
-            const type = e.dataTransfer.getData('type');
-            const rect = editeur.getBoundingClientRect();
-            const scrollLeft = editeur.scrollLeft;
-            const scrollTop = editeur.scrollTop;
-            const x = e.clientX - rect.left + scrollLeft - 80;
-            const y = e.clientY - rect.top + scrollTop - 40;
+            if (this.isLoading) return;
             
-            creerNouvelElement(type, x, y);
+            const type = e.dataTransfer.getData('text/plain');
+            const rect = this.container.getBoundingClientRect();
+            const x = e.clientX - rect.left + this.container.scrollLeft - 60;
+            const y = e.clientY - rect.top + this.container.scrollTop - 35;
+            
+            await this.createElement(type, x, y);
         });
     }
 
-    // Créer un nouvel élément
-    async function creerNouvelElement(type, x, y) {
-        const libelle = prompt('Libellé de l\'élément:', getLibelleParDefaut(type));
-        if (!libelle) return;
-        
-        const style = {};
-        if (type === 'organisation') {
-            style.width = 20;
-            style.height = 500;
-        } else if (type === 'titre') {
-            style.width = 200;
-            style.height = 60;
-        }
-        
-        const nouvelElement = {
-            type: type,
-            libelle: libelle,
-            description: '',
-            position_x: Math.max(0, x),
-            position_y: Math.max(0, y),
-            style: style
-        };
-        
+    async loadData() {
+        this.showLoading(true);
         try {
-            const reponse = await fetchWithCSRF(`/api/logigramme/${ACTIVITE_ID}/elements`, {
-                method: 'POST',
-                headers: { 
-                    'Content-Type': 'application/json',
-                    'X-CSRFToken': '{{ csrf_token() }}'
-                },
-                body: JSON.stringify(nouvelElement)
-            });
+            const elementsRes = await fetch(`/api/logigramme/${this.activiteId}/elements`);
+            if (!elementsRes.ok) throw new Error('Erreur chargement éléments');
+            this.elements = await elementsRes.json();
             
-            if (!reponse.ok) throw new Error('Erreur création élément');
+            const linksRes = await fetch(`/api/logigramme/${this.activiteId}/liens`);
+            if (!linksRes.ok) throw new Error('Erreur chargement liens');
+            this.links = await linksRes.json();
             
-            const resultat = await reponse.json();
-            nouvelElement.id = resultat.id;
-            elements.push(nouvelElement);
+            this.renderElements();
+            this.renderLinks();
+            this.saveToHistory();
             
-            const conteneur = document.getElementById('conteneur-elements');
-            const divElement = creerElementDOM(nouvelElement);
-            conteneur.appendChild(divElement);
-            
-            cacherInstructions();
-            mettreAJourStats();
-            afficherMessage('Élément créé avec succès', 'success');
-            
-        } catch (erreur) {
-            console.error('Erreur création:', erreur);
-            afficherMessage('Erreur lors de la création de l\'élément', 'error');
+        } catch (error) {
+            console.error('Erreur chargement:', error);
+            this.showToast('Erreur lors du chargement des données', 'error');
+        } finally {
+            this.showLoading(false);
         }
     }
 
-    // Libellés par défaut selon le type
-    function getLibelleParDefaut(type) {
-        const libelles = {
+    renderElements() {
+        this.elementsContainer.innerHTML = '';
+        this.elements.forEach(element => {
+            const el = this.createElementDOM(element);
+            this.elementsContainer.appendChild(el);
+        });
+        this.updateStats();
+    }
+
+    createElementDOM(element) {
+        const div = document.createElement('div');
+        const isSeparator = element.type === 'organisation';
+        const width = element.style?.width || (isSeparator ? 25 : 120);
+        const height = element.style?.height || (isSeparator ? 150 : 70);
+        
+        div.className = `element-processus element-${element.type}`;
+        div.setAttribute('data-id', element.id);
+        div.style.left = `${element.position_x}px`;
+        div.style.top = `${element.position_y}px`;
+        div.style.width = `${width}px`;
+        div.style.height = `${height}px`;
+        
+        if (isSeparator) {
+            div.innerHTML = `
+                <div class="element-content">
+                    <i class="fas fa-grip-vertical"></i>
+                    <div class="element-title">${this.escapeHtml(element.libelle || 'Séparateur')}</div>
+                </div>
+                <div class="resize-handle"></div>
+            `;
+            
+            // Ajouter le redimensionnement pour le séparateur
+            const resizeHandle = div.querySelector('.resize-handle');
+            if (resizeHandle) {
+                this.makeResizable(div, element.id);
+            }
+        } else {
+            div.innerHTML = `
+                <div class="element-content">
+                    <div class="element-title">${this.escapeHtml(element.libelle)}</div>
+                    ${element.description ? `<div class="element-description text-sm opacity-75">${this.escapeHtml(element.description)}</div>` : ''}
+                </div>
+            `;
+        }
+        
+        div.addEventListener('click', (e) => {
+            e.stopPropagation();
+            if (!this.isLoading) {
+                this.handleElementClick(element.id, e.ctrlKey || e.metaKey);
+            }
+        });
+        
+        div.addEventListener('dblclick', (e) => {
+            e.stopPropagation();
+            if (!this.isLoading) {
+                this.editElement(element.id);
+            }
+        });
+        
+        this.makeDraggable(div, element.id);
+        
+        if (this.selectedElements.has(element.id)) {
+            div.classList.add('selected');
+        }
+        
+        return div;
+    }
+
+    makeResizable(element, elementId) {
+        let startX, startWidth;
+        let isResizing = false;
+        
+        const resizeHandle = element.querySelector('.resize-handle');
+        if (!resizeHandle) return;
+        
+        const onMouseMove = (e) => {
+            if (!isResizing) return;
+            e.preventDefault();
+            
+            const dx = e.clientX - startX;
+            const newWidth = Math.max(15, Math.min(80, startWidth + dx));
+            element.style.width = `${newWidth}px`;
+            
+            // Mettre à jour les liens en temps réel
+            this.renderLinks();
+            this.updateMinimap();
+        };
+        
+        const onMouseUp = async () => {
+            if (!isResizing) return;
+            isResizing = false;
+            
+            const newWidth = parseInt(element.style.width);
+            const elementData = this.elements.find(e => e.id === elementId);
+            if (elementData) {
+                elementData.style = elementData.style || {};
+                elementData.style.width = newWidth;
+                await this.updateElementStyle(elementId, { width: newWidth });
+            }
+            
+            document.removeEventListener('mousemove', onMouseMove);
+            document.removeEventListener('mouseup', onMouseUp);
+            element.classList.remove('resizing');
+        };
+        
+        resizeHandle.addEventListener('mousedown', (e) => {
+            e.stopPropagation();
+            e.preventDefault();
+            isResizing = true;
+            startX = e.clientX;
+            startWidth = parseInt(element.style.width);
+            element.classList.add('resizing');
+            
+            document.addEventListener('mousemove', onMouseMove);
+            document.addEventListener('mouseup', onMouseUp);
+        });
+    }
+
+    async updateElementStyle(elementId, style) {
+        try {
+            const response = await fetch(`/api/element/${elementId}`, {
+                method: 'PUT',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRFToken': this.getCsrfToken()
+                },
+                body: JSON.stringify({ style: style })
+            });
+            if (!response.ok) throw new Error('Erreur mise à jour style');
+        } catch (error) {
+            console.error('Erreur:', error);
+        }
+    }
+
+    makeDraggable(element, elementId) {
+        let startX, startY, startLeft, startTop;
+        let isDragging = false;
+        
+        element.addEventListener('mousedown', (e) => {
+            if (this.mode !== 'select' || this.isLoading) return;
+            if (e.button !== 0) return;
+            if (e.target.classList.contains('resize-handle')) return;
+            
+            e.preventDefault();
+            e.stopPropagation();
+            
+            isDragging = true;
+            startX = e.clientX;
+            startY = e.clientY;
+            startLeft = parseInt(element.style.left);
+            startTop = parseInt(element.style.top);
+            
+            const onMouseMove = (moveEvent) => {
+                if (!isDragging) return;
+                
+                const dx = moveEvent.clientX - startX;
+                const dy = moveEvent.clientY - startY;
+                const newLeft = Math.max(0, startLeft + dx);
+                const newTop = Math.max(0, startTop + dy);
+                
+                element.style.left = `${newLeft}px`;
+                element.style.top = `${newTop}px`;
+                
+                if (this.selectedElements.size > 1 && this.selectedElements.has(elementId)) {
+                    this.selectedElements.forEach(id => {
+                        if (id !== elementId) {
+                            const otherEl = document.querySelector(`[data-id="${id}"]`);
+                            if (otherEl) {
+                                const currentLeft = parseInt(otherEl.style.left);
+                                const currentTop = parseInt(otherEl.style.top);
+                                otherEl.style.left = `${currentLeft + dx}px`;
+                                otherEl.style.top = `${currentTop + dy}px`;
+                            }
+                        }
+                    });
+                }
+                
+                this.renderLinks();
+                this.updateMinimap();
+            };
+            
+            const onMouseUp = async () => {
+                if (!isDragging) return;
+                isDragging = false;
+                
+                const newLeft = parseInt(element.style.left);
+                const newTop = parseInt(element.style.top);
+                
+                if (newLeft !== startLeft || newTop !== startTop) {
+                    await this.updateElementPosition(elementId, newLeft, newTop);
+                    
+                    if (this.selectedElements.size > 1 && this.selectedElements.has(elementId)) {
+                        for (const id of this.selectedElements) {
+                            if (id !== elementId) {
+                                const otherEl = document.querySelector(`[data-id="${id}"]`);
+                                if (otherEl) {
+                                    const newOtherLeft = parseInt(otherEl.style.left);
+                                    const newOtherTop = parseInt(otherEl.style.top);
+                                    await this.updateElementPosition(id, newOtherLeft, newOtherTop);
+                                }
+                            }
+                        }
+                    }
+                }
+                
+                document.removeEventListener('mousemove', onMouseMove);
+                document.removeEventListener('mouseup', onMouseUp);
+            };
+            
+            document.addEventListener('mousemove', onMouseMove);
+            document.addEventListener('mouseup', onMouseUp);
+        });
+    }
+
+    handleElementClick(elementId, isMultiSelect = false) {
+        if (this.mode === 'select') {
+            if (isMultiSelect) {
+                if (this.selectedElements.has(elementId)) {
+                    this.selectedElements.delete(elementId);
+                } else {
+                    this.selectedElements.add(elementId);
+                }
+            } else {
+                if (this.selectedElements.has(elementId) && this.selectedElements.size === 1) {
+                    this.editElement(elementId);
+                } else {
+                    this.selectedElements.clear();
+                    this.selectedElements.add(elementId);
+                }
+            }
+            this.updateSelectionUI();
+            this.updateStats();
+        } else if (this.mode === 'connect') {
+            if (!this.linkSource) {
+                this.linkSource = elementId;
+                this.highlightElement(elementId);
+                this.showToast('Sélectionnez l\'élément de destination', 'info');
+            } else {
+                if (this.linkSource !== elementId) {
+                    this.showLinkTypeModal(this.linkSource, elementId);
+                }
+                this.clearLinkSource();
+            }
+        }
+    }
+
+    updateSelectionUI() {
+        document.querySelectorAll('.element-processus').forEach(el => {
+            const id = parseInt(el.dataset.id);
+            if (this.selectedElements.has(id)) {
+                el.classList.add('selected');
+            } else {
+                el.classList.remove('selected');
+            }
+        });
+    }
+
+    clearSelection() {
+        this.selectedElements.clear();
+        this.updateSelectionUI();
+        this.updateStats();
+    }
+
+    selectAllElements() {
+        this.selectedElements.clear();
+        this.elements.forEach(el => this.selectedElements.add(el.id));
+        this.updateSelectionUI();
+        this.updateStats();
+        this.showToast(`${this.selectedElements.size} éléments sélectionnés`, 'info');
+    }
+
+    async deleteSelectedElements() {
+        if (this.selectedElements.size === 0) {
+            this.showToast('Aucun élément sélectionné', 'warning');
+            return;
+        }
+        
+        if (!confirm(`Supprimer ${this.selectedElements.size} élément(s) ? Cette action est irréversible.`)) return;
+        
+        this.showLoading(true);
+        const idsToDelete = Array.from(this.selectedElements);
+        
+        for (const id of idsToDelete) {
+            try {
+                await fetch(`/api/element/${id}`, {
+                    method: 'DELETE',
+                    headers: { 'X-CSRFToken': this.getCsrfToken() }
+                });
+                
+                this.links = this.links.filter(l => 
+                    l.source_id !== id && l.cible_id !== id
+                );
+            } catch (error) {
+                console.error('Erreur suppression:', error);
+            }
+        }
+        
+        this.elements = this.elements.filter(e => !idsToDelete.includes(e.id));
+        this.selectedElements.clear();
+        
+        this.renderElements();
+        this.renderLinks();
+        this.saveToHistory();
+        this.updateStats();
+        this.showLoading(false);
+        this.showToast(`${idsToDelete.length} élément(s) supprimé(s)`, 'success');
+    }
+
+    startSelectionRect(e) {
+        if (this.isLoading) return;
+        
+        this.isSelecting = true;
+        this.selectStart = {
+            x: e.clientX - this.container.getBoundingClientRect().left + this.container.scrollLeft,
+            y: e.clientY - this.container.getBoundingClientRect().top + this.container.scrollTop
+        };
+        
+        this.selectionRect = document.createElement('div');
+        this.selectionRect.className = 'selection-rect';
+        this.selectionRect.style.position = 'absolute';
+        this.selectionRect.style.left = `${this.selectStart.x}px`;
+        this.selectionRect.style.top = `${this.selectStart.y}px`;
+        this.selectionRect.style.width = '0';
+        this.selectionRect.style.height = '0';
+        this.elementsContainer.appendChild(this.selectionRect);
+    }
+
+    updateSelectionRect(e) {
+        if (!this.isSelecting) return;
+        
+        const currentX = e.clientX - this.container.getBoundingClientRect().left + this.container.scrollLeft;
+        const currentY = e.clientY - this.container.getBoundingClientRect().top + this.container.scrollTop;
+        
+        const left = Math.min(this.selectStart.x, currentX);
+        const top = Math.min(this.selectStart.y, currentY);
+        const width = Math.abs(currentX - this.selectStart.x);
+        const height = Math.abs(currentY - this.selectStart.y);
+        
+        this.selectionRect.style.left = `${left}px`;
+        this.selectionRect.style.top = `${top}px`;
+        this.selectionRect.style.width = `${width}px`;
+        this.selectionRect.style.height = `${height}px`;
+    }
+
+    endSelectionRect() {
+        if (!this.isSelecting) return;
+        
+        const rect = this.selectionRect.getBoundingClientRect();
+        const containerRect = this.elementsContainer.getBoundingClientRect();
+        
+        const absoluteLeft = rect.left - containerRect.left;
+        const absoluteTop = rect.top - containerRect.top;
+        const absoluteRight = absoluteLeft + rect.width;
+        const absoluteBottom = absoluteTop + rect.height;
+        
+        this.selectedElements.clear();
+        
+        this.elements.forEach(element => {
+            const el = document.querySelector(`[data-id="${element.id}"]`);
+            if (el) {
+                const elRect = el.getBoundingClientRect();
+                const elLeft = elRect.left - containerRect.left;
+                const elTop = elRect.top - containerRect.top;
+                const elRight = elLeft + elRect.width;
+                const elBottom = elTop + elRect.height;
+                
+                if (elRight > absoluteLeft && elLeft < absoluteRight && 
+                    elBottom > absoluteTop && elTop < absoluteBottom) {
+                    this.selectedElements.add(element.id);
+                }
+            }
+        });
+        
+        this.updateSelectionUI();
+        this.updateStats();
+        
+        this.selectionRect.remove();
+        this.selectionRect = null;
+        this.isSelecting = false;
+        this.selectStart = null;
+    }
+
+    async createElement(type, x, y) {
+        const defaultLabels = {
             'debut': 'Début du processus',
             'action': 'Nouvelle action',
             'controle': 'Point de contrôle',
             'risque': 'Risque identifié',
             'fin': 'Fin du processus',
-            'organisation': 'Séparation organisationnelle',
-            'titre': 'Nouveau titre'
+            'titre': 'Nouveau titre',
+            'organisation': 'Séparateur'
         };
-        return libelles[type] || 'Nouvel élément';
-    }
-
-    // Rendre un élément draggable
-    function rendreDraggable(element, elementId) {
-        let deplacementX = 0, deplacementY = 0;
         
-        element.addEventListener('mousedown', commencerDeplacement);
+        const libelle = prompt('Libellé de l\'élément:', defaultLabels[type]);
+        if (!libelle) return;
         
-        function commencerDeplacement(e) {
-            if (modeActuel !== 'selection') return;
-            
-            e.preventDefault();
-            elementEnDeplacement = element;
-            element.classList.add('selected');
-            
-            const rect = element.getBoundingClientRect();
-            deplacementX = e.clientX - rect.left;
-            deplacementY = e.clientY - rect.top;
-            
-            document.addEventListener('mousemove', deplacerElement);
-            document.addEventListener('mouseup', arreterDeplacement);
-        }
+        const defaultStyles = {
+            'titre': { width: 200, height: 60 },
+            'organisation': { width: 25, height: 150 }
+        };
         
-        function deplacerElement(e) {
-            if (!elementEnDeplacement) return;
-            
-            const editeur = document.getElementById('editeur-logigramme');
-            const rectEditeur = editeur.getBoundingClientRect();
-            const scrollLeft = editeur.scrollLeft;
-            const scrollTop = editeur.scrollTop;
-            
-            let nouvelleX = e.clientX - rectEditeur.left + scrollLeft - deplacementX;
-            let nouvelleY = e.clientY - rectEditeur.top + scrollTop - deplacementY;
-            
-            // Limites de l'éditeur
-            nouvelleX = Math.max(0, nouvelleX);
-            nouvelleY = Math.max(0, nouvelleY);
-            
-            element.style.left = nouvelleX + 'px';
-            element.style.top = nouvelleY + 'px';
-            
-            afficherLiens();
-        }
+        const newElement = {
+            type: type,
+            libelle: libelle,
+            description: '',
+            position_x: Math.max(0, x),
+            position_y: Math.max(0, y),
+            style: defaultStyles[type] || {}
+        };
         
-        function arreterDeplacement() {
-            if (!elementEnDeplacement) return;
+        this.showLoading(true);
+        try {
+            const response = await fetch(`/api/logigramme/${this.activiteId}/elements`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRFToken': this.getCsrfToken()
+                },
+                body: JSON.stringify(newElement)
+            });
             
-            document.removeEventListener('mousemove', deplacerElement);
-            document.removeEventListener('mouseup', arreterDeplacement);
+            if (!response.ok) throw new Error('Erreur création');
             
-            const nouvelleX = parseInt(element.style.left);
-            const nouvelleY = parseInt(element.style.top);
+            const result = await response.json();
+            newElement.id = result.id;
+            this.elements.push(newElement);
             
-            mettreAJourPositionElement(elementId, nouvelleX, nouvelleY);
+            this.renderElements();
+            this.saveToHistory();
+            this.showToast('Élément créé avec succès', 'success');
             
-            elementEnDeplacement = null;
+        } catch (error) {
+            console.error('Erreur:', error);
+            this.showToast('Erreur lors de la création', 'error');
+        } finally {
+            this.showLoading(false);
         }
     }
 
-    // Mettre à jour la position d'un élément
-    async function mettreAJourPositionElement(elementId, x, y) {
-        const element = elements.find(el => el.id === elementId);
+    async updateElementPosition(elementId, x, y) {
+        const element = this.elements.find(e => e.id === elementId);
         if (element) {
             element.position_x = x;
             element.position_y = y;
             
             try {
-                const reponse = await fetchWithCSRF(`/api/element/${elementId}`, {
+                await fetch(`/api/element/${elementId}`, {
                     method: 'PUT',
-                    headers: { 
+                    headers: {
                         'Content-Type': 'application/json',
-                        'X-CSRFToken': '{{ csrf_token() }}'
+                        'X-CSRFToken': this.getCsrfToken()
                     },
                     body: JSON.stringify({ position_x: x, position_y: y })
                 });
                 
-                if (!reponse.ok) throw new Error('Erreur mise à jour position');
+                this.renderLinks();
+                this.updateMinimap();
+                this.saveToHistory();
                 
-                afficherLiens();
-                
-            } catch (erreur) {
-                console.error('Erreur mise à jour position:', erreur);
+            } catch (error) {
+                console.error('Erreur mise à jour position:', error);
             }
         }
     }
 
-    // Initialiser les événements
-    function initialiserEvenements() {
-        // Modes
-        document.getElementById('btn-mode-selection').addEventListener('click', () => changerMode('selection'));
-        document.getElementById('btn-mode-lien').addEventListener('click', () => changerMode('lien'));
-        
-        // Zoom
-        document.getElementById('btn-zoom-in').addEventListener('click', zoomIn);
-        document.getElementById('btn-zoom-out').addEventListener('click', zoomOut);
-        document.getElementById('btn-reset-zoom').addEventListener('click', resetZoom);
-        
-        // Actions
-        document.getElementById('btn-effacer-tout').addEventListener('click', effacerTout);
-        document.getElementById('btn-supprimer-selection').addEventListener('click', supprimerSelection);
-        document.getElementById('btn-imprimer').addEventListener('click', imprimerLogigramme);
-        document.getElementById('btn-sauvegarder').addEventListener('click', () => {
-            afficherMessage('Logigramme sauvegardé avec succès!', 'success');
-        });
-        
-        // Modification des informations
-        document.getElementById('btn-modifier-infos').addEventListener('click', () => {
-            const modal = new bootstrap.Modal(document.getElementById('modal-infos-logigramme'));
-            modal.show();
-        });
-        
-        document.getElementById('btn-sauvegarder-infos').addEventListener('click', sauvegarderInfosLogigramme);
-        
-        // Types de liens
-        document.querySelectorAll('[data-lien-type]').forEach(btn => {
-            btn.addEventListener('click', (e) => {
-                typeLienSelectionne = e.target.closest('button').dataset.lienType;
-                bootstrap.Modal.getInstance(document.getElementById('modal-type-lien')).hide();
-            });
-        });
-        
-        // Clic sur l'éditeur
-        document.getElementById('editeur-logigramme').addEventListener('click', (e) => {
-            if (e.target.id === 'editeur-logigramme') {
-                deselectionnerElement();
-                if (modeActuel === 'lien') {
-                    reinitialiserSelectionLien();
-                }
-            }
-        });
-        
-        // Échap pour annuler
-        document.addEventListener('keydown', (e) => {
-            if (e.key === 'Escape') {
-                deselectionnerElement();
-                if (modeActuel === 'lien') {
-                    reinitialiserSelectionLien();
-                }
-                if (menuContextuelLien) {
-                    fermerMenuContextuel();
-                }
-            }
-            
-            // Supprimer avec la touche Suppr
-            if (e.key === 'Delete' && elementSelectionne) {
-                supprimerElement(elementSelectionne);
-            }
-        });
-    }
-
-    // Sauvegarder les informations du logigramme
-    async function sauvegarderInfosLogigramme() {
-        const nom = document.getElementById('logigramme-nom-input').value;
-        const description = document.getElementById('logigramme-description-input').value;
-        const directionId = document.getElementById('logigramme-direction-input').value || null;
-        const serviceId = document.getElementById('logigramme-service-input').value || null;
-        
-        if (!nom) {
-            afficherMessage('Le nom est obligatoire', 'error');
-            return;
-        }
-        
+    async createLink(sourceId, targetId, type) {
         try {
-            const reponse = await fetchWithCSRF(`/api/logigramme/${ACTIVITE_ID}/infos`, {
-                method: 'PUT',
-                headers: { 
-                    'Content-Type': 'application/json',
-                    'X-CSRFToken': '{{ csrf_token() }}'
-                },
-                body: JSON.stringify({
-                    nom: nom,
-                    description: description,
-                    direction_id: directionId,
-                    service_id: serviceId
-                })
-            });
-            
-            if (!reponse.ok) throw new Error('Erreur mise à jour informations');
-            
-            // Mettre à jour l'affichage
-            document.getElementById('logigramme-nom').textContent = nom;
-            document.getElementById('info-nom').textContent = nom;
-            
-            if (description) {
-                document.getElementById('logigramme-description').textContent = description;
-                document.getElementById('info-description').textContent = description;
-            }
-            
-            // Mettre à jour les badges d'affectation
-            mettreAJourBadgesAffectation(directionId, serviceId);
-            
-            bootstrap.Modal.getInstance(document.getElementById('modal-infos-logigramme')).hide();
-            afficherMessage('Informations mises à jour avec succès', 'success');
-            
-        } catch (erreur) {
-            console.error('Erreur mise à jour informations:', erreur);
-            afficherMessage('Erreur lors de la mise à jour des informations', 'error');
-        }
-    }
-
-    function mettreAJourBadgesAffectation(directionId, serviceId) {
-        const badgesContainer = document.querySelector('.info-badges');
-        badgesContainer.innerHTML = '';
-        
-        // Récupérer les noms depuis les selects (pour l'affichage immédiat)
-        const directionSelect = document.getElementById('logigramme-direction-input');
-        const serviceSelect = document.getElementById('logigramme-service-input');
-        
-        if (directionId) {
-            const directionOption = directionSelect.querySelector(`option[value="${directionId}"]`);
-            if (directionOption) {
-                const badgeDirection = document.createElement('span');
-                badgeDirection.className = 'badge bg-info';
-                badgeDirection.innerHTML = `<i class="fas fa-sitemap me-1"></i>${directionOption.textContent}`;
-                badgesContainer.appendChild(badgeDirection);
-            }
-        }
-        
-        if (serviceId) {
-            const serviceOption = serviceSelect.querySelector(`option[value="${serviceId}"]`);
-            if (serviceOption) {
-                const badgeService = document.createElement('span');
-                badgeService.className = 'badge bg-secondary';
-                badgeService.innerHTML = `<i class="fas fa-building me-1"></i>${serviceOption.textContent}`;
-                badgesContainer.appendChild(badgeService);
-            }
-        }
-    }
-
-    function changerMode(nouveauMode) {
-        modeActuel = nouveauMode;
-        
-        // Mettre à jour les boutons
-        document.querySelectorAll('[data-mode]').forEach(btn => {
-            btn.classList.toggle('active', btn.dataset.mode === nouveauMode);
-        });
-        
-        // Mettre à jour l'indicateur
-        const indicator = document.getElementById('mode-indicator');
-        if (indicator) {
-            indicator.innerHTML = nouveauMode === 'selection' ? 
-                '<i class="fas fa-mouse-pointer"></i> Mode Sélection' :
-                '<i class="fas fa-link"></i> Mode Connexions';
-            indicator.classList.toggle('mode-active', nouveauMode === 'lien');
-        }
-        
-        deselectionnerElement();
-        reinitialiserSelectionLien();
-        
-        afficherMessage(`Mode ${nouveauMode === 'selection' ? 'Sélection' : 'Connexions'} activé`, 'info');
-    }
-
-    function zoomIn() {
-        echelle = Math.min(2, echelle + 0.1);
-        appliquerZoom();
-    }
-
-    function zoomOut() {
-        echelle = Math.max(0.2, echelle - 0.1);
-        appliquerZoom();
-    }
-
-    function resetZoom() {
-    echelle = 1;
-    
-    const conteneur = document.getElementById('conteneur-elements');
-    const svg = document.getElementById('svg-liens');
-    const editeur = document.getElementById('editeur-logigramme');
-    
-    // Réinitialiser les transformations
-    conteneur.style.transform = 'scale(1)';
-    svg.style.transform = 'scale(1)';
-    
-    // IMPORTANT : Réinitialiser aussi les dimensions du SVG
-    svg.style.width = '2000px';
-    svg.style.height = '2000px';
-    
-    // Réinitialiser la position de défilement pour voir toute la zone
-    editeur.scrollLeft = 0;
-    editeur.scrollTop = 0;
-    
-    // Forcer le redessin des liens
-    afficherLiens();
-    
-    afficherMessage('Zoom normal', 'info');
-}
-
-function zoomIn() {
-    echelle = Math.min(2, echelle + 0.2);
-    appliquerZoom();
-}
-
-function zoomOut() {
-    echelle = Math.max(0.5, echelle - 0.2);
-    appliquerZoom();
-}
-
-function appliquerZoom() {
-    const conteneur = document.getElementById('conteneur-elements');
-    const svg = document.getElementById('svg-liens');
-    
-    // Appliquer le zoom
-    conteneur.style.transform = `scale(${echelle})`;
-    svg.style.transform = `scale(${echelle})`;
-    
-    // Maintenir l'origine en haut à gauche
-    conteneur.style.transformOrigin = '0 0';
-    svg.style.transformOrigin = '0 0';
-    
-    // Redessiner les liens pour qu'ils s'adaptent au nouveau zoom
-    afficherLiens();
-    
-    afficherMessage(`Zoom: ${Math.round(echelle * 100)}%`, 'info');
-}
-
-    function appliquerZoom() {
-        const conteneur = document.getElementById('conteneur-elements');
-        conteneur.style.transform = `scale(${echelle})`;
-        afficherMessage(`Zoom: ${Math.round(echelle * 100)}%`, 'info');
-    }
-
-    function selectionnerElement(elementId) {
-        deselectionnerElement();
-        elementSelectionne = elementId;
-        const element = document.querySelector(`[data-id="${elementId}"]`);
-        element.classList.add('selected');
-    }
-
-    function deselectionnerElement() {
-        if (elementSelectionne) {
-            const element = document.querySelector(`[data-id="${elementSelectionne}"]`);
-            if (element) element.classList.remove('selected');
-            elementSelectionne = null;
-        }
-    }
-
-    // Gestion de la création de liens
-    // CORRECTION : Modifiez cette fonction
-function gererCreationLien(elementId) {
-    if (!elementSourceLien) {
-        // Premier clic - sélectionner la source
-        elementSourceLien = elementId;
-        const element = document.querySelector(`[data-id="${elementId}"]`);
-        element.classList.add('selected');
-        
-        // Afficher le modal pour choisir le type de lien
-        const modal = new bootstrap.Modal(document.getElementById('modal-type-lien'));
-        modal.show();
-        
-        // AJOUTEZ CETTE PARTIE : Attendre la sélection du type
-        const typeButtons = document.querySelectorAll('[data-lien-type]');
-        typeButtons.forEach(btn => {
-            btn.addEventListener('click', function(e) {
-                typeLienSelectionne = this.dataset.lienType;
-                modal.hide();
-            }, { once: true }); // Utiliser { once: true } pour ne s'exécuter qu'une fois
-        });
-        
-    } else {
-        // Second clic - créer le lien
-        if (elementSourceLien !== elementId) {
-            creerLien(elementSourceLien, elementId, typeLienSelectionne);
-        } else {
-            afficherMessage('Impossible de créer un lien vers le même élément', 'warning');
-        }
-        
-        // Réinitialiser
-        reinitialiserSelectionLien();
-    }
-}
-
-    function reinitialiserSelectionLien() {
-        document.querySelectorAll('.element-processus.selected').forEach(el => {
-            el.classList.remove('selected');
-        });
-        elementSourceLien = null;
-    }
-
-    // Créer un nouveau lien
-    async function creerLien(sourceId, cibleId, typeLien) {
-        try {
-            const reponse = await fetchWithCSRF(`/api/logigramme/${ACTIVITE_ID}/liens`, {
+            const response = await fetch(`/api/logigramme/${this.activiteId}/liens`, {
                 method: 'POST',
-                headers: { 
+                headers: {
                     'Content-Type': 'application/json',
-                    'X-CSRFToken': '{{ csrf_token() }}'
+                    'X-CSRFToken': this.getCsrfToken()
                 },
                 body: JSON.stringify({
                     source_id: sourceId,
-                    cible_id: cibleId,
+                    cible_id: targetId,
                     libelle: '',
-                    style: { type: typeLien }
+                    style: { type: type }
                 })
             });
             
-            if (!reponse.ok) throw new Error('Erreur création lien');
+            if (!response.ok) throw new Error('Erreur création lien');
             
-            const resultat = await reponse.json();
-            liens.push({
-                id: resultat.id,
+            const newLink = await response.json();
+            this.links.push({
+                id: newLink.id,
                 source_id: sourceId,
-                cible_id: cibleId,
-                type: typeLien
+                cible_id: targetId,
+                type: type
             });
             
-            afficherLiens();
-            mettreAJourStats();
-            afficherMessage('Lien créé avec succès', 'success');
+            this.renderLinks();
+            this.saveToHistory();
+            this.showToast('Connexion créée avec succès', 'success');
             
-        } catch (erreur) {
-            console.error('Erreur création lien:', erreur);
-            afficherMessage('Erreur lors de la création du lien', 'error');
+        } catch (error) {
+            console.error('Erreur:', error);
+            this.showToast('Erreur lors de la création du lien', 'error');
         }
     }
 
-    // Changer le type d'un lien existant
-    async function changerTypeLien(lienId) {
-        const modal = new bootstrap.Modal(document.getElementById('modal-type-lien'));
-        modal.show();
+    renderLinks() {
+        this.svgContainer.innerHTML = '<defs>' + this.getArrowDefs() + '</defs>';
         
-        // Attendre la sélection du type
-        const ancienBoutons = document.querySelectorAll('[data-lien-type]');
-        ancienBoutons.forEach(btn => btn.removeEventListener('click', selectionTypeHandler));
-        
-        function selectionTypeHandler(e) {
-            const nouveauType = e.target.closest('button').dataset.lienType;
-            mettreAJourTypeLien(lienId, nouveauType);
-            modal.hide();
-        }
-        
-        document.querySelectorAll('[data-lien-type]').forEach(btn => {
-            btn.addEventListener('click', selectionTypeHandler);
+        this.links.forEach(link => {
+            const source = this.elements.find(e => e.id === link.source_id);
+            const target = this.elements.find(e => e.id === link.cible_id);
+            
+            if (source && target) {
+                const sourceRect = this.getElementRect(source);
+                const targetRect = this.getElementRect(target);
+                const points = this.calculateConnectionPoints(sourceRect, targetRect);
+                
+                const line = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+                line.setAttribute('x1', points.x1);
+                line.setAttribute('y1', points.y1);
+                line.setAttribute('x2', points.x2);
+                line.setAttribute('y2', points.y2);
+                line.setAttribute('class', `lien-processus lien-${link.type || 'normal'}`);
+                line.setAttribute('marker-end', `url(#arrow-${link.type || 'normal'})`);
+                line.setAttribute('data-link-id', link.id);
+                
+                line.style.pointerEvents = 'stroke';
+                line.addEventListener('click', (e) => {
+                    e.stopPropagation();
+                    if (e.ctrlKey) {
+                        this.deleteLink(link.id);
+                    }
+                });
+                
+                this.svgContainer.appendChild(line);
+                
+                if (link.type === 'oui' || link.type === 'non') {
+                    const midX = (points.x1 + points.x2) / 2;
+                    const midY = (points.y1 + points.y2) / 2;
+                    
+                    const text = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+                    text.setAttribute('x', midX);
+                    text.setAttribute('y', midY);
+                    text.setAttribute('class', 'lien-label');
+                    text.setAttribute('text-anchor', 'middle');
+                    text.setAttribute('dy', '-0.5em');
+                    text.textContent = link.type === 'oui' ? 'OUI' : 'NON';
+                    
+                    this.svgContainer.appendChild(text);
+                }
+            }
         });
     }
 
-    async function mettreAJourTypeLien(lienId, nouveauType) {
+    getElementRect(element) {
+        const width = element.style?.width || (element.type === 'organisation' ? 25 : 120);
+        const height = element.style?.height || (element.type === 'organisation' ? 150 : 70);
+        
+        return {
+            x: element.position_x,
+            y: element.position_y,
+            width: width,
+            height: height,
+            centerX: element.position_x + width / 2,
+            centerY: element.position_y + height / 2
+        };
+    }
+
+    calculateConnectionPoints(source, target) {
+        const dx = target.centerX - source.centerX;
+        const dy = target.centerY - source.centerY;
+        
+        let x1, y1, x2, y2;
+        
+        if (Math.abs(dx) > Math.abs(dy)) {
+            if (dx > 0) {
+                x1 = source.x + source.width;
+                y1 = source.centerY;
+                x2 = target.x;
+                y2 = target.centerY;
+            } else {
+                x1 = source.x;
+                y1 = source.centerY;
+                x2 = target.x + target.width;
+                y2 = target.centerY;
+            }
+        } else {
+            if (dy > 0) {
+                x1 = source.centerX;
+                y1 = source.y + source.height;
+                x2 = target.centerX;
+                y2 = target.y;
+            } else {
+                x1 = source.centerX;
+                y1 = source.y;
+                x2 = target.centerX;
+                y2 = target.y + target.height;
+            }
+        }
+        
+        return { x1, y1, x2, y2 };
+    }
+
+    getArrowDefs() {
+        return `
+            <marker id="arrow-normal" markerWidth="10" markerHeight="10" refX="9" refY="5" orient="auto">
+                <polygon points="0 0, 10 5, 0 10" fill="#9ca3af" />
+            </marker>
+            <marker id="arrow-oui" markerWidth="10" markerHeight="10" refX="9" refY="5" orient="auto">
+                <polygon points="0 0, 10 5, 0 10" fill="#10b981" />
+            </marker>
+            <marker id="arrow-non" markerWidth="10" markerHeight="10" refX="9" refY="5" orient="auto">
+                <polygon points="0 0, 10 5, 0 10" fill="#ef4444" />
+            </marker>
+        `;
+    }
+
+    showLinkTypeModal(sourceId, targetId) {
+        const modal = new bootstrap.Modal(document.getElementById('link-type-modal'));
+        const buttons = document.querySelectorAll('[data-link-type]');
+        
+        const handleClick = async (e) => {
+            const type = e.currentTarget.dataset.linkType;
+            await this.createLink(sourceId, targetId, type);
+            modal.hide();
+            buttons.forEach(btn => btn.removeEventListener('click', handleClick));
+        };
+        
+        buttons.forEach(btn => btn.addEventListener('click', handleClick));
+        modal.show();
+    }
+
+    highlightElement(elementId) {
+        const element = document.querySelector(`[data-id="${elementId}"]`);
+        if (element) {
+            element.style.boxShadow = '0 0 0 3px rgba(59, 130, 246, 0.5)';
+            setTimeout(() => {
+                element.style.boxShadow = '';
+            }, 1000);
+        }
+    }
+
+    clearLinkSource() {
+        this.linkSource = null;
+    }
+
+    editElement(elementId) {
+        const element = this.elements.find(e => e.id === elementId);
+        if (!element) return;
+        
+        document.getElementById('element-id').value = element.id;
+        document.getElementById('element-libelle').value = element.libelle;
+        document.getElementById('element-description').value = element.description || '';
+        document.getElementById('element-type').value = this.getTypeLabel(element.type);
+        document.getElementById('element-x').value = element.position_x;
+        document.getElementById('element-y').value = element.position_y;
+        
+        // Afficher le slider de largeur pour les séparateurs
+        if (element.type === 'organisation') {
+            this.separatorWidthGroup.style.display = 'block';
+            const currentWidth = element.style?.width || 25;
+            this.separatorWidthSlider.value = currentWidth;
+            this.widthValueSpan.textContent = currentWidth + 'px';
+        } else {
+            this.separatorWidthGroup.style.display = 'none';
+        }
+        
+        const modal = new bootstrap.Modal(document.getElementById('edit-modal'));
+        modal.show();
+    }
+
+    async saveElement() {
+        const elementId = parseInt(document.getElementById('element-id').value);
+        const libelle = document.getElementById('element-libelle').value;
+        const description = document.getElementById('element-description').value;
+        const x = parseInt(document.getElementById('element-x').value);
+        const y = parseInt(document.getElementById('element-y').value);
+        
+        if (!libelle) {
+            this.showToast('Le libellé est requis', 'error');
+            return;
+        }
+        
+        this.showLoading(true);
         try {
-            const reponse = await fetchWithCSRF(`/api/lien/${lienId}`, {
-                method: 'PUT',
-                headers: { 
-                    'Content-Type': 'application/json',
-                    'X-CSRFToken': '{{ csrf_token() }}'
-                },
-                body: JSON.stringify({
-                    style: { type: nouveauType }
-                })
-            });
+            const element = this.elements.find(e => e.id === elementId);
+            const updateData = {
+                libelle: libelle,
+                description: description,
+                position_x: x,
+                position_y: y
+            };
             
-            if (!reponse.ok) throw new Error('Erreur mise à jour lien');
-            
-            const lien = liens.find(l => l.id === lienId);
-            if (lien) {
-                lien.type = nouveauType;
+            // Ajouter la largeur pour les séparateurs
+            if (element && element.type === 'organisation') {
+                const newWidth = parseInt(this.separatorWidthSlider.value);
+                updateData.style = { width: newWidth };
             }
             
-            afficherLiens();
-            afficherMessage('Type de lien mis à jour', 'success');
+            const response = await fetch(`/api/element/${elementId}`, {
+                method: 'PUT',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRFToken': this.getCsrfToken()
+                },
+                body: JSON.stringify(updateData)
+            });
             
-        } catch (erreur) {
-            console.error('Erreur mise à jour type lien:', erreur);
-            afficherMessage('Erreur lors de la mise à jour du type de lien', 'error');
+            if (!response.ok) throw new Error('Erreur mise à jour');
+            
+            if (element) {
+                element.libelle = libelle;
+                element.description = description;
+                element.position_x = x;
+                element.position_y = y;
+                if (element.type === 'organisation') {
+                    element.style = element.style || {};
+                    element.style.width = parseInt(this.separatorWidthSlider.value);
+                }
+            }
+            
+            this.renderElements();
+            this.renderLinks();
+            this.saveToHistory();
+            this.showToast('Élément mis à jour', 'success');
+            
+            bootstrap.Modal.getInstance(document.getElementById('edit-modal')).hide();
+            
+        } catch (error) {
+            console.error('Erreur:', error);
+            this.showToast('Erreur lors de la mise à jour', 'error');
+        } finally {
+            this.showLoading(false);
         }
     }
 
-    function editerElement(elementId) {
-        const element = elements.find(el => el.id === elementId);
-        if (element) {
-            document.getElementById('element-id').value = element.id;
-            document.getElementById('element-libelle').value = element.libelle;
-            document.getElementById('element-description').value = element.description || '';
-            document.getElementById('element-type').value = getNomType(element.type);
-            document.getElementById('element-pos-x').value = element.position_x;
-            document.getElementById('element-pos-y').value = element.position_y;
-            document.getElementById('element-width').value = element.style?.width || '';
-            document.getElementById('element-height').value = element.style?.height || '';
+    async deleteLink(linkId) {
+        if (!confirm('Supprimer cette connexion ?')) return;
+        
+        try {
+            await fetch(`/api/lien/${linkId}`, {
+                method: 'DELETE',
+                headers: { 'X-CSRFToken': this.getCsrfToken() }
+            });
             
-            const modal = new bootstrap.Modal(document.getElementById('modal-editer-element'));
-            modal.show();
+            this.links = this.links.filter(l => l.id !== linkId);
+            this.renderLinks();
+            this.saveToHistory();
+            this.showToast('Connexion supprimée', 'success');
+            
+        } catch (error) {
+            console.error('Erreur suppression lien:', error);
+            this.showToast('Erreur lors de la suppression', 'error');
         }
     }
 
-    function getNomType(type) {
-        const noms = {
+    setMode(mode) {
+        this.mode = mode;
+        
+        if (mode === 'select') {
+            this.buttons.select.classList.add('active');
+            this.buttons.connect.classList.remove('active');
+            this.modeIndicator.innerHTML = '<i class="fas fa-mouse-pointer me-1"></i>Mode Sélection';
+            this.modeIndicator.className = 'badge bg-dark bg-opacity-75 px-3 py-2';
+        } else {
+            this.buttons.connect.classList.add('active');
+            this.buttons.select.classList.remove('active');
+            this.modeIndicator.innerHTML = '<i class="fas fa-link me-1"></i>Mode Connexion';
+            this.modeIndicator.className = 'badge bg-info bg-opacity-75 px-3 py-2';
+        }
+        
+        this.clearLinkSource();
+        this.clearSelection();
+    }
+
+    zoomIn() {
+        this.zoom = Math.min(2, this.zoom + 0.1);
+        this.applyZoom();
+    }
+
+    zoomOut() {
+        this.zoom = Math.max(0.5, this.zoom - 0.1);
+        this.applyZoom();
+    }
+
+    resetZoom() {
+        this.zoom = 1;
+        this.applyZoom();
+    }
+
+    applyZoom() {
+        this.elementsContainer.style.transform = `scale(${this.zoom})`;
+        this.elementsContainer.style.transformOrigin = '0 0';
+        this.svgContainer.style.transform = `scale(${this.zoom})`;
+        this.svgContainer.style.transformOrigin = '0 0';
+        this.updateZoomDisplay();
+        this.renderLinks();
+        this.updateMinimap();
+    }
+
+    updateZoomDisplay() {
+        const zoomPercent = Math.round(this.zoom * 100);
+        document.getElementById('zoom-level').textContent = `${zoomPercent}%`;
+    }
+
+    alignElements(alignment) {
+        if (this.selectedElements.size === 0) {
+            this.showToast('Sélectionnez des éléments', 'warning');
+            return;
+        }
+        
+        const selectedIds = Array.from(this.selectedElements);
+        const selectedElements = this.elements.filter(e => selectedIds.includes(e.id));
+        
+        let referenceX;
+        if (alignment === 'left') {
+            referenceX = Math.min(...selectedElements.map(e => e.position_x));
+            selectedElements.forEach(e => e.position_x = referenceX);
+        } else if (alignment === 'center') {
+            const centerX = selectedElements.reduce((sum, e) => sum + e.position_x, 0) / selectedElements.length;
+            selectedElements.forEach(e => e.position_x = centerX);
+        } else if (alignment === 'right') {
+            referenceX = Math.max(...selectedElements.map(e => e.position_x + (e.style?.width || 120)));
+            selectedElements.forEach(e => e.position_x = referenceX - (e.style?.width || 120));
+        }
+        
+        this.renderElements();
+        this.renderLinks();
+        this.saveToHistory();
+        this.showToast('Alignement effectué', 'success');
+    }
+
+    async save() {
+        this.showToast('Logigramme sauvegardé', 'success');
+    }
+
+    saveToHistory() {
+        const snapshot = {
+            elements: JSON.parse(JSON.stringify(this.elements)),
+            links: JSON.parse(JSON.stringify(this.links))
+        };
+        
+        this.history = this.history.slice(0, this.historyIndex + 1);
+        this.history.push(snapshot);
+        this.historyIndex++;
+        
+        this.updateUndoRedoButtons();
+    }
+
+    undo() {
+        if (this.historyIndex > 0 && !this.isLoading) {
+            this.historyIndex--;
+            this.restoreFromHistory(this.history[this.historyIndex]);
+            this.updateUndoRedoButtons();
+        }
+    }
+
+    redo() {
+        if (this.historyIndex < this.history.length - 1 && !this.isLoading) {
+            this.historyIndex++;
+            this.restoreFromHistory(this.history[this.historyIndex]);
+            this.updateUndoRedoButtons();
+        }
+    }
+
+    restoreFromHistory(snapshot) {
+        this.elements = snapshot.elements;
+        this.links = snapshot.links;
+        this.selectedElements.clear();
+        this.renderElements();
+        this.renderLinks();
+        this.updateStats();
+        this.updateMinimap();
+    }
+
+    updateUndoRedoButtons() {
+        this.buttons.undo.disabled = this.historyIndex <= 0;
+        this.buttons.redo.disabled = this.historyIndex >= this.history.length - 1;
+    }
+
+    updateStats() {
+        this.stats.elements.textContent = this.elements.length;
+        this.stats.liens.textContent = this.links.length;
+        this.stats.selected.textContent = this.selectedElements.size;
+    }
+
+    initMinimap() {
+        this.updateMinimap();
+        
+        const minimap = document.getElementById('minimap');
+        minimap.addEventListener('click', (e) => {
+            const rect = minimap.getBoundingClientRect();
+            const x = (e.clientX - rect.left) / rect.width;
+            const y = (e.clientY - rect.top) / rect.height;
+            
+            const canvasWidth = this.elementsContainer.scrollWidth;
+            const canvasHeight = this.elementsContainer.scrollHeight;
+            
+            this.container.scrollLeft = x * canvasWidth - this.container.clientWidth / 2;
+            this.container.scrollTop = y * canvasHeight - this.container.clientHeight / 2;
+        });
+    }
+
+    updateMinimap() {
+        if (!this.minimapCanvas) return;
+        
+        const ctx = this.minimapCanvas.getContext('2d');
+        const width = this.minimapCanvas.width;
+        const height = this.minimapCanvas.height;
+        
+        ctx.fillStyle = '#f3f4f6';
+        ctx.fillRect(0, 0, width, height);
+        
+        if (this.elements.length === 0) return;
+        
+        let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+        this.elements.forEach(element => {
+            const w = element.style?.width || (element.type === 'organisation' ? 25 : 120);
+            const h = element.style?.height || (element.type === 'organisation' ? 150 : 70);
+            minX = Math.min(minX, element.position_x);
+            minY = Math.min(minY, element.position_y);
+            maxX = Math.max(maxX, element.position_x + w);
+            maxY = Math.max(maxY, element.position_y + h);
+        });
+        
+        const scaleX = width / (maxX - minX + 20);
+        const scaleY = height / (maxY - minY + 20);
+        const scale = Math.min(scaleX, scaleY);
+        
+        const offsetX = (width - (maxX - minX) * scale) / 2 - minX * scale;
+        const offsetY = (height - (maxY - minY) * scale) / 2 - minY * scale;
+        
+        this.elements.forEach(element => {
+            const w = element.style?.width || (element.type === 'organisation' ? 25 : 120);
+            const h = element.style?.height || (element.type === 'organisation' ? 150 : 70);
+            const x = element.position_x * scale + offsetX;
+            const y = element.position_y * scale + offsetY;
+            const scaledW = Math.max(2, w * scale);
+            const scaledH = Math.max(2, h * scale);
+            
+            ctx.fillStyle = this.getElementColor(element.type);
+            ctx.fillRect(x, y, scaledW, scaledH);
+            ctx.strokeStyle = '#000';
+            ctx.strokeRect(x, y, scaledW, scaledH);
+        });
+        
+        const scrollLeft = this.container.scrollLeft;
+        const scrollTop = this.container.scrollTop;
+        const viewWidth = this.container.clientWidth;
+        const viewHeight = this.container.clientHeight;
+        
+        const viewX = scrollLeft * scale + offsetX;
+        const viewY = scrollTop * scale + offsetY;
+        const viewW = viewWidth * scale;
+        const viewH = viewHeight * scale;
+        
+        ctx.strokeStyle = '#3b82f6';
+        ctx.lineWidth = 2;
+        ctx.strokeRect(viewX, viewY, viewW, viewH);
+        ctx.fillStyle = 'rgba(59, 130, 246, 0.1)';
+        ctx.fillRect(viewX, viewY, viewW, viewH);
+    }
+
+    getElementColor(type) {
+        const colors = {
+            'debut': '#10b981',
+            'action': '#3b82f6',
+            'controle': '#f59e0b',
+            'risque': '#ef4444',
+            'fin': '#6b7280',
+            'titre': '#8b5cf6',
+            'organisation': '#8b5cf6'
+        };
+        return colors[type] || '#9ca3af';
+    }
+
+    getTypeLabel(type) {
+        const labels = {
             'debut': 'Début',
             'action': 'Action',
             'controle': 'Contrôle',
             'risque': 'Risque',
             'fin': 'Fin',
-            'organisation': 'Séparation Organisationnelle',
-            'titre': 'Titre'
+            'titre': 'Titre',
+            'organisation': 'Séparateur'
         };
-        return noms[type] || type;
+        return labels[type] || type;
     }
 
-    // Sauvegarder les modifications d'un élément
-    document.getElementById('btn-sauvegarder-element').addEventListener('click', async function() {
-        const elementId = document.getElementById('element-id').value;
-        const libelle = document.getElementById('element-libelle').value;
-        const description = document.getElementById('element-description').value;
-        const posX = parseInt(document.getElementById('element-pos-x').value) || 0;
-        const posY = parseInt(document.getElementById('element-pos-y').value) || 0;
-        const width = parseInt(document.getElementById('element-width').value) || null;
-        const height = parseInt(document.getElementById('element-height').value) || null;
-        
-        if (!libelle) {
-            afficherMessage('Le libellé est obligatoire', 'error');
-            return;
-        }
-        
-        const style = {};
-        if (width) style.width = width;
-        if (height) style.height = height;
-        
+    async exportPDF() {
+        this.showToast('Préparation du PDF...', 'info');
         try {
-            const reponse = await fetchWithCSRF(`/api/element/${elementId}`, {
-                method: 'PUT',
-                headers: { 
-                    'Content-Type': 'application/json',
-                    'X-CSRFToken': '{{ csrf_token() }}'
-                },
-                body: JSON.stringify({ 
-                    libelle, 
-                    description, 
-                    position_x: posX, 
-                    position_y: posY,
-                    style: style
-                })
-            });
-            
-            if (!reponse.ok) throw new Error('Erreur mise à jour élément');
-            
-            // Mettre à jour l'élément local
-            const element = elements.find(el => el.id === parseInt(elementId));
-            if (element) {
-                element.libelle = libelle;
-                element.description = description;
-                element.position_x = posX;
-                element.position_y = posY;
-                element.style = style;
-                afficherElements();
-                afficherLiens();
+            const response = await fetch(`/logigramme/${this.activiteId}/export-pdf`);
+            if (response.ok) {
+                const blob = await response.blob();
+                const url = window.URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = `logigramme_${this.activiteId}.pdf`;
+                document.body.appendChild(a);
+                a.click();
+                document.body.removeChild(a);
+                window.URL.revokeObjectURL(url);
+                this.showToast('PDF exporté avec succès', 'success');
             }
-            
-            bootstrap.Modal.getInstance(document.getElementById('modal-editer-element')).hide();
-            afficherMessage('Élément mis à jour avec succès', 'success');
-            
-        } catch (erreur) {
-            console.error('Erreur mise à jour:', erreur);
-            afficherMessage('Erreur lors de la mise à jour', 'error');
-        }
-    });
-
-    // Supprimer un élément
-    document.getElementById('btn-supprimer-element').addEventListener('click', function() {
-        const elementId = document.getElementById('element-id').value;
-        supprimerElement(elementId);
-    });
-
-    async function supprimerElement(elementId) {
-        confirmerAction(
-            'Supprimer l\'élément',
-            'Êtes-vous sûr de vouloir supprimer cet élément ? Cette action supprimera également tous les liens associés.',
-            async () => {
-                try {
-                    const reponse = await fetchWithCSRF(`/api/element/${elementId}`, { 
-                        method: 'DELETE',
-                        headers: {
-                            'X-CSRFToken': '{{ csrf_token() }}'
-                        }
-                    });
-                    
-                    if (!reponse.ok) throw new Error('Erreur suppression élément');
-                    
-                    // Supprimer les liens associés
-                    const liensASupprimer = liens.filter(lien => 
-                        lien.source_id === parseInt(elementId) || lien.cible_id === parseInt(elementId)
-                    );
-                    
-                    for (const lien of liensASupprimer) {
-                        await fetchWithCSRF(`/api/lien/${lien.id}`, { 
-                            method: 'DELETE',
-                            headers: {
-                                'X-CSRFToken': '{{ csrf_token() }}'
-                            }
-                        });
-                    }
-                    
-                    // Mettre à jour les données locales
-                    elements = elements.filter(el => el.id !== parseInt(elementId));
-                    liens = liens.filter(lien => 
-                        lien.source_id !== parseInt(elementId) && lien.cible_id !== parseInt(elementId)
-                    );
-                    
-                    afficherElements();
-                    afficherLiens();
-                    mettreAJourStats();
-                    montrerInstructions();
-                    deselectionnerElement();
-                    
-                    bootstrap.Modal.getInstance(document.getElementById('modal-editer-element')).hide();
-                    afficherMessage('Élément supprimé avec succès', 'success');
-                    
-                } catch (erreur) {
-                    console.error('Erreur suppression:', erreur);
-                    afficherMessage('Erreur lors de la suppression', 'error');
-                }
-            }
-        );
-    }
-
-    // Supprimer la sélection
-    function supprimerSelection() {
-        if (elementSelectionne) {
-            supprimerElement(elementSelectionne);
-        } else {
-            afficherMessage('Aucun élément sélectionné', 'warning');
+        } catch (error) {
+            console.error('Erreur export PDF:', error);
+            this.showToast('Erreur lors de l\'export PDF', 'error');
         }
     }
 
-    async function supprimerLien(lienId) {
-        confirmerAction(
-            'Supprimer le lien',
-            'Êtes-vous sûr de vouloir supprimer ce lien ?',
-            async () => {
-                try {
-                    await fetchWithCSRF(`/api/lien/${lienId}`, { 
-                        method: 'DELETE',
-                        headers: {
-                            'X-CSRFToken': '{{ csrf_token() }}'
-                        }
-                    });
-                    liens = liens.filter(l => l.id !== lienId);
-                    afficherLiens();
-                    mettreAJourStats();
-                    afficherMessage('Lien supprimé avec succès', 'success');
-                } catch (erreur) {
-                    console.error('Erreur suppression lien:', erreur);
-                    afficherMessage('Erreur lors de la suppression du lien', 'error');
-                }
+    async exportPNG() {
+        this.showToast('Préparation de l\'image...', 'info');
+        try {
+            const response = await fetch(`/logigramme/${this.activiteId}/export-png`);
+            if (response.ok) {
+                const blob = await response.blob();
+                const url = window.URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = `logigramme_${this.activiteId}.png`;
+                document.body.appendChild(a);
+                a.click();
+                document.body.removeChild(a);
+                window.URL.revokeObjectURL(url);
+                this.showToast('Image exportée avec succès', 'success');
             }
-        );
+        } catch (error) {
+            console.error('Erreur export PNG:', error);
+            this.showToast('Erreur lors de l\'export image', 'error');
+        }
     }
 
-    function effacerTout() {
-        confirmerAction(
-            'Tout effacer',
-            'Êtes-vous sûr de vouloir supprimer tous les éléments et liens ? Cette action est irréversible.',
-            async () => {
-                try {
-                    // Supprimer tous les éléments (cela supprimera aussi les liens via CASCADE)
-                    for (const element of elements) {
-                        await fetchWithCSRF(`/api/element/${element.id}`, { 
-                            method: 'DELETE',
-                            headers: {
-                                'X-CSRFToken': '{{ csrf_token() }}'
-                            }
-                        });
-                    }
-                    
-                    elements = [];
-                    liens = [];
-                    afficherElements();
-                    afficherLiens();
-                    mettreAJourStats();
-                    montrerInstructions();
-                    deselectionnerElement();
-                    
-                    afficherMessage('Tous les éléments ont été supprimés', 'success');
-                    
-                } catch (erreur) {
-                    console.error('Erreur suppression totale:', erreur);
-                    afficherMessage('Erreur lors de la suppression', 'error');
-                }
+    async exportSVG() {
+        this.showToast('Export SVG...', 'info');
+        try {
+            const response = await fetch(`/logigramme/${this.activiteId}/export-svg`);
+            if (response.ok) {
+                const blob = await response.blob();
+                const url = window.URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = `logigramme_${this.activiteId}.svg`;
+                document.body.appendChild(a);
+                a.click();
+                document.body.removeChild(a);
+                window.URL.revokeObjectURL(url);
+                this.showToast('SVG exporté avec succès', 'success');
             }
-        );
+        } catch (error) {
+            console.error('Erreur export SVG:', error);
+            this.showToast('Erreur lors de l\'export SVG', 'error');
+        }
     }
 
-    // Fonction d'impression
-    function imprimerLogigramme() {
-        window.print();
-    }
-
-    function confirmerAction(titre, message, callback) {
-        document.getElementById('message-confirmation').textContent = message;
-        const modal = new bootstrap.Modal(document.getElementById('modal-confirmation'));
-        
-        const btnConfirmer = document.getElementById('btn-confirmer-action');
-        btnConfirmer.onclick = () => {
-            modal.hide();
-            callback();
+    exportJSON() {
+        const data = {
+            elements: this.elements,
+            links: this.links,
+            metadata: {
+                activite_id: this.activiteId,
+                export_date: new Date().toISOString(),
+                version: '1.0'
+            }
         };
         
-        modal.show();
-    }
-
-    // Mettre à jour les statistiques
-    function mettreAJourStats() {
-        document.getElementById('stat-elements').textContent = elements.length;
-        document.getElementById('stat-liens').textContent = liens.length;
-    }
-
-    // Fonction fetch avec CSRF
-    async function fetchWithCSRF(url, options = {}) {
-        const token = document.querySelector('input[name="csrf_token"]')?.value || 
-                     document.querySelector('meta[name="csrf-token"]')?.content;
+        const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+        const url = window.URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `logigramme_${this.activiteId}.json`;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        window.URL.revokeObjectURL(url);
         
-        const mergedOptions = {
-            headers: {
-                'Content-Type': 'application/json',
-                'X-CSRFToken': token
-            },
-            credentials: 'same-origin',
-            ...options
-        };
-        
-        return await fetch(url, mergedOptions);
+        this.showToast('Données JSON exportées', 'success');
     }
 
-    // Fonctions d'affichage des messages
-    function afficherMessage(message, type) {
-        const alert = document.createElement('div');
-        alert.className = `alert-modern alert-${type === 'error' ? 'danger' : type} position-fixed`;
-        alert.style.cssText = 'top: 20px; right: 20px; z-index: 9999; min-width: 300px;';
-        alert.innerHTML = `
+    showToast(message, type = 'info') {
+        const toast = document.createElement('div');
+        toast.className = `toast-notification alert alert-${type === 'error' ? 'danger' : type} shadow-lg`;
+        toast.style.cssText = 'position: fixed; bottom: 20px; right: 20px; z-index: 9999; min-width: 300px; animation: slideInRight 0.3s ease-out;';
+        
+        const icon = {
+            'success': 'check-circle',
+            'error': 'exclamation-triangle',
+            'warning': 'exclamation-triangle',
+            'info': 'info-circle'
+        }[type] || 'info-circle';
+        
+        toast.innerHTML = `
             <div class="d-flex align-items-center">
-                <i class="fas fa-${getIconeType(type)} me-3"></i>
+                <i class="fas fa-${icon} me-3 fa-lg"></i>
                 <div class="flex-grow-1">${message}</div>
                 <button type="button" class="btn-close" onclick="this.parentElement.parentElement.remove()"></button>
             </div>
         `;
         
-        document.body.appendChild(alert);
+        document.body.appendChild(toast);
         
         setTimeout(() => {
-            if (alert.parentElement) {
-                alert.remove();
+            if (toast.parentElement) {
+                toast.style.animation = 'slideOutRight 0.3s ease-out';
+                setTimeout(() => toast.remove(), 300);
             }
         }, 3000);
     }
 
-    function getIconeType(type) {
-        const icones = {
-            'success': 'check-circle',
-            'error': 'exclamation-triangle',
-            'warning': 'exclamation-triangle',
-            'info': 'info-circle'
-        };
-        return icones[type] || 'info-circle';
+    escapeHtml(text) {
+        const div = document.createElement('div');
+        div.textContent = text;
+        return div.innerHTML;
     }
-    // Export JSON
-document.getElementById('btn-export-json')?.addEventListener('click', function(e) {
-    e.preventDefault();
-    const url = `/logigramme/${ACTIVITE_ID}/export-json`;
+
+    getCsrfToken() {
+        return document.querySelector('meta[name="csrf-token"]')?.content || '';
+    }
+}
+
+// Initialisation
+document.addEventListener('DOMContentLoaded', () => {
+    const activiteId = {{ activite.id }};
+    window.editor = new LogigrammeEditor(activiteId);
     
-    // Télécharger le fichier
-    const link = document.createElement('a');
-    link.href = url;
-    link.download = `logigramme_${ACTIVITE_ID}.json`;
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-    
-    // Notification
-    afficherNotification('Données JSON exportées avec succès!', 'success');
+    document.getElementById('save-element').addEventListener('click', () => window.editor.saveElement());
+    document.getElementById('delete-element').addEventListener('click', () => {
+        const elementId = parseInt(document.getElementById('element-id').value);
+        window.editor.selectedElements.clear();
+        window.editor.selectedElements.add(elementId);
+        window.editor.deleteSelectedElements();
+        bootstrap.Modal.getInstance(document.getElementById('edit-modal')).hide();
+    });
 });
 
-function afficherNotification(message, type = 'info') {
-    const notification = document.createElement('div');
-    notification.className = `alert-modern alert-${type} position-fixed`;
-    notification.style.cssText = 'top: 20px; right: 20px; z-index: 9999; min-width: 300px;';
-    notification.innerHTML = `
-        <div class="d-flex align-items-center">
-            <i class="fas fa-${type === 'success' ? 'check-circle' : 'info-circle'} me-3"></i>
-            <div class="flex-grow-1">${message}</div>
-            <button type="button" class="btn-close" onclick="this.parentElement.parentElement.remove()"></button>
-        </div>
-    `;
-    
-    document.body.appendChild(notification);
-    
-    setTimeout(() => {
-        if (notification.parentElement) {
-            notification.remove();
-        }
-    }, 3000);
-}
+// Fix pour le dropdown Bootstrap
+document.addEventListener('DOMContentLoaded', function() {
+    var dropdowns = document.querySelectorAll('.dropdown-toggle');
+    dropdowns.forEach(function(dropdown) {
+        new bootstrap.Dropdown(dropdown);
+    });
+});
 </script>
 {% endblock %}
