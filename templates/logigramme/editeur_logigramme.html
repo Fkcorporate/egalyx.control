@@ -314,7 +314,7 @@
         text-align: center;
     }
 
-    /* SÉPARATEUR - LIGNE NOIRE REDIMENSIONNABLE À L'INFINI */
+    /* SÉPARATEUR - LIGNE NOIRE REDIMENSIONNABLE */
     .element-organisation {
         background: transparent !important;
         min-width: 4px !important;
@@ -596,23 +596,14 @@
         height: calc(100vh - 140px) !important;
     }
 
-    /* Responsive */
-    @media (max-width: 992px) {
-        .editor-container {
-            padding: 1rem;
-        }
-        
-        .toolbar-group {
-            flex-wrap: wrap;
-        }
-        
-        .palette-grid {
-            grid-template-columns: 1fr;
-        }
-    }
-
-    /* Styles pour l'impression PDF */
+    /* Styles pour l'impression PDF - Optimisés */
     @media print {
+        body {
+            background: white !important;
+            margin: 0 !important;
+            padding: 0 !important;
+        }
+        
         .no-print {
             display: none !important;
         }
@@ -625,22 +616,26 @@
         
         .canvas-wrapper {
             box-shadow: none !important;
-            border: 1px solid #e5e7eb !important;
+            border: none !important;
+            border-radius: 0 !important;
         }
         
         #editeur-logigramme {
             height: auto !important;
             overflow: visible !important;
+            background: white !important;
         }
         
         #conteneur-elements {
-            transform: scale(0.8) !important;
-            transform-origin: 0 0 !important;
+            transform: scale(1) !important;
+            width: auto !important;
+            height: auto !important;
         }
         
         .element-processus {
             break-inside: avoid;
             page-break-inside: avoid;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.1) !important;
         }
         
         .element-organisation .resize-handle-top,
@@ -648,6 +643,11 @@
         .element-organisation::before,
         .element-organisation::after {
             display: none !important;
+        }
+        
+        .separator-label {
+            background: #1e293b !important;
+            color: white !important;
         }
     }
 </style>
@@ -659,7 +659,7 @@
     <div id="loading-overlay" class="loading-overlay">
         <div class="loading-spinner">
             <i class="fas fa-spinner fa-spin fa-2x mb-3"></i>
-            <p class="mb-0">Chargement...</p>
+            <p class="mb-0">Génération du PDF en cours...</p>
         </div>
     </div>
 
@@ -722,6 +722,7 @@
                         <li><a class="dropdown-item" href="#" id="export-pdf-standard"><i class="fas fa-file-pdf me-2"></i> PDF Standard</a></li>
                         <li><a class="dropdown-item" href="#" id="export-pdf-haute-qualite"><i class="fas fa-file-pdf me-2 text-danger"></i> PDF Haute Qualité</a></li>
                         <li><a class="dropdown-item" href="#" id="export-pdf-rapport"><i class="fas fa-file-alt me-2"></i> PDF Rapport Complet</a></li>
+                        <li><a class="dropdown-item" href="#" id="export-pdf-exact"><i class="fas fa-eye me-2"></i> PDF Vue Exacte</a></li>
                         <li><hr class="dropdown-divider"></li>
                         <li><a class="dropdown-item" href="#" id="export-png"><i class="fas fa-image me-2"></i> PNG</a></li>
                         <li><a class="dropdown-item" href="#" id="export-svg"><i class="fas fa-code me-2"></i> SVG</a></li>
@@ -867,7 +868,7 @@
                                     <span id="width-value" class="text-sm">4px</span>
                                 </div>
                                 <div class="mb-2" id="separator-height-group" style="display: none;">
-                                    <label class="text-sm text-gray-600">Hauteur (px) - Illimité</label>
+                                    <label class="text-sm text-gray-600">Hauteur (px)</label>
                                     <input type="number" class="form-control" id="separator-height" step="10" placeholder="Hauteur en pixels">
                                     <small class="text-muted">Laissez vide pour garder la hauteur actuelle</small>
                                 </div>
@@ -928,7 +929,7 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
 <script>
 // ============================================
-// LOGIGRAMME ÉDITEUR PROFESSIONNEL - SÉPARATEUR À LONGUEUR ILLIMITÉE
+// LOGIGRAMME ÉDITEUR PROFESSIONNEL AVEC EXPORT PDF HAUTE QUALITÉ
 // ============================================
 
 class LogigrammeEditor {
@@ -967,10 +968,12 @@ class LogigrammeEditor {
         this.showToast('Logigramme chargé avec succès', 'success');
     }
 
-    showLoading(show) {
+    showLoading(show, message = 'Chargement...') {
         this.isLoading = show;
         const overlay = document.getElementById('loading-overlay');
         if (overlay) {
+            const spinnerText = overlay.querySelector('.loading-spinner p');
+            if (spinnerText) spinnerText.textContent = message;
             if (show) {
                 overlay.classList.add('active');
             } else {
@@ -1022,7 +1025,7 @@ class LogigrammeEditor {
         this.buttons.fullscreen.addEventListener('click', () => this.toggleFullscreen());
         this.buttons.deleteSelected.addEventListener('click', () => this.deleteSelectedElements());
         
-        // Exports PDF
+        // Exports PDF professionnels
         document.getElementById('export-pdf-standard').addEventListener('click', (e) => {
             e.preventDefault();
             this.exportPDF('standard');
@@ -1034,6 +1037,10 @@ class LogigrammeEditor {
         document.getElementById('export-pdf-rapport').addEventListener('click', (e) => {
             e.preventDefault();
             this.exportPDF('rapport');
+        });
+        document.getElementById('export-pdf-exact').addEventListener('click', (e) => {
+            e.preventDefault();
+            this.exportPDF('exact');
         });
         document.getElementById('export-png').addEventListener('click', (e) => {
             e.preventDefault();
@@ -1163,7 +1170,7 @@ class LogigrammeEditor {
     }
 
     async loadData() {
-        this.showLoading(true);
+        this.showLoading(true, 'Chargement du logigramme...');
         try {
             const elementsRes = await fetch(`/api/logigramme/${this.activiteId}/elements`);
             if (!elementsRes.ok) throw new Error('Erreur chargement éléments');
@@ -1256,7 +1263,7 @@ class LogigrammeEditor {
     makeResizableVerticalInfinite(element, elementId) {
         let startY, startHeight, startTop;
         let isResizing = false;
-        let resizeMode = null; // 'top' or 'bottom'
+        let resizeMode = null;
         
         const resizeHandleTop = element.querySelector('.resize-handle-top');
         const resizeHandleBottom = element.querySelector('.resize-handle-bottom');
@@ -1269,11 +1276,9 @@ class LogigrammeEditor {
             let newHeight;
             
             if (resizeMode === 'bottom') {
-                // Redimensionnement par le bas - pas de limite maximale
                 newHeight = Math.max(50, startHeight + dy);
                 element.style.height = `${newHeight}px`;
             } else if (resizeMode === 'top') {
-                // Redimensionnement par le haut - pas de limite maximale
                 newHeight = Math.max(50, startHeight - dy);
                 const newTop = startTop + (startHeight - newHeight);
                 element.style.top = `${newTop}px`;
@@ -1514,7 +1519,7 @@ class LogigrammeEditor {
             style: defaultStyles[type] || {}
         };
         
-        this.showLoading(true);
+        this.showLoading(true, 'Création de l\'élément...');
         try {
             const response = await fetch(`/api/logigramme/${this.activiteId}/elements`, {
                 method: 'POST',
@@ -1763,7 +1768,7 @@ class LogigrammeEditor {
             return;
         }
         
-        this.showLoading(true);
+        this.showLoading(true, 'Sauvegarde en cours...');
         try {
             const element = this.elements.find(e => e.id === elementId);
             const updateData = {
@@ -1850,7 +1855,7 @@ class LogigrammeEditor {
         
         if (!confirm(`Supprimer ${this.selectedElements.size} élément(s) ? Cette action est irréversible.`)) return;
         
-        this.showLoading(true);
+        this.showLoading(true, 'Suppression en cours...');
         const idsToDelete = Array.from(this.selectedElements);
         
         for (const id of idsToDelete) {
@@ -2183,124 +2188,26 @@ class LogigrammeEditor {
         return labels[type] || type;
     }
 
+    // ============================================
+    // EXPORT PDF PROFESSIONNEL - VUE EXACTE
+    // ============================================
+    
     async exportPDF(type = 'standard') {
-        this.showLoading(true);
-        this.showToast('Préparation du PDF...', 'info');
+        this.showLoading(true, 'Préparation du PDF...');
         
         try {
-            const exportContainer = document.createElement('div');
-            exportContainer.style.padding = '40px';
-            exportContainer.style.background = 'white';
-            exportContainer.style.fontFamily = 'Inter, system-ui, sans-serif';
-            
-            exportContainer.innerHTML = `
-                <div style="text-align: center; margin-bottom: 40px; border-bottom: 3px solid #3b82f6; padding-bottom: 20px;">
-                    <h1 style="color: #1e293b; font-size: 28px; margin-bottom: 10px;">${this.escapeHtml(this.activiteNom)}</h1>
-                    ${this.activiteDescription ? `<p style="color: #64748b; font-size: 14px;">${this.escapeHtml(this.activiteDescription)}</p>` : ''}
-                    <div style="display: flex; justify-content: center; gap: 30px; margin-top: 15px;">
-                        <span style="font-size: 12px; color: #94a3b8;">Généré le ${new Date().toLocaleDateString('fr-FR')}</span>
-                        <span style="font-size: 12px; color: #94a3b8;">Version ${type === 'haute-qualite' ? 'Haute Qualité' : type === 'rapport' ? 'Rapport Complet' : 'Standard'}</span>
-                    </div>
-                </div>
-            `;
-            
-            const canvasWrapper = document.createElement('div');
-            canvasWrapper.style.position = 'relative';
-            canvasWrapper.style.minHeight = '600px';
-            canvasWrapper.style.background = 'white';
-            canvasWrapper.style.border = '1px solid #e2e8f0';
-            canvasWrapper.style.borderRadius = '12px';
-            canvasWrapper.style.padding = '20px';
-            
-            const svgElement = this.generateSVGForExport();
-            canvasWrapper.appendChild(svgElement);
-            
-            exportContainer.appendChild(canvasWrapper);
-            
-            if (type === 'rapport') {
-                const statsSection = document.createElement('div');
-                statsSection.style.marginTop = '40px';
-                statsSection.style.padding = '20px';
-                statsSection.style.background = '#f8fafc';
-                statsSection.style.borderRadius = '12px';
-                statsSection.innerHTML = `
-                    <h3 style="color: #1e293b; margin-bottom: 20px;">Statistiques du processus</h3>
-                    <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 20px;">
-                        <div style="text-align: center; padding: 15px; background: white; border-radius: 8px;">
-                            <div style="font-size: 32px; font-weight: bold; color: #3b82f6;">${this.elements.length}</div>
-                            <div style="color: #64748b;">Éléments</div>
-                        </div>
-                        <div style="text-align: center; padding: 15px; background: white; border-radius: 8px;">
-                            <div style="font-size: 32px; font-weight: bold; color: #10b981;">${this.links.length}</div>
-                            <div style="color: #64748b;">Connexions</div>
-                        </div>
-                        <div style="text-align: center; padding: 15px; background: white; border-radius: 8px;">
-                            <div style="font-size: 32px; font-weight: bold; color: #8b5cf6;">${this.elements.filter(e => e.type === 'action').length}</div>
-                            <div style="color: #64748b;">Actions</div>
-                        </div>
-                    </div>
-                `;
-                exportContainer.appendChild(statsSection);
-                
-                const elementsList = document.createElement('div');
-                elementsList.style.marginTop = '30px';
-                elementsList.innerHTML = `
-                    <h3 style="color: #1e293b; margin-bottom: 15px;">Détail des éléments</h3>
-                    <table style="width: 100%; border-collapse: collapse;">
-                        <thead>
-                            <tr style="background: #f1f5f9;">
-                                <th style="padding: 10px; text-align: left; border: 1px solid #e2e8f0;">Type</th>
-                                <th style="padding: 10px; text-align: left; border: 1px solid #e2e8f0;">Libellé</th>
-                                <th style="padding: 10px; text-align: left; border: 1px solid #e2e8f0;">Description</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            ${this.elements.map(el => `
-                                <tr>
-                                    <td style="padding: 8px; border: 1px solid #e2e8f0;">${this.getTypeLabel(el.type)}</td>
-                                    <td style="padding: 8px; border: 1px solid #e2e8f0;">${this.escapeHtml(el.libelle)}</td>
-                                    <td style="padding: 8px; border: 1px solid #e2e8f0;">${this.escapeHtml(el.description || '-')}</td>
-                                </tr>
-                            `).join('')}
-                        </tbody>
-                    </table>
-                `;
-                exportContainer.appendChild(elementsList);
-            }
-            
-            const footer = document.createElement('div');
-            footer.style.marginTop = '40px';
-            footer.style.textAlign = 'center';
-            footer.style.paddingTop = '20px';
-            footer.style.borderTop = '1px solid #e2e8f0';
-            footer.style.color = '#94a3b8';
-            footer.style.fontSize = '10px';
-            footer.innerHTML = 'Document généré automatiquement - Tous droits réservés';
-            exportContainer.appendChild(footer);
+            // Créer un clone du logigramme pour l'export
+            const exportContainer = this.createExportContainer(type);
             
             document.body.appendChild(exportContainer);
             
-            const opt = {
-                margin: [0.5, 0.5, 0.5, 0.5],
-                filename: `logigramme_${this.activiteNom}_${type}.pdf`,
-                image: { type: 'jpeg', quality: type === 'haute-qualite' ? 1 : 0.98 },
-                html2canvas: { 
-                    scale: type === 'haute-qualite' ? 3 : 2,
-                    useCORS: true,
-                    logging: false,
-                    backgroundColor: '#ffffff'
-                },
-                jsPDF: { 
-                    unit: 'in', 
-                    format: 'a4', 
-                    orientation: 'landscape'
-                }
-            };
+            // Configuration de l'export selon le type
+            const config = this.getPDFConfig(type);
             
-            await html2pdf().set(opt).from(exportContainer).save();
+            await html2pdf().set(config).from(exportContainer).save();
             
             document.body.removeChild(exportContainer);
-            this.showToast('PDF exporté avec succès', 'success');
+            this.showToast(`PDF ${this.getPDFTypeName(type)} exporté avec succès`, 'success');
             
         } catch (error) {
             console.error('Erreur export PDF:', error);
@@ -2310,7 +2217,14 @@ class LogigrammeEditor {
         }
     }
 
-    generateSVGForExport() {
+    createExportContainer(type) {
+        const container = document.createElement('div');
+        container.style.padding = '30px';
+        container.style.background = 'white';
+        container.style.fontFamily = "'Inter', system-ui, -apple-system, sans-serif";
+        container.style.minHeight = '100%';
+        
+        // Calculer les dimensions totales du logigramme
         let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
         this.elements.forEach(element => {
             const w = element.style?.width || (element.type === 'organisation' ? 4 : 120);
@@ -2321,16 +2235,68 @@ class LogigrammeEditor {
             maxY = Math.max(maxY, element.position_y + h);
         });
         
-        const padding = 50;
+        const padding = 40;
+        const totalWidth = maxX - minX + 2 * padding;
+        const totalHeight = maxY - minY + 2 * padding;
+        
+        // En-tête professionnel
+        const header = this.createHeader(type);
+        container.appendChild(header);
+        
+        // Zone du diagramme
+        const diagramWrapper = document.createElement('div');
+        diagramWrapper.style.margin = '20px 0';
+        diagramWrapper.style.border = '1px solid #e2e8f0';
+        diagramWrapper.style.borderRadius = '12px';
+        diagramWrapper.style.background = 'white';
+        diagramWrapper.style.overflow = 'hidden';
+        diagramWrapper.style.boxShadow = '0 4px 6px -1px rgba(0, 0, 0, 0.1)';
+        
+        // Générer le SVG exact du logigramme
+        const svgElement = this.generateExactSVG(minX, minY, maxX, maxY, padding);
+        diagramWrapper.appendChild(svgElement);
+        
+        container.appendChild(diagramWrapper);
+        
+        // Pour le rapport complet, ajouter des informations supplémentaires
+        if (type === 'rapport') {
+            const statsSection = this.createStatsSection();
+            container.appendChild(statsSection);
+            
+            const elementsTable = this.createElementsTable();
+            container.appendChild(elementsTable);
+        }
+        
+        // Pied de page
+        const footer = this.createFooter();
+        container.appendChild(footer);
+        
+        return container;
+    }
+
+    generateExactSVG(minX, minY, maxX, maxY, padding) {
         const width = maxX - minX + 2 * padding;
         const height = maxY - minY + 2 * padding;
         
         const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
-        svg.setAttribute('width', width);
-        svg.setAttribute('height', height);
+        svg.setAttribute('width', '100%');
+        svg.setAttribute('height', 'auto');
         svg.setAttribute('viewBox', `${minX - padding} ${minY - padding} ${width} ${height}`);
         svg.style.background = 'white';
         
+        // Définition des flèches
+        const defs = document.createElementNS('http://www.w3.org/2000/svg', 'defs');
+        
+        const arrowNormal = this.createMarker('arrow-pdf-normal', '#94a3b8');
+        const arrowOui = this.createMarker('arrow-pdf-oui', '#10b981');
+        const arrowNon = this.createMarker('arrow-pdf-non', '#ef4444');
+        
+        defs.appendChild(arrowNormal);
+        defs.appendChild(arrowOui);
+        defs.appendChild(arrowNon);
+        svg.appendChild(defs);
+        
+        // Dessiner les liens
         this.links.forEach(link => {
             const source = this.elements.find(e => e.id === link.source_id);
             const target = this.elements.find(e => e.id === link.cible_id);
@@ -2345,15 +2311,38 @@ class LogigrammeEditor {
                 line.setAttribute('y1', points.y1);
                 line.setAttribute('x2', points.x2);
                 line.setAttribute('y2', points.y2);
-                line.setAttribute('stroke', link.type === 'oui' ? '#10b981' : (link.type === 'non' ? '#ef4444' : '#94a3b8'));
-                line.setAttribute('stroke-width', '2');
-                if (link.type === 'non') {
-                    line.setAttribute('stroke-dasharray', '6 4');
+                
+                const type = link.type || 'normal';
+                line.setAttribute('stroke', type === 'oui' ? '#10b981' : (type === 'non' ? '#ef4444' : '#94a3b8'));
+                line.setAttribute('stroke-width', '2.5');
+                if (type === 'non') {
+                    line.setAttribute('stroke-dasharray', '8 4');
                 }
+                line.setAttribute('marker-end', `url(#arrow-pdf-${type})`);
+                
                 svg.appendChild(line);
+                
+                // Ajouter le label pour Oui/Non
+                if (type === 'oui' || type === 'non') {
+                    const midX = (points.x1 + points.x2) / 2;
+                    const midY = (points.y1 + points.y2) / 2;
+                    
+                    const text = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+                    text.setAttribute('x', midX);
+                    text.setAttribute('y', midY);
+                    text.setAttribute('fill', type === 'oui' ? '#10b981' : '#ef4444');
+                    text.setAttribute('font-size', '11');
+                    text.setAttribute('font-weight', 'bold');
+                    text.setAttribute('text-anchor', 'middle');
+                    text.setAttribute('dominant-baseline', 'middle');
+                    text.textContent = type === 'oui' ? '✓ OUI' : '✗ NON';
+                    
+                    svg.appendChild(text);
+                }
             }
         });
         
+        // Dessiner les éléments
         this.elements.forEach(element => {
             const isSeparator = element.type === 'organisation';
             const w = element.style?.width || (isSeparator ? 4 : 120);
@@ -2368,15 +2357,16 @@ class LogigrammeEditor {
                 rect.setAttribute('width', w);
                 rect.setAttribute('height', h);
                 rect.setAttribute('fill', '#1e293b');
-                rect.setAttribute('rx', '2');
+                rect.setAttribute('rx', '3');
                 g.appendChild(rect);
                 
                 const text = document.createElementNS('http://www.w3.org/2000/svg', 'text');
-                text.setAttribute('x', element.position_x + w + 8);
+                text.setAttribute('x', element.position_x + w + 10);
                 text.setAttribute('y', element.position_y + h / 2);
                 text.setAttribute('fill', '#1e293b');
                 text.setAttribute('font-size', '11');
                 text.setAttribute('font-weight', '600');
+                text.setAttribute('dominant-baseline', 'middle');
                 text.textContent = element.libelle;
                 g.appendChild(text);
             } else {
@@ -2386,16 +2376,16 @@ class LogigrammeEditor {
                 rect.setAttribute('width', w);
                 rect.setAttribute('height', h);
                 rect.setAttribute('fill', this.getFillColor(element.type));
-                rect.setAttribute('rx', element.type === 'debut' || element.type === 'fin' ? '40' : '8');
-                rect.setAttribute('stroke', '#e2e8f0');
-                rect.setAttribute('stroke-width', '1');
+                rect.setAttribute('rx', element.type === 'debut' || element.type === 'fin' ? '30' : '8');
+                rect.setAttribute('stroke', '#cbd5e1');
+                rect.setAttribute('stroke-width', '1.5');
                 g.appendChild(rect);
                 
                 const text = document.createElementNS('http://www.w3.org/2000/svg', 'text');
                 text.setAttribute('x', element.position_x + w / 2);
                 text.setAttribute('y', element.position_y + h / 2);
                 text.setAttribute('fill', element.type === 'titre' ? '#1e293b' : 'white');
-                text.setAttribute('font-size', '12');
+                text.setAttribute('font-size', element.type === 'titre' ? '14' : '12');
                 text.setAttribute('font-weight', '600');
                 text.setAttribute('text-anchor', 'middle');
                 text.setAttribute('dominant-baseline', 'middle');
@@ -2409,53 +2399,234 @@ class LogigrammeEditor {
         return svg;
     }
 
-    getFillColor(type) {
-        const colors = {
-            'debut': '#10b981',
-            'action': '#3b82f6',
-            'controle': '#f59e0b',
-            'risque': '#ef4444',
-            'fin': '#6b7280',
-            'titre': '#ffffff',
-            'organisation': '#1e293b'
+    createMarker(id, color) {
+        const marker = document.createElementNS('http://www.w3.org/2000/svg', 'marker');
+        marker.setAttribute('id', id);
+        marker.setAttribute('markerWidth', '10');
+        marker.setAttribute('markerHeight', '10');
+        marker.setAttribute('refX', '9');
+        marker.setAttribute('refY', '5');
+        marker.setAttribute('orient', 'auto');
+        
+        const polygon = document.createElementNS('http://www.w3.org/2000/svg', 'polygon');
+        polygon.setAttribute('points', '0 0, 10 5, 0 10');
+        polygon.setAttribute('fill', color);
+        
+        marker.appendChild(polygon);
+        return marker;
+    }
+
+    createHeader(type) {
+        const header = document.createElement('div');
+        header.style.textAlign = 'center';
+        header.style.marginBottom = '30px';
+        header.style.padding = '20px';
+        header.style.background = 'linear-gradient(135deg, #f8fafc 0%, #f1f5f9 100%)';
+        header.style.borderRadius = '12px';
+        
+        header.innerHTML = `
+            <h1 style="color: #1e293b; font-size: 24px; margin-bottom: 10px; font-weight: 700;">
+                ${this.escapeHtml(this.activiteNom)}
+            </h1>
+            ${this.activiteDescription ? `<p style="color: #64748b; font-size: 14px; margin-bottom: 15px;">${this.escapeHtml(this.activiteDescription)}</p>` : ''}
+            <div style="display: flex; justify-content: center; gap: 30px; flex-wrap: wrap;">
+                <span style="font-size: 12px; color: #94a3b8;">
+                    <i class="fas fa-calendar-alt"></i> Généré le ${new Date().toLocaleDateString('fr-FR')}
+                </span>
+                <span style="font-size: 12px; color: #94a3b8;">
+                    <i class="fas fa-chart-line"></i> Version ${this.getPDFTypeName(type)}
+                </span>
+                <span style="font-size: 12px; color: #94a3b8;">
+                    <i class="fas fa-cubes"></i> ${this.elements.length} éléments
+                </span>
+                <span style="font-size: 12px; color: #94a3b8;">
+                    <i class="fas fa-link"></i> ${this.links.length} connexions
+                </span>
+            </div>
+        `;
+        
+        return header;
+    }
+
+    createStatsSection() {
+        const section = document.createElement('div');
+        section.style.marginTop = '30px';
+        section.style.padding = '20px';
+        section.style.background = '#f8fafc';
+        section.style.borderRadius = '12px';
+        
+        const actions = this.elements.filter(e => e.type === 'action').length;
+        const controles = this.elements.filter(e => e.type === 'controle').length;
+        const risques = this.elements.filter(e => e.type === 'risque').length;
+        
+        section.innerHTML = `
+            <h3 style="color: #1e293b; margin-bottom: 20px; font-size: 18px;">
+                <i class="fas fa-chart-pie"></i> Statistiques du processus
+            </h3>
+            <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 15px;">
+                <div style="text-align: center; padding: 15px; background: white; border-radius: 8px; box-shadow: 0 1px 3px rgba(0,0,0,0.1);">
+                    <div style="font-size: 28px; font-weight: bold; color: #10b981;">${actions}</div>
+                    <div style="color: #64748b; font-size: 12px;">Actions</div>
+                </div>
+                <div style="text-align: center; padding: 15px; background: white; border-radius: 8px; box-shadow: 0 1px 3px rgba(0,0,0,0.1);">
+                    <div style="font-size: 28px; font-weight: bold; color: #f59e0b;">${controles}</div>
+                    <div style="color: #64748b; font-size: 12px;">Contrôles</div>
+                </div>
+                <div style="text-align: center; padding: 15px; background: white; border-radius: 8px; box-shadow: 0 1px 3px rgba(0,0,0,0.1);">
+                    <div style="font-size: 28px; font-weight: bold; color: #ef4444;">${risques}</div>
+                    <div style="color: #64748b; font-size: 12px;">Risques</div>
+                </div>
+                <div style="text-align: center; padding: 15px; background: white; border-radius: 8px; box-shadow: 0 1px 3px rgba(0,0,0,0.1);">
+                    <div style="font-size: 28px; font-weight: bold; color: #3b82f6;">${this.links.length}</div>
+                    <div style="color: #64748b; font-size: 12px;">Connexions</div>
+                </div>
+            </div>
+        `;
+        
+        return section;
+    }
+
+    createElementsTable() {
+        const table = document.createElement('div');
+        table.style.marginTop = '30px';
+        table.style.overflowX = 'auto';
+        
+        let tableHtml = `
+            <h3 style="color: #1e293b; margin-bottom: 15px; font-size: 18px;">
+                <i class="fas fa-list-ul"></i> Détail des éléments
+            </h3>
+            <table style="width: 100%; border-collapse: collapse; font-size: 12px;">
+                <thead>
+                    <tr style="background: #f1f5f9;">
+                        <th style="padding: 12px; text-align: left; border: 1px solid #e2e8f0;">Type</th>
+                        <th style="padding: 12px; text-align: left; border: 1px solid #e2e8f0;">Libellé</th>
+                        <th style="padding: 12px; text-align: left; border: 1px solid #e2e8f0;">Description</th>
+                        <th style="padding: 12px; text-align: center; border: 1px solid #e2e8f0;">Position</th>
+                    </tr>
+                </thead>
+                <tbody>
+        `;
+        
+        this.elements.forEach(el => {
+            tableHtml += `
+                <tr style="border-bottom: 1px solid #e2e8f0;">
+                    <td style="padding: 10px; border: 1px solid #e2e8f0;">
+                        <span style="display: inline-block; width: 10px; height: 10px; border-radius: 2px; background: ${this.getElementColor(el.type)}; margin-right: 8px;"></span>
+                        ${this.getTypeLabel(el.type)}
+                    </td>
+                    <td style="padding: 10px; border: 1px solid #e2e8f0;"><strong>${this.escapeHtml(el.libelle)}</strong></td>
+                    <td style="padding: 10px; border: 1px solid #e2e8f0;">${this.escapeHtml(el.description || '-')}</td>
+                    <td style="padding: 10px; text-align: center; border: 1px solid #e2e8f0;">(${el.position_x}, ${el.position_y})</td>
+                </tr>
+            `;
+        });
+        
+        tableHtml += `
+                </tbody>
+            </table>
+        `;
+        
+        table.innerHTML = tableHtml;
+        return table;
+    }
+
+    createFooter() {
+        const footer = document.createElement('div');
+        footer.style.marginTop = '40px';
+        footer.style.textAlign = 'center';
+        footer.style.paddingTop = '20px';
+        footer.style.borderTop = '1px solid #e2e8f0';
+        footer.style.color = '#94a3b8';
+        footer.style.fontSize = '10px';
+        footer.innerHTML = `
+            Document généré automatiquement par l'application de gestion des processus<br>
+            Tous droits réservés - ${new Date().getFullYear()}
+        `;
+        return footer;
+    }
+
+    getPDFConfig(type) {
+        const baseConfig = {
+            margin: [0.5, 0.5, 0.5, 0.5],
+            image: { type: 'jpeg', quality: 1 },
+            html2canvas: { 
+                scale: type === 'haute-qualite' ? 3 : (type === 'exact' ? 4 : 2),
+                useCORS: true,
+                logging: false,
+                backgroundColor: '#ffffff',
+                letterRendering: true
+            },
+            jsPDF: { 
+                unit: 'in', 
+                format: 'a4', 
+                orientation: 'landscape'
+            }
         };
-        return colors[type] || '#94a3b8';
+        
+        const filenames = {
+            'standard': `logigramme_${this.activiteNom}.pdf`,
+            'haute-qualite': `logigramme_${this.activiteNom}_haute_qualite.pdf`,
+            'rapport': `logigramme_${this.activiteNom}_rapport.pdf`,
+            'exact': `logigramme_${this.activiteNom}_exact.pdf`
+        };
+        
+        baseConfig.filename = filenames[type] || filenames.standard;
+        
+        return baseConfig;
+    }
+
+    getPDFTypeName(type) {
+        const names = {
+            'standard': 'Standard',
+            'haute-qualite': 'Haute Qualité',
+            'rapport': 'Rapport Complet',
+            'exact': 'Vue Exacte'
+        };
+        return names[type] || 'Standard';
     }
 
     async exportPNG() {
-        this.showLoading(true);
+        this.showLoading(true, 'Génération de l\'image...');
         try {
-            const svgElement = this.generateSVGForExport();
-            const canvas = document.createElement('canvas');
-            const ctx = canvas.getContext('2d');
-            const svgString = new XMLSerializer().serializeToString(svgElement);
-            const img = new Image();
+            const exportContainer = this.createExportContainer('exact');
+            document.body.appendChild(exportContainer);
             
-            canvas.width = 1200;
-            canvas.height = 800;
+            const canvas = await html2canvas(exportContainer, {
+                scale: 3,
+                backgroundColor: '#ffffff',
+                logging: false,
+                useCORS: true
+            });
             
-            img.onload = () => {
-                ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
-                const png = canvas.toDataURL('image/png');
-                const link = document.createElement('a');
-                link.download = `logigramme_${this.activiteNom}.png`;
-                link.href = png;
-                link.click();
-                this.showToast('Image exportée avec succès', 'success');
-                this.showLoading(false);
-            };
+            const link = document.createElement('a');
+            link.download = `logigramme_${this.activiteNom}.png`;
+            link.href = canvas.toDataURL('image/png');
+            link.click();
             
-            img.src = 'data:image/svg+xml,' + encodeURIComponent(svgString);
+            document.body.removeChild(exportContainer);
+            this.showToast('Image exportée avec succès', 'success');
             
         } catch (error) {
             console.error('Erreur export PNG:', error);
             this.showToast('Erreur lors de l\'export PNG', 'error');
+        } finally {
             this.showLoading(false);
         }
     }
 
     async exportSVG() {
-        const svgElement = this.generateSVGForExport();
+        let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+        this.elements.forEach(element => {
+            const w = element.style?.width || (element.type === 'organisation' ? 4 : 120);
+            const h = element.style?.height || (element.type === 'organisation' ? 200 : 70);
+            minX = Math.min(minX, element.position_x);
+            minY = Math.min(minY, element.position_y);
+            maxX = Math.max(maxX, element.position_x + w);
+            maxY = Math.max(maxY, element.position_y + h);
+        });
+        
+        const padding = 50;
+        const svgElement = this.generateExactSVG(minX, minY, maxX, maxY, padding);
         const svgString = new XMLSerializer().serializeToString(svgElement);
         const blob = new Blob([svgString], { type: 'image/svg+xml' });
         const url = URL.createObjectURL(blob);
@@ -2476,7 +2647,14 @@ class LogigrammeEditor {
             metadata: {
                 activite_id: this.activiteId,
                 export_date: new Date().toISOString(),
-                version: '1.0'
+                version: '2.0',
+                stats: {
+                    total_elements: this.elements.length,
+                    total_liens: this.links.length,
+                    actions: this.elements.filter(e => e.type === 'action').length,
+                    controles: this.elements.filter(e => e.type === 'controle').length,
+                    risques: this.elements.filter(e => e.type === 'risque').length
+                }
             }
         };
         
@@ -2488,6 +2666,19 @@ class LogigrammeEditor {
         link.click();
         URL.revokeObjectURL(url);
         this.showToast('Données JSON exportées', 'success');
+    }
+
+    getFillColor(type) {
+        const colors = {
+            'debut': '#10b981',
+            'action': '#3b82f6',
+            'controle': '#f59e0b',
+            'risque': '#ef4444',
+            'fin': '#6b7280',
+            'titre': '#ffffff',
+            'organisation': '#1e293b'
+        };
+        return colors[type] || '#94a3b8';
     }
 
     showToast(message, type = 'info') {
