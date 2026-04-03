@@ -48,7 +48,7 @@ def generer_matrice_risques(evaluations, matrice_type='classique'):
             couleur = get_couleur_risque(score)
             
             # CORRECTION : Impact 5 = ligne du haut (i=0), Impact 1 = ligne du bas (i=4)
-            rect = patches.Rectangle((j, i), 1, 1, linewidth=2,  # PLUS de 4-i, juste i
+            rect = patches.Rectangle((j, i), 1, 1, linewidth=2,
                                    edgecolor='black', facecolor=couleur, alpha=0.7)
             ax.add_patch(rect)
             
@@ -181,21 +181,21 @@ def generer_matrice_risques(evaluations, matrice_type='classique'):
     # CORRECTION : Échelles cohérentes avec le nouveau positionnement
     if matrice_type == 'classique':
         ax.set_xticklabels(['1\nTrès rare', '2\nRare', '3\nPossible', '4\nProbable', '5\nTrès probable'], fontsize=11)
-        ax.set_yticklabels(['1\nNégligeable', '2\nMineur', '3\nModéré', '4\nImportant', '5\nCritique'], fontsize=11)  # CORRECTION : ordre normal
+        ax.set_yticklabels(['1\nNégligeable', '2\nMineur', '3\nModéré', '4\nImportant', '5\nCritique'], fontsize=11)
         ax.set_xlabel('Probabilité', fontsize=13, fontweight='bold', labelpad=15)
         ax.set_ylabel('Impact', fontsize=13, fontweight='bold', labelpad=15)
         titre = "Matrice des Risques - Classique"
         
     elif matrice_type == 'criticite':
         ax.set_xticklabels(['1\nTrès rare', '2\nRare', '3\nPossible', '4\nProbable', '5\nTrès probable'], fontsize=11)
-        ax.set_yticklabels(['1\nNégligeable', '2\nMineur', '3\nModéré', '4\nImportant', '5\nCritique'], fontsize=11)  # CORRECTION : ordre normal
+        ax.set_yticklabels(['1\nNégligeable', '2\nMineur', '3\nModéré', '4\nImportant', '5\nCritique'], fontsize=11)
         ax.set_xlabel('Probabilité', fontsize=13, fontweight='bold', labelpad=15)
         ax.set_ylabel('Impact', fontsize=13, fontweight='bold', labelpad=15)
         titre = "Matrice de Criticité"
         
     elif matrice_type == 'priorisation':
         ax.set_xticklabels(['1\nInsuffisant', '2\nPartiel', '3\nAdéquat', '4\nBon', '5\nExcellent'], fontsize=11)
-        ax.set_yticklabels(['1\nNégligeable', '2\nMineur', '3\nModéré', '4\nImportant', '5\nCritique'], fontsize=11)  # CORRECTION : ordre normal
+        ax.set_yticklabels(['1\nNégligeable', '2\nMineur', '3\nModéré', '4\nImportant', '5\nCritique'], fontsize=11)
         ax.set_xlabel('Niveau de Maîtrise', fontsize=13, fontweight='bold', labelpad=15)
         ax.set_ylabel('Impact', fontsize=13, fontweight='bold', labelpad=15)
         titre = "Matrice de Priorisation"
@@ -232,15 +232,20 @@ def generer_matrice_risques(evaluations, matrice_type='classique'):
         ax.add_patch(patches.Rectangle((legend_x, 2.8 - i*0.2), 0.3, 0.15, facecolor=couleur))
         ax.text(legend_x + 0.4, 2.87 - i*0.2, texte, fontsize=8, va='center')
     
-    # Conversion en image base64
+    # Ajuster les limites pour la légende
+    ax.set_xlim(0, 7.0)
+    
+    # ✅ CORRECTION IMPORTANTE : Sauvegarde AVANT de fermer la figure
     buffer = BytesIO()
     plt.savefig(buffer, format='png', dpi=150, bbox_inches='tight', facecolor='white')
     buffer.seek(0)
     image_png = buffer.getvalue()
+    
+    # ✅ Fermer la figure APRÈS avoir récupéré les données
+    plt.close(fig)
     buffer.close()
     
     graphic = base64.b64encode(image_png).decode('utf-8')
-    plt.close()
     
     print(f"✅ Matrice {matrice_type} générée avec positionnement CORRECT : 25 en haut à droite, 1 en bas à gauche")
     return graphic
