@@ -1186,10 +1186,14 @@ let maitriseDescriptions = {
     5: "Contrôles optimisés - Couverture complète - Documentation exemplaire"
 };
 
-// Valeurs actuelles sélectionnées
-let currentImpactValue = 0;
-let currentProbabiliteValue = 0;
-let currentMaitriseValue = 3;
+// Valeurs actuelles sélectionnées - INITIALISÉES DEPUIS LE SERVEUR
+let currentImpactValue = {{ evaluation_en_cours.impact_conf or evaluation_en_cours.impact_val or evaluation_en_cours.impact_pre or 0 }};
+let currentProbabiliteValue = {{ evaluation_en_cours.probabilite_conf or evaluation_en_cours.probabilite_val or evaluation_en_cours.probabilite_pre or 0 }};
+let currentMaitriseValue = {{ evaluation_en_cours.niveau_maitrise_conf or evaluation_en_cours.niveau_maitrise_val or evaluation_en_cours.niveau_maitrise_pre or 3 }};
+
+// Valeurs finales stockées (pour la matrice persistante)
+let finalImpactValue = currentImpactValue;
+let finalProbabiliteValue = currentProbabiliteValue;
 
 // ============================================================
 // CHARGEMENT DYNAMIQUE DES PARAMÈTRES
@@ -1200,7 +1204,7 @@ async function chargerParametresEvaluation() {
         if (response.ok) {
             const data = await response.json();
             
-            // Mettre à jour les descriptions sans écraser avec des objets
+            // Mettre à jour les descriptions
             if (data.impact) {
                 for (let niveau in data.impact) {
                     if (data.impact[niveau] && data.impact[niveau].description) {
@@ -1226,13 +1230,7 @@ async function chargerParametresEvaluation() {
             // Mettre à jour les couleurs des baromètres
             mettreAJourCouleursBarometres(data);
             
-            console.log('✅ Paramètres chargés:', {
-                impact: impactDescriptions,
-                probabilite: probabiliteDescriptions
-            });
-            
-            // Rafraîchir l'affichage des descriptions
-            rafraichirDescriptions();
+            console.log('✅ Paramètres chargés');
         }
     } catch (error) {
         console.error('❌ Erreur chargement paramètres:', error);
@@ -1243,7 +1241,6 @@ async function chargerParametresEvaluation() {
 // METTRE À JOUR LES COULEURS DES BAROMÈTRES
 // ============================================================
 function mettreAJourCouleursBarometres(data) {
-    // Mettre à jour les couleurs des impacts
     if (data.impact) {
         for (let i = 1; i <= 5; i++) {
             const element = document.querySelector(`.echelle-item-horizontal[data-type="impact"][data-value="${i}"] .echelle-niveau-horizontal`);
@@ -1253,7 +1250,6 @@ function mettreAJourCouleursBarometres(data) {
         }
     }
     
-    // Mettre à jour les couleurs des probabilités
     if (data.probabilite) {
         for (let i = 1; i <= 5; i++) {
             const element = document.querySelector(`.echelle-item-horizontal[data-type="probabilite"][data-value="${i}"] .echelle-niveau-horizontal`);
@@ -1263,7 +1259,6 @@ function mettreAJourCouleursBarometres(data) {
         }
     }
     
-    // Mettre à jour les couleurs des maîtrises
     if (data.maitrise) {
         for (let i = 1; i <= 5; i++) {
             const element = document.querySelector(`.echelle-item-horizontal[data-type="maitrise"][data-value="${i}"] .echelle-niveau-horizontal`);
@@ -1271,29 +1266,6 @@ function mettreAJourCouleursBarometres(data) {
                 element.style.backgroundColor = data.maitrise[i].couleur;
             }
         }
-    }
-}
-
-// ============================================================
-// RAFRAÎCHIR LES DESCRIPTIONS AFFICHÉES
-// ============================================================
-function rafraichirDescriptions() {
-    // Mettre à jour la description de l'impact
-    const impactDescElement = document.getElementById('impactDescription');
-    if (impactDescElement && currentImpactValue > 0) {
-        impactDescElement.textContent = impactDescriptions[currentImpactValue] || "Sélectionnez le niveau d'impact";
-    }
-    
-    // Mettre à jour la description de la probabilité
-    const probaDescElement = document.getElementById('probabiliteDescription');
-    if (probaDescElement && currentProbabiliteValue > 0) {
-        probaDescElement.textContent = probabiliteDescriptions[currentProbabiliteValue] || "Sélectionnez la probabilité";
-    }
-    
-    // Mettre à jour la description de la maîtrise
-    const maitriseDescElement = document.getElementById('maitriseDescription');
-    if (maitriseDescElement && currentMaitriseValue > 0) {
-        maitriseDescElement.textContent = maitriseDescriptions[currentMaitriseValue] || "Niveau de contrôle existant";
     }
 }
 
@@ -1343,7 +1315,7 @@ function selectionnerEchelle(type, valeur, element) {
         inputElement.value = valeur;
     }
     
-    // Mettre à jour la description avec la bonne valeur
+    // Mettre à jour la description
     const descriptionId = `${type}Description`;
     const descriptionElement = document.getElementById(descriptionId);
     
@@ -1362,72 +1334,67 @@ function selectionnerEchelle(type, valeur, element) {
         }
         descriptionElement.textContent = description;
     }
-    
-    console.log(`✅ Sélectionné: ${type} = ${valeur}`);
 }
 
 // ============================================================
 // RESTAURER LES VALEURS DU BAROMÈTRE
 // ============================================================
 function restaurerValeursBarometre() {
-    const types = ['impact', 'probabilite', 'maitrise'];
-    
-    types.forEach(type => {
-        const input = document.getElementById(`${type}Input`);
-        if (input && input.value && parseInt(input.value) > 0) {
-            const valeur = parseInt(input.value);
+    // Restaurer l'impact
+    if (currentImpactValue > 0) {
+        const impactElement = document.querySelector(`.echelle-item-horizontal[data-type="impact"][data-value="${currentImpactValue}"]`);
+        if (impactElement) {
+            const parent = impactElement.closest('.barometre-echelles-horizontal');
+            const elements = parent.querySelectorAll('.echelle-item-horizontal[data-type="impact"]');
+            elements.forEach(el => el.classList.remove('active'));
+            impactElement.classList.add('active');
             
-            // Mettre à jour la valeur courante
-            if (type === 'impact') currentImpactValue = valeur;
-            if (type === 'probabilite') currentProbabiliteValue = valeur;
-            if (type === 'maitrise') currentMaitriseValue = valeur;
-            
-            const element = document.querySelector(`.echelle-item-horizontal[data-type="${type}"][data-value="${valeur}"]`);
-            if (element) {
-                // Retirer la classe active des autres
-                const parent = element.closest('.barometre-echelles-horizontal');
-                const elements = parent.querySelectorAll(`.echelle-item-horizontal[data-type="${type}"]`);
-                elements.forEach(el => el.classList.remove('active'));
-                element.classList.add('active');
-                
-                // Mettre à jour la description
-                const descriptionId = `${type}Description`;
-                const descriptionElement = document.getElementById(descriptionId);
-                if (descriptionElement) {
-                    let description = '';
-                    switch(type) {
-                        case 'impact':
-                            description = impactDescriptions[valeur] || '';
-                            break;
-                        case 'probabilite':
-                            description = probabiliteDescriptions[valeur] || '';
-                            break;
-                        case 'maitrise':
-                            description = maitriseDescriptions[valeur] || '';
-                            break;
-                    }
-                    descriptionElement.textContent = description;
-                }
-            }
+            const impactDesc = document.getElementById('impactDescription');
+            if (impactDesc) impactDesc.textContent = impactDescriptions[currentImpactValue] || "";
         }
-    });
+        const impactInput = document.getElementById('impactInput');
+        if (impactInput) impactInput.value = currentImpactValue;
+    }
+    
+    // Restaurer la probabilité
+    if (currentProbabiliteValue > 0) {
+        const probaElement = document.querySelector(`.echelle-item-horizontal[data-type="probabilite"][data-value="${currentProbabiliteValue}"]`);
+        if (probaElement) {
+            const parent = probaElement.closest('.barometre-echelles-horizontal');
+            const elements = parent.querySelectorAll('.echelle-item-horizontal[data-type="probabilite"]');
+            elements.forEach(el => el.classList.remove('active'));
+            probaElement.classList.add('active');
+            
+            const probaDesc = document.getElementById('probabiliteDescription');
+            if (probaDesc) probaDesc.textContent = probabiliteDescriptions[currentProbabiliteValue] || "";
+        }
+        const probaInput = document.getElementById('probabiliteInput');
+        if (probaInput) probaInput.value = currentProbabiliteValue;
+    }
+    
+    // Restaurer la maîtrise
+    if (currentMaitriseValue > 0) {
+        const maitriseElement = document.querySelector(`.echelle-item-horizontal[data-type="maitrise"][data-value="${currentMaitriseValue}"]`);
+        if (maitriseElement) {
+            const parent = maitriseElement.closest('.barometre-echelles-horizontal');
+            const elements = parent.querySelectorAll('.echelle-item-horizontal[data-type="maitrise"]');
+            elements.forEach(el => el.classList.remove('active'));
+            maitriseElement.classList.add('active');
+            
+            const maitriseDesc = document.getElementById('maitriseDescription');
+            if (maitriseDesc) maitriseDesc.textContent = maitriseDescriptions[currentMaitriseValue] || "";
+        }
+        const maitriseInput = document.getElementById('maitriseInput');
+        if (maitriseInput) maitriseInput.value = currentMaitriseValue;
+    }
 }
 
 // ============================================================
 // CALCULER LE SCORE PHASE 1
 // ============================================================
 function calculerScorePhase1() {
-    // Récupérer les valeurs depuis les variables globales
     let impactFinal = currentImpactValue;
     let probabiliteFinale = currentProbabiliteValue;
-    
-    // Si les variables globales sont vides, essayer depuis les inputs
-    if (impactFinal === 0) {
-        impactFinal = parseInt(document.getElementById('impactInput')?.value) || 0;
-    }
-    if (probabiliteFinale === 0) {
-        probabiliteFinale = parseInt(document.getElementById('probabiliteInput')?.value) || 0;
-    }
     
     if (impactFinal > 0 && probabiliteFinale > 0) {
         const score = impactFinal * probabiliteFinale;
@@ -1458,16 +1425,17 @@ function calculerScorePhase1() {
         const resultatPhase1 = document.getElementById('resultatPhase1');
         if (resultatPhase1) resultatPhase1.style.display = 'block';
         
-        dessinerMiniMatrice(impactFinal, probabiliteFinale, score);
+        // DESSINER LA MATRICE AVEC LES VALEURS FINALES PERSISTANTES
+        dessinerMiniMatrice(finalImpactValue, finalProbabiliteValue, finalImpactValue * finalProbabiliteValue);
         
-        // Mettre à jour la colonne latérale
+        // Mettre à jour la colonne latérale avec les valeurs finales
         const positionScore = document.getElementById('positionScore');
         const positionImpact = document.getElementById('positionImpact');
         const positionProbabilite = document.getElementById('positionProbabilite');
         
-        if (positionScore) positionScore.textContent = score;
-        if (positionImpact) positionImpact.textContent = impactFinal;
-        if (positionProbabilite) positionProbabilite.textContent = probabiliteFinale;
+        if (positionScore) positionScore.textContent = finalImpactValue * finalProbabiliteValue;
+        if (positionImpact) positionImpact.textContent = finalImpactValue;
+        if (positionProbabilite) positionProbabilite.textContent = finalProbabiliteValue;
     } else {
         const resultatPhase1 = document.getElementById('resultatPhase1');
         if (resultatPhase1) resultatPhase1.style.display = 'none';
@@ -1490,7 +1458,6 @@ function calculerScorePhase2() {
     let impactFinal = currentImpactValue;
     let probabiliteFinale = currentProbabiliteValue;
     
-    // Vérifier si des ajustements sont sélectionnés
     const impactValSelect = document.querySelector('select[name="impact_val"]');
     const probaValSelect = document.querySelector('select[name="probabilite_val"]');
     
@@ -1518,7 +1485,8 @@ function calculerScorePhase2() {
             niveauFinal2.className = `badge bg-${niveau.couleur}`;
         }
         
-        dessinerMiniMatrice(impactFinal, probabiliteFinale, score);
+        // La matrice reste avec les valeurs finales, pas celles en cours d'édition
+        dessinerMiniMatrice(finalImpactValue, finalProbabiliteValue, finalImpactValue * finalProbabiliteValue);
     }
 }
 
@@ -1529,7 +1497,6 @@ function calculerScorePhase3() {
     let impactFinal = currentImpactValue;
     let probabiliteFinale = currentProbabiliteValue;
     
-    // Vérifier si des confirmations sont sélectionnées
     const impactConfSelect = document.querySelector('select[name="impact_conf"]');
     const probaConfSelect = document.querySelector('select[name="probabilite_conf"]');
     
@@ -1559,8 +1526,27 @@ function calculerScorePhase3() {
         }
         if (positionFinale) positionFinale.textContent = `Impact ${impactFinal} / Probabilité ${probabiliteFinale}`;
         
-        dessinerMiniMatrice(impactFinal, probabiliteFinale, score);
+        // La matrice reste avec les valeurs finales
+        dessinerMiniMatrice(finalImpactValue, finalProbabiliteValue, finalImpactValue * finalProbabiliteValue);
     }
+}
+
+// ============================================================
+// METTRE À JOUR LES VALEURS FINALES (APPELÉ APRÈS SAUVEGARDE)
+// ============================================================
+function mettreAJourValeursFinales(impact, probabilite) {
+    finalImpactValue = impact;
+    finalProbabiliteValue = probabilite;
+    dessinerMiniMatrice(finalImpactValue, finalProbabiliteValue, finalImpactValue * finalProbabiliteValue);
+    
+    // Mettre à jour l'affichage dans la colonne latérale
+    const positionScore = document.getElementById('positionScore');
+    const positionImpact = document.getElementById('positionImpact');
+    const positionProbabilite = document.getElementById('positionProbabilite');
+    
+    if (positionScore) positionScore.textContent = finalImpactValue * finalProbabiliteValue;
+    if (positionImpact) positionImpact.textContent = finalImpactValue;
+    if (positionProbabilite) positionProbabilite.textContent = finalProbabiliteValue;
 }
 
 // ============================================================
@@ -1574,7 +1560,7 @@ function calculerNiveauRisque(score) {
 }
 
 // ============================================================
-// DESSINER LA MINI MATRICE
+// DESSINER LA MINI MATRICE - VERSION CORRIGÉE
 // ============================================================
 function dessinerMiniMatrice(impact = 0, probabilite = 0, score = 0) {
     const canvas = document.getElementById('matriceCanvas');
@@ -1609,19 +1595,31 @@ function dessinerMiniMatrice(impact = 0, probabilite = 0, score = 0) {
         }
     }
     
-    // Positionner le point
+    // Positionner le point AVEC LES VALEURS FINALES
     if (impact > 0 && probabilite > 0) {
         const x = (probabilite - 1) * cellSize + cellSize / 2;
         const y = (5 - impact) * cellSize + cellSize / 2;
         
-        ctx.fillStyle = 'red';
+        ctx.fillStyle = '#e74c3c';
+        ctx.shadowBlur = 0;
         ctx.beginPath();
-        ctx.arc(x, y, 6, 0, 2 * Math.PI);
+        ctx.arc(x, y, 8, 0, 2 * Math.PI);
         ctx.fill();
         
+        // Contour blanc
         ctx.strokeStyle = 'white';
-        ctx.lineWidth = 2;
+        ctx.lineWidth = 2.5;
+        ctx.beginPath();
+        ctx.arc(x, y, 8, 0, 2 * Math.PI);
         ctx.stroke();
+        
+        // Point central blanc
+        ctx.fillStyle = 'white';
+        ctx.beginPath();
+        ctx.arc(x, y, 3, 0, 2 * Math.PI);
+        ctx.fill();
+        
+        console.log(`🎯 Point matrice final: Impact ${impact}, Probabilité ${probabilite} → (${x}, ${y})`);
     }
 }
 
@@ -1629,32 +1627,46 @@ function dessinerMiniMatrice(impact = 0, probabilite = 0, score = 0) {
 // COULEUR DES CELLULES
 // ============================================================
 function getCouleurCellule(score) {
-    if (score <= 4) return '#28a745';
-    if (score <= 10) return '#ffc107';
-    if (score <= 16) return '#ff8c00';
-    return '#dc3545';
+    if (score <= 4) return '#27ae60';
+    if (score <= 10) return '#f39c12';
+    if (score <= 16) return '#e67e22';
+    return '#c0392b';
 }
 
 // ============================================================
-// FORCER LE RECALCUL AVEC LES VALEURS FINALES
+// ZOOM AVANT À L'OUVERTURE DE LA PAGE
 // ============================================================
-function forcerRecalculAvecValeursFinales() {
-    // Récupérer les valeurs depuis le serveur (via les éléments HTML)
-    const impactInput = document.getElementById('impactInput');
-    const probaInput = document.getElementById('probabiliteInput');
+const ZOOM_LEVEL = 0.85; // 85% pour voir plus large
+
+function applyZoom() {
+    // Appliquer le zoom avec transform scale
+    document.body.style.transform = `scale(${ZOOM_LEVEL})`;
+    document.body.style.transformOrigin = 'top left';
     
-    if (impactInput && impactInput.value) {
-        currentImpactValue = parseInt(impactInput.value);
-    }
-    if (probaInput && probaInput.value) {
-        currentProbabiliteValue = parseInt(probaInput.value);
+    // Ajuster la largeur du body pour compenser le scale
+    const scaleFactor = 1 / ZOOM_LEVEL;
+    document.body.style.width = `${scaleFactor * 100}%`;
+    document.body.style.minHeight = `${scaleFactor * 100}vh`;
+    
+    // Ajuster les conteneurs
+    const containers = document.querySelectorAll('.container, .container-fluid');
+    containers.forEach(container => {
+        container.style.maxWidth = 'none';
+        container.style.width = '100%';
+    });
+    
+    // Éviter le débordement horizontal
+    document.documentElement.style.overflowX = 'hidden';
+    document.body.style.overflowX = 'hidden';
+    
+    // Ajuster les canvas
+    const canvas = document.getElementById('matriceCanvas');
+    if (canvas) {
+        canvas.style.width = `${200 * ZOOM_LEVEL}px`;
+        canvas.style.height = `${200 * ZOOM_LEVEL}px`;
     }
     
-    if (currentImpactValue > 0 && currentProbabiliteValue > 0) {
-        restaurerValeursBarometre();
-        calculerScorePhase1();
-        dessinerMiniMatrice(currentImpactValue, currentProbabiliteValue, currentImpactValue * currentProbabiliteValue);
-    }
+    console.log(`🔍 Zoom appliqué: ${ZOOM_LEVEL * 100}%`);
 }
 
 // ============================================================
@@ -1739,9 +1751,9 @@ function exporterEvaluationCourante() {
             </div>
             <div class="section">
                 <h3>Résumé de l'Évaluation</h3>
-                <p>Impact: ${currentImpactValue}/5</p>
-                <p>Probabilité: ${currentProbabiliteValue}/5</p>
-                <p>Score: ${currentImpactValue * currentProbabiliteValue}</p>
+                <p>Impact final: ${finalImpactValue}/5</p>
+                <p>Probabilité finale: ${finalProbabiliteValue}/5</p>
+                <p>Score final: ${finalImpactValue * finalProbabiliteValue}</p>
             </div>
         </body>
         </html>
@@ -1757,37 +1769,43 @@ function exporterEvaluationCourante() {
 // INITIALISATION AU CHARGEMENT
 // ============================================================
 document.addEventListener('DOMContentLoaded', function() {
-    // Charger les paramètres depuis le serveur
+    // Appliquer le zoom immédiatement
+    applyZoom();
+    
+    // Initialiser les valeurs finales depuis le serveur
+    finalImpactValue = currentImpactValue;
+    finalProbabiliteValue = currentProbabiliteValue;
+    
+    // Charger les paramètres
     chargerParametresEvaluation().then(() => {
-        // Restaurer les valeurs sauvegardées
-        forcerRecalculAvecValeursFinales();
-        
-        // Initialiser les événements
-        initialiserBarometre();
-        
-        // Calculer les scores
+        restaurerValeursBarometre();
         calculerScorePhase1();
         calculerScorePhase2();
         calculerScorePhase3();
-        dessinerMiniMatrice();
         
-        // Gestion des onglets
-        const tabs = document.querySelectorAll('button[data-bs-toggle="pill"]');
-        tabs.forEach(tab => {
-            tab.addEventListener('shown.bs.tab', function(event) {
-                localStorage.setItem('activeEvaluationTab', event.target.id);
-            });
-        });
+        // Dessiner la matrice avec les valeurs finales persistantes
+        dessinerMiniMatrice(finalImpactValue, finalProbabiliteValue, finalImpactValue * finalProbabiliteValue);
         
-        const activeTabId = localStorage.getItem('activeEvaluationTab');
-        if (activeTabId) {
-            const activeTab = document.getElementById(activeTabId);
-            if (activeTab) {
-                const tab = new bootstrap.Tab(activeTab);
-                tab.show();
-            }
-        }
+        // Initialiser les événements du baromètre
+        initialiserBarometre();
     });
+    
+    // Gestion des onglets
+    const tabs = document.querySelectorAll('button[data-bs-toggle="pill"]');
+    tabs.forEach(tab => {
+        tab.addEventListener('shown.bs.tab', function(event) {
+            localStorage.setItem('activeEvaluationTab', event.target.id);
+        });
+    });
+    
+    const activeTabId = localStorage.getItem('activeEvaluationTab');
+    if (activeTabId) {
+        const activeTab = document.getElementById(activeTabId);
+        if (activeTab) {
+            const tab = new bootstrap.Tab(activeTab);
+            tab.show();
+        }
+    }
     
     // Désactiver les boutons de soumission pendant le traitement
     document.querySelectorAll('form').forEach(form => {
@@ -1799,9 +1817,745 @@ document.addEventListener('DOMContentLoaded', function() {
             }
         });
     });
+    
+    // Réappliquer le zoom après chargement complet
+    setTimeout(() => {
+        applyZoom();
+        dessinerMiniMatrice(finalImpactValue, finalProbabiliteValue, finalImpactValue * finalProbabiliteValue);
+    }, 100);
 });
 
-window.toggleZoom = toggleZoom;
+// Gérer le redimensionnement
+let resizeTimeout;
+window.addEventListener('resize', function() {
+    clearTimeout(resizeTimeout);
+    resizeTimeout = setTimeout(function() {
+        applyZoom();
+        dessinerMiniMatrice(finalImpactValue, finalProbabiliteValue, finalImpactValue * finalProbabiliteValue);
+    }, 250);
+});
+
+// Gérer l'impression
+window.addEventListener('beforeprint', function() {
+    document.body.style.transform = 'scale(1)';
+    document.body.style.width = '100%';
+});
+
+window.addEventListener('afterprint', function() {
+    setTimeout(() => {
+        applyZoom();
+        dessinerMiniMatrice(finalImpactValue, finalProbabiliteValue, finalImpactValue * finalProbabiliteValue);
+    }, 100);
+});
+
+window.toggleZoom = function(enabled) {
+    if (enabled) {
+        applyZoom();
+    } else {
+        document.body.style.transform = 'scale(1)';
+        document.body.style.width = '100%';
+    }
+};
+</script>
+{% endblock %}{% block scripts %}
+<script>
+// ============================================================
+// STRUCTURE DES DONNÉES - Initialisation correcte
+// ============================================================
+let impactDescriptions = {
+    1: "Impact minime sur les objectifs - Pertes < 1% du CA",
+    2: "Impact limité sur les objectifs - Pertes 1-5% CA",
+    3: "Impact significatif sur les objectifs - Pertes 5-10% CA",
+    4: "Impact majeur sur les objectifs - Pertes 10-20% CA",
+    5: "Impact catastrophique sur les objectifs - Pertes > 20% CA"
+};
+
+let probabiliteDescriptions = {
+    1: "Moins d'une fois tous les 5 ans - Probabilité < 5%",
+    2: "Une fois tous les 1-2 ans - Probabilité 5-20%",
+    3: "Plusieurs fois par an - Probabilité 20-50%",
+    4: "Une fois par mois - Probabilité 50-80%",
+    5: "Une fois par semaine ou plus - Probabilité > 80%"
+};
+
+let maitriseDescriptions = {
+    1: "Contrôles inexistants ou inefficaces - Aucune documentation",
+    2: "Contrôles basiques - Couverture limitée - Documentation incomplète",
+    3: "Contrôles standard - Couverture acceptable - Documentation de base",
+    4: "Contrôles robustes - Couverture étendue - Documentation complète",
+    5: "Contrôles optimisés - Couverture complète - Documentation exemplaire"
+};
+
+// Valeurs actuelles sélectionnées - INITIALISÉES DEPUIS LE SERVEUR
+let currentImpactValue = {{ evaluation_en_cours.impact_conf or evaluation_en_cours.impact_val or evaluation_en_cours.impact_pre or 0 }};
+let currentProbabiliteValue = {{ evaluation_en_cours.probabilite_conf or evaluation_en_cours.probabilite_val or evaluation_en_cours.probabilite_pre or 0 }};
+let currentMaitriseValue = {{ evaluation_en_cours.niveau_maitrise_conf or evaluation_en_cours.niveau_maitrise_val or evaluation_en_cours.niveau_maitrise_pre or 3 }};
+
+// Valeurs finales stockées (pour la matrice persistante)
+let finalImpactValue = currentImpactValue;
+let finalProbabiliteValue = currentProbabiliteValue;
+
+// ============================================================
+// CHARGEMENT DYNAMIQUE DES PARAMÈTRES
+// ============================================================
+async function chargerParametresEvaluation() {
+    try {
+        const response = await fetch('/api/parametres-evaluation');
+        if (response.ok) {
+            const data = await response.json();
+            
+            // Mettre à jour les descriptions
+            if (data.impact) {
+                for (let niveau in data.impact) {
+                    if (data.impact[niveau] && data.impact[niveau].description) {
+                        impactDescriptions[niveau] = data.impact[niveau].description;
+                    }
+                }
+            }
+            if (data.probabilite) {
+                for (let niveau in data.probabilite) {
+                    if (data.probabilite[niveau] && data.probabilite[niveau].description) {
+                        probabiliteDescriptions[niveau] = data.probabilite[niveau].description;
+                    }
+                }
+            }
+            if (data.maitrise) {
+                for (let niveau in data.maitrise) {
+                    if (data.maitrise[niveau] && data.maitrise[niveau].description) {
+                        maitriseDescriptions[niveau] = data.maitrise[niveau].description;
+                    }
+                }
+            }
+            
+            // Mettre à jour les couleurs des baromètres
+            mettreAJourCouleursBarometres(data);
+            
+            console.log('✅ Paramètres chargés');
+        }
+    } catch (error) {
+        console.error('❌ Erreur chargement paramètres:', error);
+    }
+}
+
+// ============================================================
+// METTRE À JOUR LES COULEURS DES BAROMÈTRES
+// ============================================================
+function mettreAJourCouleursBarometres(data) {
+    if (data.impact) {
+        for (let i = 1; i <= 5; i++) {
+            const element = document.querySelector(`.echelle-item-horizontal[data-type="impact"][data-value="${i}"] .echelle-niveau-horizontal`);
+            if (element && data.impact[i] && data.impact[i].couleur) {
+                element.style.backgroundColor = data.impact[i].couleur;
+            }
+        }
+    }
+    
+    if (data.probabilite) {
+        for (let i = 1; i <= 5; i++) {
+            const element = document.querySelector(`.echelle-item-horizontal[data-type="probabilite"][data-value="${i}"] .echelle-niveau-horizontal`);
+            if (element && data.probabilite[i] && data.probabilite[i].couleur) {
+                element.style.backgroundColor = data.probabilite[i].couleur;
+            }
+        }
+    }
+    
+    if (data.maitrise) {
+        for (let i = 1; i <= 5; i++) {
+            const element = document.querySelector(`.echelle-item-horizontal[data-type="maitrise"][data-value="${i}"] .echelle-niveau-horizontal`);
+            if (element && data.maitrise[i] && data.maitrise[i].couleur) {
+                element.style.backgroundColor = data.maitrise[i].couleur;
+            }
+        }
+    }
+}
+
+// ============================================================
+// INITIALISATION DU BAROMÈTRE
+// ============================================================
+function initialiserBarometre() {
+    document.querySelectorAll('.barometre-echelles-horizontal').forEach(barometre => {
+        barometre.addEventListener('click', function(e) {
+            const echelleItem = e.target.closest('.echelle-item-horizontal');
+            if (echelleItem) {
+                const valeur = parseInt(echelleItem.getAttribute('data-value'));
+                const type = echelleItem.getAttribute('data-type');
+                
+                selectionnerEchelle(type, valeur, echelleItem);
+                calculerScorePhase1();
+            }
+        });
+    });
+}
+
+// ============================================================
+// SÉLECTIONNER UNE ÉCHELLE
+// ============================================================
+function selectionnerEchelle(type, valeur, element) {
+    // Mettre à jour la valeur courante
+    if (type === 'impact') {
+        currentImpactValue = valeur;
+    } else if (type === 'probabilite') {
+        currentProbabiliteValue = valeur;
+    } else if (type === 'maitrise') {
+        currentMaitriseValue = valeur;
+    }
+    
+    // Retirer la classe active des éléments du même type
+    const parent = element.closest('.barometre-echelles-horizontal');
+    const elements = parent.querySelectorAll(`.echelle-item-horizontal[data-type="${type}"]`);
+    elements.forEach(el => el.classList.remove('active'));
+    
+    // Activer l'élément sélectionné
+    element.classList.add('active');
+    
+    // Mettre à jour l'input caché
+    const inputId = `${type}Input`;
+    const inputElement = document.getElementById(inputId);
+    if (inputElement) {
+        inputElement.value = valeur;
+    }
+    
+    // Mettre à jour la description
+    const descriptionId = `${type}Description`;
+    const descriptionElement = document.getElementById(descriptionId);
+    
+    if (descriptionElement) {
+        let description = '';
+        switch(type) {
+            case 'impact':
+                description = impactDescriptions[valeur] || "Sélectionnez le niveau d'impact";
+                break;
+            case 'probabilite':
+                description = probabiliteDescriptions[valeur] || "Sélectionnez la probabilité";
+                break;
+            case 'maitrise':
+                description = maitriseDescriptions[valeur] || "Niveau de contrôle existant";
+                break;
+        }
+        descriptionElement.textContent = description;
+    }
+}
+
+// ============================================================
+// RESTAURER LES VALEURS DU BAROMÈTRE
+// ============================================================
+function restaurerValeursBarometre() {
+    // Restaurer l'impact
+    if (currentImpactValue > 0) {
+        const impactElement = document.querySelector(`.echelle-item-horizontal[data-type="impact"][data-value="${currentImpactValue}"]`);
+        if (impactElement) {
+            const parent = impactElement.closest('.barometre-echelles-horizontal');
+            const elements = parent.querySelectorAll('.echelle-item-horizontal[data-type="impact"]');
+            elements.forEach(el => el.classList.remove('active'));
+            impactElement.classList.add('active');
+            
+            const impactDesc = document.getElementById('impactDescription');
+            if (impactDesc) impactDesc.textContent = impactDescriptions[currentImpactValue] || "";
+        }
+        const impactInput = document.getElementById('impactInput');
+        if (impactInput) impactInput.value = currentImpactValue;
+    }
+    
+    // Restaurer la probabilité
+    if (currentProbabiliteValue > 0) {
+        const probaElement = document.querySelector(`.echelle-item-horizontal[data-type="probabilite"][data-value="${currentProbabiliteValue}"]`);
+        if (probaElement) {
+            const parent = probaElement.closest('.barometre-echelles-horizontal');
+            const elements = parent.querySelectorAll('.echelle-item-horizontal[data-type="probabilite"]');
+            elements.forEach(el => el.classList.remove('active'));
+            probaElement.classList.add('active');
+            
+            const probaDesc = document.getElementById('probabiliteDescription');
+            if (probaDesc) probaDesc.textContent = probabiliteDescriptions[currentProbabiliteValue] || "";
+        }
+        const probaInput = document.getElementById('probabiliteInput');
+        if (probaInput) probaInput.value = currentProbabiliteValue;
+    }
+    
+    // Restaurer la maîtrise
+    if (currentMaitriseValue > 0) {
+        const maitriseElement = document.querySelector(`.echelle-item-horizontal[data-type="maitrise"][data-value="${currentMaitriseValue}"]`);
+        if (maitriseElement) {
+            const parent = maitriseElement.closest('.barometre-echelles-horizontal');
+            const elements = parent.querySelectorAll('.echelle-item-horizontal[data-type="maitrise"]');
+            elements.forEach(el => el.classList.remove('active'));
+            maitriseElement.classList.add('active');
+            
+            const maitriseDesc = document.getElementById('maitriseDescription');
+            if (maitriseDesc) maitriseDesc.textContent = maitriseDescriptions[currentMaitriseValue] || "";
+        }
+        const maitriseInput = document.getElementById('maitriseInput');
+        if (maitriseInput) maitriseInput.value = currentMaitriseValue;
+    }
+}
+
+// ============================================================
+// CALCULER LE SCORE PHASE 1
+// ============================================================
+function calculerScorePhase1() {
+    let impactFinal = currentImpactValue;
+    let probabiliteFinale = currentProbabiliteValue;
+    
+    if (impactFinal > 0 && probabiliteFinale > 0) {
+        const score = impactFinal * probabiliteFinale;
+        const niveau = calculerNiveauRisque(score);
+        
+        // Mettre à jour l'affichage
+        const scoreAffiche = document.getElementById('scoreAffiche');
+        const niveauAffiche = document.getElementById('niveauAffiche');
+        
+        if (scoreAffiche) scoreAffiche.textContent = score;
+        if (niveauAffiche) {
+            niveauAffiche.textContent = niveau.nom;
+            niveauAffiche.className = `badge bg-${niveau.couleur} fs-6`;
+        }
+        
+        // Mettre à jour le résultat détaillé
+        const scoreCalcule = document.getElementById('scoreCalculé');
+        const niveauRisque = document.getElementById('niveauRisque');
+        const positionMatrice = document.getElementById('positionMatrice');
+        
+        if (scoreCalcule) scoreCalcule.textContent = score;
+        if (niveauRisque) {
+            niveauRisque.textContent = niveau.nom;
+            niveauRisque.className = `badge bg-${niveau.couleur}`;
+        }
+        if (positionMatrice) positionMatrice.textContent = `Impact ${impactFinal} / Probabilité ${probabiliteFinale}`;
+        
+        const resultatPhase1 = document.getElementById('resultatPhase1');
+        if (resultatPhase1) resultatPhase1.style.display = 'block';
+        
+        // DESSINER LA MATRICE AVEC LES VALEURS FINALES PERSISTANTES
+        dessinerMiniMatrice(finalImpactValue, finalProbabiliteValue, finalImpactValue * finalProbabiliteValue);
+        
+        // Mettre à jour la colonne latérale avec les valeurs finales
+        const positionScore = document.getElementById('positionScore');
+        const positionImpact = document.getElementById('positionImpact');
+        const positionProbabilite = document.getElementById('positionProbabilite');
+        
+        if (positionScore) positionScore.textContent = finalImpactValue * finalProbabiliteValue;
+        if (positionImpact) positionImpact.textContent = finalImpactValue;
+        if (positionProbabilite) positionProbabilite.textContent = finalProbabiliteValue;
+    } else {
+        const resultatPhase1 = document.getElementById('resultatPhase1');
+        if (resultatPhase1) resultatPhase1.style.display = 'none';
+        
+        const scoreAffiche = document.getElementById('scoreAffiche');
+        const niveauAffiche = document.getElementById('niveauAffiche');
+        
+        if (scoreAffiche) scoreAffiche.textContent = '0';
+        if (niveauAffiche) {
+            niveauAffiche.textContent = 'Non évalué';
+            niveauAffiche.className = 'badge bg-secondary fs-6';
+        }
+    }
+}
+
+// ============================================================
+// CALCULER LE SCORE PHASE 2
+// ============================================================
+function calculerScorePhase2() {
+    let impactFinal = currentImpactValue;
+    let probabiliteFinale = currentProbabiliteValue;
+    
+    const impactValSelect = document.querySelector('select[name="impact_val"]');
+    const probaValSelect = document.querySelector('select[name="probabilite_val"]');
+    
+    if (impactValSelect && impactValSelect.value && parseInt(impactValSelect.value) > 0) {
+        impactFinal = parseInt(impactValSelect.value);
+    }
+    if (probaValSelect && probaValSelect.value && parseInt(probaValSelect.value) > 0) {
+        probabiliteFinale = parseInt(probaValSelect.value);
+    }
+    
+    if (impactFinal > 0 && probabiliteFinale > 0) {
+        const score = impactFinal * probabiliteFinale;
+        const niveau = calculerNiveauRisque(score);
+        
+        const impactFinal2 = document.getElementById('impactFinal2');
+        const probabiliteFinale2 = document.getElementById('probabiliteFinale2');
+        const scoreFinal2 = document.getElementById('scoreFinal2');
+        const niveauFinal2 = document.getElementById('niveauFinal2');
+        
+        if (impactFinal2) impactFinal2.textContent = impactFinal;
+        if (probabiliteFinale2) probabiliteFinale2.textContent = probabiliteFinale;
+        if (scoreFinal2) scoreFinal2.textContent = score;
+        if (niveauFinal2) {
+            niveauFinal2.textContent = niveau.nom;
+            niveauFinal2.className = `badge bg-${niveau.couleur}`;
+        }
+        
+        // La matrice reste avec les valeurs finales, pas celles en cours d'édition
+        dessinerMiniMatrice(finalImpactValue, finalProbabiliteValue, finalImpactValue * finalProbabiliteValue);
+    }
+}
+
+// ============================================================
+// CALCULER LE SCORE PHASE 3
+// ============================================================
+function calculerScorePhase3() {
+    let impactFinal = currentImpactValue;
+    let probabiliteFinale = currentProbabiliteValue;
+    
+    const impactConfSelect = document.querySelector('select[name="impact_conf"]');
+    const probaConfSelect = document.querySelector('select[name="probabilite_conf"]');
+    
+    if (impactConfSelect && impactConfSelect.value && parseInt(impactConfSelect.value) > 0) {
+        impactFinal = parseInt(impactConfSelect.value);
+    }
+    if (probaConfSelect && probaConfSelect.value && parseInt(probaConfSelect.value) > 0) {
+        probabiliteFinale = parseInt(probaConfSelect.value);
+    }
+    
+    if (impactFinal > 0 && probabiliteFinale > 0) {
+        const score = impactFinal * probabiliteFinale;
+        const niveau = calculerNiveauRisque(score);
+        
+        const impactFinal3 = document.getElementById('impactFinal3');
+        const probabiliteFinale3 = document.getElementById('probabiliteFinale3');
+        const scoreFinal3 = document.getElementById('scoreFinal3');
+        const niveauFinal3 = document.getElementById('niveauFinal3');
+        const positionFinale = document.getElementById('positionFinale');
+        
+        if (impactFinal3) impactFinal3.textContent = impactFinal;
+        if (probabiliteFinale3) probabiliteFinale3.textContent = probabiliteFinale;
+        if (scoreFinal3) scoreFinal3.textContent = score;
+        if (niveauFinal3) {
+            niveauFinal3.textContent = niveau.nom;
+            niveauFinal3.className = `badge bg-${niveau.couleur}`;
+        }
+        if (positionFinale) positionFinale.textContent = `Impact ${impactFinal} / Probabilité ${probabiliteFinale}`;
+        
+        // La matrice reste avec les valeurs finales
+        dessinerMiniMatrice(finalImpactValue, finalProbabiliteValue, finalImpactValue * finalProbabiliteValue);
+    }
+}
+
+// ============================================================
+// METTRE À JOUR LES VALEURS FINALES (APPELÉ APRÈS SAUVEGARDE)
+// ============================================================
+function mettreAJourValeursFinales(impact, probabilite) {
+    finalImpactValue = impact;
+    finalProbabiliteValue = probabilite;
+    dessinerMiniMatrice(finalImpactValue, finalProbabiliteValue, finalImpactValue * finalProbabiliteValue);
+    
+    // Mettre à jour l'affichage dans la colonne latérale
+    const positionScore = document.getElementById('positionScore');
+    const positionImpact = document.getElementById('positionImpact');
+    const positionProbabilite = document.getElementById('positionProbabilite');
+    
+    if (positionScore) positionScore.textContent = finalImpactValue * finalProbabiliteValue;
+    if (positionImpact) positionImpact.textContent = finalImpactValue;
+    if (positionProbabilite) positionProbabilite.textContent = finalProbabiliteValue;
+}
+
+// ============================================================
+// CALCULER LE NIVEAU DE RISQUE
+// ============================================================
+function calculerNiveauRisque(score) {
+    if (score <= 4) return { nom: 'Faible', couleur: 'success' };
+    if (score <= 10) return { nom: 'Moyen', couleur: 'warning' };
+    if (score <= 16) return { nom: 'Élevé', couleur: 'danger' };
+    return { nom: 'Critique', couleur: 'dark' };
+}
+
+// ============================================================
+// DESSINER LA MINI MATRICE - VERSION CORRIGÉE
+// ============================================================
+function dessinerMiniMatrice(impact = 0, probabilite = 0, score = 0) {
+    const canvas = document.getElementById('matriceCanvas');
+    if (!canvas) return;
+    
+    const ctx = canvas.getContext('2d');
+    const size = 200;
+    const cellSize = size / 5;
+    
+    canvas.width = size;
+    canvas.height = size;
+    
+    ctx.clearRect(0, 0, size, size);
+    
+    // Dessiner la grille
+    for (let i = 0; i < 5; i++) {
+        for (let j = 0; j < 5; j++) {
+            const scoreCell = (5 - i) * (j + 1);
+            const couleur = getCouleurCellule(scoreCell);
+            
+            ctx.fillStyle = couleur;
+            ctx.fillRect(j * cellSize, i * cellSize, cellSize, cellSize);
+            
+            ctx.strokeStyle = '#ddd';
+            ctx.strokeRect(j * cellSize, i * cellSize, cellSize, cellSize);
+            
+            ctx.fillStyle = scoreCell > 12 ? 'white' : 'black';
+            ctx.font = '10px Arial';
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+            ctx.fillText(scoreCell.toString(), j * cellSize + cellSize / 2, i * cellSize + cellSize / 2);
+        }
+    }
+    
+    // Positionner le point AVEC LES VALEURS FINALES
+    if (impact > 0 && probabilite > 0) {
+        const x = (probabilite - 1) * cellSize + cellSize / 2;
+        const y = (5 - impact) * cellSize + cellSize / 2;
+        
+        ctx.fillStyle = '#e74c3c';
+        ctx.shadowBlur = 0;
+        ctx.beginPath();
+        ctx.arc(x, y, 8, 0, 2 * Math.PI);
+        ctx.fill();
+        
+        // Contour blanc
+        ctx.strokeStyle = 'white';
+        ctx.lineWidth = 2.5;
+        ctx.beginPath();
+        ctx.arc(x, y, 8, 0, 2 * Math.PI);
+        ctx.stroke();
+        
+        // Point central blanc
+        ctx.fillStyle = 'white';
+        ctx.beginPath();
+        ctx.arc(x, y, 3, 0, 2 * Math.PI);
+        ctx.fill();
+        
+        console.log(`🎯 Point matrice final: Impact ${impact}, Probabilité ${probabilite} → (${x}, ${y})`);
+    }
+}
+
+// ============================================================
+// COULEUR DES CELLULES
+// ============================================================
+function getCouleurCellule(score) {
+    if (score <= 4) return '#27ae60';
+    if (score <= 10) return '#f39c12';
+    if (score <= 16) return '#e67e22';
+    return '#c0392b';
+}
+
+// ============================================================
+// ZOOM AVANT À L'OUVERTURE DE LA PAGE
+// ============================================================
+const ZOOM_LEVEL = 0.85; // 85% pour voir plus large
+
+function applyZoom() {
+    // Appliquer le zoom avec transform scale
+    document.body.style.transform = `scale(${ZOOM_LEVEL})`;
+    document.body.style.transformOrigin = 'top left';
+    
+    // Ajuster la largeur du body pour compenser le scale
+    const scaleFactor = 1 / ZOOM_LEVEL;
+    document.body.style.width = `${scaleFactor * 100}%`;
+    document.body.style.minHeight = `${scaleFactor * 100}vh`;
+    
+    // Ajuster les conteneurs
+    const containers = document.querySelectorAll('.container, .container-fluid');
+    containers.forEach(container => {
+        container.style.maxWidth = 'none';
+        container.style.width = '100%';
+    });
+    
+    // Éviter le débordement horizontal
+    document.documentElement.style.overflowX = 'hidden';
+    document.body.style.overflowX = 'hidden';
+    
+    // Ajuster les canvas
+    const canvas = document.getElementById('matriceCanvas');
+    if (canvas) {
+        canvas.style.width = `${200 * ZOOM_LEVEL}px`;
+        canvas.style.height = `${200 * ZOOM_LEVEL}px`;
+    }
+    
+    console.log(`🔍 Zoom appliqué: ${ZOOM_LEVEL * 100}%`);
+}
+
+// ============================================================
+// CHANGER DE RISQUE
+// ============================================================
+function changerRisque() {
+    const select = document.getElementById('selectRisque');
+    const selectedOption = select.options[select.selectedIndex];
+    const risqueId = select.value;
+    const isArchived = selectedOption.getAttribute('data-archived') === 'true';
+    
+    if (!isArchived) {
+        window.location.href = `/risque/${risqueId}/evaluation-triphase`;
+    } else {
+        alert('Ce risque est archivé. Veuillez sélectionner un risque actif.');
+        select.value = '{{ risque.id }}';
+    }
+}
+
+// ============================================================
+// IMPRIMER LE GUIDE
+// ============================================================
+function imprimerGuide() {
+    const modal = document.getElementById('guideModal');
+    const modalContent = modal.querySelector('.modal-content').cloneNode(true);
+    
+    const footer = modalContent.querySelector('.modal-footer');
+    if (footer) footer.remove();
+    
+    const printWindow = window.open('', '_blank');
+    printWindow.document.write(`
+        <html>
+        <head>
+            <title>Guide d'Évaluation Triphase</title>
+            <style>
+                body { font-family: Arial, sans-serif; margin: 20px; }
+                .card { margin-bottom: 15px; border: 1px solid #ddd; border-radius: 5px; }
+                .card-header { padding: 10px; font-weight: bold; }
+                .table { width: 100%; margin-top: 15px; }
+                .echelle-item { display: flex; align-items: center; margin-bottom: 8px; }
+                .echelle-niveau { width: 20px; height: 20px; border-radius: 3px; margin-right: 10px; }
+                @media print { .card { break-inside: avoid; } }
+            </style>
+        </head>
+        <body>
+            <h1>Guide d'Évaluation Triphase - Référentiel Complet</h1>
+            ${modalContent.innerHTML}
+        </body>
+        </html>
+    `);
+    printWindow.document.close();
+    printWindow.print();
+}
+
+// ============================================================
+// EXPORTER L'ÉVALUATION COURANTE
+// ============================================================
+function exporterEvaluationCourante() {
+    const risqueRef = "{{ risque.reference }}";
+    const risqueIntitule = "{{ risque.intitule }}";
+    const dateExport = new Date().toLocaleDateString('fr-FR');
+    
+    const content = `
+        <html>
+        <head>
+            <title>Évaluation ${risqueRef}</title>
+            <style>
+                body { font-family: Arial, sans-serif; margin: 20px; }
+                .header { text-align: center; border-bottom: 2px solid #333; padding-bottom: 10px; margin-bottom: 20px; }
+                .badge { padding: 5px 10px; border-radius: 4px; color: white; font-weight: bold; }
+                .badge-faible { background: #27ae60; }
+                .badge-moyen { background: #f39c12; }
+                .badge-eleve { background: #ff8c00; }
+                .badge-critique { background: #e74c3c; }
+            </style>
+        </head>
+        <body>
+            <div class="header">
+                <h1>ÉVALUATION TRIPHASÉE DU RISQUE</h1>
+                <h2>${risqueRef} - ${risqueIntitule}</h2>
+                <p>Export généré le ${dateExport}</p>
+            </div>
+            <div class="section">
+                <h3>Résumé de l'Évaluation</h3>
+                <p>Impact final: ${finalImpactValue}/5</p>
+                <p>Probabilité finale: ${finalProbabiliteValue}/5</p>
+                <p>Score final: ${finalImpactValue * finalProbabiliteValue}</p>
+            </div>
+        </body>
+        </html>
+    `;
+    
+    const printWindow = window.open('', '_blank');
+    printWindow.document.write(content);
+    printWindow.document.close();
+    printWindow.print();
+}
+
+// ============================================================
+// INITIALISATION AU CHARGEMENT
+// ============================================================
+document.addEventListener('DOMContentLoaded', function() {
+    // Appliquer le zoom immédiatement
+    applyZoom();
+    
+    // Initialiser les valeurs finales depuis le serveur
+    finalImpactValue = currentImpactValue;
+    finalProbabiliteValue = currentProbabiliteValue;
+    
+    // Charger les paramètres
+    chargerParametresEvaluation().then(() => {
+        restaurerValeursBarometre();
+        calculerScorePhase1();
+        calculerScorePhase2();
+        calculerScorePhase3();
+        
+        // Dessiner la matrice avec les valeurs finales persistantes
+        dessinerMiniMatrice(finalImpactValue, finalProbabiliteValue, finalImpactValue * finalProbabiliteValue);
+        
+        // Initialiser les événements du baromètre
+        initialiserBarometre();
+    });
+    
+    // Gestion des onglets
+    const tabs = document.querySelectorAll('button[data-bs-toggle="pill"]');
+    tabs.forEach(tab => {
+        tab.addEventListener('shown.bs.tab', function(event) {
+            localStorage.setItem('activeEvaluationTab', event.target.id);
+        });
+    });
+    
+    const activeTabId = localStorage.getItem('activeEvaluationTab');
+    if (activeTabId) {
+        const activeTab = document.getElementById(activeTabId);
+        if (activeTab) {
+            const tab = new bootstrap.Tab(activeTab);
+            tab.show();
+        }
+    }
+    
+    // Désactiver les boutons de soumission pendant le traitement
+    document.querySelectorAll('form').forEach(form => {
+        form.addEventListener('submit', function(e) {
+            const submitBtn = this.querySelector('button[type="submit"]');
+            if (submitBtn) {
+                submitBtn.disabled = true;
+                submitBtn.innerHTML = '<i class="fas fa-spinner fa-spin me-2"></i>Traitement...';
+            }
+        });
+    });
+    
+    // Réappliquer le zoom après chargement complet
+    setTimeout(() => {
+        applyZoom();
+        dessinerMiniMatrice(finalImpactValue, finalProbabiliteValue, finalImpactValue * finalProbabiliteValue);
+    }, 100);
+});
+
+// Gérer le redimensionnement
+let resizeTimeout;
+window.addEventListener('resize', function() {
+    clearTimeout(resizeTimeout);
+    resizeTimeout = setTimeout(function() {
+        applyZoom();
+        dessinerMiniMatrice(finalImpactValue, finalProbabiliteValue, finalImpactValue * finalProbabiliteValue);
+    }, 250);
+});
+
+// Gérer l'impression
+window.addEventListener('beforeprint', function() {
+    document.body.style.transform = 'scale(1)';
+    document.body.style.width = '100%';
+});
+
+window.addEventListener('afterprint', function() {
+    setTimeout(() => {
+        applyZoom();
+        dessinerMiniMatrice(finalImpactValue, finalProbabiliteValue, finalImpactValue * finalProbabiliteValue);
+    }, 100);
+});
+
+window.toggleZoom = function(enabled) {
+    if (enabled) {
+        applyZoom();
+    } else {
+        document.body.style.transform = 'scale(1)';
+        document.body.style.width = '100%';
+    }
+};
 </script>
 
 <style>
