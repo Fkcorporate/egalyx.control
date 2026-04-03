@@ -1442,6 +1442,7 @@ function getCouleurCellule(score) {
 }
 
 // 5. Ajouter une fonction pour forcer le recalcul avec les valeurs finales
+// Modifiez cette fonction dans votre template
 function forcerRecalculAvecValeursFinales() {
     {% if evaluation_en_cours %}
         // Récupérer les valeurs FINALES
@@ -1453,21 +1454,33 @@ function forcerRecalculAvecValeursFinales() {
             document.getElementById('impactInput').value = impactFinal;
             document.getElementById('probabiliteInput').value = probabiliteFinale;
             
-            // Mettre à jour visuellement les baromètres
-            const types = ['impact', 'probabilite'];
-            types.forEach(type => {
-                const element = document.querySelector(`.echelle-item-horizontal[data-type="${type}"][data-value="${type === 'impact' ? impactFinal : probabiliteFinale}"]`);
-                if (element) {
-                    const parent = element.closest('.barometre-echelles-horizontal');
-                    const elements = parent.querySelectorAll(`.echelle-item-horizontal[data-type="${type}"]`);
-                    elements.forEach(el => el.classList.remove('active'));
-                    element.classList.add('active');
-                }
+            // RECHARGER LES DESCRIPTIONS DEPUIS LA BASE
+            chargerParametresEvaluation().then(() => {
+                // Mettre à jour visuellement les baromètres
+                const types = ['impact', 'probabilite'];
+                types.forEach(type => {
+                    const element = document.querySelector(`.echelle-item-horizontal[data-type="${type}"][data-value="${type === 'impact' ? impactFinal : probabiliteFinale}"]`);
+                    if (element) {
+                        const parent = element.closest('.barometre-echelles-horizontal');
+                        const elements = parent.querySelectorAll(`.echelle-item-horizontal[data-type="${type}"]`);
+                        elements.forEach(el => el.classList.remove('active'));
+                        element.classList.add('active');
+                        
+                        // Mettre à jour la description
+                        const descriptionId = `${type}Description`;
+                        const valeur = type === 'impact' ? impactFinal : probabiliteFinale;
+                        if (type === 'impact' && impactDescriptions[valeur]) {
+                            document.getElementById(descriptionId).textContent = impactDescriptions[valeur];
+                        } else if (type === 'probabilite' && probabiliteDescriptions[valeur]) {
+                            document.getElementById(descriptionId).textContent = probabiliteDescriptions[valeur];
+                        }
+                    }
+                });
+                
+                // Recalculer et redessiner
+                calculerScorePhase1();
+                dessinerMiniMatrice(impactFinal, probabiliteFinale, impactFinal * probabiliteFinale);
             });
-            
-            // Recalculer et redessiner
-            calculerScorePhase1();
-            dessinerMiniMatrice(impactFinal, probabiliteFinale, impactFinal * probabiliteFinale);
         }
     {% endif %}
 }
@@ -1721,7 +1734,52 @@ function toggleZoom(enabled) {
         document.body.style.minHeight = '100vh';
     }
 }
+// Dans votre template evaluation_triphase.html, AJOUTEZ CETTE FONCTION :
 
+// ============================================================
+// CHARGEMENT DYNAMIQUE DES PARAMÈTRES D'ÉVALUATION
+// ============================================================
+
+async function chargerParametresEvaluation() {
+    try {
+        const response = await fetch('/api/parametres-evaluation');
+        if (response.ok) {
+            const data = await response.json();
+            
+            // Mettre à jour les descriptions globales
+            if (data.impact) {
+                Object.assign(impactDescriptions, data.impact);
+            }
+            if (data.probabilite) {
+                Object.assign(probabiliteDescriptions, data.probabilite);
+            }
+            if (data.maitrise) {
+                Object.assign(maitriseDescriptions, data.maitrise);
+            }
+            
+            // Mettre à jour les couleurs si nécessaire
+            if (data.couleurs) {
+                // Mettre à jour les couleurs des baromètres
+                document.querySelectorAll('.echelle-niveau-horizontal').forEach(el => {
+                    const parent = el.closest('.echelle-item-horizontal');
+                    if (parent) {
+                        const type = parent.getAttribute('data-type');
+                        const value = parent.getAttribute('data-value');
+                        if (type && value && data[type] && data[type][value] && data[type][value].couleur) {
+                            el.style.backgroundColor = data[type][value].couleur;
+                        }
+                    }
+                });
+            }
+            
+            console.log('✅ Paramètres d\'évaluation chargés dynamiquement');
+        }
+    } catch (error) {
+        console.error('❌ Erreur chargement paramètres:', error);
+    }
+}
+
+// Ajoutez cette route API dans votre app.py :
 // Exposer la fonction globalement pour un contrôle manuel
 window.toggleZoom = toggleZoom;
 </script>
