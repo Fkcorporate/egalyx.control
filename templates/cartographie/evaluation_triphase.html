@@ -1159,48 +1159,153 @@
 
 {% block scripts %}
 <script>
-// Données des descriptions détaillées - CHARGÉES DYNAMIQUEMENT
-const impactDescriptions = {
-    {% for i in range(1, 6) %}
-    {{ i }}: "{{ get_niveau_description('impact', i)|replace('"', '\\"')|safe }}",
-    {% endfor %}
+// ============================================================
+// STRUCTURE DES DONNÉES - Initialisation correcte
+// ============================================================
+let impactDescriptions = {
+    1: "Impact minime sur les objectifs - Pertes < 1% du CA",
+    2: "Impact limité sur les objectifs - Pertes 1-5% CA",
+    3: "Impact significatif sur les objectifs - Pertes 5-10% CA",
+    4: "Impact majeur sur les objectifs - Pertes 10-20% CA",
+    5: "Impact catastrophique sur les objectifs - Pertes > 20% CA"
 };
 
-const probabiliteDescriptions = {
-    {% for i in range(1, 6) %}
-    {{ i }}: "{{ get_niveau_description('probabilite', i)|replace('"', '\\"')|safe }}",
-    {% endfor %}
+let probabiliteDescriptions = {
+    1: "Moins d'une fois tous les 5 ans - Probabilité < 5%",
+    2: "Une fois tous les 1-2 ans - Probabilité 5-20%",
+    3: "Plusieurs fois par an - Probabilité 20-50%",
+    4: "Une fois par mois - Probabilité 50-80%",
+    5: "Une fois par semaine ou plus - Probabilité > 80%"
 };
 
-const maitriseDescriptions = {
-    {% for i in range(1, 6) %}
-    {{ i }}: "{{ get_niveau_description('maitrise', i)|replace('"', '\\"')|safe }}",
-    {% endfor %}
+let maitriseDescriptions = {
+    1: "Contrôles inexistants ou inefficaces - Aucune documentation",
+    2: "Contrôles basiques - Couverture limitée - Documentation incomplète",
+    3: "Contrôles standard - Couverture acceptable - Documentation de base",
+    4: "Contrôles robustes - Couverture étendue - Documentation complète",
+    5: "Contrôles optimisés - Couverture complète - Documentation exemplaire"
 };
 
-// Initialisation du baromètre
-document.addEventListener('DOMContentLoaded', function() {
-    initialiserBarometre();
+// Valeurs actuelles sélectionnées
+let currentImpactValue = 0;
+let currentProbabiliteValue = 0;
+let currentMaitriseValue = 3;
+
+// ============================================================
+// CHARGEMENT DYNAMIQUE DES PARAMÈTRES
+// ============================================================
+async function chargerParametresEvaluation() {
+    try {
+        const response = await fetch('/api/parametres-evaluation');
+        if (response.ok) {
+            const data = await response.json();
+            
+            // Mettre à jour les descriptions sans écraser avec des objets
+            if (data.impact) {
+                for (let niveau in data.impact) {
+                    if (data.impact[niveau] && data.impact[niveau].description) {
+                        impactDescriptions[niveau] = data.impact[niveau].description;
+                    }
+                }
+            }
+            if (data.probabilite) {
+                for (let niveau in data.probabilite) {
+                    if (data.probabilite[niveau] && data.probabilite[niveau].description) {
+                        probabiliteDescriptions[niveau] = data.probabilite[niveau].description;
+                    }
+                }
+            }
+            if (data.maitrise) {
+                for (let niveau in data.maitrise) {
+                    if (data.maitrise[niveau] && data.maitrise[niveau].description) {
+                        maitriseDescriptions[niveau] = data.maitrise[niveau].description;
+                    }
+                }
+            }
+            
+            // Mettre à jour les couleurs des baromètres
+            mettreAJourCouleursBarometres(data);
+            
+            console.log('✅ Paramètres chargés:', {
+                impact: impactDescriptions,
+                probabilite: probabiliteDescriptions
+            });
+            
+            // Rafraîchir l'affichage des descriptions
+            rafraichirDescriptions();
+        }
+    } catch (error) {
+        console.error('❌ Erreur chargement paramètres:', error);
+    }
+}
+
+// ============================================================
+// METTRE À JOUR LES COULEURS DES BAROMÈTRES
+// ============================================================
+function mettreAJourCouleursBarometres(data) {
+    // Mettre à jour les couleurs des impacts
+    if (data.impact) {
+        for (let i = 1; i <= 5; i++) {
+            const element = document.querySelector(`.echelle-item-horizontal[data-type="impact"][data-value="${i}"] .echelle-niveau-horizontal`);
+            if (element && data.impact[i] && data.impact[i].couleur) {
+                element.style.backgroundColor = data.impact[i].couleur;
+            }
+        }
+    }
     
-    // FORCER l'utilisation des valeurs FINALES dès le chargement
-    setTimeout(() => {
-        calculerScorePhase1();
-        calculerScorePhase2(); 
-        calculerScorePhase3();
-        dessinerMiniMatrice();
-        
-        // Restaurer les valeurs si elles existent
-        restaurerValeursBarometre();
-    }, 100);
-});
+    // Mettre à jour les couleurs des probabilités
+    if (data.probabilite) {
+        for (let i = 1; i <= 5; i++) {
+            const element = document.querySelector(`.echelle-item-horizontal[data-type="probabilite"][data-value="${i}"] .echelle-niveau-horizontal`);
+            if (element && data.probabilite[i] && data.probabilite[i].couleur) {
+                element.style.backgroundColor = data.probabilite[i].couleur;
+            }
+        }
+    }
+    
+    // Mettre à jour les couleurs des maîtrises
+    if (data.maitrise) {
+        for (let i = 1; i <= 5; i++) {
+            const element = document.querySelector(`.echelle-item-horizontal[data-type="maitrise"][data-value="${i}"] .echelle-niveau-horizontal`);
+            if (element && data.maitrise[i] && data.maitrise[i].couleur) {
+                element.style.backgroundColor = data.maitrise[i].couleur;
+            }
+        }
+    }
+}
 
+// ============================================================
+// RAFRAÎCHIR LES DESCRIPTIONS AFFICHÉES
+// ============================================================
+function rafraichirDescriptions() {
+    // Mettre à jour la description de l'impact
+    const impactDescElement = document.getElementById('impactDescription');
+    if (impactDescElement && currentImpactValue > 0) {
+        impactDescElement.textContent = impactDescriptions[currentImpactValue] || "Sélectionnez le niveau d'impact";
+    }
+    
+    // Mettre à jour la description de la probabilité
+    const probaDescElement = document.getElementById('probabiliteDescription');
+    if (probaDescElement && currentProbabiliteValue > 0) {
+        probaDescElement.textContent = probabiliteDescriptions[currentProbabiliteValue] || "Sélectionnez la probabilité";
+    }
+    
+    // Mettre à jour la description de la maîtrise
+    const maitriseDescElement = document.getElementById('maitriseDescription');
+    if (maitriseDescElement && currentMaitriseValue > 0) {
+        maitriseDescElement.textContent = maitriseDescriptions[currentMaitriseValue] || "Niveau de contrôle existant";
+    }
+}
+
+// ============================================================
+// INITIALISATION DU BAROMÈTRE
+// ============================================================
 function initialiserBarometre() {
-    // Initialiser tous les baromètres horizontaux
     document.querySelectorAll('.barometre-echelles-horizontal').forEach(barometre => {
         barometre.addEventListener('click', function(e) {
             const echelleItem = e.target.closest('.echelle-item-horizontal');
             if (echelleItem) {
-                const valeur = echelleItem.getAttribute('data-value');
+                const valeur = parseInt(echelleItem.getAttribute('data-value'));
                 const type = echelleItem.getAttribute('data-type');
                 
                 selectionnerEchelle(type, valeur, echelleItem);
@@ -1210,8 +1315,20 @@ function initialiserBarometre() {
     });
 }
 
+// ============================================================
+// SÉLECTIONNER UNE ÉCHELLE
+// ============================================================
 function selectionnerEchelle(type, valeur, element) {
-    // Retirer la classe active de tous les éléments du même type dans le même conteneur
+    // Mettre à jour la valeur courante
+    if (type === 'impact') {
+        currentImpactValue = valeur;
+    } else if (type === 'probabilite') {
+        currentProbabiliteValue = valeur;
+    } else if (type === 'maitrise') {
+        currentMaitriseValue = valeur;
+    }
+    
+    // Retirer la classe active des éléments du même type
     const parent = element.closest('.barometre-echelles-horizontal');
     const elements = parent.querySelectorAll(`.echelle-item-horizontal[data-type="${type}"]`);
     elements.forEach(el => el.classList.remove('active'));
@@ -1221,151 +1338,234 @@ function selectionnerEchelle(type, valeur, element) {
     
     // Mettre à jour l'input caché
     const inputId = `${type}Input`;
-    document.getElementById(inputId).value = valeur;
-    
-    // Mettre à jour la description
-    const descriptionId = `${type}Description`;
-    let description = '';
-    
-    switch(type) {
-        case 'impact':
-            description = impactDescriptions[valeur] || '';
-            break;
-        case 'probabilite':
-            description = probabiliteDescriptions[valeur] || '';
-            break;
-        case 'maitrise':
-            description = maitriseDescriptions[valeur] || '';
-            break;
+    const inputElement = document.getElementById(inputId);
+    if (inputElement) {
+        inputElement.value = valeur;
     }
     
-    document.getElementById(descriptionId).textContent = description;
+    // Mettre à jour la description avec la bonne valeur
+    const descriptionId = `${type}Description`;
+    const descriptionElement = document.getElementById(descriptionId);
+    
+    if (descriptionElement) {
+        let description = '';
+        switch(type) {
+            case 'impact':
+                description = impactDescriptions[valeur] || "Sélectionnez le niveau d'impact";
+                break;
+            case 'probabilite':
+                description = probabiliteDescriptions[valeur] || "Sélectionnez la probabilité";
+                break;
+            case 'maitrise':
+                description = maitriseDescriptions[valeur] || "Niveau de contrôle existant";
+                break;
+        }
+        descriptionElement.textContent = description;
+    }
+    
+    console.log(`✅ Sélectionné: ${type} = ${valeur}`);
 }
 
+// ============================================================
+// RESTAURER LES VALEURS DU BAROMÈTRE
+// ============================================================
 function restaurerValeursBarometre() {
-    // Restaurer les valeurs depuis les inputs cachés
     const types = ['impact', 'probabilite', 'maitrise'];
     
     types.forEach(type => {
         const input = document.getElementById(`${type}Input`);
-        if (input && input.value) {
-            const element = document.querySelector(`.echelle-item-horizontal[data-type="${type}"][data-value="${input.value}"]`);
+        if (input && input.value && parseInt(input.value) > 0) {
+            const valeur = parseInt(input.value);
+            
+            // Mettre à jour la valeur courante
+            if (type === 'impact') currentImpactValue = valeur;
+            if (type === 'probabilite') currentProbabiliteValue = valeur;
+            if (type === 'maitrise') currentMaitriseValue = valeur;
+            
+            const element = document.querySelector(`.echelle-item-horizontal[data-type="${type}"][data-value="${valeur}"]`);
             if (element) {
-                selectionnerEchelle(type, input.value, element);
+                // Retirer la classe active des autres
+                const parent = element.closest('.barometre-echelles-horizontal');
+                const elements = parent.querySelectorAll(`.echelle-item-horizontal[data-type="${type}"]`);
+                elements.forEach(el => el.classList.remove('active'));
+                element.classList.add('active');
+                
+                // Mettre à jour la description
+                const descriptionId = `${type}Description`;
+                const descriptionElement = document.getElementById(descriptionId);
+                if (descriptionElement) {
+                    let description = '';
+                    switch(type) {
+                        case 'impact':
+                            description = impactDescriptions[valeur] || '';
+                            break;
+                        case 'probabilite':
+                            description = probabiliteDescriptions[valeur] || '';
+                            break;
+                        case 'maitrise':
+                            description = maitriseDescriptions[valeur] || '';
+                            break;
+                    }
+                    descriptionElement.textContent = description;
+                }
             }
         }
     });
 }
 
-// Fonction pour changer de risque
-function changerRisque() {
-    const select = document.getElementById('selectRisque');
-    const selectedOption = select.options[select.selectedIndex];
-    const risqueId = select.value;
-    const isArchived = selectedOption.getAttribute('data-archived') === 'true';
-    
-    if (!isArchived) {
-        window.location.href = `/risque/${risqueId}/evaluation-triphase`;
-    } else {
-        alert('Ce risque est archivé. Veuillez sélectionner un risque actif.');
-        select.value = '{{ risque.id }}'; // Revenir à la valeur précédente
-    }
-}
-
-// 1. Mettre à jour la fonction calculerScorePhase1() pour utiliser les valeurs finales
+// ============================================================
+// CALCULER LE SCORE PHASE 1
+// ============================================================
 function calculerScorePhase1() {
-    // Récupérer les valeurs FINALES (priorité: confirmation > validation > pré-évaluation)
-    let impactFinal, probabiliteFinale;
+    // Récupérer les valeurs depuis les variables globales
+    let impactFinal = currentImpactValue;
+    let probabiliteFinale = currentProbabiliteValue;
     
-    {% if evaluation_en_cours %}
-        // PRIORITÉ : Confirmation > Validation > Pré-évaluation
-        impactFinal = {{ evaluation_en_cours.impact_conf or evaluation_en_cours.impact_val or evaluation_en_cours.impact_pre or 0 }};
-        probabiliteFinale = {{ evaluation_en_cours.probabilite_conf or evaluation_en_cours.probabilite_val or evaluation_en_cours.probabilite_pre or 0 }};
-    {% else %}
-        impactFinal = parseInt(document.getElementById('impactInput').value) || 0;
-        probabiliteFinale = parseInt(document.getElementById('probabiliteInput').value) || 0;
-    {% endif %}
+    // Si les variables globales sont vides, essayer depuis les inputs
+    if (impactFinal === 0) {
+        impactFinal = parseInt(document.getElementById('impactInput')?.value) || 0;
+    }
+    if (probabiliteFinale === 0) {
+        probabiliteFinale = parseInt(document.getElementById('probabiliteInput')?.value) || 0;
+    }
     
     if (impactFinal > 0 && probabiliteFinale > 0) {
         const score = impactFinal * probabiliteFinale;
         const niveau = calculerNiveauRisque(score);
         
-        // Mettre à jour l'affichage du score
-        document.getElementById('scoreAffiche').textContent = score;
-        document.getElementById('niveauAffiche').textContent = niveau.nom;
-        document.getElementById('niveauAffiche').className = `badge bg-${niveau.couleur} fs-6`;
+        // Mettre à jour l'affichage
+        const scoreAffiche = document.getElementById('scoreAffiche');
+        const niveauAffiche = document.getElementById('niveauAffiche');
+        
+        if (scoreAffiche) scoreAffiche.textContent = score;
+        if (niveauAffiche) {
+            niveauAffiche.textContent = niveau.nom;
+            niveauAffiche.className = `badge bg-${niveau.couleur} fs-6`;
+        }
         
         // Mettre à jour le résultat détaillé
-        document.getElementById('scoreCalculé').textContent = score;
-        document.getElementById('niveauRisque').textContent = niveau.nom;
-        document.getElementById('niveauRisque').className = `badge bg-${niveau.couleur}`;
-        document.getElementById('positionMatrice').textContent = `Impact ${impactFinal} / Probabilité ${probabiliteFinale}`;
+        const scoreCalcule = document.getElementById('scoreCalculé');
+        const niveauRisque = document.getElementById('niveauRisque');
+        const positionMatrice = document.getElementById('positionMatrice');
         
-        document.getElementById('resultatPhase1').style.display = 'block';
+        if (scoreCalcule) scoreCalcule.textContent = score;
+        if (niveauRisque) {
+            niveauRisque.textContent = niveau.nom;
+            niveauRisque.className = `badge bg-${niveau.couleur}`;
+        }
+        if (positionMatrice) positionMatrice.textContent = `Impact ${impactFinal} / Probabilité ${probabiliteFinale}`;
+        
+        const resultatPhase1 = document.getElementById('resultatPhase1');
+        if (resultatPhase1) resultatPhase1.style.display = 'block';
+        
         dessinerMiniMatrice(impactFinal, probabiliteFinale, score);
         
-        // Mettre à jour la position dans la colonne latérale
-        document.getElementById('positionScore').textContent = score;
-        document.getElementById('positionImpact').textContent = impactFinal;
-        document.getElementById('positionProbabilite').textContent = probabiliteFinale;
+        // Mettre à jour la colonne latérale
+        const positionScore = document.getElementById('positionScore');
+        const positionImpact = document.getElementById('positionImpact');
+        const positionProbabilite = document.getElementById('positionProbabilite');
+        
+        if (positionScore) positionScore.textContent = score;
+        if (positionImpact) positionImpact.textContent = impactFinal;
+        if (positionProbabilite) positionProbabilite.textContent = probabiliteFinale;
     } else {
-        document.getElementById('resultatPhase1').style.display = 'none';
-        document.getElementById('scoreAffiche').textContent = '0';
-        document.getElementById('niveauAffiche').textContent = 'Non évalué';
-        document.getElementById('niveauAffiche').className = 'badge bg-secondary fs-6';
+        const resultatPhase1 = document.getElementById('resultatPhase1');
+        if (resultatPhase1) resultatPhase1.style.display = 'none';
+        
+        const scoreAffiche = document.getElementById('scoreAffiche');
+        const niveauAffiche = document.getElementById('niveauAffiche');
+        
+        if (scoreAffiche) scoreAffiche.textContent = '0';
+        if (niveauAffiche) {
+            niveauAffiche.textContent = 'Non évalué';
+            niveauAffiche.className = 'badge bg-secondary fs-6';
+        }
     }
 }
 
-// 6. Mettre à jour les fonctions de calcul des phases 2 et 3
+// ============================================================
+// CALCULER LE SCORE PHASE 2
+// ============================================================
 function calculerScorePhase2() {
-    // Toujours utiliser les valeurs FINALES pour le calcul
-    {% if evaluation_en_cours %}
-        const impactFinal = {{ evaluation_en_cours.impact_conf or evaluation_en_cours.impact_val or evaluation_en_cours.impact_pre or 0 }};
-        const probabiliteFinale = {{ evaluation_en_cours.probabilite_conf or evaluation_en_cours.probabilite_val or evaluation_en_cours.probabilite_pre or 0 }};
-    {% else %}
-        const impactFinal = 0;
-        const probabiliteFinale = 0;
-    {% endif %}
+    let impactFinal = currentImpactValue;
+    let probabiliteFinale = currentProbabiliteValue;
+    
+    // Vérifier si des ajustements sont sélectionnés
+    const impactValSelect = document.querySelector('select[name="impact_val"]');
+    const probaValSelect = document.querySelector('select[name="probabilite_val"]');
+    
+    if (impactValSelect && impactValSelect.value && parseInt(impactValSelect.value) > 0) {
+        impactFinal = parseInt(impactValSelect.value);
+    }
+    if (probaValSelect && probaValSelect.value && parseInt(probaValSelect.value) > 0) {
+        probabiliteFinale = parseInt(probaValSelect.value);
+    }
     
     if (impactFinal > 0 && probabiliteFinale > 0) {
         const score = impactFinal * probabiliteFinale;
         const niveau = calculerNiveauRisque(score);
         
-        document.getElementById('impactFinal2').textContent = impactFinal;
-        document.getElementById('probabiliteFinale2').textContent = probabiliteFinale;
-        document.getElementById('scoreFinal2').textContent = score;
-        document.getElementById('niveauFinal2').textContent = niveau.nom;
-        document.getElementById('niveauFinal2').className = `badge bg-${niveau.couleur}`;
+        const impactFinal2 = document.getElementById('impactFinal2');
+        const probabiliteFinale2 = document.getElementById('probabiliteFinale2');
+        const scoreFinal2 = document.getElementById('scoreFinal2');
+        const niveauFinal2 = document.getElementById('niveauFinal2');
+        
+        if (impactFinal2) impactFinal2.textContent = impactFinal;
+        if (probabiliteFinale2) probabiliteFinale2.textContent = probabiliteFinale;
+        if (scoreFinal2) scoreFinal2.textContent = score;
+        if (niveauFinal2) {
+            niveauFinal2.textContent = niveau.nom;
+            niveauFinal2.className = `badge bg-${niveau.couleur}`;
+        }
         
         dessinerMiniMatrice(impactFinal, probabiliteFinale, score);
     }
 }
 
+// ============================================================
+// CALCULER LE SCORE PHASE 3
+// ============================================================
 function calculerScorePhase3() {
-    // Toujours utiliser les valeurs FINALES pour le calcul
-    {% if evaluation_en_cours %}
-        const impactFinal = {{ evaluation_en_cours.impact_conf or evaluation_en_cours.impact_val or evaluation_en_cours.impact_pre or 0 }};
-        const probabiliteFinale = {{ evaluation_en_cours.probabilite_conf or evaluation_en_cours.probabilite_val or evaluation_en_cours.probabilite_pre or 0 }};
-    {% else %}
-        const impactFinal = 0;
-        const probabiliteFinale = 0;
-    {% endif %}
+    let impactFinal = currentImpactValue;
+    let probabiliteFinale = currentProbabiliteValue;
+    
+    // Vérifier si des confirmations sont sélectionnées
+    const impactConfSelect = document.querySelector('select[name="impact_conf"]');
+    const probaConfSelect = document.querySelector('select[name="probabilite_conf"]');
+    
+    if (impactConfSelect && impactConfSelect.value && parseInt(impactConfSelect.value) > 0) {
+        impactFinal = parseInt(impactConfSelect.value);
+    }
+    if (probaConfSelect && probaConfSelect.value && parseInt(probaConfSelect.value) > 0) {
+        probabiliteFinale = parseInt(probaConfSelect.value);
+    }
     
     if (impactFinal > 0 && probabiliteFinale > 0) {
         const score = impactFinal * probabiliteFinale;
         const niveau = calculerNiveauRisque(score);
         
-        document.getElementById('impactFinal3').textContent = impactFinal;
-        document.getElementById('probabiliteFinale3').textContent = probabiliteFinale;
-        document.getElementById('scoreFinal3').textContent = score;
-        document.getElementById('niveauFinal3').textContent = niveau.nom;
-        document.getElementById('niveauFinal3').className = `badge bg-${niveau.couleur}`;
-        document.getElementById('positionFinale').textContent = `Impact ${impactFinal} / Probabilité ${probabiliteFinale}`;
+        const impactFinal3 = document.getElementById('impactFinal3');
+        const probabiliteFinale3 = document.getElementById('probabiliteFinale3');
+        const scoreFinal3 = document.getElementById('scoreFinal3');
+        const niveauFinal3 = document.getElementById('niveauFinal3');
+        const positionFinale = document.getElementById('positionFinale');
+        
+        if (impactFinal3) impactFinal3.textContent = impactFinal;
+        if (probabiliteFinale3) probabiliteFinale3.textContent = probabiliteFinale;
+        if (scoreFinal3) scoreFinal3.textContent = score;
+        if (niveauFinal3) {
+            niveauFinal3.textContent = niveau.nom;
+            niveauFinal3.className = `badge bg-${niveau.couleur}`;
+        }
+        if (positionFinale) positionFinale.textContent = `Impact ${impactFinal} / Probabilité ${probabiliteFinale}`;
         
         dessinerMiniMatrice(impactFinal, probabiliteFinale, score);
     }
 }
 
+// ============================================================
+// CALCULER LE NIVEAU DE RISQUE
+// ============================================================
 function calculerNiveauRisque(score) {
     if (score <= 4) return { nom: 'Faible', couleur: 'success' };
     if (score <= 10) return { nom: 'Moyen', couleur: 'warning' };
@@ -1373,7 +1573,9 @@ function calculerNiveauRisque(score) {
     return { nom: 'Critique', couleur: 'dark' };
 }
 
-// 2. Mettre à jour la fonction dessinerMiniMatrice() pour utiliser les valeurs finales
+// ============================================================
+// DESSINER LA MINI MATRICE
+// ============================================================
 function dessinerMiniMatrice(impact = 0, probabilite = 0, score = 0) {
     const canvas = document.getElementById('matriceCanvas');
     if (!canvas) return;
@@ -1387,10 +1589,10 @@ function dessinerMiniMatrice(impact = 0, probabilite = 0, score = 0) {
     
     ctx.clearRect(0, 0, size, size);
     
-    // Dessiner la grille de la matrice
+    // Dessiner la grille
     for (let i = 0; i < 5; i++) {
         for (let j = 0; j < 5; j++) {
-            const scoreCell = (5 - i) * (j + 1); // Impact décroissant de 5 à 1, probabilité croissante de 1 à 5
+            const scoreCell = (5 - i) * (j + 1);
             const couleur = getCouleurCellule(scoreCell);
             
             ctx.fillStyle = couleur;
@@ -1403,105 +1605,85 @@ function dessinerMiniMatrice(impact = 0, probabilite = 0, score = 0) {
             ctx.font = '10px Arial';
             ctx.textAlign = 'center';
             ctx.textBaseline = 'middle';
-            ctx.fillText(
-                scoreCell.toString(), 
-                j * cellSize + cellSize / 2, 
-                i * cellSize + cellSize / 2
-            );
+            ctx.fillText(scoreCell.toString(), j * cellSize + cellSize / 2, i * cellSize + cellSize / 2);
         }
     }
     
-    // Positionner le risque sur la matrice avec les valeurs FINALES
+    // Positionner le point
     if (impact > 0 && probabilite > 0) {
-        // Calcul des coordonnées : impact (5-1) correspond à lignes (0-4), probabilité (1-5) correspond à colonnes (0-4)
         const x = (probabilite - 1) * cellSize + cellSize / 2;
-        const y = (5 - impact) * cellSize + cellSize / 2; // Inverser l'axe Y car impact 5 = ligne 0
+        const y = (5 - impact) * cellSize + cellSize / 2;
         
-        // Dessiner un marqueur rouge
         ctx.fillStyle = 'red';
         ctx.beginPath();
         ctx.arc(x, y, 6, 0, 2 * Math.PI);
         ctx.fill();
         
-        // Contour blanc pour meilleure visibilité
         ctx.strokeStyle = 'white';
         ctx.lineWidth = 2;
         ctx.stroke();
-        
-        console.log(`📍 Position matrice: Impact ${impact}, Probabilité ${probabilite} → (${x}, ${y})`);
     }
 }
 
+// ============================================================
+// COULEUR DES CELLULES
+// ============================================================
 function getCouleurCellule(score) {
-    // Utiliser les couleurs paramétrées si disponibles
-    {% set couleurs_matrise = session.get('couleurs_personnalisees', {}) %}
-    if (score <= 4) return '{{ couleurs_matrise.get("matrice_faible", "#28a745") }}';
-    if (score <= 10) return '{{ couleurs_matrise.get("matrice_moyen", "#ffc107") }}';  
-    if (score <= 16) return '{{ couleurs_matrise.get("matrice_eleve", "#ff8c00") }}';
-    return '{{ couleurs_matrise.get("matrice_critique", "#dc3545") }}';
+    if (score <= 4) return '#28a745';
+    if (score <= 10) return '#ffc107';
+    if (score <= 16) return '#ff8c00';
+    return '#dc3545';
 }
 
-// 5. Ajouter une fonction pour forcer le recalcul avec les valeurs finales
-// Modifiez cette fonction dans votre template
+// ============================================================
+// FORCER LE RECALCUL AVEC LES VALEURS FINALES
+// ============================================================
 function forcerRecalculAvecValeursFinales() {
-    {% if evaluation_en_cours %}
-        // Récupérer les valeurs FINALES
-        const impactFinal = {{ evaluation_en_cours.impact_conf or evaluation_en_cours.impact_val or evaluation_en_cours.impact_pre or 0 }};
-        const probabiliteFinale = {{ evaluation_en_cours.probabilite_conf or evaluation_en_cours.probabilite_val or evaluation_en_cours.probabilite_pre or 0 }};
-        
-        if (impactFinal > 0 && probabiliteFinale > 0) {
-            // Mettre à jour les inputs cachés avec les valeurs finales
-            document.getElementById('impactInput').value = impactFinal;
-            document.getElementById('probabiliteInput').value = probabiliteFinale;
-            
-            // RECHARGER LES DESCRIPTIONS DEPUIS LA BASE
-            chargerParametresEvaluation().then(() => {
-                // Mettre à jour visuellement les baromètres
-                const types = ['impact', 'probabilite'];
-                types.forEach(type => {
-                    const element = document.querySelector(`.echelle-item-horizontal[data-type="${type}"][data-value="${type === 'impact' ? impactFinal : probabiliteFinale}"]`);
-                    if (element) {
-                        const parent = element.closest('.barometre-echelles-horizontal');
-                        const elements = parent.querySelectorAll(`.echelle-item-horizontal[data-type="${type}"]`);
-                        elements.forEach(el => el.classList.remove('active'));
-                        element.classList.add('active');
-                        
-                        // Mettre à jour la description
-                        const descriptionId = `${type}Description`;
-                        const valeur = type === 'impact' ? impactFinal : probabiliteFinale;
-                        if (type === 'impact' && impactDescriptions[valeur]) {
-                            document.getElementById(descriptionId).textContent = impactDescriptions[valeur];
-                        } else if (type === 'probabilite' && probabiliteDescriptions[valeur]) {
-                            document.getElementById(descriptionId).textContent = probabiliteDescriptions[valeur];
-                        }
-                    }
-                });
-                
-                // Recalculer et redessiner
-                calculerScorePhase1();
-                dessinerMiniMatrice(impactFinal, probabiliteFinale, impactFinal * probabiliteFinale);
-            });
-        }
-    {% endif %}
+    // Récupérer les valeurs depuis le serveur (via les éléments HTML)
+    const impactInput = document.getElementById('impactInput');
+    const probaInput = document.getElementById('probabiliteInput');
+    
+    if (impactInput && impactInput.value) {
+        currentImpactValue = parseInt(impactInput.value);
+    }
+    if (probaInput && probaInput.value) {
+        currentProbabiliteValue = parseInt(probaInput.value);
+    }
+    
+    if (currentImpactValue > 0 && currentProbabiliteValue > 0) {
+        restaurerValeursBarometre();
+        calculerScorePhase1();
+        dessinerMiniMatrice(currentImpactValue, currentProbabiliteValue, currentImpactValue * currentProbabiliteValue);
+    }
 }
 
-// Appeler cette fonction après chaque mise à jour
-document.addEventListener('DOMContentLoaded', function() {
-    // ... code existant ...
+// ============================================================
+// CHANGER DE RISQUE
+// ============================================================
+function changerRisque() {
+    const select = document.getElementById('selectRisque');
+    const selectedOption = select.options[select.selectedIndex];
+    const risqueId = select.value;
+    const isArchived = selectedOption.getAttribute('data-archived') === 'true';
     
-    // Forcer le recalcul avec les valeurs finales après un court délai
-    setTimeout(forcerRecalculAvecValeursFinales, 200);
-});
+    if (!isArchived) {
+        window.location.href = `/risque/${risqueId}/evaluation-triphase`;
+    } else {
+        alert('Ce risque est archivé. Veuillez sélectionner un risque actif.');
+        select.value = '{{ risque.id }}';
+    }
+}
 
+// ============================================================
+// IMPRIMER LE GUIDE
+// ============================================================
 function imprimerGuide() {
     const modal = document.getElementById('guideModal');
     const modalContent = modal.querySelector('.modal-content').cloneNode(true);
     
-    // Supprimer les boutons du footer
     const footer = modalContent.querySelector('.modal-footer');
     if (footer) footer.remove();
     
-    // Ouvrir une nouvelle fenêtre pour l'impression
     const printWindow = window.open('', '_blank');
     printWindow.document.write(`
         <html>
@@ -1514,9 +1696,7 @@ function imprimerGuide() {
                 .table { width: 100%; margin-top: 15px; }
                 .echelle-item { display: flex; align-items: center; margin-bottom: 8px; }
                 .echelle-niveau { width: 20px; height: 20px; border-radius: 3px; margin-right: 10px; }
-                @media print {
-                    .card { break-inside: avoid; }
-                }
+                @media print { .card { break-inside: avoid; } }
             </style>
         </head>
         <body>
@@ -1529,36 +1709,9 @@ function imprimerGuide() {
     printWindow.print();
 }
 
-// Gestion des onglets avec sauvegarde de l'état
-document.addEventListener('DOMContentLoaded', function() {
-    const tabs = document.querySelectorAll('button[data-bs-toggle="pill"]');
-    tabs.forEach(tab => {
-        tab.addEventListener('shown.bs.tab', function (event) {
-            localStorage.setItem('activeEvaluationTab', event.target.id);
-        });
-    });
-    
-    const activeTabId = localStorage.getItem('activeEvaluationTab');
-    if (activeTabId) {
-        const activeTab = document.getElementById(activeTabId);
-        if (activeTab) {
-            const tab = new bootstrap.Tab(activeTab);
-            tab.show();
-        }
-    }
-});
-
-// Validation des formulaires
-document.querySelectorAll('form').forEach(form => {
-    form.addEventListener('submit', function(e) {
-        const submitBtn = this.querySelector('button[type="submit"]');
-        if (submitBtn) {
-            submitBtn.disabled = true;
-            submitBtn.innerHTML = '<i class="fas fa-spinner fa-spin me-2"></i>Traitement...';
-        }
-    });
-});
-
+// ============================================================
+// EXPORTER L'ÉVALUATION COURANTE
+// ============================================================
 function exporterEvaluationCourante() {
     const risqueRef = "{{ risque.reference }}";
     const risqueIntitule = "{{ risque.intitule }}";
@@ -1571,7 +1724,6 @@ function exporterEvaluationCourante() {
             <style>
                 body { font-family: Arial, sans-serif; margin: 20px; }
                 .header { text-align: center; border-bottom: 2px solid #333; padding-bottom: 10px; margin-bottom: 20px; }
-                .section { margin-bottom: 20px; }
                 .badge { padding: 5px 10px; border-radius: 4px; color: white; font-weight: bold; }
                 .badge-faible { background: #27ae60; }
                 .badge-moyen { background: #f39c12; }
@@ -1585,10 +1737,11 @@ function exporterEvaluationCourante() {
                 <h2>${risqueRef} - ${risqueIntitule}</h2>
                 <p>Export généré le ${dateExport}</p>
             </div>
-            
             <div class="section">
                 <h3>Résumé de l'Évaluation</h3>
-                <!-- Données dynamiques à implémenter -->
+                <p>Impact: ${currentImpactValue}/5</p>
+                <p>Probabilité: ${currentProbabiliteValue}/5</p>
+                <p>Score: ${currentImpactValue * currentProbabiliteValue}</p>
             </div>
         </body>
         </html>
@@ -1599,188 +1752,55 @@ function exporterEvaluationCourante() {
     printWindow.document.close();
     printWindow.print();
 }
-// Configuration du zoom
-const ZOOM_LEVEL = 0.9; // 90%
 
-// Fonction pour appliquer le zoom
-function applyZoom() {
-    // Méthode 1: Utiliser la propriété zoom (support limité)
-    document.body.style.zoom = `${ZOOM_LEVEL * 100}%`;
-    
-    // Méthode 2: Utiliser transform: scale (support plus large)
-    document.body.style.transform = `scale(${ZOOM_LEVEL})`;
-    document.body.style.transformOrigin = 'top left';
-    
-    // Ajuster les dimensions pour compenser le scale
-    const scaleFactor = 1 / ZOOM_LEVEL;
-    document.body.style.width = `${scaleFactor * 100}%`;
-    document.body.style.minHeight = `${scaleFactor * 100}vh`;
-    
-    // Ajuster les conteneurs principaux
-    const mainContainers = document.querySelectorAll('.container, .container-fluid, .row');
-    mainContainers.forEach(container => {
-        container.style.maxWidth = 'none';
-        container.style.width = '100%';
-    });
-    
-    // Empêcher le débordement horizontal
-    document.documentElement.style.overflowX = 'hidden';
-    document.body.style.overflowX = 'hidden';
-    
-    console.log(`Zoom appliqué à ${ZOOM_LEVEL * 100}%`);
-}
-
-// Fonction pour ajuster les éléments spécifiques après zoom
-function adjustElementsAfterZoom() {
-    // Ajuster les largeurs des colonnes Bootstrap si nécessaire
-    const cols = document.querySelectorAll('[class*="col-"]');
-    cols.forEach(col => {
-        const classes = col.className.split(' ');
-        const colClass = classes.find(c => c.startsWith('col-'));
-        if (colClass) {
-            // S'assurer que les colonnes prennent bien leur largeur
-            col.style.flex = '0 0 auto';
-        }
-    });
-    
-    // Ajuster les canvas (comme la matrice)
-    const canvases = document.querySelectorAll('canvas');
-    canvases.forEach(canvas => {
-        const originalWidth = canvas.getAttribute('width');
-        const originalHeight = canvas.getAttribute('height');
-        if (originalWidth && originalHeight) {
-            canvas.style.width = `${originalWidth * ZOOM_LEVEL}px`;
-            canvas.style.height = `${originalHeight * ZOOM_LEVEL}px`;
-        }
-    });
-    
-    // Ajuster les tailles de police si nécessaire
-    const smallTexts = document.querySelectorAll('small, .small, .form-text');
-    smallTexts.forEach(text => {
-        const currentSize = parseFloat(window.getComputedStyle(text).fontSize);
-        if (currentSize < 11) {
-            text.style.fontSize = `${currentSize / ZOOM_LEVEL}px`;
-        }
-    });
-}
-
-// Appliquer le zoom au chargement
+// ============================================================
+// INITIALISATION AU CHARGEMENT
+// ============================================================
 document.addEventListener('DOMContentLoaded', function() {
-    // Appliquer le zoom immédiatement
-    applyZoom();
-    
-    // Ajuster les éléments après un court délai
-    setTimeout(() => {
-        adjustElementsAfterZoom();
-        
-        // Initialiser les composants de l'évaluation
-        initialiserBarometre();
+    // Charger les paramètres depuis le serveur
+    chargerParametresEvaluation().then(() => {
+        // Restaurer les valeurs sauvegardées
         forcerRecalculAvecValeursFinales();
+        
+        // Initialiser les événements
+        initialiserBarometre();
+        
+        // Calculer les scores
         calculerScorePhase1();
         calculerScorePhase2();
         calculerScorePhase3();
         dessinerMiniMatrice();
-        restaurerValeursBarometre();
-    }, 50);
-    
-    // Réappliquer après que tout le contenu soit chargé
-    setTimeout(applyZoom, 200);
-    setTimeout(adjustElementsAfterZoom, 300);
-    
-    // Vérifier périodiquement que le zoom est toujours appliqué
-    setInterval(() => {
-        const currentTransform = window.getComputedStyle(document.body).transform;
-        if (currentTransform === 'none' || !currentTransform.includes('0.9')) {
-            applyZoom();
+        
+        // Gestion des onglets
+        const tabs = document.querySelectorAll('button[data-bs-toggle="pill"]');
+        tabs.forEach(tab => {
+            tab.addEventListener('shown.bs.tab', function(event) {
+                localStorage.setItem('activeEvaluationTab', event.target.id);
+            });
+        });
+        
+        const activeTabId = localStorage.getItem('activeEvaluationTab');
+        if (activeTabId) {
+            const activeTab = document.getElementById(activeTabId);
+            if (activeTab) {
+                const tab = new bootstrap.Tab(activeTab);
+                tab.show();
+            }
         }
-    }, 1000);
+    });
+    
+    // Désactiver les boutons de soumission pendant le traitement
+    document.querySelectorAll('form').forEach(form => {
+        form.addEventListener('submit', function(e) {
+            const submitBtn = this.querySelector('button[type="submit"]');
+            if (submitBtn) {
+                submitBtn.disabled = true;
+                submitBtn.innerHTML = '<i class="fas fa-spinner fa-spin me-2"></i>Traitement...';
+            }
+        });
+    });
 });
 
-// Gérer le redimensionnement
-let resizeTimeout;
-window.addEventListener('resize', function() {
-    clearTimeout(resizeTimeout);
-    resizeTimeout = setTimeout(function() {
-        applyZoom();
-        setTimeout(adjustElementsAfterZoom, 100);
-    }, 250);
-});
-
-// Gérer l'impression (désactiver le zoom pour l'impression)
-window.addEventListener('beforeprint', function() {
-    document.body.style.zoom = '100%';
-    document.body.style.transform = 'scale(1)';
-    document.body.style.width = '100%';
-    document.body.style.minHeight = '100vh';
-});
-
-window.addEventListener('afterprint', function() {
-    // Rétablir le zoom après impression
-    setTimeout(() => {
-        applyZoom();
-        setTimeout(adjustElementsAfterZoom, 200);
-    }, 100);
-});
-
-// Ajouter une fonction pour désactiver/activer le zoom si nécessaire
-function toggleZoom(enabled) {
-    if (enabled) {
-        applyZoom();
-        setTimeout(adjustElementsAfterZoom, 100);
-    } else {
-        document.body.style.zoom = '100%';
-        document.body.style.transform = 'scale(1)';
-        document.body.style.width = '100%';
-        document.body.style.minHeight = '100vh';
-    }
-}
-// Dans votre template evaluation_triphase.html, AJOUTEZ CETTE FONCTION :
-
-// ============================================================
-// CHARGEMENT DYNAMIQUE DES PARAMÈTRES D'ÉVALUATION
-// ============================================================
-
-async function chargerParametresEvaluation() {
-    try {
-        const response = await fetch('/api/parametres-evaluation');
-        if (response.ok) {
-            const data = await response.json();
-            
-            // Mettre à jour les descriptions globales
-            if (data.impact) {
-                Object.assign(impactDescriptions, data.impact);
-            }
-            if (data.probabilite) {
-                Object.assign(probabiliteDescriptions, data.probabilite);
-            }
-            if (data.maitrise) {
-                Object.assign(maitriseDescriptions, data.maitrise);
-            }
-            
-            // Mettre à jour les couleurs si nécessaire
-            if (data.couleurs) {
-                // Mettre à jour les couleurs des baromètres
-                document.querySelectorAll('.echelle-niveau-horizontal').forEach(el => {
-                    const parent = el.closest('.echelle-item-horizontal');
-                    if (parent) {
-                        const type = parent.getAttribute('data-type');
-                        const value = parent.getAttribute('data-value');
-                        if (type && value && data[type] && data[type][value] && data[type][value].couleur) {
-                            el.style.backgroundColor = data[type][value].couleur;
-                        }
-                    }
-                });
-            }
-            
-            console.log('✅ Paramètres d\'évaluation chargés dynamiquement');
-        }
-    } catch (error) {
-        console.error('❌ Erreur chargement paramètres:', error);
-    }
-}
-
-// Ajoutez cette route API dans votre app.py :
-// Exposer la fonction globalement pour un contrôle manuel
 window.toggleZoom = toggleZoom;
 </script>
 
