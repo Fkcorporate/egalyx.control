@@ -7619,4 +7619,383 @@ class AlerteCollecte(db.Model):
     traiteur = db.relationship('User', foreign_keys=[traitee_par])
 
 
+# ============================================
+# MODULE QUALITÉ - PLAN D'ASSURANCE QUALITÉ
+# ============================================
+# ============================================
+# FICHIERS PLAN QUALITÉ (À PLACER AVANT PlanQualiteFonction)
+# ============================================
+
+class FichierPlanQualite(db.Model):
+    """Fichiers attachés à un plan qualité"""
+    __tablename__ = 'fichiers_plan_qualite'
+    
+    id = db.Column(db.Integer, primary_key=True)
+    
+    # Liaison
+    plan_qualite_id = db.Column(db.Integer, db.ForeignKey('plans_qualite_fonction.id'), nullable=False)
+    
+    # Informations fichier
+    nom_fichier = db.Column(db.String(255), nullable=False)
+    nom_unique = db.Column(db.String(255), nullable=False, unique=True)
+    chemin_fichier = db.Column(db.String(500), nullable=False)
+    type_fichier = db.Column(db.String(100), nullable=False)
+    taille = db.Column(db.Integer, nullable=False)
+    
+    # Métadonnées
+    categorie = db.Column(db.String(50), default='document')
+    description = db.Column(db.String(500), nullable=True)
+    
+    # Audit
+    uploaded_at = db.Column(db.DateTime, default=datetime.utcnow)
+    uploaded_by = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
+    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    
+    # Multi-tenant
+    client_id = db.Column(db.Integer, db.ForeignKey('clients.id'), nullable=False)
+    
+    # Relations
+    plan_qualite = db.relationship('PlanQualiteFonction', back_populates='fichiers')
+    uploader = db.relationship('User', foreign_keys=[uploaded_by])
+    
+    def __repr__(self):
+        return f'<FichierPlanQualite {self.nom_fichier}>'
+    
+    def to_dict(self):
+        return {
+            'id': self.id,
+            'nom_fichier': self.nom_fichier,
+            'type_fichier': self.type_fichier,
+            'taille': self.taille,
+            'taille_formatee': self.get_taille_formatee(),
+            'categorie': self.categorie,
+            'description': self.description,
+            'uploaded_at': self.uploaded_at.strftime('%d/%m/%Y %H:%M') if self.uploaded_at else '',
+            'uploader': self.uploader.username if self.uploader else 'Inconnu'
+        }
+    
+    def get_taille_formatee(self):
+        if self.taille < 1024:
+            return f"{self.taille} o"
+        elif self.taille < 1024 * 1024:
+            return f"{self.taille / 1024:.1f} Ko"
+        else:
+            return f"{self.taille / (1024 * 1024):.1f} Mo"
+
+
+# ============================================
+# PLAN QUALITÉ FONCTION (APRÈS FichierPlanQualite)
+# ============================================
+
+class PlanQualiteFonction(db.Model):
+    """Plan d'assurance et d'amélioration qualité pour une fonction spécifique"""
+    __tablename__ = 'plans_qualite_fonction'
+
+    id = db.Column(db.Integer, primary_key=True)
+    
+    # Identifiants et références
+    reference = db.Column(db.String(50), unique=True, nullable=False)
+    titre = db.Column(db.String(200), nullable=False)
+    description = db.Column(db.Text, nullable=True)
+    
+    # Liens vers la structure de l'entreprise
+    pole_id = db.Column(db.Integer, db.ForeignKey('poles.id'), nullable=True)
+    direction_id = db.Column(db.Integer, db.ForeignKey('direction.id'), nullable=True)
+    service_id = db.Column(db.Integer, db.ForeignKey('service.id'), nullable=True)
+    
+    # Dates et périmètre
+    date_debut = db.Column(db.Date, nullable=False)
+    date_fin = db.Column(db.Date, nullable=False)
+    annee_exercice = db.Column(db.Integer, nullable=False)
+    
+    # SECTION 1 : ASSURANCE QUALITÉ (PRÉVENTIF)
+    procedures_applicables = db.Column(db.Text, nullable=True)
+    frequence_controles = db.Column(db.String(50), default='mensuel')
+    responsable_conformite_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=True)
+    documents_reference = db.Column(db.Text, nullable=True)
+    controles_cles = db.Column(db.Text, nullable=True)
+    niveau_maturite = db.Column(db.String(10), default='3')
+    
+    # SECTION 2 : AMÉLIORATION QUALITÉ (CORRECTIF)
+    objectifs_qualite = db.Column(db.JSON, default=[])
+    indicateurs_cles = db.Column(db.JSON, default=[])
+    
+    # SECTION 3 : REVUE ET AUDIT DU PLAN
+    date_prochaine_revue = db.Column(db.Date, nullable=True)
+    date_derniere_revue = db.Column(db.Date, nullable=True)
+    responsable_revue_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=True)
+    
+    # Statut et validation
+    statut = db.Column(db.String(20), default='brouillon')
+    est_valide = db.Column(db.Boolean, default=False)
+    date_validation = db.Column(db.DateTime, nullable=True)
+    valide_par_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=True)
+    
+    # Archivage
+    is_archived = db.Column(db.Boolean, default=False)
+    archived_at = db.Column(db.DateTime, nullable=True)
+    archived_by = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=True)
+    archive_reason = db.Column(db.String(255), nullable=True)
+    
+    # Audit et métadonnées
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    created_by = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
+    
+    # Multi-tenant
+    client_id = db.Column(db.Integer, db.ForeignKey('clients.id'), nullable=False)
+    
+    # ============================================
+    # RELATIONS
+    # ============================================
+    pole = db.relationship('Pole', foreign_keys=[pole_id])
+    direction = db.relationship('Direction', foreign_keys=[direction_id])
+    service = db.relationship('Service', foreign_keys=[service_id])
+    createur = db.relationship('User', foreign_keys=[created_by])
+    archive_user = db.relationship('User', foreign_keys=[archived_by])
+    validateur = db.relationship('User', foreign_keys=[valide_par_id])
+    responsable_conformite = db.relationship('User', foreign_keys=[responsable_conformite_id])
+    responsable_revue = db.relationship('User', foreign_keys=[responsable_revue_id])
+    
+    actions_amelioration = db.relationship('ActionAmeliorationQualite', back_populates='plan_qualite', lazy=True)
+    fichiers = db.relationship('FichierPlanQualite', back_populates='plan_qualite', lazy=True, cascade='all, delete-orphan')
+    
+    def __repr__(self):
+        return f'<PlanQualite {self.reference}: {self.titre}>'
+    
+    def to_dict(self):
+        return {
+            'id': self.id,
+            'reference': self.reference,
+            'titre': self.titre,
+            'description': self.description,
+            'statut': self.statut,
+            'est_valide': self.est_valide,
+            'date_debut': self.date_debut.isoformat() if self.date_debut else None,
+            'date_fin': self.date_fin.isoformat() if self.date_fin else None,
+            'date_prochaine_revue': self.date_prochaine_revue.isoformat() if self.date_prochaine_revue else None,
+            'created_at': self.created_at.isoformat() if self.created_at else None,
+            'procedures_applicables': self.procedures_applicables,
+            'frequence_controles': self.frequence_controles,
+            'niveau_maturite': self.niveau_maturite,
+            'objectifs_qualite': self.objectifs_qualite,
+            'indicateurs_cles': self.indicateurs_cles
+        }
+    
+    def archiver(self, user_id, raison="Archivage manuel"):
+        self.is_archived = True
+        self.archived_at = datetime.utcnow()
+        self.archived_by = user_id
+        self.archive_reason = raison
+        self.statut = 'archive'
+        
+    def desarchiver(self):
+        self.is_archived = False
+        self.archived_at = None
+        self.archived_by = None
+        self.archive_reason = None
+        self.statut = 'brouillon'
+    
+    def valider(self, user_id):
+        self.est_valide = True
+        self.date_validation = datetime.utcnow()
+        self.valide_par_id = user_id
+        self.statut = 'actif'
+    
+    def get_niveau_maturite_label(self):
+        niveaux = {
+            '1': 'Initial',
+            '2': 'Répétable',
+            '3': 'Défini',
+            '4': 'Géré',
+            '5': 'Optimisé'
+        }
+        return niveaux.get(self.niveau_maturite, 'Non défini')
+    
+    def get_frequence_controles_label(self):
+        frequences = {
+            'quotidien': 'Quotidien',
+            'hebdomadaire': 'Hebdomadaire',
+            'mensuel': 'Mensuel',
+            'trimestriel': 'Trimestriel',
+            'semestriel': 'Semestriel',
+            'annuel': 'Annuel'
+        }
+        return frequences.get(self.frequence_controles, 'Non défini')
+    
+    def get_statut_revue(self):
+        if not self.date_prochaine_revue:
+            return 'non_planifie'
+        
+        today = datetime.now().date()
+        if self.date_prochaine_revue < today:
+            return 'retard'
+        elif self.date_prochaine_revue <= today + timedelta(days=30):
+            return 'proche'
+        else:
+            return 'ok'
+    
+    def get_jours_restants_revue(self):
+        if not self.date_prochaine_revue:
+            return None
+        
+        today = datetime.now().date()
+        if self.date_prochaine_revue < today:
+            return - (today - self.date_prochaine_revue).days
+        else:
+            return (self.date_prochaine_revue - today).days
+
+    def calculer_progression(self):
+        """Calcule la progression du plan basée sur les actions d'amélioration"""
+        if not self.actions_amelioration:
+            return 0
+        total = len(self.actions_amelioration)
+        if total == 0:
+            return 0
+        terminees = sum(1 for a in self.actions_amelioration if a.statut == 'terminee')
+        return round((terminees / total) * 100, 1)
+    
+    def get_statut_css(self):
+        """Retourne la classe CSS pour le statut"""
+        if self.is_archived:
+            return 'secondary'
+        elif self.statut == 'actif':
+            return 'success'
+        elif self.statut == 'brouillon':
+            return 'warning'
+        elif self.statut == 'clos':
+            return 'info'
+        elif self.statut == 'annule':
+            return 'danger'
+        return 'secondary'
+
+
+class CartographieRisqueFonction(db.Model):
+    """Cartographie détaillée des risques par fonction d'assurance"""
+    __tablename__ = 'cartographie_risques_fonction'
+    
+    id = db.Column(db.Integer, primary_key=True)
+    
+    # ============================================
+    # IDENTIFICATION
+    # ============================================
+    pole = db.Column(db.String(100), nullable=False)              # Pôle
+    direction = db.Column(db.String(100), nullable=False)         # Direction
+    direction_partie_prenante = db.Column(db.String(200))         # Direction partie prenante
+    zone_risque_majeur = db.Column(db.String(200), nullable=False) # Zone de Risque majeur
+    
+    # ============================================
+    # ÉVALUATION DU RISQUE
+    # ============================================
+    impact = db.Column(db.String(50), nullable=False)             # Impact (Fort à éviter, etc.)
+    probabilite = db.Column(db.String(50), nullable=False)        # Probabilité (Certain, Probable, Possible)
+    niveau_maitrise = db.Column(db.String(50), nullable=False)    # Niveau de maîtrise (Bonne, Faible, Insuffisante)
+    typologie_risque = db.Column(db.String(100))                  # Typologie du risque
+    
+    # ============================================
+    # NIVEAUX DE CONTRÔLE
+    # ============================================
+    niveau_1 = db.Column(db.Text)      # Niveau 1 - Contrôle opérationnel
+    niveau_2 = db.Column(db.Text)      # Niveau 2 - Supervision
+    niveau_3 = db.Column(db.Text)      # Niveau 3 - Contrôle indépendant
+    controle_externe = db.Column(db.Text)  # Contrôle externe (Cours des comptes, DDFIP, etc.)
+    controles_prestataires = db.Column(db.Text)  # Contrôles réalisés par prestataires externes
+    
+    # ============================================
+    # HISTORIQUE ET PLANIFICATION
+    # ============================================
+    anciens_audits = db.Column(db.Text)   # Anciens audits en lien avec le risque
+    plan_audit_annuel = db.Column(db.Text) # Plan d'audit annuel
+    observations = db.Column(db.Text)      # Observations complémentaires
+    
+    # ============================================
+    # FONCTIONS D'ASSURANCE
+    # ============================================
+    fonctions_assurance = db.Column(db.String(200))   # Fonctions d'assurance concernées
+    pole_audit = db.Column(db.String(100))            # Pôle Audit (IG, etc.)
+    pilote = db.Column(db.String(100))                # Pilote de l'action
+    
+    # ============================================
+    # MÉTADONNÉES
+    # ============================================
+    annee = db.Column(db.Integer, nullable=False)     # Année de la cartographie
+    statut = db.Column(db.String(20), default='actif') # actif, archive
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    created_by = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
+    client_id = db.Column(db.Integer, db.ForeignKey('clients.id'), nullable=False)
+    
+    # Relations
+    createur = db.relationship('User', foreign_keys=[created_by])
+    
+    def __repr__(self):
+        return f'<CartographieRisque {self.pole} - {self.zone_risque_majeur}>'
+    
+    def get_niveau_risque(self):
+        """Calcule le niveau de risque global"""
+        # Logique de calcul personnalisable
+        impact_score = {'Très fort à éviter': 5, 'Fort à éviter': 4, 'Modéré': 3, 'Faible': 2, 'Très faible': 1}.get(self.impact, 3)
+        probabilite_score = {'Certain': 5, 'Très probable': 5, 'Probable': 4, 'Possible': 3, 'Peu probable': 2, 'Très rare': 1}.get(self.probabilite, 3)
+        maitrise_score = {'Excellent': 1, 'Bonne': 2, 'Suffisante': 3, 'Faible': 4, 'Insuffisante': 5}.get(self.niveau_maitrise, 3)
+        
+        score = (impact_score + probabilite_score + maitrise_score) / 3
+        if score <= 2:
+            return 'Faible', 'success'
+        elif score <= 3.5:
+            return 'Moyen', 'warning'
+        elif score <= 4.5:
+            return 'Élevé', 'danger'
+        else:
+            return 'Critique', 'dark'
+        
+# ============================================
+# ACTIONS AMÉLIORATION QUALITÉ
+# ============================================
+
+class ActionAmeliorationQualite(db.Model):
+    """Action d'amélioration qualité liée à un plan"""
+    __tablename__ = 'actions_amelioration_qualite'
+
+    id = db.Column(db.Integer, primary_key=True)
+    reference = db.Column(db.String(50), unique=True, nullable=False)
+    intitule = db.Column(db.String(200), nullable=False)
+    description = db.Column(db.Text, nullable=True)
+    
+    plan_qualite_id = db.Column(db.Integer, db.ForeignKey('plans_qualite_fonction.id'), nullable=False)
+    
+    date_echeance = db.Column(db.Date, nullable=False)
+    priorite = db.Column(db.String(20), default='moyenne')
+    
+    statut = db.Column(db.String(20), default='a_faire')
+    pourcentage_realisation = db.Column(db.Integer, default=0)
+    commentaire_realisation = db.Column(db.Text, nullable=True)
+    
+    responsable_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=True)
+    
+    is_archived = db.Column(db.Boolean, default=False)
+    archived_at = db.Column(db.DateTime, nullable=True)
+    archived_by = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=True)
+    
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    created_by = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
+    
+    client_id = db.Column(db.Integer, db.ForeignKey('clients.id'), nullable=False)
+    
+    # Relations
+    plan_qualite = db.relationship('PlanQualiteFonction', back_populates='actions_amelioration')
+    responsable = db.relationship('User', foreign_keys=[responsable_id])
+    createur = db.relationship('User', foreign_keys=[created_by])
+    archive_user = db.relationship('User', foreign_keys=[archived_by])
+    
+    def __repr__(self):
+        return f'<ActionAmelioration {self.reference}: {self.intitule}>'
+    
+    def est_en_retard(self):
+        if self.statut == 'terminee':
+            return False
+        if self.date_echeance and datetime.utcnow().date() > self.date_echeance:
+            return True
+        return False
+
 
