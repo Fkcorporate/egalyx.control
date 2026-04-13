@@ -1,0 +1,341 @@
+{% extends "base.html" %}
+
+{% block title %}Plans Qualité - Egalyx Control{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <!-- En-tête -->
+    <!-- En-tête -->
+    <div class="row mb-4">
+        <div class="col">
+            <div class="d-flex justify-content-between align-items-center">
+                <div>
+                    <h1 class="h2 mb-0">
+                        <i class="fas fa-clipboard-list text-primary me-2"></i>
+                        Plans d'assurance et d'amélioration qualité
+                    </h1>
+                    <p class="text-muted mt-2">
+                        Gestion des plans qualité complets (assurance préventive + amélioration corrective)
+                    </p>
+                </div>
+                <div class="btn-group">
+
+                    <a href="{{ url_for('cartographie_qualite') }}" class="btn btn-outline-info">
+                        <i class="fas fa-chart-pie me-1"></i>Tableau de bord
+                    </a>
+                    <a href="{{ url_for('nouveau_plan_qualite') }}" class="btn btn-primary">
+                        <i class="fas fa-plus me-2"></i>Nouveau plan
+                    </a>
+                    <a href="{{ url_for('liste_cartographie_risques') }}" class="btn btn-outline-danger">
+                        <i class="fas fa-map me-1"></i>Cartographie des risques
+                    </a>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Filtres -->
+    <div class="card shadow-sm mb-4">
+        <div class="card-body">
+            <form method="GET" class="row g-3 align-items-end" id="filterForm">
+                <div class="col-md-3">
+                    <label class="form-label">Statut</label>
+                    <select name="statut" class="form-select" id="statutSelect">
+                        <option value="tous" {% if current_filters.statut == 'tous' %}selected{% endif %}>Tous</option>
+                        <option value="actif" {% if current_filters.statut == 'actif' %}selected{% endif %}>Actifs</option>
+                        <option value="brouillon" {% if current_filters.statut == 'brouillon' %}selected{% endif %}>Brouillons</option>
+                        <option value="clos" {% if current_filters.statut == 'clos' %}selected{% endif %}>Clos</option>
+                        <option value="annule" {% if current_filters.statut == 'annule' %}selected{% endif %}>Annulés</option>
+                    </select>
+                </div>
+                <div class="col-md-3">
+                    <label class="form-label">Type de fonction</label>
+                    <select name="type_fonction" class="form-select" id="typeFonction">
+                        <option value="">-- Tous --</option>
+                        <option value="pole" {% if current_filters.type_fonction == 'pole' %}selected{% endif %}>Pôle</option>
+                        <option value="direction" {% if current_filters.type_fonction == 'direction' %}selected{% endif %}>Direction</option>
+                        <option value="service" {% if current_filters.type_fonction == 'service' %}selected{% endif %}>Service</option>
+                    </select>
+                </div>
+                <div class="col-md-3">
+                    <label class="form-label">Fonction</label>
+                    <select name="fonction_id" class="form-select" id="fonctionSelect">
+                        <option value="">-- Toutes --</option>
+                        {% if current_filters.type_fonction == 'pole' %}
+                            {% for pole in poles %}
+                                <option value="{{ pole.id }}" {% if current_filters.fonction_id|int == pole.id %}selected{% endif %}>{{ pole.nom }}</option>
+                            {% endfor %}
+                        {% elif current_filters.type_fonction == 'direction' %}
+                            {% for direction in directions %}
+                                <option value="{{ direction.id }}" {% if current_filters.fonction_id|int == direction.id %}selected{% endif %}>{{ direction.nom }}</option>
+                            {% endfor %}
+                        {% elif current_filters.type_fonction == 'service' %}
+                            {% for service in services %}
+                                <option value="{{ service.id }}" {% if current_filters.fonction_id|int == service.id %}selected{% endif %}>{{ service.nom }}</option>
+                            {% endfor %}
+                        {% endif %}
+                    </select>
+                </div>
+                <div class="col-md-3">
+                    <div class="form-check form-switch mb-3">
+                        <input class="form-check-input" type="checkbox" name="show_archived" id="showArchived" 
+                               {% if show_archived %}checked{% endif %} onchange="this.form.submit()">
+                        <label class="form-check-label" for="showArchived">
+                            <i class="fas fa-archive me-1"></i>Afficher les plans archivés
+                        </label>
+                    </div>
+                    <button type="submit" class="btn btn-primary w-100">
+                        <i class="fas fa-search me-1"></i>Filtrer
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Cartes de statistiques -->
+    <div class="row mb-4 g-3">
+        <div class="col-md-3">
+            <div class="card text-white bg-primary shadow-sm h-100">
+                <div class="card-body">
+                    <div class="d-flex justify-content-between align-items-center">
+                        <div>
+                            <h6 class="card-title mb-0 opacity-75">Total</h6>
+                            <p class="display-6 mb-0 fw-bold">{{ stats.total }}</p>
+                        </div>
+                        <i class="fas fa-clipboard-list fa-2x opacity-50"></i>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card text-white bg-success shadow-sm h-100">
+                <div class="card-body">
+                    <div class="d-flex justify-content-between align-items-center">
+                        <div>
+                            <h6 class="card-title mb-0 opacity-75">Actifs</h6>
+                            <p class="display-6 mb-0 fw-bold">{{ stats.actifs }}</p>
+                        </div>
+                        <i class="fas fa-check-circle fa-2x opacity-50"></i>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card text-white bg-warning shadow-sm h-100">
+                <div class="card-body">
+                    <div class="d-flex justify-content-between align-items-center">
+                        <div>
+                            <h6 class="card-title mb-0 opacity-75">Brouillons</h6>
+                            <p class="display-6 mb-0 fw-bold">{{ stats.brouillons }}</p>
+                        </div>
+                        <i class="fas fa-pen-fancy fa-2x opacity-50"></i>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card text-white bg-secondary shadow-sm h-100">
+                <div class="card-body">
+                    <div class="d-flex justify-content-between align-items-center">
+                        <div>
+                            <h6 class="card-title mb-0 opacity-75">Archivés</h6>
+                            <p class="display-6 mb-0 fw-bold">{{ stats.archives }}</p>
+                        </div>
+                        <i class="fas fa-archive fa-2x opacity-50"></i>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Tableau des plans -->
+    <div class="card shadow-sm">
+        <div class="card-header bg-white py-3">
+            <div class="d-flex justify-content-between align-items-center">
+                <h5 class="mb-0">
+                    <i class="fas fa-list me-2"></i>Liste des plans qualité
+                </h5>
+                <span class="badge bg-secondary">{{ plans|length }} plan(s)</span>
+            </div>
+        </div>
+        <div class="card-body p-0">
+            <div class="table-responsive">
+                <table class="table table-hover align-middle mb-0">
+                    <thead class="table-light">
+                        <tr>
+                            <th style="width: 12%">Référence</th>
+                            <th style="width: 25%">Titre</th>
+                            <th style="width: 18%">Fonction cible</th>
+                            <th style="width: 10%">Maturité</th>
+                            <th style="width: 10%">Période</th>
+                            <th style="width: 10%">Statut</th>
+                            <th style="width: 8%">Validé</th>
+                            <th style="width: 7%">Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for plan in plans %}
+                        <tr class="{% if plan.is_archived %}table-secondary opacity-75{% endif %}">
+                            <td>
+                                <code class="fw-bold">{{ plan.reference }}</code>
+                            </td>
+                            <td>
+                                <a href="{{ url_for('detail_plan_qualite', plan_id=plan.id) }}" class="text-decoration-none fw-semibold">
+                                    {{ plan.titre[:50] }}{% if plan.titre|length > 50 %}...{% endif %}
+                                </a>
+                            </td>
+                            <td>
+                                {% if plan.pole %}
+                                    <span class="badge bg-info bg-opacity-10 text-info px-2 py-1">
+                                        <i class="fas fa-building me-1"></i> {{ plan.pole.nom|truncate(20) }}
+                                    </span>
+                                {% elif plan.direction %}
+                                    <span class="badge bg-primary bg-opacity-10 text-primary px-2 py-1">
+                                        <i class="fas fa-sitemap me-1"></i> {{ plan.direction.nom|truncate(20) }}
+                                    </span>
+                                {% elif plan.service %}
+                                    <span class="badge bg-success bg-opacity-10 text-success px-2 py-1">
+                                        <i class="fas fa-users me-1"></i> {{ plan.service.nom|truncate(20) }}
+                                    </span>
+                                {% else %}
+                                    <span class="text-muted">Non spécifié</span>
+                                {% endif %}
+                            </td>
+                            <td>
+                                {% set maturite_labels = {'1': 'Initial', '2': 'Répétable', '3': 'Défini', '4': 'Géré', '5': 'Optimisé'} %}
+                                {% set maturite_colors = {'1': 'secondary', '2': 'info', '3': 'primary', '4': 'warning', '5': 'success'} %}
+                                <span class="badge bg-{{ maturite_colors.get(plan.niveau_maturite, 'secondary') }}">
+                                    {{ maturite_labels.get(plan.niveau_maturite, 'N/A') }}
+                                </span>
+                            </td>
+                            <td>
+                                <small class="text-muted">
+                                    <i class="far fa-calendar-alt me-1"></i>
+                                    {{ plan.date_debut.strftime('%d/%m/%Y') }}<br>
+                                    <i class="far fa-calendar-check me-1"></i>
+                                    {{ plan.date_fin.strftime('%d/%m/%Y') }}
+                                </small>
+                            </td>
+                            <td>
+                                {% if plan.is_archived %}
+                                    <span class="badge bg-dark">Archivé</span>
+                                {% elif plan.statut == 'actif' %}
+                                    <span class="badge bg-success">Actif</span>
+                                {% elif plan.statut == 'brouillon' %}
+                                    <span class="badge bg-warning text-dark">Brouillon</span>
+                                {% elif plan.statut == 'clos' %}
+                                    <span class="badge bg-secondary">Clos</span>
+                                {% elif plan.statut == 'annule' %}
+                                    <span class="badge bg-danger">Annulé</span>
+                                {% endif %}
+                            </td>
+                            <td class="text-center">
+                                {% if plan.est_valide %}
+                                    <i class="fas fa-check-circle text-success fs-5" 
+                                       title="Validé le {{ plan.date_validation.strftime('%d/%m/%Y') if plan.date_validation else '' }}"></i>
+                                {% else %}
+                                    <i class="fas fa-clock text-warning fs-5" title="Non validé"></i>
+                                {% endif %}
+                            </td>
+                            <td>
+                                <div class="btn-group btn-group-sm">
+                                    <a href="{{ url_for('detail_plan_qualite', plan_id=plan.id) }}" 
+                                       class="btn btn-outline-primary" title="Voir">
+                                        <i class="fas fa-eye"></i>
+                                    </a>
+                                    <a href="{{ url_for('modifier_plan_qualite', plan_id=plan.id) }}" 
+                                       class="btn btn-outline-secondary" title="Modifier">
+                                        <i class="fas fa-edit"></i>
+                                    </a>
+                                    {% if not plan.is_archived %}
+                                    <button type="button" class="btn btn-outline-danger" title="Archiver" 
+                                            data-bs-toggle="modal" data-bs-target="#archiveModal{{ plan.id }}">
+                                        <i class="fas fa-archive"></i>
+                                    </button>
+                                    {% else %}
+                                    <form method="POST" action="{{ url_for('restaurer_plan_qualite', plan_id=plan.id) }}" 
+                                          style="display: inline;" onsubmit="return confirm('Restaurer ce plan archivé ?')">
+                                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                                        <button type="submit" class="btn btn-outline-success" title="Restaurer">
+                                            <i class="fas fa-undo-alt"></i>
+                                        </button>
+                                    </form>
+                                    {% endif %}
+                                </div>
+                                
+                                <!-- Modal d'archivage -->
+                                <div class="modal fade" id="archiveModal{{ plan.id }}" tabindex="-1">
+                                    <div class="modal-dialog">
+                                        <div class="modal-content">
+                                            <form method="POST" action="{{ url_for('archiver_plan_qualite', plan_id=plan.id) }}">
+                                                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                                                <div class="modal-header">
+                                                    <h5 class="modal-title">
+                                                        <i class="fas fa-archive text-danger me-2"></i>Archiver le plan
+                                                    </h5>
+                                                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                                                </div>
+                                                <div class="modal-body">
+                                                    <p>Êtes-vous sûr de vouloir archiver le plan suivant ?</p>
+                                                    <div class="alert alert-light border">
+                                                        <strong>{{ plan.reference }}</strong><br>
+                                                        {{ plan.titre }}
+                                                    </div>
+                                                    <div class="mb-3">
+                                                        <label class="form-label">Raison de l'archivage <span class="text-muted">(optionnel)</span></label>
+                                                        <textarea name="raison" class="form-control" rows="3" 
+                                                                  placeholder="Ex: Plan remplacé par une nouvelle version, objectifs atteints, restructuration..."></textarea>
+                                                    </div>
+                                                    <p class="text-muted small mb-0">
+                                                        <i class="fas fa-info-circle me-1"></i>
+                                                        L'archivage rend le plan accessible uniquement dans la vue "Archivés". 
+                                                        Vous pourrez le restaurer à tout moment.
+                                                    </p>
+                                                </div>
+                                                <div class="modal-footer">
+                                                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Annuler</button>
+                                                    <button type="submit" class="btn btn-danger">
+                                                        <i class="fas fa-archive me-1"></i>Archiver
+                                                    </button>
+                                                </div>
+                                            </form>
+                                        </div>
+                                    </div>
+                                </div>
+                            </td>
+                        </tr>
+                        {% else %}
+                        <tr>
+                            <td colspan="8" class="text-center py-5">
+                                {% if show_archived %}
+                                    <i class="fas fa-inbox fa-3x text-muted mb-3"></i>
+                                    <p class="text-muted mb-2">Aucun plan archivé trouvé.</p>
+                                    <button class="btn btn-outline-secondary btn-sm" onclick="document.getElementById('showArchived').click();">
+                                        <i class="fas fa-eye me-1"></i>Afficher les plans actifs
+                                    </button>
+                                {% else %}
+                                    <i class="fas fa-folder-open fa-3x text-muted mb-3"></i>
+                                    <p class="text-muted mb-2">Aucun plan qualité trouvé.</p>
+                                    <a href="{{ url_for('nouveau_plan_qualite') }}" class="btn btn-primary btn-sm">
+                                        <i class="fas fa-plus me-1"></i>Créer le premier plan
+                                    </a>
+                                {% endif %}
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+document.getElementById('typeFonction').addEventListener('change', function() {
+    const url = new URL(window.location.href);
+    url.searchParams.set('type_fonction', this.value);
+    url.searchParams.delete('fonction_id');
+    window.location.href = url.toString();
+});
+</script>
+{% endblock %}

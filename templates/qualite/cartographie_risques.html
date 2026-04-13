@@ -1,0 +1,183 @@
+{% extends "base.html" %}
+
+{% block title %}Cartographie des risques par fonction d'assurance{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <!-- En-tête -->
+    <div class="row mb-4">
+        <div class="col">
+            <div class="d-flex justify-content-between align-items-center">
+                <div>
+                    <h1 class="h2 mb-0">
+                        <i class="fas fa-map text-danger me-2"></i>
+                        Cartographie des risques par fonction d'assurance
+                    </h1>
+                    <p class="text-muted mt-2">
+                        Analyse détaillée des risques par pôle, direction et niveau de contrôle
+                    </p>
+                </div>
+                <a href="{{ url_for('nouvelle_cartographie_risque') }}" class="btn btn-primary">
+                    <i class="fas fa-plus me-2"></i>Ajouter un risque
+                </a>
+            </div>
+        </div>
+    </div>
+
+    <!-- Filtres -->
+    <div class="card shadow-sm mb-4">
+        <div class="card-body">
+            <form method="GET" class="row g-3">
+                <div class="col-md-3">
+                    <label class="form-label">Pôle</label>
+                    <select name="pole" class="form-select">
+                        <option value="">-- Tous --</option>
+                        {% for pole in poles %}
+                        <option value="{{ pole }}" {% if request.args.get('pole') == pole %}selected{% endif %}>{{ pole }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="col-md-3">
+                    <label class="form-label">Direction</label>
+                    <select name="direction" class="form-select">
+                        <option value="">-- Toutes --</option>
+                        {% for direction in directions %}
+                        <option value="{{ direction }}" {% if request.args.get('direction') == direction %}selected{% endif %}>{{ direction }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="col-md-2">
+                    <label class="form-label">Niveau risque</label>
+                    <select name="niveau" class="form-select">
+                        <option value="">-- Tous --</option>
+                        <option value="Faible" {% if request.args.get('niveau') == 'Faible' %}selected{% endif %}>Faible</option>
+                        <option value="Moyen" {% if request.args.get('niveau') == 'Moyen' %}selected{% endif %}>Moyen</option>
+                        <option value="Élevé" {% if request.args.get('niveau') == 'Élevé' %}selected{% endif %}>Élevé</option>
+                        <option value="Critique" {% if request.args.get('niveau') == 'Critique' %}selected{% endif %}>Critique</option>
+                    </select>
+                </div>
+                <div class="col-md-2">
+                    <label class="form-label">Année</label>
+                    <select name="annee" class="form-select">
+                        <option value="">-- Toutes --</option>
+                        {% for annee in annees %}
+                        <option value="{{ annee }}" {% if request.args.get('annee')|int == annee %}selected{% endif %}>{{ annee }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="col-md-2 d-flex align-items-end">
+                    <button type="submit" class="btn btn-primary w-100">Filtrer</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Tableau de bord des risques -->
+    <div class="card shadow-sm">
+        <div class="card-header bg-white py-3">
+            <h5 class="mb-0">
+                <i class="fas fa-table me-2"></i>Matrice des risques par fonction
+            </h5>
+        </div>
+        <div class="card-body p-0">
+            <div class="table-responsive">
+                <table class="table table-bordered table-hover mb-0" style="font-size: 0.8rem;">
+                    <thead class="table-dark">
+                        <tr>
+                            <th rowspan="2" style="vertical-align: middle;">Pôle</th>
+                            <th rowspan="2" style="vertical-align: middle;">Direction</th>
+                            <th rowspan="2" style="vertical-align: middle;">Direction partie prenante</th>
+                            <th rowspan="2" style="vertical-align: middle;">Zone de Risque majeur</th>
+                            <th colspan="3" class="text-center">Évaluation</th>
+                            <th rowspan="2" style="vertical-align: middle;">Typologie Risque</th>
+                            <th colspan="3" class="text-center">Niveaux de contrôle</th>
+                            <th rowspan="2" style="vertical-align: middle;">Contrôle externe</th>
+                            <th rowspan="2" style="vertical-align: middle;">Contrôles prestataires</th>
+                            <th rowspan="2" style="vertical-align: middle;">Anciens audits</th>
+                            <th rowspan="2" style="vertical-align: middle;">Niveau risque</th>
+                            <th rowspan="2" style="vertical-align: middle;">Actions</th>
+                        </tr>
+                        <tr class="table-dark">
+                            <th>Impact</th>
+                            <th>Proba</th>
+                            <th>Niveau maîtrise</th>
+                            <th>Niveau 1</th>
+                            <th>Niveau 2</th>
+                            <th>Niveau 3</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for risque in risques %}
+                        {% set niveau_risque, niveau_couleur = risque.get_niveau_risque() %}
+                        <tr class="table-{{ niveau_couleur }}">
+                            <td>{{ risque.pole }}</td>
+                            <td>{{ risque.direction }}</td>
+                            <td>{{ risque.direction_partie_prenante or '-' }}</td>
+                            <td class="fw-bold">{{ risque.zone_risque_majeur }}</td>
+                            <td>
+                                <span class="badge {% if risque.impact in ['Très fort à éviter', 'Fort à éviter'] %}bg-danger{% else %}bg-warning{% endif %}">
+                                    {{ risque.impact }}
+                                </span>
+                            </td>
+                            <td>
+                                <span class="badge {% if risque.probabilite in ['Certain', 'Très probable'] %}bg-danger{% elif risque.probabilite == 'Probable' %}bg-warning{% else %}bg-info{% endif %}">
+                                    {{ risque.probabilite }}
+                                </span>
+                            </td>
+                            <td>
+                                <span class="badge {% if risque.niveau_maitrise in ['Faible', 'Insuffisante'] %}bg-danger{% elif risque.niveau_maitrise == 'Suffisante' %}bg-warning{% else %}bg-success{% endif %}">
+                                    {{ risque.niveau_maitrise }}
+                                </span>
+                            </td>
+                            <td>{{ risque.typologie_risque or '-' }}</td>
+                            <td>
+                                <small>{{ risque.niveau_1|truncate(60) if risque.niveau_1 else '-' }}</small>
+                            </td>
+                            <td>
+                                <small>{{ risque.niveau_2|truncate(60) if risque.niveau_2 else '-' }}</small>
+                            </td>
+                            <td>
+                                <small>{{ risque.niveau_3|truncate(60) if risque.niveau_3 else '-' }}</small>
+                            </td>
+                            <td>
+                                <small>{{ risque.controle_externe|truncate(60) if risque.controle_externe else '-' }}</small>
+                            </td>
+                            <td>
+                                <small>{{ risque.controles_prestataires|truncate(60) if risque.controles_prestataires else '-' }}</small>
+                            </td>
+                            <td>
+                                <small>{{ risque.anciens_audits|truncate(50) if risque.anciens_audits else '-' }}</small>
+                            </td>
+                            <td>
+                                <span class="badge bg-{{ niveau_couleur }} fs-6">{{ niveau_risque }}</span>
+                            </td>
+                            <td>
+                                <div class="btn-group btn-group-sm">
+                                    <a href="{{ url_for('modifier_cartographie_risque', id=risque.id) }}" class="btn btn-outline-primary">
+                                        <i class="fas fa-edit"></i>
+                                    </a>
+                                    <button type="button" class="btn btn-outline-danger" 
+                                            onclick="if(confirm('Supprimer cette entrée ?')) fetch('{{ url_for('supprimer_cartographie_risque', id=risque.id) }}', {method:'POST', headers:{'X-CSRFToken':'{{ csrf_token() }}'}}).then(() => location.reload())">
+                                        <i class="fas fa-trash"></i>
+                                    </button>
+                                </div>
+                            </td>
+                        </tr>
+                        {% else %}
+                        <tr>
+                            <td colspan="17" class="text-center py-5">
+                                <i class="fas fa-folder-open fa-3x text-muted mb-3"></i>
+                                <p class="text-muted">Aucune donnée de cartographie trouvée.</p>
+                                <a href="{{ url_for('nouvelle_cartographie_risque') }}" class="btn btn-primary btn-sm">
+                                    <i class="fas fa-plus me-1"></i>Ajouter un risque
+                                </a>
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
