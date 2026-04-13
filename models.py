@@ -109,7 +109,9 @@ class User(UserMixin, db.Model):
         'module_processus': True,
         'module_questionnaires': True,
         'module_plans_action': True,
-        'module_analyse_ia': False
+        'module_analyse_ia': False,
+        'can_manage_quality': False
+
     })
     
     # ============================================
