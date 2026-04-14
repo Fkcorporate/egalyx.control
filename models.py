@@ -8181,3 +8181,299 @@ class FichierCampagneControle(db.Model):
             return f"{self.taille / 1024:.1f} Ko"
         else:
             return f"{self.taille / (1024 * 1024):.1f} Mo"
+
+
+
+# ============================================
+# MODULE PLAN DE CONTINUITÉ D'ACTIVITÉ (PCA)
+# ============================================
+
+class PlanContinuiteActivite(db.Model):
+    """Plan de Continuité d'Activité - PCA"""
+    __tablename__ = 'plans_continuite_activite'
+    
+    id = db.Column(db.Integer, primary_key=True)
+    
+    # ============================================
+    # IDENTIFICATION
+    # ============================================
+    reference = db.Column(db.String(50), unique=True, nullable=False)
+    titre = db.Column(db.String(200), nullable=False)
+    description = db.Column(db.Text)
+    version = db.Column(db.String(20), default='1.0')
+    
+    # Périmètre
+    pole_id = db.Column(db.Integer, db.ForeignKey('poles.id'), nullable=True)
+    direction_id = db.Column(db.Integer, db.ForeignKey('direction.id'), nullable=True)
+    service_id = db.Column(db.Integer, db.ForeignKey('service.id'), nullable=True)
+    processus_critiques = db.Column(db.JSON, default=[])  # Liste des processus critiques
+    
+    # ============================================
+    # DATES
+    # ============================================
+    date_creation = db.Column(db.DateTime, default=datetime.utcnow)
+    date_mise_a_jour = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    date_validite = db.Column(db.Date)  # Date de fin de validité
+    date_dernier_test = db.Column(db.Date)  # Date du dernier test
+    date_prochain_test = db.Column(db.Date)  # Date du prochain test
+    
+    # ============================================
+    # ACTEURS
+    # ============================================
+    responsable_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=True)
+    redacteur_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=True)
+    valideur_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=True)
+    equipe_pca = db.Column(db.JSON, default=[])  # Liste des membres de l'équipe PCA
+    
+    # ============================================
+    # ANALYSE D'IMPACT (BIA)
+    # ============================================
+    bia_realisee = db.Column(db.Boolean, default=False)
+    bia_date = db.Column(db.Date)
+    delai_arret_max = db.Column(db.String(50))  # Délai d'arrêt maximal (RTO)
+    perte_donnees_max = db.Column(db.String(50))  # Perte de données maximale (RPO)
+    impacts_critiques = db.Column(db.JSON, default=[])  # Impacts critiques identifiés
+    
+    # ============================================
+    # STRATÉGIES DE CONTINUITÉ
+    # ============================================
+    strategies = db.Column(db.JSON, default=[])  # Liste des stratégies
+    sites_secours = db.Column(db.JSON, default=[])  # Sites de secours
+    ressources_alternatives = db.Column(db.JSON, default=[])  # Ressources alternatives
+    
+    # ============================================
+    # PROCÉDURES DE REPRISE
+    # ============================================
+    procedures_urgence = db.Column(db.Text)  # Procédures d'urgence
+    procedures_reprise = db.Column(db.Text)  # Procédures de reprise
+    procedures_retour_normal = db.Column(db.Text)  # Procédures de retour à la normale
+    
+    # ============================================
+    # ÉQUIPES ET CONTACTS
+    # ============================================
+    cellule_crise = db.Column(db.JSON, default=[])  # Membres de la cellule de crise
+    contacts_urgence = db.Column(db.JSON, default=[])  # Contacts d'urgence
+    fournisseurs_critiques = db.Column(db.JSON, default=[])  # Fournisseurs critiques
+    
+    # ============================================
+    # RESSOURCES CRITIQUES
+    # ============================================
+    ressources_critiques = db.Column(db.JSON, default=[])  # Ressources critiques (matériel, logiciel, données)
+    duree_critique = db.Column(db.String(50))  # Durée critique de reprise
+    
+    # ============================================
+    # EXERCICES ET TESTS
+    # ============================================
+    periodicite_test = db.Column(db.String(50), default='annuelle')  # Périodicité des tests
+    dernier_test = db.Column(db.DateTime)
+    prochain_test = db.Column(db.DateTime)
+    resultats_tests = db.Column(db.JSON, default=[])  # Historique des tests
+    
+    # ============================================
+    # STATUT
+    # ============================================
+    statut = db.Column(db.String(30), default='en_redaction')  # en_redaction, en_relecture, valide, obsolète, archive
+    niveau_maturite = db.Column(db.Integer, default=1)  # 1-5
+    
+    # ============================================
+    # ARCHIVAGE
+    # ============================================
+    is_archived = db.Column(db.Boolean, default=False)
+    archived_at = db.Column(db.DateTime)
+    archived_by = db.Column(db.Integer, db.ForeignKey('user.id'))
+    archive_reason = db.Column(db.String(255))
+    
+    # ============================================
+    # AUDIT
+    # ============================================
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    created_by = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
+    client_id = db.Column(db.Integer, db.ForeignKey('clients.id'), nullable=False)
+    
+    # Relations
+    pole = db.relationship('Pole', foreign_keys=[pole_id])
+    direction = db.relationship('Direction', foreign_keys=[direction_id])
+    service = db.relationship('Service', foreign_keys=[service_id])
+    responsable = db.relationship('User', foreign_keys=[responsable_id])
+    redacteur = db.relationship('User', foreign_keys=[redacteur_id])
+    valideur = db.relationship('User', foreign_keys=[valideur_id])
+    createur = db.relationship('User', foreign_keys=[created_by])
+    archive_user = db.relationship('User', foreign_keys=[archived_by])
+    
+    actions = db.relationship('ActionPCA', back_populates='plan', lazy=True, cascade='all, delete-orphan')
+    exercices = db.relationship('ExercicePCA', back_populates='plan', lazy=True, cascade='all, delete-orphan')
+    documents = db.relationship('DocumentPCA', back_populates='plan', lazy=True, cascade='all, delete-orphan')
+    
+    def __repr__(self):
+        return f'<PCA {self.reference}: {self.titre}>'
+    
+    def get_maturite_label(self):
+        labels = {1: 'Initial', 2: 'Répétable', 3: 'Défini', 4: 'Géré', 5: 'Optimisé'}
+        return labels.get(self.niveau_maturite, 'Non défini')
+    
+    def get_statut_label(self):
+        labels = {
+            'en_redaction': 'En rédaction',
+            'en_relecture': 'En relecture',
+            'valide': 'Validé',
+            'obsolète': 'Obsolète',
+            'archive': 'Archivé'
+        }
+        return labels.get(self.statut, self.statut)
+    
+    def get_statut_css(self):
+        css = {
+            'en_redaction': 'warning',
+            'en_relecture': 'info',
+            'valide': 'success',
+            'obsolète': 'danger',
+            'archive': 'secondary'
+        }
+        return css.get(self.statut, 'secondary')
+    
+    def get_taux_realisation(self):
+        """Calcule le taux de complétion du PCA"""
+        if not self.actions:
+            return 0
+        total = len(self.actions)
+        terminees = len([a for a in self.actions if a.statut == 'termine'])
+        return round((terminees / total * 100), 1) if total > 0 else 0
+    
+    def get_delais_conformite(self):
+        """Vérifie si les délais sont conformes"""
+        if self.delai_arret_max and self.duree_critique:
+            # Logique de calcul
+            return True
+        return None
+    
+    def archiver(self, user_id, raison=None):
+        self.is_archived = True
+        self.archived_at = datetime.utcnow()
+        self.archived_by = user_id
+        self.archive_reason = raison
+        self.statut = 'archive'
+    
+    def desarchiver(self):
+        self.is_archived = False
+        self.archived_at = None
+        self.archived_by = None
+        self.archive_reason = None
+        self.statut = 'en_redaction'
+
+
+class ActionPCA(db.Model):
+    """Actions du plan de continuité"""
+    __tablename__ = 'actions_pca'
+    
+    id = db.Column(db.Integer, primary_key=True)
+    reference = db.Column(db.String(50), unique=True, nullable=False)
+    plan_id = db.Column(db.Integer, db.ForeignKey('plans_continuite_activite.id'), nullable=False)
+    
+    intitule = db.Column(db.String(200), nullable=False)
+    description = db.Column(db.Text)
+    phase = db.Column(db.String(50), default='preparation')  # preparation, crise, reprise, retour
+    
+    priorite = db.Column(db.String(20), default='moyenne')  # haute, moyenne, basse
+    delai_execution = db.Column(db.String(50))  # délai d'exécution (en heures)
+    
+    responsable_id = db.Column(db.Integer, db.ForeignKey('user.id'))
+    equipe = db.Column(db.JSON, default=[])  # Liste des membres impliqués
+    
+    date_debut = db.Column(db.Date)
+    date_fin_prevue = db.Column(db.Date)
+    date_fin_reelle = db.Column(db.Date)
+    
+    statut = db.Column(db.String(20), default='a_faire')  # a_faire, en_cours, termine, bloque
+    pourcentage_realisation = db.Column(db.Integer, default=0)
+    commentaire = db.Column(db.Text)
+    
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    created_by = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
+    client_id = db.Column(db.Integer, db.ForeignKey('clients.id'), nullable=False)
+    
+    # Relations
+    plan = db.relationship('PlanContinuiteActivite', back_populates='actions')
+    responsable = db.relationship('User', foreign_keys=[responsable_id])
+    createur = db.relationship('User', foreign_keys=[created_by])
+    
+    def __repr__(self):
+        return f'<ActionPCA {self.reference}>'
+
+
+class ExercicePCA(db.Model):
+    """Exercices et tests du PCA"""
+    __tablename__ = 'exercices_pca'
+    
+    id = db.Column(db.Integer, primary_key=True)
+    reference = db.Column(db.String(50), unique=True, nullable=False)
+    plan_id = db.Column(db.Integer, db.ForeignKey('plans_continuite_activite.id'), nullable=False)
+    
+    nom = db.Column(db.String(200), nullable=False)
+    description = db.Column(db.Text)
+    type_exercice = db.Column(db.String(50), default='table_top')  # table_top, technique, grandeur_nature
+    
+    date_exercice = db.Column(db.DateTime, nullable=False)
+    duree = db.Column(db.String(50))  # durée en heures
+    
+    participants = db.Column(db.JSON, default=[])  # Liste des participants
+    observateurs = db.Column(db.JSON, default=[])  # Liste des observateurs
+    
+    scenario = db.Column(db.Text)  # Scénario de l'exercice
+    objectifs = db.Column(db.JSON, default=[])  # Objectifs de l'exercice
+    
+    resultats = db.Column(db.Text)  # Résultats de l'exercice
+    points_forts = db.Column(db.JSON, default=[])
+    axes_amelioration = db.Column(db.JSON, default=[])
+    actions_correctives = db.Column(db.JSON, default=[])
+    
+    note = db.Column(db.Integer)  # Note sur 100
+    statut = db.Column(db.String(20), default='planifie')  # planifie, realise, annule, reporte
+    
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    created_by = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
+    client_id = db.Column(db.Integer, db.ForeignKey('clients.id'), nullable=False)
+    
+    # Relations
+    plan = db.relationship('PlanContinuiteActivite', back_populates='exercices')
+    createur = db.relationship('User', foreign_keys=[created_by])
+    
+    def __repr__(self):
+        return f'<ExercicePCA {self.reference}>'
+
+
+class DocumentPCA(db.Model):
+    """Documents attachés au PCA"""
+    __tablename__ = 'documents_pca'
+    
+    id = db.Column(db.Integer, primary_key=True)
+    plan_id = db.Column(db.Integer, db.ForeignKey('plans_continuite_activite.id'), nullable=False)
+    
+    nom_fichier = db.Column(db.String(255), nullable=False)
+    nom_unique = db.Column(db.String(255), nullable=False, unique=True)
+    chemin_fichier = db.Column(db.String(500), nullable=False)
+    type_fichier = db.Column(db.String(100), nullable=False)
+    taille = db.Column(db.Integer, nullable=False)
+    
+    categorie = db.Column(db.String(50), default='document')  # document, procedure, schema, rapport
+    description = db.Column(db.String(500))
+    
+    uploaded_at = db.Column(db.DateTime, default=datetime.utcnow)
+    uploaded_by = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
+    client_id = db.Column(db.Integer, db.ForeignKey('clients.id'), nullable=False)
+    
+    # Relations
+    plan = db.relationship('PlanContinuiteActivite', back_populates='documents')
+    uploader = db.relationship('User', foreign_keys=[uploaded_by])
+    
+    def get_taille_formatee(self):
+        if self.taille < 1024:
+            return f"{self.taille} o"
+        elif self.taille < 1024 * 1024:
+            return f"{self.taille / 1024:.1f} Ko"
+        else:
+            return f"{self.taille / (1024 * 1024):.1f} Mo"
+
+        
