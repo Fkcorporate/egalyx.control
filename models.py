@@ -8476,4 +8476,371 @@ class DocumentPCA(db.Model):
         else:
             return f"{self.taille / (1024 * 1024):.1f} Mo"
 
+
+# ========================
+# MODÈLE INCIDENT (VERSION COMPLÈTE)
+# ========================
+
+class Incident(db.Model):
+    """Gestion complète des incidents avec workflow avancé"""
+    __tablename__ = 'incidents'
+    
+    # Identifiants de base
+    id = db.Column(db.Integer, primary_key=True)
+    reference = db.Column(db.String(30), unique=True, nullable=False)
+    titre = db.Column(db.String(200), nullable=False)
+    description = db.Column(db.Text)
+    
+    # Classification
+    gravite = db.Column(db.String(20), default='moyenne')
+    type_incident = db.Column(db.String(50))
+    statut = db.Column(db.String(20), default='ouvert', index=True)
+    
+    # Niveau d'escalade (NOUVEAU)
+    niveau_escalade = db.Column(db.Integer, default=1)  # 1, 2, 3
+    escalation_auto = db.Column(db.Boolean, default=False)
+    escalation_date = db.Column(db.DateTime)
+    
+    # Approbation (NOUVEAU)
+    approbation_requise = db.Column(db.Boolean, default=False)
+    approbation_statut = db.Column(db.String(20), default='en_attente')  # en_attente, approuve, rejete
+    approbation_par_id = db.Column(db.Integer, db.ForeignKey('user.id'))
+    approbation_date = db.Column(db.DateTime)
+    commentaire_approbation = db.Column(db.Text)
+    
+    # Dates
+    date_occurrence = db.Column(db.DateTime, nullable=False)
+    date_detection = db.Column(db.DateTime)
+    date_resolution = db.Column(db.DateTime)
+    date_approbation = db.Column(db.DateTime)
+    
+    # SLA (Service Level Agreement)
+    sla_heures = db.Column(db.Integer, default=48)
+    sla_date_limite = db.Column(db.DateTime)
+    sla_viole = db.Column(db.Boolean, default=False)
+    
+    # Liens métier
+    risque_id = db.Column(db.Integer, db.ForeignKey('risques.id'))
+    dispositif_id = db.Column(db.Integer, db.ForeignKey('dispositifs_maitrise.id'))
+    plan_action_id = db.Column(db.Integer, db.ForeignKey('plans_action.id'))
+    
+    # Acteurs
+    declare_par_id = db.Column(db.Integer, db.ForeignKey('user.id'))
+    responsable_resolution_id = db.Column(db.Integer, db.ForeignKey('user.id'))
+    superviseur_id = db.Column(db.Integer, db.ForeignKey('user.id'))  # NOUVEAU
+    
+    # Résolution
+    cause_racine = db.Column(db.Text)
+    actions_correctives = db.Column(db.Text)
+    lecons_apprises = db.Column(db.Text)
+    commentaire_cloture = db.Column(db.Text)
+    
+    # Métadonnées IA (NOUVEAU)
+    analyse_ia = db.Column(db.Text)  # JSON
+    ia_score_confiance = db.Column(db.Float, default=0)
+    ia_recommandations = db.Column(db.Text)  # JSON
+    
+    # Multi-tenant
+    client_id = db.Column(db.Integer, db.ForeignKey('clients.id'), index=True)
+    created_by = db.Column(db.Integer, db.ForeignKey('user.id'))
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    
+    # Archivage
+    is_archived = db.Column(db.Boolean, default=False)
+    archived_at = db.Column(db.DateTime)
+    archived_by = db.Column(db.Integer, db.ForeignKey('user.id'))
+    archive_reason = db.Column(db.String(200))
+    
+    # Relations
+    risque = db.relationship('Risque', backref='incidents', foreign_keys=[risque_id])
+    dispositif = db.relationship('DispositifMaitrise', backref='incidents', foreign_keys=[dispositif_id])
+    plan_action = db.relationship('PlanAction', backref='incidents', foreign_keys=[plan_action_id])
+    declare_par = db.relationship('User', foreign_keys=[declare_par_id], backref='incidents_declares')
+    responsable = db.relationship('User', foreign_keys=[responsable_resolution_id], backref='incidents_responsables')
+    superviseur = db.relationship('User', foreign_keys=[superviseur_id], backref='incidents_supervises')
+    approbateur = db.relationship('User', foreign_keys=[approbation_par_id])
+    archiveur = db.relationship('User', foreign_keys=[archived_by])
+    
+    def __init__(self, **kwargs):
+        super(Incident, self).__init__(**kwargs)
+        if not self.reference:
+            self.reference = self.generer_reference()
+        if not self.sla_date_limite and self.sla_heures:
+            self.sla_date_limite = datetime.utcnow() + timedelta(hours=self.sla_heures)
+    
+    def generer_reference(self):
+        """Génère une référence unique"""
+        annee = datetime.utcnow().year
+        query = Incident.query.filter(
+            Incident.reference.like(f'INC-{annee}-%'),
+            Incident.client_id == self.client_id
+        )
+        count = query.count()
+        return f"INC-{annee}-{count + 1:03d}"
+    
+    # ==================== MÉTHODES DE WORKFLOW ====================
+    
+    def approuver(self, user_id, commentaire=None):
+        """Approuver la résolution d'un incident"""
+        self.approbation_statut = 'approuve'
+        self.approbation_par_id = user_id
+        self.approbation_date = datetime.utcnow()
+        self.commentaire_approbation = commentaire
+        self.statut = 'ferme'
+        self.date_approbation = datetime.utcnow()
+        self.updated_at = datetime.utcnow()
+    
+    def rejeter(self, user_id, commentaire):
+        """Rejeter la résolution d'un incident"""
+        self.approbation_statut = 'rejete'
+        self.approbation_par_id = user_id
+        self.approbation_date = datetime.utcnow()
+        self.commentaire_approbation = commentaire
+        self.statut = 'en_cours'  # Retour en cours
+        self.updated_at = datetime.utcnow()
+    
+    def escalader(self):
+        """Escalader l'incident au niveau supérieur"""
+        self.niveau_escalade += 1
+        self.escalade_date = datetime.utcnow()
+        self.escalation_auto = True
+        self.updated_at = datetime.utcnow()
         
+        # Log d'escalade
+        log_activity(
+            self.created_by, 
+            f'escalade_incident_niveau_{self.niveau_escalade}',
+            f"Incident {self.reference} escaladé au niveau {self.niveau_escalade}",
+            'incident', self.id
+        )
+    
+    def verifier_sla(self):
+        """Vérifie si le SLA est violé"""
+        if self.statut not in ['ferme', 'resolu'] and self.sla_date_limite:
+            if datetime.utcnow() > self.sla_date_limite and not self.sla_viole:
+                self.sla_viole = True
+                self.escalader()  # Escalade automatique si SLA violé
+                return True
+        return False
+    
+    def get_niveau_escalade_label(self):
+        """Libellé du niveau d'escalade"""
+        labels = {1: 'Niveau 1 (Support)', 2: 'Niveau 2 (Superviseur)', 3: 'Niveau 3 (Direction)'}
+        return labels.get(self.niveau_escalade, f'Niveau {self.niveau_escalade}')
+    
+    def get_approbation_statut_label(self):
+        """Libellé du statut d'approbation"""
+        labels = {'en_attente': 'En attente', 'approuve': 'Approuvé', 'rejete': 'Rejeté'}
+        return labels.get(self.approbation_statut, self.approbation_statut)
+    
+    # ==================== MÉTHODES DE STATUT ====================
+    
+    def get_gravite_label(self):
+        labels = {'critique': 'Critique', 'elevee': 'Élevée', 'moyenne': 'Moyenne', 'mineure': 'Mineure'}
+        return labels.get(self.gravite, self.gravite)
+    
+    def get_gravite_color(self):
+        colors = {'critique': 'danger', 'elevee': 'warning', 'moyenne': 'info', 'mineure': 'success'}
+        return colors.get(self.gravite, 'secondary')
+    
+    def get_type_label(self):
+        labels = {'securite': 'Sécurité', 'conformite': 'Conformité', 'operationnel': 'Opérationnel',
+                  'technique': 'Technique', 'juridique': 'Juridique'}
+        return labels.get(self.type_incident, self.type_incident)
+    
+    def get_statut_label(self):
+        labels = {'ouvert': 'Ouvert', 'en_cours': 'En cours', 'resolu': 'Résolu', 
+                  'ferme': 'Fermé', 'rejete': 'Rejeté'}
+        return labels.get(self.statut, self.statut)
+    
+    def get_statut_color(self):
+        colors = {'ouvert': 'danger', 'en_cours': 'warning', 'resolu': 'info', 
+                  'ferme': 'success', 'rejete': 'secondary'}
+        return colors.get(self.statut, 'secondary')
+    
+    def get_delai_resolution(self):
+        if self.date_resolution and self.date_occurrence:
+            delta = self.date_resolution - self.date_occurrence
+            return delta.days
+        return None
+    
+    def get_heures_restantes_sla(self):
+        """Heures restantes avant violation du SLA"""
+        if self.sla_date_limite and self.statut not in ['ferme', 'resolu']:
+            delta = self.sla_date_limite - datetime.utcnow()
+            return max(0, delta.total_seconds() / 3600)
+        return None
+    
+    # ==================== MÉTHODES IA ====================
+    
+    def analyser_avec_ia(self):
+        """Analyse prédictive de l'incident avec IA"""
+        from services.incident_ia_service import IncidentIAService
+        return IncidentIAService.analyser_incident(self)
+    
+    def predire_recurrence(self):
+        """Prédit la probabilité de récurrence"""
+        from services.incident_ia_service import IncidentIAService
+        return IncidentIAService.predire_recurrence(self)
+    
+    # ==================== MÉTHODES D'ARCHIVAGE ====================
+    
+    def archiver(self, user_id, raison):
+        self.is_archived = True
+        self.archived_at = datetime.utcnow()
+        self.archived_by = user_id
+        self.archive_reason = raison
+        self.updated_at = datetime.utcnow()
+    
+    def desarchiver(self):
+        self.is_archived = False
+        self.archived_at = None
+        self.archived_by = None
+        self.archive_reason = None
+        self.updated_at = datetime.utcnow()
+    
+    # ==================== MÉTHODES DE CONVERSION ====================
+    
+    def to_dict(self):
+        return {
+            'id': self.id,
+            'reference': self.reference,
+            'titre': self.titre,
+            'description': self.description,
+            'gravite': self.gravite,
+            'gravite_label': self.get_gravite_label(),
+            'gravite_color': self.get_gravite_color(),
+            'type_incident': self.type_incident,
+            'type_label': self.get_type_label(),
+            'statut': self.statut,
+            'statut_label': self.get_statut_label(),
+            'statut_color': self.get_statut_color(),
+            'niveau_escalade': self.niveau_escalade,
+            'niveau_escalade_label': self.get_niveau_escalade_label(),
+            'approbation_requise': self.approbation_requise,
+            'approbation_statut': self.approbation_statut,
+            'approbation_statut_label': self.get_approbation_statut_label(),
+            'date_occurrence': self.date_occurrence.isoformat() if self.date_occurrence else None,
+            'date_detection': self.date_detection.isoformat() if self.date_detection else None,
+            'date_resolution': self.date_resolution.isoformat() if self.date_resolution else None,
+            'delai_resolution': self.get_delai_resolution(),
+            'sla_heures': self.sla_heures,
+            'sla_date_limite': self.sla_date_limite.isoformat() if self.sla_date_limite else None,
+            'sla_viole': self.sla_viole,
+            'heures_restantes_sla': self.get_heures_restantes_sla(),
+            'risque_id': self.risque_id,
+            'risque_reference': self.risque.reference if self.risque else None,
+            'dispositif_id': self.dispositif_id,
+            'dispositif_reference': self.dispositif.reference if self.dispositif else None,
+            'plan_action_id': self.plan_action_id,
+            'plan_action_nom': self.plan_action.nom if self.plan_action else None,
+            'declare_par': self.declare_par.username if self.declare_par else None,
+            'responsable': self.responsable.username if self.responsable else None,
+            'superviseur': self.superviseur.username if self.superviseur else None,
+            'approbateur': self.approbateur.username if self.approbateur else None,
+            'cause_racine': self.cause_racine,
+            'lecons_apprises': self.lecons_apprises,
+            'actions_correctives': self.actions_correctives,
+            'analyse_ia': json.loads(self.analyse_ia) if self.analyse_ia else None,
+            'ia_score_confiance': self.ia_score_confiance,
+            'created_at': self.created_at.isoformat() if self.created_at else None,
+            'updated_at': self.updated_at.isoformat() if self.updated_at else None
+        }
+    # Dans la classe Incident, ajoutez cette méthode :
+
+    def peut_modifier(self, user):
+        """Vérifie si l'utilisateur peut modifier l'incident même après résolution"""
+        # Super admin et admin client peuvent toujours modifier
+        if user.role == 'super_admin' or user.is_client_admin:
+            return True
+        
+        # Le créateur et le responsable peuvent modifier
+        if user.id == self.created_by or user.id == self.responsable_resolution_id:
+            return True
+        
+        # Les superviseurs peuvent modifier
+        if user.id == self.superviseur_id:
+            return True
+        
+        return False
+
+
+# ========================
+# MODÈLE TICKET SUPPORT (NOUVEAU)
+# ========================
+
+class TicketSupport(db.Model):
+    """Interface client pour déclarer des incidents"""
+    __tablename__ = 'tickets_support'
+    
+    id = db.Column(db.Integer, primary_key=True)
+    reference = db.Column(db.String(30), unique=True, nullable=False)
+    
+    # Informations client
+    client_id = db.Column(db.Integer, db.ForeignKey('clients.id'))
+    client_nom = db.Column(db.String(200))
+    client_email = db.Column(db.String(120))
+    client_telephone = db.Column(db.String(20))
+    
+    # Contenu du ticket
+    sujet = db.Column(db.String(200), nullable=False)
+    description = db.Column(db.Text, nullable=False)
+    pieces_jointes = db.Column(db.Text)  # URLs séparées par des virgules
+    
+    # Priorité (client)
+    priorite_client = db.Column(db.String(20), default='normale')  # basse, normale, haute, critique
+    
+    # Statut
+    statut = db.Column(db.String(20), default='nouveau')  # nouveau, en_cours, traite, ferme
+    
+    # Liens
+    incident_id = db.Column(db.Integer, db.ForeignKey('incidents.id'))
+    incident = db.relationship('Incident', backref='ticket')
+    
+    # Métadonnées
+    ip_address = db.Column(db.String(45))
+    user_agent = db.Column(db.String(500))
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    traite_par_id = db.Column(db.Integer, db.ForeignKey('user.id'))
+    traite_par = db.relationship('User')
+    
+    def generer_reference(self):
+        annee = datetime.utcnow().year
+        count = TicketSupport.query.filter(
+            TicketSupport.reference.like(f'TKT-{annee}-%')
+        ).count()
+        return f"TKT-{annee}-{count + 1:04d}"
+    
+    def to_dict(self):
+        return {
+            'id': self.id,
+            'reference': self.reference,
+            'sujet': self.sujet,
+            'description': self.description,
+            'priorite_client': self.priorite_client,
+            'statut': self.statut,
+            'created_at': self.created_at.isoformat() if self.created_at else None,
+            'incident_reference': self.incident.reference if self.incident else None
+        }
+
+
+# ========================
+# MODÈLE HISTORIQUE INCIDENT (pour traçabilité)
+# ========================
+
+class IncidentHistorique(db.Model):
+    """Historique des actions sur les incidents"""
+    __tablename__ = 'incidents_historique'
+    
+    id = db.Column(db.Integer, primary_key=True)
+    incident_id = db.Column(db.Integer, db.ForeignKey('incidents.id'))
+    action = db.Column(db.String(100), nullable=False)
+    details = db.Column(db.Text)
+    utilisateur_id = db.Column(db.Integer, db.ForeignKey('user.id'))
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    
+    incident = db.relationship('Incident', backref='historique')
+    utilisateur = db.relationship('User')
+    
