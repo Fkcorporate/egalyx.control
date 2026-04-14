@@ -8001,3 +8001,183 @@ class ActionAmeliorationQualite(db.Model):
         return False
 
 
+# ============================================
+# MODULE FICHE DE CONTRÔLE PAR CAMPAGNE
+# ============================================
+
+class CampagneControle(db.Model):
+    """Campagne de contrôle - Fiche de contrôle complète"""
+    __tablename__ = 'campagnes_controle'
+    
+    id = db.Column(db.Integer, primary_key=True)
+    
+    # ============================================
+    # IDENTIFICATION
+    # ============================================
+    nom = db.Column(db.String(200), nullable=False)
+    description = db.Column(db.Text)
+    reference = db.Column(db.String(50), unique=True, nullable=False)
+    
+    # Organisation
+    pole_id = db.Column(db.Integer, db.ForeignKey('poles.id'), nullable=True)
+    direction_id = db.Column(db.Integer, db.ForeignKey('direction.id'), nullable=True)
+    service_id = db.Column(db.Integer, db.ForeignKey('service.id'), nullable=True)
+    
+    # ============================================
+    # DATES ET STATUT
+    # ============================================
+    date_debut = db.Column(db.Date, nullable=False)
+    date_fin = db.Column(db.Date, nullable=False)
+    statut = db.Column(db.String(30), default='en_preparation')  # en_preparation, en_cours, termine, suspendu, annule
+    
+    # ============================================
+    # ACTEURS
+    # ============================================
+    createur_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
+    valideur_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=True)
+    evaluateur_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=True)
+    
+    # ============================================
+    # VOLUMES PRÉVISIONNELS
+    # ============================================
+    volume_previsionnel = db.Column(db.Integer, default=0)  # Nombre total de dossiers à contrôler
+    nb_dossiers_prevus = db.Column(db.Integer, default=0)   # Nombre de dossiers prévus
+    nb_dossiers_reglement = db.Column(db.Integer, default=0) # Nombre de dossiers règlement à contrôler
+    
+    # ============================================
+    # RÉSULTATS DU CONTRÔLE
+    # ============================================
+    nb_dossiers_controles = db.Column(db.Integer, default=0)  # Nombre de dossiers réellement contrôlés
+    nb_anomalies = db.Column(db.Integer, default=0)           # Nombre de dossiers en anomalie
+    nb_conformes = db.Column(db.Integer, default=0)           # Nombre de dossiers conformes
+    taux_conformite = db.Column(db.Numeric(5, 2), default=0)  # Taux de conformité (%)
+    
+    # ============================================
+    # LISTES (stockées en JSON)
+    # ============================================
+    dossiers_reglement_controles = db.Column(db.JSON, default=[])  # Liste des dossiers règlement contrôlés
+    motifs_anomalie = db.Column(db.JSON, default=[])               # Liste des motifs d'anomalie
+    recommandations = db.Column(db.JSON, default=[])               # Liste des recommandations
+    
+    # ============================================
+    # COMMENTAIRES ET CONCLUSIONS
+    # ============================================
+    commentaire_general = db.Column(db.Text)
+    conclusion = db.Column(db.Text)
+    actions_correctives = db.Column(db.Text)
+    
+    # ============================================
+    # ARCHIVAGE
+    # ============================================
+    is_archived = db.Column(db.Boolean, default=False)
+    archived_at = db.Column(db.DateTime, nullable=True)
+    archived_by = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=True)
+    archive_reason = db.Column(db.String(255), nullable=True)
+    
+    # ============================================
+    # AUDIT
+    # ============================================
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    client_id = db.Column(db.Integer, db.ForeignKey('clients.id'), nullable=False)
+    
+    # ============================================
+    # RELATIONS
+    # ============================================
+    pole = db.relationship('Pole', foreign_keys=[pole_id])
+    direction = db.relationship('Direction', foreign_keys=[direction_id])
+    service = db.relationship('Service', foreign_keys=[service_id])
+    createur = db.relationship('User', foreign_keys=[createur_id])
+    valideur = db.relationship('User', foreign_keys=[valideur_id])
+    evaluateur = db.relationship('User', foreign_keys=[evaluateur_id])
+    archive_user = db.relationship('User', foreign_keys=[archived_by])
+    
+    fichiers = db.relationship('FichierCampagneControle', back_populates='campagne', lazy=True, cascade='all, delete-orphan')
+    
+    def __repr__(self):
+        return f'<CampagneControle {self.reference}: {self.nom}>'
+    
+    def calculer_taux_conformite(self):
+        """Calcule le taux de conformité"""
+        if self.nb_dossiers_controles > 0:
+            self.taux_conformite = round((self.nb_conformes / self.nb_dossiers_controles) * 100, 2)
+        else:
+            self.taux_conformite = 0
+        return self.taux_conformite
+    
+    def get_avancement(self):
+        """Calcule l'avancement de la campagne en pourcentage"""
+        if self.nb_dossiers_prevus > 0:
+            return round((self.nb_dossiers_controles / self.nb_dossiers_prevus) * 100, 1)
+        return 0
+    
+    def get_statut_css(self):
+        """Retourne la classe CSS pour le statut"""
+        status_map = {
+            'en_preparation': 'secondary',
+            'en_cours': 'primary',
+            'termine': 'success',
+            'suspendu': 'warning',
+            'annule': 'danger'
+        }
+        return status_map.get(self.statut, 'secondary')
+    
+    def get_statut_label(self):
+        """Retourne le libellé du statut"""
+        labels = {
+            'en_preparation': 'En préparation',
+            'en_cours': 'En cours',
+            'termine': 'Terminé',
+            'suspendu': 'Suspendu',
+            'annule': 'Annulé'
+        }
+        return labels.get(self.statut, self.statut)
+    
+    def archiver(self, user_id, raison=None):
+        """Archive la campagne"""
+        self.is_archived = True
+        self.archived_at = datetime.utcnow()
+        self.archived_by = user_id
+        self.archive_reason = raison
+        self.statut = 'termine'
+    
+    def desarchiver(self):
+        """Désarchive la campagne"""
+        self.is_archived = False
+        self.archived_at = None
+        self.archived_by = None
+        self.archive_reason = None
+        self.statut = 'en_preparation'
+
+
+class FichierCampagneControle(db.Model):
+    """Fichiers attachés à une campagne de contrôle"""
+    __tablename__ = 'fichiers_campagne_controle'
+    
+    id = db.Column(db.Integer, primary_key=True)
+    campagne_id = db.Column(db.Integer, db.ForeignKey('campagnes_controle.id'), nullable=False)
+    
+    nom_fichier = db.Column(db.String(255), nullable=False)
+    nom_unique = db.Column(db.String(255), nullable=False, unique=True)
+    chemin_fichier = db.Column(db.String(500), nullable=False)
+    type_fichier = db.Column(db.String(100), nullable=False)
+    taille = db.Column(db.Integer, nullable=False)
+    
+    categorie = db.Column(db.String(50), default='document')  # document, rapport, preuve, autre
+    description = db.Column(db.String(500), nullable=True)
+    
+    uploaded_at = db.Column(db.DateTime, default=datetime.utcnow)
+    uploaded_by = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
+    client_id = db.Column(db.Integer, db.ForeignKey('clients.id'), nullable=False)
+    
+    # Relations
+    campagne = db.relationship('CampagneControle', back_populates='fichiers')
+    uploader = db.relationship('User', foreign_keys=[uploaded_by])
+    
+    def get_taille_formatee(self):
+        if self.taille < 1024:
+            return f"{self.taille} o"
+        elif self.taille < 1024 * 1024:
+            return f"{self.taille / 1024:.1f} Ko"
+        else:
+            return f"{self.taille / (1024 * 1024):.1f} Mo"
