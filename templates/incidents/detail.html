@@ -1,0 +1,434 @@
+{% extends "base.html" %}
+
+{% block title %}Incident {{ incident.reference }}{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <div class="row">
+        <div class="col-md-8 mx-auto">
+            <!-- En-tête -->
+            <div class="card mb-4">
+                <div class="card-header bg-{{ incident.get_statut_color() }} text-white">
+                    <div class="d-flex justify-content-between align-items-center">
+                        <div>
+                            <h3 class="mb-0">
+                                <i class="fas fa-exclamation-triangle me-2"></i>
+                                {{ incident.reference }}
+                            </h3>
+                            <small>{{ incident.titre }}</small>
+                        </div>
+                        <div>
+                            <span class="badge bg-light text-dark me-2">
+                                {{ incident.get_type_label() }}
+                            </span>
+                            <span class="badge bg-{{ incident.get_gravite_color() }}">
+                                {{ incident.get_gravite_label() }}
+                            </span>
+                            <span class="badge bg-{{ incident.get_statut_color() }}">
+                                {{ incident.get_statut_label() }}
+                            </span>
+                        </div>
+                    </div>
+                </div>
+                <div class="card-body">
+                    <!-- Métadonnées principales -->
+                    <div class="row">
+                        <div class="col-md-4">
+                            <div class="info-group mb-3">
+                                <label class="text-muted small">Date d'occurrence</label>
+                                <p class="mb-0">{{ incident.date_occurrence.strftime('%d/%m/%Y à %H:%M') if incident.date_occurrence else '-' }}</p>
+                            </div>
+                        </div>
+                        <div class="col-md-4">
+                            <div class="info-group mb-3">
+                                <label class="text-muted small">Date de détection</label>
+                                <p class="mb-0">{{ incident.date_detection.strftime('%d/%m/%Y à %H:%M') if incident.date_detection else 'Non renseignée' }}</p>
+                            </div>
+                        </div>
+                        <div class="col-md-4">
+                            <div class="info-group mb-3">
+                                <label class="text-muted small">Date de résolution</label>
+                                <p class="mb-0">{{ incident.date_resolution.strftime('%d/%m/%Y à %H:%M') if incident.date_resolution else 'Non résolu' }}</p>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- SLA et escalade -->
+                    <div class="row">
+                        <div class="col-md-6">
+                            <div class="info-group mb-3">
+                                <label class="text-muted small">SLA (heures)</label>
+                                <p class="mb-0">
+                                    {% if incident.sla_heures %}
+                                        <span class="badge bg-secondary">{{ incident.sla_heures }} heures</span>
+                                        {% if incident.sla_date_limite %}
+                                            {% set heures_restantes = incident.get_heures_restantes_sla() %}
+                                            {% if incident.sla_viole %}
+                                                <span class="badge bg-danger ms-2">SLA VIOLÉ</span>
+                                            {% elif heures_restantes is not none %}
+                                                <span class="badge bg-{{ 'danger' if heures_restantes < 12 else 'warning' if heures_restantes < 24 else 'success' }} ms-2">
+                                                    {{ heures_restantes|int }}h restantes
+                                                </span>
+                                            {% endif %}
+                                        {% endif %}
+                                    {% else %}
+                                        <span class="text-muted">Non défini</span>
+                                    {% endif %}
+                                </p>
+                            </div>
+                        </div>
+                        <div class="col-md-6">
+                            <div class="info-group mb-3">
+                                <label class="text-muted small">Niveau d'escalade</label>
+                                <p class="mb-0">
+                                    <span class="badge bg-{{ 'danger' if incident.niveau_escalade == 3 else 'warning' if incident.niveau_escalade == 2 else 'secondary' }}">
+                                        {{ incident.get_niveau_escalade_label() }}
+                                    </span>
+                                    {% if incident.escalade_date %}
+                                        <small class="text-muted ms-2">(depuis {{ incident.escalade_date.strftime('%d/%m/%Y') }})</small>
+                                    {% endif %}
+                                </p>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- Description -->
+                    <div class="info-group mb-3">
+                        <label class="text-muted small">Description</label>
+                        <div class="p-3 bg-light rounded">
+                            {{ incident.description|nl2br|safe if incident.description else 'Aucune description' }}
+                        </div>
+                    </div>
+                    
+                    <!-- Liens métier -->
+                    <div class="row">
+                        <div class="col-md-4">
+                            <div class="info-group mb-3">
+                                <label class="text-muted small">Risque associé</label>
+                                <p>
+                                    {% if incident.risque %}
+                                    <a href="{{ url_for('detail_risque', id=incident.risque.id) }}" class="text-decoration-none">
+                                        <i class="fas fa-shield-alt"></i> {{ incident.risque.reference }} - {{ incident.risque.intitule }}
+                                    </a>
+                                    {% else %}
+                                    <span class="text-muted">Aucun risque associé</span>
+                                    {% endif %}
+                                </p>
+                            </div>
+                        </div>
+                        <div class="col-md-4">
+                            <div class="info-group mb-3">
+                                <label class="text-muted small">Dispositif concerné</label>
+                                <p>
+                                    {% if incident.dispositif %}
+                                    <a href="{{ url_for('detail_dispositif', dispositif_id=incident.dispositif.id) }}" class="text-decoration-none">
+                                        <i class="fas fa-shield-virus"></i> {{ incident.dispositif.reference }} - {{ incident.dispositif.nom }}
+                                    </a>
+                                    {% else %}
+                                    <span class="text-muted">Aucun dispositif associé</span>
+                                    {% endif %}
+                                </p>
+                            </div>
+                        </div>
+                        <div class="col-md-4">
+                            <div class="info-group mb-3">
+                                <label class="text-muted small">Plan d'action</label>
+                                <p>
+                                    {% if incident.plan_action %}
+                                    <a href="{{ url_for('detail_plan_action', plan_id=incident.plan_action.id) }}" class="text-decoration-none">
+                                        <i class="fas fa-tasks"></i> {{ incident.plan_action.reference }} - {{ incident.plan_action.nom }}
+                                    </a>
+                                    {% else %}
+                                    <span class="text-muted">Aucun plan d'action</span>
+                                    {% endif %}
+                                </p>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- Acteurs -->
+                    <div class="row">
+                        <div class="col-md-4">
+                            <div class="info-group mb-3">
+                                <label class="text-muted small">Déclaré par</label>
+                                <p>{{ incident.declare_par.username if incident.declare_par else 'Système' }}</p>
+                            </div>
+                        </div>
+                        <div class="col-md-4">
+                            <div class="info-group mb-3">
+                                <label class="text-muted small">Responsable résolution</label>
+                                <p>{{ incident.responsable.username if incident.responsable else 'Non assigné' }}</p>
+                            </div>
+                        </div>
+                        <div class="col-md-4">
+                            <div class="info-group mb-3">
+                                <label class="text-muted small">Superviseur</label>
+                                <p>{{ incident.superviseur.username if incident.superviseur else 'Non assigné' }}</p>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- Approbation -->
+                    {% if incident.approbation_requise %}
+                    <div class="alert alert-{{ 'success' if incident.approbation_statut == 'approuve' else 'danger' if incident.approbation_statut == 'rejete' else 'info' }}">
+                        <i class="fas fa-stamp me-2"></i>
+                        <strong>Approbation:</strong> {{ incident.get_approbation_statut_label() }}
+                        {% if incident.approbation_date %}
+                            - le {{ incident.approbation_date.strftime('%d/%m/%Y à %H:%M') }}
+                        {% endif %}
+                        {% if incident.approbateur %}
+                            par {{ incident.approbateur.username }}
+                        {% endif %}
+                        {% if incident.commentaire_approbation %}
+                            <br><small class="mt-1 d-block">{{ incident.commentaire_approbation }}</small>
+                        {% endif %}
+                    </div>
+                    {% endif %}
+                    
+                    <!-- Section résolution -->
+                    {% if incident.cause_racine or incident.actions_correctives or incident.lecons_apprises %}
+                    <hr>
+                    <h5 class="mt-3">Résolution</h5>
+                    
+                    {% if incident.cause_racine %}
+                    <div class="info-group mb-3">
+                        <label class="text-muted small">Cause racine</label>
+                        <div class="p-3 bg-light rounded">
+                            {{ incident.cause_racine|nl2br|safe }}
+                        </div>
+                    </div>
+                    {% endif %}
+                    
+                    {% if incident.actions_correctives %}
+                    <div class="info-group mb-3">
+                        <label class="text-muted small">Actions correctives</label>
+                        <div class="p-3 bg-light rounded">
+                            {{ incident.actions_correctives|nl2br|safe }}
+                        </div>
+                    </div>
+                    {% endif %}
+                    
+                    {% if incident.lecons_apprises %}
+                    <div class="info-group mb-3">
+                        <label class="text-muted small">Leçons apprises</label>
+                        <div class="p-3 bg-light rounded">
+                            {{ incident.lecons_apprises|nl2br|safe }}
+                        </div>
+                    </div>
+                    {% endif %}
+                    
+                    {% if incident.commentaire_cloture %}
+                    <div class="info-group mb-3">
+                        <label class="text-muted small">Commentaire de clôture</label>
+                        <div class="p-3 bg-light rounded">
+                            {{ incident.commentaire_cloture|nl2br|safe }}
+                        </div>
+                    </div>
+                    {% endif %}
+                    
+                    {% if incident.date_resolution %}
+                    <div class="alert alert-success">
+                        <i class="fas fa-check-circle me-2"></i>
+                        Incident clôturé le {{ incident.date_resolution.strftime('%d/%m/%Y à %H:%M') }}
+                        {% if incident.get_delai_resolution() %}
+                        - Délai de résolution : {{ incident.get_delai_resolution() }} jours
+                        {% endif %}
+                    </div>
+                    {% endif %}
+                    {% endif %}
+                    
+                    <!-- Analyse IA -->
+                    {% if incident.analyse_ia %}
+                    <hr>
+                    <h5 class="mt-3">
+                        <i class="fas fa-robot me-2"></i>
+                        Analyse IA
+                        <small class="text-muted">(score de confiance: {{ incident.ia_score_confiance }}%)</small>
+                    </h5>
+                    <div class="alert alert-info">
+                        <i class="fas fa-info-circle me-2"></i>
+                        Une analyse par intelligence artificielle a été réalisée sur cet incident.
+                        {% if incident.ia_score_confiance >= 80 %}
+                        <span class="badge bg-success ms-2">Haute confiance</span>
+                        {% elif incident.ia_score_confiance >= 60 %}
+                        <span class="badge bg-warning ms-2">Confiance moyenne</span>
+                        {% else %}
+                        <span class="badge bg-danger ms-2">Confiance faible</span>
+                        {% endif %}
+                    </div>
+                    {% endif %}
+                    
+                    <!-- Historique -->
+                    {% if historique %}
+                    <hr>
+                    <h5 class="mt-3">Historique des actions</h5>
+                    <div class="timeline">
+                        {% for entry in historique %}
+                        <div class="timeline-item mb-3">
+                            <div class="d-flex">
+                                <div class="timeline-icon me-3">
+                                    <i class="fas fa-{{ 'check-circle' if 'resolu' in entry.action or 'resolution' in entry.action else 'edit' if 'modification' in entry.action else 'arrow-up' if 'escalade' in entry.action else 'flag' if 'approbation' in entry.action else 'info-circle' }}"></i>
+                                </div>
+                                <div class="timeline-content">
+                                    <div class="d-flex justify-content-between">
+                                        <strong>
+                                            {% if 'resolu' in entry.action or 'resolution' in entry.action %}
+                                                Résolution
+                                            {% elif 'modification' in entry.action %}
+                                                Modification
+                                            {% elif 'escalade' in entry.action %}
+                                                Escalade
+                                            {% elif 'approbation' in entry.action %}
+                                                Approbation
+                                            {% else %}
+                                                {{ entry.action|replace('_', ' ')|title }}
+                                            {% endif %}
+                                        </strong>
+                                        <small class="text-muted">{{ entry.created_at.strftime('%d/%m/%Y %H:%M') }}</small>
+                                    </div>
+                                    <p class="mb-0 small">{{ entry.details }}</p>
+                                    <small class="text-muted">par {{ entry.utilisateur.username if entry.utilisateur else 'Système' }}</small>
+                                </div>
+                            </div>
+                        </div>
+                        {% endfor %}
+                    </div>
+                    {% endif %}
+                    
+                    <!-- Actions -->
+                    <div class="d-flex justify-content-between mt-4">
+                        <a href="{{ url_for('liste_incidents') }}" class="btn btn-secondary">
+                            <i class="fas fa-arrow-left me-1"></i> Retour à la liste
+                        </a>
+                        <div>
+                            <!-- Bouton Modifier/Résoudre - toujours visible pour les admins -->
+                            {% if incident.peut_modifier(current_user) %}
+                            <a href="{{ url_for('resoudre_incident', id=incident.id) }}" class="btn btn-{{ 'warning' if incident.statut in ['ferme', 'resolu'] else 'success' }}">
+                                <i class="fas fa-{{ 'edit' if incident.statut in ['ferme', 'resolu'] else 'check-circle' }} me-1"></i> 
+                                {% if incident.statut in ['ferme', 'resolu'] %}
+                                    Modifier la résolution
+                                {% else %}
+                                    Résoudre l'incident
+                                {% endif %}
+                            </a>
+                            {% endif %}
+                            
+                            <!-- Bouton Analyse IA -->
+                            {% if incident.analyse_ia is none and incident.gravite in ['critique', 'elevee'] %}
+                            <a href="{{ url_for('analyse_ia_incident', id=incident.id) }}" class="btn btn-primary">
+                                <i class="fas fa-robot me-1"></i> Analyser avec IA
+                            </a>
+                            {% endif %}
+                            
+                            <!-- Bouton Escalade -->
+                            {% if incident.niveau_escalade < 3 and current_user.is_client_admin %}
+                            <button type="button" class="btn btn-warning" data-bs-toggle="modal" data-bs-target="#escaladeModal">
+                                <i class="fas fa-arrow-up me-1"></i> Escalader
+                            </button>
+                            {% endif %}
+                            
+                            <!-- Bouton Archivage -->
+                            {% if not incident.is_archived %}
+                            <button type="button" class="btn btn-secondary" data-bs-toggle="modal" data-bs-target="#archiveModal">
+                                <i class="fas fa-archive me-1"></i> Archiver
+                            </button>
+                            {% endif %}
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Modal d'escalade -->
+<div class="modal fade" id="escaladeModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <form method="POST" action="{{ url_for('escalader_incident', id=incident.id) }}">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                <div class="modal-header bg-warning">
+                    <h5 class="modal-title">Escalader l'incident</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <p>Escalader l'incident <strong>{{ incident.reference }}</strong> au niveau supérieur ?</p>
+                    <div class="mb-3">
+                        <label class="form-label">Raison de l'escalade</label>
+                        <textarea name="raison" class="form-control" rows="3" required></textarea>
+                    </div>
+                    <div class="alert alert-info">
+                        <i class="fas fa-info-circle me-2"></i>
+                        Niveau actuel: <strong>{{ incident.get_niveau_escalade_label() }}</strong><br>
+                        Prochain niveau: <strong>{{ 'Niveau 3 (Direction)' if incident.niveau_escalade == 2 else 'Niveau 2 (Superviseur)' }}</strong>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Annuler</button>
+                    <button type="submit" class="btn btn-warning">Escalader</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<!-- Modal d'archivage -->
+<div class="modal fade" id="archiveModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <form method="POST" action="{{ url_for('archiver_incident', id=incident.id) }}">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                <div class="modal-header bg-secondary text-white">
+                    <h5 class="modal-title">Archiver l'incident</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <p>Voulez-vous archiver l'incident <strong>{{ incident.reference }}</strong> ?</p>
+                    <div class="mb-3">
+                        <label class="form-label">Raison de l'archivage</label>
+                        <textarea name="raison" class="form-control" rows="3" required></textarea>
+                    </div>
+                    <div class="alert alert-warning">
+                        <i class="fas fa-exclamation-triangle me-2"></i>
+                        L'incident archivé ne sera plus visible dans la liste active, mais restera consultable dans les archives.
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Annuler</button>
+                    <button type="submit" class="btn btn-secondary">Archiver</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<style>
+.timeline-icon {
+    width: 32px;
+    height: 32px;
+    background: #e9ecef;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+}
+.timeline-content {
+    flex: 1;
+    padding: 8px 12px;
+    background: #f8f9fa;
+    border-radius: 8px;
+}
+[data-bs-theme="dark"] .timeline-icon {
+    background: #334155;
+}
+[data-bs-theme="dark"] .timeline-content {
+    background: #1E293B;
+}
+.info-group label {
+    font-size: 0.7rem;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+</style>
+{% endblock %}

@@ -1,0 +1,110 @@
+{% extends "base.html" %}
+
+{% block title %}Incidents archivés{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <div class="row">
+        <div class="col-12">
+            <div class="card">
+                <div class="card-header bg-secondary text-white d-flex justify-content-between align-items-center">
+                    <h3 class="mb-0">
+                        <i class="fas fa-archive me-2"></i>
+                        Incidents archivés
+                    </h3>
+                    <a href="{{ url_for('liste_incidents') }}" class="btn btn-light">
+                        <i class="fas fa-arrow-left me-1"></i> Retour aux incidents actifs
+                    </a>
+                </div>
+                <div class="card-body">
+                    <div class="table-responsive">
+                        <table class="table table-hover">
+                            <thead class="table-dark">
+                                <tr>
+                                    <th>Référence</th>
+                                    <th>Titre</th>
+                                    <th>Gravité</th>
+                                    <th>Date archivage</th>
+                                    <th>Archivé par</th>
+                                    <th>Raison</th>
+                                    <th>Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for incident in incidents %}
+                                <tr>
+                                    <td><code>{{ incident.reference }}</code></td>
+                                    <td>{{ incident.titre[:50] }}{% if incident.titre|length > 50 %}...{% endif %}</td>
+                                    <td><span class="badge bg-{{ incident.get_gravite_color() }}">{{ incident.get_gravite_label() }}</span></td>
+                                    <td>{{ incident.archived_at.strftime('%d/%m/%Y') if incident.archived_at else '-' }}</td>
+                                    <td>{{ incident.archiveur.username if incident.archiveur else '-' }}</td>
+                                    <td>{{ incident.archive_reason[:50] if incident.archive_reason else '-' }}</td>
+                                    <td>
+                                        <div class="btn-group" role="group">
+                                            <a href="{{ url_for('detail_incident', id=incident.id) }}" class="btn btn-sm btn-outline-primary">
+                                                <i class="fas fa-eye"></i>
+                                            </a>
+                                            <form method="POST" action="{{ url_for('restaurer_incident', id=incident.id) }}" class="d-inline">
+                                                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                                                <button type="submit" class="btn btn-sm btn-outline-success" title="Restaurer">
+                                                    <i class="fas fa-undo-alt"></i>
+                                                </button>
+                                            </form>
+                                            {% if current_user.role == 'super_admin' or current_user.is_client_admin %}
+                                            <button type="button" 
+                                                    class="btn btn-sm btn-outline-danger" 
+                                                    data-bs-toggle="modal"
+                                                    data-bs-target="#deleteModal{{ incident.id }}"
+                                                    title="Supprimer définitivement">
+                                                <i class="fas fa-trash-alt"></i>
+                                            </button>
+                                            {% endif %}
+                                        </div>
+                                        
+                                        <!-- Modal de suppression -->
+                                        <div class="modal fade" id="deleteModal{{ incident.id }}" tabindex="-1">
+                                            <div class="modal-dialog">
+                                                <div class="modal-content">
+                                                    <form method="POST" action="{{ url_for('supprimer_definitivement_incident', id=incident.id) }}">
+                                                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                                                        <div class="modal-header bg-danger text-white">
+                                                            <h5 class="modal-title">Supprimer définitivement</h5>
+                                                            <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                                                        </div>
+                                                        <div class="modal-body">
+                                                            <p>Attention ! Cette action est irréversible.</p>
+                                                            <p>Voulez-vous vraiment supprimer l'incident <strong>{{ incident.reference }}</strong> ?</p>
+                                                            <div class="mb-3">
+                                                                <label class="form-label">Confirmez la référence</label>
+                                                                <input type="text" name="confirmation" class="form-control" 
+                                                                       placeholder="{{ incident.reference }}" required>
+                                                                <small class="text-muted">Tapez la référence exacte pour confirmer</small>
+                                                            </div>
+                                                        </div>
+                                                        <div class="modal-footer">
+                                                            <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Annuler</button>
+                                                            <button type="submit" class="btn btn-danger">Supprimer définitivement</button>
+                                                        </div>
+                                                    </form>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </td>
+                                </tr>
+                                {% else %}
+                                <tr>
+                                    <td colspan="7" class="text-center py-5">
+                                        <i class="fas fa-inbox fa-3x text-muted mb-3"></i>
+                                        <p class="text-muted">Aucun incident archivé</p>
+                                    </td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

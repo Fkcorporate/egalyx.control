@@ -1,0 +1,113 @@
+{% extends "base.html" %}
+
+{% block title %}Résoudre l'incident {{ incident.reference }}{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <div class="row">
+        <div class="col-md-8 mx-auto">
+            <div class="card">
+                <div class="card-header bg-success text-white">
+                    <h4 class="mb-0">
+                        <i class="fas fa-check-circle me-2"></i>
+                        Résoudre l'incident {{ incident.reference }}
+                    </h4>
+                </div>
+                <div class="card-body">
+                    <!-- Récapitulatif -->
+                    <div class="alert alert-info">
+                        <strong>Incident :</strong> {{ incident.titre }}<br>
+                        <strong>Gravité :</strong> <span class="badge bg-{{ incident.get_gravite_color() }}">{{ incident.get_gravite_label() }}</span><br>
+                        <strong>Statut actuel :</strong> <span class="badge bg-{{ incident.get_statut_color() }}">{{ incident.get_statut_label() }}</span><br>
+                        <strong>Date d'occurrence :</strong> {{ incident.date_occurrence.strftime('%d/%m/%Y à %H:%M') }}<br>
+                        {% if incident.date_occurrence %}
+                        <strong>Temps écoulé :</strong> 
+                        {% set diff = (now - incident.date_occurrence).total_seconds() / 3600 %}
+                        {% if diff < 0 %}
+                            0 heures
+                        {% else %}
+                            {{ diff|int }} heures
+                        {% endif %}
+                        {% endif %}
+                    </div>
+                    
+                    <form method="POST">
+                        {{ form.csrf_token }}
+                        
+                        <div class="row">
+                            <div class="col-md-12 mb-3">
+                                <label class="form-label">{{ form.statut.label }}</label>
+                                {{ form.statut(class="form-select" + (" is-invalid" if form.statut.errors else "")) }}
+                                <small class="text-muted">Choisissez le nouveau statut de l'incident</small>
+                                {% for error in form.statut.errors %}
+                                    <div class="invalid-feedback">{{ error }}</div>
+                                {% endfor %}
+                            </div>
+                        </div>
+                        
+                        <div class="row">
+                            <div class="col-md-12 mb-3">
+                                <label class="form-label">{{ form.cause_racine.label }}</label>
+                                {{ form.cause_racine(class="form-control", rows=4, placeholder="Ex: Le serveur a planté à cause d'une surcharge mémoire...") }}
+                                <small class="text-muted">Analyse approfondie de la cause première de l'incident</small>
+                            </div>
+                        </div>
+                        
+                        <div class="row">
+                            <div class="col-md-12 mb-3">
+                                <label class="form-label">{{ form.actions_correctives.label }}</label>
+                                {{ form.actions_correctives(class="form-control", rows=4, placeholder="Ex: 1. Ajouter un monitoring mémoire\n2. Augmenter la RAM\n3. Mettre en place une alerte...") }}
+                                <small class="text-muted">Actions mises en place pour éviter la récurrence</small>
+                            </div>
+                        </div>
+                        
+                        <div class="row">
+                            <div class="col-md-12 mb-3">
+                                <label class="form-label">{{ form.lecons_apprises.label }}</label>
+                                {{ form.lecons_apprises(class="form-control", rows=3, placeholder="Ex: Il faut surveiller les métriques de performance plus régulièrement...") }}
+                                <small class="text-muted">Enseignements tirés de cet incident</small>
+                            </div>
+                        </div>
+                        
+                        <div class="row">
+                            <div class="col-md-12 mb-3">
+                                <label class="form-label">{{ form.commentaire_cloture.label }}</label>
+                                {{ form.commentaire_cloture(class="form-control", rows=3, placeholder="Commentaire final de clôture...") }}
+                            </div>
+                        </div>
+                        
+                        <div class="row">
+                            <div class="col-md-12 mb-3">
+                                <div class="form-check">
+                                    {{ form.creer_plan_action(class="form-check-input") }}
+                                    <label class="form-check-label">{{ form.creer_plan_action.label }}</label>
+                                    <small class="d-block text-muted">Crée automatiquement un plan d'action associé à cet incident</small>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <div class="d-flex justify-content-between">
+                            <a href="{{ url_for('detail_incident', id=incident.id) }}" class="btn btn-secondary">
+                                <i class="fas fa-arrow-left me-1"></i> Annuler
+                            </a>
+                            {{ form.submit(class="btn btn-success") }}
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+// Optionnel: Ajouter une confirmation avant de soumettre
+document.querySelector('form').addEventListener('submit', function(e) {
+    var statut = document.querySelector('#statut').value;
+    if (statut === 'ferme' || statut === 'resolu') {
+        if (!confirm('Êtes-vous sûr de vouloir clôturer cet incident ? Cette action est définitive.')) {
+            e.preventDefault();
+        }
+    }
+});
+</script>
+{% endblock %}

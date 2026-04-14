@@ -1,0 +1,218 @@
+{% extends "base.html" %}
+
+{% block title %}Dashboard IA - Analyse des incidents{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <div class="row">
+        <div class="col-12">
+            <div class="card">
+                <div class="card-header bg-primary text-white">
+                    <h3 class="mb-0">
+                        <i class="fas fa-robot me-2"></i>
+                        Dashboard Intelligence Artificielle
+                        <small class="ms-2">Analyse prédictive des incidents</small>
+                    </h3>
+                </div>
+                <div class="card-body">
+                    
+                    <!-- Tendances -->
+                    <div class="row mb-4">
+                        <div class="col-md-6">
+                            <div class="card">
+                                <div class="card-header bg-info text-white">
+                                    <i class="fas fa-chart-line me-2"></i> Tendances des incidents
+                                </div>
+                                <div class="card-body">
+                                    <div class="text-center mb-3">
+                                        <h2 class="display-4">{{ tendances.total_incidents }}</h2>
+                                        <p class="text-muted">incidents sur 30 jours</p>
+                                        <div class="progress mb-3" style="height: 30px;">
+                                            <div class="progress-bar bg-{{ 'danger' if tendances.pic_detecte else 'success' }}" 
+                                                 style="width: {{ (tendances.moyenne_journaliere / 10 * 100) if tendances.moyenne_journaliere else 0 }}%">
+                                                {{ tendances.moyenne_journaliere }} /jour
+                                            </div>
+                                        </div>
+                                    </div>
+                                    <div class="alert alert-{{ 'danger' if tendances.tendance == 'hausse significative' else 'success' if tendances.tendance == 'baisse significative' else 'info' }}">
+                                        <i class="fas fa-{{ 'arrow-up' if tendances.tendance == 'hausse significative' else 'arrow-down' if tendances.tendance == 'baisse significative' else 'minus' }} me-2"></i>
+                                        <strong>Tendance :</strong> {{ tendances.tendance }}
+                                    </div>
+                                    <h6>Types les plus fréquents :</h6>
+                                    <ul>
+                                        {% for type_info in tendances.types_frequents %}
+                                        <li>{{ type_info.type|replace('_', ' ')|title }} : {{ type_info.count }} incidents</li>
+                                        {% endfor %}
+                                    </ul>
+                                    <p class="text-muted small mt-3">
+                                        <i class="fas fa-lightbulb me-1"></i>
+                                        {{ tendances.recommandation }}
+                                    </p>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <!-- Suggestions d'amélioration -->
+                        <div class="col-md-6">
+                            <div class="card">
+                                <div class="card-header bg-warning text-dark">
+                                    <i class="fas fa-lightbulb me-2"></i> Suggestions d'amélioration
+                                </div>
+                                <div class="card-body">
+                                    {% if ameliorations.suggestions %}
+                                        {% for suggestion in ameliorations.suggestions %}
+                                        <div class="alert alert-{{ 'danger' if suggestion.priorite == 'haute' else 'warning' if suggestion.priorite == 'moyenne' else 'info' }} mb-3">
+                                            <strong>{{ suggestion.type|replace('_', ' ')|title }}</strong>
+                                            <span class="badge bg-{{ 'danger' if suggestion.priorite == 'haute' else 'warning' if suggestion.priorite == 'moyenne' else 'info' }} ms-2">
+                                                {{ suggestion.priorite|title }}
+                                            </span>
+                                            <p class="mt-2 mb-1">{{ suggestion.suggestion }}</p>
+                                            <small class="text-muted">
+                                                Causes principales: {{ suggestion.causes_principales|join(', ') }}
+                                            </small>
+                                        </div>
+                                        {% endfor %}
+                                    {% else %}
+                                        <div class="alert alert-success">
+                                            <i class="fas fa-check-circle me-2"></i>
+                                            Aucune suggestion d'amélioration pour le moment.
+                                        </div>
+                                    {% endif %}
+                                    <p class="text-muted small mt-3">
+                                        <i class="fas fa-chart-bar me-1"></i>
+                                        Basé sur {{ ameliorations.total_analyses }} incidents analysés
+                                    </p>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- Incidents analysés par IA -->
+                    <div class="card mb-4">
+                        <div class="card-header bg-secondary text-white">
+                            <i class="fas fa-microchip me-2"></i> Incidents analysés par IA
+                        </div>
+                        <div class="card-body">
+                            <div class="table-responsive">
+                                <table class="table table-hover">
+                                    <thead>
+                                        <tr>
+                                            <th>Référence</th>
+                                            <th>Titre</th>
+                                            <th>Score confiance</th>
+                                            <th>Analyse</th>
+                                            <th>Action</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        {% for incident in incidents_ia %}
+                                        <tr>
+                                            <td><code>{{ incident.reference }}</code></td>
+                                            <td>{{ incident.titre[:50] }}</td>
+                                            <td>
+                                                <div class="progress" style="height: 20px;">
+                                                    <div class="progress-bar bg-{{ 'success' if incident.ia_score_confiance >= 80 else 'warning' if incident.ia_score_confiance >= 60 else 'danger' }}" 
+                                                         style="width: {{ incident.ia_score_confiance }}%">
+                                                        {{ incident.ia_score_confiance }}%
+                                                    </div>
+                                                </div>
+                                            </td>
+                                            <td>
+                                                {% set analyse = incident.analyse_ia|from_json %}
+                                                {% if analyse %}
+                                                <button type="button" class="btn btn-sm btn-outline-info" 
+                                                        data-bs-toggle="collapse" 
+                                                        data-bs-target="#analyse{{ incident.id }}">
+                                                    <i class="fas fa-code-branch me-1"></i> Voir l'analyse
+                                                </button>
+                                                <div class="collapse mt-2" id="analyse{{ incident.id }}">
+                                                    <div class="card card-body bg-light">
+                                                        <strong>Causes probables:</strong>
+                                                        <ul>
+                                                            {% for cause in analyse.get('causes_probables', []) %}
+                                                            <li>{{ cause }}</li>
+                                                            {% endfor %}
+                                                        </ul>
+                                                        <strong>Recommandations:</strong>
+                                                        <ul>
+                                                            {% for reco in analyse.get('recommandations', []) %}
+                                                            <li>{{ reco }}</li>
+                                                            {% endfor %}
+                                                        </ul>
+                                                        <small class="text-muted">Délai estimé: {{ analyse.get('delai_estime', 'Non estimé') }}</small>
+                                                    </div>
+                                                </div>
+                                                {% else %}
+                                                <span class="text-muted">Non disponible</span>
+                                                {% endif %}
+                                            </td>
+                                            <td>
+                                                <a href="{{ url_for('detail_incident', id=incident.id) }}" class="btn btn-sm btn-primary">
+                                                    <i class="fas fa-eye"></i> Voir
+                                                </a>
+                                            </td>
+                                        </tr>
+                                        {% else %}
+                                        <tr>
+                                            <td colspan="5" class="text-center py-5">
+                                                <i class="fas fa-robot fa-3x text-muted mb-3"></i>
+                                                <p class="text-muted">Aucun incident analysé par l'IA</p>
+                                            </td>
+                                        </tr>
+                                        {% endfor %}
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- Risques de récurrence élevés -->
+                    {% if incidents_recurrents %}
+                    <div class="card">
+                        <div class="card-header bg-danger text-white">
+                            <i class="fas fa-chart-line me-2"></i> Incidents à risque de récurrence élevé
+                        </div>
+                        <div class="card-body">
+                            <div class="row">
+                                {% for item in incidents_recurrents %}
+                                <div class="col-md-4 mb-3">
+                                    <div class="card h-100 border-danger">
+                                        <div class="card-body">
+                                            <h6 class="card-title">{{ item.incident.reference }}</h6>
+                                            <p class="card-text small">{{ item.incident.titre[:80] }}</p>
+                                            <div class="progress mb-2" style="height: 10px;">
+                                                <div class="progress-bar bg-danger" style="width: {{ item.probabilite }}%"></div>
+                                            </div>
+                                            <p class="small text-danger">Risque de récurrence: {{ item.probabilite }}%</p>
+                                            <small class="text-muted">{{ item.recommandation }}</small>
+                                        </div>
+                                        <div class="card-footer bg-transparent">
+                                            <a href="{{ url_for('detail_incident', id=item.incident.id) }}" class="btn btn-sm btn-outline-danger">
+                                                Analyser
+                                            </a>
+                                        </div>
+                                    </div>
+                                </div>
+                                {% endfor %}
+                            </div>
+                        </div>
+                    </div>
+                    {% endif %}
+                    
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+// Ajouter un filtre pour les dates personnalisées si nécessaire
+document.addEventListener('DOMContentLoaded', function() {
+    // Tooltips
+    var tooltipTriggerList = [].slice.call(document.querySelectorAll('[data-bs-toggle="tooltip"]'))
+    var tooltipList = tooltipTriggerList.map(function (tooltipTriggerEl) {
+        return new bootstrap.Tooltip(tooltipTriggerEl)
+    })
+});
+</script>
+{% endblock %}
