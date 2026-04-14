@@ -1,0 +1,512 @@
+{% extends "base.html" %}
+
+{% block title %}{{ plan.reference }} - {{ plan.titre }}{% endblock %}
+
+{% block content %}
+<style>
+    .page-header {
+        background: linear-gradient(135deg, #0A1929 0%, #1A3C6B 100%);
+        border-radius: 24px;
+        padding: 2rem;
+        margin-bottom: 2rem;
+        color: white;
+    }
+    
+    .info-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+        gap: 1rem;
+    }
+    
+    .info-card {
+        background: #f8fafc;
+        border-radius: 16px;
+        padding: 1rem;
+        transition: all 0.3s ease;
+    }
+    
+    .info-card:hover {
+        transform: translateY(-3px);
+        box-shadow: 0 8px 20px rgba(0,0,0,0.08);
+    }
+    
+    [data-bs-theme="dark"] .info-card {
+        background: #1e293b;
+    }
+    
+    .info-label {
+        font-size: 0.7rem;
+        text-transform: uppercase;
+        color: #64748b;
+        letter-spacing: 0.5px;
+    }
+    
+    .info-value {
+        font-size: 1rem;
+        font-weight: 600;
+        margin-top: 0.25rem;
+    }
+    
+    .section-card {
+        background: white;
+        border-radius: 20px;
+        padding: 1.5rem;
+        margin-bottom: 1.5rem;
+        box-shadow: 0 4px 20px rgba(0,0,0,0.05);
+    }
+    
+    [data-bs-theme="dark"] .section-card {
+        background: #1e293b;
+    }
+    
+    .section-title {
+        font-size: 1.1rem;
+        font-weight: 700;
+        margin-bottom: 1rem;
+        padding-bottom: 0.5rem;
+        border-bottom: 2px solid rgba(0,102,204,0.2);
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+    }
+    
+    .btn-action {
+        width: 32px;
+        height: 32px;
+        border-radius: 8px;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        background: #f1f5f9;
+        border: 1px solid #e2e8f0;
+        color: #64748b;
+        transition: all 0.3s ease;
+    }
+    
+    .btn-action:hover {
+        transform: translateY(-2px);
+        background: white;
+    }
+    
+    .progress-modern {
+        background: #e2e8f0;
+        border-radius: 50px;
+        height: 8px;
+        overflow: hidden;
+    }
+    
+    .progress-modern-bar {
+        height: 100%;
+        border-radius: 50px;
+        transition: width 0.3s ease;
+    }
+</style>
+
+<div class="container-fluid px-4">
+    <!-- En-tête -->
+    <div class="page-header">
+        <div class="d-flex flex-wrap justify-content-between align-items-center">
+            <div>
+                <nav aria-label="breadcrumb">
+                    <ol class="breadcrumb mb-2">
+                        <li class="breadcrumb-item"><a href="{{ url_for('liste_plans_pca') }}" class="text-white-50">Plans PCA</a></li>
+                        <li class="breadcrumb-item active text-white">{{ plan.reference }}</li>
+                    </ol>
+                </nav>
+                <h1 class="h2 mb-1 fw-semibold">
+                    <i class="fas fa-chalkboard-user me-2"></i>{{ plan.titre }}
+                </h1>
+                <div class="d-flex flex-wrap gap-2 mt-2">
+                    <span class="badge bg-light text-dark px-3 py-2">
+                        <i class="fas fa-tag me-1"></i>{{ plan.reference }}
+                    </span>
+                    <span class="badge bg-light text-dark px-3 py-2">
+                        <i class="fas fa-code-branch me-1"></i>v{{ plan.version }}
+                    </span>
+                    <span class="badge bg-light text-dark px-3 py-2">
+                        <i class="fas fa-calendar me-1"></i>{{ plan.created_at.strftime('%d/%m/%Y') }}
+                    </span>
+                </div>
+            </div>
+            <div class="d-flex gap-2 mt-2 mt-sm-0">
+                <a href="{{ url_for('modifier_plan_pca', plan_id=plan.id) }}" class="btn btn-outline-light btn-sm">
+                    <i class="fas fa-edit me-1"></i> Modifier
+                </a>
+                <a href="{{ url_for('nouvelle_action_pca', plan_id=plan.id) }}" class="btn btn-outline-light btn-sm">
+                    <i class="fas fa-plus me-1"></i> Action
+                </a>
+                <a href="{{ url_for('nouvel_exercice_pca', plan_id=plan.id) }}" class="btn btn-outline-light btn-sm">
+                    <i class="fas fa-calendar-alt me-1"></i> Exercice
+                </a>
+                <a href="{{ url_for('export_plan_pca_pdf', plan_id=plan.id) }}" class="btn btn-outline-danger btn-sm" target="_blank">
+                    <i class="fas fa-file-pdf me-1"></i> Exporter PDF
+                </a>
+                {% if not plan.is_archived %}
+                <button class="btn btn-outline-light btn-sm" data-bs-toggle="modal" data-bs-target="#archiveModal">
+                    <i class="fas fa-archive me-1"></i> Archiver
+                </button>
+                {% else %}
+                <form method="POST" action="{{ url_for('restaurer_plan_pca', plan_id=plan.id) }}" style="display: inline;">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                    <button type="submit" class="btn btn-outline-light btn-sm">
+                        <i class="fas fa-undo-alt me-1"></i> Restaurer
+                    </button>
+                </form>
+                {% endif %}
+                <!-- Dans la section des actions, ajoutez -->
+
+            </div>
+        </div>
+    </div>
+
+    <!-- Cartes récapitulatives -->
+    <div class="row g-3 mb-4">
+        <div class="col-md-3">
+            <div class="info-card">
+                <div class="info-label">Statut</div>
+                <div class="info-value">
+                    {% if plan.is_archived %}
+                        <span class="badge bg-secondary">Archivé</span>
+                    {% elif plan.statut == 'valide' %}
+                        <span class="badge bg-success">Validé</span>
+                    {% elif plan.statut == 'en_relecture' %}
+                        <span class="badge bg-info">En relecture</span>
+                    {% elif plan.statut == 'en_redaction' %}
+                        <span class="badge bg-warning text-dark">En rédaction</span>
+                    {% elif plan.statut == 'obsolète' %}
+                        <span class="badge bg-danger">Obsolète</span>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="info-card">
+                <div class="info-label">Niveau de maturité</div>
+                <div class="info-value">
+                    <span class="badge bg-primary">{{ plan.niveau_maturite }}/5 - {{ plan.get_maturite_label() }}</span>
+                </div>
+                <div class="progress-modern mt-2">
+                    <div class="progress-modern-bar bg-primary" style="width: {{ plan.niveau_maturite * 20 }}%"></div>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="info-card">
+                <div class="info-label">Avancement</div>
+                <div class="info-value">{{ plan.get_taux_realisation() }}%</div>
+                <div class="progress-modern mt-2">
+                    <div class="progress-modern-bar bg-success" style="width: {{ plan.get_taux_realisation() }}%"></div>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="info-card">
+                <div class="info-label">Prochain test</div>
+                <div class="info-value">
+                    {% if plan.date_prochain_test %}
+                        {{ plan.date_prochain_test.strftime('%d/%m/%Y') }}
+                        {% if plan.date_prochain_test < now.date() %}
+                            <span class="badge bg-danger ms-2">En retard</span>
+                        {% endif %}
+                    {% else %}
+                        Non planifié
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="row g-4">
+        <!-- Colonne gauche -->
+        <div class="col-lg-6">
+            <!-- Informations générales -->
+            <div class="section-card">
+                <div class="section-title">
+                    <i class="fas fa-info-circle text-primary"></i>
+                    Informations générales
+                </div>
+                <div class="row g-3">
+                    <div class="col-6">
+                        <div class="info-label">Responsable PCA</div>
+                        <div class="info-value">{{ plan.responsable.username if plan.responsable else 'Non assigné' }}</div>
+                    </div>
+                    <div class="col-6">
+                        <div class="info-label">Rédacteur</div>
+                        <div class="info-value">{{ plan.redacteur.username if plan.redacteur else 'Non assigné' }}</div>
+                    </div>
+                    <div class="col-6">
+                        <div class="info-label">Valideur</div>
+                        <div class="info-value">{{ plan.valideur.username if plan.valideur else 'Non assigné' }}</div>
+                    </div>
+                    <div class="col-6">
+                        <div class="info-label">Périmètre</div>
+                        <div class="info-value">
+                            {% if plan.pole %}{{ plan.pole.nom }}
+                            {% elif plan.direction %}{{ plan.direction.nom }}
+                            {% elif plan.service %}{{ plan.service.nom }}
+                            {% else %}Toute l'organisation{% endif %}
+                        </div>
+                    </div>
+                </div>
+                {% if plan.description %}
+                <hr class="my-3">
+                <div class="info-label">Description</div>
+                <p class="mt-1 mb-0">{{ plan.description }}</p>
+                {% endif %}
+            </div>
+
+            <!-- BIA - Analyse d'Impact -->
+            <div class="section-card">
+                <div class="section-title">
+                    <i class="fas fa-chart-line text-warning"></i>
+                    Analyse d'Impact (BIA)
+                </div>
+                <div class="row g-3">
+                    <div class="col-6">
+                        <div class="info-label">BIA réalisée</div>
+                        <div class="info-value">
+                            {% if plan.bia_realisee %}
+                                <span class="badge bg-success">Oui</span>
+                                {% if plan.bia_date %} - {{ plan.bia_date.strftime('%d/%m/%Y') }}{% endif %}
+                            {% else %}
+                                <span class="badge bg-secondary">Non réalisée</span>
+                            {% endif %}
+                        </div>
+                    </div>
+                    <div class="col-6">
+                        <div class="info-label">Délai d'arrêt max (RTO)</div>
+                        <div class="info-value">{{ plan.delai_arret_max or 'Non défini' }}</div>
+                    </div>
+                    <div class="col-6">
+                        <div class="info-label">Perte données max (RPO)</div>
+                        <div class="info-value">{{ plan.perte_donnees_max or 'Non défini' }}</div>
+                    </div>
+                    <div class="col-6">
+                        <div class="info-label">Durée critique de reprise</div>
+                        <div class="info-value">{{ plan.duree_critique or 'Non définie' }}</div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Processus critiques -->
+            {% if plan.processus_critiques %}
+            <div class="section-card">
+                <div class="section-title">
+                    <i class="fas fa-list-check text-info"></i>
+                    Processus critiques
+                </div>
+                <ul class="list-unstyled mb-0">
+                    {% for p in plan.processus_critiques %}
+                    <li class="mb-2"><i class="fas fa-check-circle text-success me-2"></i>{{ p }}</li>
+                    {% endfor %}
+                </ul>
+            </div>
+            {% endif %}
+
+            <!-- Stratégies -->
+            {% if plan.strategies %}
+            <div class="section-card">
+                <div class="section-title">
+                    <i class="fas fa-chess-queen text-primary"></i>
+                    Stratégies de continuité
+                </div>
+                <ul class="list-unstyled mb-0">
+                    {% for s in plan.strategies %}
+                    <li class="mb-2"><i class="fas fa-arrow-right text-primary me-2"></i>{{ s }}</li>
+                    {% endfor %}
+                </ul>
+            </div>
+            {% endif %}
+
+            <!-- Sites de secours -->
+            {% if plan.sites_secours %}
+            <div class="section-card">
+                <div class="section-title">
+                    <i class="fas fa-building text-secondary"></i>
+                    Sites de secours
+                </div>
+                <ul class="list-unstyled mb-0">
+                    {% for site in plan.sites_secours %}
+                    <li class="mb-2"><i class="fas fa-map-marker-alt text-danger me-2"></i>{{ site }}</li>
+                    {% endfor %}
+                </ul>
+            </div>
+            {% endif %}
+        </div>
+
+        <!-- Colonne droite -->
+        <div class="col-lg-6">
+            <!-- Procédures -->
+            <div class="section-card">
+                <div class="section-title">
+                    <i class="fas fa-book-open text-success"></i>
+                    Procédures
+                </div>
+                <div class="row g-3">
+                    {% if plan.procedures_urgence %}
+                    <div class="col-12">
+                        <div class="info-label">Procédures d'urgence</div>
+                        <p class="small mt-1">{{ plan.procedures_urgence }}</p>
+                    </div>
+                    {% endif %}
+                    {% if plan.procedures_reprise %}
+                    <div class="col-12">
+                        <div class="info-label">Procédures de reprise</div>
+                        <p class="small mt-1">{{ plan.procedures_reprise }}</p>
+                    </div>
+                    {% endif %}
+                    {% if plan.procedures_retour_normal %}
+                    <div class="col-12">
+                        <div class="info-label">Procédures de retour à la normale</div>
+                        <p class="small mt-1">{{ plan.procedures_retour_normal }}</p>
+                    </div>
+                    {% endif %}
+                </div>
+            </div>
+
+            <!-- Ressources critiques -->
+            {% if plan.ressources_critiques %}
+            <div class="section-card">
+                <div class="section-title">
+                    <i class="fas fa-microchip text-danger"></i>
+                    Ressources critiques
+                </div>
+                <ul class="list-unstyled mb-0">
+                    {% for r in plan.ressources_critiques %}
+                    <li class="mb-2"><i class="fas fa-cog text-warning me-2"></i>{{ r }}</li>
+                    {% endfor %}
+                </ul>
+            </div>
+            {% endif %}
+
+            <!-- Actions -->
+            <div class="section-card">
+                <div class="section-title">
+                    <i class="fas fa-tasks text-primary"></i>
+                    Actions ({{ actions|length }})
+                    <a href="{{ url_for('nouvelle_action_pca', plan_id=plan.id) }}" class="btn btn-sm btn-primary ms-auto">
+                        <i class="fas fa-plus"></i> Ajouter
+                    </a>
+                </div>
+                {% if actions %}
+                <div class="table-responsive">
+                    <table class="table table-sm">
+                        <thead>
+                            <tr>
+                                <th>Réf.</th>
+                                <th>Intitulé</th>
+                                <th>Phase</th>
+                                <th>Avancement</th>
+                                <th>Statut</th>
+                                <th></th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for action in actions %}
+                            <tr>
+                                <td><code>{{ action.reference }}</code></td>
+                                <td>{{ action.intitule|truncate(30) }}</td>
+                                <td>
+                                    <span class="badge bg-secondary">{{ action.phase|replace('_', ' ')|title }}</span>
+                                 </td>
+                                <td>
+                                    <div class="d-flex align-items-center gap-1">
+                                        <div class="progress-modern flex-grow-1" style="height: 4px;">
+                                            <div class="progress-modern-bar bg-primary" style="width: {{ action.pourcentage_realisation }}%"></div>
+                                        </div>
+                                        <small>{{ action.pourcentage_realisation }}%</small>
+                                    </div>
+                                 </td>
+                                <td>
+                                    {% if action.statut == 'termine' %}
+                                        <span class="badge bg-success">Terminé</span>
+                                    {% elif action.statut == 'en_cours' %}
+                                        <span class="badge bg-primary">En cours</span>
+                                    {% else %}
+                                        <span class="badge bg-secondary">À faire</span>
+                                    {% endif %}
+                                 </td>
+                                <td>
+                                    <a href="{{ url_for('modifier_action_pca', action_id=action.id) }}" class="btn-action warning">
+                                        <i class="fas fa-edit"></i>
+                                    </a>
+                                 </td>
+                             </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+                {% else %}
+                <p class="text-muted text-center py-3">Aucune action définie</p>
+                {% endif %}
+            </div>
+
+            <!-- Exercices -->
+            <div class="section-card">
+                <div class="section-title">
+                    <i class="fas fa-calendar-alt text-warning"></i>
+                    Exercices ({{ exercices|length }})
+                    <a href="{{ url_for('nouvel_exercice_pca', plan_id=plan.id) }}" class="btn btn-sm btn-primary ms-auto">
+                        <i class="fas fa-plus"></i> Ajouter
+                    </a>
+                </div>
+                {% if exercices %}
+                <div class="table-responsive">
+                    <table class="table table-sm">
+                        <thead>
+                            <tr>
+                                <th>Date</th>
+                                <th>Nom</th>
+                                <th>Type</th>
+                                <th>Note</th>
+                             </tr>
+                        </thead>
+                        <tbody>
+                            {% for ex in exercices %}
+                            <tr>
+                                <td>{{ ex.date_exercice.strftime('%d/%m/%Y') }}</td>
+                                <td>{{ ex.nom|truncate(25) }}</td>
+                                <td><span class="badge bg-info">{{ ex.type_exercice|replace('_', ' ')|title }}</span></td>
+                                <td>
+                                    {% if ex.note %}
+                                        <span class="badge bg-success">{{ ex.note }}/100</span>
+                                    {% else %}
+                                        -
+                                    {% endif %}
+                                </td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+                {% else %}
+                <p class="text-muted text-center py-3">Aucun exercice programmé</p>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Modal archivage -->
+<div class="modal fade" id="archiveModal" tabindex="-1">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content">
+            <form method="POST" action="{{ url_for('archiver_plan_pca', plan_id=plan.id) }}">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                <div class="modal-header border-0 pb-0">
+                    <h5 class="modal-title"><i class="fas fa-archive text-danger me-2"></i>Archiver</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <p>Archiver <strong>{{ plan.titre }}</strong> ?</p>
+                    <textarea name="raison" class="form-control bg-light" rows="2" placeholder="Raison (optionnel)"></textarea>
+                </div>
+                <div class="modal-footer border-0 pt-0">
+                    <button type="button" class="btn btn-light" data-bs-dismiss="modal">Annuler</button>
+                    <button type="submit" class="btn btn-danger px-4"><i class="fas fa-archive me-1"></i>Archiver</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+{% endblock %}

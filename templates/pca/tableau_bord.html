@@ -1,0 +1,222 @@
+{% extends "base.html" %}
+
+{% block title %}Tableau de bord PCA - Egalyx Control{% endblock %}
+
+{% block content %}
+<style>
+    .stat-card {
+        transition: all 0.3s ease;
+        cursor: pointer;
+    }
+    .stat-card:hover {
+        transform: translateY(-5px);
+    }
+    .chart-container {
+        background: white;
+        border-radius: 20px;
+        padding: 1.5rem;
+        margin-bottom: 1.5rem;
+        box-shadow: 0 4px 20px rgba(0,0,0,0.05);
+    }
+    [data-bs-theme="dark"] .chart-container {
+        background: #1e293b;
+    }
+</style>
+
+<div class="container-fluid px-4">
+    <!-- En-tête -->
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <div>
+            <h1 class="h2 mb-1">
+                <i class="fas fa-chalkboard-user text-primary me-2"></i>
+                Tableau de bord PCA
+            </h1>
+            <p class="text-muted">Vue d'ensemble des plans de continuité d'activité</p>
+        </div>
+        <a href="{{ url_for('nouveau_plan_pca') }}" class="btn btn-primary">
+            <i class="fas fa-plus me-2"></i>Nouveau PCA
+        </a>
+    </div>
+
+    <!-- Cartes statistiques -->
+    <div class="row g-3 mb-4">
+        <div class="col-md-3">
+            <div class="stat-card card border-0 shadow-sm h-100" style="background: linear-gradient(135deg, #1E3A5F 0%, #0F2B45 100%);">
+                <div class="card-body">
+                    <div class="d-flex justify-content-between align-items-center">
+                        <div>
+                            <span class="text-white-50 small text-uppercase">Total PCA</span>
+                            <h2 class="mb-0 fw-bold text-white">{{ stats.total }}</h2>
+                        </div>
+                        <i class="fas fa-chalkboard-user fa-2x text-white opacity-50"></i>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="stat-card card border-0 shadow-sm h-100" style="background: linear-gradient(135deg, #0D5C4B 0%, #0A4A3C 100%);">
+                <div class="card-body">
+                    <div class="d-flex justify-content-between align-items-center">
+                        <div>
+                            <span class="text-white-50 small text-uppercase">Validés</span>
+                            <h2 class="mb-0 fw-bold text-white">{{ stats.valides }}</h2>
+                        </div>
+                        <i class="fas fa-check-circle fa-2x text-white opacity-50"></i>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="stat-card card border-0 shadow-sm h-100" style="background: linear-gradient(135deg, #C47A2E 0%, #A5631F 100%);">
+                <div class="card-body">
+                    <div class="d-flex justify-content-between align-items-center">
+                        <div>
+                            <span class="text-white-50 small text-uppercase">BIA réalisées</span>
+                            <h2 class="mb-0 fw-bold text-white">{{ stats.bia_realisees }}</h2>
+                        </div>
+                        <i class="fas fa-chart-line fa-2x text-white opacity-50"></i>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="stat-card card border-0 shadow-sm h-100" style="background: linear-gradient(135deg, #4A5568 0%, #2D3748 100%);">
+                <div class="card-body">
+                    <div class="d-flex justify-content-between align-items-center">
+                        <div>
+                            <span class="text-white-50 small text-uppercase">Maturité moyenne</span>
+                            <h2 class="mb-0 fw-bold text-white">{{ stats.maturite_moyenne }}</h2>
+                        </div>
+                        <i class="fas fa-chart-line fa-2x text-white opacity-50"></i>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Graphiques -->
+    <div class="row g-4">
+        <div class="col-md-6">
+            <div class="chart-container">
+                <h5 class="mb-3 fw-semibold">
+                    <i class="fas fa-chart-pie me-2 text-primary"></i>Répartition par statut
+                </h5>
+                <canvas id="chartStatuts" style="max-height: 300px;"></canvas>
+            </div>
+        </div>
+        <div class="col-md-6">
+            <div class="chart-container">
+                <h5 class="mb-3 fw-semibold">
+                    <i class="fas fa-chart-bar me-2 text-primary"></i>Niveaux de maturité
+                </h5>
+                <canvas id="chartMaturite" style="max-height: 300px;"></canvas>
+            </div>
+        </div>
+    </div>
+
+    <!-- Derniers plans -->
+    <div class="chart-container mt-4">
+        <div class="d-flex justify-content-between align-items-center mb-3">
+            <h5 class="mb-0 fw-semibold">
+                <i class="fas fa-clock me-2 text-primary"></i>Derniers plans PCA
+            </h5>
+            <a href="{{ url_for('liste_plans_pca') }}" class="btn btn-sm btn-outline-primary">Voir tout</a>
+        </div>
+        <div class="table-responsive">
+            <table class="table table-hover">
+                <thead class="table-light">
+                    <tr>
+                        <th>Référence</th>
+                        <th>Titre</th>
+                        <th>Statut</th>
+                        <th>Maturité</th>
+                        <th>Créé le</th>
+                        <th></th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for plan in plans %}
+                    <tr>
+                        <td><code>{{ plan.reference }}</code></td>
+                        <td>{{ plan.titre|truncate(40) }}</td>
+                        <td>
+                            {% if plan.statut == 'valide' %}
+                                <span class="badge bg-success">Validé</span>
+                            {% elif plan.statut == 'en_relecture' %}
+                                <span class="badge bg-info">En relecture</span>
+                            {% elif plan.statut == 'en_redaction' %}
+                                <span class="badge bg-warning text-dark">En rédaction</span>
+                            {% else %}
+                                <span class="badge bg-secondary">{{ plan.statut }}</span>
+                            {% endif %}
+                         </td>
+                        <td>
+                            {% set maturite_labels = {1: 'Initial', 2: 'Répétable', 3: 'Défini', 4: 'Géré', 5: 'Optimisé'} %}
+                            {{ maturite_labels.get(plan.niveau_maturite, 'N/A') }}
+                         </td>
+                        <td>{{ plan.created_at.strftime('%d/%m/%Y') }}</td>
+                        <td>
+                            <a href="{{ url_for('detail_plan_pca', plan_id=plan.id) }}" class="btn btn-sm btn-outline-primary">
+                                <i class="fas fa-eye"></i>
+                            </a>
+                         </td>
+                     </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<script>
+// Graphique des statuts
+new Chart(document.getElementById('chartStatuts'), {
+    type: 'doughnut',
+    data: {
+        labels: ['En rédaction', 'En relecture', 'Validé', 'Obsolète'],
+        datasets: [{
+            data: [
+                {{ statut_counts.get('En rédaction', 0) }},
+                {{ statut_counts.get('En relecture', 0) }},
+                {{ statut_counts.get('Validé', 0) }},
+                {{ statut_counts.get('Obsolète', 0) }}
+            ],
+            backgroundColor: ['#F59E0B', '#3B82F6', '#0D9488', '#64748B'],
+            borderWidth: 0
+        }]
+    },
+    options: {
+        responsive: true,
+        maintainAspectRatio: true,
+        plugins: { legend: { position: 'bottom' } }
+    }
+});
+
+// Graphique de maturité
+new Chart(document.getElementById('chartMaturite'), {
+    type: 'bar',
+    data: {
+        labels: ['Initial (1)', 'Répétable (2)', 'Défini (3)', 'Géré (4)', 'Optimisé (5)'],
+        datasets: [{
+            label: 'Nombre de plans',
+            data: [
+                {{ maturite_counts.get(1, 0) }},
+                {{ maturite_counts.get(2, 0) }},
+                {{ maturite_counts.get(3, 0) }},
+                {{ maturite_counts.get(4, 0) }},
+                {{ maturite_counts.get(5, 0) }}
+            ],
+            backgroundColor: '#3B82F6',
+            borderRadius: 8
+        }]
+    },
+    options: {
+        responsive: true,
+        maintainAspectRatio: true,
+        plugins: { legend: { display: false } },
+        scales: { y: { beginAtZero: true, title: { display: true, text: 'Nombre de plans' } } }
+    }
+});
+</script>
+{% endblock %}

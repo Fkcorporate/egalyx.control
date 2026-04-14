@@ -1,0 +1,345 @@
+{% extends "base.html" %}
+
+{% block title %}Plans de Continuité d'Activité - Egalyx Control{% endblock %}
+
+{% block content %}
+<style>
+    .page-header {
+        background: linear-gradient(135deg, #0A1929 0%, #1A3C6B 100%);
+        border-radius: 24px;
+        padding: 2rem;
+        margin-bottom: 2rem;
+        color: white;
+    }
+    
+    .stat-card {
+        transition: all 0.3s ease;
+        cursor: pointer;
+    }
+    
+    .stat-card:hover {
+        transform: translateY(-5px);
+    }
+    
+    .badge-maturite {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.5rem;
+        padding: 0.3rem 0.8rem;
+        border-radius: 30px;
+        font-size: 0.7rem;
+        font-weight: 600;
+    }
+    
+    .btn-action {
+        width: 32px;
+        height: 32px;
+        border-radius: 8px;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        background: #f1f5f9;
+        border: 1px solid #e2e8f0;
+        color: #64748b;
+        transition: all 0.3s ease;
+    }
+    
+    .btn-action:hover {
+        transform: translateY(-2px);
+        background: white;
+    }
+    
+    .btn-action.primary:hover { background: #0066CC; color: white; }
+    .btn-action.warning:hover { background: #F59E0B; color: white; }
+    .btn-action.danger:hover { background: #DC2626; color: white; }
+</style>
+
+<div class="container-fluid px-4">
+    <!-- En-tête -->
+    <div class="page-header">
+        <div class="d-flex flex-wrap justify-content-between align-items-center">
+            <div>
+                <h1 class="h3 mb-1 fw-semibold">
+                    <i class="fas fa-chalkboard-user me-2"></i>
+                    Plans de Continuité d'Activité
+                </h1>
+                <p class="text-white-50 small mb-0">
+                    Gestion des PCA - Plan de Continuité d'Activité
+                </p>
+            </div>
+            <div class="d-flex gap-2 mt-2 mt-sm-0">
+                <a href="{{ url_for('tableau_bord_pca') }}" class="btn btn-outline-light btn-sm">
+                    <i class="fas fa-chart-line me-1"></i> Tableau de bord
+                </a>
+                <a href="{{ url_for('nouveau_plan_pca') }}" class="btn btn-light btn-sm">
+                    <i class="fas fa-plus me-1"></i> Nouveau PCA
+                </a>
+            </div>
+        </div>
+    </div>
+
+    <!-- Filtres -->
+    <div class="card border-0 shadow-sm mb-4">
+        <div class="card-body py-3">
+            <form method="GET" class="row g-3 align-items-end">
+                <div class="col-md-3">
+                    <label class="form-label small text-muted mb-1">Statut</label>
+                    <select name="statut" class="form-select form-select-sm bg-light border-0">
+                        <option value="">Tous</option>
+                        <option value="en_redaction" {% if request.args.get('statut') == 'en_redaction' %}selected{% endif %}>En rédaction</option>
+                        <option value="en_relecture" {% if request.args.get('statut') == 'en_relecture' %}selected{% endif %}>En relecture</option>
+                        <option value="valide" {% if request.args.get('statut') == 'valide' %}selected{% endif %}>Validé</option>
+                        <option value="obsolète" {% if request.args.get('statut') == 'obsolète' %}selected{% endif %}>Obsolète</option>
+                    </select>
+                </div>
+                <div class="col-md-3">
+                    <label class="form-label small text-muted mb-1">Pôle</label>
+                    <select name="pole_id" class="form-select form-select-sm bg-light border-0">
+                        <option value="">Tous</option>
+                        {% for pole in poles %}
+                        <option value="{{ pole.id }}" {% if request.args.get('pole_id')|int == pole.id %}selected{% endif %}>{{ pole.nom }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="col-md-3">
+                    <label class="form-label small text-muted mb-1">Direction</label>
+                    <select name="direction_id" class="form-select form-select-sm bg-light border-0">
+                        <option value="">Toutes</option>
+                        {% for direction in directions %}
+                        <option value="{{ direction.id }}" {% if request.args.get('direction_id')|int == direction.id %}selected{% endif %}>{{ direction.nom }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="col-md-3">
+                    <div class="d-flex gap-2">
+                        <div class="form-check form-switch mt-3">
+                            <input class="form-check-input" type="checkbox" name="show_archived" id="showArchived" 
+                                   value="true" {% if show_archived %}checked{% endif %} onchange="this.form.submit()">
+                            <label class="form-check-label small" for="showArchived">
+                                <i class="fas fa-archive me-1"></i>Archivés
+                            </label>
+                        </div>
+                        <button type="submit" class="btn btn-primary btn-sm px-4 mt-2">
+                            <i class="fas fa-search me-1"></i>Filtrer
+                        </button>
+                    </div>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Cartes statistiques -->
+    <div class="row g-3 mb-4">
+        <div class="col-sm-6 col-lg-3">
+            <div class="stat-card card border-0 shadow-sm h-100" style="background: linear-gradient(135deg, #1E3A5F 0%, #0F2B45 100%);">
+                <div class="card-body">
+                    <div class="d-flex align-items-center justify-content-between">
+                        <div>
+                            <span class="text-white-50 small text-uppercase">Total</span>
+                            <h2 class="mb-0 fw-bold mt-1 text-white">{{ stats.total }}</h2>
+                            <small class="text-white-50">plans PCA</small>
+                        </div>
+                        <div class="rounded-circle p-3" style="background: rgba(255,255,255,0.15);">
+                            <i class="fas fa-chalkboard-user fa-2x text-white"></i>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="col-sm-6 col-lg-3">
+            <div class="stat-card card border-0 shadow-sm h-100" style="background: linear-gradient(135deg, #0D5C4B 0%, #0A4A3C 100%);">
+                <div class="card-body">
+                    <div class="d-flex align-items-center justify-content-between">
+                        <div>
+                            <span class="text-white-50 small text-uppercase">Validés</span>
+                            <h2 class="mb-0 fw-bold mt-1 text-white">{{ stats.valide }}</h2>
+                            <small class="text-white-50">opérationnels</small>
+                        </div>
+                        <div class="rounded-circle p-3" style="background: rgba(255,255,255,0.15);">
+                            <i class="fas fa-check-circle fa-2x text-white"></i>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="col-sm-6 col-lg-3">
+            <div class="stat-card card border-0 shadow-sm h-100" style="background: linear-gradient(135deg, #C47A2E 0%, #A5631F 100%);">
+                <div class="card-body">
+                    <div class="d-flex align-items-center justify-content-between">
+                        <div>
+                            <span class="text-white-50 small text-uppercase">En rédaction</span>
+                            <h2 class="mb-0 fw-bold mt-1 text-white">{{ stats.en_redaction }}</h2>
+                            <small class="text-white-50">en cours</small>
+                        </div>
+                        <div class="rounded-circle p-3" style="background: rgba(255,255,255,0.15);">
+                            <i class="fas fa-pen-fancy fa-2x text-white"></i>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="col-sm-6 col-lg-3">
+            <div class="stat-card card border-0 shadow-sm h-100" style="background: linear-gradient(135deg, #4A5568 0%, #2D3748 100%);">
+                <div class="card-body">
+                    <div class="d-flex align-items-center justify-content-between">
+                        <div>
+                            <span class="text-white-50 small text-uppercase">Maturité</span>
+                            <h2 class="mb-0 fw-bold mt-1 text-white">{{ stats.maturite_moyenne }}</h2>
+                            <small class="text-white-50">/5</small>
+                        </div>
+                        <div class="rounded-circle p-3" style="background: rgba(255,255,255,0.15);">
+                            <i class="fas fa-chart-line fa-2x text-white"></i>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Tableau des plans -->
+    <div class="card border-0 shadow-sm">
+        <div class="card-header bg-white border-0 py-3">
+            <div class="d-flex justify-content-between align-items-center">
+                <h5 class="mb-0 fw-semibold">
+                    <i class="fas fa-list me-2 text-primary"></i>Liste des plans PCA
+                </h5>
+                <span class="badge bg-light text-dark">{{ plans|length }} résultat(s)</span>
+            </div>
+        </div>
+        <div class="card-body p-0">
+            {% if plans %}
+            <div class="table-responsive">
+                <table class="table table-hover align-middle mb-0">
+                    <thead class="bg-light">
+                        <tr>
+                            <th class="ps-3">Référence</th>
+                            <th>Titre</th>
+                            <th>Périmètre</th>
+                            <th>Maturité</th>
+                            <th>RTO/RPO</th>
+                            <th>Statut</th>
+                            <th class="text-end pe-3">Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for plan in plans %}
+                        <tr class="{% if plan.is_archived %}table-secondary opacity-75{% endif %}">
+                            <td class="ps-3">
+                                <code class="small fw-bold">{{ plan.reference }}</code>
+                                <div class="small text-muted">v{{ plan.version }}</div>
+                            </td>
+                            <td>
+                                <a href="{{ url_for('detail_plan_pca', plan_id=plan.id) }}" class="text-decoration-none fw-semibold">
+                                    {{ plan.titre }}
+                                </a>
+                            </td>
+                            <td>
+                                {% if plan.pole %}
+                                    <span class="badge bg-primary bg-opacity-10 text-primary px-2 py-1">
+                                        <i class="fas fa-building me-1"></i> {{ plan.pole.nom|truncate(20) }}
+                                    </span>
+                                {% elif plan.direction %}
+                                    <span class="badge bg-info bg-opacity-10 text-info px-2 py-1">
+                                        <i class="fas fa-sitemap me-1"></i> {{ plan.direction.nom|truncate(20) }}
+                                    </span>
+                                {% elif plan.service %}
+                                    <span class="badge bg-success bg-opacity-10 text-success px-2 py-1">
+                                        <i class="fas fa-users me-1"></i> {{ plan.service.nom|truncate(20) }}
+                                    </span>
+                                {% else %}
+                                    <span class="text-muted">—</span>
+                                {% endif %}
+                             </td>
+                            <td>
+                                {% set maturite_labels = {1: 'Initial', 2: 'Répétable', 3: 'Défini', 4: 'Géré', 5: 'Optimisé'} %}
+                                {% set maturite_colors = {1: 'secondary', 2: 'info', 3: 'primary', 4: 'warning', 5: 'success'} %}
+                                <span class="badge-maturite bg-{{ maturite_colors.get(plan.niveau_maturite, 'secondary') }} bg-opacity-10 text-{{ maturite_colors.get(plan.niveau_maturite, 'secondary') }}">
+                                    {{ maturite_labels.get(plan.niveau_maturite, 'N/A') }}
+                                </span>
+                             </td>
+                            <td class="small">
+                                <div>RTO: {{ plan.delai_arret_max or '-' }}</div>
+                                <div>RPO: {{ plan.perte_donnees_max or '-' }}</div>
+                             </td>
+                            <td>
+                                {% if plan.is_archived %}
+                                    <span class="badge bg-secondary">Archivé</span>
+                                {% elif plan.statut == 'valide' %}
+                                    <span class="badge bg-success">Validé</span>
+                                {% elif plan.statut == 'en_relecture' %}
+                                    <span class="badge bg-info">En relecture</span>
+                                {% elif plan.statut == 'en_redaction' %}
+                                    <span class="badge bg-warning text-dark">En rédaction</span>
+                                {% elif plan.statut == 'obsolète' %}
+                                    <span class="badge bg-danger">Obsolète</span>
+                                {% endif %}
+                             </td>
+                            <td class="text-end pe-3">
+                                <div class="btn-group btn-group-sm">
+                                    <a href="{{ url_for('detail_plan_pca', plan_id=plan.id) }}" class="btn-action primary" title="Détails">
+                                        <i class="fas fa-eye"></i>
+                                    </a>
+                                    <a href="{{ url_for('modifier_plan_pca', plan_id=plan.id) }}" class="btn-action warning" title="Modifier">
+                                        <i class="fas fa-edit"></i>
+                                    </a>
+                                    {% if not plan.is_archived %}
+                                    <button class="btn-action danger" title="Archiver" data-bs-toggle="modal" data-bs-target="#archiveModal{{ plan.id }}">
+                                        <i class="fas fa-archive"></i>
+                                    </button>
+                                    {% else %}
+                                    <form method="POST" action="{{ url_for('restaurer_plan_pca', plan_id=plan.id) }}" style="display: inline;">
+                                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                                        <button type="submit" class="btn-action success" title="Restaurer">
+                                            <i class="fas fa-undo-alt"></i>
+                                        </button>
+                                    </form>
+                                    {% endif %}
+                                </div>
+
+                                <!-- Modal archivage -->
+                                <div class="modal fade" id="archiveModal{{ plan.id }}" tabindex="-1">
+                                    <div class="modal-dialog modal-dialog-centered">
+                                        <div class="modal-content">
+                                            <form method="POST" action="{{ url_for('archiver_plan_pca', plan_id=plan.id) }}">
+                                                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                                                <div class="modal-header border-0 pb-0">
+                                                    <h5 class="modal-title"><i class="fas fa-archive text-danger me-2"></i>Archiver</h5>
+                                                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                                                </div>
+                                                <div class="modal-body">
+                                                    <p>Archiver <strong>{{ plan.titre }}</strong> ?</p>
+                                                    <textarea name="raison" class="form-control bg-light" rows="2" placeholder="Raison (optionnel)"></textarea>
+                                                </div>
+                                                <div class="modal-footer border-0 pt-0">
+                                                    <button type="button" class="btn btn-light" data-bs-dismiss="modal">Annuler</button>
+                                                    <button type="submit" class="btn btn-danger px-4"><i class="fas fa-archive me-1"></i>Archiver</button>
+                                                </div>
+                                            </form>
+                                        </div>
+                                    </div>
+                                </div>
+                             </td>
+                         </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+            {% else %}
+            <div class="text-center py-5">
+                <i class="fas fa-folder-open fa-3x text-muted mb-3 opacity-50"></i>
+                <p class="text-muted mb-2">Aucun plan PCA trouvé.</p>
+                <a href="{{ url_for('nouveau_plan_pca') }}" class="btn btn-primary btn-sm mt-2">
+                    <i class="fas fa-plus me-1"></i>Créer un plan PCA
+                </a>
+            </div>
+            {% endif %}
+        </div>
+    </div>
+</div>
+
+<script>
+document.getElementById('showArchived')?.addEventListener('change', function() {
+    this.form.submit();
+});
+</script>
+{% endblock %}
