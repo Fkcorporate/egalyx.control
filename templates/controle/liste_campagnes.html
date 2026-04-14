@@ -1,0 +1,300 @@
+{% extends "base.html" %}
+
+{% block title %}Campagnes de contrôle - Egalyx Control{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <!-- En-tête -->
+    <div class="row mb-4">
+        <div class="col">
+            <div class="d-flex justify-content-between align-items-center">
+                <div>
+                    <h1 class="h2 mb-0">
+                        <i class="fas fa-clipboard-list text-primary me-2"></i>
+                        Campagnes de contrôle
+                    </h1>
+                    <p class="text-muted mt-2">
+                        Gestion des fiches de contrôle par campagne
+                    </p>
+                </div>
+                <div class="btn-group">
+                    <a href="{{ url_for('statistiques_globales_controle') }}" class="btn btn-outline-info">
+                        <i class="fas fa-chart-line me-1"></i>Tableau de bord
+                    </a>
+                    <a href="{{ url_for('nouvelle_campagne_controle') }}" class="btn btn-primary">
+                        <i class="fas fa-plus me-2"></i>Nouvelle campagne
+                    </a>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Filtres -->
+    <div class="card shadow-sm mb-4">
+        <div class="card-body">
+            <form method="GET" class="row g-3 align-items-end">
+                <div class="col-md-3">
+                    <label class="form-label">Statut</label>
+                    <select name="statut" class="form-select">
+                        <option value="">-- Tous --</option>
+                        <option value="en_preparation" {% if request.args.get('statut') == 'en_preparation' %}selected{% endif %}>En préparation</option>
+                        <option value="en_cours" {% if request.args.get('statut') == 'en_cours' %}selected{% endif %}>En cours</option>
+                        <option value="termine" {% if request.args.get('statut') == 'termine' %}selected{% endif %}>Terminé</option>
+                        <option value="suspendu" {% if request.args.get('statut') == 'suspendu' %}selected{% endif %}>Suspendu</option>
+                        <option value="annule" {% if request.args.get('statut') == 'annule' %}selected{% endif %}>Annulé</option>
+                    </select>
+                </div>
+                <div class="col-md-3">
+                    <label class="form-label">Pôle</label>
+                    <select name="pole_id" class="form-select">
+                        <option value="">-- Tous --</option>
+                        {% for pole in poles %}
+                        <option value="{{ pole.id }}" {% if request.args.get('pole_id')|int == pole.id %}selected{% endif %}>{{ pole.nom }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="col-md-3">
+                    <label class="form-label">Direction</label>
+                    <select name="direction_id" class="form-select">
+                        <option value="">-- Toutes --</option>
+                        {% for direction in directions %}
+                        <option value="{{ direction.id }}" {% if request.args.get('direction_id')|int == direction.id %}selected{% endif %}>{{ direction.nom }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="col-md-3">
+                    <div class="form-check form-switch mb-3">
+                        <input class="form-check-input" type="checkbox" name="show_archived" id="showArchived" 
+                               {% if show_archived %}checked{% endif %} onchange="this.form.submit()">
+                        <label class="form-check-label" for="showArchived">
+                            <i class="fas fa-archive me-1"></i>Afficher les archivés
+                        </label>
+                    </div>
+                    <button type="submit" class="btn btn-primary w-100">
+                        <i class="fas fa-search me-1"></i>Filtrer
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Cartes statistiques -->
+    <div class="row mb-4 g-3">
+        <div class="col-md-3">
+            <div class="card text-white bg-primary shadow-sm h-100">
+                <div class="card-body">
+                    <div class="d-flex justify-content-between align-items-center">
+                        <div>
+                            <h6 class="card-title mb-0 opacity-75">Total</h6>
+                            <p class="display-6 mb-0 fw-bold">{{ stats.total }}</p>
+                        </div>
+                        <i class="fas fa-clipboard-list fa-2x opacity-50"></i>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card text-white bg-info shadow-sm h-100">
+                <div class="card-body">
+                    <div class="d-flex justify-content-between align-items-center">
+                        <div>
+                            <h6 class="card-title mb-0 opacity-75">En cours</h6>
+                            <p class="display-6 mb-0 fw-bold">{{ stats.en_cours }}</p>
+                        </div>
+                        <i class="fas fa-play-circle fa-2x opacity-50"></i>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card text-white bg-success shadow-sm h-100">
+                <div class="card-body">
+                    <div class="d-flex justify-content-between align-items-center">
+                        <div>
+                            <h6 class="card-title mb-0 opacity-75">Terminées</h6>
+                            <p class="display-6 mb-0 fw-bold">{{ stats.termine }}</p>
+                        </div>
+                        <i class="fas fa-check-circle fa-2x opacity-50"></i>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card text-white bg-secondary shadow-sm h-100">
+                <div class="card-body">
+                    <div class="d-flex justify-content-between align-items-center">
+                        <div>
+                            <h6 class="card-title mb-0 opacity-75">Taux conformité</h6>
+                            <p class="display-6 mb-0 fw-bold">{{ stats.taux_moyen }}%</p>
+                        </div>
+                        <i class="fas fa-chart-line fa-2x opacity-50"></i>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Tableau des campagnes -->
+    <div class="card shadow-sm">
+        <div class="card-header bg-white py-3">
+            <div class="d-flex justify-content-between align-items-center">
+                <h5 class="mb-0">
+                    <i class="fas fa-list me-2"></i>Liste des campagnes
+                </h5>
+                <span class="badge bg-secondary">{{ campagnes|length }} campagne(s)</span>
+            </div>
+        </div>
+        <div class="card-body p-0">
+            <div class="table-responsive">
+                <table class="table table-hover align-middle mb-0">
+                    <thead class="table-light">
+                        <tr>
+                            <th>Référence</th>
+                            <th>Nom</th>
+                            <th>Organisation</th>
+                            <th>Période</th>
+                            <th>Avancement</th>
+                            <th>Taux conformité</th>
+                            <th>Statut</th>
+                            <th>Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for campagne in campagnes %}
+                        <tr>
+                            <td>
+                                <code class="fw-bold">{{ campagne.reference }}</code>
+                            </td>
+                            <td>
+                                <a href="{{ url_for('detail_campagne_controle', campagne_id=campagne.id) }}" class="text-decoration-none fw-semibold">
+                                    {{ campagne.nom[:50] }}{% if campagne.nom|length > 50 %}...{% endif %}
+                                </a>
+                            </td>
+                            <td>
+                                {% if campagne.pole %}
+                                    <span class="badge bg-info bg-opacity-10 text-info">
+                                        <i class="fas fa-building me-1"></i>{{ campagne.pole.nom }}
+                                    </span>
+                                {% elif campagne.direction %}
+                                    <span class="badge bg-primary bg-opacity-10 text-primary">
+                                        <i class="fas fa-sitemap me-1"></i>{{ campagne.direction.nom }}
+                                    </span>
+                                {% elif campagne.service %}
+                                    <span class="badge bg-success bg-opacity-10 text-success">
+                                        <i class="fas fa-users me-1"></i>{{ campagne.service.nom }}
+                                    </span>
+                                {% else %}
+                                    <span class="text-muted">Non spécifié</span>
+                                {% endif %}
+                            </td>
+                            <td>
+                                <small>
+                                    {{ campagne.date_debut.strftime('%d/%m/%Y') }}<br>
+                                    <i class="far fa-calendar-alt text-muted"></i> {{ campagne.date_fin.strftime('%d/%m/%Y') }}
+                                </small>
+                            </td>
+                            <td>
+                                <div class="d-flex align-items-center">
+                                    <div class="progress flex-grow-1 me-2" style="height: 6px;">
+                                        <div class="progress-bar bg-info" role="progressbar" 
+                                             style="width: {{ campagne.get_avancement() }}%"></div>
+                                    </div>
+                                    <small>{{ campagne.get_avancement() }}%</small>
+                                </div>
+                            </td>
+                            <td>
+                                {% set taux = campagne.taux_conformite|float %}
+                                <div class="d-flex align-items-center">
+                                    <div class="progress flex-grow-1 me-2" style="height: 6px;">
+                                        <div class="progress-bar {% if taux >= 80 %}bg-success{% elif taux >= 60 %}bg-warning{% else %}bg-danger{% endif %}" 
+                                             role="progressbar" style="width: {{ taux }}%"></div>
+                                    </div>
+                                    <small>{{ taux }}%</small>
+                                </div>
+                            </td>
+                            <td>
+                                <span class="badge bg-{{ campagne.get_statut_css() }}">
+                                    {{ campagne.get_statut_label() }}
+                                </span>
+                            </td>
+                            <td>
+                                <div class="btn-group btn-group-sm">
+                                    <a href="{{ url_for('detail_campagne_controle', campagne_id=campagne.id) }}" 
+                                       class="btn btn-outline-primary" title="Voir">
+                                        <i class="fas fa-eye"></i>
+                                    </a>
+                                    <a href="{{ url_for('modifier_campagne_controle', campagne_id=campagne.id) }}" 
+                                       class="btn btn-outline-secondary" title="Modifier">
+                                        <i class="fas fa-edit"></i>
+                                    </a>
+                                    <a href="{{ url_for('statistiques_campagne_controle', campagne_id=campagne.id) }}" 
+                                       class="btn btn-outline-info" title="Statistiques">
+                                        <i class="fas fa-chart-bar"></i>
+                                    </a>
+                                    {% if not campagne.is_archived %}
+                                    <button type="button" class="btn btn-outline-danger" title="Archiver" 
+                                            data-bs-toggle="modal" data-bs-target="#archiveModal{{ campagne.id }}">
+                                        <i class="fas fa-archive"></i>
+                                    </button>
+                                    {% else %}
+                                    <form method="POST" action="{{ url_for('restaurer_campagne_controle', campagne_id=campagne.id) }}" 
+                                          style="display: inline;" onsubmit="return confirm('Restaurer cette campagne ?')">
+                                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                                        <button type="submit" class="btn btn-outline-success" title="Restaurer">
+                                            <i class="fas fa-undo-alt"></i>
+                                        </button>
+                                    </form>
+                                    {% endif %}
+                                </div>
+                                
+                                <!-- Modal archivage -->
+                                <div class="modal fade" id="archiveModal{{ campagne.id }}" tabindex="-1">
+                                    <div class="modal-dialog">
+                                        <div class="modal-content">
+                                            <form method="POST" action="{{ url_for('archiver_campagne_controle', campagne_id=campagne.id) }}">
+                                                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                                                <div class="modal-header">
+                                                    <h5 class="modal-title">Archiver la campagne</h5>
+                                                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                                                </div>
+                                                <div class="modal-body">
+                                                    <p>Archiver la campagne <strong>{{ campagne.reference }} - {{ campagne.nom }}</strong> ?</p>
+                                                    <div class="mb-3">
+                                                        <label class="form-label">Raison de l'archivage</label>
+                                                        <textarea name="raison" class="form-control" rows="2"></textarea>
+                                                    </div>
+                                                </div>
+                                                <div class="modal-footer">
+                                                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Annuler</button>
+                                                    <button type="submit" class="btn btn-danger">Archiver</button>
+                                                </div>
+                                            </form>
+                                        </div>
+                                    </div>
+                                </div>
+                            </td>
+                        </tr>
+                        {% else %}
+                        <tr>
+                            <td colspan="8" class="text-center py-5">
+                                <i class="fas fa-folder-open fa-3x text-muted mb-3"></i>
+                                <p class="text-muted">Aucune campagne trouvée.</p>
+                                <a href="{{ url_for('nouvelle_campagne_controle') }}" class="btn btn-primary btn-sm">
+                                    <i class="fas fa-plus me-1"></i>Créer la première campagne
+                                </a>
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+document.getElementById('showArchived').addEventListener('change', function() {
+    this.form.submit();
+});
+</script>
+{% endblock %}

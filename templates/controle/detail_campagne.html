@@ -1,0 +1,380 @@
+{% extends "base.html" %}
+
+{% block title %}{{ campagne.reference }} - {{ campagne.nom }}{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <!-- En-tête -->
+    <div class="row mb-4">
+        <div class="col">
+            <nav aria-label="breadcrumb">
+                <ol class="breadcrumb">
+                    <li class="breadcrumb-item"><a href="{{ url_for('liste_campagnes_controle') }}">Campagnes de contrôle</a></li>
+                    <li class="breadcrumb-item active">{{ campagne.reference }}</li>
+                </ol>
+            </nav>
+            <div class="d-flex justify-content-between align-items-start">
+                <div>
+                    <h1 class="h2 mb-1">
+                        <i class="fas fa-clipboard-list text-primary me-2"></i>
+                        {{ campagne.nom }}
+                    </h1>
+                    <div class="d-flex flex-wrap gap-2 mt-2">
+                        <span class="badge bg-light text-dark border">
+                            <i class="fas fa-tag me-1"></i>{{ campagne.reference }}
+                        </span>
+                        <span class="badge bg-light text-dark border">
+                            <i class="fas fa-user me-1"></i>Créé par: {{ campagne.createur.username }}
+                        </span>
+                        <span class="badge bg-light text-dark border">
+                            <i class="far fa-calendar-alt me-1"></i>{{ campagne.created_at.strftime('%d/%m/%Y') }}
+                        </span>
+                    </div>
+                </div>
+                <div class="btn-group">
+                    <a href="{{ url_for('modifier_campagne_controle', campagne_id=campagne.id) }}" class="btn btn-outline-primary">
+                        <i class="fas fa-edit me-1"></i>Modifier
+                    </a>
+                    <a href="{{ url_for('statistiques_campagne_controle', campagne_id=campagne.id) }}" class="btn btn-outline-info">
+                        <i class="fas fa-chart-bar me-1"></i>Statistiques
+                    </a>
+                    {% if not campagne.is_archived %}
+                    <button type="button" class="btn btn-outline-danger" data-bs-toggle="modal" data-bs-target="#archiveModal">
+                        <i class="fas fa-archive me-1"></i>Archiver
+                    </button>
+                    {% else %}
+                    <form method="POST" action="{{ url_for('restaurer_campagne_controle', campagne_id=campagne.id) }}" style="display: inline;">
+                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                        <button type="submit" class="btn btn-outline-success" onclick="return confirm('Restaurer cette campagne ?')">
+                            <i class="fas fa-undo-alt me-1"></i>Restaurer
+                        </button>
+                    </form>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="row">
+        <!-- Colonne gauche - Informations -->
+        <div class="col-md-5">
+            <!-- Carte informations générales -->
+            <div class="card shadow-sm mb-4">
+                <div class="card-header bg-white py-3">
+                    <h5 class="card-title mb-0">
+                        <i class="fas fa-info-circle me-2"></i>Informations générales
+                    </h5>
+                </div>
+                <div class="card-body">
+                    <table class="table table-sm table-borderless">
+                        <tr>
+                            <th width="40%">Statut:</th>
+                            <td>
+                                <span class="badge bg-{{ campagne.get_statut_css() }}">{{ campagne.get_statut_label() }}</span>
+                            </td>
+                        </tr>
+                        <tr>
+                            <th>Organisation:</th>
+                            <td>
+                                {% if organisation %}
+                                    <i class="fas {% if campagne.pole %}fa-building{% elif campagne.direction %}fa-sitemap{% else %}fa-users{% endif %} me-1"></i>
+                                    {{ organisation.nom }}
+                                {% else %}
+                                    <span class="text-muted">Non spécifiée</span>
+                                {% endif %}
+                            </td>
+                        </tr>
+                        <tr>
+                            <th>Période:</th>
+                            <td>{{ campagne.date_debut.strftime('%d/%m/%Y') }} - {{ campagne.date_fin.strftime('%d/%m/%Y') }}</td>
+                        </tr>
+                        <tr>
+                            <th>Valideur:</th>
+                            <td>{{ campagne.valideur.username if campagne.valideur else 'Non assigné' }}</td>
+                        </tr>
+                        <tr>
+                            <th>Évaluateur:</th>
+                            <td>{{ campagne.evaluateur.username if campagne.evaluateur else 'Non assigné' }}</td>
+                        </tr>
+                    </table>
+                    
+                    {% if campagne.description %}
+                    <hr>
+                    <div class="text-muted small mb-1">Description</div>
+                    <p class="small mb-0">{{ campagne.description }}</p>
+                    {% endif %}
+                </div>
+            </div>
+
+            <!-- Carte volumes prévisionnels -->
+            <div class="card shadow-sm mb-4">
+                <div class="card-header bg-white py-3">
+                    <h5 class="card-title mb-0">
+                        <i class="fas fa-chart-line me-2"></i>Volumes prévisionnels
+                    </h5>
+                </div>
+                <div class="card-body">
+                    <div class="row text-center mb-3">
+                        <div class="col-6">
+                            <div class="border rounded p-2">
+                                <div class="text-muted small">Volume total</div>
+                                <div class="h3 mb-0">{{ campagne.volume_previsionnel }}</div>
+                            </div>
+                        </div>
+                        <div class="col-6">
+                            <div class="border rounded p-2">
+                                <div class="text-muted small">Dossiers prévus</div>
+                                <div class="h3 mb-0">{{ campagne.nb_dossiers_prevus }}</div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="text-center">
+                        <div class="border rounded p-2">
+                            <div class="text-muted small">Dossiers règlement à contrôler</div>
+                            <div class="h3 mb-0">{{ campagne.nb_dossiers_reglement }}</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Carte résultats -->
+            <div class="card shadow-sm mb-4">
+                <div class="card-header bg-white py-3">
+                    <h5 class="card-title mb-0">
+                        <i class="fas fa-chart-simple me-2"></i>Résultats du contrôle
+                    </h5>
+                </div>
+                <div class="card-body">
+                    <div class="row text-center mb-3">
+                        <div class="col-4">
+                            <div class="border rounded p-2">
+                                <div class="text-muted small">Contrôlés</div>
+                                <div class="h4 mb-0 text-primary">{{ campagne.nb_dossiers_controles }}</div>
+                            </div>
+                        </div>
+                        <div class="col-4">
+                            <div class="border rounded p-2">
+                                <div class="text-muted small">Conformes</div>
+                                <div class="h4 mb-0 text-success">{{ campagne.nb_conformes }}</div>
+                            </div>
+                        </div>
+                        <div class="col-4">
+                            <div class="border rounded p-2">
+                                <div class="text-muted small">Anomalies</div>
+                                <div class="h4 mb-0 text-danger">{{ campagne.nb_anomalies }}</div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="mb-3">
+                        <div class="d-flex justify-content-between small mb-1">
+                            <span>Avancement</span>
+                            <span>{{ campagne.get_avancement() }}%</span>
+                        </div>
+                        <div class="progress" style="height: 8px;">
+                            <div class="progress-bar bg-info" role="progressbar" 
+                                 style="width: {{ campagne.get_avancement() }}%"></div>
+                        </div>
+                    </div>
+                    
+                    <div>
+                        <div class="d-flex justify-content-between small mb-1">
+                            <span>Taux de conformité</span>
+                            <span class="fw-bold">{{ campagne.taux_conformite }}%</span>
+                        </div>
+                        <div class="progress" style="height: 8px;">
+                            <div class="progress-bar {% if campagne.taux_conformite >= 80 %}bg-success{% elif campagne.taux_conformite >= 60 %}bg-warning{% else %}bg-danger{% endif %}" 
+                                 role="progressbar" style="width: {{ campagne.taux_conformite }}%"></div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Colonne droite - Commentaires et fichiers -->
+        <div class="col-md-7">
+            <!-- Carte commentaires -->
+            <div class="card shadow-sm mb-4">
+                <div class="card-header bg-white py-3">
+                    <h5 class="card-title mb-0">
+                        <i class="fas fa-comment-dots me-2"></i>Commentaires et conclusions
+                    </h5>
+                </div>
+                <div class="card-body">
+                    {% if campagne.commentaire_general %}
+                    <div class="mb-3">
+                        <div class="text-muted small fw-semibold mb-1">Commentaire général</div>
+                        <p class="small mb-0">{{ campagne.commentaire_general }}</p>
+                    </div>
+                    {% endif %}
+                    
+                    {% if campagne.conclusion %}
+                    <div class="mb-3">
+                        <div class="text-muted small fw-semibold mb-1">Conclusion</div>
+                        <p class="small mb-0">{{ campagne.conclusion }}</p>
+                    </div>
+                    {% endif %}
+                    
+                    {% if campagne.actions_correctives %}
+                    <div class="mb-3">
+                        <div class="text-muted small fw-semibold mb-1">Actions correctives proposées</div>
+                        <p class="small mb-0">{{ campagne.actions_correctives }}</p>
+                    </div>
+                    {% endif %}
+                    
+                    {% if not campagne.commentaire_general and not campagne.conclusion and not campagne.actions_correctives %}
+                    <p class="text-muted text-center mb-0">Aucun commentaire</p>
+                    {% endif %}
+                </div>
+            </div>
+
+            <!-- Carte fichiers -->
+            <div class="card shadow-sm mb-4">
+                <div class="card-header bg-white py-3 d-flex justify-content-between align-items-center">
+                    <h5 class="card-title mb-0">
+                        <i class="fas fa-paperclip me-2"></i>Documents et fichiers
+                    </h5>
+                    <button type="button" class="btn btn-sm btn-primary" data-bs-toggle="modal" data-bs-target="#uploadModal">
+                        <i class="fas fa-upload me-1"></i>Ajouter
+                    </button>
+                </div>
+                <div class="card-body">
+                    <div id="fichiersList">
+                        <div class="text-center py-3">
+                            <div class="spinner-border spinner-border-sm text-primary" role="status">
+                                <span class="visually-hidden">Chargement...</span>
+                            </div>
+                            <p class="text-muted small mt-2 mb-0">Chargement des fichiers...</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Modal archivage -->
+<div class="modal fade" id="archiveModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <form method="POST" action="{{ url_for('archiver_campagne_controle', campagne_id=campagne.id) }}">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                <div class="modal-header">
+                    <h5 class="modal-title">Archiver la campagne</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <p>Archiver la campagne <strong>{{ campagne.reference }} - {{ campagne.nom }}</strong> ?</p>
+                    <div class="mb-3">
+                        <label class="form-label">Raison de l'archivage</label>
+                        <textarea name="raison" class="form-control" rows="2"></textarea>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Annuler</button>
+                    <button type="submit" class="btn btn-danger">Archiver</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<!-- Modal upload -->
+<div class="modal fade" id="uploadModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <form method="POST" action="{{ url_for('upload_fichier_campagne_controle', campagne_id=campagne.id) }}" 
+                  enctype="multipart/form-data">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                <div class="modal-header">
+                    <h5 class="modal-title">Ajouter un document</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="mb-3">
+                        <label class="form-label">Fichier</label>
+                        <input type="file" class="form-control" name="fichier" required accept=".pdf,.doc,.docx,.xls,.xlsx,.jpg,.jpeg,.png,.txt">
+                        <small class="text-muted">PDF, Word, Excel, Images, TXT (Max 10 Mo)</small>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Catégorie</label>
+                        <select name="categorie" class="form-select">
+                            <option value="document">Document</option>
+                            <option value="rapport">Rapport</option>
+                            <option value="preuve">Preuve de contrôle</option>
+                            <option value="autre">Autre</option>
+                        </select>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Description</label>
+                        <textarea name="description" class="form-control" rows="2"></textarea>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Annuler</button>
+                    <button type="submit" class="btn btn-primary">Uploader</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<script>
+function chargerFichiers() {
+    fetch('/controle/campagne/{{ campagne.id }}/fichiers')
+        .then(response => response.json())
+        .then(data => {
+            const container = document.getElementById('fichiersList');
+            if (data.success && data.fichiers.length > 0) {
+                let html = '<div class="table-responsive"><table class="table table-sm">';
+                html += '<thead><tr><th>Nom</th><th>Catégorie</th><th>Taille</th><th>Ajouté par</th><th></th></tr></thead><tbody>';
+                data.fichiers.forEach(f => {
+                    html += `
+                    <tr>
+                        <td><i class="fas fa-file-${getFileIcon(f.type_fichier)} me-2"></i>${escapeHtml(f.nom_fichier)}</td>
+                        <td><span class="badge bg-secondary">${f.categorie}</span></td>
+                        <td>${f.taille_formatee}</td>
+                        <td><small>${f.uploader}<br>${f.uploaded_at}</small></td>
+                        <td>
+                            <div class="btn-group btn-group-sm">
+                                <a href="/controle/fichier/${f.id}/telecharger" class="btn btn-outline-primary"><i class="fas fa-download"></i></a>
+                                <button type="button" class="btn btn-outline-danger" onclick="supprimerFichier(${f.id})"><i class="fas fa-trash"></i></button>
+                            </div>
+                         </td>
+                     </tr>`;
+                });
+                html += '</tbody></table></div>';
+                container.innerHTML = html;
+            } else {
+                container.innerHTML = '<div class="text-center py-3"><i class="fas fa-folder-open fa-2x text-muted mb-2"></i><p class="text-muted small mb-0">Aucun fichier</p></div>';
+            }
+        });
+}
+
+function getFileIcon(mimeType) {
+    if (mimeType.includes('pdf')) return 'pdf';
+    if (mimeType.includes('word') || mimeType.includes('doc')) return 'word';
+    if (mimeType.includes('excel') || mimeType.includes('xls')) return 'excel';
+    if (mimeType.includes('image')) return 'image';
+    return 'paperclip';
+}
+
+function escapeHtml(text) {
+    if (!text) return '';
+    const div = document.createElement('div');
+    div.textContent = text;
+    return div.innerHTML;
+}
+
+function supprimerFichier(fichierId) {
+    if (!confirm('Supprimer définitivement ce fichier ?')) return;
+    fetch(`/controle/fichier/${fichierId}/supprimer`, {
+        method: 'POST',
+        headers: { 'X-CSRFToken': '{{ csrf_token() }}' }
+    }).then(() => chargerFichiers());
+}
+
+document.addEventListener('DOMContentLoaded', chargerFichiers);
+document.getElementById('uploadModal').addEventListener('hidden.bs.modal', chargerFichiers);
+</script>
+{% endblock %}
