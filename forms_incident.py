@@ -5,10 +5,10 @@ from wtforms.validators import DataRequired, Optional, Length, ValidationError, 
 from datetime import datetime
 
 class IncidentForm(FlaskForm):
-    """Formulaire de création d'incident"""
+    """Formulaire de création/modification d'incident"""
     
     titre = StringField('Titre', validators=[DataRequired(), Length(max=200)])
-    description = TextAreaField('Description', validators=[DataRequired()])
+    description = TextAreaField('Description', validators=[Optional()])
     
     gravite = SelectField('Gravité', choices=[
         ('critique', 'Critique - Impact majeur'),
@@ -31,12 +31,17 @@ class IncidentForm(FlaskForm):
     
     risque_id = SelectField('Risque associé', coerce=int, choices=[], validators=[Optional()])
     dispositif_id = SelectField('Dispositif concerné', coerce=int, choices=[], validators=[Optional()])
-    responsable_resolution_id = SelectField('Responsable résolution', coerce=int, choices=[], validators=[Optional()])
+    
+    # ========== RESPONSABLES PAR NIVEAU ==========
+    responsable_resolution_id = SelectField('Responsable (Niveau 1)', coerce=int, choices=[], validators=[Optional()])
+    superviseur_id = SelectField('Superviseur (Niveau 2)', coerce=int, choices=[], validators=[Optional()])
+    directeur_id = SelectField('Directeur (Niveau 3)', coerce=int, choices=[], validators=[Optional()])
     
     sla_heures = IntegerField('SLA (heures)', default=48, validators=[Optional()])
     approbation_requise = BooleanField('Approbation requise avant clôture', default=False)
     
     submit = SubmitField('Créer l\'incident')
+    
 
 
 class IncidentResolutionForm(FlaskForm):
