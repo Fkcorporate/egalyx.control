@@ -1,0 +1,190 @@
+{% extends "base.html" %}
+
+{% block title %}Tableau de bord des risques{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <div>
+            <h1 class="h3 mb-1 fw-bold">
+                <i class="fas fa-chart-line me-2"></i>
+                Tableau de bord des risques
+            </h1>
+            <p class="text-muted">Analyse consolidée de tous les risques</p>
+        </div>
+        <div>
+            <a href="{{ url_for('export_risques') }}" class="fk-btn fk-btn-outline">
+                <i class="fas fa-download me-2"></i>Exporter
+            </a>
+        </div>
+    </div>
+
+    <!-- Cartes de statistiques -->
+    <div class="row mb-4">
+        <div class="col-md-3">
+            <div class="fk-card">
+                <div class="fk-card-body">
+                    <div class="d-flex justify-content-between align-items-center">
+                        <div>
+                            <h6 class="text-muted mb-1">Total risques</h6>
+                            <h2 class="mb-0 fw-bold">{{ total_risques|default(0) }}</h2>
+                        </div>
+                        <div class="icon-circle bg-primary bg-opacity-10">
+                            <i class="fas fa-exclamation-triangle text-primary"></i>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="fk-card">
+                <div class="fk-card-body">
+                    <div class="d-flex justify-content-between align-items-center">
+                        <div>
+                            <h6 class="text-muted mb-1">Risques évalués</h6>
+                            <h2 class="mb-0 fw-bold">{{ total_risques_evalues|default(0) }}</h2>
+                        </div>
+                        <div class="icon-circle bg-success bg-opacity-10">
+                            <i class="fas fa-check-circle text-success"></i>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="fk-card">
+                <div class="fk-card-body">
+                    <div class="d-flex justify-content-between align-items-center">
+                        <div>
+                            <h6 class="text-muted mb-1">Risques critiques</h6>
+                            <h2 class="mb-0 fw-bold">{{ risques_critiques_count|default(0) }}</h2>
+                        </div>
+                        <div class="icon-circle bg-danger bg-opacity-10">
+                            <i class="fas fa-fire text-danger"></i>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="fk-card">
+                <div class="fk-card-body">
+                    <div class="d-flex justify-content-between align-items-center">
+                        <div>
+                            <h6 class="text-muted mb-1">Score moyen</h6>
+                            <h2 class="mb-0 fw-bold">{{ score_risque_moyen|default(0) }}/25</h2>
+                        </div>
+                        <div class="icon-circle bg-warning bg-opacity-10">
+                            <i class="fas fa-chart-line text-warning"></i>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Répartition par catégorie -->
+    <div class="row">
+        <div class="col-md-6">
+            <div class="fk-card mb-4">
+                <div class="fk-card-header">
+                    <h5 class="mb-0"><i class="fas fa-chart-pie me-2"></i>Répartition par catégorie</h5>
+                </div>
+                <div class="fk-card-body">
+                    <div class="chart-container" style="height: 300px;">
+                        <canvas id="categoryChart"></canvas>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-6">
+            <div class="fk-card mb-4">
+                <div class="fk-card-header">
+                    <h5 class="mb-0"><i class="fas fa-building me-2"></i>Top cartographies</h5>
+                </div>
+                <div class="fk-card-body">
+                    <div class="table-responsive">
+                        <table class="table table-hover">
+                            <thead>
+                                <tr><th>Cartographie</th><th>Risques</th><th>Score</th></tr>
+                            </thead>
+                            <tbody>
+                                {% for item in cartographies_actives|default([]) %}
+                                <tr>
+                                    <td><a href="{{ url_for('detail_cartographie', id=item.cartographie.id) }}">{{ item.cartographie.nom }}</a></td>
+                                    <td>{{ item.nb_risques }}</td>
+                                    <td>{{ item.score_moyen|default('-') }}</td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Risques critiques récents -->
+    <div class="fk-card">
+        <div class="fk-card-header bg-danger text-white">
+            <h5 class="mb-0"><i class="fas fa-exclamation-triangle me-2"></i>Risques critiques récents</h5>
+        </div>
+        <div class="fk-card-body">
+            {% if risques_critiques_recents %}
+            <div class="table-responsive">
+                <table class="table table-hover">
+                    <thead>
+                        <tr><th>Référence</th><th>Intitulé</th><th>Niveau</th><th>Score</th><th>Date</th><th>Action</th></tr>
+                    </thead>
+                    <tbody>
+                        {% for item in risques_critiques_recents %}
+                        <tr>
+                            <td><code>{{ item.risque.reference }}</code></td>
+                            <td>{{ item.risque.intitule|truncate(40) }}</td>
+                            <td><span class="badge bg-danger">{{ item.evaluation.niveau_risque }}</span></td>
+                            <td>{{ item.evaluation.score_risque }}</td>
+                            <td>{{ item.evaluation.created_at.strftime('%d/%m/%Y') }}</td>
+                            <td><a href="{{ url_for('detail_risque', id=item.risque.id) }}" class="btn btn-sm btn-outline-primary">Voir</a></td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+            {% else %}
+            <div class="text-center py-4">
+                <i class="fas fa-check-circle fa-3x text-success mb-3"></i>
+                <p class="text-muted mb-0">Aucun risque critique récent</p>
+            </div>
+            {% endif %}
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    const ctx = document.getElementById('categoryChart');
+    if (ctx) {
+        new Chart(ctx, {
+            type: 'pie',
+            data: {
+                labels: {{ repartition_categories|map(attribute=0)|list|tojson|safe }},
+                datasets: [{
+                    data: {{ repartition_categories|map(attribute=1)|list|tojson|safe }},
+                    backgroundColor: ['#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#ec4899']
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                    legend: { position: 'bottom' }
+                }
+            }
+        });
+    }
+});
+</script>
+{% endblock %}
