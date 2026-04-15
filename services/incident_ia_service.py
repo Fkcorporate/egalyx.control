@@ -209,3 +209,37 @@ class IncidentIAService:
             return "Tendance positive. Maintenir les actions en place."
         else:
             return "Situation stable. Continuer la surveillance."
+    # À ajouter dans la classe IncidentIAService
+
+    @staticmethod
+    def suggerer_resolution(incident):
+        """
+        Génère des suggestions de résolution basées sur l'analyse IA
+        Retourne un dict avec cause_racine, actions_correctives, lecons_apprises
+        """
+        # Utiliser l'analyse existante ou en lancer une nouvelle
+        if not incident.analyse_ia:
+            analyse = IncidentIAService.analyser_incident(incident)
+        else:
+            analyse = json.loads(incident.analyse_ia)
+        
+        # Générer des suggestions structurées
+        suggestions = {
+            'cause_racine': "",
+            'actions_correctives': "",
+            'lecons_apprises': "",
+            'commentaire_cloture': ""
+        }
+        
+        causes = analyse.get('causes_probables', [])
+        if causes:
+            suggestions['cause_racine'] = " ; ".join(causes)
+        
+        recommandations = analyse.get('recommandations', [])
+        if recommandations:
+            suggestions['actions_correctives'] = "\n".join(f"- {r}" for r in recommandations)
+        
+        suggestions['lecons_apprises'] = f"Suite à l'incident de type {incident.get_type_label()}, il est recommandé de renforcer les contrôles sur les causes identifiées."
+        suggestions['commentaire_cloture'] = f"Incident analysé par IA (score {incident.ia_score_confiance}%). À valider par un responsable."
+        
+        return suggestions
