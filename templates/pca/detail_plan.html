@@ -68,6 +68,7 @@
         display: flex;
         align-items: center;
         gap: 0.5rem;
+        flex-wrap: wrap;
     }
     
     .btn-action {
@@ -99,6 +100,94 @@
         height: 100%;
         border-radius: 50px;
         transition: width 0.3s ease;
+    }
+    
+    .ia-card {
+        background: linear-gradient(135deg, #e0f2fe 0%, #bae6fd 100%);
+        border: 1px solid #7dd3fc;
+    }
+    
+    [data-bs-theme="dark"] .ia-card {
+        background: linear-gradient(135deg, #0c4a6e 0%, #082f49 100%);
+        border-color: #38bdf8;
+    }
+    
+    .score-circle {
+        width: 80px;
+        height: 80px;
+        border-radius: 50%;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 28px;
+        font-weight: bold;
+        margin: 0 auto;
+        cursor: pointer;
+        transition: all 0.3s ease;
+    }
+    
+    .score-circle:hover {
+        transform: scale(1.05);
+        box-shadow: 0 4px 15px rgba(0,0,0,0.2);
+    }
+    
+    .table-actions td {
+        vertical-align: middle;
+    }
+    
+    .suggestion-item {
+        transition: all 0.3s ease;
+        border-left: 3px solid transparent;
+    }
+    
+    .suggestion-item:hover {
+        background: linear-gradient(135deg, #f0f9ff 0%, #e0f2fe 100%);
+        border-left-color: #0ea5e9;
+        transform: translateX(5px);
+    }
+    
+    .btn-suggest {
+        background: linear-gradient(135deg, #0ea5e9 0%, #3b82f6 100%);
+        color: white;
+        border: none;
+    }
+    
+    .btn-suggest:hover {
+        background: linear-gradient(135deg, #0284c7 0%, #2563eb 100%);
+        color: white;
+        transform: translateY(-1px);
+    }
+    
+    .score-editor {
+        position: fixed;
+        top: 0;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        background: rgba(0,0,0,0.5);
+        z-index: 1060;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+    }
+    
+    .score-editor-card {
+        background: white;
+        border-radius: 20px;
+        max-width: 400px;
+        width: 90%;
+        animation: slideIn 0.3s ease;
+    }
+    
+    @keyframes slideIn {
+        from {
+            opacity: 0;
+            transform: translateY(-50px);
+        }
+        to {
+            opacity: 1;
+            transform: translateY(0);
+        }
     }
 </style>
 
@@ -141,6 +230,9 @@
                 <a href="{{ url_for('export_plan_pca_pdf', plan_id=plan.id) }}" class="btn btn-outline-danger btn-sm" target="_blank">
                     <i class="fas fa-file-pdf me-1"></i> Exporter PDF
                 </a>
+                <button class="btn btn-outline-info btn-sm" id="analyzePcaBtn">
+                    <i class="fas fa-chart-line me-1"></i> Analyser l'efficacité
+                </button>
                 {% if not plan.is_archived %}
                 <button class="btn btn-outline-light btn-sm" data-bs-toggle="modal" data-bs-target="#archiveModal">
                     <i class="fas fa-archive me-1"></i> Archiver
@@ -153,8 +245,6 @@
                     </button>
                 </form>
                 {% endif %}
-                <!-- Dans la section des actions, ajoutez -->
-
             </div>
         </div>
     </div>
@@ -211,6 +301,77 @@
                     {% else %}
                         Non planifié
                     {% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Carte Score IA -->
+    <div class="info-card mb-4 ia-card" id="scoreCard">
+        <div class="d-flex align-items-center justify-content-between">
+            <div class="flex-grow-1">
+                <div class="info-label">
+                    <i class="fas fa-robot me-1"></i> Score IA - Efficacité du plan
+                    <button class="btn btn-sm btn-link p-0 ms-2" id="editScoreBtn" title="Modifier manuellement le score">
+                        <i class="fas fa-pen text-muted"></i>
+                    </button>
+                </div>
+                <div class="info-value" id="iaScoreValue">
+                    <div class="d-flex align-items-center gap-3">
+                        <div class="display-6 fw-bold" id="iaScoreNumber">--</div>
+                        <div class="progress flex-grow-1" style="height: 8px;">
+                            <div class="progress-bar" id="iaScoreBar" style="width: 0%"></div>
+                        </div>
+                    </div>
+                    <div class="small text-muted mt-1" id="iaScoreMessage">Cliquez sur "Analyser l'efficacité"</div>
+                </div>
+            </div>
+            <div class="text-end">
+                <div class="score-circle bg-info bg-opacity-25" id="iaScoreCircle">
+                    <span id="iaScoreCircleValue">--</span>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Éditeur de score manuel -->
+    <div id="scoreEditor" style="display: none;">
+        <div class="score-editor">
+            <div class="score-editor-card">
+                <div class="card-header bg-info text-white py-3">
+                    <h5 class="mb-0"><i class="fas fa-edit me-2"></i>Modifier le score d'efficacité</h5>
+                </div>
+                <div class="card-body p-4">
+                    <div class="mb-3">
+                        <label class="form-label fw-semibold">Score (0-100)</label>
+                        <input type="range" class="form-range" id="manualScoreSlider" min="0" max="100" step="1" value="0">
+                        <div class="d-flex justify-content-between mt-2">
+                            <span class="text-danger">0</span>
+                            <span class="text-warning">50</span>
+                            <span class="text-success">100</span>
+                        </div>
+                        <div class="input-group mt-3">
+                            <input type="number" class="form-control text-center fw-bold" id="manualScoreValue" min="0" max="100" value="0">
+                            <span class="input-group-text">/ 100</span>
+                        </div>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label fw-semibold">Message personnalisé</label>
+                        <textarea class="form-control" id="manualScoreMessage" rows="2" placeholder="Description du score..."></textarea>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label fw-semibold">Couleur</label>
+                        <select class="form-select" id="manualScoreColor">
+                            <option value="success">Vert (Excellent)</option>
+                            <option value="primary">Bleu (Bon)</option>
+                            <option value="warning">Orange (Moyen)</option>
+                            <option value="danger">Rouge (Faible)</option>
+                        </select>
+                    </div>
+                </div>
+                <div class="card-footer bg-light d-flex justify-content-end gap-2">
+                    <button class="btn btn-secondary" id="cancelScoreEditBtn">Annuler</button>
+                    <button class="btn btn-primary" id="saveScoreEditBtn">Enregistrer</button>
                 </div>
             </div>
         </div>
@@ -379,7 +540,81 @@
             </div>
             {% endif %}
 
-            <!-- Actions -->
+            <!-- ============================================ -->
+            <!-- BOUTONS SUGGESTIONS IA -->
+            <!-- ============================================ -->
+            <div class="section-card ia-card">
+                <div class="section-title">
+                    <i class="fas fa-robot text-info me-2"></i>
+                    Assistant IA
+                </div>
+                <div class="row g-3">
+                    <div class="col-6">
+                        <button class="btn btn-suggest w-100 py-2" id="suggestActionsBtn">
+                            <i class="fas fa-lightbulb me-2"></i>
+                            Suggérer des actions
+                        </button>
+                    </div>
+                    <div class="col-6">
+                        <button class="btn btn-suggest w-100 py-2" id="suggestExercicesBtn">
+                            <i class="fas fa-calendar-alt me-2"></i>
+                            Suggérer des exercices
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- ============================================ -->
+            <!-- MODAL SUGGESTIONS ACTIONS -->
+            <!-- ============================================ -->
+            <div class="modal fade" id="suggestActionsModal" tabindex="-1">
+                <div class="modal-dialog modal-lg modal-dialog-centered">
+                    <div class="modal-content">
+                        <div class="modal-header bg-info text-white">
+                            <h5 class="modal-title">
+                                <i class="fas fa-robot me-2"></i>Actions suggérées par l'IA
+                            </h5>
+                            <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+                        </div>
+                        <div class="modal-body" id="suggestActionsModalBody">
+                            <div class="text-center py-4">
+                                <div class="spinner-border text-info" role="status"></div>
+                                <p class="mt-2">Chargement des suggestions...</p>
+                            </div>
+                        </div>
+                        <div class="modal-footer">
+                            <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Fermer</button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- ============================================ -->
+            <!-- MODAL SUGGESTIONS EXERCICES -->
+            <!-- ============================================ -->
+            <div class="modal fade" id="suggestExercicesModal" tabindex="-1">
+                <div class="modal-dialog modal-lg modal-dialog-centered">
+                    <div class="modal-content">
+                        <div class="modal-header bg-info text-white">
+                            <h5 class="modal-title">
+                                <i class="fas fa-robot me-2"></i>Exercices suggérés par l'IA
+                            </h5>
+                            <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+                        </div>
+                        <div class="modal-body" id="suggestExercicesModalBody">
+                            <div class="text-center py-4">
+                                <div class="spinner-border text-info" role="status"></div>
+                                <p class="mt-2">Chargement des suggestions...</p>
+                            </div>
+                        </div>
+                        <div class="modal-footer">
+                            <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Fermer</button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Actions existantes -->
             <div class="section-card">
                 <div class="section-title">
                     <i class="fas fa-tasks text-primary"></i>
@@ -390,7 +625,7 @@
                 </div>
                 {% if actions %}
                 <div class="table-responsive">
-                    <table class="table table-sm">
+                    <table class="table table-sm table-actions">
                         <thead>
                             <tr>
                                 <th>Réf.</th>
@@ -398,25 +633,29 @@
                                 <th>Phase</th>
                                 <th>Avancement</th>
                                 <th>Statut</th>
-                                <th></th>
+                                <th style="width: 70px;"></th>
                             </tr>
                         </thead>
                         <tbody>
                             {% for action in actions %}
                             <tr>
                                 <td><code>{{ action.reference }}</code></td>
-                                <td>{{ action.intitule|truncate(30) }}</td>
+                                <td>
+                                    <a href="{{ url_for('modifier_action_pca', action_id=action.id) }}" class="text-decoration-none fw-semibold">
+                                        {{ action.intitule|truncate(40) }}
+                                    </a>
+                                 </th>
                                 <td>
                                     <span class="badge bg-secondary">{{ action.phase|replace('_', ' ')|title }}</span>
-                                 </td>
+                                 </th>
                                 <td>
-                                    <div class="d-flex align-items-center gap-1">
+                                    <div class="d-flex align-items-center gap-1" style="min-width: 80px;">
                                         <div class="progress-modern flex-grow-1" style="height: 4px;">
                                             <div class="progress-modern-bar bg-primary" style="width: {{ action.pourcentage_realisation }}%"></div>
                                         </div>
                                         <small>{{ action.pourcentage_realisation }}%</small>
                                     </div>
-                                 </td>
+                                  </th>
                                 <td>
                                     {% if action.statut == 'termine' %}
                                         <span class="badge bg-success">Terminé</span>
@@ -425,23 +664,39 @@
                                     {% else %}
                                         <span class="badge bg-secondary">À faire</span>
                                     {% endif %}
-                                 </td>
+                                  </th>
                                 <td>
-                                    <a href="{{ url_for('modifier_action_pca', action_id=action.id) }}" class="btn-action warning">
-                                        <i class="fas fa-edit"></i>
-                                    </a>
-                                 </td>
-                             </tr>
+                                    <div class="btn-group btn-group-sm">
+                                        <a href="{{ url_for('modifier_action_pca', action_id=action.id) }}" class="btn btn-outline-secondary" title="Modifier">
+                                            <i class="fas fa-edit"></i>
+                                        </a>
+                                        <button type="button" class="btn btn-outline-danger" title="Supprimer" 
+                                                onclick="if(confirm('Supprimer définitivement cette action ?')) {
+                                                    fetch('{{ url_for('supprimer_action_pca', action_id=action.id) }}', 
+                                                          {method:'POST', headers:{'X-CSRFToken': '{{ csrf_token() }}'}})
+                                                    .then(() => location.reload());
+                                                }">
+                                            <i class="fas fa-trash"></i>
+                                        </button>
+                                    </div>
+                                  </th>
+                            </tr>
                             {% endfor %}
                         </tbody>
                     </table>
                 </div>
                 {% else %}
-                <p class="text-muted text-center py-3">Aucune action définie</p>
+                <div class="text-center py-4">
+                    <i class="fas fa-inbox fa-2x text-muted mb-2 d-block"></i>
+                    <p class="text-muted mb-0">Aucune action définie</p>
+                    <a href="{{ url_for('nouvelle_action_pca', plan_id=plan.id) }}" class="btn btn-sm btn-outline-primary mt-2">
+                        <i class="fas fa-plus me-1"></i>Créer une action
+                    </a>
+                </div>
                 {% endif %}
             </div>
 
-            <!-- Exercices -->
+            <!-- Exercices existants -->
             <div class="section-card">
                 <div class="section-title">
                     <i class="fas fa-calendar-alt text-warning"></i>
@@ -452,35 +707,64 @@
                 </div>
                 {% if exercices %}
                 <div class="table-responsive">
-                    <table class="table table-sm">
+                    <table class="table table-sm table-actions">
                         <thead>
                             <tr>
                                 <th>Date</th>
                                 <th>Nom</th>
                                 <th>Type</th>
                                 <th>Note</th>
-                             </tr>
+                                <th style="width: 70px;"></th>
+                            </tr>
                         </thead>
                         <tbody>
                             {% for ex in exercices %}
                             <tr>
-                                <td>{{ ex.date_exercice.strftime('%d/%m/%Y') }}</td>
-                                <td>{{ ex.nom|truncate(25) }}</td>
-                                <td><span class="badge bg-info">{{ ex.type_exercice|replace('_', ' ')|title }}</span></td>
+                                <td>{{ ex.date_exercice.strftime('%d/%m/%Y') }}</th>
+                                <td>
+                                    <span class="fw-semibold">{{ ex.nom|truncate(35) }}</span>
+                                    {% if ex.description %}
+                                    <br><small class="text-muted">{{ ex.description|truncate(40) }}</small>
+                                    {% endif %}
+                                 </th>
+                                <td>
+                                    <span class="badge bg-info">{{ ex.type_exercice|replace('_', ' ')|title }}</span>
+                                 </th>
                                 <td>
                                     {% if ex.note %}
                                         <span class="badge bg-success">{{ ex.note }}/100</span>
                                     {% else %}
-                                        -
+                                        <span class="badge bg-secondary">Non évalué</span>
                                     {% endif %}
-                                </td>
+                                 </th>
+                                <td>
+                                    <div class="btn-group btn-group-sm">
+                                        <a href="{{ url_for('modifier_exercice_pca', exercice_id=ex.id) }}" class="btn btn-outline-secondary" title="Modifier">
+                                            <i class="fas fa-edit"></i>
+                                        </a>
+                                        <button type="button" class="btn btn-outline-danger" title="Supprimer"
+                                                onclick="if(confirm('Supprimer définitivement cet exercice ?')) {
+                                                    fetch('{{ url_for('supprimer_exercice_pca', exercice_id=ex.id) }}', 
+                                                          {method:'POST', headers:{'X-CSRFToken': '{{ csrf_token() }}'}})
+                                                    .then(() => location.reload());
+                                                }">
+                                            <i class="fas fa-trash"></i>
+                                        </button>
+                                    </div>
+                                 </th>
                             </tr>
                             {% endfor %}
                         </tbody>
                     </table>
                 </div>
                 {% else %}
-                <p class="text-muted text-center py-3">Aucun exercice programmé</p>
+                <div class="text-center py-4">
+                    <i class="fas fa-calendar-times fa-2x text-muted mb-2 d-block"></i>
+                    <p class="text-muted mb-0">Aucun exercice programmé</p>
+                    <a href="{{ url_for('nouvel_exercice_pca', plan_id=plan.id) }}" class="btn btn-sm btn-outline-primary mt-2">
+                        <i class="fas fa-plus me-1"></i>Planifier un exercice
+                    </a>
+                </div>
                 {% endif %}
             </div>
         </div>
@@ -509,4 +793,371 @@
         </div>
     </div>
 </div>
+
+<script>
+// ============================================
+// SCORE IA AVEC MODIFICATION MANUELLE
+// ============================================
+
+let currentScore = null;
+
+document.getElementById('analyzePcaBtn')?.addEventListener('click', async function() {
+    const btn = this;
+    const originalHtml = btn.innerHTML;
+    btn.innerHTML = '<i class="fas fa-spinner fa-spin me-1"></i> Analyse...';
+    btn.disabled = true;
+    
+    try {
+        const response = await fetch('/api/pca/analyser-plan/{{ plan.id }}', {
+            method: 'GET',
+            headers: { 'X-CSRFToken': '{{ csrf_token() }}' }
+        });
+        
+        const data = await response.json();
+        
+        if (data.success && data.analyse) {
+            currentScore = data.analyse.score;
+            afficherScore(currentScore);
+            
+            Swal.fire({
+                icon: currentScore.couleur === 'success' ? 'success' : (currentScore.couleur === 'danger' ? 'error' : 'info'),
+                title: `Score d'efficacité: ${currentScore.score}/100`,
+                html: `
+                    <p>${currentScore.message}</p>
+                    <hr>
+                    <div class="text-start small">
+                        <strong>Détail de l'évaluation:</strong>
+                        <ul class="mt-1">
+                            ${currentScore.details.map(d => `<li>${d.statut === 'ok' ? '✅' : (d.statut === 'warning' ? '⚠️' : '❌')} ${d.categorie}: ${d.points}/${d.max}</li>`).join('')}
+                        </ul>
+                    </div>
+                `,
+                confirmButtonText: 'OK'
+            });
+        } else {
+            Swal.fire({ icon: 'error', title: 'Erreur', text: 'Analyse impossible' });
+        }
+    } catch (error) {
+        console.error(error);
+        Swal.fire({ icon: 'error', title: 'Erreur', text: 'Erreur de communication' });
+    } finally {
+        btn.innerHTML = originalHtml;
+        btn.disabled = false;
+    }
+});
+
+function afficherScore(score) {
+    document.getElementById('iaScoreNumber').textContent = score.score;
+    document.getElementById('iaScoreCircleValue').textContent = score.score;
+    document.getElementById('iaScoreBar').style.width = score.score + '%';
+    document.getElementById('iaScoreBar').className = `progress-bar bg-${score.couleur}`;
+    document.getElementById('iaScoreMessage').innerHTML = `<span class="badge bg-${score.couleur}">${score.message}</span>`;
+    
+    const circle = document.getElementById('iaScoreCircle');
+    circle.className = `score-circle bg-${score.couleur} bg-opacity-25`;
+    
+    localStorage.setItem(`pca_score_{{ plan.id }}`, JSON.stringify(score));
+}
+
+document.getElementById('editScoreBtn')?.addEventListener('click', function() {
+    const editor = document.getElementById('scoreEditor');
+    const currentValue = currentScore ? currentScore.score : 0;
+    const currentMessage = currentScore ? currentScore.message : '';
+    const currentColor = currentScore ? currentScore.couleur : 'info';
+    
+    document.getElementById('manualScoreSlider').value = currentValue;
+    document.getElementById('manualScoreValue').value = currentValue;
+    document.getElementById('manualScoreMessage').value = currentMessage;
+    document.getElementById('manualScoreColor').value = currentColor;
+    
+    editor.style.display = 'block';
+});
+
+document.getElementById('cancelScoreEditBtn')?.addEventListener('click', function() {
+    document.getElementById('scoreEditor').style.display = 'none';
+});
+
+document.getElementById('saveScoreEditBtn')?.addEventListener('click', function() {
+    const newScoreValue = parseInt(document.getElementById('manualScoreValue').value);
+    const newMessage = document.getElementById('manualScoreMessage').value;
+    const newColor = document.getElementById('manualScoreColor').value;
+    
+    let niveau = 'moyen';
+    if (newScoreValue >= 80) niveau = 'excellent';
+    else if (newScoreValue >= 60) niveau = 'bon';
+    else if (newScoreValue >= 40) niveau = 'moyen';
+    else niveau = 'faible';
+    
+    currentScore = {
+        score: newScoreValue,
+        message: newMessage || `Score manuel: ${newScoreValue}/100`,
+        couleur: newColor,
+        niveau: niveau,
+        details: []
+    };
+    
+    afficherScore(currentScore);
+    document.getElementById('scoreEditor').style.display = 'none';
+    
+    Swal.fire({
+        icon: 'success',
+        title: 'Score modifié',
+        text: 'Le score a été mis à jour manuellement.',
+        timer: 2000,
+        showConfirmButton: false
+    });
+});
+
+const slider = document.getElementById('manualScoreSlider');
+const numberInput = document.getElementById('manualScoreValue');
+if (slider && numberInput) {
+    slider.addEventListener('input', function() { numberInput.value = this.value; });
+    numberInput.addEventListener('input', function() { slider.value = this.value; });
+}
+
+// ============================================
+// FONCTIONS GLOBALES POUR LES BOUTONS
+// ============================================
+
+// Fonction pour créer une action - Version avec données encodées
+window.creerActionDepuisSuggestion = function(titre, description, phase, priorite) {
+    const url = new URL('{{ url_for("nouvelle_action_pca", plan_id=plan.id) }}', window.location.origin);
+    url.searchParams.append('intitule', titre);
+    url.searchParams.append('description', description);
+    url.searchParams.append('phase', phase);
+    url.searchParams.append('priorite', priorite);
+    window.location.href = url.toString();
+};
+
+// Fonction pour créer un exercice - Version avec données encodées
+window.creerExerciceDepuisSuggestion = function(titre, description, type, duree, objectifs) {
+    const url = new URL('{{ url_for("nouvel_exercice_pca", plan_id=plan.id) }}', window.location.origin);
+    url.searchParams.append('nom', titre);
+    url.searchParams.append('description', description);
+    url.searchParams.append('type_exercice', type);
+    url.searchParams.append('duree', duree);
+    if (objectifs && objectifs !== 'undefined') {
+        url.searchParams.append('objectifs', objectifs);
+    }
+    window.location.href = url.toString();
+};
+
+// ============================================
+// SUGGESTIONS IA - AVEC DÉLÉGATION D'ÉVÉNEMENTS
+// ============================================
+
+// Bouton Suggérer des actions
+document.getElementById('suggestActionsBtn')?.addEventListener('click', async function() {
+    const modalBody = document.getElementById('suggestActionsModalBody');
+    modalBody.innerHTML = `
+        <div class="text-center py-4">
+            <div class="spinner-border text-info" role="status"></div>
+            <p class="mt-2">Chargement des suggestions d'actions...</p>
+        </div>
+    `;
+    
+    const modal = new bootstrap.Modal(document.getElementById('suggestActionsModal'));
+    modal.show();
+    
+    try {
+        const response = await fetch('/api/pca/suggestions/actions/{{ plan.id }}', {
+            headers: { 'X-CSRFToken': '{{ csrf_token() }}' }
+        });
+        const data = await response.json();
+        
+        if (data.success && data.suggestions && data.suggestions.length > 0) {
+            let html = '';
+            const phaseLabels = { 'preparation': 'Préparation', 'crise': 'Gestion de crise', 'reprise': 'Reprise', 'retour': 'Retour normal', 'test': 'Test' };
+            
+            data.suggestions.forEach((suggestion, index) => {
+                const badgeClass = suggestion.priorite === 'haute' ? 'danger' : (suggestion.priorite === 'moyenne' ? 'warning' : 'secondary');
+                const safeTitre = suggestion.titre.replace(/'/g, "\\'").replace(/"/g, '&quot;');
+                const safeDescription = suggestion.description.replace(/'/g, "\\'").replace(/"/g, '&quot;');
+                
+                html += `
+                    <div class="list-group-item suggestion-item mb-2" data-suggestion-index="${index}">
+                        <div class="d-flex justify-content-between align-items-start">
+                            <div class="flex-grow-1">
+                                <div class="fw-semibold fs-6">${escapeHtml(suggestion.titre)}</div>
+                                <p class="small text-muted mb-1">${escapeHtml(suggestion.description)}</p>
+                                <div class="d-flex gap-2 mt-1 flex-wrap">
+                                    <span class="badge bg-${badgeClass}">${suggestion.priorite}</span>
+                                    <span class="badge bg-secondary">Phase: ${phaseLabels[suggestion.phase] || suggestion.phase}</span>
+                                    <span class="badge bg-info">Délai: ${suggestion.delai_suggere}</span>
+                                </div>
+                            </div>
+                            <button class="btn btn-sm btn-success rounded-pill ms-2 btn-transform-action" 
+                                    data-titre="${safeTitre}"
+                                    data-description="${safeDescription}"
+                                    data-phase="${suggestion.phase}"
+                                    data-priorite="${suggestion.priorite}">
+                                <i class="fas fa-plus me-1"></i>Transformer en action
+                            </button>
+                        </div>
+                    </div>
+                `;
+            });
+            modalBody.innerHTML = html;
+            
+            // Attacher les événements aux boutons après l'insertion
+            document.querySelectorAll('#suggestActionsModalBody .btn-transform-action').forEach(btn => {
+                btn.addEventListener('click', function(e) {
+                    e.preventDefault();
+                    const titre = this.getAttribute('data-titre');
+                    const description = this.getAttribute('data-description');
+                    const phase = this.getAttribute('data-phase');
+                    const priorite = this.getAttribute('data-priorite');
+                    window.creerActionDepuisSuggestion(titre, description, phase, priorite);
+                });
+            });
+        } else {
+            modalBody.innerHTML = `
+                <div class="text-center py-4">
+                    <i class="fas fa-check-circle fa-3x text-success mb-2"></i>
+                    <p>Aucune suggestion d'action pour le moment.</p>
+                    <p class="text-muted small">Votre plan semble déjà bien complet !</p>
+                </div>
+            `;
+        }
+    } catch (error) {
+        console.error(error);
+        modalBody.innerHTML = `
+            <div class="text-center py-4">
+                <i class="fas fa-exclamation-triangle fa-3x text-danger mb-2"></i>
+                <p>Erreur lors du chargement des suggestions.</p>
+                <button class="btn btn-sm btn-outline-danger" onclick="location.reload()">Réessayer</button>
+            </div>
+        `;
+    }
+});
+
+// Bouton Suggérer des exercices
+document.getElementById('suggestExercicesBtn')?.addEventListener('click', async function() {
+    const modalBody = document.getElementById('suggestExercicesModalBody');
+    modalBody.innerHTML = `
+        <div class="text-center py-4">
+            <div class="spinner-border text-info" role="status"></div>
+            <p class="mt-2">Chargement des suggestions d'exercices...</p>
+        </div>
+    `;
+    
+    const modal = new bootstrap.Modal(document.getElementById('suggestExercicesModal'));
+    modal.show();
+    
+    try {
+        const response = await fetch('/api/pca/suggestions/exercices/{{ plan.id }}', {
+            headers: { 'X-CSRFToken': '{{ csrf_token() }}' }
+        });
+        const data = await response.json();
+        
+        if (data.success && data.suggestions && data.suggestions.length > 0) {
+            let html = '';
+            const typeLabels = { 'table_top': 'Tabletop', 'technique': 'Technique', 'grandeur_nature': 'Grandeur nature' };
+            
+            data.suggestions.forEach((suggestion, index) => {
+                const safeTitre = suggestion.titre.replace(/'/g, "\\'").replace(/"/g, '&quot;');
+                const safeDescription = suggestion.description.replace(/'/g, "\\'").replace(/"/g, '&quot;');
+                const safeObjectifs = (suggestion.objectifs || '').replace(/'/g, "\\'").replace(/"/g, '&quot;');
+                
+                html += `
+                    <div class="list-group-item suggestion-item mb-2" data-suggestion-index="${index}">
+                        <div class="d-flex justify-content-between align-items-start">
+                            <div class="flex-grow-1">
+                                <div class="fw-semibold fs-6">${escapeHtml(suggestion.titre)}</div>
+                                <p class="small text-muted mb-1">${escapeHtml(suggestion.description)}</p>
+                                <div class="d-flex gap-2 mt-1 flex-wrap">
+                                    <span class="badge bg-info">${typeLabels[suggestion.type] || suggestion.type}</span>
+                                    <span class="badge bg-secondary">Durée: ${suggestion.duree_suggeree}</span>
+                                </div>
+                                ${suggestion.objectifs ? `<div class="small text-muted mt-1"><i class="fas fa-list me-1"></i>Objectifs:<br>${escapeHtml(suggestion.objectifs).replace(/\n/g, '<br>')}</div>` : ''}
+                            </div>
+                            <button class="btn btn-sm btn-success rounded-pill ms-2 btn-transform-exercice" 
+                                    data-titre="${safeTitre}"
+                                    data-description="${safeDescription}"
+                                    data-type="${suggestion.type}"
+                                    data-duree="${suggestion.duree_suggeree}"
+                                    data-objectifs="${safeObjectifs}">
+                                <i class="fas fa-plus me-1"></i>Transformer en exercice
+                            </button>
+                        </div>
+                    </div>
+                `;
+            });
+            modalBody.innerHTML = html;
+            
+            // Attacher les événements aux boutons après l'insertion
+            document.querySelectorAll('#suggestExercicesModalBody .btn-transform-exercice').forEach(btn => {
+                btn.addEventListener('click', function(e) {
+                    e.preventDefault();
+                    const titre = this.getAttribute('data-titre');
+                    const description = this.getAttribute('data-description');
+                    const type = this.getAttribute('data-type');
+                    const duree = this.getAttribute('data-duree');
+                    const objectifs = this.getAttribute('data-objectifs');
+                    window.creerExerciceDepuisSuggestion(titre, description, type, duree, objectifs);
+                });
+            });
+        } else {
+            modalBody.innerHTML = `
+                <div class="text-center py-4">
+                    <i class="fas fa-check-circle fa-3x text-success mb-2"></i>
+                    <p>Aucune suggestion d'exercice pour le moment.</p>
+                    <p class="text-muted small">Votre programme d'exercices semble déjà complet !</p>
+                </div>
+            `;
+        }
+    } catch (error) {
+        console.error(error);
+        modalBody.innerHTML = `
+            <div class="text-center py-4">
+                <i class="fas fa-exclamation-triangle fa-3x text-danger mb-2"></i>
+                <p>Erreur lors du chargement des suggestions.</p>
+                <button class="btn btn-sm btn-outline-danger" onclick="location.reload()">Réessayer</button>
+            </div>
+        `;
+    }
+});
+
+// ============================================
+// CHARGEMENT DU SCORE SAUVEGARDÉ
+// ============================================
+
+function loadSavedScore() {
+    const saved = localStorage.getItem(`pca_score_{{ plan.id }}`);
+    if (saved) {
+        try {
+            currentScore = JSON.parse(saved);
+            afficherScore(currentScore);
+        } catch(e) {}
+    }
+}
+
+// ============================================
+// UTILITAIRES
+// ============================================
+
+function escapeHtml(text) {
+    if (!text) return '';
+    const div = document.createElement('div');
+    div.textContent = text;
+    return div.innerHTML;
+}
+
+document.addEventListener('DOMContentLoaded', function() {
+    loadSavedScore();
+    
+    const cards = document.querySelectorAll('.section-card');
+    cards.forEach((card, index) => {
+        card.style.opacity = '0';
+        setTimeout(() => {
+            card.style.opacity = '1';
+        }, index * 50);
+    });
+    
+    const tooltipTriggerList = [].slice.call(document.querySelectorAll('[data-bs-toggle="tooltip"]'));
+    tooltipTriggerList.map(function (tooltipTriggerEl) {
+        return new bootstrap.Tooltip(tooltipTriggerEl);
+    });
+});
+</script>
 {% endblock %}
