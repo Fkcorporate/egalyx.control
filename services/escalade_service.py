@@ -3,7 +3,6 @@ from datetime import datetime, timedelta
 from flask import current_app
 
 # Import correct de db depuis votre application
-# Au lieu de 'from extensions import db', utilisez:
 from models import db, Incident, Notification, User, IncidentHistorique
 
 class EscaladeService:
@@ -31,10 +30,10 @@ class EscaladeService:
             if maintenant > date_limite and not getattr(incident, 'notification_envoyee_niveau2', False):
                 return EscaladeService.escalader(incident, auto=True, raison=f"Délai dépassé ({delai}h sans résolution)")
         
-        # Vérifier escalade niveau 3
+        # Vérifier escalade niveau 3 - CORRIGÉ: utiliser escalation_date au lieu de escalade_date
         elif incident.niveau_escalade == 2:
             delai = getattr(incident, 'delai_escalade_niveau3', 72)
-            date_limite = incident.escalade_date + timedelta(hours=delai) if incident.escalade_date else incident.created_at + timedelta(hours=delai)
+            date_limite = incident.escalation_date + timedelta(hours=delai) if incident.escalation_date else incident.created_at + timedelta(hours=delai)
             
             if maintenant > date_limite and not getattr(incident, 'notification_envoyee_niveau3', False):
                 return EscaladeService.escalader(incident, auto=True, raison=f"Nouveau délai dépassé ({delai}h sans résolution)")
@@ -52,7 +51,8 @@ class EscaladeService:
         
         ancien_niveau = incident.niveau_escalade
         incident.niveau_escalade += 1
-        incident.escalade_date = datetime.utcnow()
+        # CORRIGÉ: utiliser escalation_date au lieu de escalade_date
+        incident.escalation_date = datetime.utcnow()
         incident.escalation_auto = auto
         incident.raison_escalade = raison
         incident.updated_at = datetime.utcnow()
@@ -80,7 +80,7 @@ class EscaladeService:
             historique = IncidentHistorique(
                 incident_id=incident.id,
                 action=f'escalade_niveau_{incident.niveau_escalade}',
-                details=f"Escalade automatique: {raison}" if auto else f"Escalade manuelle: {raison}",
+                details=f"Escalade {'automatique' if auto else 'manuelle'}: {raison}",
                 utilisateur_id=None,
                 created_at=datetime.utcnow()
             )
@@ -107,7 +107,8 @@ class EscaladeService:
         
         # Remettre le responsable approprié
         if niveau_cible == 1:
-            incident.responsable_resolution_id = incident.responsable_resolution_id
+            # Garder le responsable actuel (ne pas changer)
+            pass
         elif niveau_cible == 2:
             incident.responsable_resolution_id = incident.superviseur_id
         
@@ -187,7 +188,8 @@ class EscaladeService:
         if client_id:
             query = query.filter(Incident.client_id == client_id)
         
-        return query.order_by(Incident.escalade_date.desc()).all()
+        # CORRIGÉ: utiliser escalation_date au lieu de escalade_date
+        return query.order_by(Incident.escalation_date.desc()).all()
     
     @staticmethod
     def get_stats_escalade(client_id=None):
