@@ -1,8 +1,10 @@
 # services/escalade_service.py
 from datetime import datetime, timedelta
 from flask import current_app
-from models import Incident, Notification, User, IncidentHistorique
-from extensions import db
+
+# Import correct de db depuis votre application
+# Au lieu de 'from extensions import db', utilisez:
+from models import db, Incident, Notification, User, IncidentHistorique
 
 class EscaladeService:
     """Service de gestion des escalades d'incidents"""
@@ -23,18 +25,18 @@ class EscaladeService:
         
         # Vérifier escalade niveau 2
         if incident.niveau_escalade == 1:
-            delai = incident.delai_escalade_niveau2 or 48
+            delai = getattr(incident, 'delai_escalade_niveau2', 48)
             date_limite = incident.created_at + timedelta(hours=delai)
             
-            if maintenant > date_limite and not incident.notification_envoyee_niveau2:
+            if maintenant > date_limite and not getattr(incident, 'notification_envoyee_niveau2', False):
                 return EscaladeService.escalader(incident, auto=True, raison=f"Délai dépassé ({delai}h sans résolution)")
         
         # Vérifier escalade niveau 3
         elif incident.niveau_escalade == 2:
-            delai = incident.delai_escalade_niveau3 or 72
+            delai = getattr(incident, 'delai_escalade_niveau3', 72)
             date_limite = incident.escalade_date + timedelta(hours=delai) if incident.escalade_date else incident.created_at + timedelta(hours=delai)
             
-            if maintenant > date_limite and not incident.notification_envoyee_niveau3:
+            if maintenant > date_limite and not getattr(incident, 'notification_envoyee_niveau3', False):
                 return EscaladeService.escalader(incident, auto=True, raison=f"Nouveau délai dépassé ({delai}h sans résolution)")
         
         return False
@@ -53,17 +55,22 @@ class EscaladeService:
         incident.escalade_date = datetime.utcnow()
         incident.escalation_auto = auto
         incident.raison_escalade = raison
-        incident.derniere_action_date = datetime.utcnow()
         incident.updated_at = datetime.utcnow()
+        
+        # Mettre à jour la date de dernière action si l'attribut existe
+        if hasattr(incident, 'derniere_action_date'):
+            incident.derniere_action_date = datetime.utcnow()
         
         # Mettre à jour le responsable selon le niveau
         nouveau_responsable = None
         if incident.niveau_escalade == 2 and incident.superviseur_id:
             nouveau_responsable = incident.superviseur_id
-            incident.notification_envoyee_niveau2 = True
+            if hasattr(incident, 'notification_envoyee_niveau2'):
+                incident.notification_envoyee_niveau2 = True
         elif incident.niveau_escalade == 3 and incident.directeur_id:
             nouveau_responsable = incident.directeur_id
-            incident.notification_envoyee_niveau3 = True
+            if hasattr(incident, 'notification_envoyee_niveau3'):
+                incident.notification_envoyee_niveau3 = True
         
         if nouveau_responsable:
             ancien_responsable = incident.responsable_resolution_id
@@ -96,7 +103,6 @@ class EscaladeService:
         ancien_niveau = incident.niveau_escalade
         incident.niveau_escalade = niveau_cible
         incident.raison_escalade = raison
-        incident.derniere_action_date = datetime.utcnow()
         incident.updated_at = datetime.utcnow()
         
         # Remettre le responsable approprié
@@ -121,6 +127,7 @@ class EscaladeService:
     @staticmethod
     def _creer_notification_escalade(incident, ancien_responsable_id, nouveau_responsable_id):
         """Crée une notification pour le nouveau responsable"""
+        from models import Notification
         
         # Niveau d'urgence
         urgence = 'urgent' if incident.niveau_escalade >= 2 else 'important'
