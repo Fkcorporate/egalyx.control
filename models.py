@@ -8501,6 +8501,7 @@ class Incident(db.Model):
     niveau_escalade = db.Column(db.Integer, default=1)  # 1, 2, 3
     escalation_auto = db.Column(db.Boolean, default=False)
     escalation_date = db.Column(db.DateTime)
+    raison_escalade = db.Column(db.Text)
     
     # ==================== APPROBATION ====================
     approbation_requise = db.Column(db.Boolean, default=False)
@@ -8511,14 +8512,24 @@ class Incident(db.Model):
     
     # ==================== DATES ====================
     date_occurrence = db.Column(db.DateTime, nullable=False)
-    date_detection = db.Column(db.DateTime)
+    date_detection = db.Column(db.DateTime, default=datetime.utcnow)
     date_resolution = db.Column(db.DateTime)
-    date_approbation = db.Column(db.DateTime)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
     
     # ==================== SLA (SERVICE LEVEL AGREEMENT) ====================
     sla_heures = db.Column(db.Integer, default=48)
     sla_date_limite = db.Column(db.DateTime)
     sla_viole = db.Column(db.Boolean, default=False)
+    
+    # ==================== DÉLAIS D'ESCALADE ====================
+    delai_escalade_niveau2 = db.Column(db.Integer, default=48)  # heures avant escalade niveau 2
+    delai_escalade_niveau3 = db.Column(db.Integer, default=72)  # heures avant escalade niveau 3
+    
+    # ==================== NOTIFICATIONS ====================
+    notification_envoyee_niveau2 = db.Column(db.Boolean, default=False)
+    notification_envoyee_niveau3 = db.Column(db.Boolean, default=False)
+    derniere_action_date = db.Column(db.DateTime, default=datetime.utcnow)
     
     # ==================== LIENS MÉTIER ====================
     risque_id = db.Column(db.Integer, db.ForeignKey('risques.id'))
@@ -8529,14 +8540,13 @@ class Incident(db.Model):
     declare_par_id = db.Column(db.Integer, db.ForeignKey('user.id'))
     responsable_resolution_id = db.Column(db.Integer, db.ForeignKey('user.id'))
     superviseur_id = db.Column(db.Integer, db.ForeignKey('user.id'))
-    directeur_id = db.Column(db.Integer, db.ForeignKey('user.id'))  # NOUVEAU - Pour escalade niveau 3
+    directeur_id = db.Column(db.Integer, db.ForeignKey('user.id'))
     
     # ==================== RÉSOLUTION ====================
     cause_racine = db.Column(db.Text)
     actions_correctives = db.Column(db.Text)
     lecons_apprises = db.Column(db.Text)
     commentaire_cloture = db.Column(db.Text)
-    raison_escalade = db.Column(db.Text)  # NOUVEAU - Stocke la raison de l'escalade
     
     # ==================== MÉTADONNÉES IA ====================
     analyse_ia = db.Column(db.Text)  # JSON
@@ -8546,10 +8556,6 @@ class Incident(db.Model):
     # ==================== MULTI-TENANT ====================
     client_id = db.Column(db.Integer, db.ForeignKey('clients.id'), index=True)
     created_by = db.Column(db.Integer, db.ForeignKey('user.id'))
-    created_at = db.Column(db.DateTime, default=datetime.utcnow)
-    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
-    
-    # ==================== ARCHIVAGE ====================
     is_archived = db.Column(db.Boolean, default=False)
     archived_at = db.Column(db.DateTime)
     archived_by = db.Column(db.Integer, db.ForeignKey('user.id'))
@@ -8562,9 +8568,10 @@ class Incident(db.Model):
     declare_par = db.relationship('User', foreign_keys=[declare_par_id], backref='incidents_declares')
     responsable = db.relationship('User', foreign_keys=[responsable_resolution_id], backref='incidents_responsables')
     superviseur = db.relationship('User', foreign_keys=[superviseur_id], backref='incidents_supervises')
-    directeur = db.relationship('User', foreign_keys=[directeur_id], backref='incidents_directeur')  # NOUVEAU
+    directeur = db.relationship('User', foreign_keys=[directeur_id], backref='incidents_directeur')
     approbateur = db.relationship('User', foreign_keys=[approbation_par_id])
     archiveur = db.relationship('User', foreign_keys=[archived_by])
+    historique = db.relationship('IncidentHistorique', backref='incident', lazy='dynamic', cascade='all, delete-orphan')
     
     def __init__(self, **kwargs):
         super(Incident, self).__init__(**kwargs)
@@ -8584,63 +8591,57 @@ class Incident(db.Model):
         count = query.count()
         return f"INC-{annee}-{count + 1:03d}"
     
-    # ==================== MÉTHODES DE WORKFLOW ====================
+    # ==================== MÉTHODES D'ESCALADE ====================
     
-    def escalader(self, raison=None, auto=False):
+    def escalader(self, raison=None, auto=False, user_id=None):
         """
         Escalade l'incident au niveau supérieur
-        Args:
-            raison: Raison de l'escalade (texte)
-            auto: True si escalade automatique, False si manuelle
-        Returns:
-            bool: True si escalade réussie, False sinon
         """
+        from services.escalade_service import EscaladeService
+        return EscaladeService.escalader(self, auto=auto, raison=raison)
+    
+    def retro_escalader(self, niveau_cible=1, raison=None):
+        """Rétro-escalade l'incident à un niveau inférieur"""
+        from services.escalade_service import EscaladeService
+        return EscaladeService.retro_escalader(self, niveau_cible, raison)
+    
+    def verifier_sla(self):
+        """Vérifie le SLA et escalade automatiquement si nécessaire"""
+        from services.escalade_service import EscaladeService
+        return EscaladeService.verifier_et_escalader_auto(self)
+    
+    def peut_escalader(self, user):
+        """Vérifie si l'utilisateur peut escalader l'incident"""
+        if not user.is_authenticated:
+            return False
+        
+        if user.role == 'super_admin':
+            return True
+        
         if self.niveau_escalade >= 3:
             return False
         
-        ancien_niveau = self.niveau_escalade
+        if self.is_archived:
+            return False
         
-        # Incrémenter le niveau
-        self.niveau_escalade += 1
-        self.escalade_date = datetime.utcnow()
-        self.escalation_auto = auto
-        self.raison_escalade = raison
-        self.updated_at = datetime.utcnow()
+        if self.statut in ['ferme', 'resolu', 'rejete']:
+            return False
         
-        # ========== CHANGEMENT DE RESPONSABLE SELON LE NIVEAU ==========
-        if self.niveau_escalade == 2 and self.superviseur_id:
-            # Passer au superviseur
-            ancien_responsable = self.responsable_resolution_id
-            self.responsable_resolution_id = self.superviseur_id
-            
-            # Journaliser le changement de responsable
-            from models import IncidentHistorique
-            historique = IncidentHistorique(
-                incident_id=self.id,
-                action='changement_responsable',
-                details=f"Responsable changé de {ancien_responsable} à {self.superviseur_id} (escalade N{self.niveau_escalade})",
-                utilisateur_id=None,
-                created_at=datetime.utcnow()
-            )
-            db.session.add(historique)
-            
-        elif self.niveau_escalade == 3 and self.directeur_id:
-            # Passer au directeur
-            ancien_responsable = self.responsable_resolution_id
-            self.responsable_resolution_id = self.directeur_id
-            
-            # Journaliser le changement de responsable
-            from models import IncidentHistorique
-            historique = IncidentHistorique(
-                incident_id=self.id,
-                action='changement_responsable',
-                details=f"Responsable changé de {ancien_responsable} à {self.directeur_id} (escalade N{self.niveau_escalade})",
-                utilisateur_id=None,
-                created_at=datetime.utcnow()
-            )
-            db.session.add(historique)
+        # Le responsable actuel peut escalader
+        if self.responsable_resolution_id == user.id:
+            return True
         
-        return True
+        # Le superviseur peut escalader un incident de niveau 1
+        if self.niveau_escalade == 1 and self.superviseur_id == user.id:
+            return True
+        
+        # Le directeur peut escalader un incident de niveau 2
+        if self.niveau_escalade == 2 and self.directeur_id == user.id:
+            return True
+        
+        return False
+    
+    # ==================== MÉTHODES D'APPROBATION ====================
     
     def approuver(self, user_id, commentaire=None):
         """Approuve la résolution d'un incident"""
@@ -8649,7 +8650,6 @@ class Incident(db.Model):
         self.approbation_date = datetime.utcnow()
         self.commentaire_approbation = commentaire
         self.statut = 'ferme'
-        self.date_approbation = datetime.utcnow()
         self.date_resolution = datetime.utcnow()
         self.updated_at = datetime.utcnow()
     
@@ -8659,21 +8659,34 @@ class Incident(db.Model):
         self.approbation_par_id = user_id
         self.approbation_date = datetime.utcnow()
         self.commentaire_approbation = commentaire
-        self.statut = 'en_cours'  # Retour en cours
+        self.statut = 'en_cours'
         self.updated_at = datetime.utcnow()
     
-    def verifier_sla(self):
-        """
-        Vérifie si le SLA est violé et escalade automatiquement
-        Returns:
-            bool: True si escalade déclenchée, False sinon
-        """
-        if self.statut not in ['ferme', 'resolu'] and self.sla_date_limite:
-            if datetime.utcnow() > self.sla_date_limite and not self.sla_viole:
-                self.sla_viole = True
-                raison = f"SLA dépassé - Délai de {self.sla_heures} heures écoulé"
-                return self.escalader(raison=raison, auto=True)
+    def peut_approuver(self, user):
+        """Vérifie si l'utilisateur peut approuver l'incident"""
+        if not user.is_authenticated:
+            return False
+        
+        if user.role == 'super_admin':
+            return True
+        
+        if not self.approbation_requise:
+            return False
+        
+        if self.approbation_statut != 'en_attente':
+            return False
+        
+        # Le superviseur peut approuver
+        if self.superviseur_id == user.id:
+            return True
+        
+        # Le directeur peut approuver
+        if self.directeur_id == user.id:
+            return True
+        
         return False
+    
+    # ==================== MÉTHODES D'ARCHIVAGE ====================
     
     def archiver(self, user_id, raison):
         """Archive l'incident"""
@@ -8691,100 +8704,37 @@ class Incident(db.Model):
         self.archive_reason = None
         self.updated_at = datetime.utcnow()
     
-    def peut_modifier(self, user):
-        """
-        Vérifie si l'utilisateur peut modifier l'incident même après résolution
-        Args:
-            user: Utilisateur à vérifier
-        Returns:
-            bool: True si l'utilisateur peut modifier
-        """
-        # Super admin et admin client peuvent toujours modifier
-        if user.role == 'super_admin' or user.is_client_admin:
+    def peut_archiver(self, user):
+        """Vérifie si l'utilisateur peut archiver l'incident"""
+        if not user.is_authenticated:
+            return False
+        
+        if user.role == 'super_admin':
             return True
         
-        # Le créateur et le responsable peuvent modifier
-        if user.id == self.created_by or user.id == self.responsable_resolution_id:
-            return True
-        
-        # Les superviseurs peuvent modifier
-        if user.id == self.superviseur_id:
-            return True
-        
-        # Les directeurs peuvent modifier
-        if user.id == self.directeur_id:
+        if user.is_client_admin:
             return True
         
         return False
     
-    # ==================== MÉTHODES DE LIBELLÉS ====================
-    
-    def get_gravite_label(self):
-        """Retourne le libellé de la gravité"""
-        labels = {
-            'critique': 'Critique',
-            'elevee': 'Élevée',
-            'moyenne': 'Moyenne',
-            'mineure': 'Mineure'
-        }
-        return labels.get(self.gravite, self.gravite)
-    
-    def get_gravite_color(self):
-        """Retourne la couleur CSS pour la gravité"""
-        colors = {
-            'critique': 'danger',
-            'elevee': 'warning',
-            'moyenne': 'info',
-            'mineure': 'success'
-        }
-        return colors.get(self.gravite, 'secondary')
-    
-    def get_type_label(self):
-        """Retourne le libellé du type d'incident"""
-        labels = {
-            'securite': 'Sécurité',
-            'conformite': 'Conformité',
-            'operationnel': 'Opérationnel',
-            'technique': 'Technique',
-            'juridique': 'Juridique'
-        }
-        return labels.get(self.type_incident, self.type_incident)
-    
-    def get_statut_label(self):
-        """Retourne le libellé du statut"""
-        labels = {
-            'ouvert': 'Ouvert',
-            'en_cours': 'En cours',
-            'resolu': 'Résolu',
-            'ferme': 'Fermé',
-            'rejete': 'Rejeté'
-        }
-        return labels.get(self.statut, self.statut)
-    
-    def get_statut_color(self):
-        """Retourne la couleur CSS pour le statut"""
-        colors = {
-            'ouvert': 'danger',
-            'en_cours': 'warning',
-            'resolu': 'info',
-            'ferme': 'success',
-            'rejete': 'secondary'
-        }
-        return colors.get(self.statut, 'secondary')
-    
-    def get_niveau_escalade_label(self):
-        """Retourne le libellé du niveau d'escalade"""
-        labels = {
-            1: 'Niveau 1 (Support)',
-            2: 'Niveau 2 (Superviseur)',
-            3: 'Niveau 3 (Direction)'
-        }
-        return labels.get(self.niveau_escalade, f'Niveau {self.niveau_escalade}')
-    
-    def get_approbation_statut_label(self):
-        """Retourne le libellé du statut d'approbation"""
-        labels = {'en_attente': 'En attente', 'approuve': 'Approuvé', 'rejete': 'Rejeté'}
-        return labels.get(self.approbation_statut, self.approbation_statut)
+    def peut_modifier(self, user):
+        """Vérifie si l'utilisateur peut modifier l'incident"""
+        if not user.is_authenticated:
+            return False
+        
+        if user.role == 'super_admin':
+            return True
+        
+        if user.is_client_admin:
+            return True
+        
+        if user.id == self.created_by:
+            return True
+        
+        if user.id == self.responsable_resolution_id:
+            return True
+        
+        return False
     
     # ==================== MÉTHODES DE CALCUL ====================
     
@@ -8810,6 +8760,37 @@ class Incident(db.Model):
             return f"Escalade automatique - SLA dépassé ({self.sla_heures}h)"
         return "Escalade manuelle"
     
+    # ==================== MÉTHODES DE LIBELLÉS ====================
+    
+    def get_gravite_label(self):
+        labels = {'critique': 'Critique', 'elevee': 'Élevée', 'moyenne': 'Moyenne', 'mineure': 'Mineure'}
+        return labels.get(self.gravite, self.gravite)
+    
+    def get_gravite_color(self):
+        colors = {'critique': 'danger', 'elevee': 'warning', 'moyenne': 'info', 'mineure': 'success'}
+        return colors.get(self.gravite, 'secondary')
+    
+    def get_type_label(self):
+        labels = {'securite': 'Sécurité', 'conformite': 'Conformité', 'operationnel': 'Opérationnel', 
+                  'technique': 'Technique', 'juridique': 'Juridique'}
+        return labels.get(self.type_incident, self.type_incident)
+    
+    def get_statut_label(self):
+        labels = {'ouvert': 'Ouvert', 'en_cours': 'En cours', 'resolu': 'Résolu', 'ferme': 'Fermé', 'rejete': 'Rejeté'}
+        return labels.get(self.statut, self.statut)
+    
+    def get_statut_color(self):
+        colors = {'ouvert': 'danger', 'en_cours': 'warning', 'resolu': 'info', 'ferme': 'success', 'rejete': 'secondary'}
+        return colors.get(self.statut, 'secondary')
+    
+    def get_niveau_escalade_label(self):
+        labels = {1: 'Niveau 1 (Support)', 2: 'Niveau 2 (Superviseur)', 3: 'Niveau 3 (Direction)'}
+        return labels.get(self.niveau_escalade, f'Niveau {self.niveau_escalade}')
+    
+    def get_approbation_statut_label(self):
+        labels = {'en_attente': 'En attente', 'approuve': 'Approuvé', 'rejete': 'Rejeté'}
+        return labels.get(self.approbation_statut, self.approbation_statut)
+    
     # ==================== MÉTHODES IA ====================
     
     def analyser_avec_ia(self):
@@ -8825,7 +8806,7 @@ class Incident(db.Model):
     # ==================== MÉTHODES DE CONVERSION ====================
     
     def to_dict(self):
-        """Convertit l'incident en dictionnaire pour API"""
+        import json
         return {
             'id': self.id,
             'reference': self.reference,
@@ -8873,8 +8854,12 @@ class Incident(db.Model):
             'analyse_ia': json.loads(self.analyse_ia) if self.analyse_ia else None,
             'ia_score_confiance': self.ia_score_confiance,
             'created_at': self.created_at.isoformat() if self.created_at else None,
-            'updated_at': self.updated_at.isoformat() if self.updated_at else None
+            'updated_at': self.updated_at.isoformat() if self.updated_at else None,
+            'is_archived': self.is_archived
         }
+    
+    def __repr__(self):
+        return f'<Incident {self.reference}: {self.titre[:30]}>'
 
 
 # ========================
