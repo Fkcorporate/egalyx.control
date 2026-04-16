@@ -8481,7 +8481,6 @@ class DocumentPCA(db.Model):
 # MODÈLE INCIDENT (VERSION COMPLÈTE)
 # ========================
 
-
 class Incident(db.Model):
     """Gestion complète des incidents avec workflow avancé"""
     __tablename__ = 'incidents'
@@ -8517,14 +8516,14 @@ class Incident(db.Model):
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
     
-    # ==================== SLA (SERVICE LEVEL AGREEMENT) ====================
+    # ==================== SLA ====================
     sla_heures = db.Column(db.Integer, default=48)
     sla_date_limite = db.Column(db.DateTime)
     sla_viole = db.Column(db.Boolean, default=False)
     
     # ==================== DÉLAIS D'ESCALADE ====================
-    delai_escalade_niveau2 = db.Column(db.Integer, default=48)  # heures avant escalade niveau 2
-    delai_escalade_niveau3 = db.Column(db.Integer, default=72)  # heures avant escalade niveau 3
+    delai_escalade_niveau2 = db.Column(db.Integer, default=48)
+    delai_escalade_niveau3 = db.Column(db.Integer, default=72)
     
     # ==================== NOTIFICATIONS ====================
     notification_envoyee_niveau2 = db.Column(db.Boolean, default=False)
@@ -8549,9 +8548,9 @@ class Incident(db.Model):
     commentaire_cloture = db.Column(db.Text)
     
     # ==================== MÉTADONNÉES IA ====================
-    analyse_ia = db.Column(db.Text)  # JSON
+    analyse_ia = db.Column(db.Text)
     ia_score_confiance = db.Column(db.Float, default=0)
-    ia_recommandations = db.Column(db.Text)  # JSON
+    ia_recommandations = db.Column(db.Text)
     
     # ==================== MULTI-TENANT ====================
     client_id = db.Column(db.Integer, db.ForeignKey('clients.id'), index=True)
@@ -8561,7 +8560,7 @@ class Incident(db.Model):
     archived_by = db.Column(db.Integer, db.ForeignKey('user.id'))
     archive_reason = db.Column(db.String(200))
     
-    # ==================== RELATIONS ====================
+    # ==================== RELATIONS CORRIGÉES ====================
     risque = db.relationship('Risque', backref='incidents', foreign_keys=[risque_id])
     dispositif = db.relationship('DispositifMaitrise', backref='incidents', foreign_keys=[dispositif_id])
     plan_action = db.relationship('PlanAction', backref='incidents', foreign_keys=[plan_action_id])
@@ -8571,7 +8570,9 @@ class Incident(db.Model):
     directeur = db.relationship('User', foreign_keys=[directeur_id], backref='incidents_directeur')
     approbateur = db.relationship('User', foreign_keys=[approbation_par_id])
     archiveur = db.relationship('User', foreign_keys=[archived_by])
-    historique = db.relationship('IncidentHistorique', backref='incident', lazy='dynamic', cascade='all, delete-orphan')
+    
+    # PAS DE RELATION DIRECTE AVEC IncidentHistorique pour éviter les conflits
+    # On utilisera des requêtes directes
     
     def __init__(self, **kwargs):
         super(Incident, self).__init__(**kwargs)
@@ -8582,7 +8583,6 @@ class Incident(db.Model):
     
     # ==================== GÉNÉRATION DE RÉFÉRENCE ====================
     def generer_reference(self):
-        """Génère une référence unique pour l'incident"""
         annee = datetime.utcnow().year
         query = Incident.query.filter(
             Incident.reference.like(f'INC-{annee}-%'),
@@ -8592,59 +8592,39 @@ class Incident(db.Model):
         return f"INC-{annee}-{count + 1:03d}"
     
     # ==================== MÉTHODES D'ESCALADE ====================
-    
     def escalader(self, raison=None, auto=False, user_id=None):
-        """
-        Escalade l'incident au niveau supérieur
-        """
         from services.escalade_service import EscaladeService
         return EscaladeService.escalader(self, auto=auto, raison=raison)
     
     def retro_escalader(self, niveau_cible=1, raison=None):
-        """Rétro-escalade l'incident à un niveau inférieur"""
         from services.escalade_service import EscaladeService
         return EscaladeService.retro_escalader(self, niveau_cible, raison)
     
     def verifier_sla(self):
-        """Vérifie le SLA et escalade automatiquement si nécessaire"""
         from services.escalade_service import EscaladeService
         return EscaladeService.verifier_et_escalader_auto(self)
     
     def peut_escalader(self, user):
-        """Vérifie si l'utilisateur peut escalader l'incident"""
         if not user.is_authenticated:
             return False
-        
         if user.role == 'super_admin':
             return True
-        
         if self.niveau_escalade >= 3:
             return False
-        
         if self.is_archived:
             return False
-        
         if self.statut in ['ferme', 'resolu', 'rejete']:
             return False
-        
-        # Le responsable actuel peut escalader
         if self.responsable_resolution_id == user.id:
             return True
-        
-        # Le superviseur peut escalader un incident de niveau 1
         if self.niveau_escalade == 1 and self.superviseur_id == user.id:
             return True
-        
-        # Le directeur peut escalader un incident de niveau 2
         if self.niveau_escalade == 2 and self.directeur_id == user.id:
             return True
-        
         return False
     
     # ==================== MÉTHODES D'APPROBATION ====================
-    
     def approuver(self, user_id, commentaire=None):
-        """Approuve la résolution d'un incident"""
         self.approbation_statut = 'approuve'
         self.approbation_par_id = user_id
         self.approbation_date = datetime.utcnow()
@@ -8654,7 +8634,6 @@ class Incident(db.Model):
         self.updated_at = datetime.utcnow()
     
     def rejeter(self, user_id, commentaire):
-        """Rejette la résolution d'un incident"""
         self.approbation_statut = 'rejete'
         self.approbation_par_id = user_id
         self.approbation_date = datetime.utcnow()
@@ -8663,33 +8642,22 @@ class Incident(db.Model):
         self.updated_at = datetime.utcnow()
     
     def peut_approuver(self, user):
-        """Vérifie si l'utilisateur peut approuver l'incident"""
         if not user.is_authenticated:
             return False
-        
         if user.role == 'super_admin':
             return True
-        
         if not self.approbation_requise:
             return False
-        
         if self.approbation_statut != 'en_attente':
             return False
-        
-        # Le superviseur peut approuver
         if self.superviseur_id == user.id:
             return True
-        
-        # Le directeur peut approuver
         if self.directeur_id == user.id:
             return True
-        
         return False
     
     # ==================== MÉTHODES D'ARCHIVAGE ====================
-    
     def archiver(self, user_id, raison):
-        """Archive l'incident"""
         self.is_archived = True
         self.archived_at = datetime.utcnow()
         self.archived_by = user_id
@@ -8697,7 +8665,6 @@ class Incident(db.Model):
         self.updated_at = datetime.utcnow()
     
     def desarchiver(self):
-        """Désarchive l'incident"""
         self.is_archived = False
         self.archived_at = None
         self.archived_by = None
@@ -8705,55 +8672,41 @@ class Incident(db.Model):
         self.updated_at = datetime.utcnow()
     
     def peut_archiver(self, user):
-        """Vérifie si l'utilisateur peut archiver l'incident"""
         if not user.is_authenticated:
             return False
-        
         if user.role == 'super_admin':
             return True
-        
         if user.is_client_admin:
             return True
-        
         return False
     
     def peut_modifier(self, user):
-        """Vérifie si l'utilisateur peut modifier l'incident"""
         if not user.is_authenticated:
             return False
-        
         if user.role == 'super_admin':
             return True
-        
         if user.is_client_admin:
             return True
-        
         if user.id == self.created_by:
             return True
-        
         if user.id == self.responsable_resolution_id:
             return True
-        
         return False
     
     # ==================== MÉTHODES DE CALCUL ====================
-    
     def get_delai_resolution(self):
-        """Retourne le délai de résolution en jours"""
         if self.date_resolution and self.date_occurrence:
             delta = self.date_resolution - self.date_occurrence
             return delta.days
         return None
     
     def get_heures_restantes_sla(self):
-        """Retourne les heures restantes avant violation du SLA"""
         if self.sla_date_limite and self.statut not in ['ferme', 'resolu']:
             delta = self.sla_date_limite - datetime.utcnow()
             return max(0, delta.total_seconds() / 3600)
         return None
     
     def get_raison_escalade(self):
-        """Retourne la raison de l'escalade"""
         if self.raison_escalade:
             return self.raison_escalade
         if self.escalation_auto:
@@ -8761,7 +8714,6 @@ class Incident(db.Model):
         return "Escalade manuelle"
     
     # ==================== MÉTHODES DE LIBELLÉS ====================
-    
     def get_gravite_label(self):
         labels = {'critique': 'Critique', 'elevee': 'Élevée', 'moyenne': 'Moyenne', 'mineure': 'Mineure'}
         return labels.get(self.gravite, self.gravite)
@@ -8792,19 +8744,15 @@ class Incident(db.Model):
         return labels.get(self.approbation_statut, self.approbation_statut)
     
     # ==================== MÉTHODES IA ====================
-    
     def analyser_avec_ia(self):
-        """Analyse prédictive de l'incident avec IA"""
         from services.incident_ia_service import IncidentIAService
         return IncidentIAService.analyser_incident(self)
     
     def predire_recurrence(self):
-        """Prédit la probabilité de récurrence"""
         from services.incident_ia_service import IncidentIAService
         return IncidentIAService.predire_recurrence(self)
     
     # ==================== MÉTHODES DE CONVERSION ====================
-    
     def to_dict(self):
         import json
         return {
@@ -8824,7 +8772,7 @@ class Incident(db.Model):
             'niveau_escalade_label': self.get_niveau_escalade_label(),
             'raison_escalade': self.get_raison_escalade(),
             'escalation_auto': self.escalation_auto,
-            'escalation_date': self.escalation_date.isoformat() if self.escalation_date else None,
+            'escalation_date': self.escalade_date.isoformat() if self.escalade_date else None,
             'approbation_requise': self.approbation_requise,
             'approbation_statut': self.approbation_statut,
             'approbation_statut_label': self.get_approbation_statut_label(),
@@ -8837,16 +8785,12 @@ class Incident(db.Model):
             'sla_viole': self.sla_viole,
             'heures_restantes_sla': self.get_heures_restantes_sla(),
             'risque_id': self.risque_id,
-            'risque_reference': self.risque.reference if self.risque else None,
             'dispositif_id': self.dispositif_id,
-            'dispositif_reference': self.dispositif.reference if self.dispositif else None,
             'plan_action_id': self.plan_action_id,
-            'plan_action_nom': self.plan_action.nom if self.plan_action else None,
             'declare_par': self.declare_par.username if self.declare_par else None,
             'responsable_resolution': self.responsable.username if self.responsable else None,
             'superviseur': self.superviseur.username if self.superviseur else None,
             'directeur': self.directeur.username if self.directeur else None,
-            'approbateur': self.approbateur.username if self.approbateur else None,
             'cause_racine': self.cause_racine,
             'actions_correctives': self.actions_correctives,
             'lecons_apprises': self.lecons_apprises,
@@ -8927,16 +8871,257 @@ class TicketSupport(db.Model):
 # ========================
 
 class IncidentHistorique(db.Model):
-    """Historique des actions sur les incidents"""
+    """Historique des actions sur les incidents - Version corrigée sans conflit"""
     __tablename__ = 'incidents_historique'
     
     id = db.Column(db.Integer, primary_key=True)
-    incident_id = db.Column(db.Integer, db.ForeignKey('incidents.id'))
+    incident_id = db.Column(db.Integer, db.ForeignKey('incidents.id'), nullable=False)
     action = db.Column(db.String(100), nullable=False)
     details = db.Column(db.Text)
-    utilisateur_id = db.Column(db.Integer, db.ForeignKey('user.id'))
+    utilisateur_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=True)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     
-    incident = db.relationship('Incident', backref='historique')
-    utilisateur = db.relationship('User')
+    # ==================== RELATIONS SIMPLES ET SANS CONFLIT ====================
+    # Relation simple UNIDIRECTIONNELLE (seulement depuis l'historique vers l'incident)
+    incident = db.relationship('Incident', foreign_keys=[incident_id])
+    utilisateur = db.relationship('User', foreign_keys=[utilisateur_id])
     
+    # ==================== MÉTHODES ====================
+    
+    def get_action_label(self):
+        """Retourne le libellé de l'action"""
+        labels = {
+            'creation': 'Création',
+            'modification': 'Modification',
+            'resolution': 'Résolution',
+            'escalade_manuelle': 'Escalade manuelle',
+            'escalade_auto': 'Escalade automatique',
+            'escalade_niveau_2': 'Escalade niveau 2',
+            'escalade_niveau_3': 'Escalade niveau 3',
+            'retro_escalade': 'Rétro-escalade',
+            'approbation_approuve': 'Approbation acceptée',
+            'approbation_rejete': 'Approbation rejetée',
+            'archivage': 'Archivage',
+            'restauration': 'Restauration',
+            'changement_responsable': 'Changement de responsable'
+        }
+        return labels.get(self.action, self.action.replace('_', ' ').title())
+    
+    def get_action_icon(self):
+        """Retourne l'icône pour l'action"""
+        icons = {
+            'creation': 'fa-plus-circle',
+            'modification': 'fa-edit',
+            'resolution': 'fa-check-circle',
+            'escalade_manuelle': 'fa-arrow-up',
+            'escalade_auto': 'fa-arrow-up',
+            'escalade_niveau_2': 'fa-arrow-up',
+            'escalade_niveau_3': 'fa-arrow-up',
+            'retro_escalade': 'fa-arrow-down',
+            'approbation_approuve': 'fa-stamp',
+            'approbation_rejete': 'fa-times-circle',
+            'archivage': 'fa-archive',
+            'restauration': 'fa-undo',
+            'changement_responsable': 'fa-user-switch'
+        }
+        return icons.get(self.action, 'fa-info-circle')
+    
+    def get_action_color(self):
+        """Retourne la couleur pour l'action"""
+        colors = {
+            'creation': 'success',
+            'modification': 'primary',
+            'resolution': 'success',
+            'escalade_manuelle': 'warning',
+            'escalade_auto': 'danger',
+            'escalade_niveau_2': 'warning',
+            'escalade_niveau_3': 'danger',
+            'retro_escalade': 'info',
+            'approbation_approuve': 'success',
+            'approbation_rejete': 'danger',
+            'archivage': 'secondary',
+            'restauration': 'info',
+            'changement_responsable': 'warning'
+        }
+        return colors.get(self.action, 'secondary')
+    
+    def get_formatted_date(self):
+        """Retourne la date formatée"""
+        if self.created_at:
+            return self.created_at.strftime('%d/%m/%Y à %H:%M')
+        return 'Date inconnue'
+    
+    def get_time_ago(self):
+        """Retourne le temps écoulé depuis la création"""
+        if not self.created_at:
+            return "Récemment"
+        
+        now = datetime.utcnow()
+        diff = now - self.created_at
+        
+        if diff.days > 365:
+            years = diff.days // 365
+            return f"il y a {years} an{'s' if years > 1 else ''}"
+        elif diff.days > 30:
+            months = diff.days // 30
+            return f"il y a {months} mois"
+        elif diff.days > 7:
+            weeks = diff.days // 7
+            return f"il y a {weeks} semaine{'s' if weeks > 1 else ''}"
+        elif diff.days > 0:
+            return f"il y a {diff.days} jour{'s' if diff.days > 1 else ''}"
+        elif diff.seconds >= 3600:
+            hours = diff.seconds // 3600
+            return f"il y a {hours} heure{'s' if hours > 1 else ''}"
+        elif diff.seconds >= 60:
+            minutes = diff.seconds // 60
+            return f"il y a {minutes} minute{'s' if minutes > 1 else ''}"
+        else:
+            return "À l'instant"
+    
+    def to_dict(self):
+        """Convertit l'historique en dictionnaire"""
+        return {
+            'id': self.id,
+            'incident_id': self.incident_id,
+            'action': self.action,
+            'action_label': self.get_action_label(),
+            'action_icon': self.get_action_icon(),
+            'action_color': self.get_action_color(),
+            'details': self.details,
+            'utilisateur_id': self.utilisateur_id,
+            'utilisateur_nom': self.utilisateur.username if self.utilisateur else 'Système',
+            'created_at': self.created_at.isoformat() if self.created_at else None,
+            'date_formatee': self.get_formatted_date(),
+            'time_ago': self.get_time_ago()
+        }
+    
+    def __repr__(self):
+        return f'<IncidentHistorique {self.id}: {self.action} pour incident {self.incident_id}>'class IncidentHistorique(db.Model):
+    """Historique des actions sur les incidents - Version corrigée sans conflit"""
+    __tablename__ = 'incidents_historique'
+    
+    id = db.Column(db.Integer, primary_key=True)
+    incident_id = db.Column(db.Integer, db.ForeignKey('incidents.id'), nullable=False)
+    action = db.Column(db.String(100), nullable=False)
+    details = db.Column(db.Text)
+    utilisateur_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=True)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    
+    # ==================== RELATIONS SIMPLES ET SANS CONFLIT ====================
+    # Relation simple UNIDIRECTIONNELLE (seulement depuis l'historique vers l'incident)
+    incident = db.relationship('Incident', foreign_keys=[incident_id])
+    utilisateur = db.relationship('User', foreign_keys=[utilisateur_id])
+    
+    # ==================== MÉTHODES ====================
+    
+    def get_action_label(self):
+        """Retourne le libellé de l'action"""
+        labels = {
+            'creation': 'Création',
+            'modification': 'Modification',
+            'resolution': 'Résolution',
+            'escalade_manuelle': 'Escalade manuelle',
+            'escalade_auto': 'Escalade automatique',
+            'escalade_niveau_2': 'Escalade niveau 2',
+            'escalade_niveau_3': 'Escalade niveau 3',
+            'retro_escalade': 'Rétro-escalade',
+            'approbation_approuve': 'Approbation acceptée',
+            'approbation_rejete': 'Approbation rejetée',
+            'archivage': 'Archivage',
+            'restauration': 'Restauration',
+            'changement_responsable': 'Changement de responsable'
+        }
+        return labels.get(self.action, self.action.replace('_', ' ').title())
+    
+    def get_action_icon(self):
+        """Retourne l'icône pour l'action"""
+        icons = {
+            'creation': 'fa-plus-circle',
+            'modification': 'fa-edit',
+            'resolution': 'fa-check-circle',
+            'escalade_manuelle': 'fa-arrow-up',
+            'escalade_auto': 'fa-arrow-up',
+            'escalade_niveau_2': 'fa-arrow-up',
+            'escalade_niveau_3': 'fa-arrow-up',
+            'retro_escalade': 'fa-arrow-down',
+            'approbation_approuve': 'fa-stamp',
+            'approbation_rejete': 'fa-times-circle',
+            'archivage': 'fa-archive',
+            'restauration': 'fa-undo',
+            'changement_responsable': 'fa-user-switch'
+        }
+        return icons.get(self.action, 'fa-info-circle')
+    
+    def get_action_color(self):
+        """Retourne la couleur pour l'action"""
+        colors = {
+            'creation': 'success',
+            'modification': 'primary',
+            'resolution': 'success',
+            'escalade_manuelle': 'warning',
+            'escalade_auto': 'danger',
+            'escalade_niveau_2': 'warning',
+            'escalade_niveau_3': 'danger',
+            'retro_escalade': 'info',
+            'approbation_approuve': 'success',
+            'approbation_rejete': 'danger',
+            'archivage': 'secondary',
+            'restauration': 'info',
+            'changement_responsable': 'warning'
+        }
+        return colors.get(self.action, 'secondary')
+    
+    def get_formatted_date(self):
+        """Retourne la date formatée"""
+        if self.created_at:
+            return self.created_at.strftime('%d/%m/%Y à %H:%M')
+        return 'Date inconnue'
+    
+    def get_time_ago(self):
+        """Retourne le temps écoulé depuis la création"""
+        if not self.created_at:
+            return "Récemment"
+        
+        now = datetime.utcnow()
+        diff = now - self.created_at
+        
+        if diff.days > 365:
+            years = diff.days // 365
+            return f"il y a {years} an{'s' if years > 1 else ''}"
+        elif diff.days > 30:
+            months = diff.days // 30
+            return f"il y a {months} mois"
+        elif diff.days > 7:
+            weeks = diff.days // 7
+            return f"il y a {weeks} semaine{'s' if weeks > 1 else ''}"
+        elif diff.days > 0:
+            return f"il y a {diff.days} jour{'s' if diff.days > 1 else ''}"
+        elif diff.seconds >= 3600:
+            hours = diff.seconds // 3600
+            return f"il y a {hours} heure{'s' if hours > 1 else ''}"
+        elif diff.seconds >= 60:
+            minutes = diff.seconds // 60
+            return f"il y a {minutes} minute{'s' if minutes > 1 else ''}"
+        else:
+            return "À l'instant"
+    
+    def to_dict(self):
+        """Convertit l'historique en dictionnaire"""
+        return {
+            'id': self.id,
+            'incident_id': self.incident_id,
+            'action': self.action,
+            'action_label': self.get_action_label(),
+            'action_icon': self.get_action_icon(),
+            'action_color': self.get_action_color(),
+            'details': self.details,
+            'utilisateur_id': self.utilisateur_id,
+            'utilisateur_nom': self.utilisateur.username if self.utilisateur else 'Système',
+            'created_at': self.created_at.isoformat() if self.created_at else None,
+            'date_formatee': self.get_formatted_date(),
+            'time_ago': self.get_time_ago()
+        }
+    
+    def __repr__(self):
+        return f'<IncidentHistorique {self.id}: {self.action} pour incident {self.incident_id}>'
