@@ -8751,6 +8751,22 @@ class Incident(db.Model):
     def predire_recurrence(self):
         from services.incident_ia_service import IncidentIAService
         return IncidentIAService.predire_recurrence(self)
+    def generer_reference(self):
+        """Génère une référence unique pour l'incident par client"""
+        annee = datetime.utcnow().year
+        # Compter uniquement pour le même client
+        count = Incident.query.filter(
+            Incident.reference.like(f'INC-{annee}-%'),
+            Incident.client_id == self.client_id  # ← NOUVEAU : filtre par client
+        ).count()
+        return f"INC-{annee}-{count + 1:03d}"
+    
+    def __init__(self, **kwargs):
+        super(Incident, self).__init__(**kwargs)
+        if not self.reference:
+            self.reference = self.generer_reference()
+        if not self.sla_date_limite and self.sla_heures:
+            self.sla_date_limite = datetime.utcnow() + timedelta(hours=self.sla_heures)
     
     # ==================== MÉTHODES DE CONVERSION ====================
     def to_dict(self):
