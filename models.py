@@ -8571,25 +8571,48 @@ class Incident(db.Model):
     approbateur = db.relationship('User', foreign_keys=[approbation_par_id])
     archiveur = db.relationship('User', foreign_keys=[archived_by])
     
-    # PAS DE RELATION DIRECTE AVEC IncidentHistorique pour éviter les conflits
-    # On utilisera des requêtes directes
+    # ==================== GÉNÉRATION DE RÉFÉRENCE ROBUSTE ====================
+    @classmethod
+    def generer_reference_unique(cls, client_id=None, tentative=0):
+        """
+        Génère une référence unique pour l'incident avec gestion des conflits
+        """
+        annee = datetime.utcnow().year
+        max_tentatives = 10
+        
+        # Construire la requête de base
+        query = cls.query.filter(cls.reference.like(f'INC-{annee}-%'))
+        if client_id:
+            query = query.filter(cls.client_id == client_id)
+        
+        # Compter les incidents existants
+        count = query.count()
+        
+        # Générer le numéro de base
+        base_num = count + 1 + tentative
+        
+        # Générer la référence
+        reference = f"INC-{annee}-{base_num:03d}"
+        
+        # Vérifier si la référence existe déjà
+        existing = cls.query.filter_by(reference=reference).first()
+        
+        if existing and tentative < max_tentatives:
+            # Conflit, réessayer avec tentative+1
+            return cls.generer_reference_unique(client_id, tentative + 1)
+        elif existing:
+            # Échec après max_tentatives, utiliser un timestamp
+            timestamp = int(datetime.utcnow().timestamp())
+            reference = f"INC-{annee}-{timestamp}"
+        
+        return reference
     
     def __init__(self, **kwargs):
         super(Incident, self).__init__(**kwargs)
         if not self.reference:
-            self.reference = self.generer_reference()
+            self.reference = self.generer_reference_unique(self.client_id)
         if not self.sla_date_limite and self.sla_heures:
             self.sla_date_limite = datetime.utcnow() + timedelta(hours=self.sla_heures)
-    
-    # ==================== GÉNÉRATION DE RÉFÉRENCE ====================
-    def generer_reference(self):
-        annee = datetime.utcnow().year
-        query = Incident.query.filter(
-            Incident.reference.like(f'INC-{annee}-%'),
-            Incident.client_id == self.client_id
-        )
-        count = query.count()
-        return f"INC-{annee}-{count + 1:03d}"
     
     # ==================== MÉTHODES D'ESCALADE ====================
     def escalader(self, raison=None, auto=False, user_id=None):
@@ -8751,22 +8774,6 @@ class Incident(db.Model):
     def predire_recurrence(self):
         from services.incident_ia_service import IncidentIAService
         return IncidentIAService.predire_recurrence(self)
-    def generer_reference(self):
-        """Génère une référence unique pour l'incident par client"""
-        annee = datetime.utcnow().year
-        # Compter uniquement pour le même client
-        count = Incident.query.filter(
-            Incident.reference.like(f'INC-{annee}-%'),
-            Incident.client_id == self.client_id  # ← NOUVEAU : filtre par client
-        ).count()
-        return f"INC-{annee}-{count + 1:03d}"
-    
-    def __init__(self, **kwargs):
-        super(Incident, self).__init__(**kwargs)
-        if not self.reference:
-            self.reference = self.generer_reference()
-        if not self.sla_date_limite and self.sla_heures:
-            self.sla_date_limite = datetime.utcnow() + timedelta(hours=self.sla_heures)
     
     # ==================== MÉTHODES DE CONVERSION ====================
     def to_dict(self):
