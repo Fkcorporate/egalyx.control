@@ -8607,6 +8607,11 @@ class Incident(db.Model):
         
         return reference
     
+    # Garder la méthode generer_reference pour compatibilité (appelle la nouvelle méthode)
+    def generer_reference(self):
+        """Méthode de compatibilité - appelle generer_reference_unique"""
+        return self.generer_reference_unique(self.client_id)
+    
     def __init__(self, **kwargs):
         super(Incident, self).__init__(**kwargs)
         if not self.reference:
@@ -8827,7 +8832,6 @@ class Incident(db.Model):
     
     def __repr__(self):
         return f'<Incident {self.reference}: {self.titre[:30]}>'
-
 
 # ========================
 # MODÈLE TICKET SUPPORT (NOUVEAU)
