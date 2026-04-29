@@ -1,0 +1,390 @@
+{% extends "base.html" %}
+
+{% block title %}Gestion des Formations{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <h1>
+            <i class="fas fa-book-open me-2"></i>
+            Formations
+        </h1>
+        <div class="d-flex gap-2">
+            <a href="{{ url_for('dashboard_developpement_auditeurs') }}" class="btn btn-secondary">
+                <i class="fas fa-arrow-left me-2"></i>Retour au tableau de bord
+            </a>
+            <a href="{{ url_for('nouvelle_formation') }}" class="btn btn-primary">
+                <i class="fas fa-plus me-2"></i>Nouvelle formation
+            </a>
+        </div>
+    </div>
+
+    <!-- Filtres -->
+    <div class="card mb-4">
+        <div class="card-body">
+            <div class="row">
+                <div class="col-md-3">
+                    <label class="form-label">Type de formation</label>
+                    <select class="form-select" id="filterType">
+                        <option value="">Tous</option>
+                        <option value="presentiel">Présentiel</option>
+                        <option value="distanciel">Distanciel</option>
+                        <option value="e-learning">E-learning</option>
+                        <option value="hybride">Hybride</option>
+                    </select>
+                </div>
+                <div class="col-md-3">
+                    <label class="form-label">Catégorie</label>
+                    <select class="form-select" id="filterCategorie">
+                        <option value="">Toutes</option>
+                        <option value="technique">Technique</option>
+                        <option value="soft_skills">Soft Skills</option>
+                        <option value="management">Management</option>
+                        <option value="normative">Normative</option>
+                    </select>
+                </div>
+                <div class="col-md-3">
+                    <label class="form-label">Recherche</label>
+                    <input type="text" id="searchFormation" class="form-control" placeholder="Nom, formateur...">
+                </div>
+                <div class="col-md-3">
+                    <label class="form-label">&nbsp;</label>
+                    <button class="btn btn-outline-secondary w-100" onclick="resetFiltres()">
+                        <i class="fas fa-undo me-2"></i>Réinitialiser
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="row" id="formationsContainer">
+        {% for formation in formations %}
+        <div class="col-md-4 mb-3 formation-card" 
+             data-type="{{ formation.type_formation }}" 
+             data-categorie="{{ formation.categorie }}"
+             data-titre="{{ formation.titre|lower }}"
+             data-formateur="{{ formation.formateur|lower }}">
+            <div class="card h-100">
+                <div class="card-header {% if formation.date_debut and formation.date_debut < now.date() %}bg-secondary{% else %}bg-primary{% endif %} text-white d-flex justify-content-between align-items-center">
+                    <strong>{{ formation.reference }}</strong>
+                    <div class="btn-group btn-group-sm">
+                        <button class="btn btn-sm btn-light" onclick="modifierFormation({{ formation.id }})" title="Modifier">
+                            <i class="fas fa-edit"></i>
+                        </button>
+                        <button class="btn btn-sm btn-light" onclick="supprimerFormation({{ formation.id }})" title="Supprimer">
+                            <i class="fas fa-trash"></i>
+                        </button>
+                    </div>
+                </div>
+                <div class="card-body">
+                    <h5 class="card-title">{{ formation.titre }}</h5>
+                    <p class="card-text small text-muted">{{ formation.description[:120] }}{% if formation.description|length > 120 %}...{% endif %}</p>
+                    
+                    <div class="mb-2">
+                        <span class="badge bg-info">{{ formation.type_formation|default('Non défini') }}</span>
+                        <span class="badge bg-secondary">{{ formation.categorie|default('Non catégorisé') }}</span>
+                        {% if formation.est_actif %}
+                        <span class="badge bg-success">Active</span>
+                        {% else %}
+                        <span class="badge bg-danger">Inactive</span>
+                        {% endif %}
+                    </div>
+                    
+                    <div class="small text-muted">
+                        <div><i class="fas fa-clock me-1"></i>Durée: {{ formation.duree_heures or '-' }}h</div>
+                        <div><i class="fas fa-euro-sign me-1"></i>Coût: {{ formation.cout or '-' }} €</div>
+                        <div><i class="fas fa-chalkboard-user me-1"></i>Formateur: {{ formation.formateur or '-' }}</div>
+                        <div><i class="fas fa-building me-1"></i>Organisme: {{ formation.organisme or '-' }}</div>
+                        {% if formation.date_debut %}
+                        <div><i class="fas fa-calendar me-1"></i>Date: {{ formation.date_debut.strftime('%d/%m/%Y') }}</div>
+                        {% endif %}
+                        {% if formation.places_disponibles is not none %}
+                        <div><i class="fas fa-chair me-1"></i>Places: {{ formation.places_disponibles }}</div>
+                        {% endif %}
+                    </div>
+                </div>
+                <div class="card-footer">
+                    <button class="btn btn-sm btn-outline-primary w-100" onclick="ouvrirModalInscription({{ formation.id }}, '{{ formation.titre }}')">
+                        <i class="fas fa-user-plus me-2"></i>Inscrire des auditeurs
+                    </button>
+                </div>
+            </div>
+        </div>
+        {% else %}
+        <div class="col-12">
+            <div class="alert alert-info text-center py-5">
+                <i class="fas fa-book-open fa-3x mb-3"></i>
+                <h5>Aucune formation disponible</h5>
+                <p>Cliquez sur "Nouvelle formation" pour en créer une.</p>
+            </div>
+        </div>
+        {% endfor %}
+    </div>
+</div>
+
+<!-- MODAL INSCRIPTION AUDITEURS -->
+<div class="modal fade" id="modalInscriptionAuditeurs" tabindex="-1">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header bg-success text-white">
+                <h5 class="modal-title">
+                    <i class="fas fa-user-plus me-2"></i>
+                    Inscrire des auditeurs - <span id="modalFormationTitre"></span>
+                </h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <input type="hidden" id="modalFormationId">
+                <div class="mb-3">
+                    <label class="form-label fw-bold">Sélectionner les auditeurs</label>
+                    <div class="border rounded p-2" style="max-height: 400px; overflow-y: auto;">
+                        <div class="mb-2">
+                            <input type="text" id="searchAuditeurModal" class="form-control" placeholder="Rechercher un auditeur...">
+                        </div>
+                        <div id="auditeursCheckboxList">
+                            <div class="text-center py-3">
+                                <div class="spinner-border spinner-border-sm" role="status"></div>
+                                Chargement...
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Annuler</button>
+                <button type="button" class="btn btn-success" onclick="inscrireAuditeursSelectionnes()">
+                    <i class="fas fa-check me-2"></i>Inscrire les sélectionnés
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+let currentFormationId = null;
+
+// Charger la liste des auditeurs
+function chargerAuditeurs() {
+    console.log("Chargement des utilisateurs...");
+    
+    const container = document.getElementById('auditeursCheckboxList');
+    container.innerHTML = '<div class="text-center py-3"><div class="spinner-border spinner-border-sm"></div> Chargement...</div>';
+    
+    fetch('/api/developpement-auditeurs/auditeurs/liste')
+        .then(response => response.json())
+        .then(data => {
+            console.log("Données brutes:", data);
+            
+            // Essayer différents formats possibles
+            let users = [];
+            if (data.auditeurs) users = data.auditeurs;
+            else if (data.users) users = data.users;
+            else if (Array.isArray(data)) users = data;
+            else if (data.data && Array.isArray(data.data)) users = data.data;
+            
+            console.log("Utilisateurs trouvés:", users.length);
+            
+            if (!users || users.length === 0) {
+                container.innerHTML = `
+                    <div class="alert alert-warning">
+                        <i class="fas fa-exclamation-triangle me-2"></i>
+                        Aucun utilisateur dans la base de données.<br>
+                        <hr>
+                        <button class="btn btn-sm btn-primary mt-2" onclick="window.location.href='/register'">
+                            <i class="fas fa-user-plus me-2"></i>Créer un compte
+                        </button>
+                    </div>
+                `;
+                return;
+            }
+            
+            // Afficher tous les utilisateurs
+            let html = `
+                <div class="mb-2">
+                    <input type="text" id="searchAuditeurModal" class="form-control" placeholder="🔍 Rechercher...">
+                </div>
+                <div class="alert alert-info mb-2">
+                    <i class="fas fa-users me-2"></i>
+                    ${users.length} utilisateur(s) trouvé(s)
+                </div>
+                <div style="max-height: 300px; overflow-y: auto;">
+            `;
+            
+            users.forEach(user => {
+                html += `
+                    <div class="form-check mb-2 p-2 border rounded" data-search="${(user.username + ' ' + (user.email || '')).toLowerCase()}">
+                        <input class="form-check-input" type="checkbox" value="${user.id}" id="user_${user.id}">
+                        <label class="form-check-label w-100" for="user_${user.id}">
+                            <strong>${user.username}</strong>
+                            <br><small class="text-muted">${user.email || 'Pas d\'email'} - ${user.role || 'utilisateur'}</small>
+                        </label>
+                    </div>
+                `;
+            });
+            
+            html += `</div>`;
+            container.innerHTML = html;
+            
+            // Recherche
+            const searchInput = document.getElementById('searchAuditeurModal');
+            if (searchInput) {
+                searchInput.addEventListener('keyup', function() {
+                    const term = this.value.toLowerCase();
+                    document.querySelectorAll('#auditeursCheckboxList .border.rounded').forEach(item => {
+                        const match = item.dataset.search.includes(term);
+                        item.style.display = match ? '' : 'none';
+                    });
+                });
+            }
+        })
+        .catch(error => {
+            console.error("Erreur:", error);
+            container.innerHTML = `<div class="alert alert-danger">Erreur: ${error.message}</div>`;
+        });
+}
+
+function ouvrirModalInscription(formationId, formationTitre) {
+    currentFormationId = formationId;
+    document.getElementById('modalFormationId').value = formationId;
+    document.getElementById('modalFormationTitre').textContent = formationTitre;
+    
+    // Charger les auditeurs
+    chargerAuditeurs();
+    
+    const modal = new bootstrap.Modal(document.getElementById('modalInscriptionAuditeurs'));
+    modal.show();
+}
+
+function inscrireAuditeursSelectionnes() {
+    const checkboxes = document.querySelectorAll('#auditeursCheckboxList input[type="checkbox"]:checked');
+    const auditeursIds = Array.from(checkboxes).map(cb => parseInt(cb.value));
+    
+    if (auditeursIds.length === 0) {
+        alert('Veuillez sélectionner au moins un auditeur');
+        return;
+    }
+    
+    fetch(`/api/developpement-auditeurs/formation/${currentFormationId}/inscrire/multi`, {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            'X-CSRFToken': '{{ csrf_token() }}'
+        },
+        body: JSON.stringify({ auditeurs: auditeursIds })
+    })
+    .then(r => r.json())
+    .then(data => {
+        if (data.success) {
+            alert(`${data.inscrits} auditeur(s) inscrit(s) avec succès !`);
+            bootstrap.Modal.getInstance(document.getElementById('modalInscriptionAuditeurs')).hide();
+            location.reload();
+        } else {
+            alert('Erreur: ' + (data.error || 'Erreur lors de l\'inscription'));
+        }
+    })
+    .catch(error => {
+        console.error('Erreur:', error);
+        alert('Erreur réseau');
+    });
+}
+
+// Filtres
+function filtrerFormations() {
+    const type = document.getElementById('filterType').value;
+    const categorie = document.getElementById('filterCategorie').value;
+    const search = document.getElementById('searchFormation').value.toLowerCase();
+    
+    const cards = document.querySelectorAll('.formation-card');
+    let visibleCount = 0;
+    
+    cards.forEach(card => {
+        let show = true;
+        
+        if (type && card.dataset.type !== type) show = false;
+        if (categorie && card.dataset.categorie !== categorie) show = false;
+        if (search && !card.dataset.titre.includes(search) && !card.dataset.formateur.includes(search)) show = false;
+        
+        card.style.display = show ? '' : 'none';
+        if (show) visibleCount++;
+    });
+    
+    // Afficher message si aucun résultat
+    const container = document.getElementById('formationsContainer');
+    let noResultMsg = document.getElementById('noResultMessage');
+    
+    if (visibleCount === 0) {
+        if (!noResultMsg) {
+            noResultMsg = document.createElement('div');
+            noResultMsg.id = 'noResultMessage';
+            noResultMsg.className = 'col-12';
+            noResultMsg.innerHTML = `
+                <div class="alert alert-info text-center py-5">
+                    <i class="fas fa-search fa-3x mb-3"></i>
+                    <h5>Aucune formation ne correspond aux critères</h5>
+                    <button class="btn btn-sm btn-outline-primary" onclick="resetFiltres()">
+                        <i class="fas fa-undo me-2"></i>Réinitialiser les filtres
+                    </button>
+                </div>
+            `;
+            container.appendChild(noResultMsg);
+        }
+    } else {
+        if (noResultMsg) noResultMsg.remove();
+    }
+}
+
+function resetFiltres() {
+    document.getElementById('filterType').value = '';
+    document.getElementById('filterCategorie').value = '';
+    document.getElementById('searchFormation').value = '';
+    filtrerFormations();
+}
+
+// Modifier une formation
+function modifierFormation(formationId) {
+    window.location.href = `/developpement-auditeurs/formation/${formationId}/modifier`;
+}
+
+// Supprimer une formation
+function supprimerFormation(formationId) {
+    if (confirm('Êtes-vous sûr de vouloir supprimer cette formation ? Cette action est irréversible.')) {
+        fetch(`/api/developpement-auditeurs/formation/${formationId}`, {
+            method: 'DELETE',
+            headers: {
+                'X-CSRFToken': '{{ csrf_token() }}'
+            }
+        })
+        .then(r => r.json())
+        .then(data => {
+            if (data.success) {
+                location.reload();
+            } else {
+                alert('Erreur: ' + data.error);
+            }
+        });
+    }
+}
+
+// Événements
+document.getElementById('filterType')?.addEventListener('change', filtrerFormations);
+document.getElementById('filterCategorie')?.addEventListener('change', filtrerFormations);
+document.getElementById('searchFormation')?.addEventListener('keyup', filtrerFormations);
+</script>
+
+<style>
+.formation-card {
+    transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+.formation-card:hover {
+    transform: translateY(-5px);
+    box-shadow: 0 10px 20px rgba(0,0,0,0.1);
+}
+.card-header .btn-group {
+    opacity: 0.7;
+    transition: opacity 0.2s;
+}
+.card-header:hover .btn-group {
+    opacity: 1;
+}
+</style>
+{% endblock %}

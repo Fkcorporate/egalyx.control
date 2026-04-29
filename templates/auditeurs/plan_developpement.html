@@ -1,0 +1,394 @@
+{% extends "base.html" %}
+
+{% block title %}Plan de développement - {{ auditeur.username }}{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <div class="row">
+        <div class="col-12">
+            <div class="card shadow-sm">
+                <div class="card-header bg-primary text-white">
+                    <h5 class="mb-0">
+                        <i class="fas fa-tasks me-2"></i>
+                        Plan de développement - {{ auditeur.username }} ({{ plan.annee }})
+                    </h5>
+                </div>
+                <div class="card-body">
+                    <!-- Onglets -->
+                    <ul class="nav nav-tabs mb-4" id="pdiTabs" role="tablist">
+                        <li class="nav-item" role="presentation">
+                            <button class="nav-link active" id="objectifs-tab" data-bs-toggle="tab" data-bs-target="#objectifs" type="button" role="tab">
+                                <i class="fas fa-bullseye me-2"></i>Objectifs
+                            </button>
+                        </li>
+                        <li class="nav-item" role="presentation">
+                            <button class="nav-link" id="ecarts-tab" data-bs-toggle="tab" data-bs-target="#ecarts" type="button" role="tab">
+                                <i class="fas fa-chart-line me-2"></i>Écarts de compétences
+                            </button>
+                        </li>
+                        <li class="nav-item" role="presentation">
+                            <button class="nav-link" id="actions-tab" data-bs-toggle="tab" data-bs-target="#actions" type="button" role="tab">
+                                <i class="fas fa-list-check me-2"></i>Actions prévues
+                            </button>
+                        </li>
+                        <li class="nav-item" role="presentation">
+                            <button class="nav-link" id="formations-tab" data-bs-toggle="tab" data-bs-target="#formations" type="button" role="tab">
+                                <i class="fas fa-graduation-cap me-2"></i>Formations
+                            </button>
+                        </li>
+                    </ul>
+                    
+                    <div class="tab-content" id="pdiTabContent">
+                        <!-- Objectifs -->
+                        <div class="tab-pane fade show active" id="objectifs" role="tabpanel">
+                            <form id="objectifsForm">
+                                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                                
+                                <div class="mb-4">
+                                    <label class="form-label fw-bold">Objectifs globaux pour l'année</label>
+                                    <textarea class="form-control" id="objectifs_globaux" rows="4" 
+                                              placeholder="Décrivez les objectifs principaux de développement pour l'année...">{{ plan.objectifs_globaux or '' }}</textarea>
+                                </div>
+                                
+                                <div class="mb-4">
+                                    <label class="form-label fw-bold">Objectifs SMART</label>
+                                    <div id="objectifsSmartList">
+                                        {% if plan.objectifs_smart %}
+                                            {% for obj in plan.objectifs_smart %}
+                                            <div class="input-group mb-2">
+                                                <input type="text" class="form-control objectif-smart" value="{{ obj }}">
+                                                <button type="button" class="btn btn-outline-danger remove-objectif">🗑️</button>
+                                            </div>
+                                            {% endfor %}
+                                        {% endif %}
+                                    </div>
+                                    <button type="button" class="btn btn-sm btn-outline-primary mt-2" id="ajouterObjectifSmart">
+                                        <i class="fas fa-plus me-1"></i>Ajouter un objectif SMART
+                                    </button>
+                                </div>
+                                
+                                <div class="mb-4">
+                                    <label class="form-label fw-bold">Points forts identifiés</label>
+                                    <textarea class="form-control" id="points_forts" rows="3" 
+                                              placeholder="Forces de l'auditeur...">{{ plan.points_forts or '' }}</textarea>
+                                </div>
+                                
+                                <div class="mb-4">
+                                    <label class="form-label fw-bold">Axes d'amélioration</label>
+                                    <textarea class="form-control" id="axes_amelioration" rows="3" 
+                                              placeholder="Points à améliorer...">{{ plan.axes_amelioration or '' }}</textarea>
+                                </div>
+                                
+                                <div class="alert alert-info">
+                                    <i class="fas fa-lightbulb me-2"></i>
+                                    Un objectif SMART est : Spécifique, Mesurable, Acceptable, Réaliste, Temporellement défini.
+                                </div>
+                                
+                                <button type="button" id="saveObjectifs" class="btn btn-primary">
+                                    <i class="fas fa-save me-2"></i>Enregistrer les objectifs
+                                </button>
+                            </form>
+                        </div>
+                        
+                        <!-- Écarts de compétences -->
+                        <div class="tab-pane fade" id="ecarts" role="tabpanel">
+                            <div class="table-responsive">
+                                <table class="table table-bordered">
+                                    <thead class="table-light">
+                                        <tr>
+                                            <th>Compétence</th>
+                                            <th>Niveau actuel</th>
+                                            <th>Niveau requis</th>
+                                            <th>Écart</th>
+                                            <th>Actions recommandées</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        {% for ecart in ecarts %}
+                                        <tr>
+                                            <td>
+                                                <strong>{{ ecart.competence.nom }}</strong><br>
+                                                <small class="text-muted">{{ ecart.competence.categorie|replace('_', ' ')|title }}</small>
+                                            </td>
+                                            <td class="text-center">
+                                                <div class="d-flex align-items-center justify-content-center">
+                                                    <div class="me-2">{{ ecart.niveau_actuel }}/5</div>
+                                                    <div class="progress" style="width: 80px; height: 6px;">
+                                                        <div class="progress-bar bg-danger" style="width: {{ (ecart.niveau_actuel / 5) * 100 }}%"></div>
+                                                    </div>
+                                                </div>
+                                            </td>
+                                            <td class="text-center">
+                                                <div class="d-flex align-items-center justify-content-center">
+                                                    <div class="me-2">{{ ecart.niveau_requis }}/5</div>
+                                                    <div class="progress" style="width: 80px; height: 6px;">
+                                                        <div class="progress-bar bg-success" style="width: {{ (ecart.niveau_requis / 5) * 100 }}%"></div>
+                                                    </div>
+                                                </div>
+                                            </td>
+                                            <td class="text-center">
+                                                <span class="badge bg-danger">-{{ ecart.ecart }} points</span>
+                                            </td>
+                                            <td>
+                                                <select class="form-select form-select-sm action-reco" data-comp-id="{{ ecart.competence.id }}">
+                                                    <option value="">-- Choisir une action --</option>
+                                                    <option value="formation">📚 Formation spécifique</option>
+                                                    <option value="mentorat">👥 Mentorat</option>
+                                                    <option value="projet">📋 Mission sur projet</option>
+                                                    <option value="autonomie">🎯 Autonomie progressive</option>
+                                                </select>
+                                            </td>
+                                        </tr>
+                                        {% else %}
+                                        <tr>
+                                            <td colspan="5" class="text-center py-4">
+                                                <i class="fas fa-check-circle fa-2x text-success mb-2"></i>
+                                                <p class="text-muted">Toutes les compétences sont au niveau requis !</p>
+                                            </td>
+                                        </tr>
+                                        {% endfor %}
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                        
+                        <!-- Actions prévues -->
+                        <div class="tab-pane fade" id="actions" role="tabpanel">
+                            <div id="actionsList">
+                                {% if plan.actions_prevues %}
+                                    {% for action in plan.actions_prevues %}
+                                    <div class="card mb-2 action-card" data-action-id="{{ loop.index0 }}">
+                                        <div class="card-body py-2">
+                                            <div class="d-flex justify-content-between align-items-center">
+                                                <div>
+                                                    <span class="badge bg-primary me-2">{{ action.type|replace('_', ' ')|title }}</span>
+                                                    <span>{{ action.description }}</span>
+                                                    <small class="text-muted ms-2">Échéance: {{ action.date_echeance or 'À définir' }}</small>
+                                                </div>
+                                                <div>
+                                                    <span class="badge {% if action.statut == 'realise' %}bg-success{% elif action.statut == 'en_cours' %}bg-info{% else %}bg-secondary{% endif %}">
+                                                        {{ action.statut|replace('_', ' ')|title or 'À faire' }}
+                                                    </span>
+                                                    <button type="button" class="btn btn-sm btn-outline-danger ms-2 remove-action">🗑️</button>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                    {% endfor %}
+                                {% endif %}
+                            </div>
+                            
+                            <button type="button" class="btn btn-outline-primary mt-3" id="ajouterAction">
+                                <i class="fas fa-plus me-1"></i>Ajouter une action
+                            </button>
+                        </div>
+                        
+                        <!-- Formations recommandées -->
+                        <div class="tab-pane fade" id="formations" role="tabpanel">
+                            <div class="row">
+                                {% for formation in formations %}
+                                <div class="col-md-6 mb-3">
+                                    <div class="card h-100">
+                                        <div class="card-body">
+                                            <h6 class="card-title">{{ formation.titre }}</h6>
+                                            <p class="card-text small text-muted">{{ formation.description|truncate(100) }}</p>
+                                            <div class="d-flex justify-content-between align-items-center mt-2">
+                                                <span class="badge bg-secondary">{{ formation.type_formation|replace('_', ' ')|title }}</span>
+                                                <button class="btn btn-sm btn-outline-primary ajouter-action-formation" 
+                                                        data-titre="{{ formation.titre }}"
+                                                        data-formation-id="{{ formation.id }}">
+                                                    <i class="fas fa-plus me-1"></i>Ajouter au plan
+                                                </button>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                                {% endfor %}
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div class="card-footer">
+                    <div class="d-flex justify-content-between">
+                        <a href="{{ url_for('dashboard_developpement_auditeurs') }}" class="btn btn-secondary">
+                            <i class="fas fa-arrow-left me-2"></i>Retour
+                        </a>
+                        <div>
+                            {% if plan.statut != 'valide' %}
+                            <button type="button" id="validerPlan" class="btn btn-success">
+                                <i class="fas fa-check-circle me-2"></i>Valider le plan
+                            </button>
+                            {% else %}
+                            {% if plan.date_validation %}
+                            <span class="badge bg-success p-2">✅ Plan validé le {{ plan.date_validation.strftime('%d/%m/%Y') }}</span>
+                            {% endif %}
+                            {% endif %}
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+let currentActions = {{ plan.actions_prevues or []|tojson }};
+
+function renderActions() {
+    const container = document.getElementById('actionsList');
+    container.innerHTML = '';
+    
+    currentActions.forEach((action, idx) => {
+        const card = document.createElement('div');
+        card.className = 'card mb-2 action-card';
+        card.dataset.actionId = idx;
+        card.innerHTML = `
+            <div class="card-body py-2">
+                <div class="d-flex justify-content-between align-items-center">
+                    <div>
+                        <span class="badge bg-primary me-2">${action.type?.replace('_', ' ') || 'Action'}</span>
+                        <span>${action.description}</span>
+                        <small class="text-muted ms-2">Échéance: ${action.date_echeance || 'À définir'}</small>
+                    </div>
+                    <div>
+                        <span class="badge ${action.statut === 'realise' ? 'bg-success' : (action.statut === 'en_cours' ? 'bg-info' : 'bg-secondary')}">
+                            ${action.statut?.replace('_', ' ') || 'À faire'}
+                        </span>
+                        <button type="button" class="btn btn-sm btn-outline-danger ms-2 remove-action">🗑️</button>
+                    </div>
+                </div>
+            </div>
+        `;
+        
+        card.querySelector('.remove-action').addEventListener('click', () => {
+            currentActions.splice(idx, 1);
+            renderActions();
+            saveActions();
+        });
+        
+        container.appendChild(card);
+    });
+}
+
+function saveActions() {
+    fetch(`{{ url_for('api_mettre_a_jour_plan_developpement', plan_id=plan.id) }}`, {
+        method: 'PUT',
+        headers: {
+            'Content-Type': 'application/json',
+            'X-CSRFToken': document.querySelector('input[name="csrf_token"]').value
+        },
+        body: JSON.stringify({ actions_prevues: currentActions })
+    });
+}
+
+function saveObjectifs() {
+    const objectifs_smart = [];
+    document.querySelectorAll('.objectif-smart').forEach(input => {
+        if (input.value.trim()) objectifs_smart.push(input.value.trim());
+    });
+    
+    fetch(`{{ url_for('api_mettre_a_jour_plan_developpement', plan_id=plan.id) }}`, {
+        method: 'PUT',
+        headers: {
+            'Content-Type': 'application/json',
+            'X-CSRFToken': document.querySelector('input[name="csrf_token"]').value
+        },
+        body: JSON.stringify({
+            objectifs_globaux: document.getElementById('objectifs_globaux').value,
+            objectifs_smart: objectifs_smart,
+            points_forts: document.getElementById('points_forts').value,
+            axes_amelioration: document.getElementById('axes_amelioration').value
+        })
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) alert('✅ Objectifs sauvegardés !');
+        else alert('❌ Erreur');
+    });
+}
+
+document.getElementById('saveObjectifs')?.addEventListener('click', saveObjectifs);
+
+document.getElementById('ajouterObjectifSmart')?.addEventListener('click', () => {
+    const container = document.getElementById('objectifsSmartList');
+    const div = document.createElement('div');
+    div.className = 'input-group mb-2';
+    div.innerHTML = `
+        <input type="text" class="form-control objectif-smart" placeholder="Nouvel objectif SMART">
+        <button type="button" class="btn btn-outline-danger remove-objectif">🗑️</button>
+    `;
+    div.querySelector('.remove-objectif').addEventListener('click', () => div.remove());
+    container.appendChild(div);
+});
+
+document.getElementById('ajouterAction')?.addEventListener('click', () => {
+    const type = prompt('Type d\'action (formation, mentorat, projet, autonomie):');
+    const description = prompt('Description de l\'action:');
+    const date_echeance = prompt('Date d\'échéance (YYYY-MM-DD):');
+    
+    if (description) {
+        currentActions.push({
+            type: type || 'action',
+            description: description,
+            date_echeance: date_echeance,
+            statut: 'a_faire'
+        });
+        renderActions();
+        saveActions();
+    }
+});
+
+document.querySelectorAll('.action-reco').forEach(select => {
+    select.addEventListener('change', function() {
+        if (this.value) {
+            const actionType = this.value;
+            const description = prompt('Description de l\'action:');
+            if (description) {
+                currentActions.push({
+                    type: actionType,
+                    description: description,
+                    date_echeance: new Date().toISOString().split('T')[0],
+                    statut: 'a_faire'
+                });
+                renderActions();
+                saveActions();
+            }
+            this.value = '';
+        }
+    });
+});
+
+document.querySelectorAll('.ajouter-action-formation').forEach(btn => {
+    btn.addEventListener('click', function() {
+        const titre = this.dataset.titre;
+        if (confirm(`Ajouter la formation "${titre}" au plan de développement ?`)) {
+            currentActions.push({
+                type: 'formation',
+                description: `Suivre la formation: ${titre}`,
+                date_echeance: new Date().toISOString().split('T')[0],
+                statut: 'a_faire'
+            });
+            renderActions();
+            saveActions();
+        }
+    });
+});
+
+document.getElementById('validerPlan')?.addEventListener('click', function() {
+    if (confirm('Valider ce plan de développement ?')) {
+        fetch(`{{ url_for('api_mettre_a_jour_plan_developpement', plan_id=plan.id) }}`, {
+            method: 'PUT',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRFToken': document.querySelector('input[name="csrf_token"]').value
+            },
+            body: JSON.stringify({ statut: 'valide' })
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) location.reload();
+        });
+    }
+});
+</script>
+{% endblock %}

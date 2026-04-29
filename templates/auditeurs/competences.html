@@ -1,0 +1,398 @@
+{% extends "base.html" %}
+
+{% block title %}Gestion des Compétences{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <h1>
+            <i class="fas fa-graduation-cap me-2"></i>
+            Compétences
+        </h1>
+        <div class="d-flex gap-2">
+            <a href="{{ url_for('dashboard_developpement_auditeurs') }}" class="btn btn-secondary">
+                <i class="fas fa-arrow-left me-2"></i>Retour au tableau de bord
+            </a>
+            <button class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#modalAjouterCompetence">
+                <i class="fas fa-plus me-2"></i>Nouvelle compétence
+            </button>
+        </div>
+    </div>
+
+    <!-- Filtres et recherche -->
+    <div class="card mb-4">
+        <div class="card-body">
+            <div class="row">
+                <div class="col-md-4">
+                    <label class="form-label">Catégorie</label>
+                    <select class="form-select" id="filterCategorie">
+                        <option value="">Toutes</option>
+                        <option value="technique">Technique</option>
+                        <option value="management">Management</option>
+                        <option value="soft_skills">Soft Skills</option>
+                        <option value="normative">Normative</option>
+                    </select>
+                </div>
+                <div class="col-md-4">
+                    <label class="form-label">Niveau requis</label>
+                    <select class="form-select" id="filterNiveau">
+                        <option value="">Tous</option>
+                        <option value="1">1 - Débutant</option>
+                        <option value="2">2 - Intermédiaire</option>
+                        <option value="3">3 - Avancé</option>
+                        <option value="4">4 - Expert</option>
+                    </select>
+                </div>
+                <div class="col-md-4">
+                    <label class="form-label">Recherche</label>
+                    <input type="text" id="searchCompetence" class="form-control" placeholder="Code, nom...">
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="card">
+        <div class="card-header bg-primary text-white">
+            <h5 class="mb-0"><i class="fas fa-list me-2"></i>Liste des compétences</h5>
+        </div>
+        <div class="card-body p-0">
+            <div class="table-responsive">
+                <table class="table table-hover mb-0" id="competencesTable">
+                    <thead class="table-light">
+                        <tr>
+                            <th>Code</th>
+                            <th>Nom</th>
+                            <th>Catégorie</th>
+                            <th>Description</th>
+                            <th>Niveau requis</th>
+                            <th>Statut</th>
+                            <th>Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for competence in competences %}
+                        <tr class="competence-row" data-categorie="{{ competence.categorie }}" data-niveau="{{ competence.niveau_requis }}" data-code="{{ competence.code|lower }}" data-nom="{{ competence.nom|lower }}">
+                            <td><code>{{ competence.code }}</code></td>
+                            <td><strong>{{ competence.nom }}</strong></td>
+                            <td>
+                                {% if competence.categorie == 'technique' %}
+                                <span class="badge bg-primary">🔧 Technique</span>
+                                {% elif competence.categorie == 'management' %}
+                                <span class="badge bg-warning">👔 Management</span>
+                                {% elif competence.categorie == 'soft_skills' %}
+                                <span class="badge bg-info">💬 Soft Skills</span>
+                                {% elif competence.categorie == 'normative' %}
+                                <span class="badge bg-danger">📜 Normative</span>
+                                {% else %}
+                                <span class="badge bg-secondary">{{ competence.categorie or '-' }}</span>
+                                {% endif %}
+                            </td>
+                            <td>
+                                <span class="d-inline-block text-truncate" style="max-width: 250px;" title="{{ competence.description }}">
+                                    {{ competence.description[:80] }}{% if competence.description and competence.description|length > 80 %}...{% endif %}
+                                </span>
+                                {% if not competence.description %}
+                                <span class="text-muted">-</span>
+                                {% endif %}
+                            </td>
+                            <td>
+                                <div class="d-flex align-items-center">
+                                    <div class="progress flex-grow-1 me-2" style="height: 6px;">
+                                        <div class="progress-bar bg-success" style="width: {{ (competence.niveau_requis / 4 * 100) }}%"></div>
+                                    </div>
+                                    <span class="fw-bold">{{ competence.niveau_requis }}/4</span>
+                                </div>
+                             </td>
+                            <td>
+                                {% if competence.est_actif %}
+                                <span class="badge bg-success">Active</span>
+                                {% else %}
+                                <span class="badge bg-danger">Inactive</span>
+                                {% endif %}
+                             </td>
+                            <td>
+                                <div class="btn-group btn-group-sm">
+                                    <button class="btn btn-outline-primary" onclick="modifierCompetence({{ competence.id }})" title="Modifier">
+                                        <i class="fas fa-edit"></i>
+                                    </button>
+                                    <button class="btn btn-outline-success" onclick="toggleActiverCompetence({{ competence.id }}, {{ competence.est_actif|lower }})" title="{% if competence.est_actif %}Désactiver{% else %}Activer{% endif %}">
+                                        <i class="fas fa-{% if competence.est_actif %}ban{% else %}check-circle{% endif %}"></i>
+                                    </button>
+                                    <button class="btn btn-outline-danger" onclick="supprimerCompetence({{ competence.id }})" title="Supprimer">
+                                        <i class="fas fa-trash"></i>
+                                    </button>
+                                </div>
+                             </td>
+                         </tr>
+                        {% else %}
+                        <tr>
+                            <td colspan="7" class="text-center py-5">
+                                <i class="fas fa-graduation-cap fa-3x text-muted mb-3"></i>
+                                <h5>Aucune compétence</h5>
+                                <p class="text-muted">Cliquez sur "Nouvelle compétence" pour en créer une.</p>
+                                <button class="btn btn-primary btn-sm" data-bs-toggle="modal" data-bs-target="#modalAjouterCompetence">
+                                    <i class="fas fa-plus me-2"></i>Créer une compétence
+                                </button>
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Modal Ajouter Compétence -->
+<div class="modal fade" id="modalAjouterCompetence" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header bg-primary text-white">
+                <h5 class="modal-title">
+                    <i class="fas fa-plus-circle me-2"></i>Nouvelle compétence
+                </h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+            </div>
+            <form method="POST" action="{{ url_for('nouvelle_competence') }}">
+                <div class="modal-body">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                    <div class="mb-3">
+                        <label class="form-label">Code <span class="text-danger">*</span></label>
+                        <input type="text" name="code" class="form-control" required placeholder="Ex: AUD-001, COM-005">
+                        <small class="text-muted">Code unique pour identifier la compétence</small>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Nom <span class="text-danger">*</span></label>
+                        <input type="text" name="nom" class="form-control" required placeholder="Ex: Analyse de risques, Communication">
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Catégorie</label>
+                        <select name="categorie" class="form-select">
+                            <option value="technique">🔧 Technique</option>
+                            <option value="management">👔 Management</option>
+                            <option value="soft_skills">💬 Soft Skills</option>
+                            <option value="normative">📜 Normative</option>
+                        </select>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Description</label>
+                        <textarea name="description" class="form-control" rows="3" placeholder="Décrivez la compétence..."></textarea>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Niveau requis</label>
+                        <select name="niveau_requis" class="form-select">
+                            <option value="1">⭐ 1 - Débutant (Connaissance de base)</option>
+                            <option value="2" selected>⭐⭐ 2 - Intermédiaire (Pratique autonome)</option>
+                            <option value="3">⭐⭐⭐ 3 - Avancé (Maîtrise, formation possible)</option>
+                            <option value="4">⭐⭐⭐⭐ 4 - Expert (Référence, conseil)</option>
+                        </select>
+                    </div>
+                    <div class="form-check mb-3">
+                        <input class="form-check-input" type="checkbox" name="est_actif" value="1" checked id="est_actif">
+                        <label class="form-check-label" for="est_actif">
+                            Compétence active (visible pour les évaluations)
+                        </label>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Annuler</button>
+                    <button type="submit" class="btn btn-primary">
+                        <i class="fas fa-save me-2"></i>Créer
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<!-- Modal Modifier Compétence -->
+<div class="modal fade" id="modalModifierCompetence" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header bg-warning text-dark">
+                <h5 class="modal-title">
+                    <i class="fas fa-edit me-2"></i>Modifier la compétence
+                </h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <form method="POST" action="" id="formModifierCompetence">
+                <div class="modal-body">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                    <input type="hidden" name="_method" value="PUT">
+                    <div class="mb-3">
+                        <label class="form-label">Code</label>
+                        <input type="text" name="code" id="edit_code" class="form-control" required>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Nom</label>
+                        <input type="text" name="nom" id="edit_nom" class="form-control" required>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Catégorie</label>
+                        <select name="categorie" id="edit_categorie" class="form-select">
+                            <option value="technique">🔧 Technique</option>
+                            <option value="management">👔 Management</option>
+                            <option value="soft_skills">💬 Soft Skills</option>
+                            <option value="normative">📜 Normative</option>
+                        </select>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Description</label>
+                        <textarea name="description" id="edit_description" class="form-control" rows="3"></textarea>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Niveau requis</label>
+                        <select name="niveau_requis" id="edit_niveau_requis" class="form-select">
+                            <option value="1">⭐ 1 - Débutant</option>
+                            <option value="2">⭐⭐ 2 - Intermédiaire</option>
+                            <option value="3">⭐⭐⭐ 3 - Avancé</option>
+                            <option value="4">⭐⭐⭐⭐ 4 - Expert</option>
+                        </select>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Annuler</button>
+                    <button type="submit" class="btn btn-warning">
+                        <i class="fas fa-save me-2"></i>Mettre à jour
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<script>
+// Filtres et recherche
+function filtrerCompetences() {
+    const categorie = document.getElementById('filterCategorie').value;
+    const niveau = document.getElementById('filterNiveau').value;
+    const search = document.getElementById('searchCompetence').value.toLowerCase();
+    
+    const rows = document.querySelectorAll('.competence-row');
+    let visibleCount = 0;
+    
+    rows.forEach(row => {
+        let show = true;
+        
+        if (categorie && row.dataset.categorie !== categorie) show = false;
+        if (niveau && row.dataset.niveau !== niveau) show = false;
+        if (search && !row.dataset.code.includes(search) && !row.dataset.nom.includes(search)) show = false;
+        
+        row.style.display = show ? '' : 'none';
+        if (show) visibleCount++;
+    });
+    
+    // Afficher message si aucun résultat
+    let noResultRow = document.getElementById('noResultRow');
+    const tbody = document.querySelector('#competencesTable tbody');
+    
+    if (visibleCount === 0 && !noResultRow && rows.length > 0) {
+        noResultRow = document.createElement('tr');
+        noResultRow.id = 'noResultRow';
+        noResultRow.innerHTML = '<td colspan="7" class="text-center py-5"><i class="fas fa-search fa-2x text-muted mb-2"></i><p>Aucune compétence ne correspond aux critères</p></td>';
+        tbody.appendChild(noResultRow);
+    } else if (visibleCount > 0 && noResultRow) {
+        noResultRow.remove();
+    }
+}
+
+// Modifier une compétence
+function modifierCompetence(id) {
+    fetch(`/api/developpement-auditeurs/competence/${id}`)
+        .then(r => r.json())
+        .then(data => {
+            if (data.success) {
+                document.getElementById('edit_code').value = data.competence.code;
+                document.getElementById('edit_nom').value = data.competence.nom;
+                document.getElementById('edit_categorie').value = data.competence.categorie || 'technique';
+                document.getElementById('edit_description').value = data.competence.description || '';
+                document.getElementById('edit_niveau_requis').value = data.competence.niveau_requis;
+                
+                const form = document.getElementById('formModifierCompetence');
+                form.action = `/developpement-auditeurs/competence/${id}/modifier`;
+                
+                new bootstrap.Modal(document.getElementById('modalModifierCompetence')).show();
+            }
+        });
+}
+
+// Activer/Désactiver une compétence
+function toggleActiverCompetence(id, estActif) {
+    const action = estActif ? 'désactiver' : 'activer';
+    if (confirm(`Êtes-vous sûr de vouloir ${action} cette compétence ?`)) {
+        fetch(`/api/developpement-auditeurs/competence/${id}/toggle`, {
+            method: 'POST',
+            headers: {
+                'X-CSRFToken': '{{ csrf_token() }}'
+            }
+        })
+        .then(r => r.json())
+        .then(data => {
+            if (data.success) {
+                location.reload();
+            } else {
+                alert('Erreur: ' + data.error);
+            }
+        });
+    }
+}
+
+// Supprimer une compétence
+function supprimerCompetence(id) {
+    if (confirm('Attention ! Supprimer cette compétence supprimera également toutes les évaluations associées. Êtes-vous sûr ?')) {
+        fetch(`/api/developpement-auditeurs/competence/${id}`, {
+            method: 'DELETE',
+            headers: {
+                'X-CSRFToken': '{{ csrf_token() }}'
+            }
+        })
+        .then(r => r.json())
+        .then(data => {
+            if (data.success) {
+                location.reload();
+            } else {
+                alert('Erreur: ' + data.error);
+            }
+        });
+    }
+}
+
+// Événements
+document.getElementById('filterCategorie')?.addEventListener('change', filtrerCompetences);
+document.getElementById('filterNiveau')?.addEventListener('change', filtrerCompetences);
+document.getElementById('searchCompetence')?.addEventListener('keyup', filtrerCompetences);
+
+// Initialiser tableau
+document.addEventListener('DOMContentLoaded', function() {
+    // Trier le tableau par code par défaut
+    const tbody = document.querySelector('#competencesTable tbody');
+    const rows = Array.from(tbody.querySelectorAll('tr:not(#noResultRow)'));
+    rows.sort((a, b) => {
+        const codeA = a.cells[0]?.textContent || '';
+        const codeB = b.cells[0]?.textContent || '';
+        return codeA.localeCompare(codeB);
+    });
+    rows.forEach(row => tbody.appendChild(row));
+});
+</script>
+
+<style>
+.competence-row {
+    transition: background-color 0.2s ease;
+}
+.competence-row:hover {
+    background-color: #f8f9fa;
+}
+.progress {
+    background-color: #e9ecef;
+    border-radius: 10px;
+}
+.table th {
+    font-weight: 600;
+    font-size: 0.85rem;
+}
+.badge {
+    font-size: 0.75rem;
+}
+</style>
+{% endblock %}

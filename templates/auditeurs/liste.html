@@ -1,0 +1,172 @@
+{% extends "base.html" %}
+
+{% block title %}Liste des Auditeurs{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <h1>
+            <i class="fas fa-users me-2"></i>
+            Auditeurs
+        </h1>
+        <div class="d-flex gap-2">
+            <a href="{{ url_for('dashboard_developpement_auditeurs') }}" class="btn btn-secondary">
+                <i class="fas fa-arrow-left me-2"></i>Retour au tableau de bord
+            </a>
+            <input type="text" id="searchAuditeur" class="form-control" placeholder="Rechercher..." style="width: 250px;">
+        </div>
+    </div>
+
+    <div class="card">
+        <div class="card-header bg-primary text-white">
+            <h5 class="mb-0"><i class="fas fa-list me-2"></i>Tous les auditeurs</h5>
+        </div>
+        <div class="card-body p-0">
+            <div class="table-responsive">
+                <table class="table table-hover mb-0" id="auditeursTable">
+                    <thead class="table-light">
+                        <tr>
+                            <th>Auditeur</th>
+                            <th>Email</th>
+                            <th>Rôle</th>
+                            <th>Évaluations</th>
+                            <th>Niveau moyen</th>
+                            <th>PDI</th>
+                            <th>Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for auditeur in auditeurs %}
+                        <tr>
+                            <tr>
+                                <div class="d-flex align-items-center">
+                                    <div class="rounded-circle bg-primary text-white d-flex align-items-center justify-content-center me-2" style="width: 35px; height: 35px;">
+                                        {{ auditeur.username[0].upper() }}
+                                    </div>
+                                    <div>
+                                        <strong>{{ auditeur.username }}</strong>
+                                        <br>
+                                        <small class="text-muted">{{ auditeur.department or 'Département non spécifié' }}</small>
+                                    </div>
+                                </div>
+                            </td>
+                            <td>{{ auditeur.email }}</td>
+                            <td>
+                                {% if auditeur.role == 'auditeur' %}
+                                <span class="badge bg-info">Auditeur</span>
+                                {% elif auditeur.role == 'auditor' %}
+                                <span class="badge bg-primary">Auditor</span>
+                                {% elif auditeur.role == 'manager' %}
+                                <span class="badge bg-warning">Manager</span>
+                                {% else %}
+                                <span class="badge bg-secondary">{{ auditeur.role|title }}</span>
+                                {% endif %}
+                            </td>
+                            <td>
+                                <span class="badge bg-secondary">{{ auditeur.nb_evaluations|default(0) }}</span>
+                            </td>
+                            <td>
+                                <div class="d-flex align-items-center">
+                                    <div class="progress flex-grow-1 me-2" style="height: 6px;">
+                                        {% set niveau = auditeur.niveau_moyen|default(0) %}
+                                        <div class="progress-bar bg-success" style="width: {{ (niveau / 4 * 100) }}%"></div>
+                                    </div>
+                                    <span>{{ niveau }}/4</span>
+                                </div>
+                            </td>
+                            <td>
+                                {% set pdi_statut = auditeur.pdi_statut|default('non_defini') %}
+                                {% if pdi_statut == 'valide' %}
+                                <span class="badge bg-success">Validé</span>
+                                {% elif pdi_statut == 'en_cours' %}
+                                <span class="badge bg-info">En cours</span>
+                                {% elif pdi_statut == 'termine' %}
+                                <span class="badge bg-primary">Terminé</span>
+                                {% elif pdi_statut == 'brouillon' %}
+                                <span class="badge bg-secondary">Brouillon</span>
+                                {% else %}
+                                <span class="badge bg-secondary">Non défini</span>
+                                {% endif %}
+                                <span class="badge bg-primary">{{ auditeur.pdi_progression|default(0) }}%</span>
+                            </td>
+                            <td>
+                                <div class="btn-group btn-group-sm">
+                                    <a href="{{ url_for('fiche_auditeur_complete', auditeur_id=auditeur.id) }}" class="btn btn-outline-primary" title="Voir la fiche">
+                                        <i class="fas fa-eye"></i>
+                                    </a>
+                                    <a href="{{ url_for('evaluer_auditeur', auditeur_id=auditeur.id) }}" class="btn btn-outline-success" title="Évaluer">
+                                        <i class="fas fa-star"></i>
+                                    </a>
+                                    <a href="{{ url_for('plan_developpement_auditeur', auditeur_id=auditeur.id) }}" class="btn btn-outline-info" title="Plan de développement">
+                                        <i class="fas fa-clipboard-list"></i>
+                                    </a>
+                                </div>
+                            </td>
+                        </tr>
+                        {% else %}
+                        <tr>
+                            <td colspan="7" class="text-center py-5">
+                                <i class="fas fa-users fa-3x text-muted mb-3"></i>
+                                <h5>Aucun auditeur trouvé</h5>
+                                <p class="text-muted">Aucun auditeur n'est encore enregistré dans votre organisation.</p>
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    const searchInput = document.getElementById('searchAuditeur');
+    if (searchInput) {
+        searchInput.addEventListener('keyup', function() {
+            const searchTerm = this.value.toLowerCase();
+            const rows = document.querySelectorAll('#auditeursTable tbody tr');
+            let visibleCount = 0;
+            
+            rows.forEach(row => {
+                if (row.cells) {
+                    const text = row.textContent.toLowerCase();
+                    const isVisible = text.includes(searchTerm);
+                    row.style.display = isVisible ? '' : 'none';
+                    if (isVisible) visibleCount++;
+                }
+            });
+            
+            // Afficher un message si aucun résultat
+            const noResultRow = document.getElementById('noResultRow');
+            if (visibleCount === 0 && !document.querySelector('#noResultRow')) {
+                const tbody = document.querySelector('#auditeursTable tbody');
+                const tr = document.createElement('tr');
+                tr.id = 'noResultRow';
+                tr.innerHTML = '<td colspan="7" class="text-center py-5"><i class="fas fa-search fa-2x text-muted mb-2"></i><p>Aucun auditeur ne correspond à votre recherche</p></td>';
+                tbody.appendChild(tr);
+            } else if (visibleCount > 0 && document.getElementById('noResultRow')) {
+                document.getElementById('noResultRow').remove();
+            }
+        });
+    }
+});
+</script>
+
+<style>
+.btn-group .btn {
+    transition: all 0.2s ease;
+}
+.btn-group .btn:hover {
+    transform: translateY(-2px);
+}
+.progress {
+    background-color: #e9ecef;
+    border-radius: 10px;
+}
+.table tbody tr:hover {
+    background-color: #f8f9fa;
+    cursor: pointer;
+}
+</style>
+{% endblock %}

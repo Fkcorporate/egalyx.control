@@ -1,0 +1,442 @@
+{% extends "base.html" %}
+
+{% block title %}Fiche - {{ auditeur.username }}{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <h1>
+            <i class="fas fa-user-circle me-2"></i>
+            {{ auditeur.username }}
+            <small class="text-muted">{{ auditeur.role|title }}</small>
+        </h1>
+        <div>
+            <a href="{{ url_for('evaluer_auditeur', auditeur_id=auditeur.id) }}" class="btn btn-primary">
+                <i class="fas fa-star me-2"></i>Évaluer
+            </a>
+            <a href="{{ url_for('liste_auditeurs') }}" class="btn btn-secondary">
+                <i class="fas fa-arrow-left me-2"></i>Retour à la liste
+            </a>
+        </div>
+    </div>
+
+    <!-- Cartes stats -->
+    <div class="row mb-4">
+        <div class="col-md-3">
+            <div class="card bg-primary text-white">
+                <div class="card-body">
+                    <div class="d-flex justify-content-between">
+                        <div>
+                            <h6>Niveau moyen</h6>
+                            <h2 class="mb-0">{{ stats.niveau_moyen }}/4</h2>
+                        </div>
+                        <i class="fas fa-chart-line fa-3x opacity-50"></i>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card bg-success text-white">
+                <div class="card-body">
+                    <div class="d-flex justify-content-between">
+                        <div>
+                            <h6>Évaluations</h6>
+                            <h2 class="mb-0">{{ stats.nb_evaluations }}</h2>
+                        </div>
+                        <i class="fas fa-clipboard-list fa-3x opacity-50"></i>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card bg-info text-white">
+                <div class="card-body">
+                    <div class="d-flex justify-content-between">
+                        <div>
+                            <h6>Formations</h6>
+                            <h2 class="mb-0">{{ stats.nb_formations }}</h2>
+                        </div>
+                        <i class="fas fa-graduation-cap fa-3x opacity-50"></i>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card bg-warning text-white">
+                <div class="card-body">
+                    <div class="d-flex justify-content-between">
+                        <div>
+                            <h6>Progression PDI</h6>
+                            <h2 class="mb-0">{{ stats.pdi_progression }}%</h2>
+                        </div>
+                        <i class="fas fa-chart-simple fa-3x opacity-50"></i>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="row">
+        <!-- Compétences -->
+        <div class="col-md-6">
+            <div class="card mb-3">
+                <div class="card-header bg-primary text-white d-flex justify-content-between align-items-center">
+                    <h5 class="mb-0"><i class="fas fa-graduation-cap me-2"></i>Compétences évaluées</h5>
+                    <a href="{{ url_for('evaluer_auditeur', auditeur_id=auditeur.id) }}" class="btn btn-sm btn-light">
+                        <i class="fas fa-edit"></i> Évaluer
+                    </a>
+                </div>
+                <div class="card-body p-0">
+                    <div class="table-responsive">
+                        <table class="table table-sm mb-0">
+                            <thead class="table-light">
+                                <tr>
+                                    <th>Compétence</th>
+                                    <th>Niveau</th>
+                                    <th>Objectif</th>
+                                    <th>Écart</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for comp in competences %}
+                                {% set eval = evaluations[comp.id] %}
+                                <tr>
+                                    <td>
+                                        <strong>{{ comp.nom }}</strong>
+                                        <br><small class="text-muted">{{ comp.categorie }}</small>
+                                    </td>
+                                    <td>
+                                        {% set niveau = eval.evaluation_superieur if eval and eval.evaluation_superieur else (eval.niveau_actuel if eval else 1) %}
+                                        <span class="badge bg-secondary">{{ niveau }}/4</span>
+                                    </td>
+                                    <td>{{ comp.niveau_requis }}/4</td>
+                                    <td>
+                                        {% set ecart = comp.niveau_requis - niveau %}
+                                        {% if ecart > 0 %}
+                                        <span class="badge bg-danger">-{{ ecart }}</span>
+                                        {% else %}
+                                        <span class="badge bg-success">✓</span>
+                                        {% endif %}
+                                    </td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Plan de développement -->
+        <div class="col-md-6">
+            <div class="card mb-3">
+                <div class="card-header bg-primary text-white d-flex justify-content-between align-items-center">
+                    <h5 class="mb-0"><i class="fas fa-clipboard-list me-2"></i>Plan de développement</h5>
+                    <button class="btn btn-sm btn-light" onclick="editerPlan()">
+                        <i class="fas fa-edit"></i> Modifier
+                    </button>
+                </div>
+                <div class="card-body">
+                    <div class="mb-3">
+                        <label class="fw-bold">Objectifs globaux</label>
+                        <p class="text-muted p-2 bg-light rounded" id="display_objectifs_globaux">{{ pdi.objectifs_globaux or 'Non défini' }}</p>
+                    </div>
+                    <div class="mb-3">
+                        <label class="fw-bold">Objectifs SMART</label>
+                        <p class="text-muted p-2 bg-light rounded" id="display_objectifs_smart">{{ pdi.objectifs_smart or 'Non défini' }}</p>
+                    </div>
+                    <div class="mb-3">
+                        <label class="fw-bold">Actions prévues</label>
+                        <p class="text-muted p-2 bg-light rounded" id="display_actions_prevues">{{ pdi.actions_prevues or 'Non défini' }}</p>
+                    </div>
+                    <div class="mb-3">
+                        <label class="fw-bold">Actions réalisées</label>
+                        <p class="text-muted p-2 bg-light rounded" id="display_actions_realisees">{{ pdi.actions_realisees or 'Non défini' }}</p>
+                    </div>
+                    <div class="progress mb-2" style="height: 20px;">
+                        <div class="progress-bar progress-bar-striped bg-success" style="width: {{ pdi.progression }}%">
+                            {{ pdi.progression }}%
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Mentorat -->
+            <div class="card mb-3">
+                <div class="card-header bg-primary text-white">
+                    <h5 class="mb-0"><i class="fas fa-chalkboard-user me-2"></i>Mentorat</h5>
+                </div>
+                <div class="card-body">
+                    <div class="row">
+                        <div class="col-md-6">
+                            <label class="fw-bold">Mentor</label>
+                            <p class="text-muted" id="display_mentor">{{ pdi.mentor.username if pdi.mentor else 'Non assigné' }}</p>
+                        </div>
+                        <div class="col-md-6">
+                            <label class="fw-bold">Séances réalisées</label>
+                            <p class="text-muted">{{ pdi.seances_mentorat or 0 }}</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Formations suivies -->
+    <div class="row">
+        <div class="col-12">
+            <div class="card">
+                <div class="card-header bg-primary text-white d-flex justify-content-between align-items-center">
+                    <h5 class="mb-0"><i class="fas fa-book-open me-2"></i>Formations suivies</h5>
+                    <button class="btn btn-sm btn-light" data-bs-toggle="modal" data-bs-target="#modalInscrireFormation">
+                        <i class="fas fa-plus"></i> Inscrire à une formation
+                    </button>
+                </div>
+                <div class="card-body p-0">
+                    <div class="table-responsive">
+                        <table class="table mb-0">
+                            <thead class="table-light">
+                                <tr>
+                                    <th>Formation</th>
+                                    <th>Date</th>
+                                    <th>Durée</th>
+                                    <th>Statut</th>
+                                    <th>Validation</th>
+                                    <th>Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for inscription in inscriptions %}
+                                <tr>
+                                    <td>
+                                        <strong>{{ inscription.formation.titre }}</strong>
+                                        <br><small>{{ inscription.formation.formateur or '' }}</small>
+                                    </td>
+                                    <td>{{ inscription.formation.date_debut.strftime('%d/%m/%Y') if inscription.formation.date_debut else '-' }}</td>
+                                    <td>{{ inscription.formation.duree_heures or '-' }}h</td>
+                                    <td>
+                                        {% if inscription.statut == 'termine' %}
+                                        <span class="badge bg-success">✅ Terminé</span>
+                                        {% elif inscription.statut == 'inscrit' %}
+                                        <span class="badge bg-info">📝 Inscrit</span>
+                                        {% elif inscription.statut == 'en_attente' %}
+                                        <span class="badge bg-warning">⏳ En attente</span>
+                                        {% else %}
+                                        <span class="badge bg-secondary">{{ inscription.statut }}</span>
+                                        {% endif %}
+                                    </td>
+                                    <td>
+                                        {% if inscription.validation_obtenue %}
+                                        <span class="badge bg-success">✓ Validé</span>
+                                        {% else %}
+                                        <span class="badge bg-secondary">En cours</span>
+                                        {% endif %}
+                                    </td>
+                                    <td>
+                                        <button class="btn btn-sm btn-outline-danger" onclick="annulerInscription({{ inscription.id }})">
+                                            <i class="fas fa-trash"></i>
+                                        </button>
+                                    </td>
+                                </tr>
+                                {% else %}
+                                <tr>
+                                    <td colspan="6" class="text-center py-4">
+                                        <i class="fas fa-book-open fa-2x text-muted mb-2"></i>
+                                        <p>Aucune formation suivie</p>
+                                        <button class="btn btn-sm btn-primary" data-bs-toggle="modal" data-bs-target="#modalInscrireFormation">
+                                            <i class="fas fa-plus"></i> Inscrire à une formation
+                                        </button>
+                                    </td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- MODAL ÉDITION PLAN DE DÉVELOPPEMENT -->
+<div class="modal fade modal-lg" id="modalEditerPlan" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header bg-primary text-white">
+                <h5 class="modal-title"><i class="fas fa-clipboard-list me-2"></i>Modifier le plan de développement</h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <form id="formEditerPlan">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                    <div class="mb-3">
+                        <label class="form-label fw-bold">Objectifs globaux</label>
+                        <textarea class="form-control" id="edit_objectifs_globaux" rows="3" placeholder="Décrivez les objectifs généraux...">{{ pdi.objectifs_globaux or '' }}</textarea>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label fw-bold">Objectifs SMART</label>
+                        <textarea class="form-control" id="edit_objectifs_smart" rows="3" placeholder="Spécifiques, Mesurables, Atteignables, Réalistes, Temporels...">{{ pdi.objectifs_smart or '' }}</textarea>
+                        <small class="text-muted">Ex: Améliorer ma note d'évaluation de 2.8 à 3.5 d'ici décembre 2026</small>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label fw-bold">Actions prévues</label>
+                        <textarea class="form-control" id="edit_actions_prevues" rows="3" placeholder="Listez les actions à réaliser...">{{ pdi.actions_prevues or '' }}</textarea>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label fw-bold">Actions réalisées</label>
+                        <textarea class="form-control" id="edit_actions_realisees" rows="3" placeholder="Listez les actions déjà réalisées...">{{ pdi.actions_realisees or '' }}</textarea>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label fw-bold">Mentor</label>
+                        <select class="form-select" id="edit_mentor_id">
+                            <option value="">-- Aucun --</option>
+                            {% for user in users if user.role in ['manager', 'admin'] %}
+                            <option value="{{ user.id }}" {% if pdi.mentor_id == user.id %}selected{% endif %}>{{ user.username }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label fw-bold">Progression (%)</label>
+                        <input type="range" class="form-range" id="edit_progression" min="0" max="100" value="{{ pdi.progression or 0 }}" oninput="document.getElementById('progression_value').value = this.value">
+                        <input type="number" class="form-control mt-2" id="progression_value" value="{{ pdi.progression or 0 }}" oninput="document.getElementById('edit_progression').value = this.value">
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label fw-bold">Statut</label>
+                        <select class="form-select" id="edit_statut">
+                            <option value="brouillon" {% if pdi.statut == 'brouillon' %}selected{% endif %}>📝 Brouillon</option>
+                            <option value="en_cours" {% if pdi.statut == 'en_cours' %}selected{% endif %}>🔄 En cours</option>
+                            <option value="termine" {% if pdi.statut == 'termine' %}selected{% endif %}>✅ Terminé</option>
+                            <option value="valide" {% if pdi.statut == 'valide' %}selected{% endif %}>✓ Validé</option>
+                        </select>
+                    </div>
+                </form>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Annuler</button>
+                <button type="button" class="btn btn-primary" onclick="sauvegarderPlan()">
+                    <i class="fas fa-save me-2"></i>Enregistrer
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- MODAL INSCRIRE À UNE FORMATION -->
+<div class="modal fade" id="modalInscrireFormation" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header bg-success text-white">
+                <h5 class="modal-title"><i class="fas fa-plus me-2"></i>Inscrire à une formation</h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <form id="formInscrireFormation">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                    <div class="mb-3">
+                        <label class="form-label fw-bold">Sélectionner une formation</label>
+                        <select class="form-select" id="formation_id" required>
+                            <option value="">-- Choisir une formation --</option>
+                            {% for formation in formations_disponibles %}
+                            <option value="{{ formation.id }}">
+                                {{ formation.reference }} - {{ formation.titre }} 
+                                ({{ formation.date_debut.strftime('%d/%m/%Y') if formation.date_debut else 'Date flexible' }})
+                            </option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                </form>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Annuler</button>
+                <button type="button" class="btn btn-success" onclick="inscrireFormation({{ auditeur.id }})">
+                    <i class="fas fa-user-plus me-2"></i>Inscrire
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+function editerPlan() {
+    const modal = new bootstrap.Modal(document.getElementById('modalEditerPlan'));
+    modal.show();
+}
+
+function sauvegarderPlan() {
+    const data = {
+        objectifs_globaux: document.getElementById('edit_objectifs_globaux').value,
+        objectifs_smart: document.getElementById('edit_objectifs_smart').value,
+        actions_prevues: document.getElementById('edit_actions_prevues').value,
+        actions_realisees: document.getElementById('edit_actions_realisees').value,
+        mentor_id: document.getElementById('edit_mentor_id').value || null,
+        progression: document.getElementById('edit_progression').value,
+        statut: document.getElementById('edit_statut').value
+    };
+    
+    fetch(`/api/developpement-auditeurs/plan/{{ pdi.id }}`, {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            'X-CSRFToken': '{{ csrf_token() }}'
+        },
+        body: JSON.stringify(data)
+    })
+    .then(r => r.json())
+    .then(data => {
+        if (data.success) {
+            location.reload();
+        } else {
+            alert('Erreur: ' + (data.error || 'Erreur lors de la sauvegarde'));
+        }
+    })
+    .catch(error => {
+        console.error('Erreur:', error);
+        alert('Erreur réseau');
+    });
+}
+
+function inscrireFormation(auditeurId) {
+    const formationId = document.getElementById('formation_id').value;
+    if (!formationId) {
+        alert('Veuillez sélectionner une formation');
+        return;
+    }
+    
+    fetch(`/api/developpement-auditeurs/formation/${formationId}/inscrire`, {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            'X-CSRFToken': '{{ csrf_token() }}'
+        },
+        body: JSON.stringify({ auditeur_id: auditeurId })
+    })
+    .then(r => r.json())
+    .then(data => {
+        if (data.success) {
+            location.reload();
+        } else {
+            alert('Erreur: ' + data.error);
+        }
+    });
+}
+
+function annulerInscription(inscriptionId) {
+    if (confirm('Annuler cette inscription ?')) {
+        fetch(`/api/developpement-auditeurs/inscription/${inscriptionId}/annuler`, {
+            method: 'POST',
+            headers: {
+                'X-CSRFToken': '{{ csrf_token() }}'
+            }
+        })
+        .then(r => r.json())
+        .then(data => {
+            if (data.success) {
+                location.reload();
+            } else {
+                alert('Erreur: ' + data.error);
+            }
+        });
+    }
+}
+</script>
+{% endblock %}
