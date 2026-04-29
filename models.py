@@ -3264,7 +3264,7 @@ class PlanDeveloppementIndividuel(db.Model):
     validateur = db.relationship('User', foreign_keys=[valide_par_id])
     createur = db.relationship('User', foreign_keys=[created_by])
     
-    client_id = db.Column(db.Integer, db.ForeignKey('client.id'), nullable=False)
+    client_id = db.Column(db.Integer, db.ForeignKey('clients.id'), nullable=False)
     
     def __repr__(self):
         return f'<PDI {self.reference} - {self.auditeur_id}>'
@@ -3320,6 +3320,8 @@ class FeedbackAuditeur(db.Model):
                  self.autonomie, self.esprit_equipe, self.rigueur]
         notes_valides = [n for n in notes if n is not None]
         return round(sum(notes_valides) / len(notes_valides), 1) if notes_valides else 0
+
+
 class PlanAction(db.Model):
     __tablename__ = 'plans_action'
     
