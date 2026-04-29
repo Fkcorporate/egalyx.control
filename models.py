@@ -2599,6 +2599,727 @@ plan_audits = db.Table('plan_audits',
 )
 
 
+# ============================================
+# MODULE FEUILLES DE TRAVAIL (WORKPAPERS)
+# ============================================
+
+class FeuilleTravail(db.Model):
+    """Feuille de travail pour une mission d'audit"""
+    __tablename__ = 'feuilles_travail'
+    
+    id = db.Column(db.Integer, primary_key=True)
+    reference = db.Column(db.String(50), unique=True, nullable=False)
+    titre = db.Column(db.String(200), nullable=False)
+    description = db.Column(db.Text)
+    
+    # Liens
+    audit_id = db.Column(db.Integer, db.ForeignKey('audits.id'), nullable=False)
+    mission_id = db.Column(db.Integer, db.ForeignKey('missions_audit.id'), nullable=True)
+    constatation_id = db.Column(db.Integer, db.ForeignKey('constatations.id'), nullable=True)
+    
+    # Type de feuille
+    type_feuille = db.Column(db.String(50), default='standard')  # standard, checklist, test, analyse
+    statut = db.Column(db.String(50), default='brouillon')  # brouillon, en_cours, termine, valide
+    
+    # Contenu structuré (JSON)
+    contenu = db.Column(db.JSON, default={})
+    
+    # Références croisées
+    procedure_id = db.Column(db.Integer, db.ForeignKey('controle_processus.id'), nullable=True)
+    risque_id = db.Column(db.Integer, db.ForeignKey('risques.id'), nullable=True)
+    controle_id = db.Column(db.Integer, db.ForeignKey('controle_processus.id'), nullable=True)
+    
+    # Personnes
+    preparee_par_id = db.Column(db.Integer, db.ForeignKey('user.id'))
+    verifiee_par_id = db.Column(db.Integer, db.ForeignKey('user.id'))
+    approuvee_par_id = db.Column(db.Integer, db.ForeignKey('user.id'))
+    
+    # Dates
+    date_preparation = db.Column(db.DateTime, default=datetime.utcnow)
+    date_verification = db.Column(db.DateTime)
+    date_approbation = db.Column(db.DateTime)
+    
+    # Documents joints
+    pieces_jointes = db.Column(db.Text)
+    
+    # Métadonnées multi-tenant
+    client_id = db.Column(db.Integer, db.ForeignKey('clients.id'))
+    created_by = db.Column(db.Integer, db.ForeignKey('user.id'))
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    is_archived = db.Column(db.Boolean, default=False)
+    
+    # Relations
+    audit = db.relationship('Audit', foreign_keys=[audit_id], backref='feuilles_travail')
+    mission = db.relationship('MissionAudit', foreign_keys=[mission_id])
+    constatation = db.relationship('Constatation', foreign_keys=[constatation_id])
+    preparee_par = db.relationship('User', foreign_keys=[preparee_par_id])
+    verifiee_par = db.relationship('User', foreign_keys=[verifiee_par_id])
+    approuvee_par = db.relationship('User', foreign_keys=[approuvee_par_id])
+    createur = db.relationship('User', foreign_keys=[created_by])
+    
+    tests = db.relationship('TestControleFeuille', back_populates='feuille', cascade='all, delete-orphan')
+    
+    def __repr__(self):
+        return f'<FeuilleTravail {self.reference}>'
+    
+    def generer_reference(self):
+        """Génère une référence unique et robuste"""
+        annee = datetime.now().year
+        prefixe = f"FT-{annee}-"
+        
+        # Trouver le dernier numéro utilisé
+        dernier = FeuilleTravail.query.filter(
+            FeuilleTravail.reference.like(f'{prefixe}%'),
+            FeuilleTravail.client_id == self.client_id
+        ).order_by(FeuilleTravail.id.desc()).first()
+        
+        if dernier and dernier.reference:
+            try:
+                # Extraire le numéro de la dernière référence
+                numero = int(dernier.reference.split('-')[-1])
+                nouveau_numero = numero + 1
+            except (ValueError, IndexError):
+                nouveau_numero = 1
+        else:
+            nouveau_numero = 1
+        
+        return f"{prefixe}{nouveau_numero:04d}"
+    
+    def to_dict(self):
+        return {
+            'id': self.id,
+            'reference': self.reference,
+            'titre': self.titre,
+            'description': self.description,
+            'type_feuille': self.type_feuille,
+            'statut': self.statut,
+            'contenu': self.contenu,
+            'date_preparation': self.date_preparation.isoformat() if self.date_preparation else None
+        }
+    
+    @property
+    def progression(self):
+        """Calcule la progression basée sur les tests"""
+        if not self.tests:
+            return 0
+        total = len(self.tests)
+        termines = len([t for t in self.tests if t.resultat == 'conforme'])
+        return round((termines / total) * 100) if total > 0 else 0
+
+
+
+class TestControleFeuille(db.Model):
+    """Ligne de test de contrôle dans une feuille de travail - Version Ultra Complète"""
+    __tablename__ = 'tests_controle_feuille'
+    
+    id = db.Column(db.Integer, primary_key=True)
+    feuille_travail_id = db.Column(db.Integer, db.ForeignKey('feuilles_travail.id'), nullable=False)
+    
+    # ============================================
+    # 1. INFORMATIONS GÉNÉRALES
+    # ============================================
+    objet_test = db.Column(db.String(200), nullable=False)
+    objectif_controle = db.Column(db.Text)  # Objectif spécifique du contrôle
+    reference_norme = db.Column(db.String(100))  # Référence à une norme (ISO, COSO, etc.)
+    
+    # ============================================
+    # 2. PROCÉDURE DÉTAILLÉE
+    # ============================================
+    procedure = db.Column(db.Text)
+    criteres_acceptation = db.Column(db.Text)  # Critères pour considérer le test conforme
+    etapes_cles = db.Column(db.Text)  # Étapes clés séparées par des sauts de ligne
+    
+    # ============================================
+    # 3. ÉCHANTILLONNAGE
+    # ============================================
+    echantillon = db.Column(db.Text)
+    methode_echantillonnage = db.Column(db.String(50))  # aléatoire, ciblé, statistique, exhaustif, stratifié
+    taille_echantillon = db.Column(db.Integer)
+    population_totale = db.Column(db.Integer)
+    periode_couverte = db.Column(db.String(200))
+    taux_confiance = db.Column(db.Float)  # Pourcentage (ex: 95)
+    marge_erreur = db.Column(db.Float)  # Pourcentage
+    
+    # ============================================
+    # 4. RÉSULTATS DU TEST
+    # ============================================
+    resultat = db.Column(db.String(50), default='non_testé')  # non_testé, conforme, non_conforme, na, partiellement_conforme
+    observations = db.Column(db.Text)
+    ecart_constate = db.Column(db.Text)
+    
+    # Classification des anomalies
+    classification_anomalie = db.Column(db.String(50))  # mineure, majeure, critique, information
+    impact_financier = db.Column(db.Float)
+    impact_fonctionnel = db.Column(db.Text)
+    cause_racine = db.Column(db.Text)  # Analyse de la cause racine
+    
+    # ============================================
+    # 5. CORRECTIONS ET ACTIONS
+    # ============================================
+    correction_effectuee = db.Column(db.Boolean, default=False)
+    date_correction = db.Column(db.Date)
+    correction_commentaire = db.Column(db.Text)
+    action_curative = db.Column(db.Text)  # Action immédiate
+    action_preventive = db.Column(db.Text)  # Action pour éviter récurrence
+    responsable_correction_id = db.Column(db.Integer, db.ForeignKey('user.id'))
+    
+    # ============================================
+    # 6. PREUVES ET DOCUMENTS
+    # ============================================
+    preuves = db.Column(db.Text)  # Noms des fichiers séparés par ;
+    url_preuves = db.Column(db.Text)  # Liens externes
+    lien_grille_controle = db.Column(db.String(500))  # Lien vers grille Excel
+    
+    # ============================================
+    # 7. APPROBATION ET REVUE
+    # ============================================
+    statut_revision = db.Column(db.String(50), default='brouillon')  # brouillon, en_revision, approuve, rejete
+    approuve_par_id = db.Column(db.Integer, db.ForeignKey('user.id'))
+    approuve_le = db.Column(db.DateTime)
+    commentaire_revision = db.Column(db.Text)
+    
+    # ============================================
+    # 8. MÉTRIQUES ET SUIVI
+    # ============================================
+    nb_erreurs_trouvees = db.Column(db.Integer, default=0)
+    nb_elements_testes = db.Column(db.Integer, default=0)
+    taux_reussite = db.Column(db.Float)  # Calculé automatiquement
+    temps_passe_minutes = db.Column(db.Integer)  # Temps passé sur ce test
+    difficulte = db.Column(db.String(20))  # facile, moyen, difficile
+    
+    # ============================================
+    # 9. RISQUES ET CRITICITÉ
+    # ============================================
+    risque_associe_id = db.Column(db.Integer, db.ForeignKey('risques.id'))
+    niveau_criticite = db.Column(db.String(20))  # faible, moyen, eleve, critique
+    probabilite_occurrence = db.Column(db.String(20))  # rare, possible, probable, frequente
+    gravite_impact = db.Column(db.String(20))  # mineur, modere, severe, critique
+    
+    # ============================================
+    # 10. CHAMPS SYSTÈME
+    # ============================================
+    ordre = db.Column(db.Integer, default=0)
+    created_by = db.Column(db.Integer, db.ForeignKey('user.id'))
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    updated_by = db.Column(db.Integer, db.ForeignKey('user.id'))
+    is_archived = db.Column(db.Boolean, default=False)
+    
+    # ============================================
+    # RELATIONS
+    # ============================================
+    feuille = db.relationship('FeuilleTravail', back_populates='tests')
+    risque = db.relationship('Risque', foreign_keys=[risque_associe_id])
+    createur = db.relationship('User', foreign_keys=[created_by], lazy='joined')
+    moderateur = db.relationship('User', foreign_keys=[updated_by], lazy='joined')
+    approbateur = db.relationship('User', foreign_keys=[approuve_par_id], lazy='joined')
+    responsable_correction = db.relationship('User', foreign_keys=[responsable_correction_id], lazy='joined')
+    
+    def __repr__(self):
+        return f'<TestControleFeuille {self.id}: {self.objet_test[:50]}>'
+    
+    def to_dict(self, include_all=False):
+        """Convertir en dictionnaire"""
+        base_dict = {
+            'id': self.id,
+            'objet_test': self.objet_test,
+            'procedure': self.procedure,
+            'echantillon': self.echantillon,
+            'resultat': self.resultat,
+            'observations': self.observations,
+            'ecart_constate': self.ecart_constate,
+            'preuves': self.preuves.split(';') if self.preuves else [],
+            'ordre': self.ordre,
+            'created_at': self.created_at.isoformat() if self.created_at else None,
+            'updated_at': self.updated_at.isoformat() if self.updated_at else None,
+            'statut_revision': self.statut_revision,
+            'taux_reussite': self.taux_reussite,
+            'niveau_criticite': self.niveau_criticite
+        }
+        
+        if include_all:
+            extra_dict = {
+                'objectif_controle': self.objectif_controle,
+                'reference_norme': self.reference_norme,
+                'criteres_acceptation': self.criteres_acceptation,
+                'etapes_cles': self.etapes_cles,
+                'methode_echantillonnage': self.methode_echantillonnage,
+                'taille_echantillon': self.taille_echantillon,
+                'population_totale': self.population_totale,
+                'periode_couverte': self.periode_couverte,
+                'taux_confiance': self.taux_confiance,
+                'marge_erreur': self.marge_erreur,
+                'classification_anomalie': self.classification_anomalie,
+                'impact_financier': self.impact_financier,
+                'impact_fonctionnel': self.impact_fonctionnel,
+                'cause_racine': self.cause_racine,
+                'correction_effectuee': self.correction_effectuee,
+                'date_correction': self.date_correction.isoformat() if self.date_correction else None,
+                'correction_commentaire': self.correction_commentaire,
+                'action_curative': self.action_curative,
+                'action_preventive': self.action_preventive,
+                'responsable_correction': self.responsable_correction.username if self.responsable_correction else None,
+                'url_preuves': self.url_preuves,
+                'lien_grille_controle': self.lien_grille_controle,
+                'approuve_par': self.approbateur.username if self.approbateur else None,
+                'approuve_le': self.approuve_le.isoformat() if self.approuve_le else None,
+                'commentaire_revision': self.commentaire_revision,
+                'nb_erreurs_trouvees': self.nb_erreurs_trouvees,
+                'nb_elements_testes': self.nb_elements_testes,
+                'temps_passe_minutes': self.temps_passe_minutes,
+                'difficulte': self.difficulte,
+                'risque_associe_id': self.risque_associe_id,
+                'probabilite_occurrence': self.probabilite_occurrence,
+                'gravite_impact': self.gravite_impact,
+                'created_by': self.createur.username if self.createur else None,
+                'updated_by': self.moderateur.username if self.moderateur else None,
+                'is_archived': self.is_archived
+            }
+            base_dict.update(extra_dict)
+        
+        return base_dict
+    
+    def calculer_taux_reussite(self):
+        """Calculer automatiquement le taux de réussite"""
+        if self.nb_elements_testes > 0:
+            taux = ((self.nb_elements_testes - self.nb_erreurs_trouvees) / self.nb_elements_testes) * 100
+            self.taux_reussite = round(taux, 2)
+        else:
+            self.taux_reussite = None
+        return self.taux_reussite
+    
+    @staticmethod
+    def get_resultat_badge(resultat):
+        """Retourner le badge HTML pour un résultat"""
+        badges = {
+            'non_testé': '<span class="badge bg-secondary">⏳ Non testé</span>',
+            'conforme': '<span class="badge bg-success">✅ Conforme</span>',
+            'non_conforme': '<span class="badge bg-danger">❌ Non conforme</span>',
+            'partiellement_conforme': '<span class="badge bg-warning">⚠️ Partiellement conforme</span>',
+            'na': '<span class="badge bg-info">N/A</span>'
+        }
+        return badges.get(resultat, '<span class="badge bg-secondary">Inconnu</span>')
+    
+    @staticmethod
+    def get_criticite_badge(niveau):
+        """Retourner le badge HTML pour la criticité"""
+        badges = {
+            'faible': '<span class="badge bg-success">🟢 Faible</span>',
+            'moyen': '<span class="badge bg-warning">🟡 Moyen</span>',
+            'eleve': '<span class="badge bg-danger">🟠 Élevé</span>',
+            'critique': '<span class="badge bg-dark">🔴 Critique</span>'
+        }
+        return badges.get(niveau, '<span class="badge bg-secondary">Non défini</span>')
+
+# ============================================
+# MODÈLES AVANCÉS POUR FEUILLES DE TRAVAIL
+# ============================================
+
+class FeuilleTravailVersion(db.Model):
+    """Historique des versions d'une feuille de travail"""
+    __tablename__ = 'feuilles_travail_versions'
+    
+    id = db.Column(db.Integer, primary_key=True)
+    feuille_travail_id = db.Column(db.Integer, db.ForeignKey('feuilles_travail.id'), nullable=False)
+    version_numero = db.Column(db.Integer, nullable=False)
+    
+    # Snapshot du contenu
+    contenu_snapshot = db.Column(db.JSON, nullable=False)
+    tests_snapshot = db.Column(db.JSON)
+    
+    # Métadonnées de version
+    version_commentaire = db.Column(db.Text)
+    version_type = db.Column(db.String(50), default='modification')  # creation, modification, validation, rollback
+    
+    created_by = db.Column(db.Integer, db.ForeignKey('user.id'))
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    
+    # Relations
+    feuille = db.relationship('FeuilleTravail', backref='versions')
+    createur = db.relationship('User', foreign_keys=[created_by])
+    
+    __table_args__ = (db.UniqueConstraint('feuille_travail_id', 'version_numero', name='unique_version'),)
+
+
+class ModeleFeuilleTravail(db.Model):
+    """Modèles prédéfinis de feuilles de travail (bibliothèque professionnelle)"""
+    __tablename__ = 'modeles_feuilles_travail'
+    
+    id = db.Column(db.Integer, primary_key=True)
+    reference = db.Column(db.String(50), unique=True, nullable=False)
+    nom = db.Column(db.String(200), nullable=False)
+    description = db.Column(db.Text)
+    categorie = db.Column(db.String(100))  # Financier, Conformité, IT, Opérationnel, etc.
+    
+    # Template de contenu
+    template_contenu = db.Column(db.JSON, default={})
+    template_tests = db.Column(db.JSON, default=[])
+    
+    # Niveau de maturité recommandé
+    niveau_maturite = db.Column(db.Integer, default=3)  # 1-5
+    
+    # Standards référencés
+    normes = db.Column(db.JSON, default=[])  # ISO 9001, COSO, COBIT, etc.
+    
+    # Usage
+    nb_utilisations = db.Column(db.Integer, default=0)
+    note_moyenne = db.Column(db.Float, default=0)
+    
+    is_public = db.Column(db.Boolean, default=True)
+    client_id = db.Column(db.Integer, db.ForeignKey('clients.id'), nullable=True)
+    created_by = db.Column(db.Integer, db.ForeignKey('user.id'))
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    
+    def __repr__(self):
+        return f'<ModeleFeuilleTravail {self.reference}: {self.nom}>'
+
+
+class ReferenceCroiseeFeuille(db.Model):
+    """Références croisées entre feuilles de travail et autres entités"""
+    __tablename__ = 'references_croisees_feuilles'
+    
+    id = db.Column(db.Integer, primary_key=True)
+    feuille_travail_id = db.Column(db.Integer, db.ForeignKey('feuilles_travail.id'), nullable=False)
+    
+    # Type de référence
+    type_reference = db.Column(db.String(50), nullable=False)  # constatation, recommandation, plan_action, risque, procedure, norme
+    
+    # ID de l'entité référencée
+    entite_id = db.Column(db.Integer, nullable=False)
+    
+    # Métadonnées de la référence
+    contexte = db.Column(db.Text)
+    est_auto_genere = db.Column(db.Boolean, default=False)
+    
+    created_by = db.Column(db.Integer, db.ForeignKey('user.id'))
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    
+    feuille = db.relationship('FeuilleTravail', backref='references_croisees')
+    
+    __table_args__ = (db.UniqueConstraint('feuille_travail_id', 'type_reference', 'entite_id', name='unique_reference'),)
+
+
+class CommentaireFeuille(db.Model):
+    """Système de commentaires collaboratifs avec résolution"""
+    __tablename__ = 'commentaires_feuille'
+    
+    id = db.Column(db.Integer, primary_key=True)
+    feuille_travail_id = db.Column(db.Integer, db.ForeignKey('feuilles_travail.id'), nullable=False)
+    
+    # Position dans la feuille
+    section = db.Column(db.String(100))  # general, test_{id}, preuve_{id}
+    ligne = db.Column(db.Integer)
+    colonne = db.Column(db.Integer)
+    
+    # Contenu
+    contenu = db.Column(db.Text, nullable=False)
+    
+    # Métadonnées
+    type_commentaire = db.Column(db.String(50), default='commentaire')  # commentaire, question, revision, approbation, rejet
+    statut = db.Column(db.String(50), default='ouvert')  # ouvert, en_cours, resolu, ferme
+    
+    # Réponses et résolution
+    reponse_a_id = db.Column(db.Integer, db.ForeignKey('commentaires_feuille.id'), nullable=True)
+    resolution_commentaire = db.Column(db.Text)
+    resolu_par_id = db.Column(db.Integer, db.ForeignKey('user.id'))
+    resolu_le = db.Column(db.DateTime)
+    
+    created_by = db.Column(db.Integer, db.ForeignKey('user.id'))
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    
+    # Relations
+    feuille = db.relationship('FeuilleTravail', backref='commentaires')
+    reponse_a = db.relationship('CommentaireFeuille', remote_side=[id], backref='reponses')
+    createur = db.relationship('User', foreign_keys=[created_by])
+    resolveur = db.relationship('User', foreign_keys=[resolu_par_id])
+
+
+class FavoriFeuille(db.Model):
+    """Favoris des auditeurs pour accès rapide"""
+    __tablename__ = 'favoris_feuilles'
+    
+    id = db.Column(db.Integer, primary_key=True)
+    feuille_travail_id = db.Column(db.Integer, db.ForeignKey('feuilles_travail.id'), nullable=False)
+    utilisateur_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
+    ordre = db.Column(db.Integer, default=0)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    
+    feuille = db.relationship('FeuilleTravail')
+    utilisateur = db.relationship('User', foreign_keys=[utilisateur_id])
+    
+    __table_args__ = (db.UniqueConstraint('feuille_travail_id', 'utilisateur_id', name='unique_favori'),)
+
+
+class TagFeuille(db.Model):
+    """Tags pour catégorisation avancée"""
+    __tablename__ = 'tags_feuilles'
+    
+    id = db.Column(db.Integer, primary_key=True)
+    feuille_travail_id = db.Column(db.Integer, db.ForeignKey('feuilles_travail.id'), nullable=False)
+    tag = db.Column(db.String(100), nullable=False)
+    created_by = db.Column(db.Integer, db.ForeignKey('user.id'))
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    
+    __table_args__ = (db.UniqueConstraint('feuille_travail_id', 'tag', name='unique_tag'),)
+
+# ============================================
+# MODULE PLAN DE DÉVELOPPEMENT DES AUDITEURS
+# ============================================
+
+# ============================================
+# MODÈLES POUR LE DÉVELOPPEMENT DES AUDITEURS
+# ============================================
+
+class Competence(db.Model):
+    """Compétence à développer"""
+    __tablename__ = 'competences'
+    
+    id = db.Column(db.Integer, primary_key=True)
+    code = db.Column(db.String(20), unique=True, nullable=False)
+    nom = db.Column(db.String(200), nullable=False)
+    categorie = db.Column(db.String(50))  # Technique, Comportementale, Management, Normative
+    description = db.Column(db.Text)
+    niveau_requis = db.Column(db.Integer, default=2)  # 1: Débutant, 2: Intermédiaire, 3: Avancé, 4: Expert
+    est_actif = db.Column(db.Boolean, default=True)
+    
+    # Métadonnées
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    client_id = db.Column(db.Integer, db.ForeignKey('client.id'), nullable=False)
+    
+    def __repr__(self):
+        return f'<Competence {self.code}: {self.nom}>'
+    
+    def get_niveau_text(self):
+        niveaux = {1: 'Débutant', 2: 'Intermédiaire', 3: 'Avancé', 4: 'Expert'}
+        return niveaux.get(self.niveau_requis, 'Inconnu')
+
+
+class EvaluationCompetence(db.Model):
+    """Évaluation des compétences d'un auditeur"""
+    __tablename__ = 'evaluations_competences'
+    
+    id = db.Column(db.Integer, primary_key=True)
+    auditeur_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
+    competence_id = db.Column(db.Integer, db.ForeignKey('competences.id'), nullable=False)
+    
+    # Niveaux d'évaluation
+    niveau_actuel = db.Column(db.Integer, default=1)
+    niveau_souhaite = db.Column(db.Integer, default=2)
+    evaluation_superieur = db.Column(db.Integer)
+    evaluation_auto = db.Column(db.Integer)
+    
+    # Écart et priorité
+    ecart = db.Column(db.Integer)  # Calculé automatiquement
+    priorite = db.Column(db.String(20), default='moyenne')  # basse, moyenne, haute, urgente
+    
+    # Commentaires
+    commentaire_evaluateur = db.Column(db.Text)
+    commentaire_auditeur = db.Column(db.Text)
+    
+    # Dates
+    date_evaluation = db.Column(db.DateTime, default=datetime.utcnow)
+    date_prochaine_evaluation = db.Column(db.DateTime)
+    evaluateur_id = db.Column(db.Integer, db.ForeignKey('user.id'))
+    
+    # Relations
+    auditeur = db.relationship('User', foreign_keys=[auditeur_id])
+    competence = db.relationship('Competence')
+    evaluateur = db.relationship('User', foreign_keys=[evaluateur_id])
+    
+    client_id = db.Column(db.Integer, db.ForeignKey('client.id'), nullable=False)
+    
+    def __repr__(self):
+        return f'<Evaluation {self.auditeur_id}/{self.competence_id}>'
+    
+    def calculer_ecart(self):
+        self.ecart = self.niveau_souhaite - (self.evaluation_superieur or self.niveau_actuel)
+        return self.ecart
+
+
+class Formation(db.Model):
+    """Formation disponible"""
+    __tablename__ = 'formations'
+    
+    id = db.Column(db.Integer, primary_key=True)
+    reference = db.Column(db.String(20), unique=True, nullable=False)
+    titre = db.Column(db.String(200), nullable=False)
+    description = db.Column(db.Text)
+    objectifs = db.Column(db.Text)
+    
+    # Détails
+    duree_heures = db.Column(db.Float)
+    cout = db.Column(db.Float)
+    formateur = db.Column(db.String(200))
+    organisme = db.Column(db.String(200))
+    
+    # Type et catégorie
+    type_formation = db.Column(db.String(50))  # presentiel, distanciel, e-learning, hybride
+    categorie = db.Column(db.String(50))  # technique, soft_skills, management, normes
+    
+    # Compétences visées
+    competences_visees = db.Column(db.Text)  # IDs séparés par des virgules
+    
+    # Dates
+    date_debut = db.Column(db.Date)
+    date_fin = db.Column(db.Date)
+    date_limite_inscription = db.Column(db.Date)
+    
+    # Statut
+    est_actif = db.Column(db.Boolean, default=True)
+    places_disponibles = db.Column(db.Integer, default=0)
+    
+    # Métadonnées
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    client_id = db.Column(db.Integer, db.ForeignKey('client.id'), nullable=False)
+    
+    def __repr__(self):
+        return f'<Formation {self.reference}: {self.titre}>'
+    
+    @staticmethod
+    def generer_reference():
+        annee = datetime.now().year
+        count = Formation.query.filter(Formation.reference.like(f'FOR-{annee}-%')).count() + 1
+        return f"FOR-{annee}-{count:04d}"
+
+
+class InscriptionFormation(db.Model):
+    """Inscription d'un auditeur à une formation"""
+    __tablename__ = 'inscriptions_formation'
+    
+    id = db.Column(db.Integer, primary_key=True)
+    formation_id = db.Column(db.Integer, db.ForeignKey('formations.id'), nullable=False)
+    auditeur_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
+    
+    # Statut
+    statut = db.Column(db.String(50), default='inscrit')  # inscrit, en_attente, termine, abandonne
+    presence_confirmee = db.Column(db.Boolean, default=False)
+    validation_obtenue = db.Column(db.Boolean, default=False)
+    note_obtenue = db.Column(db.Float)
+    
+    # Évaluation de la formation
+    satisfaction = db.Column(db.Integer)  # 1-5
+    commentaire = db.Column(db.Text)
+    
+    # Dates
+    date_inscription = db.Column(db.DateTime, default=datetime.utcnow)
+    date_completion = db.Column(db.DateTime)
+    
+    # Relations
+    formation = db.relationship('Formation')
+    auditeur = db.relationship('User', foreign_keys=[auditeur_id])
+    
+    client_id = db.Column(db.Integer, db.ForeignKey('client.id'), nullable=False)
+    
+    def __repr__(self):
+        return f'<Inscription {self.auditeur_id} -> {self.formation_id}>'
+
+
+class PlanDeveloppementIndividuel(db.Model):
+    """Plan de développement individuel (PDI)"""
+    __tablename__ = 'plans_developpement'
+    
+    id = db.Column(db.Integer, primary_key=True)
+    reference = db.Column(db.String(20), unique=True, nullable=False)
+    auditeur_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
+    annee = db.Column(db.Integer, nullable=False)
+    
+    # Objectifs
+    objectifs_globaux = db.Column(db.Text)
+    objectifs_smart = db.Column(db.Text)  # Spécifiques, Mesurables, Atteignables, Réalistes, Temporels
+    
+    # Actions
+    actions_prevues = db.Column(db.Text)
+    actions_realisees = db.Column(db.Text)
+    
+    # Compétences ciblées
+    competences_cibles = db.Column(db.Text)  # IDs séparés par des virgules
+    
+    # Formations planifiées
+    formations_prevues = db.Column(db.Text)  # IDs séparés par des virgules
+    
+    # Mentorat
+    mentor_id = db.Column(db.Integer, db.ForeignKey('user.id'))
+    seances_mentorat = db.Column(db.Integer, default=0)
+    
+    # Suivi
+    progression = db.Column(db.Integer, default=0)  # Pourcentage
+    statut = db.Column(db.String(50), default='brouillon')  # brouillon, en_cours, termine, valide
+    
+    # Relecture et validation
+    valide_par_id = db.Column(db.Integer, db.ForeignKey('user.id'))
+    date_validation = db.Column(db.DateTime)
+    commentaire_validation = db.Column(db.Text)
+    
+    # Métadonnées
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    created_by = db.Column(db.Integer, db.ForeignKey('user.id'))
+    
+    # Relations
+    auditeur = db.relationship('User', foreign_keys=[auditeur_id])
+    mentor = db.relationship('User', foreign_keys=[mentor_id])
+    validateur = db.relationship('User', foreign_keys=[valide_par_id])
+    createur = db.relationship('User', foreign_keys=[created_by])
+    
+    client_id = db.Column(db.Integer, db.ForeignKey('client.id'), nullable=False)
+    
+    def __repr__(self):
+        return f'<PDI {self.reference} - {self.auditeur_id}>'
+    
+    def generer_reference(self):
+        return f"PDI-{self.annee}-{self.auditeur_id:04d}"
+    
+    def calculer_progression(self):
+        """Calculer la progression basée sur les actions réalisées"""
+        if self.actions_prevues and self.actions_realisees:
+            prevues = len(self.actions_prevues.split(','))
+            realisees = len(self.actions_realisees.split(','))
+            self.progression = round((realisees / prevues) * 100) if prevues > 0 else 0
+        return self.progression
+
+
+class FeedbackAuditeur(db.Model):
+    """Feedback 360° pour les auditeurs"""
+    __tablename__ = 'feedbacks_auditeurs'
+    
+    id = db.Column(db.Integer, primary_key=True)
+    auditeur_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
+    evaluateur_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
+    mission_id = db.Column(db.Integer, db.ForeignKey('missions_audit.id'))
+    
+    # Catégories d'évaluation (1-5)
+    qualite_travail = db.Column(db.Integer)
+    respect_delais = db.Column(db.Integer)
+    communication = db.Column(db.Integer)
+    autonomie = db.Column(db.Integer)
+    esprit_equipe = db.Column(db.Integer)
+    rigueur = db.Column(db.Integer)
+    
+    # Commentaires
+    points_forts = db.Column(db.Text)
+    points_amelioration = db.Column(db.Text)
+    commentaire_global = db.Column(db.Text)
+    
+    # Anonymat
+    est_anonyme = db.Column(db.Boolean, default=True)
+    
+    # Dates
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    periode = db.Column(db.String(20))  # trimestre1, semestre1, annuel
+    
+    client_id = db.Column(db.Integer, db.ForeignKey('client.id'), nullable=False)
+    
+    def __repr__(self):
+        return f'<Feedback {self.auditeur_id} par {self.evaluateur_id}>'
+    
+    def get_moyenne(self):
+        notes = [self.qualite_travail, self.respect_delais, self.communication, 
+                 self.autonomie, self.esprit_equipe, self.rigueur]
+        notes_valides = [n for n in notes if n is not None]
+        return round(sum(notes_valides) / len(notes_valides), 1) if notes_valides else 0
 class PlanAction(db.Model):
     __tablename__ = 'plans_action'
     
