@@ -3129,7 +3129,8 @@ class EvaluationCompetence(db.Model):
     competence = db.relationship('Competence')
     evaluateur = db.relationship('User', foreign_keys=[evaluateur_id])
     
-    client_id = db.Column(db.Integer, db.ForeignKey('client.id'), nullable=False)
+    client_id = db.Column(db.Integer, db.ForeignKey('clients.id'), nullable=False)
+
     
     def __repr__(self):
         return f'<Evaluation {self.auditeur_id}/{self.competence_id}>'
