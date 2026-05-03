@@ -3174,7 +3174,8 @@ class Formation(db.Model):
     # Métadonnées (une seule fois chacune)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     created_by = db.Column(db.Integer, db.ForeignKey('user.id'))
-    client_id = db.Column(db.Integer, db.ForeignKey('client.id'), nullable=False)
+    client_id = db.Column(db.Integer, db.ForeignKey('clients.id'), nullable=False)
+
     
     # Relations
     createur = db.relationship('User', foreign_keys=[created_by])
