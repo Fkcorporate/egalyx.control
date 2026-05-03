@@ -3161,7 +3161,12 @@ class Formation(db.Model):
     
     # Compétences visées
     competences_visees = db.Column(db.Text)  # IDs séparés par des virgules
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    created_by = db.Column(db.Integer, db.ForeignKey('user.id'))  # ← Ajouter cette ligne
+    client_id = db.Column(db.Integer, db.ForeignKey('client.id'), nullable=False)
     
+    # Relation
+    createur = db.relationship('User', foreign_keys=[created_by])
     # Dates
     date_debut = db.Column(db.Date)
     date_fin = db.Column(db.Date)
