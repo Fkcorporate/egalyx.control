@@ -3156,17 +3156,12 @@ class Formation(db.Model):
     organisme = db.Column(db.String(200))
     
     # Type et catégorie
-    type_formation = db.Column(db.String(50))  # presentiel, distanciel, e-learning, hybride
-    categorie = db.Column(db.String(50))  # technique, soft_skills, management, normes
+    type_formation = db.Column(db.String(50))
+    categorie = db.Column(db.String(50))
     
     # Compétences visées
-    competences_visees = db.Column(db.Text)  # IDs séparés par des virgules
-    created_at = db.Column(db.DateTime, default=datetime.utcnow)
-    created_by = db.Column(db.Integer, db.ForeignKey('user.id'))  # ← Ajouter cette ligne
-    client_id = db.Column(db.Integer, db.ForeignKey('client.id'), nullable=False)
+    competences_visees = db.Column(db.Text)
     
-    # Relation
-    createur = db.relationship('User', foreign_keys=[created_by])
     # Dates
     date_debut = db.Column(db.Date)
     date_fin = db.Column(db.Date)
@@ -3176,9 +3171,13 @@ class Formation(db.Model):
     est_actif = db.Column(db.Boolean, default=True)
     places_disponibles = db.Column(db.Integer, default=0)
     
-    # Métadonnées
+    # Métadonnées (une seule fois chacune)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    created_by = db.Column(db.Integer, db.ForeignKey('user.id'))
     client_id = db.Column(db.Integer, db.ForeignKey('client.id'), nullable=False)
+    
+    # Relations
+    createur = db.relationship('User', foreign_keys=[created_by])
     
     def __repr__(self):
         return f'<Formation {self.reference}: {self.titre}>'
@@ -3188,7 +3187,6 @@ class Formation(db.Model):
         annee = datetime.now().year
         count = Formation.query.filter(Formation.reference.like(f'FOR-{annee}-%')).count() + 1
         return f"FOR-{annee}-{count:04d}"
-
 
 class InscriptionFormation(db.Model):
     """Inscription d'un auditeur à une formation"""
