@@ -1068,11 +1068,12 @@ class Cartographie(db.Model):
 # -------------------- RISQUE --------------------
 class Risque(db.Model):
     __tablename__ = 'risques'
+    
     id = db.Column(db.Integer, primary_key=True)
-    cartographie_id = db.Column(db.Integer, db.ForeignKey('cartographie.id'))
-    reference = db.Column(db.String(50), unique=True, nullable=False)
+    reference = db.Column(db.String(50), nullable=False)  # ← unique=True ENLEVÉ
     intitule = db.Column(db.String(300), nullable=False)
     description = db.Column(db.Text)
+    cartographie_id = db.Column(db.Integer, db.ForeignKey('cartographie.id'))
     processus_concerne = db.Column(db.String(200))
     categorie = db.Column(db.String(100))
     type_risque = db.Column(db.String(100))
@@ -1086,21 +1087,47 @@ class Risque(db.Model):
     archive_reason = db.Column(db.Text)
     client_id = db.Column(db.Integer, db.ForeignKey('clients.id'), nullable=True)
 
+    # Relations
     cartographie = db.relationship('Cartographie', back_populates='risques')
     createur = db.relationship('User', foreign_keys=[created_by], back_populates='risques_crees')
     archive_user = db.relationship('User', foreign_keys=[archived_by], back_populates='risques_archives')
     evaluations = db.relationship('EvaluationRisque', back_populates='risque', lazy=True)
-    
-    # CORRECTION: Relation KRI avec primaryjoin explicite
     kri = db.relationship('KRI', back_populates='risque', uselist=False, lazy=True,
                          primaryjoin='Risque.id == KRI.risque_id')
-    
     dispositifs_maitrise = db.relationship('DispositifMaitrise', 
                                           back_populates='risque',
                                           cascade='all, delete-orphan',
                                           lazy=True)
+    
+    # ⭐ CONTRAINTE UNIQUE COMPOSITE
+    __table_args__ = (
+        db.UniqueConstraint('reference', 'client_id', name='uix_risque_reference_client'),
+    )
+    
+    # ⭐ MÉTHODE DE GÉNÉRATION
+    @staticmethod
+    def generer_reference(client_id):
+        from datetime import datetime
+        annee = datetime.now().year
+        prefixe = f"RISQ-{annee}-"
+        
+        count = Risque.query.filter(
+            Risque.reference.like(f'{prefixe}%'),
+            Risque.client_id == client_id
+        ).count()
+        
+        return f"{prefixe}{(count + 1):04d}"
+    
+    # ⭐ MÉTHODE UTILITAIRE (optionnelle)
+    def get_derniere_evaluation_niveau(self):
+        if self.evaluations:
+            derniere = sorted(self.evaluations, key=lambda x: x.created_at)[-1]
+            return derniere.niveau_risque
+        return None
+    
+    def __repr__(self):
+        return f'<Risque {self.reference}: {self.intitule[:50]}>'
 
-# -------------------- EVALUATION RISQUE (CORRIGÉ) --------------------
 # -------------------- EVALUATION RISQUE (CORRIGÉ) --------------------
 class EvaluationRisque(db.Model):
     __tablename__ = 'evaluations_risque'
@@ -1836,7 +1863,7 @@ class Audit(db.Model):
     __tablename__ = 'audits'
     
     id = db.Column(db.Integer, primary_key=True)
-    reference = db.Column(db.String(50), unique=True, nullable=False)
+    reference = db.Column(db.String(50), nullable=False)  # unique=True ENLEVÉ
     titre = db.Column(db.String(200), nullable=False)
     description = db.Column(db.Text)
     type_audit = db.Column(db.String(50), nullable=False)
@@ -1874,19 +1901,13 @@ class Audit(db.Model):
     # Membres externes
     membres_externes = db.Column(db.JSON, nullable=True, default=list)
     
-    # CORRECTION : UNE SEULE RELATION POUR LE CREATEUR
+    # Relations
     createur = db.relationship('User', foreign_keys=[created_by])
-    
-    # Responsable
     responsable = db.relationship('User', foreign_keys=[responsable_id], 
                                   backref='audits_dont_je_suis_responsable')
-    
-    # Archiveur
     archiveur = db.relationship('User', foreign_keys=[archived_by], 
                                backref='audits_que_jai_archives')
-    
-    # Processus
-    processus = db.relationship('ProcessusActivite', backref='audits')  # Changer la relation
+    processus = db.relationship('ProcessusActivite', backref='audits')
     
     # Relations avec les autres modèles
     constatations = db.relationship('Constatation', 
@@ -1909,8 +1930,28 @@ class Audit(db.Model):
                                     lazy=True, 
                                     cascade='all, delete-orphan')
     
+    # ===== CONTRAINTE UNIQUE COMPOSITE =====
+    __table_args__ = (
+        db.UniqueConstraint('reference', 'client_id', name='uix_audit_reference_client'),
+    )
     
-    # Méthodes pour gérer l'équipe
+    # ===== MÉTHODE STATIQUE DE GÉNÉRATION =====
+    @staticmethod
+    def generer_reference(client_id):
+        """Génère une référence unique PAR CLIENT"""
+        from datetime import datetime
+        annee = datetime.now().year
+        prefixe = f"AUD-{annee}-"
+        
+        count = Audit.query.filter(
+            Audit.reference.like(f'{prefixe}%'),
+            Audit.client_id == client_id
+        ).count()
+        
+        return f"{prefixe}{(count + 1):04d}"
+    
+    # ===== MÉTHODES EXISTANTES (à conserver) =====
+    
     def get_equipe_audit(self):
         """Retourne la liste des utilisateurs de l'équipe d'audit"""
         if self.equipe_audit_ids:
@@ -2010,7 +2051,6 @@ class Audit(db.Model):
             return self.processus_concerne
         return "Non spécifié"
     
-    # Calcul des statistiques
     @property
     def progression_globale(self):
         """Progression globale de l'audit basée sur les constatations"""
@@ -2085,15 +2125,6 @@ class Audit(db.Model):
             return 'warning'
         else:
             return 'danger'
-
-    @property
-    def processus_audite_display(self):
-        """Retourne le nom du processus audité pour l'affichage"""
-        if self.processus:
-            return self.processus.nom
-        elif self.processus_concerne:  # Champ manuel
-            return self.processus_concerne
-        return None
     
     def set_processus(self, processus_id=None, nom_manuel=None):
         """Définit le processus audité soit par ID soit par nom manuel"""
@@ -2251,37 +2282,76 @@ class Constatation(db.Model):
     __tablename__ = 'constatations'
     
     id = db.Column(db.Integer, primary_key=True)
-    reference = db.Column(db.String(50), nullable=False)
+    reference = db.Column(db.String(50), nullable=False)  # ← unique=True ENLEVÉ
     description = db.Column(db.Text, nullable=False)
     type_constatation = db.Column(db.String(50), nullable=False)
     gravite = db.Column(db.String(50))
+    
     # Nouveaux champs
     criticite = db.Column(db.String(50))  # mineure, majeure, critique
-    processus_concerne = db.Column(db.String(200))
+    processus_concerne = db.Column(db.String(500))  # Augmenter la longueur
     cause_racine = db.Column(db.Text)  # Méthode 5 Why
     documents_justificatifs = db.Column(db.Text)
+    
     # Workflow intelligent
     statut = db.Column(db.String(50), default='a_analyser')  # a_analyser, a_valider, en_action, clos
+    
     # Fichiers joints
     fichiers_ids = db.Column(db.String(500))  # Références aux fichiers
     preuves = db.Column(db.Text)
-    audit_id = db.Column(db.Integer, db.ForeignKey('audits.id'), nullable=False)  # 'audits.id'
+    
+    # Liens
+    audit_id = db.Column(db.Integer, db.ForeignKey('audits.id'), nullable=False)
     risque_id = db.Column(db.Integer, db.ForeignKey('risques.id'))
+    
+    # Conclusion et commentaires
+    conclusion = db.Column(db.Text)  # Pour le rapport définitif
+    commentaires = db.Column(db.Text)  # Commentaires internes
+    recommandations_immediates = db.Column(db.Text)  # Actions immédiates proposées
+    
+    # Audit
     created_by = db.Column(db.Integer, db.ForeignKey('user.id'))
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
     is_archived = db.Column(db.Boolean, default=False)
     client_id = db.Column(db.Integer, db.ForeignKey('clients.id'), nullable=True)
     
-    # Relations corrigées
+    # ===== RELATIONS =====
     audit = db.relationship('Audit', back_populates='constatations')
     risque = db.relationship('Risque', backref='constatations')
     createur = db.relationship('User', foreign_keys=[created_by])
     recommandations = db.relationship('Recommandation', back_populates='constatation', lazy=True)
-    processus_concerne = db.Column(db.String(500))  # Augmenter la longueur
-    conclusion = db.Column(db.Text)  # Pour le rapport définitif
-    commentaires = db.Column(db.Text)  # Commentaires internes
-    recommandations_immediates = db.Column(db.Text)  # Actions immédiates proposées
+    
+    # ===== CONTRAINTE UNIQUE COMPOSITE =====
+    __table_args__ = (
+        db.UniqueConstraint('reference', 'client_id', name='uix_constatation_reference_client'),
+    )
+    
+    # ===== MÉTHODE STATIQUE DE GÉNÉRATION =====
+    @staticmethod
+    def generer_reference(client_id):
+        """Génère une référence unique PAR CLIENT"""
+        from datetime import datetime
+        annee = datetime.now().year
+        prefixe = f"CONST-{annee}-"
+        
+        count = Constatation.query.filter(
+            Constatation.reference.like(f'{prefixe}%'),
+            Constatation.client_id == client_id
+        ).count()
+        
+        return f"{prefixe}{(count + 1):04d}"
+    
+    # ===== INITIALISATION =====
+    def __init__(self, **kwargs):
+        """Initialise une constatation avec génération automatique de la référence"""
+        # Générer la référence si non fournie et si client_id est présent
+        if 'reference' not in kwargs and 'client_id' in kwargs and kwargs['client_id']:
+            kwargs['reference'] = self.generer_reference(kwargs['client_id'])
+        
+        super().__init__(**kwargs)
+    
+    # ===== PROPRIÉTÉS CALCULÉES =====
     
     @property
     def couleur_criticite(self):
@@ -2291,7 +2361,7 @@ class Constatation(db.Model):
             'majeure': 'danger',
             'critique': 'dark'
         }.get(self.criticite or 'mineure', 'secondary')
-
+    
     @property
     def processus_audite_display(self):
         """Retourne le nom du processus concerné"""
@@ -2301,19 +2371,6 @@ class Constatation(db.Model):
             return self.audit.processus.nom
         return None
     
-    def set_processus(self, processus_id=None, nom_manuel=None, from_audit=False):
-        """Définit le processus concerné"""
-        if from_audit and self.audit:
-            # Utiliser le processus de l'audit
-            self.processus_concerne = self.audit.processus_audite_display
-        elif nom_manuel:
-            self.processus_concerne = nom_manuel
-        elif processus_id:
-            # Récupérer le nom du processus
-            processus = Processus.query.get(processus_id)
-            if processus:
-                self.processus_concerne = processus.nom
-    
     @property
     def get_preuves_list(self):
         """Retourne la liste des preuves sous forme de liste Python"""
@@ -2321,25 +2378,6 @@ class Constatation(db.Model):
             # Si les preuves sont stockées séparées par des virgules
             return [p.strip() for p in self.preuves.split(',') if p.strip()]
         return []
-    
-    def get_fichiers_list(self):
-        """Retourne la liste des IDs de fichiers"""
-        if self.fichiers_ids:
-            try:
-                return [int(id.strip()) for id in self.fichiers_ids.split(',') if id.strip()]
-            except (ValueError, AttributeError):
-                return []
-        return []
-    
-    @property
-    def nb_preuves(self):
-        """Retourne le nombre de preuves"""
-        return len(self.get_preuves_list)
-    
-    @property
-    def nb_fichiers(self):
-        """Retourne le nombre de fichiers joints"""
-        return len(self.get_fichiers_list())
     
     @property
     def get_couleur_statut(self):
@@ -2352,6 +2390,60 @@ class Constatation(db.Model):
         }
         return couleurs.get(self.statut, 'light')
     
+    @property
+    def get_statut_label(self):
+        """Libellé du statut en français"""
+        labels = {
+            'a_analyser': 'À analyser',
+            'a_valider': 'À valider',
+            'en_action': 'En action',
+            'clos': 'Clos'
+        }
+        return labels.get(self.statut, self.statut)
+    
+    @property
+    def get_criticite_label(self):
+        """Libellé de la criticité en français"""
+        labels = {
+            'mineure': 'Mineure',
+            'moyenne': 'Moyenne',
+            'majeure': 'Majeure',
+            'critique': 'Critique'
+        }
+        return labels.get(self.criticite, 'Non définie')
+    
+    @property
+    def get_gravite_label(self):
+        """Libellé de la gravité en français"""
+        labels = {
+            'faible': 'Faible',
+            'moyenne': 'Moyenne',
+            'elevee': 'Élevée',
+            'critique': 'Critique'
+        }
+        return labels.get(self.gravite, 'Non définie')
+    
+    @property
+    def nb_preuves(self):
+        """Retourne le nombre de preuves"""
+        return len(self.get_preuves_list)
+    
+    @property
+    def nb_fichiers(self):
+        """Retourne le nombre de fichiers joints"""
+        return len(self.get_fichiers_list())
+    
+    # ===== MÉTHODES DE GESTION DES FICHIERS =====
+    
+    def get_fichiers_list(self):
+        """Retourne la liste des IDs de fichiers"""
+        if self.fichiers_ids:
+            try:
+                return [int(id.strip()) for id in self.fichiers_ids.split(',') if id.strip()]
+            except (ValueError, AttributeError):
+                return []
+        return []
+    
     def ajouter_preuve(self, nom_fichier):
         """Ajoute une preuve à la constatation"""
         if not self.preuves:
@@ -2361,6 +2453,7 @@ class Constatation(db.Model):
             if nom_fichier not in preuves_list:
                 preuves_list.append(nom_fichier)
                 self.preuves = ','.join(preuves_list)
+        self.updated_at = datetime.utcnow()
     
     def supprimer_preuve(self, nom_fichier):
         """Supprime une preuve de la constatation"""
@@ -2369,24 +2462,140 @@ class Constatation(db.Model):
             if nom_fichier in preuves_list:
                 preuves_list.remove(nom_fichier)
                 self.preuves = ','.join(preuves_list) if preuves_list else None
+                self.updated_at = datetime.utcnow()
                 return True
         return False
+    
+    def ajouter_fichier(self, fichier_id):
+        """Ajoute un fichier à la constatation"""
+        if not self.fichiers_ids:
+            self.fichiers_ids = str(fichier_id)
+        else:
+            fichiers_list = self.get_fichiers_list()
+            if fichier_id not in fichiers_list:
+                fichiers_list.append(fichier_id)
+                self.fichiers_ids = ','.join(str(id) for id in fichiers_list)
+        self.updated_at = datetime.utcnow()
+    
+    def supprimer_fichier(self, fichier_id):
+        """Supprime un fichier de la constatation"""
+        if self.fichiers_ids:
+            fichiers_list = self.get_fichiers_list()
+            if fichier_id in fichiers_list:
+                fichiers_list.remove(fichier_id)
+                self.fichiers_ids = ','.join(str(id) for id in fichiers_list) if fichiers_list else None
+                self.updated_at = datetime.utcnow()
+                return True
+        return False
+    
+    # ===== MÉTHODES DE WORKFLOW =====
+    
+    def set_processus(self, processus_id=None, nom_manuel=None, from_audit=False):
+        """Définit le processus concerné"""
+        if from_audit and self.audit:
+            # Utiliser le processus de l'audit
+            self.processus_concerne = self.audit.processus_audite_display
+        elif nom_manuel:
+            self.processus_concerne = nom_manuel
+        elif processus_id:
+            # Récupérer le nom du processus
+            from models import Processus
+            processus = Processus.query.get(processus_id)
+            if processus:
+                self.processus_concerne = processus.nom
+    
+    def passer_a_analyser(self, utilisateur_id=None):
+        """Passe le statut à 'À analyser'"""
+        self.statut = 'a_analyser'
+        self.updated_at = datetime.utcnow()
+        self._log_changement_statut('a_analyser', utilisateur_id)
+    
+    def passer_a_valider(self, utilisateur_id=None):
+        """Passe le statut à 'À valider'"""
+        self.statut = 'a_valider'
+        self.updated_at = datetime.utcnow()
+        self._log_changement_statut('a_valider', utilisateur_id)
+    
+    def passer_en_action(self, utilisateur_id=None):
+        """Passe le statut à 'En action'"""
+        self.statut = 'en_action'
+        self.updated_at = datetime.utcnow()
+        self._log_changement_statut('en_action', utilisateur_id)
+    
+    def passer_clos(self, utilisateur_id=None, conclusion=None):
+        """Passe le statut à 'Clos'"""
+        self.statut = 'clos'
+        if conclusion:
+            self.conclusion = conclusion
+        if utilisateur_id:
+            self.updated_by = utilisateur_id
+        self.updated_at = datetime.utcnow()
+        self._log_changement_statut('clos', utilisateur_id)
+    
+    def _log_changement_statut(self, nouveau_statut, utilisateur_id=None):
+        """Log le changement de statut (à implémenter si vous avez un système de log)"""
+        # Optionnel : Ajouter une entrée dans un journal d'audit
+        # Vous pouvez implémenter cette méthode selon votre système de log
+        pass
+    
+    # ===== MÉTHODES D'ARCHIVAGE =====
     
     def archiver(self, utilisateur_id=None):
         """Archive la constatation"""
         self.is_archived = True
         self.updated_at = datetime.utcnow()
+        # Optionnel : enregistrer qui a archivé
+        if utilisateur_id:
+            self.archived_by = utilisateur_id
+        self.archived_at = datetime.utcnow()
     
     def restaurer(self):
         """Restaurer une constatation archivée"""
         self.is_archived = False
         self.updated_at = datetime.utcnow()
+        self.archived_at = None
+        self.archived_by = None
+    
+    # ===== MÉTHODE DE CONVERSION =====
+    
+    def to_dict(self):
+        """Convertit la constatation en dictionnaire pour API"""
+        return {
+            'id': self.id,
+            'reference': self.reference,
+            'description': self.description,
+            'type_constatation': self.type_constatation,
+            'gravite': self.gravite,
+            'gravite_label': self.get_gravite_label,
+            'criticite': self.criticite,
+            'criticite_label': self.get_criticite_label,
+            'criticite_couleur': self.couleur_criticite,
+            'processus_concerne': self.processus_audite_display,
+            'cause_racine': self.cause_racine,
+            'statut': self.statut,
+            'statut_label': self.get_statut_label,
+            'statut_couleur': self.get_couleur_statut,
+            'conclusion': self.conclusion,
+            'commentaires': self.commentaires,
+            'recommandations_immediates': self.recommandations_immediates,
+            'nb_preuves': self.nb_preuves,
+            'nb_fichiers': self.nb_fichiers,
+            'preuves': self.get_preuves_list,
+            'fichiers_ids': self.get_fichiers_list(),
+            'audit_id': self.audit_id,
+            'audit_reference': self.audit.reference if self.audit else None,
+            'risque_id': self.risque_id,
+            'risque_reference': self.risque.reference if self.risque else None,
+            'created_by': self.created_by,
+            'created_at': self.created_at.isoformat() if self.created_at else None,
+            'updated_at': self.updated_at.isoformat() if self.updated_at else None,
+            'is_archived': self.is_archived
+        }
     
     def __repr__(self):
         return f'<Constatation {self.reference}: {self.description[:50]}...>'
 
 
-# models.py - À AJOUTER (par exemple après les autres modèles)
 
 # models.py - Version corrigée de DemandeContact
 
@@ -2447,7 +2656,7 @@ class Recommandation(db.Model):
     __tablename__ = 'recommandations'
     
     id = db.Column(db.Integer, primary_key=True)
-    reference = db.Column(db.String(50), nullable=False)
+    reference = db.Column(db.String(50), nullable=False)  # ← unique=True ENLEVÉ
     description = db.Column(db.Text, nullable=False)
     type_recommandation = db.Column(db.String(50), nullable=False)
     categorie = db.Column(db.String(50))
@@ -2463,25 +2672,51 @@ class Recommandation(db.Model):
     risque_id = db.Column(db.Integer, db.ForeignKey('risques.id'), nullable=True)
     responsable_id = db.Column(db.Integer, db.ForeignKey('user.id'))
     created_by = db.Column(db.Integer, db.ForeignKey('user.id'))
-    created_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc))  # CORRIGÉ
-    updated_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc),  # CORRIGÉ
-                          onupdate=lambda: datetime.now(timezone.utc))  # CORRIGÉ
+    created_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc))
+    updated_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc),
+                          onupdate=lambda: datetime.now(timezone.utc))
     client_id = db.Column(db.Integer, db.ForeignKey('clients.id'), nullable=True)
     
-    # Relations
+    # ===== RELATIONS =====
     audit = db.relationship('Audit', back_populates='recommandations')
     constatation = db.relationship('Constatation', back_populates='recommandations')
     risque = db.relationship('Risque', backref='recommandations')
-    responsable = db.relationship('User', foreign_keys=[responsable_id])
-    createur = db.relationship('User', foreign_keys=[created_by])
+    responsable = db.relationship('User', foreign_keys=[responsable_id], backref='recommandations_responsable')
+    createur = db.relationship('User', foreign_keys=[created_by], backref='recommandations_crees')
     plan_action = db.relationship('PlanAction', back_populates='recommandation', uselist=False, lazy=True)
     historique = db.relationship('HistoriqueRecommandation', backref='recommandation', lazy=True, cascade='all, delete-orphan')
     client = db.relationship('Client')
     
+    # ===== CONTRAINTE UNIQUE COMPOSITE =====
+    __table_args__ = (
+        db.UniqueConstraint('reference', 'client_id', name='uix_recommandation_reference_client'),
+    )
+    
+    # ===== MÉTHODE STATIQUE DE GÉNÉRATION =====
+    @staticmethod
+    def generer_reference(client_id):
+        """Génère une référence unique PAR CLIENT"""
+        from datetime import datetime
+        annee = datetime.now().year
+        prefixe = f"RECO-{annee}-"
+        
+        count = Recommandation.query.filter(
+            Recommandation.reference.like(f'{prefixe}%'),
+            Recommandation.client_id == client_id
+        ).count()
+        
+        return f"{prefixe}{(count + 1):04d}"
+    
+    # ===== INITIALISATION =====
     def __init__(self, **kwargs):
+        # Générer la référence si non fournie
+        if 'reference' not in kwargs and 'client_id' in kwargs:
+            kwargs['reference'] = self.generer_reference(kwargs['client_id'])
+        
         super().__init__(**kwargs)
         self.calculer_score_priorite()
     
+    # ===== MÉTHODES DE CALCUL =====
     def calculer_score_priorite(self):
         """Calcule automatiquement le score de priorité"""
         score = (self.urgence * 0.4 + self.impact_operationnel * 0.6) * 20
@@ -2496,6 +2731,11 @@ class Recommandation(db.Model):
         self.score_priorite = min(100, int(score))
         return self.score_priorite
     
+    def recalculer_score(self):
+        """Recalcule le score de priorité (alias pour compatibilité)"""
+        return self.calculer_score_priorite()
+    
+    # ===== PROPRIÉTÉS CALCULÉES =====
     @property
     def couleur_statut(self):
         couleurs = {
@@ -2508,11 +2748,70 @@ class Recommandation(db.Model):
         return couleurs.get(self.statut, 'light')
     
     @property
+    def get_statut_label(self):
+        """Libellé du statut en français"""
+        labels = {
+            'a_traiter': 'À traiter',
+            'en_cours': 'En cours',
+            'termine': 'Terminé',
+            'retarde': 'Retardé',
+            'annule': 'Annulé'
+        }
+        return labels.get(self.statut, self.statut)
+    
+    @property
     def est_en_retard(self):
         if not self.date_echeance or self.statut == 'termine':
             return False
-        return datetime.now(timezone.utc).date() > self.date_echeance  # CORRIGÉ
+        return datetime.now(timezone.utc).date() > self.date_echeance
     
+    @property
+    def get_priorite_label(self):
+        """Libellé de la priorité basé sur le score"""
+        if self.score_priorite >= 80:
+            return 'Critique'
+        elif self.score_priorite >= 60:
+            return 'Élevée'
+        elif self.score_priorite >= 40:
+            return 'Moyenne'
+        else:
+            return 'Faible'
+    
+    @property
+    def get_priorite_couleur(self):
+        """Couleur Bootstrap pour la priorité"""
+        if self.score_priorite >= 80:
+            return 'danger'
+        elif self.score_priorite >= 60:
+            return 'warning'
+        elif self.score_priorite >= 40:
+            return 'info'
+        else:
+            return 'secondary'
+    
+    @property
+    def jours_restants(self):
+        """Jours restants avant échéance"""
+        if not self.date_echeance or self.statut == 'termine':
+            return None
+        delta = self.date_echeance - datetime.now(timezone.utc).date()
+        return max(0, delta.days)
+    
+    @property
+    def progression_display(self):
+        """Affichage de la progression avec icône"""
+        if self.taux_avancement == 100:
+            return '✅ Terminé'
+        elif self.taux_avancement >= 75:
+            return '🚀 Bien avancé'
+        elif self.taux_avancement >= 50:
+            return '📈 En bonne voie'
+        elif self.taux_avancement >= 25:
+            return '⏳ En cours'
+        else:
+            return '🟢 Nouvelle'
+    
+    # ===== MÉTHODES DE WORKFLOW =====
     def changer_statut(self, nouveau_statut, utilisateur_id, commentaire=None):
         ancien_statut = self.statut
         self.statut = nouveau_statut
@@ -2524,7 +2823,7 @@ class Recommandation(db.Model):
                 'ancien_statut': ancien_statut,
                 'nouveau_statut': nouveau_statut,
                 'commentaire': commentaire,
-                'date': datetime.now(timezone.utc).isoformat()  # CORRIGÉ
+                'date': datetime.now(timezone.utc).isoformat()
             },
             utilisateur_id=utilisateur_id
         )
@@ -2532,6 +2831,9 @@ class Recommandation(db.Model):
         
         if nouveau_statut == 'termine':
             self.taux_avancement = 100
+        
+        self.updated_at = datetime.now(timezone.utc)
+        db.session.commit()
     
     def mettre_a_jour_avancement(self, nouveau_taux, utilisateur_id):
         ancien_taux = self.taux_avancement
@@ -2543,7 +2845,7 @@ class Recommandation(db.Model):
             details={
                 'ancien_taux': ancien_taux,
                 'nouveau_taux': self.taux_avancement,
-                'date': datetime.now(timezone.utc).isoformat()  # CORRIGÉ
+                'date': datetime.now(timezone.utc).isoformat()
             },
             utilisateur_id=utilisateur_id
         )
@@ -2551,6 +2853,113 @@ class Recommandation(db.Model):
         
         if self.taux_avancement == 100 and self.statut != 'termine':
             self.statut = 'termine'
+        
+        self.updated_at = datetime.now(timezone.utc)
+        db.session.commit()
+    
+    def mettre_en_cours(self, utilisateur_id, commentaire=None):
+        """Passe la recommandation en cours"""
+        self.changer_statut('en_cours', utilisateur_id, commentaire)
+    
+    def terminer(self, utilisateur_id, commentaire=None):
+        """Termine la recommandation"""
+        self.changer_statut('termine', utilisateur_id, commentaire)
+    
+    def annuler(self, utilisateur_id, commentaire=None):
+        """Annule la recommandation"""
+        self.changer_statut('annule', utilisateur_id, commentaire)
+    
+    # ===== MÉTHODES DE GESTION =====
+    def prolonger_delai(self, nouvelles_jours, utilisateur_id, raison=None):
+        """Prolonge le délai de la recommandation"""
+        if self.date_echeance:
+            from datetime import timedelta
+            ancienne_date = self.date_echeance
+            self.date_echeance = self.date_echeance + timedelta(days=nouvelles_jours)
+            
+            historique = HistoriqueRecommandation(
+                recommandation_id=self.id,
+                action='prolongation',
+                details={
+                    'ancienne_date': ancienne_date.isoformat(),
+                    'nouvelle_date': self.date_echeance.isoformat(),
+                    'jours_ajoutes': nouvelles_jours,
+                    'raison': raison
+                },
+                utilisateur_id=utilisateur_id
+            )
+            db.session.add(historique)
+            self.updated_at = datetime.now(timezone.utc)
+            db.session.commit()
+            return True
+        return False
+    
+    def changer_responsable(self, nouveau_responsable_id, utilisateur_id, raison=None):
+        """Change le responsable de la recommandation"""
+        ancien_responsable_id = self.responsable_id
+        self.responsable_id = nouveau_responsable_id
+        
+        historique = HistoriqueRecommandation(
+            recommandation_id=self.id,
+            action='changement_responsable',
+            details={
+                'ancien_responsable_id': ancien_responsable_id,
+                'nouveau_responsable_id': nouveau_responsable_id,
+                'raison': raison
+            },
+            utilisateur_id=utilisateur_id
+        )
+        db.session.add(historique)
+        self.updated_at = datetime.now(timezone.utc)
+        db.session.commit()
+    
+    # ===== MÉTHODES D'ARCHIVAGE =====
+    def archiver(self):
+        """Archive la recommandation (soft delete)"""
+        self.is_archived = True
+        self.updated_at = datetime.now(timezone.utc)
+    
+    def restaurer(self):
+        """Restaure une recommandation archivée"""
+        self.is_archived = False
+        self.updated_at = datetime.now(timezone.utc)
+    
+    # ===== MÉTHODE DE CONVERSION =====
+    def to_dict(self):
+        """Convertit la recommandation en dictionnaire pour API"""
+        return {
+            'id': self.id,
+            'reference': self.reference,
+            'description': self.description,
+            'type_recommandation': self.type_recommandation,
+            'categorie': self.categorie,
+            'delai_mise_en_oeuvre': self.delai_mise_en_oeuvre,
+            'date_echeance': self.date_echeance.isoformat() if self.date_echeance else None,
+            'urgence': self.urgence,
+            'impact_operationnel': self.impact_operationnel,
+            'score_priorite': self.score_priorite,
+            'priorite_label': self.get_priorite_label,
+            'priorite_couleur': self.get_priorite_couleur,
+            'statut': self.statut,
+            'statut_label': self.get_statut_label,
+            'statut_couleur': self.couleur_statut,
+            'taux_avancement': self.taux_avancement,
+            'progression_display': self.progression_display,
+            'est_en_retard': self.est_en_retard,
+            'jours_restants': self.jours_restants,
+            'audit_id': self.audit_id,
+            'audit_reference': self.audit.reference if self.audit else None,
+            'constatation_id': self.constatation_id,
+            'constatation_reference': self.constatation.reference if self.constatation else None,
+            'risque_id': self.risque_id,
+            'responsable_id': self.responsable_id,
+            'responsable_nom': self.responsable.username if self.responsable else None,
+            'created_by': self.created_by,
+            'created_at': self.created_at.isoformat() if self.created_at else None,
+            'updated_at': self.updated_at.isoformat() if self.updated_at else None,
+            'has_plan_action': self.plan_action is not None,
+            'plan_action_id': self.plan_action.id if self.plan_action else None
+        }
     
     def __repr__(self):
         return f'<Recommandation {self.reference}: {self.description[:50]}...>'
@@ -3334,7 +3743,7 @@ class PlanAction(db.Model):
     # COLONNES DE BASE
     # ============================================
     id = db.Column(db.Integer, primary_key=True)
-    reference = db.Column(db.String(50), nullable=False)
+    reference = db.Column(db.String(50), nullable=False)  # ← Enlevé unique=True
     nom = db.Column(db.String(200), nullable=False)
     description = db.Column(db.Text)
     date_debut = db.Column(db.Date)
@@ -3352,14 +3761,13 @@ class PlanAction(db.Model):
     # RELATIONS AVEC AUTRES ENTITÉS
     # ============================================
     
-    # Relation plusieurs-à-plusieurs avec les dispositifs (NOUVEAU)
+    # Relation plusieurs-à-plusieurs avec les dispositifs
     dispositifs = db.relationship('DispositifMaitrise',
                                  secondary='plan_dispositifs',
-                                 back_populates='plans_action',  # Changé de backref à back_populates
+                                 back_populates='plans_action',
                                  lazy='dynamic')
     
     # Ancienne relation dispositif_id (à conserver temporairement pour compatibilité)
-    # À SUPPRIMER après migration
     dispositif_id = db.Column(db.Integer, db.ForeignKey('dispositifs_maitrise.id'), nullable=True)
     dispositif = db.relationship('DispositifMaitrise', foreign_keys=[dispositif_id])
     
@@ -3413,9 +3821,29 @@ class PlanAction(db.Model):
     archive_user = db.relationship('User', foreign_keys=[archived_by])
     client = db.relationship('Client')
     audits = db.relationship('Audit',
-                             secondary='plan_audits',  # Utilise le nom de la table, pas la variable
+                             secondary='plan_audits',
                              backref=db.backref('plans_action_multiples', lazy='dynamic'),
                              lazy='dynamic')
+    
+    # ===== CONTRAINTE UNIQUE COMPOSITE =====
+    __table_args__ = (
+        db.UniqueConstraint('reference', 'client_id', name='uix_planaction_reference_client'),
+    )
+    
+    # ===== MÉTHODE STATIQUE DE GÉNÉRATION =====
+    @staticmethod
+    def generer_reference(client_id):
+        """Génère une référence unique PAR CLIENT"""
+        from datetime import datetime
+        annee = datetime.now().year
+        prefixe = f"PA-{annee}-"
+        
+        count = PlanAction.query.filter(
+            PlanAction.reference.like(f'{prefixe}%'),
+            PlanAction.client_id == client_id
+        ).count()
+        
+        return f"{prefixe}{(count + 1):04d}"
     
     # ============================================
     # PROPRIÉTÉS CALCULÉES
@@ -3455,16 +3883,6 @@ class PlanAction(db.Model):
         return self.id
 
     @property
-    def commentaires_recentes(self):
-        """Retourne les 10 derniers commentaires"""
-        return sorted(self.commentaires, key=lambda x: x.created_at, reverse=True)[:10]
-    
-    @property
-    def fichiers_recentes(self):
-        """Retourne les 10 derniers fichiers"""
-        return sorted(self.fichiers, key=lambda x: x.created_at, reverse=True)[:10]
-
-    @property
     def tous_les_audits(self):
         """Retourne tous les audits liés à ce plan"""
         audits = list(self.audits)
@@ -3475,6 +3893,7 @@ class PlanAction(db.Model):
     @property
     def source_info_complete(self):
         """Retourne les informations sur toutes les sources du plan"""
+        from flask import url_for
         sources = []
         
         # Audits multiples
@@ -3515,13 +3934,9 @@ class PlanAction(db.Model):
         
         return sources
     
-    
     @property
     def risques_concernes(self):
-        """
-        Retourne la liste des risques concernés par ce plan
-        via les dispositifs liés
-        """
+        """Retourne la liste des risques concernés par ce plan via les dispositifs liés"""
         risques = set()
         for dispositif in self.dispositifs:
             if dispositif.risque:
@@ -3530,10 +3945,7 @@ class PlanAction(db.Model):
     
     @property
     def risque_principal(self):
-        """
-        Retourne le risque principal (pour compatibilité)
-        Priorité: risque_id direct > premier risque des dispositifs
-        """
+        """Retourne le risque principal (pour compatibilité)"""
         if self.risque:
             return self.risque
         risques = self.risques_concernes
@@ -3543,7 +3955,6 @@ class PlanAction(db.Model):
     def get_etapes_ordonnees(self):
         """Retourne les étapes/sous-actions triées"""
         if self.sous_actions:
-            # Trier par date_fin_prevue, puis par création
             from datetime import date
             return sorted(self.sous_actions, 
                          key=lambda x: (x.date_fin_prevue or date.max, x.created_at))
@@ -3596,6 +4007,8 @@ class PlanAction(db.Model):
     @property
     def source_info(self):
         """Retourne les informations sur la source du plan"""
+        from flask import url_for
+        
         if self.risque_id and self.risque:
             return {
                 'type': 'risque',
@@ -3625,10 +4038,8 @@ class PlanAction(db.Model):
         """Vérifie si le plan est en retard"""
         if self.statut == 'termine':
             return False
-        
         if not self.date_fin_prevue:
             return False
-        
         return datetime.utcnow().date() > self.date_fin_prevue
 
     @property
@@ -6355,7 +6766,7 @@ class DispositifMaitrise(db.Model):
     
     id = db.Column(db.Integer, primary_key=True)
     risque_id = db.Column(db.Integer, db.ForeignKey('risques.id'), nullable=False)
-    reference = db.Column(db.String(50), unique=True, nullable=False)
+    reference = db.Column(db.String(50), nullable=False)
     nom = db.Column(db.String(300), nullable=False)
     description = db.Column(db.Text)
     type_dispositif = db.Column(db.String(100))
@@ -6416,10 +6827,25 @@ class DispositifMaitrise(db.Model):
     # Documentation
     documents = db.relationship('DocumentDispositif', back_populates='dispositif', cascade='all, delete-orphan')
     verifications = db.relationship('VerificationDispositif', back_populates='dispositif', cascade='all, delete-orphan')
+     # ⭐ MÉTHODE DE GÉNÉRATION
+    __table_args__ = (
+        db.UniqueConstraint('reference', 'client_id', name='uix_dispositif_reference_client'),
+    )
+    @staticmethod
+    def generer_reference(client_id):
+        from datetime import datetime
+        annee = datetime.now().year
+        prefixe = f"DISP-{annee}-"
+        
+        count = DispositifMaitrise.query.filter(
+            DispositifMaitrise.reference.like(f'{prefixe}%'),
+            DispositifMaitrise.client_id == client_id
+        ).count()
+        
+        return f"{prefixe}{(count + 1):04d}"
     
     def __repr__(self):
         return f'<DispositifMaitrise {self.reference}: {self.nom}>'
-
 
     def get_reduction_risque_conforme(self):
         """
@@ -7426,7 +7852,7 @@ class ProgrammeAudit(db.Model):
     
     # ===== IDENTIFICATION =====
     id = db.Column(db.Integer, primary_key=True)
-    reference = db.Column(db.String(50), unique=True, nullable=False)
+    reference = db.Column(db.String(50), nullable=False)  # unique=True ENLEVÉ
     nom = db.Column(db.String(200), nullable=False)
     description = db.Column(db.Text)
     
@@ -7478,9 +7904,29 @@ class ProgrammeAudit(db.Model):
         'MissionAudit', 
         back_populates='programme', 
         cascade='all, delete-orphan',
-        lazy='dynamic'  # Permet d'utiliser .filter() et .count()
+        lazy='dynamic'
     )
     client = db.relationship('Client', backref='programmes_audit')
+    
+    # ===== CONTRAINTE UNIQUE COMPOSITE (AJOUT OBLIGATOIRE) =====
+    __table_args__ = (
+        db.UniqueConstraint('reference', 'client_id', name='uix_programme_reference_client'),
+    )
+    
+    # ===== MÉTHODE STATIQUE DE GÉNÉRATION (DOIT ÊTRE AVANT LES PROPRIÉTÉS) =====
+    @staticmethod
+    def generer_reference(client_id):
+        """Génère une référence unique PAR CLIENT"""
+        from datetime import datetime
+        annee = datetime.now().year
+        prefixe = f"PROGAUD-{annee}-"
+        
+        count = ProgrammeAudit.query.filter(
+            ProgrammeAudit.reference.like(f'{prefixe}%'),
+            ProgrammeAudit.client_id == client_id
+        ).count()
+        
+        return f"{prefixe}{(count + 1):04d}"
     
     # ===== PROPRIÉTÉS CALCULÉES =====
     
@@ -7836,7 +8282,7 @@ class MissionAudit(db.Model):
     __tablename__ = 'missions_audit'
     
     id = db.Column(db.Integer, primary_key=True)
-    reference = db.Column(db.String(50), nullable=False)
+    reference = db.Column(db.String(50), nullable=False)  # ← unique=True ENLEVÉ
     titre = db.Column(db.String(200), nullable=False)
     description = db.Column(db.Text)
     
@@ -7892,7 +8338,7 @@ class MissionAudit(db.Model):
     updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
     client_id = db.Column(db.Integer, db.ForeignKey('clients.id'), nullable=True)
     
-    # ========== RELATIONS SIMPLIFIÉES ==========
+    # ========== RELATIONS ==========
     # Relations principales
     programme = db.relationship('ProgrammeAudit', back_populates='missions')
     risque = db.relationship('Risque', backref='missions_audit_simple')
@@ -7907,8 +8353,7 @@ class MissionAudit(db.Model):
     archiveur = db.relationship('User', foreign_keys=[archived_by],
                                backref='missions_archivees_simple')
     
-    # ========== RELATIONS PLANS DE REPLI - CORRIGÉES ==========
-    # Une mission peut être mission PRINCIPALE de plusieurs plans
+    # Relations plans de repli
     plans_repli_principaux = db.relationship(
         'PlanPluieAudit',
         foreign_keys='PlanPluieAudit.mission_principale_id',
@@ -7917,7 +8362,6 @@ class MissionAudit(db.Model):
         lazy='dynamic'
     )
     
-    # Une mission peut être mission de REMPLACEMENT de plusieurs plans
     plans_repli_remplacement = db.relationship(
         'PlanPluieAudit',
         foreign_keys='PlanPluieAudit.mission_remplacement_id',
@@ -7926,7 +8370,27 @@ class MissionAudit(db.Model):
         lazy='dynamic'
     )
     
-    # ========== PROPRIÉTÉS ==========
+    # ========== CONTRAINTE UNIQUE COMPOSITE ==========
+    __table_args__ = (
+        db.UniqueConstraint('reference', 'client_id', name='uix_mission_reference_client'),
+    )
+    
+    # ========== MÉTHODE STATIQUE DE GÉNÉRATION ==========
+    @staticmethod
+    def generer_reference(client_id):
+        """Génère une référence unique PAR CLIENT"""
+        from datetime import datetime
+        annee = datetime.now().year
+        prefixe = f"MISS-{annee}-"
+        
+        count = MissionAudit.query.filter(
+            MissionAudit.reference.like(f'{prefixe}%'),
+            MissionAudit.client_id == client_id
+        ).count()
+        
+        return f"{prefixe}{(count + 1):04d}"
+    
+    # ========== PROPRIÉTÉS CALCULÉES ==========
     @property
     def est_en_retard(self):
         if self.date_fin_prevue and self.statut not in ['termine', 'annule', 'reporte']:
@@ -7966,9 +8430,183 @@ class MissionAudit(db.Model):
             is_archived=False
         ).first()
     
+    @property
+    def get_statut_label(self):
+        """Libellé du statut en français"""
+        labels = {
+            'planifie': 'Planifié',
+            'en_cours': 'En cours',
+            'termine': 'Terminé',
+            'reporte': 'Reporté',
+            'annule': 'Annulé'
+        }
+        return labels.get(self.statut, self.statut)
+    
+    @property
+    def get_priorite_label(self):
+        """Libellé de la priorité en français"""
+        labels = {
+            'critique': 'Critique',
+            'elevee': 'Élevée',
+            'moyenne': 'Moyenne',
+            'faible': 'Faible'
+        }
+        return labels.get(self.priorite, self.priorite)
+    
+    @property
+    def taux_progression(self):
+        """Calcule le taux de progression basé sur les dates"""
+        if self.statut == 'termine':
+            return 100
+        if self.statut == 'planifie':
+            return 0
+        if self.date_debut_reelle and self.date_fin_prevue:
+            today = datetime.now().date()
+            if today < self.date_debut_reelle:
+                return 0
+            if today > self.date_fin_prevue:
+                return 100
+            total_duree = (self.date_fin_prevue - self.date_debut_reelle).days
+            if total_duree <= 0:
+                return 0
+            duree_ecoulee = (today - self.date_debut_reelle).days
+            return min(100, int((duree_ecoulee / total_duree) * 100))
+        return self.progression or 0
+    
+    @property
+    def duree_ecart_jours(self):
+        """Écart entre durée réelle et estimée (en jours)"""
+        if self.duree_reelle and self.duree_estimee:
+            return self.duree_reelle - self.duree_estimee
+        return None
+    
+    @property
+    def budget_ecart(self):
+        """Écart entre budget réel et estimé"""
+        if self.budget_reel and self.budget_estime:
+            return self.budget_reel - self.budget_estime
+        return None
+    
+    # ========== MÉTHODES D'INSTANCE ==========
+    def demarrer(self, date_debut=None):
+        """Démarre la mission"""
+        if self.statut == 'planifie':
+            self.statut = 'en_cours'
+            self.date_debut_reelle = date_debut or datetime.now().date()
+            self.updated_at = datetime.utcnow()
+            return True
+        return False
+    
+    def terminer(self, date_fin=None):
+        """Termine la mission"""
+        if self.statut in ['planifie', 'en_cours']:
+            self.statut = 'termine'
+            self.date_fin_reelle = date_fin or datetime.now().date()
+            if self.date_debut_reelle and self.date_fin_reelle:
+                self.duree_reelle = (self.date_fin_reelle - self.date_debut_reelle).days
+            self.progression = 100
+            self.updated_at = datetime.utcnow()
+            return True
+        return False
+    
+    def reporter(self, nouvelle_date_debut=None, nouvelle_date_fin=None, raison=None):
+        """Reporte la mission"""
+        if nouvelle_date_debut:
+            self.date_debut_prevue = nouvelle_date_debut
+        if nouvelle_date_fin:
+            self.date_fin_prevue = nouvelle_date_fin
+        if raison:
+            self.commentaire_repli = raison
+        self.statut = 'reporte'
+        self.updated_at = datetime.utcnow()
+    
+    def annuler(self, raison=None):
+        """Annule la mission"""
+        self.statut = 'annule'
+        if raison:
+            self.archive_reason = raison
+        self.updated_at = datetime.utcnow()
+    
+    def archiver(self, user_id=None, raison=None):
+        """Archive la mission"""
+        self.is_archived = True
+        self.archived_at = datetime.utcnow()
+        self.archived_by = user_id
+        if raison:
+            self.archive_reason = raison
+        self.updated_at = datetime.utcnow()
+    
+    def restaurer(self):
+        """Restaure une mission archivée"""
+        self.is_archived = False
+        self.archived_at = None
+        self.archived_by = None
+        self.archive_reason = None
+        self.updated_at = datetime.utcnow()
+    
+    def get_equipe_list(self):
+        """Retourne la liste des IDs d'équipe"""
+        if self.equipe_ids:
+            return [int(id.strip()) for id in self.equipe_ids.split(',') if id.strip()]
+        return []
+    
+    def ajouter_membre_equipe(self, user_id):
+        """Ajoute un membre à l'équipe"""
+        membres = self.get_equipe_list()
+        if user_id not in membres:
+            membres.append(user_id)
+            self.equipe_ids = ','.join(str(id) for id in membres)
+            self.updated_at = datetime.utcnow()
+    
+    def retirer_membre_equipe(self, user_id):
+        """Retire un membre de l'équipe"""
+        membres = self.get_equipe_list()
+        if user_id in membres:
+            membres.remove(user_id)
+            self.equipe_ids = ','.join(str(id) for id in membres) if membres else None
+            self.updated_at = datetime.utcnow()
+    
+    # ========== MÉTHODE DE CONVERSION ==========
+    def to_dict(self):
+        """Convertit la mission en dictionnaire pour API"""
+        return {
+            'id': self.id,
+            'reference': self.reference,
+            'titre': self.titre,
+            'description': self.description,
+            'priorite': self.priorite,
+            'priorite_label': self.get_priorite_label,
+            'priorite_couleur': self.couleur_priorite,
+            'statut': self.statut,
+            'statut_label': self.get_statut_label,
+            'statut_icone': self.icone_statut,
+            'annee_prevue': self.annee_prevue,
+            'trimestre_prevue': self.trimestre_prevue,
+            'date_debut_prevue': self.date_debut_prevue.isoformat() if self.date_debut_prevue else None,
+            'date_fin_prevue': self.date_fin_prevue.isoformat() if self.date_fin_prevue else None,
+            'duree_estimee': self.duree_estimee,
+            'date_debut_reelle': self.date_debut_reelle.isoformat() if self.date_debut_reelle else None,
+            'date_fin_reelle': self.date_fin_reelle.isoformat() if self.date_fin_reelle else None,
+            'duree_reelle': self.duree_reelle,
+            'progression': self.taux_progression,
+            'est_en_retard': self.est_en_retard,
+            'jours_restants': self.jours_restants,
+            'programme_id': self.programme_id,
+            'programme_reference': self.programme.reference if self.programme else None,
+            'audit_id': self.audit_id,
+            'risque_id': self.risque_id,
+            'responsable_id': self.responsable_id,
+            'responsable_nom': self.responsable.username if self.responsable else None,
+            'budget_estime': self.budget_estime,
+            'budget_reel': self.budget_reel,
+            'budget_ecart': self.budget_ecart,
+            'created_at': self.created_at.isoformat() if self.created_at else None,
+            'updated_at': self.updated_at.isoformat() if self.updated_at else None,
+            'is_archived': self.is_archived
+        }
+    
     def __repr__(self):
         return f'<MissionAudit {self.reference}: {self.titre[:30]}>'
-    
 
 class PlanPluieAudit(db.Model):
     __tablename__ = 'plans_pluie_audit'
