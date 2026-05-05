@@ -844,17 +844,142 @@
     // ============================================
     
     // Charger les risques disponibles
-    function chargerRisques() {
-        fetch(`/api/feuille-travail/${feuilleId}/risques-disponibles`)
-            .then(r => r.json())
-            .then(risques => {
-                const select = document.getElementById('testRisqueAssocie');
-                select.innerHTML = '<option value="">-- Aucun --</option>';
-                risques.forEach(r => {
-                    select.innerHTML += `<option value="${r.id}">${r.reference} - ${r.intitule}</option>`;
-                });
-            });
+    // ============================================
+// CHARGER LES RISQUES DISPONIBLES - VERSION CORRIGÉE
+// ============================================
+
+function chargerRisques() {
+    console.log("🔄 Chargement des risques disponibles...");
+    
+    // Afficher un indicateur de chargement
+    const selectRisque = document.getElementById('testRisqueAssocie');
+    if (selectRisque) {
+        selectRisque.innerHTML = '<option value="">Chargement des risques...</option>';
+        selectRisque.disabled = true;
     }
+    
+    fetch(`/api/feuille-travail/${feuilleId}/risques-disponibles`)
+        .then(response => {
+            if (!response.ok) {
+                throw new Error(`HTTP ${response.status}`);
+            }
+            return response.json();
+        })
+        .then(data => {
+            console.log("📊 Risques reçus:", data);
+            
+            const select = document.getElementById('testRisqueAssocie');
+            if (!select) return;
+            
+            // Vider et réactiver le select
+            select.innerHTML = '<option value="">-- Aucun risque associé --</option>';
+            select.disabled = false;
+            
+            // Vérifier le format de la réponse
+            let risques = [];
+            if (Array.isArray(data)) {
+                risques = data;
+            } else if (data.risques && Array.isArray(data.risques)) {
+                risques = data.risques;
+            } else if (data.success && Array.isArray(data.data)) {
+                risques = data.data;
+            }
+            
+            if (risques.length === 0) {
+                console.warn("⚠️ Aucun risque trouvé pour ce client");
+                select.innerHTML += '<option value="" disabled>⚠️ Aucun risque disponible</option>';
+                return;
+            }
+            
+            // Ajouter les options
+            risques.forEach(risque => {
+                const option = document.createElement('option');
+                option.value = risque.id;
+                
+                // Formatage du texte d'affichage
+                let displayText = `${risque.reference} - ${risque.intitule}`;
+                if (risque.niveau_risque && risque.niveau_risque !== 'Non évalué') {
+                    displayText += ` [${risque.niveau_risque}]`;
+                }
+                if (risque.categorie && risque.categorie !== 'Non catégorisé') {
+                    displayText += ` (${risque.categorie})`;
+                }
+                option.textContent = displayText;
+                
+                // Ajouter des attributs data pour info
+                option.dataset.niveau = risque.niveau_risque || '';
+                option.dataset.score = risque.score || 0;
+                option.dataset.categorie = risque.categorie || '';
+                
+                select.appendChild(option);
+            });
+            
+            console.log(`✅ ${risques.length} risques chargés avec succès`);
+            
+            // Mettre à jour le niveau de risque calculé si le premier risque est sélectionné
+            if (risques.length > 0 && select.value) {
+                const selectedOption = select.options[select.selectedIndex];
+                if (selectedOption && selectedOption.dataset.niveau) {
+                    const niveauSpan = document.getElementById('niveauRisqueCalcule');
+                    if (niveauSpan) {
+                        niveauSpan.textContent = selectedOption.dataset.niveau.toUpperCase();
+                        const badgeClasses = {
+                            'critique': 'bg-dark',
+                            'eleve': 'bg-danger',
+                            'moyen': 'bg-warning',
+                            'faible': 'bg-success'
+                        };
+                        niveauSpan.className = `badge ${badgeClasses[selectedOption.dataset.niveau.toLowerCase()] || 'bg-secondary'}`;
+                    }
+                }
+            }
+        })
+        .catch(error => {
+            console.error('❌ Erreur chargement risques:', error);
+            const select = document.getElementById('testRisqueAssocie');
+            if (select) {
+                select.innerHTML = '<option value="">-- Erreur de chargement --</option>';
+                select.disabled = false;
+            }
+            showToast('error', 'Impossible de charger les risques');
+        });
+}
+
+// Calculer le niveau de risque basé sur la sélection
+function miseAJourNiveauRisque() {
+    const select = document.getElementById('testRisqueAssocie');
+    if (!select || !select.selectedOptions[0]) return;
+    
+    const selectedOption = select.selectedOptions[0];
+    const niveau = selectedOption.dataset.niveau;
+    const score = selectedOption.dataset.score;
+    
+    const niveauSpan = document.getElementById('niveauRisqueCalcule');
+    if (niveauSpan && niveau) {
+        niveauSpan.textContent = niveau.toUpperCase();
+        const badgeClasses = {
+            'critique': 'bg-dark',
+            'eleve': 'bg-danger',
+            'moyen': 'bg-warning',
+            'faible': 'bg-success'
+        };
+        niveauSpan.className = `badge ${badgeClasses[niveau.toLowerCase()] || 'bg-secondary'}`;
+    }
+    
+    // Optionnel : Afficher le score aussi
+    const scoreSpan = document.getElementById('scoreRisqueCalcule');
+    if (scoreSpan && score) {
+        scoreSpan.textContent = score;
+    }
+}
+
+// Ajouter l'écouteur d'événement après chargement du DOM
+document.addEventListener('DOMContentLoaded', function() {
+    const selectRisque = document.getElementById('testRisqueAssocie');
+    if (selectRisque) {
+        selectRisque.addEventListener('change', miseAJourNiveauRisque);
+    }
+});
     
     // Calculer le niveau de risque
     function calculerNiveauRisque() {
@@ -882,71 +1007,82 @@
     }
     
     // Sauvegarder un test complet
-    function sauvegarderTestComplet() {
-        const objet = document.getElementById('testObjet').value.trim();
-        if (!objet) {
-            showToast('warning', 'L\'objet du test est requis');
-            return;
-        }
-        
-        const data = {
-            objet_test: objet,
-            objectif_controle: document.getElementById('testObjectif').value,
-            reference_norme: document.getElementById('testReferenceNorme').value,
-            difficulte: document.getElementById('testDifficulte').value,
-            procedure: document.getElementById('testProcedure').value,
-            criteres_acceptation: document.getElementById('testCriteresAcceptation').value,
-            etapes_cles: document.getElementById('testEtapesCles').value,
-            echantillon: document.getElementById('testEchantillon').value,
-            methode_echantillonnage: document.getElementById('testMethodeEchantillon').value,
-            taille_echantillon: parseInt(document.getElementById('testTailleEchantillon').value) || null,
-            population_totale: parseInt(document.getElementById('testPopulationTotale').value) || null,
-            periode_couverte: document.getElementById('testPeriode').value,
-            taux_confiance: parseFloat(document.getElementById('testTauxConfiance').value) || null,
-            marge_erreur: parseFloat(document.getElementById('testMargeErreur').value) || null,
-            resultat: document.getElementById('testResultat').value,
-            observations: document.getElementById('testObservations').value,
-            ecart_constate: document.getElementById('testEcartConstate').value,
-            classification_anomalie: document.getElementById('testClassificationAnomalie').value,
-            impact_financier: parseFloat(document.getElementById('testImpactFinancier').value) || null,
-            cause_racine: document.getElementById('testCauseRacine').value,
-            nb_elements_testes: parseInt(document.getElementById('testNbElements').value) || null,
-            nb_erreurs_trouvees: parseInt(document.getElementById('testNbErreurs').value) || null,
-            risque_associe_id: parseInt(document.getElementById('testRisqueAssocie').value) || null,
-            niveau_criticite: document.getElementById('testNiveauCriticite').value,
-            probabilite_occurrence: document.getElementById('testProbabilite').value,
-            gravite_impact: document.getElementById('testGravite').value,
-            correction_effectuee: document.getElementById('testCorrectionEffectuee').checked,
-            date_correction: document.getElementById('testDateCorrection').value,
-            responsable_correction_id: parseInt(document.getElementById('testResponsableCorrection').value) || null,
-            action_curative: document.getElementById('testActionCurative').value,
-            action_preventive: document.getElementById('testActionPreventive').value,
-            correction_commentaire: document.getElementById('testCommentaireCorrection').value
-        };
-        
-        fetch(`/api/feuille-travail/${feuilleId}/test`, {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-                'X-CSRFToken': getCsrfToken()
-            },
-            body: JSON.stringify(data)
-        })
-        .then(r => r.json())
-        .then(data => {
-            if (data.success) {
-                showToast('success', 'Test ajouté avec succès');
-                bootstrap.Modal.getInstance(document.getElementById('modalAjouterTest')).hide();
-                location.reload();
-            } else {
-                showToast('error', data.error || 'Erreur');
-            }
-        })
-        .catch(error => {
-            console.error('Erreur:', error);
-            showToast('error', 'Erreur réseau');
-        });
+    function updateTest(testId) {
+    const objet = document.getElementById('testObjet').value.trim();
+    if (!objet) {
+        showToast('warning', 'L\'objet du test est requis');
+        return;
     }
+    
+    // ✅ CORRECTION : Inclure TOUS les champs d'échantillonnage
+    const data = {
+        objet_test: objet,
+        objectif_controle: document.getElementById('testObjectif').value,
+        reference_norme: document.getElementById('testReferenceNorme').value,
+        difficulte: document.getElementById('testDifficulte').value,
+        procedure: document.getElementById('testProcedure').value,
+        criteres_acceptation: document.getElementById('testCriteresAcceptation').value,
+        etapes_cles: document.getElementById('testEtapesCles').value,
+        
+        // Échantillonnage
+        echantillon: document.getElementById('testEchantillon').value,
+        methode_echantillonnage: document.getElementById('testMethodeEchantillon').value,
+        taille_echantillon: parseInt(document.getElementById('testTailleEchantillon').value) || null,
+        population_totale: parseInt(document.getElementById('testPopulationTotale').value) || null,
+        periode_couverte: document.getElementById('testPeriode').value,
+        taux_confiance: parseFloat(document.getElementById('testTauxConfiance').value) || null,
+        marge_erreur: parseFloat(document.getElementById('testMargeErreur').value) || null,
+        
+        // Résultats
+        resultat: document.getElementById('testResultat').value,
+        observations: document.getElementById('testObservations').value,
+        ecart_constate: document.getElementById('testEcartConstate').value,
+        classification_anomalie: document.getElementById('testClassificationAnomalie').value,
+        impact_financier: parseFloat(document.getElementById('testImpactFinancier').value) || null,
+        cause_racine: document.getElementById('testCauseRacine').value,
+        nb_elements_testes: parseInt(document.getElementById('testNbElements').value) || null,
+        nb_erreurs_trouvees: parseInt(document.getElementById('testNbErreurs').value) || null,
+        
+        // Risques
+        risque_associe_id: parseInt(document.getElementById('testRisqueAssocie').value) || null,
+        niveau_criticite: document.getElementById('testNiveauCriticite').value,
+        probabilite_occurrence: document.getElementById('testProbabilite').value,
+        gravite_impact: document.getElementById('testGravite').value,
+        
+        // Correction
+        correction_effectuee: document.getElementById('testCorrectionEffectuee').checked,
+        date_correction: document.getElementById('testDateCorrection').value,
+        responsable_correction_id: parseInt(document.getElementById('testResponsableCorrection').value) || null,
+        action_curative: document.getElementById('testActionCurative').value,
+        action_preventive: document.getElementById('testActionPreventive').value,
+        correction_commentaire: document.getElementById('testCommentaireCorrection').value
+    };
+    
+    console.log("📊 Mise à jour test:", data);
+    
+    fetch(`/api/feuille-travail/test/${testId}`, {
+        method: 'PUT',
+        headers: {
+            'Content-Type': 'application/json',
+            'X-CSRFToken': getCsrfToken()
+        },
+        body: JSON.stringify(data)
+    })
+    .then(r => r.json())
+    .then(data => {
+        if (data.success) {
+            showToast('success', 'Test mis à jour avec succès');
+            bootstrap.Modal.getInstance(document.getElementById('modalAjouterTest')).hide();
+            location.reload();
+        } else {
+            showToast('error', data.error || 'Erreur lors de la mise à jour');
+        }
+    })
+    .catch(error => {
+        console.error('Erreur:', error);
+        showToast('error', 'Erreur réseau');
+    });
+}
     
     // Remplacer la fonction editTest existante par celle-ci
     function editTest(testId) {
