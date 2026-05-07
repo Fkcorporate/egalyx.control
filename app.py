@@ -64526,114 +64526,6 @@ def admin_analyses_ia():
                          stats=stats,
                          recent_analyses=recent)
 
-@app.route('/pca/plan/<int:plan_id>/modifier', methods=['GET', 'POST'])
-@login_required
-def modifier_plan_pca(plan_id):
-    """Modifier un plan PCA"""
-    
-    if current_user.role == 'super_admin':
-        plan = PlanContinuiteActivite.query.get_or_404(plan_id)
-    else:
-        plan = PlanContinuiteActivite.query.filter_by(id=plan_id, client_id=current_user.client_id).first_or_404()
-    
-    form = PlanContinuiteActiviteForm(obj=plan)
-    
-    # Remplir les choix multi-tenant
-    if current_user.role == 'super_admin':
-        poles = Pole.query.filter_by(is_archived=False).order_by(Pole.nom).all()
-        directions = Direction.query.filter_by(is_archived=False, is_active=True).order_by(Direction.nom).all()
-        services = Service.query.filter_by(is_archived=False, is_active=True).order_by(Service.nom).all()
-        users = User.query.filter_by(is_active=True).order_by(User.username).all()
-    else:
-        poles = Pole.query.filter_by(client_id=current_user.client_id, is_archived=False).order_by(Pole.nom).all()
-        directions = Direction.query.filter_by(client_id=current_user.client_id, is_archived=False, is_active=True).order_by(Direction.nom).all()
-        services = Service.query.filter_by(client_id=current_user.client_id, is_archived=False, is_active=True).order_by(Service.nom).all()
-        users = User.query.filter_by(client_id=current_user.client_id, is_active=True).order_by(User.username).all()
-    
-    form.pole_id.choices = [(0, '-- Sélectionner --')] + [(p.id, p.nom) for p in poles]
-    form.direction_id.choices = [(0, '-- Sélectionner --')] + [(d.id, d.nom) for d in directions]
-    form.service_id.choices = [(0, '-- Sélectionner --')] + [(s.id, s.nom) for s in services]
-    form.responsable_id.choices = [(0, '-- Non assigné --')] + [(u.id, u.username) for u in users]
-    form.redacteur_id.choices = [(0, '-- Non assigné --')] + [(u.id, u.username) for u in users]
-    form.valideur_id.choices = [(0, '-- Non assigné --')] + [(u.id, u.username) for u in users]
-    
-    if request.method == 'GET':
-        # Pré-remplir les champs JSON
-        if plan.processus_critiques:
-            form.processus_critiques.data = '\n'.join(plan.processus_critiques)
-        if plan.strategies:
-            form.strategies.data = '\n'.join(plan.strategies)
-        if plan.sites_secours:
-            form.sites_secours.data = '\n'.join(plan.sites_secours)
-        if plan.ressources_critiques:
-            form.ressources_critiques.data = '\n'.join(plan.ressources_critiques)
-        
-        # Type d'organisation
-        if plan.pole_id:
-            form.type_organisation.data = 'pole'
-            form.pole_id.data = plan.pole_id
-        elif plan.direction_id:
-            form.type_organisation.data = 'direction'
-            form.direction_id.data = plan.direction_id
-        elif plan.service_id:
-            form.type_organisation.data = 'service'
-            form.service_id.data = plan.service_id
-        
-        # Acteurs
-        form.responsable_id.data = plan.responsable_id or 0
-        form.redacteur_id.data = plan.redacteur_id or 0
-        form.valideur_id.data = plan.valideur_id or 0
-    
-    if form.validate_on_submit():
-        try:
-            plan.titre = form.titre.data
-            plan.description = form.description.data
-            plan.version = form.version.data
-            plan.date_validite = form.date_validite.data
-            plan.date_dernier_test = form.date_dernier_test.data
-            plan.date_prochain_test = form.date_prochain_test.data
-            plan.processus_critiques = [p.strip() for p in form.processus_critiques.data.split('\n') if p.strip()] if form.processus_critiques.data else []
-            plan.bia_realisee = form.bia_realisee.data
-            plan.bia_date = form.bia_date.data
-            plan.delai_arret_max = form.delai_arret_max.data
-            plan.perte_donnees_max = form.perte_donnees_max.data
-            plan.strategies = [s.strip() for s in form.strategies.data.split('\n') if s.strip()] if form.strategies.data else []
-            plan.sites_secours = [s.strip() for s in form.sites_secours.data.split('\n') if s.strip()] if form.sites_secours.data else []
-            plan.procedures_urgence = form.procedures_urgence.data
-            plan.procedures_reprise = form.procedures_reprise.data
-            plan.procedures_retour_normal = form.procedures_retour_normal.data
-            plan.ressources_critiques = [r.strip() for r in form.ressources_critiques.data.split('\n') if r.strip()] if form.ressources_critiques.data else []
-            plan.duree_critique = form.duree_critique.data
-            plan.statut = form.statut.data
-            plan.niveau_maturite = form.niveau_maturite.data
-            plan.responsable_id = form.responsable_id.data if form.responsable_id.data != 0 else None
-            plan.redacteur_id = form.redacteur_id.data if form.redacteur_id.data != 0 else None
-            plan.valideur_id = form.valideur_id.data if form.valideur_id.data != 0 else None
-            
-            # Mettre à jour l'organisation
-            plan.pole_id = None
-            plan.direction_id = None
-            plan.service_id = None
-            
-            if form.type_organisation.data == 'pole' and form.pole_id.data:
-                plan.pole_id = form.pole_id.data
-            elif form.type_organisation.data == 'direction' and form.direction_id.data:
-                plan.direction_id = form.direction_id.data
-            elif form.type_organisation.data == 'service' and form.service_id.data:
-                plan.service_id = form.service_id.data
-            
-            plan.updated_at = datetime.utcnow()
-            db.session.commit()
-            
-            flash(f'✅ Plan PCA "{plan.reference}" mis à jour.', 'success')
-            return redirect(url_for('detail_plan_pca', plan_id=plan.id))
-            
-        except Exception as e:
-            db.session.rollback()
-            flash(f'Erreur: {str(e)}', 'error')
-    
-    return render_template('pca/form_plan.html', form=form, plan=plan, action='Modifier')
-
 @app.route('/audit/rapports/comparaison')
 @login_required
 def rapport_comparaison_audits():
@@ -64658,7 +64550,71 @@ def rapport_comparaison_audits():
                          audits=audits,
                          comparaison_data=comparaison_data)
 
+@app.route('/plan-action/<int:plan_id>/modifier', methods=['POST'])
+@csrf.exempt
+@login_required
+def modifier_plan_action(plan_id):
+    """Modifier les informations d'un plan d'action"""
+    plan_action = PlanAction.query.get_or_404(plan_id)
+    
+    try:
+        # Récupérer les données du formulaire
+        plan_action.nom = request.form.get('nom', '').strip()
+        plan_action.description = request.form.get('description', '').strip()
+        
+        # Dates
+        date_debut = request.form.get('date_debut')
+        date_fin_prevue = request.form.get('date_fin_prevue')
+        
+        if date_debut:
+            plan_action.date_debut = datetime.strptime(date_debut, '%Y-%m-%d').date()
+        if date_fin_prevue:
+            plan_action.date_fin_prevue = datetime.strptime(date_fin_prevue, '%Y-%m-%d').date()
+        
+        # Responsable
+        responsable_id = request.form.get('responsable_id')
+        plan_action.responsable_id = int(responsable_id) if responsable_id else None
+        
+        # Pourcentage
+        pourcentage = request.form.get('pourcentage_realisation')
+        if pourcentage:
+            plan_action.pourcentage_realisation = int(pourcentage)
+        
+        plan_action.updated_at = datetime.utcnow()
+        db.session.commit()
+        
+        flash('Plan d\'action modifié avec succès', 'success')
+        
+    except Exception as e:
+        db.session.rollback()
+        flash(f'Erreur lors de la modification: {str(e)}', 'error')
+    
+    return redirect(url_for('detail_plan_action', plan_id=plan_id))
 
+
+# Route pour afficher le formulaire de modification (GET)
+@app.route('/plan-action/<int:plan_id>/modifier', methods=['GET'])
+@login_required
+def afficher_modifier_plan_action(plan_id):
+    """Afficher le formulaire de modification d'un plan d'action"""
+    plan_action = PlanAction.query.get_or_404(plan_id)
+    
+    if not check_client_access(plan_action):
+        flash('Accès non autorisé', 'error')
+        return redirect(url_for('liste_plans_action'))
+    
+    # Créer le formulaire
+    form = PlanActionForm(obj=plan_action)
+    
+    # Pré-remplir les choix
+    utilisateurs = get_client_filter(User).filter_by(is_active=True).all()
+    form.responsable_id.choices = [(0, 'Non assigné')] + \
+        [(u.id, f"{u.username} - {u.role}") for u in utilisateurs]
+    
+    return render_template('plans_action/form_modifier.html',
+                         form=form,
+                         plan=plan_action,
+                         action='modifier')
 
 @app.route('/api/audit/<int:audit_id>/timeline')
 @login_required
