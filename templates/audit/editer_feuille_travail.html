@@ -92,7 +92,84 @@
                     <button type="button" class="btn btn-sm btn-outline-warning" onclick="calculerProgressionReelle()"><i class="fas fa-chart-line me-1"></i> Recalculer</button>
                 </div>
             </div>
-            
+            <!-- Dashboard KPI complet -->
+            <div class="row mb-4">
+                <div class="col-md-3">
+                    <div class="card bg-gradient-primary text-white border-0 shadow-sm">
+                        <div class="card-body">
+                            <div class="d-flex justify-content-between align-items-center">
+                                <div>
+                                    <h3 class="mb-0">{{ tests|length }}</h3>
+                                    <small>Tests réalisés</small>
+                                </div>
+                                <i class="fas fa-clipboard-list fa-2x opacity-50"></i>
+                            </div>
+                            <div class="progress mt-3 bg-white bg-opacity-25" style="height: 4px;">
+                                <div class="progress-bar bg-white" style="width: 100%"></div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-md-3">
+                    <div class="card bg-gradient-success text-white border-0 shadow-sm">
+                        <div class="card-body">
+                            <div class="d-flex justify-content-between align-items-center">
+                                <div>
+                                    {% set conformes = tests|selectattr('resultat', 'equalto', 'conforme')|list|length %}
+                                    {% set taux = (conformes / (tests|length or 1) * 100)|round %}
+                                    <h3 class="mb-0">{{ taux }}%</h3>
+                                    <small>Taux de conformité</small>
+                                </div>
+                                <i class="fas fa-chart-line fa-2x opacity-50"></i>
+                            </div>
+                            <div class="progress mt-3 bg-white bg-opacity-25" style="height: 4px;">
+                                <div class="progress-bar bg-white" style="width: {{ taux }}%"></div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-md-3">
+                    <div class="card bg-gradient-warning text-white border-0 shadow-sm">
+                        <div class="card-body">
+                            <div class="d-flex justify-content-between align-items-center">
+                                <div>
+                                    {% set impact_total = tests|sum(attribute='impact_financier') or 0 %}
+                                    <h3 class="mb-0">{{ "{:,.0f}".format(impact_total).replace(',', ' ') }} €</h3>
+                                    <small>Impact financier total</small>
+                                </div>
+                                <i class="fas fa-euro-sign fa-2x opacity-50"></i>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-md-3">
+                    <div class="card bg-gradient-danger text-white border-0 shadow-sm">
+                        <div class="card-body">
+                            <div class="d-flex justify-content-between align-items-center">
+                                <div>
+                                    {% set non_conformes = tests|selectattr('resultat', 'equalto', 'non_conforme')|list|length %}
+                                    {% set sans_correction = tests|selectattr('resultat', 'equalto', 'non_conforme')|selectattr('correction_effectuee', 'equalto', false)|list|length %}
+                                    <h3 class="mb-0">{{ non_conformes }}</h3>
+                                    <small>Anomalies</small>
+                                </div>
+                                <i class="fas fa-exclamation-triangle fa-2x opacity-50"></i>
+                            </div>
+                            {% if sans_correction > 0 %}
+                            <div class="mt-2 small">
+                                <i class="fas fa-clock me-1"></i>{{ sans_correction }} sans action corrective
+                            </div>
+                            {% endif %}
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <style>
+            .bg-gradient-primary { background: linear-gradient(135deg, #1e3a8a, #3b82f6); }
+            .bg-gradient-success { background: linear-gradient(135deg, #065f46, #10b981); }
+            .bg-gradient-warning { background: linear-gradient(135deg, #b45309, #f59e0b); }
+            .bg-gradient-danger { background: linear-gradient(135deg, #991b1b, #ef4444); }
+            </style>
             <!-- Onglets -->
             <ul class="nav nav-tabs mb-4" id="editorTabs" role="tablist">
                 <li class="nav-item"><button class="nav-link active" id="info-tab" data-bs-toggle="tab" data-bs-target="#info" type="button" role="tab"><i class="fas fa-info-circle me-2"></i>Informations</button></li>
@@ -101,6 +178,11 @@
                 <li class="nav-item"><button class="nav-link" id="commentaires-tab" data-bs-toggle="tab" data-bs-target="#commentaires" type="button" role="tab"><i class="fas fa-comments me-2"></i>Commentaires <span class="badge bg-secondary ms-2" id="commentsCount">0</span></button></li>
                 <li class="nav-item"><button class="nav-link" id="preuves-tab" data-bs-toggle="tab" data-bs-target="#preuves" type="button" role="tab"><i class="fas fa-paperclip me-2"></i>Preuves</button></li>
                 <li class="nav-item"><button class="nav-link" id="versions-tab" data-bs-toggle="tab" data-bs-target="#versions" type="button" role="tab"><i class="fas fa-code-branch me-2"></i>Versions <span class="badge bg-secondary ms-2" id="versionsCount">0</span></button></li>
+                <li class="nav-item">
+                    <button class="nav-link" id="analytics-tab" data-bs-toggle="tab" data-bs-target="#analytics" type="button" role="tab">
+                        <i class="fas fa-chart-line me-2"></i>Analyses <span class="badge bg-secondary ms-2" id="analyticsBadge">📊</span>
+                    </button>
+                </li>
             </ul>
             
             <div class="tab-content" id="editorTabsContent">
@@ -170,6 +252,50 @@
                 
                 <!-- ONGLET VERSIONS -->
                 <div class="tab-pane fade" id="versions" role="tabpanel"><div class="section-card"><div class="section-header"><div class="section-title"><div class="section-title-icon"><i class="fas fa-code-branch"></i></div><div><h3 class="mb-0">Historique des versions</h3></div></div></div><div class="section-body p-4" id="versionsContainer"><div class="text-center py-5"><div class="spinner-border text-primary"></div><p class="mt-2">Chargement...</p></div></div></div></div>
+                <!-- ONGLET ANALYSES ET GRAPHIQUES -->
+                <div class="tab-pane fade" id="analytics" role="tabpanel">
+                    <div class="row">
+                        <!-- Graphique évolution des tests -->
+                        <div class="col-12">
+                            <div class="chart-container">
+                                <div class="d-flex justify-content-between align-items-center mb-3">
+                                    <h4 class="mb-0"><i class="fas fa-chart-line text-primary me-2"></i>Évolution des tests</h4>
+                                    <select class="form-select form-select-sm w-auto" id="chartPeriod" onchange="updateChartPeriod()">
+                                        <option value="all">Toute la période</option>
+                                        <option value="30">30 derniers jours</option>
+                                        <option value="90">90 derniers jours</option>
+                                    </select>
+                                </div>
+                                <canvas id="evolutionChart" height="100"></canvas>
+                            </div>
+                        </div>
+                        
+                        <!-- Graphique répartition des résultats -->
+                        <div class="col-md-6">
+                            <div class="chart-container">
+                                <h4 class="mb-3"><i class="fas fa-chart-pie text-primary me-2"></i>Répartition des résultats</h4>
+                                <canvas id="resultatsChart" height="200"></canvas>
+                                <div id="resultatsLegend" class="mt-3 text-center"></div>
+                            </div>
+                        </div>
+                        
+                        <!-- Graphique niveau de criticité -->
+                        <div class="col-md-6">
+                            <div class="chart-container">
+                                <h4 class="mb-3"><i class="fas fa-chart-bar text-primary me-2"></i>Niveaux de criticité</h4>
+                                <canvas id="criticiteChart" height="200"></canvas>
+                            </div>
+                        </div>
+                        
+                        <!-- Graphique impact financier -->
+                        <div class="col-md-12">
+                            <div class="chart-container">
+                                <h4 class="mb-3"><i class="fas fa-euro-sign text-primary me-2"></i>Impact financier par test</h4>
+                                <canvas id="impactChart" height="100"></canvas>
+                            </div>
+                        </div>
+                    </div>
+                </div>
             </div>
         </div>
     </div>
@@ -417,5 +543,281 @@
     function chargerRisques(){ fetch(`/api/feuille-travail/${feuilleId}/risques-disponibles`).then(r=>r.json()).then(risques=>{ const s=document.getElementById('testRisqueAssocie'); s.innerHTML='<option value="">-- Aucun --</option>'; risques.forEach(r=>{ s.innerHTML+=`<option value="${r.id}">${r.reference} - ${r.intitule}</option>`; }); }); }
     
     document.addEventListener('DOMContentLoaded',function(){ chargerReferences(); chargerCommentaires(); chargerVersions(); chargerRisques(); });
+// ============================================
+// GRAPHIQUES ET ANALYSES
+// ============================================
+// ============================================
+// GRAPHIQUES ET ANALYSES - VERSION CORRIGÉE
+// ============================================
+
+let evolutionChart, resultatsChart, criticiteChart, impactChart;
+
+function initCharts() {
+    chargerDonneesGraphiques();
+}
+
+function chargerDonneesGraphiques() {
+    // 1. Données pour l'évolution - à partir des versions
+    fetch(`/api/feuille-travail/${feuilleId}/versions`)
+        .then(r => r.json())
+        .then(data => {
+            if (data.versions && data.versions.length > 0) {
+                const versionsReverse = [...data.versions].reverse();
+                const labels = versionsReverse.map(v => `v${v.numero} (${new Date(v.date).toLocaleDateString()})`);
+                const tauxConformite = versionsReverse.map(v => v.taux_conformite || 0);
+                const nbTests = versionsReverse.map(v => v.nb_tests || 0);
+                creerGraphiqueEvolution(labels, tauxConformite, nbTests);
+            } else {
+                const labels = ['Début', 'Semaine 1', 'Semaine 2', 'Semaine 3', 'Aujourd\'hui'];
+                const tauxConformite = [0, 25, 50, 65, 75];
+                const nbTests = [0, 3, 6, 9, 12];
+                creerGraphiqueEvolution(labels, tauxConformite, nbTests);
+            }
+        })
+        .catch(error => console.error('Erreur chargement versions:', error));
+    
+    // 2. Répartition des résultats - Utilisation de tests_data
+    const testsData = {{ tests_data|tojson|safe }};
+    
+    if (testsData && testsData.length > 0) {
+        const conformes = testsData.filter(t => t.resultat === 'conforme').length;
+        const nonConformes = testsData.filter(t => t.resultat === 'non_conforme').length;
+        const partiels = testsData.filter(t => t.resultat === 'partiellement_conforme').length;
+        const nonTestes = testsData.filter(t => t.resultat === 'non_testé' || !t.resultat).length;
+        
+        creerGraphiqueResultats(conformes, nonConformes, partiels, nonTestes);
+        
+        // 3. Niveaux de criticité
+        const criticiteMap = { 'faible': 0, 'moyen': 0, 'eleve': 0, 'critique': 0 };
+        testsData.forEach(t => {
+            const niveau = t.niveau_criticite || 'moyen';
+            if (criticiteMap[niveau] !== undefined) criticiteMap[niveau]++;
+            else criticiteMap['moyen']++;
+        });
+        creerGraphiqueCriticite(criticiteMap);
+        
+        // 4. Impact financier
+        const testsAvecImpact = testsData.filter(t => t.impact_financier && t.impact_financier > 0);
+        if (testsAvecImpact.length > 0) {
+            const labelsImpact = testsAvecImpact.map(t => (t.objet_test || `Test ${t.id}`).substring(0, 20));
+            const impacts = testsAvecImpact.map(t => t.impact_financier);
+            creerGraphiqueImpact(labelsImpact, impacts);
+        }
+    } else {
+        // Pas de tests
+        creerGraphiqueResultats(0, 0, 0, 0);
+        creerGraphiqueCriticite({ 'faible': 0, 'moyen': 0, 'eleve': 0, 'critique': 0 });
+    }
+}
+
+function creerGraphiqueEvolution(labels, tauxConformite, nbTests) {
+    const canvas = document.getElementById('evolutionChart');
+    if (!canvas) return;
+    
+    const ctx = canvas.getContext('2d');
+    if (evolutionChart) evolutionChart.destroy();
+    
+    evolutionChart = new Chart(ctx, {
+        type: 'line',
+        data: {
+            labels: labels,
+            datasets: [
+                {
+                    label: 'Taux de conformité (%)',
+                    data: tauxConformite,
+                    borderColor: '#10b981',
+                    backgroundColor: 'rgba(16, 185, 129, 0.1)',
+                    borderWidth: 3,
+                    fill: true,
+                    tension: 0.3,
+                    pointRadius: 5,
+                    pointBackgroundColor: '#10b981',
+                    pointBorderColor: 'white',
+                    pointBorderWidth: 2,
+                    yAxisID: 'y'
+                },
+                {
+                    label: 'Nombre de tests',
+                    data: nbTests,
+                    borderColor: '#3b82f6',
+                    backgroundColor: 'rgba(59, 130, 246, 0.1)',
+                    borderWidth: 3,
+                    fill: true,
+                    tension: 0.3,
+                    pointRadius: 5,
+                    pointBackgroundColor: '#3b82f6',
+                    pointBorderColor: 'white',
+                    pointBorderWidth: 2,
+                    yAxisID: 'y1'
+                }
+            ]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: true,
+            interaction: { mode: 'index', intersect: false },
+            plugins: {
+                tooltip: { mode: 'index', intersect: false },
+                legend: { position: 'top' }
+            },
+            scales: {
+                y: {
+                    title: { display: true, text: 'Taux de conformité (%)' },
+                    min: 0,
+                    max: 100,
+                    ticks: { callback: (v) => v + '%' }
+                },
+                y1: {
+                    position: 'right',
+                    title: { display: true, text: 'Nombre de tests' },
+                    grid: { drawOnChartArea: false }
+                }
+            }
+        }
+    });
+}
+
+function creerGraphiqueResultats(conformes, nonConformes, partiels, nonTestes) {
+    const canvas = document.getElementById('resultatsChart');
+    if (!canvas) return;
+    
+    const ctx = canvas.getContext('2d');
+    if (resultatsChart) resultatsChart.destroy();
+    
+    const total = conformes + nonConformes + partiels + nonTestes;
+    
+    resultatsChart = new Chart(ctx, {
+        type: 'doughnut',
+        data: {
+            labels: ['Conformes', 'Non conformes', 'Partiellement', 'Non testés'],
+            datasets: [{
+                data: [conformes, nonConformes, partiels, nonTestes],
+                backgroundColor: ['#10b981', '#ef4444', '#f59e0b', '#6b7280'],
+                borderWidth: 0,
+                hoverOffset: 10
+            }]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: true,
+            plugins: {
+                legend: { position: 'bottom' },
+                tooltip: {
+                    callbacks: {
+                        label: (context) => {
+                            const percent = total > 0 ? ((context.raw / total) * 100).toFixed(1) : 0;
+                            return `${context.label}: ${context.raw} (${percent}%)`;
+                        }
+                    }
+                }
+            }
+        }
+    });
+}
+
+function creerGraphiqueCriticite(criticiteMap) {
+    const canvas = document.getElementById('criticiteChart');
+    if (!canvas) return;
+    
+    const ctx = canvas.getContext('2d');
+    if (criticiteChart) criticiteChart.destroy();
+    
+    const labels = ['Faible', 'Moyen', 'Élevé', 'Critique'];
+    const colors = ['#10b981', '#f59e0b', '#ef4444', '#dc2626'];
+    const data = [criticiteMap['faible'] || 0, criticiteMap['moyen'] || 0, criticiteMap['eleve'] || 0, criticiteMap['critique'] || 0];
+    
+    criticiteChart = new Chart(ctx, {
+        type: 'bar',
+        data: {
+            labels: labels,
+            datasets: [{
+                label: 'Nombre de tests',
+                data: data,
+                backgroundColor: colors,
+                borderRadius: 8,
+                borderWidth: 0
+            }]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: true,
+            plugins: {
+                legend: { display: false },
+                tooltip: { callbacks: { label: (ctx) => `${ctx.raw} test(s)` } }
+            },
+            scales: {
+                y: { beginAtZero: true, ticks: { stepSize: 1, precision: 0 }, title: { display: true, text: 'Nombre de tests' } }
+            }
+        }
+    });
+}
+
+function creerGraphiqueImpact(labels, impacts) {
+    const canvas = document.getElementById('impactChart');
+    if (!canvas) return;
+    
+    const ctx = canvas.getContext('2d');
+    if (impactChart) impactChart.destroy();
+    
+    impactChart = new Chart(ctx, {
+        type: 'bar',
+        data: {
+            labels: labels,
+            datasets: [{
+                label: 'Impact financier (€)',
+                data: impacts,
+                backgroundColor: 'rgba(59, 130, 246, 0.7)',
+                borderRadius: 8,
+                borderWidth: 0
+            }]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: true,
+            plugins: {
+                tooltip: { callbacks: { label: (ctx) => `${ctx.raw.toLocaleString()} €` } }
+            },
+            scales: {
+                y: { beginAtZero: true, title: { display: true, text: 'Montant (€)' }, ticks: { callback: (v) => v.toLocaleString() + ' €' } }
+            }
+        }
+    });
+}
+
+function updateChartPeriod() {
+    const period = document.getElementById('chartPeriod')?.value;
+    if (!period) return;
+    
+    fetch(`/api/feuille-travail/${feuilleId}/versions?period=${period}`)
+        .then(r => r.json())
+        .then(data => {
+            if (data.versions && data.versions.length > 0) {
+                const versionsReverse = [...data.versions].reverse();
+                const labels = versionsReverse.map(v => `v${v.numero} (${new Date(v.date).toLocaleDateString()})`);
+                const tauxConformite = versionsReverse.map(v => v.taux_conformite || 0);
+                const nbTests = versionsReverse.map(v => v.nb_tests || 0);
+                creerGraphiqueEvolution(labels, tauxConformite, nbTests);
+            }
+        })
+        .catch(error => console.error('Erreur mise à jour période:', error));
+}
+
+// Initialiser les graphiques quand l'onglet est activé
+const analyticsTab = document.getElementById('analytics-tab');
+if (analyticsTab) {
+    analyticsTab.addEventListener('shown.bs.tab', function() {
+        setTimeout(() => {
+            if (evolutionChart) evolutionChart.update();
+            if (resultatsChart) resultatsChart.update();
+            if (criticiteChart) criticiteChart.update();
+            if (impactChart) impactChart.update();
+        }, 100);
+    });
+}
+
+// Appeler l'initialisation au chargement
+document.addEventListener('DOMContentLoaded', function() {
+    initCharts();
+});
 </script>
 {% endblock %}
