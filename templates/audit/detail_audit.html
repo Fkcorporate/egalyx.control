@@ -755,13 +755,15 @@
             </button>
         </li>
     <!-- Correction pour l'affichage du badge dans l'onglet -->
+        <!-- Dans la liste des onglets, remplacez l'onglet Approbation par : -->
         <li class="nav-item" role="presentation">
             <button class="nav-link" id="approbation-tab" data-bs-toggle="tab" data-bs-target="#approbation" type="button" role="tab">
                 <i class="fas fa-check-circle me-2"></i>{{ t("Approbation") }}
-                
-                <span class="badge bg-secondary ms-2" id="workflow-badge">
-                    <i class="fas fa-spinner fa-spin"></i> Chargement...
-                </span>
+                {% if workflow %}
+                <span class="badge bg-{{ workflow.get_couleur_etape() }} ms-2">{{ workflow.get_etape_label() }}</span>
+                {% else %}
+                <span class="badge bg-secondary ms-2">📝 Non démarré</span>
+                {% endif %}
             </button>
         </li>
         <!-- Dans la liste des onglets, après l'onglet Preuves -->
@@ -1699,6 +1701,7 @@
         </div>
     </div>
     <!-- Onglet Approbation (à ajouter après l'onglet Preuves et avant Feuilles) -->
+    <!-- Onglet Approbation -->
     <div class="tab-pane fade" id="approbation" role="tabpanel">
         <div class="section-card">
             <div class="section-header">
@@ -1712,171 +1715,160 @@
                     </div>
                 </div>
                 <div class="section-badge">
-                    <i class="fas fa-{{ 'check' if workflow.etape_actuelle in ['approuve', 'valide'] else 'clock' }} me-1"></i>
+                    <i class="fas fa-{{ 'check' if workflow and workflow.etape_actuelle in ['approuve', 'valide'] else 'clock' }} me-1"></i>
                     {{ workflow.get_etape_label() if workflow else "📝 Brouillon" }}
                 </div>
             </div>
             <div class="section-body">
                 
                 <!-- Timeline horizontale -->
-                <!-- Dans l'onglet Approbation, remplacez la section "Actions selon statut" -->
-
-                <div class="row mt-4">
-                    <div class="col-12">
-                        
-                        <!-- CAS 1 : AUDIT EN BROUILLON - Le créateur peut envoyer en relecture -->
-                        {% if workflow.etape_actuelle == 'brouillon' %}
-                        <div class="fk-alert fk-alert-info">
-                            <i class="fas fa-info-circle me-2"></i>
-                            {{ t("L'audit est en brouillon. Une fois terminé, cliquez sur le bouton ci-dessous pour l'envoyer en relecture.") }}
+                <div class="approval-timeline-container">
+                    <div class="approval-timeline">
+                        <div class="step {% if workflow and workflow.etape_actuelle == 'brouillon' %}active{% endif %} {% if workflow and workflow.etape_actuelle in ['en_relecture', 'approuve', 'valide'] %}completed{% endif %}">
+                            <div class="step-marker"><i class="fas fa-pen"></i></div>
+                            <div class="step-content">
+                                <div class="step-label">{{ t("Brouillon") }}</div>
+                                <div class="step-desc">{{ t("Rédaction en cours") }}</div>
+                            </div>
                         </div>
-                        
-                        <!-- Vérifier si l'utilisateur est le créateur ou a les droits -->
-                        {% if current_user.id == audit.created_by or current_user.is_client_admin or current_user.role == 'super_admin' %}
-                        <button class="btn-elegant btn-primary" onclick="envoyerRelecture()">
-                            <i class="fas fa-paper-plane me-2"></i>{{ t("Envoyer en relecture") }}
-                        </button>
-                        {% else %}
-                        <div class="alert alert-secondary">
-                            <i class="fas fa-lock me-2"></i>
-                            Seul le créateur de l'audit peut l'envoyer en relecture.
+                        <div class="step {% if workflow and workflow.etape_actuelle == 'en_relecture' %}active{% endif %} {% if workflow and workflow.etape_actuelle in ['approuve', 'valide'] %}completed{% endif %}">
+                            <div class="step-marker"><i class="fas fa-eye"></i></div>
+                            <div class="step-content">
+                                <div class="step-label">{{ t("Relecture") }}</div>
+                                <div class="step-desc">{{ t("Validation Niveau 1") }}</div>
+                            </div>
                         </div>
-                        {% endif %}
-                        
-                        <!-- CAS 2 : EN ATTENTE DE REELECTURE (NIVEAU 1) -->
-                        {% elif workflow.etape_actuelle == 'en_relecture' %}
-                        <div class="fk-alert fk-alert-warning">
-                            <i class="fas fa-clock me-2"></i>
-                            <strong>{{ t("Audit en attente de validation niveau 1") }}</strong><br>
-                            {{ t("Veuillez examiner l'audit et soit l'approuver, soit le rejeter.") }}
+                        <div class="step {% if workflow and workflow.etape_actuelle == 'approuve' %}active{% endif %} {% if workflow and workflow.etape_actuelle == 'valide' %}completed{% endif %}">
+                            <div class="step-marker"><i class="fas fa-stamp"></i></div>
+                            <div class="step-content">
+                                <div class="step-label">{{ t("Approbation") }}</div>
+                                <div class="step-desc">{{ t("Validation Direction") }}</div>
+                            </div>
                         </div>
-                        
-                        <!-- TOUJOURS AFFICHER LES BOUTONS POUR ADMIN CLIENT ET SUPER ADMIN -->
-                        {% if current_user.is_client_admin or current_user.role == 'super_admin' or current_user.id == audit.responsable_id %}
-                        <div class="btn-group">
-                            <button class="btn-elegant btn-success" onclick="approuverNiveau1()">
-                                <i class="fas fa-check me-2"></i>{{ t("Approuver (Niveau 1)") }}
-                            </button>
-                            <button class="btn-elegant btn-danger" onclick="rejeterAudit()">
-                                <i class="fas fa-times me-2"></i>{{ t("Rejeter") }}
-                            </button>
+                        <div class="step {% if workflow and workflow.etape_actuelle == 'valide' %}active{% endif %}">
+                            <div class="step-marker"><i class="fas fa-check-double"></i></div>
+                            <div class="step-content">
+                                <div class="step-label">{{ t("Validé") }}</div>
+                                <div class="step-desc">{{ t("Audit finalisé") }}</div>
+                            </div>
                         </div>
-                        {% else %}
-                        <div class="alert alert-secondary">
-                            <i class="fas fa-lock me-2"></i>
-                            Seul un administrateur ou le responsable de l'audit peut valider.
-                        </div>
-                        {% endif %}
-                        
-                        <!-- CAS 3 : APPROUVE NIVEAU 1 - EN ATTENTE APPROBATION FINALE -->
-                        {% elif workflow.etape_actuelle == 'approuve' %}
-                        <div class="fk-alert fk-alert-warning">
-                            <i class="fas fa-clock me-2"></i>
-                            <strong>{{ t("Audit en attente de validation niveau 2 (Direction)") }}</strong><br>
-                            {{ t("L'audit a été approuvé niveau 1. Il nécessite maintenant l'approbation de la direction.") }}
-                        </div>
-                        
-                        {% if current_user.is_client_admin or current_user.role == 'super_admin' %}
-                        <div class="btn-group">
-                            <button class="btn-elegant btn-success" onclick="approuverNiveau2()">
-                                <i class="fas fa-check-double me-2"></i>{{ t("Approuver (Niveau 2 - Final)") }}
-                            </button>
-                            <button class="btn-elegant btn-danger" onclick="rejeterAudit()">
-                                <i class="fas fa-times me-2"></i>{{ t("Rejeter") }}
-                            </button>
-                        </div>
-                        {% else %}
-                        <div class="alert alert-secondary">
-                            <i class="fas fa-lock me-2"></i>
-                            Seul un administrateur ou la direction peut valider l'approbation finale.
-                        </div>
-                        {% endif %}
-                        
-                        <!-- CAS 4 : AUDIT REJETE -->
-                        {% elif workflow.etape_actuelle == 'rejete' %}
-                        <div class="fk-alert fk-alert-danger">
-                            <i class="fas fa-exclamation-triangle me-2"></i>
-                            <strong>{{ t("Audit rejeté") }}</strong><br>
-                            {{ t("Raison") }} : {{ workflow.commentaire_rejet or 'Non spécifiée' }}
-                        </div>
-                        
-                        {% if current_user.id == audit.created_by or current_user.is_client_admin %}
-                        <button class="btn-elegant btn-warning" onclick="envoyerRelecture()">
-                            <i class="fas fa-sync me-2"></i>{{ t("Corriger et renvoyer") }}
-                        </button>
-                        {% endif %}
-                        
-                        <!-- CAS 5 : AUDIT VALIDE -->
-                        {% elif workflow.etape_actuelle == 'valide' %}
-                        <div class="fk-alert fk-alert-success">
-                            <i class="fas fa-check-circle me-2"></i>
-                            <strong>{{ t("Audit validé !") }}</strong><br>
-                            {{ t("L'audit a été approuvé et est maintenant finalisé.") }}
-                        </div>
-                        {% endif %}
-                        
                     </div>
                 </div>
                 
                 <!-- Actions selon statut -->
                 <div class="row mt-4">
                     <div class="col-12">
-                        {% if workflow and workflow.etape_actuelle == 'brouillon' %}
-                        <div class="fk-alert fk-alert-info">
-                            <i class="fas fa-info-circle me-2"></i>
-                            {{ t("L'audit est en brouillon. Une fois terminé, envoyez-le en relecture.") }}
-                        </div>
-                        <button class="btn-elegant btn-primary" onclick="envoyerRelecture()">
-                            <i class="fas fa-paper-plane me-2"></i>{{ t("Envoyer en relecture") }}
-                        </button>
-                        
-                        {% elif workflow and workflow.etape_actuelle == 'en_relecture' and current_user.has_permission('can_approve_audit_level1') %}
-                        <div class="fk-alert fk-alert-warning">
-                            <i class="fas fa-clock me-2"></i>
-                            {{ t("L'audit est en attente de validation niveau 1.") }}
-                        </div>
-                        <div class="btn-group">
-                            <button class="btn-elegant btn-success" onclick="approuverNiveau1()">
-                                <i class="fas fa-check me-2"></i>{{ t("Approuver (Niveau 1)") }}
+                        {% if not workflow %}
+                            <div class="fk-alert fk-alert-info">
+                                <i class="fas fa-info-circle me-2"></i>
+                                {{ t("Workflow d'approbation en cours d'initialisation...") }}
+                            </div>
+                        {% elif workflow.etape_actuelle == 'brouillon' %}
+                            <div class="fk-alert fk-alert-info">
+                                <i class="fas fa-info-circle me-2"></i>
+                                {{ t("L'audit est en brouillon. Une fois terminé, cliquez sur le bouton ci-dessous pour l'envoyer en relecture.") }}
+                            </div>
+                            {% if current_user.id == audit.created_by or current_user.is_client_admin or current_user.role == 'super_admin' %}
+                            <button class="btn-elegant btn-primary" onclick="envoyerRelecture()">
+                                <i class="fas fa-paper-plane me-2"></i>{{ t("Envoyer en relecture") }}
                             </button>
-                            <button class="btn-elegant btn-danger" onclick="rejeterAudit()">
-                                <i class="fas fa-times me-2"></i>{{ t("Rejeter") }}
+                            {% else %}
+                            <div class="alert alert-secondary">
+                                <i class="fas fa-lock me-2"></i>
+                                Seul le créateur de l'audit peut l'envoyer en relecture.
+                            </div>
+                            {% endif %}
+                            
+                        {% elif workflow.etape_actuelle == 'en_relecture' %}
+                            <div class="fk-alert fk-alert-warning">
+                                <i class="fas fa-clock me-2"></i>
+                                <strong>{{ t("Audit en attente de validation niveau 1") }}</strong><br>
+                                {{ t("Veuillez examiner l'audit et soit l'approuver, soit le rejeter.") }}
+                            </div>
+                            {% if current_user.is_client_admin or current_user.role == 'super_admin' or current_user.id == audit.responsable_id %}
+                            <div class="btn-group">
+                                <button class="btn-elegant btn-success" onclick="approuverNiveau1()">
+                                    <i class="fas fa-check me-2"></i>{{ t("Approuver (Niveau 1)") }}
+                                </button>
+                                <button class="btn-elegant btn-danger" onclick="rejeterAudit()">
+                                    <i class="fas fa-times me-2"></i>{{ t("Rejeter") }}
+                                </button>
+                            </div>
+                            {% else %}
+                            <div class="alert alert-secondary">
+                                <i class="fas fa-lock me-2"></i>
+                                Seul un administrateur ou le responsable de l'audit peut valider.
+                            </div>
+                            {% endif %}
+                            
+                        {% elif workflow.etape_actuelle == 'approuve' %}
+                            <div class="fk-alert fk-alert-warning">
+                                <i class="fas fa-clock me-2"></i>
+                                <strong>{{ t("Audit en attente de validation niveau 2 (Direction)") }}</strong><br>
+                                {{ t("L'audit a été approuvé niveau 1. Il nécessite maintenant l'approbation de la direction.") }}
+                            </div>
+                            {% if current_user.is_client_admin or current_user.role == 'super_admin' %}
+                            <div class="btn-group">
+                                <button class="btn-elegant btn-success" onclick="approuverNiveau2()">
+                                    <i class="fas fa-check-double me-2"></i>{{ t("Approuver (Niveau 2 - Final)") }}
+                                </button>
+                                <button class="btn-elegant btn-danger" onclick="rejeterAudit()">
+                                    <i class="fas fa-times me-2"></i>{{ t("Rejeter") }}
+                                </button>
+                            </div>
+                            {% else %}
+                            <div class="alert alert-secondary">
+                                <i class="fas fa-lock me-2"></i>
+                                Seul un administrateur ou la direction peut valider l'approbation finale.
+                            </div>
+                            {% endif %}
+                            
+                        {% elif workflow.etape_actuelle == 'rejete' %}
+                            <div class="fk-alert fk-alert-danger">
+                                <i class="fas fa-exclamation-triangle me-2"></i>
+                                <strong>{{ t("Audit rejeté") }}</strong><br>
+                                {{ t("Raison") }} : {{ workflow.commentaire_rejet or 'Non spécifiée' }}
+                            </div>
+                            {% if current_user.id == audit.created_by or current_user.is_client_admin %}
+                            <button class="btn-elegant btn-warning" onclick="envoyerRelecture()">
+                                <i class="fas fa-sync me-2"></i>{{ t("Corriger et renvoyer") }}
                             </button>
+                            {% endif %}
+                            
+                        {% elif workflow.etape_actuelle == 'valide' %}
+                            <div class="fk-alert fk-alert-success">
+                                <i class="fas fa-check-circle me-2"></i>
+                                <strong>{{ t("Audit validé !") }}</strong><br>
+                                {{ t("L'audit a été approuvé et est maintenant finalisé.") }}
+                            </div>
+                        {% endif %}
+                    </div>
+                </div>
+                
+                <!-- Approbateurs spécifiques -->
+                {% if workflow and (workflow.approbateur_niveau1_nom or workflow.approbateur_niveau2_nom) %}
+                <div class="mt-4">
+                    <h6><i class="fas fa-user-shield me-2"></i>{{ t("Approbateurs désignés") }}</h6>
+                    <div class="row">
+                        {% if workflow.approbateur_niveau1_nom %}
+                        <div class="col-md-6">
+                            <div class="alert alert-info">
+                                <i class="fas fa-user-check me-2"></i>
+                                <strong>{{ t("Niveau 1") }} :</strong> {{ workflow.approbateur_niveau1_nom }}
+                            </div>
                         </div>
-                        
-                        {% elif workflow and workflow.etape_actuelle == 'approuve' and current_user.has_permission('can_approve_audit_level2') %}
-                        <div class="fk-alert fk-alert-warning">
-                            <i class="fas fa-clock me-2"></i>
-                            {{ t("L'audit est en attente de validation niveau 2.") }}
-                        </div>
-                        <div class="btn-group">
-                            <button class="btn-elegant btn-success" onclick="approuverNiveau2()">
-                                <i class="fas fa-check-double me-2"></i>{{ t("Approuver (Niveau 2)") }}
-                            </button>
-                            <button class="btn-elegant btn-danger" onclick="rejeterAudit()">
-                                <i class="fas fa-times me-2"></i>{{ t("Rejeter") }}
-                            </button>
-                        </div>
-                        
-                        {% elif workflow and workflow.etape_actuelle == 'rejete' %}
-                        <div class="fk-alert fk-alert-danger">
-                            <i class="fas fa-exclamation-triangle me-2"></i>
-                            <strong>{{ t("Audit rejeté") }}</strong><br>
-                            {{ t("Raison") }} : {{ workflow.commentaire_rejet or 'Non spécifiée' }}
-                        </div>
-                        <button class="btn-elegant btn-warning" onclick="envoyerRelecture()">
-                            <i class="fas fa-sync me-2"></i>{{ t("Corriger et renvoyer") }}
-                        </button>
-                        
-                        {% elif workflow and workflow.etape_actuelle == 'valide' %}
-                        <div class="fk-alert fk-alert-success">
-                            <i class="fas fa-check-circle me-2"></i>
-                            <strong>{{ t("Audit validé !") }}</strong><br>
-                            {{ t("L'audit a été approuvé et est maintenant finalisé.") }}
+                        {% endif %}
+                        {% if workflow.approbateur_niveau2_nom %}
+                        <div class="col-md-6">
+                            <div class="alert alert-info">
+                                <i class="fas fa-user-shield me-2"></i>
+                                <strong>{{ t("Niveau 2") }} :</strong> {{ workflow.approbateur_niveau2_nom }}
+                            </div>
                         </div>
                         {% endif %}
                     </div>
                 </div>
+                {% endif %}
                 
                 <!-- Commentaires d'approbation -->
                 {% if workflow and (workflow.commentaire_relecture or workflow.commentaire_approbation_niveau1 or workflow.commentaire_approbation_niveau2) %}
@@ -1931,7 +1923,7 @@
                             <tbody>
                                 {% for etape in workflow.historique_etapes|reverse %}
                                 <tr>
-                                    <td><small>{{ etape.date }}</small></td>
+                                    <td><small>{{ etape.date.split('T')[0] }} {{ etape.date.split('T')[1][:8] if etape.date.split('T')|length > 1 else '' }}</small></td>
                                     <td>{{ etape.ancienne_etape }} → {{ etape.nouvelle_etape }}</td>
                                     <td>{{ etape.utilisateur_nom }}</td>
                                     <td>{{ etape.commentaire or '-' }}</td>
