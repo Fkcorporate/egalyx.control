@@ -10391,3 +10391,854 @@ class IncidentHistorique(db.Model):
     
     def __repr__(self):
         return f'<IncidentHistorique {self.id}: {self.action} pour incident {self.incident_id}>'
+
+
+# ============================================
+# WORKFLOW D'APPROBATION POUR LES AUDITS
+# ============================================
+
+class WorkflowApprobation(db.Model):
+    """Workflow d'approbation pour les audits avec approbateurs spécifiques"""
+    __tablename__ = 'workflows_approbation'
+    
+    id = db.Column(db.Integer, primary_key=True)
+    audit_id = db.Column(db.Integer, db.ForeignKey('audits.id'), nullable=False)
+    
+    # Étape actuelle du workflow
+    etape_actuelle = db.Column(db.String(50), default='brouillon')  # brouillon, en_relecture, approuve, valide, rejete
+    historique_etapes = db.Column(db.JSON, default=[])
+    
+    # ============================================
+    # APPROBATEURS SPÉCIFIQUES (NOUVEAU)
+    # ============================================
+    approbateur_niveau1_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=True)
+    approbateur_niveau2_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=True)
+    approbateur_niveau1_nom = db.Column(db.String(200), nullable=True)
+    approbateur_niveau2_nom = db.Column(db.String(200), nullable=True)
+    
+    # Dates importantes
+    date_envoi_relecture = db.Column(db.DateTime, nullable=True)
+    date_approbation_niveau1 = db.Column(db.DateTime, nullable=True)
+    date_approbation_niveau2 = db.Column(db.DateTime, nullable=True)
+    date_rejet = db.Column(db.DateTime, nullable=True)
+    date_validation_finale = db.Column(db.DateTime, nullable=True)
+    
+    # Commentaires
+    commentaire_relecture = db.Column(db.Text, nullable=True)
+    commentaire_approbation_niveau1 = db.Column(db.Text, nullable=True)
+    commentaire_approbation_niveau2 = db.Column(db.Text, nullable=True)
+    commentaire_rejet = db.Column(db.Text, nullable=True)
+    
+    # Notifications
+    notification_envoyee_relecture = db.Column(db.Boolean, default=False)
+    notification_envoyee_approbation_niveau1 = db.Column(db.Boolean, default=False)
+    notification_envoyee_approbation_niveau2 = db.Column(db.Boolean, default=False)
+    
+    # Multi-tenant
+    client_id = db.Column(db.Integer, db.ForeignKey('clients.id'), nullable=False)
+    created_by = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=True)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    
+    # Relations
+    audit = db.relationship('Audit', backref='workflow_approbation', foreign_keys=[audit_id])
+    approbateur_niveau1 = db.relationship('User', foreign_keys=[approbateur_niveau1_id], lazy='joined')
+    approbateur_niveau2 = db.relationship('User', foreign_keys=[approbateur_niveau2_id], lazy='joined')
+    createur = db.relationship('User', foreign_keys=[created_by], lazy='joined')
+    
+    # ============================================
+    # MÉTHODES PRINCIPALES DU WORKFLOW
+    # ============================================
+    
+    def envoyer_en_relecture(self, user_id, commentaire=None):
+        """Envoyer l'audit en relecture (Niveau 1)"""
+        from datetime import datetime
+        
+        if self.etape_actuelle != 'brouillon':
+            raise ValueError("Seul un audit en brouillon peut être envoyé en relecture")
+        
+        ancienne_etape = self.etape_actuelle
+        self.etape_actuelle = 'en_relecture'
+        self.date_envoi_relecture = datetime.utcnow()
+        self.commentaire_relecture = commentaire
+        
+        # Ajouter à l'historique
+        self._ajouter_historique(ancienne_etape, 'en_relecture', user_id, commentaire)
+        
+        # Mettre à jour le statut de l'audit
+        if self.audit:
+            self.audit.statut = 'en_validation'
+            self.audit.sous_statut = 'relecture'
+        
+        return True
+    
+    def approuver_niveau1(self, user_id, commentaire=None):
+        """Approbation niveau 1 (responsable qualité)"""
+        from datetime import datetime
+        
+        if self.etape_actuelle != 'en_relecture':
+            raise ValueError("L'audit doit être en relecture pour être approuvé niveau 1")
+        
+        ancienne_etape = self.etape_actuelle
+        self.etape_actuelle = 'approuve'
+        self.date_approbation_niveau1 = datetime.utcnow()
+        self.approbateur_niveau1_id = user_id
+        self.commentaire_approbation_niveau1 = commentaire
+        
+        # Récupérer le nom de l'approbateur
+        user = User.query.get(user_id)
+        if user:
+            self.approbateur_niveau1_nom = user.username
+        
+        self._ajouter_historique(ancienne_etape, 'approuve', user_id, commentaire)
+        
+        return True
+    
+    def approuver_niveau2(self, user_id, commentaire=None):
+        """Approbation niveau 2 (direction) - Approbation finale"""
+        from datetime import datetime
+        
+        if self.etape_actuelle != 'approuve' and self.etape_actuelle != 'en_relecture':
+            raise ValueError("L'audit doit avoir été approuvé niveau 1")
+        
+        ancienne_etape = self.etape_actuelle
+        self.etape_actuelle = 'valide'
+        self.date_approbation_niveau2 = datetime.utcnow()
+        self.approbateur_niveau2_id = user_id
+        self.commentaire_approbation_niveau2 = commentaire
+        
+        # Récupérer le nom de l'approbateur
+        user = User.query.get(user_id)
+        if user:
+            self.approbateur_niveau2_nom = user.username
+        
+        self._ajouter_historique(ancienne_etape, 'valide', user_id, commentaire)
+        
+        # Mettre à jour le statut de l'audit
+        if self.audit:
+            self.audit.statut = 'termine'
+            self.audit.sous_statut = 'valide'
+        
+        return True
+    
+    def rejeter(self, user_id, raison):
+        """Rejeter l'audit"""
+        from datetime import datetime
+        
+        if self.etape_actuelle not in ['en_relecture', 'approuve']:
+            raise ValueError("L'audit doit être en relecture ou en approbation pour être rejeté")
+        
+        ancienne_etape = self.etape_actuelle
+        self.etape_actuelle = 'rejete'
+        self.date_rejet = datetime.utcnow()
+        self.commentaire_rejet = raison
+        
+        self._ajouter_historique(ancienne_etape, 'rejete', user_id, raison)
+        
+        # Remettre en brouillon pour correction
+        if self.audit:
+            self.audit.statut = 'planifie'
+            self.audit.sous_statut = 'correction'
+        
+        return True
+    
+    def valider_final(self, user_id, commentaire=None):
+        """Validation finale après corrections"""
+        from datetime import datetime
+        
+        if self.etape_actuelle != 'rejete':
+            raise ValueError("Seul un audit rejeté peut être validé finalement")
+        
+        ancienne_etape = self.etape_actuelle
+        self.etape_actuelle = 'valide'
+        self.date_validation_finale = datetime.utcnow()
+        self.commentaire_approbation_niveau2 = commentaire
+        
+        self._ajouter_historique(ancienne_etape, 'valide', user_id, commentaire)
+        
+        if self.audit:
+            self.audit.statut = 'termine'
+            self.audit.sous_statut = 'valide'
+        
+        return True
+    
+    def _ajouter_historique(self, ancienne, nouvelle, user_id, commentaire):
+        """Ajouter une entrée dans l'historique"""
+        from models import User
+        from datetime import datetime
+        
+        if not self.historique_etapes:
+            self.historique_etapes = []
+        
+        # Récupérer le nom de l'utilisateur
+        user = User.query.get(user_id)
+        utilisateur_nom = user.username if user else 'Système'
+        
+        self.historique_etapes.append({
+            'date': datetime.utcnow().isoformat(),
+            'ancienne_etape': ancienne,
+            'nouvelle_etape': nouvelle,
+            'utilisateur_id': user_id,
+            'utilisateur_nom': utilisateur_nom,
+            'commentaire': commentaire
+        })
+        
+        # Garder seulement les 50 derniers
+        if len(self.historique_etapes) > 50:
+            self.historique_etapes = self.historique_etapes[-50:]
+    
+    # ============================================
+    # MÉTHODES POUR LES APPROBATEURS SPÉCIFIQUES
+    # ============================================
+    
+    def set_approbateur_niveau1(self, user_id):
+        """Définit l'approbateur niveau 1"""
+        from models import User
+        
+        self.approbateur_niveau1_id = user_id
+        if user_id:
+            user = User.query.get(user_id)
+            self.approbateur_niveau1_nom = user.username if user else None
+        else:
+            self.approbateur_niveau1_nom = None
+    
+    def set_approbateur_niveau2(self, user_id):
+        """Définit l'approbateur niveau 2"""
+        from models import User
+        
+        self.approbateur_niveau2_id = user_id
+        if user_id:
+            user = User.query.get(user_id)
+            self.approbateur_niveau2_nom = user.username if user else None
+        else:
+            self.approbateur_niveau2_nom = None
+    
+    def get_approbateur_niveau1(self):
+        """Retourne l'objet User de l'approbateur niveau 1"""
+        if self.approbateur_niveau1_id:
+            return User.query.get(self.approbateur_niveau1_id)
+        return None
+    
+    def get_approbateur_niveau2(self):
+        """Retourne l'objet User de l'approbateur niveau 2"""
+        if self.approbateur_niveau2_id:
+            return User.query.get(self.approbateur_niveau2_id)
+        return None
+    
+    def get_destinataires_alerte_niveau1(self):
+        """Récupère les destinataires pour les alertes niveau 1"""
+        # Priorité 1: Approbateur spécifique
+        if self.approbateur_niveau1_id:
+            user = User.query.get(self.approbateur_niveau1_id)
+            return [user] if user else []
+        
+        # Priorité 2: Approbateurs par rôle
+        return User.query.filter(
+            User.client_id == self.client_id,
+            User.is_active == True,
+            User.role.in_(['admin', 'manager', 'responsable_qualite'])
+        ).all()
+    
+    def get_destinataires_alerte_niveau2(self):
+        """Récupère les destinataires pour les alertes niveau 2"""
+        # Priorité 1: Approbateur spécifique
+        if self.approbateur_niveau2_id:
+            user = User.query.get(self.approbateur_niveau2_id)
+            return [user] if user else []
+        
+        # Priorité 2: Approbateurs par rôle
+        return User.query.filter(
+            User.client_id == self.client_id,
+            User.is_active == True,
+            User.role.in_(['admin', 'directeur', 'direction', 'dg'])
+        ).all()
+    
+    # ============================================
+    # MÉTHODES D'AFFICHAGE POUR LES TEMPLATES
+    # ============================================
+    
+    def get_etape_label(self):
+        """Retourne le libellé de l'étape actuelle pour l'affichage"""
+        labels = {
+            'brouillon': '📝 Brouillon',
+            'en_relecture': '🔍 En relecture',
+            'approuve': '✅ Approuvé (Niveau 1)',
+            'valide': '✓ Validé',
+            'rejete': '❌ Rejeté'
+        }
+        return labels.get(self.etape_actuelle, self.etape_actuelle)
+    
+    def get_etape_label_simple(self):
+        """Retourne le libellé simple (sans icône)"""
+        labels = {
+            'brouillon': 'Brouillon',
+            'en_relecture': 'En relecture',
+            'approuve': 'Approuvé Niveau 1',
+            'valide': 'Validé',
+            'rejete': 'Rejeté'
+        }
+        return labels.get(self.etape_actuelle, self.etape_actuelle)
+    
+    def get_couleur_etape(self):
+        """Retourne la couleur Bootstrap pour l'étape"""
+        couleurs = {
+            'brouillon': 'secondary',
+            'en_relecture': 'warning',
+            'approuve': 'info',
+            'valide': 'success',
+            'rejete': 'danger'
+        }
+        return couleurs.get(self.etape_actuelle, 'secondary')
+    
+    def get_etape_icone(self):
+        """Retourne l'icône FontAwesome pour l'étape"""
+        icones = {
+            'brouillon': 'fa-pen',
+            'en_relecture': 'fa-eye',
+            'approuve': 'fa-stamp',
+            'valide': 'fa-check-double',
+            'rejete': 'fa-times'
+        }
+        return icones.get(self.etape_actuelle, 'fa-question-circle')
+    
+    def get_etape_description(self):
+        """Retourne la description de l'étape actuelle"""
+        descriptions = {
+            'brouillon': 'Rédaction en cours, l\'audit n\'est pas encore soumis à validation',
+            'en_relecture': 'En attente de validation par le responsable qualité',
+            'approuve': 'Validé niveau 1, en attente de la validation finale de la direction',
+            'valide': 'Audit complètement validé et finalisé',
+            'rejete': 'Audit rejeté, des corrections sont nécessaires'
+        }
+        return descriptions.get(self.etape_actuelle, 'Statut inconnu')
+    
+    def get_progression_pourcentage(self):
+        """Retourne le pourcentage de progression du workflow"""
+        progression = {
+            'brouillon': 0,
+            'en_relecture': 33,
+            'approuve': 66,
+            'valide': 100,
+            'rejete': 0
+        }
+        return progression.get(self.etape_actuelle, 0)
+    
+    # ============================================
+    # MÉTHODES DE VÉRIFICATION DES PERMISSIONS
+    # ============================================
+    
+    def peut_approuver_niveau1(self, user):
+        """Vérifie si l'utilisateur peut approuver niveau 1"""
+        if not user.is_authenticated:
+            return False
+        if self.etape_actuelle != 'en_relecture':
+            return False
+        if user.role == 'super_admin':
+            return True
+        if user.is_client_admin:
+            return True
+        if self.approbateur_niveau1_id == user.id:
+            return True
+        if hasattr(user, 'has_permission') and user.has_permission('can_approve_audit_level1'):
+            return True
+        return False
+    
+    def peut_approuver_niveau2(self, user):
+        """Vérifie si l'utilisateur peut approuver niveau 2"""
+        if not user.is_authenticated:
+            return False
+        if self.etape_actuelle != 'approuve':
+            return False
+        if user.role == 'super_admin':
+            return True
+        if user.is_client_admin:
+            return True
+        if self.approbateur_niveau2_id == user.id:
+            return True
+        if hasattr(user, 'has_permission') and user.has_permission('can_approve_audit_level2'):
+            return True
+        return False
+    
+    def peut_rejeter(self, user):
+        """Vérifie si l'utilisateur peut rejeter l'audit"""
+        if not user.is_authenticated:
+            return False
+        if self.etape_actuelle not in ['en_relecture', 'approuve']:
+            return False
+        if user.role == 'super_admin':
+            return True
+        if user.is_client_admin:
+            return True
+        if self.approbateur_niveau1_id == user.id or self.approbateur_niveau2_id == user.id:
+            return True
+        return False
+    
+    def get_jours_dans_etape(self):
+        """Retourne le nombre de jours passés dans l'étape actuelle"""
+        from datetime import datetime
+        
+        date_reference = None
+        if self.etape_actuelle == 'en_relecture':
+            date_reference = self.date_envoi_relecture
+        elif self.etape_actuelle == 'approuve':
+            date_reference = self.date_approbation_niveau1
+        elif self.etape_actuelle == 'rejete':
+            date_reference = self.date_rejet
+        elif self.etape_actuelle == 'valide':
+            date_reference = self.date_approbation_niveau2 or self.date_validation_finale
+        
+        if date_reference:
+            delta = datetime.utcnow() - date_reference
+            return delta.days
+        return 0
+    
+    def est_en_retard(self, seuil_jours=7):
+        """Vérifie si l'étape actuelle dépasse le seuil de jours"""
+        if self.etape_actuelle in ['en_relecture', 'approuve']:
+            jours = self.get_jours_dans_etape()
+            return jours > seuil_jours
+        return False
+    
+    # ============================================
+    # MÉTHODES DE SÉRIALISATION
+    # ============================================
+    
+    def to_dict(self):
+        """Convertit l'objet en dictionnaire pour l'API"""
+        from models import User
+        
+        approbateur_niveau1_data = None
+        if self.approbateur_niveau1_id:
+            user = User.query.get(self.approbateur_niveau1_id)
+            if user:
+                approbateur_niveau1_data = {
+                    'id': user.id,
+                    'username': user.username,
+                    'email': user.email,
+                    'role': user.role
+                }
+        
+        approbateur_niveau2_data = None
+        if self.approbateur_niveau2_id:
+            user = User.query.get(self.approbateur_niveau2_id)
+            if user:
+                approbateur_niveau2_data = {
+                    'id': user.id,
+                    'username': user.username,
+                    'email': user.email,
+                    'role': user.role
+                }
+        
+        return {
+            'id': self.id,
+            'audit_id': self.audit_id,
+            'etape_actuelle': self.etape_actuelle,
+            'etape_label': self.get_etape_label(),
+            'etape_couleur': self.get_couleur_etape(),
+            'etape_icone': self.get_etape_icone(),
+            'progression': self.get_progression_pourcentage(),
+            'historique': self.historique_etapes,
+            'dates': {
+                'envoi_relecture': self.date_envoi_relecture.isoformat() if self.date_envoi_relecture else None,
+                'approbation_niveau1': self.date_approbation_niveau1.isoformat() if self.date_approbation_niveau1 else None,
+                'approbation_niveau2': self.date_approbation_niveau2.isoformat() if self.date_approbation_niveau2 else None,
+                'rejet': self.date_rejet.isoformat() if self.date_rejet else None,
+                'validation_finale': self.date_validation_finale.isoformat() if self.date_validation_finale else None
+            },
+            'commentaires': {
+                'relecture': self.commentaire_relecture,
+                'approbation_niveau1': self.commentaire_approbation_niveau1,
+                'approbation_niveau2': self.commentaire_approbation_niveau2,
+                'rejet': self.commentaire_rejet
+            },
+            'approbateurs': {
+                'niveau1_id': self.approbateur_niveau1_id,
+                'niveau1_nom': self.approbateur_niveau1_nom,
+                'niveau1_data': approbateur_niveau1_data,
+                'niveau2_id': self.approbateur_niveau2_id,
+                'niveau2_nom': self.approbateur_niveau2_nom,
+                'niveau2_data': approbateur_niveau2_data
+            },
+            'est_en_retard': self.est_en_retard(),
+            'jours_dans_etape': self.get_jours_dans_etape(),
+            'created_at': self.created_at.isoformat() if self.created_at else None,
+            'updated_at': self.updated_at.isoformat() if self.updated_at else None
+        }
+    
+    def __repr__(self):
+        return f'<WorkflowApprobation {self.id} - Audit {self.audit_id} - {self.get_etape_label()}>'
+
+# Modèle pour les clés API
+class ApiKey(db.Model):
+    __tablename__ = 'api_keys'
+    
+    id = db.Column(db.Integer, primary_key=True)
+    client_id = db.Column(db.Integer, db.ForeignKey('clients.id'), nullable=False)
+    name = db.Column(db.String(100), nullable=False)
+    api_key = db.Column(db.String(64), unique=True, nullable=False)
+    api_secret = db.Column(db.String(128), nullable=False)
+    
+    # Permissions
+    permissions = db.Column(db.JSON, default={
+        'read_audits': True,
+        'write_audits': False,
+        'read_constatations': True,
+        'write_constatations': False,
+        'read_recommandations': True,
+        'write_recommandations': False,
+        'read_plans_action': True,
+        'write_plans_action': False,
+        'read_risques': True,
+        'write_risques': False,
+        'read_kri': True,
+        'write_kri': False,
+        'read_veille': True,
+        'write_veille': False
+    })
+    
+    # Rate limiting
+    rate_limit = db.Column(db.Integer, default=1000)  # Requêtes par heure
+    rate_limit_window = db.Column(db.Integer, default=3600)  # Fenêtre en secondes
+    
+    # Statut
+    is_active = db.Column(db.Boolean, default=True)
+    expires_at = db.Column(db.DateTime, nullable=True)
+    
+    # Audit
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    last_used_at = db.Column(db.DateTime)
+    created_by = db.Column(db.Integer, db.ForeignKey('user.id'))
+    
+    # Relations
+    client = db.relationship('Client')
+    createur = db.relationship('User', foreign_keys=[created_by])
+    
+    def generate_keys(self):
+        """Générer une nouvelle paire de clés API"""
+        self.api_key = secrets.token_urlsafe(32)
+        self.api_secret = secrets.token_urlsafe(64)
+        return self.api_key, self.api_secret
+    
+    def verify_signature(self, signature, method, path, body=''):
+        """Vérifier la signature HMAC-SHA256"""
+        message = f"{method}\n{path}\n{body}\n{self.api_key}"
+        expected = hmac.new(
+            self.api_secret.encode(),
+            message.encode(),
+            hashlib.sha256
+        ).hexdigest()
+        return hmac.compare_digest(expected, signature)
+    
+    def has_permission(self, permission):
+        """Vérifier si la clé a une permission"""
+        return self.permissions.get(permission, False)
+    
+    def to_dict(self):
+        return {
+            'id': self.id,
+            'name': self.name,
+            'api_key': self.api_key,
+            'permissions': self.permissions,
+            'is_active': self.is_active,
+            'expires_at': self.expires_at.isoformat() if self.expires_at else None,
+            'created_at': self.created_at.isoformat() if self.created_at else None
+        }
+
+
+# ============================================
+# MODÈLE POUR LES NOTIFICATIONS D'APPROBATION
+# ============================================
+
+class AlerteApprobation(db.Model):
+    """Alertes d'approbation pour les audits"""
+    __tablename__ = 'alertes_approbation'
+    
+    id = db.Column(db.Integer, primary_key=True)
+    audit_id = db.Column(db.Integer, db.ForeignKey('audits.id'), nullable=False)
+    
+    # Type d'alerte
+    type_alerte = db.Column(db.String(50), nullable=False)  # approbation_niveau1, approbation_niveau2, echeance, retard
+    
+    # Destinataire
+    destinataire_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
+    
+    # Message
+    message = db.Column(db.Text, nullable=False)
+    titre = db.Column(db.String(200), nullable=False)
+    
+    # Statut
+    est_lue = db.Column(db.Boolean, default=False)
+    est_envoyee = db.Column(db.Boolean, default=False)
+    
+    # Dates
+    date_creation = db.Column(db.DateTime, default=datetime.utcnow)
+    date_envoi = db.Column(db.DateTime)
+    date_echeance = db.Column(db.DateTime)
+    
+    # Multi-tenant
+    client_id = db.Column(db.Integer, db.ForeignKey('clients.id'), nullable=False)
+    
+    # Relations
+    audit = db.relationship('Audit', backref='alertes_approbation')
+    destinataire = db.relationship('User', foreign_keys=[destinataire_id])
+
+
+# ============================================
+# SERVICE D'ENVOI D'ALERTES
+# ============================================
+class ServiceAlerteApprobation:
+    """Service pour gérer les alertes d'approbation - Version corrigée sans JSON cast"""
+    
+    @staticmethod
+    def verifier_et_envoyer_alertes():
+        """Vérifie tous les audits et envoie les alertes nécessaires"""
+        aujourdhui = datetime.utcnow().date()
+        alertes_envoyees = 0
+        
+        # 1. Récupérer tous les audits actifs
+        audits = Audit.query.filter_by(is_archived=False).all()
+        
+        for audit in audits:
+            workflow = WorkflowApprobation.query.filter_by(audit_id=audit.id).first()
+            if not workflow:
+                continue
+            
+            # ============================================
+            # 2. Alertes d'approbation selon l'étape du workflow
+            # ============================================
+            
+            if workflow.etape_actuelle == 'en_relecture':
+                # ✅ CORRIGÉ : Utiliser le rôle au lieu des permissions JSON
+                approbateurs_niveau1 = User.query.filter(
+                    User.client_id == audit.client_id,
+                    User.is_active == True,
+                    User.role.in_(['admin', 'manager', 'responsable_qualite'])
+                ).all()
+                
+                for approbateur in approbateurs_niveau1:
+                    ServiceAlerteApprobation._creer_alerte_approbation(
+                        audit=audit,
+                        destinataire=approbateur,
+                        type_alerte='approbation_niveau1',
+                        titre=f"🔍 Audit à valider: {audit.reference}",
+                        message=f"L'audit '{audit.titre}' est en attente de votre validation (Niveau 1).",
+                        workflow=workflow
+                    )
+                    alertes_envoyees += 1
+            
+            elif workflow.etape_actuelle == 'approuve':
+                # ✅ CORRIGÉ : Utiliser le rôle au lieu des permissions JSON
+                approbateurs_niveau2 = User.query.filter(
+                    User.client_id == audit.client_id,
+                    User.is_active == True,
+                    User.role.in_(['admin', 'directeur', 'direction'])
+                ).all()
+                
+                for approbateur in approbateurs_niveau2:
+                    ServiceAlerteApprobation._creer_alerte_approbation(
+                        audit=audit,
+                        destinataire=approbateur,
+                        type_alerte='approbation_niveau2',
+                        titre=f"✅ Audit à approuver: {audit.reference}",
+                        message=f"L'audit '{audit.titre}' est en attente de votre validation finale (Niveau 2).",
+                        workflow=workflow
+                    )
+                    alertes_envoyees += 1
+            
+            # ============================================
+            # 3. Alertes d'échéance pour les recommandations
+            # ============================================
+            
+            echeances_proches = Recommandation.query.filter(
+                Recommandation.audit_id == audit.id,
+                Recommandation.date_echeance.isnot(None),
+                Recommandation.statut != 'termine',
+                Recommandation.date_echeance <= aujourdhui + timedelta(days=7),
+                Recommandation.date_echeance >= aujourdhui
+            ).all()
+            
+            for reco in echeances_proches:
+                jours_restants = (reco.date_echeance - aujourdhui).days
+                responsable = reco.responsable
+                if responsable:
+                    ServiceAlerteApprobation._creer_alerte_approbation(
+                        audit=audit,
+                        destinataire=responsable,
+                        type_alerte='echeance',
+                        titre=f"⚠️ Échéance dans {jours_restants} jours",
+                        message=f"La recommandation '{reco.description[:100]}...' arrive à échéance le {reco.date_echeance.strftime('%d/%m/%Y')}.",
+                        workflow=workflow,
+                        date_echeance=reco.date_echeance
+                    )
+                    alertes_envoyees += 1
+            
+            # ============================================
+            # 4. Alertes de retard
+            # ============================================
+            
+            retards = Recommandation.query.filter(
+                Recommandation.audit_id == audit.id,
+                Recommandation.date_echeance.isnot(None),
+                Recommandation.statut != 'termine',
+                Recommandation.date_echeance < aujourdhui
+            ).all()
+            
+            for reco in retards:
+                responsable = reco.responsable
+                if responsable:
+                    jours_retard = (aujourdhui - reco.date_echeance).days
+                    ServiceAlerteApprobation._creer_alerte_approbation(
+                        audit=audit,
+                        destinataire=responsable,
+                        type_alerte='retard',
+                        titre=f"🔴 RETARD de {jours_retard} jours",
+                        message=f"La recommandation '{reco.description[:100]}...' est en retard depuis le {reco.date_echeance.strftime('%d/%m/%Y')}.",
+                        workflow=workflow,
+                        date_echeance=reco.date_echeance,
+                        jours_retard=jours_retard
+                    )
+                    alertes_envoyees += 1
+        
+        return alertes_envoyees
+    
+    @staticmethod
+    def _get_approbateurs_niveau1(client_id):
+        """Récupère les approbateurs niveau 1 (responsables qualité) - VERSION CORRIGÉE"""
+        return User.query.filter(
+            User.client_id == client_id,
+            User.is_active == True,
+            User.role.in_(['admin', 'manager', 'responsable_qualite'])
+        ).all()
+    
+    @staticmethod
+    def _get_approbateurs_niveau2(client_id):
+        """Récupère les approbateurs niveau 2 (direction) - VERSION CORRIGÉE"""
+        return User.query.filter(
+            User.client_id == client_id,
+            User.is_active == True,
+            User.role.in_(['admin', 'directeur', 'direction', 'dg'])
+        ).all()
+    
+    @staticmethod
+    def _creer_alerte_approbation(audit, destinataire, type_alerte, titre, message, workflow=None, date_echeance=None, jours_retard=None):
+        """Crée une alerte d'approbation et une notification associée"""
+        
+        # 1. Créer l'alerte dans la base de données
+        alerte = AlerteApprobation(
+            audit_id=audit.id,
+            destinataire_id=destinataire.id,
+            type_alerte=type_alerte,
+            titre=titre,
+            message=message,
+            client_id=audit.client_id,
+            date_echeance=date_echeance
+        )
+        db.session.add(alerte)
+        
+        # 2. Créer une notification dans le système principal
+        niveau_urgence = 'urgent' if type_alerte in ['retard', 'approbation_niveau2'] else 'important' if type_alerte == 'approbation_niveau1' else 'normal'
+        
+        notification = Notification(
+            destinataire_id=destinataire.id,
+            type_notification='alerte_approbation',
+            titre=titre,
+            message=message,
+            urgence=niveau_urgence,
+            entite_type='audit',
+            entite_id=audit.id,
+            client_id=audit.client_id
+        )
+        db.session.add(notification)
+        
+        # 3. Ajouter des métadonnées supplémentaires pour l'affichage
+        if workflow:
+            notification.donnees_supplementaires = {
+                'workflow_etape': workflow.etape_actuelle,
+                'audit_reference': audit.reference,
+                'audit_titre': audit.titre,
+                'type_alerte': type_alerte
+            }
+            
+            if date_echeance:
+                notification.donnees_supplementaires['date_echeance'] = date_echeance.isoformat()
+            if jours_retard:
+                notification.donnees_supplementaires['jours_retard'] = jours_retard
+        
+        db.session.commit()
+        
+        return alerte
+    
+    @staticmethod
+    def get_alertes_non_lues(user_id, client_id=None):
+        """Récupère les alertes non lues pour un utilisateur"""
+        query = AlerteApprobation.query.filter(
+            AlerteApprobation.destinataire_id == user_id,
+            AlerteApprobation.est_lue == False
+        )
+        
+        if client_id:
+            query = query.filter(AlerteApprobation.client_id == client_id)
+        
+        return query.order_by(AlerteApprobation.date_creation.desc()).all()
+    
+    @staticmethod
+    def get_alertes_par_type(user_id, type_alerte):
+        """Récupère les alertes d'un type spécifique"""
+        return AlerteApprobation.query.filter(
+            AlerteApprobation.destinataire_id == user_id,
+            AlerteApprobation.type_alerte == type_alerte,
+            AlerteApprobation.est_lue == False
+        ).order_by(AlerteApprobation.date_creation.desc()).all()
+    
+    @staticmethod
+    def marquer_alerte_lue(alerte_id, user_id):
+        """Marque une alerte comme lue"""
+        alerte = AlerteApprobation.query.get(alerte_id)
+        if not alerte:
+            return False
+        
+        if alerte.destinataire_id != user_id:
+            return False
+        
+        alerte.est_lue = True
+        db.session.commit()
+        return True
+    
+    @staticmethod
+    def marquer_toutes_alertes_lues(user_id, client_id=None):
+        """Marque toutes les alertes d'un utilisateur comme lues"""
+        query = AlerteApprobation.query.filter(
+            AlerteApprobation.destinataire_id == user_id,
+            AlerteApprobation.est_lue == False
+        )
+        
+        if client_id:
+            query = query.filter(AlerteApprobation.client_id == client_id)
+        
+        count = query.update({'est_lue': True}, synchronize_session=False)
+        db.session.commit()
+        return count
+    
+    @staticmethod
+    def get_statistiques_alertes(user_id, client_id=None):
+        """Retourne les statistiques des alertes pour un utilisateur"""
+        query = AlerteApprobation.query.filter(
+            AlerteApprobation.destinataire_id == user_id,
+            AlerteApprobation.est_lue == False
+        )
+        
+        if client_id:
+            query = query.filter(AlerteApprobation.client_id == client_id)
+        
+        alertes = query.all()
+        
+        return {
+            'total': len(alertes),
+            'par_type': {
+                'approbation_niveau1': len([a for a in alertes if a.type_alerte == 'approbation_niveau1']),
+                'approbation_niveau2': len([a for a in alertes if a.type_alerte == 'approbation_niveau2']),
+                'echeance': len([a for a in alertes if a.type_alerte == 'echeance']),
+                'retard': len([a for a in alertes if a.type_alerte == 'retard'])
+            }
+        }
+
