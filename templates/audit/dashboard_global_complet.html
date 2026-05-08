@@ -1,0 +1,321 @@
+{% extends "base.html" %}
+
+{% block title %}Dashboard Global des Audits{% endblock %}
+
+{% block styles %}
+{{ super() }}
+<style>
+    /* Styles */
+    .alert-card {
+        transition: all 0.2s ease;
+        cursor: pointer;
+    }
+    .alert-card:hover {
+        transform: translateX(5px);
+        box-shadow: 0 5px 15px rgba(0,0,0,0.1);
+    }
+    .reco-card {
+        transition: all 0.2s ease;
+    }
+    .reco-card:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 5px 15px rgba(0,0,0,0.1);
+    }
+    .workflow-step-badge {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        padding: 4px 10px;
+        border-radius: 20px;
+        font-size: 11px;
+        font-weight: 600;
+    }
+    .workflow-brouillon { background: #e2e8f0; color: #475569; }
+    .workflow-en_relecture { background: #fef3c7; color: #92400e; }
+    .workflow-approuve { background: #dbeafe; color: #1e40af; }
+    .workflow-valide { background: #d1fae5; color: #065f46; }
+    .workflow-rejete { background: #fee2e2; color: #991b1b; }
+    .audit-status {
+        width: 10px;
+        height: 10px;
+        border-radius: 50%;
+        display: inline-block;
+        margin-right: 8px;
+    }
+    .status-planifie { background: #3b82f6; }
+    .status-en_cours { background: #f59e0b; }
+    .status-termine { background: #10b981; }
+    .badge-recommandation { padding: 4px 8px; border-radius: 12px; font-size: 11px; }
+    .badge-retard { background: #fee2e2; color: #991b1b; }
+    .badge-echeance { background: #fef3c7; color: #92400e; }
+    .badge-termine { background: #d1fae5; color: #065f46; }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    
+    <!-- EN-TÊTE -->
+    <div class="row mb-4">
+        <div class="col-12">
+            <div class="page-header" style="background: linear-gradient(135deg, #1e3a8a, #2563eb); border-radius: 20px; padding: 30px; color: white;">
+                <div class="d-flex justify-content-between align-items-center flex-wrap gap-3">
+                    <div>
+                        <h1 class="mb-2"><i class="fas fa-chart-network me-3"></i>Dashboard Global des Audits</h1>
+                        <p class="mb-0 opacity-75">Vision complète des audits, approbations et recommandations</p>
+                    </div>
+                    <div>
+                        <span class="badge bg-white text-primary px-3 py-2">
+                            <i class="fas fa-calendar me-2"></i>{{ now().strftime('%d/%m/%Y') if now else datetime.utcnow().strftime('%d/%m/%Y') }}
+                        </span>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- STATISTIQUES GLOBALES -->
+    <div class="row mb-4">
+        <div class="col-md-3">
+            <div class="card bg-primary text-white">
+                <div class="card-body">
+                    <h2 class="mb-0">{{ stats.total_audits }}</h2>
+                    <small>Audits totaux</small>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card bg-warning text-white">
+                <div class="card-body">
+                    <h2 class="mb-0">{{ stats.en_attente_approbation }}</h2>
+                    <small>En attente d'approbation</small>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card bg-info text-white">
+                <div class="card-body">
+                    <h2 class="mb-0">{{ stats.total_recommandations }}</h2>
+                    <small>Recommandations</small>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card bg-success text-white">
+                <div class="card-body">
+                    <h2 class="mb-0">{{ stats.taux_realisation_recommandations }}%</h2>
+                    <small>Taux de réalisation</small>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- ============================================ -->
+    <!-- SECTION 1: ALERTES D'APPROBATION (CLIC DIRECT) -->
+    <!-- ============================================ -->
+    <div class="card mb-4">
+        <div class="card-header bg-danger text-white">
+            <h5 class="mb-0"><i class="fas fa-bell me-2"></i>Alertes d'approbation ({{ alertes_approbation|length }})</h5>
+        </div>
+        <div class="card-body p-0">
+            {% if alertes_approbation %}
+                {% for alerte in alertes_approbation %}
+                <div class="alert-card p-3 border-bottom {% if not alerte.est_lue %}bg-light{% endif %}" 
+                     onclick="window.location.href='{{ url_for('detail_audit', id=alerte.audit_id) }}'">
+                    <div class="d-flex justify-content-between align-items-start">
+                        <div>
+                            <div class="d-flex align-items-center gap-2 mb-1">
+                                <span class="badge bg-{{ 'warning' if alerte.type_alerte == 'approbation_niveau1' else 'danger' }}">
+                                    {{ 'Niveau 1' if alerte.type_alerte == 'approbation_niveau1' else 'Niveau 2' }}
+                                </span>
+                                <strong class="text-primary">{{ alerte.audit_reference }}</strong>
+                            </div>
+                            <div class="fw-bold">{{ alerte.titre }}</div>
+                            <div class="small text-muted mt-1">{{ alerte.message }}</div>
+                        </div>
+                        <div class="text-end">
+                            <small class="text-muted">{{ alerte.date_creation_formatee }}</small>
+                            <div class="mt-2">
+                                <span class="badge bg-primary">
+                                    <i class="fas fa-eye me-1"></i>Cliquez pour approuver
+                                </span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                {% endfor %}
+            {% else %}
+                <div class="text-center py-5">
+                    <i class="fas fa-check-circle fa-3x text-success mb-3"></i>
+                    <p>Aucune alerte d'approbation en attente</p>
+                </div>
+            {% endif %}
+        </div>
+    </div>
+    
+    <!-- ============================================ -->
+    <!-- SECTION 2: TOUTES LES RECOMMANDATIONS -->
+    <!-- ============================================ -->
+    <div class="card mb-4">
+        <div class="card-header bg-info text-white">
+            <h5 class="mb-0"><i class="fas fa-lightbulb me-2"></i>Toutes les recommandations ({{ toutes_recommandations|length }})</h5>
+        </div>
+        <div class="card-body p-0">
+            <div class="table-responsive">
+                <table class="table table-hover mb-0">
+                    <thead class="table-light">
+                        <tr>
+                            <th>Audit</th>
+                            <th>Recommandation</th>
+                            <th>Type</th>
+                            <th>Statut</th>
+                            <th>Avancement</th>
+                            <th>Échéance</th>
+                            <th>Responsable</th>
+                            <th>Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for rec in toutes_recommandations %}
+                        <tr class="reco-card">
+                            <td>
+                                <a href="{{ url_for('detail_audit', id=rec.audit_id) }}" class="text-decoration-none">
+                                    <code class="fw-bold">{{ rec.audit_reference }}</code>
+                                </a>
+                            </td>
+                            <td>
+                                <div class="fw-bold">{{ rec.description|truncate(80) }}</div>
+                            </td>
+                            <td>
+                                <span class="badge bg-secondary">{{ rec.type|title }}</span>
+                            </td>
+                            <td>
+                                {% if rec.statut == 'termine' %}
+                                <span class="badge bg-success">✅ Terminé</span>
+                                {% elif rec.statut == 'en_cours' %}
+                                <span class="badge bg-warning">🔄 En cours</span>
+                                {% elif rec.statut == 'a_traiter' %}
+                                <span class="badge bg-secondary">⏳ À traiter</span>
+                                {% elif rec.statut == 'retarde' %}
+                                <span class="badge bg-danger">⚠️ Retardé</span>
+                                {% else %}
+                                <span class="badge bg-secondary">{{ rec.statut }}</span>
+                                {% endif %}
+                            </td>
+                            <td>
+                                <div class="progress" style="width: 80px;">
+                                    <div class="progress-bar bg-success" style="width: {{ rec.taux_avancement }}%"></div>
+                                </div>
+                                <small>{{ rec.taux_avancement }}%</small>
+                            </td>
+                            <td>
+                                {% if rec.date_echeance %}
+                                    {% set today = now().date() if now else datetime.utcnow().date() %}
+                                    {% if rec.date_echeance < today and rec.statut != 'termine' %}
+                                    <span class="badge bg-danger">
+                                        <i class="fas fa-exclamation-triangle me-1"></i>
+                                        {{ rec.date_echeance_formatee }}
+                                    </span>
+                                    {% elif rec.date_echeance <= today + timedelta(days=7) and rec.statut != 'termine' %}
+                                    <span class="badge bg-warning">
+                                        <i class="fas fa-clock me-1"></i>
+                                        {{ rec.date_echeance_formatee }}
+                                    </span>
+                                    {% else %}
+                                    <span class="badge bg-info">{{ rec.date_echeance_formatee }}</span>
+                                    {% endif %}
+                                {% else %}
+                                    <span class="text-muted">Non définie</span>
+                                {% endif %}
+                            </td>
+                            <td>
+                                <span class="badge bg-secondary">{{ rec.responsable_nom }}</span>
+                            </td>
+                            <td>
+                                <a href="{{ url_for('detail_audit', id=rec.audit_id) }}" class="btn btn-sm btn-outline-primary">
+                                    <i class="fas fa-eye me-1"></i>Voir
+                                </a>
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+    
+    <!-- ============================================ -->
+    <!-- SECTION 3: LISTE DES AUDITS -->
+    <!-- ============================================ -->
+    <div class="card mb-4">
+        <div class="card-header bg-primary text-white">
+            <h5 class="mb-0"><i class="fas fa-list me-2"></i>Tous les audits ({{ audits_data|length }})</h5>
+        </div>
+        <div class="card-body p-0">
+            <div class="table-responsive">
+                <table class="table table-hover mb-0">
+                    <thead class="table-light">
+                        <tr>
+                            <th>Référence</th>
+                            <th>Titre</th>
+                            <th>Type</th>
+                            <th>Statut</th>
+                            <th>Workflow</th>
+                            <th>Progression</th>
+                            <th>Constatations</th>
+                            <th>Recommandations</th>
+                            <th>Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for item in audits_data %}
+                        <tr>
+                            <td><code class="fw-bold">{{ item.reference }}</code></td>
+                            <td>{{ item.titre|truncate(40) }}</td>
+                            <td><span class="badge bg-secondary">{{ item.type_audit or 'N/A' }}</span></td>
+                            <td>
+                                <span class="audit-status status-{{ item.statut }}"></span>
+                                {% if item.statut == 'planifie' %}Planifié
+                                {% elif item.statut == 'en_cours' %}En cours
+                                {% elif item.statut == 'termine' %}Terminé
+                                {% else %}{{ item.statut }}{% endif %}
+                            </td>
+                            <td>
+                                <span class="workflow-step-badge workflow-{{ item.workflow.etape_actuelle }}">
+                                    <i class="fas {{ item.workflow.etape_icone }} me-1"></i>
+                                    {{ item.workflow.etape_label }}
+                                </span>
+                            </td>
+                            <td>
+                                <div class="progress" style="width: 100px;">
+                                    <div class="progress-bar bg-success" style="width: {{ item.progression }}%"></div>
+                                </div>
+                                <small>{{ item.progression }}%</small>
+                            </td>
+                            <td><span class="badge bg-secondary">{{ item.constatations_count }}</span></td>
+                            <td><span class="badge bg-info">{{ item.recommandations_count }}</span></td>
+                            <td>
+                                <a href="{{ url_for('detail_audit', id=item.id) }}" class="btn btn-sm btn-outline-primary">
+                                    <i class="fas fa-eye"></i>
+                                </a>
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+// Fonction helper pour les dates si now n'est pas disponible
+const today = new Date();
+function getDaysUntil(dateStr) {
+    if (!dateStr) return null;
+    const date = new Date(dateStr);
+    const diffTime = date - today;
+    return Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+}
+</script>
+{% endblock %}
