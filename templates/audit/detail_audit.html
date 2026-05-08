@@ -754,6 +754,16 @@
                 <span class="badge">{{ total_preuves if total_preuves else 0 }}</span>
             </button>
         </li>
+    <!-- Correction pour l'affichage du badge dans l'onglet -->
+        <li class="nav-item" role="presentation">
+            <button class="nav-link" id="approbation-tab" data-bs-toggle="tab" data-bs-target="#approbation" type="button" role="tab">
+                <i class="fas fa-check-circle me-2"></i>{{ t("Approbation") }}
+                
+                <span class="badge bg-secondary ms-2" id="workflow-badge">
+                    <i class="fas fa-spinner fa-spin"></i> Chargement...
+                </span>
+            </button>
+        </li>
         <!-- Dans la liste des onglets, après l'onglet Preuves -->
         <li class="nav-item" role="presentation">
             <button class="nav-link" id="feuilles-tab" data-bs-toggle="tab" data-bs-target="#feuilles" type="button" role="tab">
@@ -1688,252 +1698,499 @@
             </div>
         </div>
     </div>
-</div>
-<!-- Onglet Feuilles de travail -->
-<div class="tab-pane fade" id="feuilles" role="tabpanel">
-    <div class="section-card">
-        <div class="section-header">
-            <div class="section-title">
-                <div class="section-title-icon">
-                    <i class="fas fa-file-alt"></i>
+    <!-- Onglet Approbation (à ajouter après l'onglet Preuves et avant Feuilles) -->
+    <div class="tab-pane fade" id="approbation" role="tabpanel">
+        <div class="section-card">
+            <div class="section-header">
+                <div class="section-title">
+                    <div class="section-title-icon" style="background: linear-gradient(135deg, #f59e0b, #d97706);">
+                        <i class="fas fa-check-circle"></i>
+                    </div>
+                    <div>
+                        <h3>{{ t("Workflow d'approbation") }}</h3>
+                        <p>{{ t("Suivi et validation de l'audit") }}</p>
+                    </div>
                 </div>
-                <div>
-                    <h3>{{ t("Feuilles de travail") }}</h3>
-                    <p>{{ t("Documents de travail structurés pour l'audit") }}</p>
+                <div class="section-badge">
+                    <i class="fas fa-{{ 'check' if workflow.etape_actuelle in ['approuve', 'valide'] else 'clock' }} me-1"></i>
+                    {{ workflow.get_etape_label() if workflow else "📝 Brouillon" }}
                 </div>
             </div>
-            <a href="{{ url_for('nouvelle_feuille_travail', audit_id=audit.id) }}" class="btn-elegant btn-primary">
-                <i class="fas fa-plus me-2"></i> {{ t("Nouvelle feuille") }}
-            </a>
-        </div>
-        <div class="section-body" id="feuillesContent">
-            <div class="text-center py-5">
-                <div class="spinner-border text-primary" role="status">
-                    <span class="visually-hidden">{{ t("Chargement...") }}</span>
-                </div>
-                <p class="mt-3">{{ t("Chargement des feuilles de travail...") }}</p>
-            </div>
-        </div>
-    </div>
-</div>
-<!-- Modal Gestion d'équipe -->
-<div class="modal fade" id="modalGestionEquipe" tabindex="-1">
-    <div class="modal-dialog modal-lg">
-        <div class="modal-content modal-content-modern">
-            <form method="POST" action="{{ url_for('gerer_equipe_audit', audit_id=audit.id) }}" id="formGestionEquipe">
-                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            <div class="section-body">
                 
-                <div class="modal-header modal-header-modern">
-                    <h5 class="modal-title">
-                        <i class="fas fa-users-cog me-2"></i> {{ t("Gérer l'équipe d'audit") }}
-                    </h5>
-                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="{{ t("Fermer") }}"></button>
-                </div>
-                
-                <div class="modal-body modal-body-modern">
-                    <ul class="nav nav-tabs mb-4" id="equipeTabs" role="tablist">
-                        <li class="nav-item" role="presentation">
-                            <button class="nav-link active" id="utilisateurs-tab" data-bs-toggle="tab" 
-                                    data-bs-target="#utilisateurs" type="button" role="tab">
-                                <i class="fas fa-user-check me-1"></i> {{ t("Utilisateurs existants") }}
-                            </button>
-                        </li>
-                        <li class="nav-item" role="presentation">
-                            <button class="nav-link" id="externes-tab" data-bs-toggle="tab" 
-                                    data-bs-target="#externes" type="button" role="tab">
-                                <i class="fas fa-user-plus me-1"></i> {{ t("Nouveaux membres") }}
-                            </button>
-                        </li>
-                    </ul>
+                <!-- Timeline horizontale -->
+                <!-- Dans l'onglet Approbation, remplacez la section "Actions selon statut" -->
 
-                    <div class="tab-content" id="equipeTabsContent">
-                        <!-- Utilisateurs existants -->
-                        <div class="tab-pane fade show active" id="utilisateurs" role="tabpanel">
-                            <div class="alert alert-info">
-                                <i class="fas fa-info-circle me-2"></i> {{ t("Sélectionnez parmi les utilisateurs déjà enregistrés.") }}
-                            </div>
-                            
-                            <div class="mb-3">
-                                <label class="form-label">{{ t("Rechercher un utilisateur") }}</label>
-                                <input type="text" class="form-control" id="rechercheUtilisateur" 
-                                       placeholder="{{ t("Nom, prénom, email ou rôle...") }}">
-                            </div>
-                            
-                            <div class="mb-2 d-flex justify-content-between align-items-center">
-                                <div class="form-check">
-                                    <input class="form-check-input" type="checkbox" id="selectAllUtilisateurs">
-                                    <label class="form-check-label" for="selectAllUtilisateurs">{{ t("Tout sélectionner") }}</label>
-                                </div>
-                                <small class="text-muted">
-                                    <span id="nbUtilisateursSelectionnes">0</span> {{ t("sélectionné(s)") }}
-                                </small>
-                            </div>
-                            
-                            <div class="table-responsive" style="max-height: 300px; overflow-y: auto;">
-                                <table class="table table-hover table-sm">
-                                    <thead class="table-light">
-                                        <tr>
-                                            <th width="5%">#</th>
-                                            <th width="30%">{{ t("Utilisateur") }}</th>
-                                            <th width="20%">{{ t("Email") }}</th>
-                                            <th width="15%">{{ t("Rôle") }}</th>
-                                            <th width="15%">{{ t("Département") }}</th>
-                                        </tr>
-                                    </thead>
-                                    <tbody id="listeUtilisateurs">
-                                        {% for user in users %}
-                                        {% set is_selected = user.id|string in (audit.equipe_audit_ids or '').split(',') %}
-                                        <tr data-user-id="{{ user.id }}" 
-                                            data-user-name="{{ (user.nom or '')|lower }} {{ (user.prenom or '')|lower }} {{ user.username|lower }} {{ user.email|lower }} {{ (user.role or '')|lower }}"
-                                            class="{% if is_selected %}table-success{% endif %}">
-                                            <td>
-                                                <input type="checkbox" name="utilisateurs_existants[]" value="{{ user.id }}"
-                                                       class="form-check-input checkbox-utilisateur" {% if is_selected %}checked{% endif %}>
-                                            </td>
-                                            <td>
-                                                <div class="d-flex align-items-center">
-                                                    <div class="member-avatar me-2" style="width: 30px; height: 30px; font-size: 12px;">
-                                                        <small>{{ (user.nom|first if user.nom else user.username|first)|upper }}{{ (user.prenom|first if user.prenom else '')|upper }}</small>
-                                                    </div>
-                                                    <div>
-                                                        <div class="fw-bold">
-                                                            {% if user.nom and user.prenom %}
-                                                                {{ user.prenom }} {{ user.nom }}
-                                                            {% else %}
-                                                                {{ user.username }}
-                                                            {% endif %}
-                                                        </div>
-                                                        <small class="text-muted">{{ user.username }}</small>
-                                                    </div>
-                                                </div>
-                                            </td>
-                                            <td><small>{{ user.email }}</small></td>
-                                            <td><span class="badge-modern">{{ user.role }}</span></td>
-                                            <td><span class="badge-modern">{{ user.department or '-' }}</span></td>
-                                        </tr>
-                                        {% endfor %}
-                                    </tbody>
-                                </table>
-                            </div>
+                <div class="row mt-4">
+                    <div class="col-12">
+                        
+                        <!-- CAS 1 : AUDIT EN BROUILLON - Le créateur peut envoyer en relecture -->
+                        {% if workflow.etape_actuelle == 'brouillon' %}
+                        <div class="fk-alert fk-alert-info">
+                            <i class="fas fa-info-circle me-2"></i>
+                            {{ t("L'audit est en brouillon. Une fois terminé, cliquez sur le bouton ci-dessous pour l'envoyer en relecture.") }}
                         </div>
-
-                        <!-- Membres externes -->
-                        <div class="tab-pane fade" id="externes" role="tabpanel">
-                            <div class="alert alert-warning">
-                                <i class="fas fa-exclamation-circle me-2"></i> {{ t("Créez des membres externes sans compte dans le système.") }}
-                            </div>
-                            
-                            <div id="membresExternesContainer">
-                                {% for membre in audit.membres_externes|default([]) %}
-                                <div class="membre-externe-card card mb-3">
-                                    <div class="card-body">
-                                        <div class="row g-2">
-                                            <div class="col-md-3">
-                                                <label class="form-label small">{{ t("Nom *") }}</label>
-                                                <input type="text" class="form-control form-control-sm" 
-                                                       name="membres_externes[{{ loop.index0 }}][nom]" value="{{ membre.nom }}" required>
-                                            </div>
-                                            <div class="col-md-3">
-                                                <label class="form-label small">{{ t("Prénom *") }}</label>
-                                                <input type="text" class="form-control form-control-sm" 
-                                                       name="membres_externes[{{ loop.index0 }}][prenom]" value="{{ membre.prenom }}" required>
-                                            </div>
-                                            <div class="col-md-4">
-                                                <label class="form-label small">{{ t("Email *") }}</label>
-                                                <input type="email" class="form-control form-control-sm" 
-                                                       name="membres_externes[{{ loop.index0 }}][email]" value="{{ membre.email }}" required>
-                                            </div>
-                                            <div class="col-md-2">
-                                                <label class="form-label small">&nbsp;</label>
-                                                <button type="button" class="btn btn-outline-danger btn-sm w-100" 
-                                                        onclick="supprimerMembreExterne(this)">
-                                                    <i class="fas fa-trash"></i>
-                                                </button>
-                                            </div>
-                                        </div>
-                                        <div class="row g-2 mt-1">
-                                            <div class="col-md-6">
-                                                <label class="form-label small">{{ t("Fonction") }}</label>
-                                                <input type="text" class="form-control form-control-sm" 
-                                                       name="membres_externes[{{ loop.index0 }}][fonction]" value="{{ membre.fonction }}" 
-                                                       placeholder="{{ t("Ex: Auditeur externe") }}">
-                                            </div>
-                                            <div class="col-md-6">
-                                                <label class="form-label small">{{ t("Organisation") }}</label>
-                                                <input type="text" class="form-control form-control-sm" 
-                                                       name="membres_externes[{{ loop.index0 }}][organisation]" value="{{ membre.organisation }}" 
-                                                       placeholder="{{ t("Ex: Cabinet d'audit") }}">
-                                            </div>
-                                        </div>
-                                    </div>
-                                </div>
-                                {% endfor %}
-                            </div>
-                            
-                            <div class="text-center mb-3">
-                                <button type="button" class="btn-elegant btn-primary" onclick="ajouterMembreExterne()">
-                                    <i class="fas fa-plus me-1"></i> {{ t("Ajouter un membre externe") }}
-                                </button>
-                            </div>
-
-                            <template id="templateMembreExterne">
-                                <div class="membre-externe-card card mb-3">
-                                    <div class="card-body">
-                                        <div class="row g-2">
-                                            <div class="col-md-3">
-                                                <label class="form-label small">{{ t("Nom *") }}</label>
-                                                <input type="text" class="form-control form-control-sm" 
-                                                       name="membres_externes[INDEX][nom]" placeholder="{{ t("Nom") }}" required>
-                                            </div>
-                                            <div class="col-md-3">
-                                                <label class="form-label small">{{ t("Prénom *") }}</label>
-                                                <input type="text" class="form-control form-control-sm" 
-                                                       name="membres_externes[INDEX][prenom]" placeholder="{{ t("Prénom") }}" required>
-                                            </div>
-                                            <div class="col-md-4">
-                                                <label class="form-label small">{{ t("Email *") }}</label>
-                                                <input type="email" class="form-control form-control-sm" 
-                                                       name="membres_externes[INDEX][email]" placeholder="email@exemple.com" required>
-                                            </div>
-                                            <div class="col-md-2">
-                                                <label class="form-label small">&nbsp;</label>
-                                                <button type="button" class="btn btn-outline-danger btn-sm w-100" 
-                                                        onclick="supprimerMembreExterne(this)">
-                                                    <i class="fas fa-trash"></i>
-                                                </button>
-                                            </div>
-                                        </div>
-                                        <div class="row g-2 mt-1">
-                                            <div class="col-md-6">
-                                                <label class="form-label small">{{ t("Fonction") }}</label>
-                                                <input type="text" class="form-control form-control-sm" 
-                                                       name="membres_externes[INDEX][fonction]" placeholder="{{ t("Ex: Auditeur externe") }}">
-                                            </div>
-                                            <div class="col-md-6">
-                                                <label class="form-label small">{{ t("Organisation") }}</label>
-                                                <input type="text" class="form-control form-control-sm" 
-                                                       name="membres_externes[INDEX][organisation]" placeholder="{{ t("Ex: Cabinet d'audit") }}">
-                                            </div>
-                                        </div>
-                                    </div>
-                                </div>
-                            </template>
+                        
+                        <!-- Vérifier si l'utilisateur est le créateur ou a les droits -->
+                        {% if current_user.id == audit.created_by or current_user.is_client_admin or current_user.role == 'super_admin' %}
+                        <button class="btn-elegant btn-primary" onclick="envoyerRelecture()">
+                            <i class="fas fa-paper-plane me-2"></i>{{ t("Envoyer en relecture") }}
+                        </button>
+                        {% else %}
+                        <div class="alert alert-secondary">
+                            <i class="fas fa-lock me-2"></i>
+                            Seul le créateur de l'audit peut l'envoyer en relecture.
                         </div>
+                        {% endif %}
+                        
+                        <!-- CAS 2 : EN ATTENTE DE REELECTURE (NIVEAU 1) -->
+                        {% elif workflow.etape_actuelle == 'en_relecture' %}
+                        <div class="fk-alert fk-alert-warning">
+                            <i class="fas fa-clock me-2"></i>
+                            <strong>{{ t("Audit en attente de validation niveau 1") }}</strong><br>
+                            {{ t("Veuillez examiner l'audit et soit l'approuver, soit le rejeter.") }}
+                        </div>
+                        
+                        <!-- TOUJOURS AFFICHER LES BOUTONS POUR ADMIN CLIENT ET SUPER ADMIN -->
+                        {% if current_user.is_client_admin or current_user.role == 'super_admin' or current_user.id == audit.responsable_id %}
+                        <div class="btn-group">
+                            <button class="btn-elegant btn-success" onclick="approuverNiveau1()">
+                                <i class="fas fa-check me-2"></i>{{ t("Approuver (Niveau 1)") }}
+                            </button>
+                            <button class="btn-elegant btn-danger" onclick="rejeterAudit()">
+                                <i class="fas fa-times me-2"></i>{{ t("Rejeter") }}
+                            </button>
+                        </div>
+                        {% else %}
+                        <div class="alert alert-secondary">
+                            <i class="fas fa-lock me-2"></i>
+                            Seul un administrateur ou le responsable de l'audit peut valider.
+                        </div>
+                        {% endif %}
+                        
+                        <!-- CAS 3 : APPROUVE NIVEAU 1 - EN ATTENTE APPROBATION FINALE -->
+                        {% elif workflow.etape_actuelle == 'approuve' %}
+                        <div class="fk-alert fk-alert-warning">
+                            <i class="fas fa-clock me-2"></i>
+                            <strong>{{ t("Audit en attente de validation niveau 2 (Direction)") }}</strong><br>
+                            {{ t("L'audit a été approuvé niveau 1. Il nécessite maintenant l'approbation de la direction.") }}
+                        </div>
+                        
+                        {% if current_user.is_client_admin or current_user.role == 'super_admin' %}
+                        <div class="btn-group">
+                            <button class="btn-elegant btn-success" onclick="approuverNiveau2()">
+                                <i class="fas fa-check-double me-2"></i>{{ t("Approuver (Niveau 2 - Final)") }}
+                            </button>
+                            <button class="btn-elegant btn-danger" onclick="rejeterAudit()">
+                                <i class="fas fa-times me-2"></i>{{ t("Rejeter") }}
+                            </button>
+                        </div>
+                        {% else %}
+                        <div class="alert alert-secondary">
+                            <i class="fas fa-lock me-2"></i>
+                            Seul un administrateur ou la direction peut valider l'approbation finale.
+                        </div>
+                        {% endif %}
+                        
+                        <!-- CAS 4 : AUDIT REJETE -->
+                        {% elif workflow.etape_actuelle == 'rejete' %}
+                        <div class="fk-alert fk-alert-danger">
+                            <i class="fas fa-exclamation-triangle me-2"></i>
+                            <strong>{{ t("Audit rejeté") }}</strong><br>
+                            {{ t("Raison") }} : {{ workflow.commentaire_rejet or 'Non spécifiée' }}
+                        </div>
+                        
+                        {% if current_user.id == audit.created_by or current_user.is_client_admin %}
+                        <button class="btn-elegant btn-warning" onclick="envoyerRelecture()">
+                            <i class="fas fa-sync me-2"></i>{{ t("Corriger et renvoyer") }}
+                        </button>
+                        {% endif %}
+                        
+                        <!-- CAS 5 : AUDIT VALIDE -->
+                        {% elif workflow.etape_actuelle == 'valide' %}
+                        <div class="fk-alert fk-alert-success">
+                            <i class="fas fa-check-circle me-2"></i>
+                            <strong>{{ t("Audit validé !") }}</strong><br>
+                            {{ t("L'audit a été approuvé et est maintenant finalisé.") }}
+                        </div>
+                        {% endif %}
+                        
                     </div>
                 </div>
                 
-                <div class="modal-footer modal-footer-modern">
-                    <button type="button" class="btn-elegant btn-outline" data-bs-dismiss="modal">
-                        <i class="fas fa-times me-1"></i> {{ t("Annuler") }}
-                    </button>
-                    <button type="submit" class="btn-elegant btn-primary">
-                        <i class="fas fa-save me-1"></i> {{ t("Enregistrer l'équipe") }}
-                    </button>
+                <!-- Actions selon statut -->
+                <div class="row mt-4">
+                    <div class="col-12">
+                        {% if workflow and workflow.etape_actuelle == 'brouillon' %}
+                        <div class="fk-alert fk-alert-info">
+                            <i class="fas fa-info-circle me-2"></i>
+                            {{ t("L'audit est en brouillon. Une fois terminé, envoyez-le en relecture.") }}
+                        </div>
+                        <button class="btn-elegant btn-primary" onclick="envoyerRelecture()">
+                            <i class="fas fa-paper-plane me-2"></i>{{ t("Envoyer en relecture") }}
+                        </button>
+                        
+                        {% elif workflow and workflow.etape_actuelle == 'en_relecture' and current_user.has_permission('can_approve_audit_level1') %}
+                        <div class="fk-alert fk-alert-warning">
+                            <i class="fas fa-clock me-2"></i>
+                            {{ t("L'audit est en attente de validation niveau 1.") }}
+                        </div>
+                        <div class="btn-group">
+                            <button class="btn-elegant btn-success" onclick="approuverNiveau1()">
+                                <i class="fas fa-check me-2"></i>{{ t("Approuver (Niveau 1)") }}
+                            </button>
+                            <button class="btn-elegant btn-danger" onclick="rejeterAudit()">
+                                <i class="fas fa-times me-2"></i>{{ t("Rejeter") }}
+                            </button>
+                        </div>
+                        
+                        {% elif workflow and workflow.etape_actuelle == 'approuve' and current_user.has_permission('can_approve_audit_level2') %}
+                        <div class="fk-alert fk-alert-warning">
+                            <i class="fas fa-clock me-2"></i>
+                            {{ t("L'audit est en attente de validation niveau 2.") }}
+                        </div>
+                        <div class="btn-group">
+                            <button class="btn-elegant btn-success" onclick="approuverNiveau2()">
+                                <i class="fas fa-check-double me-2"></i>{{ t("Approuver (Niveau 2)") }}
+                            </button>
+                            <button class="btn-elegant btn-danger" onclick="rejeterAudit()">
+                                <i class="fas fa-times me-2"></i>{{ t("Rejeter") }}
+                            </button>
+                        </div>
+                        
+                        {% elif workflow and workflow.etape_actuelle == 'rejete' %}
+                        <div class="fk-alert fk-alert-danger">
+                            <i class="fas fa-exclamation-triangle me-2"></i>
+                            <strong>{{ t("Audit rejeté") }}</strong><br>
+                            {{ t("Raison") }} : {{ workflow.commentaire_rejet or 'Non spécifiée' }}
+                        </div>
+                        <button class="btn-elegant btn-warning" onclick="envoyerRelecture()">
+                            <i class="fas fa-sync me-2"></i>{{ t("Corriger et renvoyer") }}
+                        </button>
+                        
+                        {% elif workflow and workflow.etape_actuelle == 'valide' %}
+                        <div class="fk-alert fk-alert-success">
+                            <i class="fas fa-check-circle me-2"></i>
+                            <strong>{{ t("Audit validé !") }}</strong><br>
+                            {{ t("L'audit a été approuvé et est maintenant finalisé.") }}
+                        </div>
+                        {% endif %}
+                    </div>
                 </div>
-            </form>
+                
+                <!-- Commentaires d'approbation -->
+                {% if workflow and (workflow.commentaire_relecture or workflow.commentaire_approbation_niveau1 or workflow.commentaire_approbation_niveau2) %}
+                <div class="mt-4">
+                    <h6><i class="fas fa-comment-dots me-2"></i>{{ t("Commentaires d'approbation") }}</h6>
+                    <div class="list-group">
+                        {% if workflow.commentaire_relecture %}
+                        <div class="list-group-item">
+                            <div class="d-flex justify-content-between">
+                                <strong>{{ t("Relecture") }}</strong>
+                                <small>{{ workflow.date_envoi_relecture.strftime('%d/%m/%Y %H:%M') if workflow.date_envoi_relecture else '' }}</small>
+                            </div>
+                            <p class="mb-0 mt-1">{{ workflow.commentaire_relecture }}</p>
+                        </div>
+                        {% endif %}
+                        {% if workflow.commentaire_approbation_niveau1 %}
+                        <div class="list-group-item">
+                            <div class="d-flex justify-content-between">
+                                <strong>{{ t("Validation Niveau 1") }}</strong>
+                                <small>{{ workflow.date_approbation_niveau1.strftime('%d/%m/%Y %H:%M') if workflow.date_approbation_niveau1 else '' }}</small>
+                            </div>
+                            <p class="mb-0 mt-1">{{ workflow.commentaire_approbation_niveau1 }}</p>
+                        </div>
+                        {% endif %}
+                        {% if workflow.commentaire_approbation_niveau2 %}
+                        <div class="list-group-item">
+                            <div class="d-flex justify-content-between">
+                                <strong>{{ t("Validation Niveau 2") }}</strong>
+                                <small>{{ workflow.date_approbation_niveau2.strftime('%d/%m/%Y %H:%M') if workflow.date_approbation_niveau2 else '' }}</small>
+                            </div>
+                            <p class="mb-0 mt-1">{{ workflow.commentaire_approbation_niveau2 }}</p>
+                        </div>
+                        {% endif %}
+                    </div>
+                </div>
+                {% endif %}
+                
+                <!-- Historique des étapes -->
+                {% if workflow and workflow.historique_etapes %}
+                <div class="mt-4">
+                    <h6><i class="fas fa-history me-2"></i>{{ t("Historique") }}</h6>
+                    <div class="table-responsive">
+                        <table class="elegant-table">
+                            <thead>
+                                <tr>
+                                    <th>{{ t("Date") }}</th>
+                                    <th>{{ t("Action") }}</th>
+                                    <th>{{ t("Utilisateur") }}</th>
+                                    <th>{{ t("Commentaire") }}</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for etape in workflow.historique_etapes|reverse %}
+                                <tr>
+                                    <td><small>{{ etape.date }}</small></td>
+                                    <td>{{ etape.ancienne_etape }} → {{ etape.nouvelle_etape }}</td>
+                                    <td>{{ etape.utilisateur_nom }}</td>
+                                    <td>{{ etape.commentaire or '-' }}</td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+                {% endif %}
+                
+            </div>
         </div>
     </div>
-</div>
+    <!-- Onglet Feuilles de travail -->
+    <div class="tab-pane fade" id="feuilles" role="tabpanel">
+        <div class="section-card">
+            <div class="section-header">
+                <div class="section-title">
+                    <div class="section-title-icon">
+                        <i class="fas fa-file-alt"></i>
+                    </div>
+                    <div>
+                        <h3>{{ t("Feuilles de travail") }}</h3>
+                        <p>{{ t("Documents de travail structurés pour l'audit") }}</p>
+                    </div>
+                </div>
+                <a href="{{ url_for('nouvelle_feuille_travail', audit_id=audit.id) }}" class="btn-elegant btn-primary">
+                    <i class="fas fa-plus me-2"></i> {{ t("Nouvelle feuille") }}
+                </a>
+            </div>
+            <div class="section-body" id="feuillesContent">
+                <div class="text-center py-5">
+                    <div class="spinner-border text-primary" role="status">
+                        <span class="visually-hidden">{{ t("Chargement...") }}</span>
+                    </div>
+                    <p class="mt-3">{{ t("Chargement des feuilles de travail...") }}</p>
+                </div>
+            </div>
+        </div>
+    </div>
+    <!-- Modal Gestion d'équipe -->
+    <div class="modal fade" id="modalGestionEquipe" tabindex="-1">
+        <div class="modal-dialog modal-lg">
+            <div class="modal-content modal-content-modern">
+                <form method="POST" action="{{ url_for('gerer_equipe_audit', audit_id=audit.id) }}" id="formGestionEquipe">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                    
+                    <div class="modal-header modal-header-modern">
+                        <h5 class="modal-title">
+                            <i class="fas fa-users-cog me-2"></i> {{ t("Gérer l'équipe d'audit") }}
+                        </h5>
+                        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="{{ t("Fermer") }}"></button>
+                    </div>
+                    
+                    <div class="modal-body modal-body-modern">
+                        <ul class="nav nav-tabs mb-4" id="equipeTabs" role="tablist">
+                            <li class="nav-item" role="presentation">
+                                <button class="nav-link active" id="utilisateurs-tab" data-bs-toggle="tab" 
+                                        data-bs-target="#utilisateurs" type="button" role="tab">
+                                    <i class="fas fa-user-check me-1"></i> {{ t("Utilisateurs existants") }}
+                                </button>
+                            </li>
+                            <li class="nav-item" role="presentation">
+                                <button class="nav-link" id="externes-tab" data-bs-toggle="tab" 
+                                        data-bs-target="#externes" type="button" role="tab">
+                                    <i class="fas fa-user-plus me-1"></i> {{ t("Nouveaux membres") }}
+                                </button>
+                            </li>
+                        </ul>
+
+                        <div class="tab-content" id="equipeTabsContent">
+                            <!-- Utilisateurs existants -->
+                            <div class="tab-pane fade show active" id="utilisateurs" role="tabpanel">
+                                <div class="alert alert-info">
+                                    <i class="fas fa-info-circle me-2"></i> {{ t("Sélectionnez parmi les utilisateurs déjà enregistrés.") }}
+                                </div>
+                                
+                                <div class="mb-3">
+                                    <label class="form-label">{{ t("Rechercher un utilisateur") }}</label>
+                                    <input type="text" class="form-control" id="rechercheUtilisateur" 
+                                        placeholder="{{ t("Nom, prénom, email ou rôle...") }}">
+                                </div>
+                                
+                                <div class="mb-2 d-flex justify-content-between align-items-center">
+                                    <div class="form-check">
+                                        <input class="form-check-input" type="checkbox" id="selectAllUtilisateurs">
+                                        <label class="form-check-label" for="selectAllUtilisateurs">{{ t("Tout sélectionner") }}</label>
+                                    </div>
+                                    <small class="text-muted">
+                                        <span id="nbUtilisateursSelectionnes">0</span> {{ t("sélectionné(s)") }}
+                                    </small>
+                                </div>
+                                
+                                <div class="table-responsive" style="max-height: 300px; overflow-y: auto;">
+                                    <table class="table table-hover table-sm">
+                                        <thead class="table-light">
+                                            <tr>
+                                                <th width="5%">#</th>
+                                                <th width="30%">{{ t("Utilisateur") }}</th>
+                                                <th width="20%">{{ t("Email") }}</th>
+                                                <th width="15%">{{ t("Rôle") }}</th>
+                                                <th width="15%">{{ t("Département") }}</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody id="listeUtilisateurs">
+                                            {% for user in users %}
+                                            {% set is_selected = user.id|string in (audit.equipe_audit_ids or '').split(',') %}
+                                            <tr data-user-id="{{ user.id }}" 
+                                                data-user-name="{{ (user.nom or '')|lower }} {{ (user.prenom or '')|lower }} {{ user.username|lower }} {{ user.email|lower }} {{ (user.role or '')|lower }}"
+                                                class="{% if is_selected %}table-success{% endif %}">
+                                                <td>
+                                                    <input type="checkbox" name="utilisateurs_existants[]" value="{{ user.id }}"
+                                                        class="form-check-input checkbox-utilisateur" {% if is_selected %}checked{% endif %}>
+                                                </td>
+                                                <td>
+                                                    <div class="d-flex align-items-center">
+                                                        <div class="member-avatar me-2" style="width: 30px; height: 30px; font-size: 12px;">
+                                                            <small>{{ (user.nom|first if user.nom else user.username|first)|upper }}{{ (user.prenom|first if user.prenom else '')|upper }}</small>
+                                                        </div>
+                                                        <div>
+                                                            <div class="fw-bold">
+                                                                {% if user.nom and user.prenom %}
+                                                                    {{ user.prenom }} {{ user.nom }}
+                                                                {% else %}
+                                                                    {{ user.username }}
+                                                                {% endif %}
+                                                            </div>
+                                                            <small class="text-muted">{{ user.username }}</small>
+                                                        </div>
+                                                    </div>
+                                                </td>
+                                                <td><small>{{ user.email }}</small></td>
+                                                <td><span class="badge-modern">{{ user.role }}</span></td>
+                                                <td><span class="badge-modern">{{ user.department or '-' }}</span></td>
+                                            </tr>
+                                            {% endfor %}
+                                        </tbody>
+                                    </table>
+                                </div>
+                            </div>
+
+                            <!-- Membres externes -->
+                            <div class="tab-pane fade" id="externes" role="tabpanel">
+                                <div class="alert alert-warning">
+                                    <i class="fas fa-exclamation-circle me-2"></i> {{ t("Créez des membres externes sans compte dans le système.") }}
+                                </div>
+                                
+                                <div id="membresExternesContainer">
+                                    {% for membre in audit.membres_externes|default([]) %}
+                                    <div class="membre-externe-card card mb-3">
+                                        <div class="card-body">
+                                            <div class="row g-2">
+                                                <div class="col-md-3">
+                                                    <label class="form-label small">{{ t("Nom *") }}</label>
+                                                    <input type="text" class="form-control form-control-sm" 
+                                                        name="membres_externes[{{ loop.index0 }}][nom]" value="{{ membre.nom }}" required>
+                                                </div>
+                                                <div class="col-md-3">
+                                                    <label class="form-label small">{{ t("Prénom *") }}</label>
+                                                    <input type="text" class="form-control form-control-sm" 
+                                                        name="membres_externes[{{ loop.index0 }}][prenom]" value="{{ membre.prenom }}" required>
+                                                </div>
+                                                <div class="col-md-4">
+                                                    <label class="form-label small">{{ t("Email *") }}</label>
+                                                    <input type="email" class="form-control form-control-sm" 
+                                                        name="membres_externes[{{ loop.index0 }}][email]" value="{{ membre.email }}" required>
+                                                </div>
+                                                <div class="col-md-2">
+                                                    <label class="form-label small">&nbsp;</label>
+                                                    <button type="button" class="btn btn-outline-danger btn-sm w-100" 
+                                                            onclick="supprimerMembreExterne(this)">
+                                                        <i class="fas fa-trash"></i>
+                                                    </button>
+                                                </div>
+                                            </div>
+                                            <div class="row g-2 mt-1">
+                                                <div class="col-md-6">
+                                                    <label class="form-label small">{{ t("Fonction") }}</label>
+                                                    <input type="text" class="form-control form-control-sm" 
+                                                        name="membres_externes[{{ loop.index0 }}][fonction]" value="{{ membre.fonction }}" 
+                                                        placeholder="{{ t("Ex: Auditeur externe") }}">
+                                                </div>
+                                                <div class="col-md-6">
+                                                    <label class="form-label small">{{ t("Organisation") }}</label>
+                                                    <input type="text" class="form-control form-control-sm" 
+                                                        name="membres_externes[{{ loop.index0 }}][organisation]" value="{{ membre.organisation }}" 
+                                                        placeholder="{{ t("Ex: Cabinet d'audit") }}">
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                    {% endfor %}
+                                </div>
+                                
+                                <div class="text-center mb-3">
+                                    <button type="button" class="btn-elegant btn-primary" onclick="ajouterMembreExterne()">
+                                        <i class="fas fa-plus me-1"></i> {{ t("Ajouter un membre externe") }}
+                                    </button>
+                                </div>
+
+                                <template id="templateMembreExterne">
+                                    <div class="membre-externe-card card mb-3">
+                                        <div class="card-body">
+                                            <div class="row g-2">
+                                                <div class="col-md-3">
+                                                    <label class="form-label small">{{ t("Nom *") }}</label>
+                                                    <input type="text" class="form-control form-control-sm" 
+                                                        name="membres_externes[INDEX][nom]" placeholder="{{ t("Nom") }}" required>
+                                                </div>
+                                                <div class="col-md-3">
+                                                    <label class="form-label small">{{ t("Prénom *") }}</label>
+                                                    <input type="text" class="form-control form-control-sm" 
+                                                        name="membres_externes[INDEX][prenom]" placeholder="{{ t("Prénom") }}" required>
+                                                </div>
+                                                <div class="col-md-4">
+                                                    <label class="form-label small">{{ t("Email *") }}</label>
+                                                    <input type="email" class="form-control form-control-sm" 
+                                                        name="membres_externes[INDEX][email]" placeholder="email@exemple.com" required>
+                                                </div>
+                                                <div class="col-md-2">
+                                                    <label class="form-label small">&nbsp;</label>
+                                                    <button type="button" class="btn btn-outline-danger btn-sm w-100" 
+                                                            onclick="supprimerMembreExterne(this)">
+                                                        <i class="fas fa-trash"></i>
+                                                    </button>
+                                                </div>
+                                            </div>
+                                            <div class="row g-2 mt-1">
+                                                <div class="col-md-6">
+                                                    <label class="form-label small">{{ t("Fonction") }}</label>
+                                                    <input type="text" class="form-control form-control-sm" 
+                                                        name="membres_externes[INDEX][fonction]" placeholder="{{ t("Ex: Auditeur externe") }}">
+                                                </div>
+                                                <div class="col-md-6">
+                                                    <label class="form-label small">{{ t("Organisation") }}</label>
+                                                    <input type="text" class="form-control form-control-sm" 
+                                                        name="membres_externes[INDEX][organisation]" placeholder="{{ t("Ex: Cabinet d'audit") }}">
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </template>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="modal-footer modal-footer-modern">
+                        <button type="button" class="btn-elegant btn-outline" data-bs-dismiss="modal">
+                            <i class="fas fa-times me-1"></i> {{ t("Annuler") }}
+                        </button>
+                        <button type="submit" class="btn-elegant btn-primary">
+                            <i class="fas fa-save me-1"></i> {{ t("Enregistrer l'équipe") }}
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
 
 <!-- Modal Nouvelle constatation -->
 <div class="modal fade" id="modalConstatation" tabindex="-1">
@@ -4591,6 +4848,107 @@ function chargerFeuillesTravail() {
         if (filtreType) filtreType.addEventListener('change', filtrerPreuves);
         if (recherchePreuve) recherchePreuve.addEventListener('input', filtrerPreuves);
     });
+    // Fonctions pour le workflow d'approbation
+function envoyerRelecture() {
+    const commentaire = prompt("{{ t("Commentaire pour la relecture (optionnel) :") }}");
+    
+    fetch(`/api/audit/{{ audit.id }}/workflow/envoyer-relecture`, {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            'X-CSRFToken': document.querySelector('input[name="csrf_token"]')?.value || ''
+        },
+        body: JSON.stringify({commentaire: commentaire || ''})
+    })
+    .then(r => r.json())
+    .then(data => {
+        if (data.success) {
+            showToast('{{ t("Audit envoyé en relecture") }}', 'success');
+            location.reload();
+        } else {
+            showToast('{{ t("Erreur") }} : ' + data.error, 'error');
+        }
+    })
+    .catch(error => {
+        showToast('{{ t("Erreur réseau") }}', 'error');
+    });
+}
+
+function approuverNiveau1() {
+    const commentaire = prompt("{{ t("Commentaire d'approbation (optionnel) :") }}");
+    
+    fetch(`/api/audit/{{ audit.id }}/workflow/approuver-niveau1`, {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            'X-CSRFToken': document.querySelector('input[name="csrf_token"]')?.value || ''
+        },
+        body: JSON.stringify({commentaire: commentaire || ''})
+    })
+    .then(r => r.json())
+    .then(data => {
+        if (data.success) {
+            showToast('{{ t("Audit approuvé niveau 1") }}', 'success');
+            location.reload();
+        } else {
+            showToast('{{ t("Erreur") }} : ' + data.error, 'error');
+        }
+    })
+    .catch(error => {
+        showToast('{{ t("Erreur réseau") }}', 'error');
+    });
+}
+
+function approuverNiveau2() {
+    const commentaire = prompt("{{ t("Commentaire d'approbation finale (optionnel) :") }}");
+    
+    fetch(`/api/audit/{{ audit.id }}/workflow/approuver-niveau2`, {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            'X-CSRFToken': document.querySelector('input[name="csrf_token"]')?.value || ''
+        },
+        body: JSON.stringify({commentaire: commentaire || ''})
+    })
+    .then(r => r.json())
+    .then(data => {
+        if (data.success) {
+            showToast('{{ t("Audit approuvé niveau 2") }}', 'success');
+            location.reload();
+        } else {
+            showToast('{{ t("Erreur") }} : ' + data.error, 'error');
+        }
+    })
+    .catch(error => {
+        showToast('{{ t("Erreur réseau") }}', 'error');
+    });
+}
+
+function rejeterAudit() {
+    const raison = prompt("{{ t("Raison du rejet (obligatoire) :") }}");
+    if (!raison) return;
+    
+    fetch(`/api/audit/{{ audit.id }}/workflow/rejeter`, {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            'X-CSRFToken': document.querySelector('input[name="csrf_token"]')?.value || ''
+        },
+        body: JSON.stringify({raison: raison})
+    })
+    .then(r => r.json())
+    .then(data => {
+        if (data.success) {
+            showToast('{{ t("Audit rejeté") }}', 'warning');
+            location.reload();
+        } else {
+            showToast('{{ t("Erreur") }} : ' + data.error, 'error');
+        }
+    })
+    .catch(error => {
+        showToast('{{ t("Erreur réseau") }}', 'error');
+    });
+}
     </script>
 {% endblock %}
 
@@ -4693,5 +5051,126 @@ function chargerFeuillesTravail() {
             min-width: 250px;
         }
     }
+    /* Styles pour la timeline d'approbation */
+.approval-timeline-container {
+    padding: 20px;
+    background: #f8f9fa;
+    border-radius: 16px;
+    margin-bottom: 20px;
+}
+
+.approval-timeline {
+    display: flex;
+    justify-content: space-between;
+    position: relative;
+}
+
+.approval-timeline .step {
+    flex: 1;
+    text-align: center;
+    position: relative;
+}
+
+.approval-timeline .step-marker {
+    width: 48px;
+    height: 48px;
+    background: #e2e8f0;
+    border-radius: 50%;
+    margin: 0 auto 12px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 20px;
+    color: #64748b;
+    position: relative;
+    z-index: 2;
+    transition: all 0.3s ease;
+}
+
+.approval-timeline .step.active .step-marker {
+    background: linear-gradient(135deg, #3b82f6, #1e3a8a);
+    color: white;
+    box-shadow: 0 0 0 4px rgba(59, 130, 246, 0.3);
+    animation: pulse 1.5s infinite;
+}
+
+.approval-timeline .step.completed .step-marker {
+    background: #10b981;
+    color: white;
+}
+
+.approval-timeline .step-label {
+    font-weight: 600;
+    font-size: 14px;
+    color: #1e293b;
+}
+
+.approval-timeline .step-desc {
+    font-size: 11px;
+    color: #64748b;
+    margin-top: 4px;
+}
+
+.approval-timeline:before {
+    content: '';
+    position: absolute;
+    top: 24px;
+    left: 0;
+    right: 0;
+    height: 2px;
+    background: #e2e8f0;
+    z-index: 1;
+}
+
+@keyframes pulse {
+    0% { box-shadow: 0 0 0 0 rgba(59, 130, 246, 0.4); }
+    70% { box-shadow: 0 0 0 10px rgba(59, 130, 246, 0); }
+    100% { box-shadow: 0 0 0 0 rgba(59, 130, 246, 0); }
+}
+
+@media (max-width: 768px) {
+    .approval-timeline-container {
+        overflow-x: auto;
+    }
+    .approval-timeline {
+        min-width: 500px;
+    }
+    .approval-timeline .step-marker {
+        width: 40px;
+        height: 40px;
+        font-size: 16px;
+    }
+    .approval-timeline:before {
+        top: 20px;
+    }
+    .step-label {
+        font-size: 11px;
+    }
+    .step-desc {
+        font-size: 9px;
+    }
+}
+
+[data-bs-theme="dark"] .approval-timeline-container {
+    background: #1e293b;
+}
+
+[data-bs-theme="dark"] .approval-timeline .step-marker {
+    background: #334155;
+    color: #94a3b8;
+}
+
+[data-bs-theme="dark"] .approval-timeline .step-label {
+    color: #e2e8f0;
+}
+
+[data-bs-theme="dark"] .approval-timeline .step-desc {
+    color: #94a3b8;
+}
+
+[data-bs-theme="dark"] .approval-timeline:before {
+    background: #334155;
+}
+    
 </style>
 {% endblock %}
