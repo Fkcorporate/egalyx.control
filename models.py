@@ -11242,3 +11242,178 @@ class ServiceAlerteApprobation:
             }
         }
 
+
+class SecteurActivite(db.Model):
+    """Secteur d'activité (Banque, Assurance, Industrie, Santé, etc.)"""
+    __tablename__ = 'secteurs_activite'
+    
+    id = db.Column(db.Integer, primary_key=True)
+    code = db.Column(db.String(20), unique=True, nullable=False)
+    nom = db.Column(db.String(100), nullable=False)
+    description = db.Column(db.Text)
+    icone = db.Column(db.String(50), default='fa-building')
+    couleur = db.Column(db.String(20), default='#3b82f6')
+    ordre = db.Column(db.Integer, default=0)
+    est_actif = db.Column(db.Boolean, default=True)
+    client_id = db.Column(db.Integer, db.ForeignKey('clients.id'), nullable=True)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    
+    # Relations
+    directions = db.relationship('DirectionSecteur', back_populates='secteur', cascade='all, delete-orphan')
+    risques = db.relationship('BibliothequeRisque', back_populates='secteur', lazy=True)
+    
+    def to_dict(self):
+        return {
+            'id': self.id,
+            'code': self.code,
+            'nom': self.nom,
+            'description': self.description,
+            'icone': self.icone,
+            'couleur': self.couleur,
+            'ordre': self.ordre,
+            'nb_directions': len(self.directions),
+            'nb_risques': len(self.risques)
+        }
+    
+    def __repr__(self):
+        return f'<SecteurActivite {self.code} - {self.nom}>'
+
+
+class DirectionSecteur(db.Model):
+    """Direction au sein d'un secteur (Finance, RH, IT, Commercial, etc.)"""
+    __tablename__ = 'directions_secteur'
+    
+    id = db.Column(db.Integer, primary_key=True)
+    secteur_id = db.Column(db.Integer, db.ForeignKey('secteurs_activite.id'), nullable=False)
+    code = db.Column(db.String(20), nullable=False)
+    nom = db.Column(db.String(100), nullable=False)
+    description = db.Column(db.Text)
+    ordre = db.Column(db.Integer, default=0)
+    est_actif = db.Column(db.Boolean, default=True)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    
+    # Relations
+    secteur = db.relationship('SecteurActivite', back_populates='directions')
+    risques = db.relationship('BibliothequeRisque', back_populates='direction', lazy=True)
+    
+    def to_dict(self):
+        return {
+            'id': self.id,
+            'secteur_id': self.secteur_id,
+            'code': self.code,
+            'nom': self.nom,
+            'description': self.description,
+            'ordre': self.ordre,
+            'nb_risques': len(self.risques)
+        }
+    
+    def __repr__(self):
+        return f'<DirectionSecteur {self.code} - {self.nom}>'
+
+
+class BibliothequeRisque(db.Model):
+    """Bibliothèque de risques prédéfinis - VERSION AVEC SECTEUR ET DIRECTION"""
+    __tablename__ = 'bibliotheque_risques'
+    
+    id = db.Column(db.Integer, primary_key=True)
+    reference = db.Column(db.String(50), unique=True, nullable=False)
+    intitule = db.Column(db.String(300), nullable=False)
+    description = db.Column(db.Text)
+    
+    # Hiérarchie
+    secteur_id = db.Column(db.Integer, db.ForeignKey('secteurs_activite.id'), nullable=True)
+    direction_id = db.Column(db.Integer, db.ForeignKey('directions_secteur.id'), nullable=True)
+    categorie = db.Column(db.String(100), nullable=False)
+    sous_categorie = db.Column(db.String(100))
+    
+    # Niveaux par défaut
+    impact_defaut = db.Column(db.Integer, default=3)
+    probabilite_defaut = db.Column(db.Integer, default=3)
+    niveau_criticite_defaut = db.Column(db.String(20), default='moyen')
+    
+    # Recommandations
+    dispositifs_recommandes = db.Column(db.JSON, default=[])
+    actions_recommandees = db.Column(db.JSON, default=[])
+    kri_suggestions = db.Column(db.JSON, default=[])
+    normes_associees = db.Column(db.JSON, default=[])
+    
+    # Mots-clés
+    mots_cles = db.Column(db.JSON, default=[])
+    
+    # Usage
+    nb_utilisations = db.Column(db.Integer, default=0)
+    note_moyenne = db.Column(db.Float, default=0)
+    
+    # Statut
+    est_publie = db.Column(db.Boolean, default=True)
+    est_recommande = db.Column(db.Boolean, default=False)
+    niveau_maturite = db.Column(db.Integer, default=1)
+    
+    # Multi-tenant
+    client_id = db.Column(db.Integer, db.ForeignKey('clients.id'), nullable=True)
+    created_by = db.Column(db.Integer, db.ForeignKey('user.id'))
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    
+    # Relations
+    secteur = db.relationship('SecteurActivite', back_populates='risques')
+    direction = db.relationship('DirectionSecteur', back_populates='risques')
+    createur = db.relationship('User', foreign_keys=[created_by])
+    
+    def __init__(self, **kwargs):
+        super(BibliothequeRisque, self).__init__(**kwargs)
+        if not self.reference:
+            self.reference = self.generer_reference()
+    
+    def generer_reference(self):
+        """Génère une référence unique"""
+        prefix = "BR-"
+        count = BibliothequeRisque.query.filter(
+            BibliothequeRisque.reference.like(f'{prefix}%')
+        ).count()
+        return f"{prefix}{count + 1:04d}"
+    
+    def to_dict(self):
+        return {
+            'id': self.id,
+            'reference': self.reference,
+            'intitule': self.intitule,
+            'description': self.description,
+            'secteur_id': self.secteur_id,
+            'secteur_nom': self.secteur.nom if self.secteur else None,
+            'direction_id': self.direction_id,
+            'direction_nom': self.direction.nom if self.direction else None,
+            'categorie': self.categorie,
+            'sous_categorie': self.sous_categorie,
+            'impact_defaut': self.impact_defaut,
+            'probabilite_defaut': self.probabilite_defaut,
+            'niveau_criticite_defaut': self.niveau_criticite_defaut,
+            'dispositifs_recommandes': self.dispositifs_recommandes,
+            'actions_recommandees': self.actions_recommandees,
+            'kri_suggestions': self.kri_suggestions,
+            'nb_utilisations': self.nb_utilisations,
+            'est_publie': self.est_publie,
+            'mots_cles': self.mots_cles
+        }
+    
+    def __repr__(self):
+        return f'<BibliothequeRisque {self.reference} - {self.intitule[:50]}>'
+
+
+class StatsBibliothequeRisque(db.Model):
+    """Statistiques d'utilisation de la bibliothèque"""
+    __tablename__ = 'stats_bibliotheque_risques'
+    
+    id = db.Column(db.Integer, primary_key=True)
+    risque_bibliotheque_id = db.Column(db.Integer, db.ForeignKey('bibliotheque_risques.id'))
+    client_id = db.Column(db.Integer, db.ForeignKey('clients.id'))
+    utilisateur_id = db.Column(db.Integer, db.ForeignKey('user.id'))
+    action = db.Column(db.String(50))  # 'consultation', 'creation', 'recommandation'
+    date_action = db.Column(db.DateTime, default=datetime.utcnow)
+    
+    # Relations
+    risque_bibliotheque = db.relationship('BibliothequeRisque', backref='stats')
+    
+    def __repr__(self):
+        return f'<StatsBibliothequeRisque {self.action} pour risque {self.risque_bibliotheque_id}>'
+
