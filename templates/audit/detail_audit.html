@@ -1823,17 +1823,19 @@
                             </div>
                             {% endif %}
                             
+                        <!-- CAS 4 : AUDIT REJETE -->
                         {% elif workflow.etape_actuelle == 'rejete' %}
-                            <div class="fk-alert fk-alert-danger">
-                                <i class="fas fa-exclamation-triangle me-2"></i>
-                                <strong>{{ t("Audit rejeté") }}</strong><br>
-                                {{ t("Raison") }} : {{ workflow.commentaire_rejet or 'Non spécifiée' }}
-                            </div>
-                            {% if current_user.id == audit.created_by or current_user.is_client_admin %}
-                            <button class="btn-elegant btn-warning" onclick="envoyerRelecture()">
-                                <i class="fas fa-sync me-2"></i>{{ t("Corriger et renvoyer") }}
-                            </button>
-                            {% endif %}
+                        <div class="fk-alert fk-alert-danger">
+                            <i class="fas fa-exclamation-triangle me-2"></i>
+                            <strong>{{ t("Audit rejeté") }}</strong><br>
+                            {{ t("Raison") }} : {{ workflow.commentaire_rejet or 'Non spécifiée' }}
+                        </div>
+
+                        {% if current_user.id == audit.created_by or current_user.is_client_admin %}
+                        <button class="btn-elegant btn-warning" onclick="renvoyerRelecture()">
+                            <i class="fas fa-sync me-2"></i>{{ t("Corriger et renvoyer") }}
+                        </button>
+                        {% endif %}
                             
                         {% elif workflow.etape_actuelle == 'valide' %}
                             <div class="fk-alert fk-alert-success">
@@ -1844,7 +1846,16 @@
                         {% endif %}
                     </div>
                 </div>
-                
+                <!-- Dans l'onglet Approbation, après les actions principales -->
+                {% if workflow and workflow.etape_actuelle in ['valide', 'approuve', 'rejete'] %}
+                <div class="mt-3">
+                    <hr>
+                    <button class="btn-elegant btn-outline-warning" onclick="annulerValidation()">
+                        <i class="fas fa-undo me-2"></i>{{ t("Annuler la validation") }}
+                    </button>
+                    <small class="text-muted ms-2">{{ t("Permet de revenir à l'étape précédente") }}</small>
+                </div>
+                {% endif %}
                 <!-- Approbateurs spécifiques -->
                 {% if workflow and (workflow.approbateur_niveau1_nom or workflow.approbateur_niveau2_nom) %}
                 <div class="mt-4">
@@ -4841,10 +4852,18 @@ function chargerFeuillesTravail() {
         if (recherchePreuve) recherchePreuve.addEventListener('input', filtrerPreuves);
     });
     // Fonctions pour le workflow d'approbation
-function envoyerRelecture() {
+    function envoyerRelecture() {
     const commentaire = prompt("{{ t("Commentaire pour la relecture (optionnel) :") }}");
     
-    fetch(`/api/audit/{{ audit.id }}/workflow/envoyer-relecture`, {
+    // Déterminer l'URL selon l'état actuel
+    let url = `/api/audit/{{ audit.id }}/workflow/envoyer-relecture`;
+    
+    // Si l'audit est rejeté, on utilise une route spéciale pour le renvoyer
+    {% if workflow and workflow.etape_actuelle == 'rejete' %}
+    url = `/api/audit/{{ audit.id }}/workflow/renvoyer-relecture`;
+    {% endif %}
+    
+    fetch(url, {
         method: 'POST',
         headers: {
             'Content-Type': 'application/json',
@@ -4932,6 +4951,55 @@ function rejeterAudit() {
     .then(data => {
         if (data.success) {
             showToast('{{ t("Audit rejeté") }}', 'warning');
+            location.reload();
+        } else {
+            showToast('{{ t("Erreur") }} : ' + data.error, 'error');
+        }
+    })
+    .catch(error => {
+        showToast('{{ t("Erreur réseau") }}', 'error');
+    });
+}
+function renvoyerRelecture() {
+    const commentaire = prompt("{{ t("Expliquez les corrections apportées (optionnel) :") }}");
+    
+    fetch(`/api/audit/{{ audit.id }}/workflow/renvoyer-relecture`, {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            'X-CSRFToken': document.querySelector('input[name="csrf_token"]')?.value || ''
+        },
+        body: JSON.stringify({commentaire: commentaire || ''})
+    })
+    .then(r => r.json())
+    .then(data => {
+        if (data.success) {
+            showToast('{{ t("Audit renvoyé en relecture") }}', 'success');
+            location.reload();
+        } else {
+            showToast('{{ t("Erreur") }} : ' + data.error, 'error');
+        }
+    })
+    .catch(error => {
+        showToast('{{ t("Erreur réseau") }}', 'error');
+    });
+}
+function annulerValidation() {
+    if (!confirm("{{ t("Êtes-vous sûr de vouloir annuler cette validation ? L'audit reviendra à l'étape précédente.") }}")) {
+        return;
+    }
+    
+    fetch(`/api/audit/{{ audit.id }}/workflow/annuler-validation`, {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            'X-CSRFToken': document.querySelector('input[name="csrf_token"]')?.value || ''
+        }
+    })
+    .then(r => r.json())
+    .then(data => {
+        if (data.success) {
+            showToast(data.message, 'info');
             location.reload();
         } else {
             showToast('{{ t("Erreur") }} : ' + data.error, 'error');
