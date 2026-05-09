@@ -110,18 +110,31 @@
         </div>
     </div>
     
+
     <!-- ============================================ -->
     <!-- SECTION 1: ALERTES D'APPROBATION (CLIC DIRECT) -->
     <!-- ============================================ -->
     <div class="card mb-4">
+        <!-- ✅ REMPLACEZ L'ANCIEN CARD-HEADER PAR CECI -->
         <div class="card-header bg-danger text-white">
-            <h5 class="mb-0"><i class="fas fa-bell me-2"></i>Alertes d'approbation ({{ alertes_approbation|length }})</h5>
+            <div class="d-flex justify-content-between align-items-center">
+                <h5 class="mb-0"><i class="fas fa-bell me-2"></i>Alertes d'approbation ({{ alertes_approbation|length }})</h5>
+                <div>
+                    <button class="btn btn-sm btn-light me-2" onclick="rafraichirAlertes()">
+                        <i class="fas fa-sync-alt me-1"></i> Rafraîchir
+                    </button>
+                    <button class="btn btn-sm btn-outline-light" onclick="nettoyerAlertesObsoletes()">
+                        <i class="fas fa-trash-alt me-1"></i> Nettoyer
+                    </button>
+                </div>
+            </div>
         </div>
         <div class="card-body p-0">
             {% if alertes_approbation %}
                 {% for alerte in alertes_approbation %}
                 <div class="alert-card p-3 border-bottom {% if not alerte.est_lue %}bg-light{% endif %}" 
-                     onclick="window.location.href='{{ url_for('detail_audit', id=alerte.audit_id) }}'">
+                    onclick="window.location.href='{{ url_for('detail_audit', id=alerte.audit_id) }}'">
+                    <!-- Contenu de l'alerte - gardez votre code existant -->
                     <div class="d-flex justify-content-between align-items-start">
                         <div>
                             <div class="d-flex align-items-center gap-2 mb-1">
@@ -177,8 +190,6 @@
                     </thead>
                     <tbody>
                         {% for rec in toutes_recommandations %}
-                        {% set today_date = now().date() if now else datetime.utcnow().date() %}
-                        {% set diff_jours = (rec.date_echeance - today_date).days if rec.date_echeance else 999 %}
                         <tr class="reco-card">
                             <td>
                                 <a href="{{ url_for('detail_audit', id=rec.audit_id) }}" class="text-decoration-none">
@@ -212,12 +223,13 @@
                             </td>
                             <td>
                                 {% if rec.date_echeance %}
-                                    {% if diff_jours < 0 and rec.statut != 'termine' %}
+                                    {% set today = now().date() if now else datetime.utcnow().date() %}
+                                    {% if rec.date_echeance < today and rec.statut != 'termine' %}
                                     <span class="badge bg-danger">
                                         <i class="fas fa-exclamation-triangle me-1"></i>
                                         {{ rec.date_echeance_formatee }}
                                     </span>
-                                    {% elif diff_jours <= 7 and diff_jours >= 0 and rec.statut != 'termine' %}
+                                    {% elif rec.date_echeance <= today + timedelta(days=7) and rec.statut != 'termine' %}
                                     <span class="badge bg-warning">
                                         <i class="fas fa-clock me-1"></i>
                                         {{ rec.date_echeance_formatee }}
@@ -319,4 +331,87 @@ function getDaysUntil(dateStr) {
     return Math.ceil(diffTime / (1000 * 60 * 60 * 24));
 }
 </script>
+<script>
+    // ============================================
+    // FONCTIONS POUR LES ALERTES
+    // ============================================
+    
+    function nettoyerAlertesObsoletes() {
+        if (!confirm("Supprimer toutes les alertes d'approbation obsolètes ?")) return;
+        
+        fetch('/api/alertes-approbation/nettoyer-obsoletes', {
+            method: 'POST',
+            headers: {
+                'X-CSRFToken': document.querySelector('input[name="csrf_token"]')?.value || ''
+            }
+        })
+        .then(r => r.json())
+        .then(data => {
+            if (data.success) {
+                showToast(data.message, 'success');
+                setTimeout(() => location.reload(), 1500);
+            } else {
+                showToast('Erreur: ' + data.error, 'error');
+            }
+        })
+        .catch(error => {
+            console.error('Erreur:', error);
+            showToast('Erreur réseau', 'error');
+        });
+    }
+    
+    function rafraichirAlertes() {
+        location.reload();
+    }
+    
+    function marquerAlerteLue(alerteId, event) {
+        if (event) event.stopPropagation();
+        
+        fetch(`/api/alertes-approbation/${alerteId}/marquer-lue`, {
+            method: 'POST',
+            headers: {
+                'X-CSRFToken': document.querySelector('input[name="csrf_token"]')?.value || ''
+            }
+        })
+        .then(r => r.json())
+        .then(data => {
+            if (data.success) {
+                showToast('Alerte marquée comme lue', 'success');
+                location.reload();
+            }
+        })
+        .catch(error => console.error('Erreur:', error));
+    }
+    
+    function showToast(message, type) {
+        let container = document.getElementById('toastContainer');
+        if (!container) {
+            container = document.createElement('div');
+            container.id = 'toastContainer';
+            container.style.position = 'fixed';
+            container.style.bottom = '20px';
+            container.style.right = '20px';
+            container.style.zIndex = '9999';
+            document.body.appendChild(container);
+        }
+        
+        const toast = document.createElement('div');
+        toast.className = `toast align-items-center text-bg-${type === 'success' ? 'success' : type === 'warning' ? 'warning' : 'danger'} border-0`;
+        toast.setAttribute('role', 'alert');
+        toast.innerHTML = `
+            <div class="d-flex">
+                <div class="toast-body">
+                    <i class="fas fa-${type === 'success' ? 'check-circle' : 'exclamation-triangle'} me-2"></i>
+                    ${message}
+                </div>
+                <button type="button" class="btn-close btn-close-white me-2 m-auto" data-bs-dismiss="toast"></button>
+            </div>
+        `;
+        
+        container.appendChild(toast);
+        const bsToast = new bootstrap.Toast(toast, { delay: 3000 });
+        bsToast.show();
+        toast.addEventListener('hidden.bs.toast', () => toast.remove());
+    }
+    </script>
 {% endblock %}
