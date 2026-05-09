@@ -1,0 +1,139 @@
+{% extends "base.html" %}
+
+{% block title %}Bibliothèque - {{ categorie|replace('_', ' ')|title }}{% endblock %}
+
+{% block content %}
+<div class="container-fluid py-4">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <div>
+            <h1 class="mb-0">
+                <i class="fas fa-folder-open me-2 text-primary"></i>
+                {{ categorie|replace('_', ' ')|title }}
+            </h1>
+            <p class="text-muted mt-2">
+                {{ risques|length }} risque(s) dans cette catégorie
+            </p>
+        </div>
+        <div>
+            <a href="{{ url_for('bibliotheque_risques') }}" class="btn btn-outline-secondary me-2">
+                <i class="fas fa-arrow-left me-2"></i>Toutes les catégories
+            </a>
+            {% if cartographie %}
+            <a href="{{ url_for('detail_cartographie', id=cartographie.id) }}" class="btn btn-outline-primary">
+                <i class="fas fa-map me-2"></i>Retour à la cartographie
+            </a>
+            {% endif %}
+        </div>
+    </div>
+    
+    <div class="row">
+        {% for risque in risques %}
+        <div class="col-md-6 col-lg-4 mb-4">
+            <div class="card h-100 shadow-sm">
+                <div class="card-body">
+                    <div class="d-flex justify-content-between align-items-start mb-2">
+                        <span class="badge bg-primary">{{ risque.categorie|replace('_', ' ')|title }}</span>
+                        <span class="badge {{ 'bg-danger' if risque.niveau_criticite_defaut == 'critique' else 'bg-warning' if risque.niveau_criticite_defaut == 'eleve' else 'bg-info' if risque.niveau_criticite_defaut == 'moyen' else 'bg-success' }}">
+                            {{ risque.niveau_criticite_defaut or 'moyen'|upper }}
+                        </span>
+                    </div>
+                    <h5 class="card-title">{{ risque.intitule }}</h5>
+                    <p class="card-text text-muted">{{ risque.description|truncate(100) }}</p>
+                    <div class="mt-2">
+                        <small class="text-muted">
+                            <i class="fas fa-chart-line me-1"></i>Impact: {{ risque.impact_defaut }}/5 | 
+                            Probabilité: {{ risque.probabilite_defaut }}/5
+                        </small>
+                    </div>
+                    <div class="mt-3">
+                        <span class="badge bg-secondary">
+                            <i class="fas fa-chart-bar me-1"></i>{{ risque.nb_utilisations }} utilisations
+                        </span>
+                    </div>
+                </div>
+                <div class="card-footer bg-transparent">
+                    <button class="btn btn-sm btn-primary w-100" onclick="ajouterRisque({{ risque.id }})">
+                        <i class="fas fa-plus me-1"></i> Ajouter à ma cartographie
+                    </button>
+                </div>
+            </div>
+        </div>
+        {% endfor %}
+    </div>
+</div>
+
+<!-- Modal pour sélectionner la cartographie -->
+<div class="modal fade" id="modalSelectCartographie" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header bg-primary text-white">
+                <h5 class="modal-title"><i class="fas fa-map me-2"></i>Ajouter le risque</h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <p>Sélectionnez la cartographie à laquelle ajouter ce risque :</p>
+                <select id="cartographieSelect" class="form-select">
+                    <option value="">-- Sélectionner une cartographie --</option>
+                    {% for carto in cartographies %}
+                    <option value="{{ carto.id }}">{{ carto.nom }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Annuler</button>
+                <button type="button" class="btn btn-primary" onclick="confirmerAjoutRisque()">Ajouter</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+let selectedRisqueId = null;
+
+function ajouterRisque(risqueId) {
+    selectedRisqueId = risqueId;
+    const modal = new bootstrap.Modal(document.getElementById('modalSelectCartographie'));
+    modal.show();
+}
+
+function confirmerAjoutRisque() {
+    const cartographieId = document.getElementById('cartographieSelect').value;
+    
+    if (!cartographieId) {
+        alert('Veuillez sélectionner une cartographie');
+        return;
+    }
+    
+    fetch('/api/bibliotheque-risques/appliquer', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            'X-CSRFToken': '{{ csrf_token() }}'
+        },
+        body: JSON.stringify({
+            risque_id: selectedRisqueId,
+            cartographie_id: parseInt(cartographieId)
+        })
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            alert('Risque ajouté avec succès !');
+            // Rediriger vers la cartographie si elle est spécifiée
+            const cartoId = document.getElementById('cartographieSelect').value;
+            if (cartoId) {
+                window.location.href = "{{ url_for('detail_cartographie', id=0) }}".replace('0', cartoId);
+            } else {
+                location.reload();
+            }
+        } else {
+            alert('Erreur: ' + data.error);
+        }
+    })
+    .catch(error => {
+        console.error('Erreur:', error);
+        alert('Erreur lors de l\'ajout du risque');
+    });
+}
+</script>
+{% endblock %}

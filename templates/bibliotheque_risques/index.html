@@ -1,0 +1,537 @@
+{% extends "base.html" %}
+
+{% block title %}Bibliothèque de Risques - Par Secteur{% endblock %}
+
+{% block styles %}
+{{ super() }}
+<style>
+    .sector-card {
+        transition: all 0.3s ease;
+        cursor: pointer;
+        border: none;
+        border-radius: 16px;
+        overflow: hidden;
+    }
+    .sector-card:hover {
+        transform: translateY(-5px);
+        box-shadow: 0 10px 30px rgba(0,0,0,0.1);
+    }
+    .sector-header {
+        padding: 20px;
+        color: white;
+    }
+    .direction-card {
+        transition: all 0.2s ease;
+        cursor: pointer;
+        border-left: 4px solid;
+        margin-bottom: 10px;
+    }
+    .direction-card:hover {
+        transform: translateX(5px);
+        background: #f8fafc;
+    }
+    .risk-card {
+        transition: all 0.2s ease;
+        border-left: 4px solid;
+        margin-bottom: 15px;
+    }
+    .risk-card:hover {
+        transform: translateX(5px);
+        box-shadow: 0 5px 15px rgba(0,0,0,0.1);
+    }
+    .search-section {
+        background: linear-gradient(135deg, #1e3a8a, #3b82f6);
+        border-radius: 20px;
+        padding: 30px;
+        margin-bottom: 30px;
+        color: white;
+    }
+    .breadcrumb-nav {
+        background: rgba(255,255,255,0.1);
+        border-radius: 10px;
+        padding: 10px 15px;
+        margin-bottom: 20px;
+    }
+    .breadcrumb-item a {
+        color: white;
+        text-decoration: none;
+    }
+    .breadcrumb-item.active {
+        color: #fbbf24;
+    }
+    .stat-number {
+        font-size: 28px;
+        font-weight: 700;
+    }
+    .filter-panel {
+        background: white;
+        border-radius: 12px;
+        padding: 20px;
+        margin-bottom: 25px;
+        box-shadow: 0 2px 10px rgba(0,0,0,0.05);
+    }
+    .selected-filters {
+        background: #f8fafc;
+        border-radius: 8px;
+        padding: 10px 15px;
+        margin-top: 15px;
+    }
+    .filter-badge {
+        display: inline-flex;
+        align-items: center;
+        background: #e2e8f0;
+        padding: 5px 12px;
+        border-radius: 20px;
+        font-size: 13px;
+        margin-right: 10px;
+        margin-top: 5px;
+    }
+    .filter-badge .remove {
+        margin-left: 8px;
+        cursor: pointer;
+        color: #ef4444;
+    }
+    .level-badge {
+        padding: 4px 10px;
+        border-radius: 20px;
+        font-size: 11px;
+        font-weight: 600;
+    }
+    .level-critical { background: #ef4444; color: white; }
+    .level-high { background: #f59e0b; color: white; }
+    .level-medium { background: #3b82f6; color: white; }
+    .level-low { background: #10b981; color: white; }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    
+    <!-- En-tête -->
+    <div class="search-section">
+        <div class="d-flex justify-content-between align-items-center mb-4">
+            <div>
+                <h1 class="mb-2"><i class="fas fa-book me-3"></i>Bibliothèque de Risques</h1>
+                <p class="mb-0 opacity-75">Plus de 200 risques prédéfinis par secteur d'activité</p>
+            </div>
+            {% if cartographie %}
+            <a href="{{ url_for('detail_cartographie', id=cartographie.id) }}" class="btn btn-light">
+                <i class="fas fa-arrow-left me-2"></i>Retour à la cartographie
+            </a>
+            {% endif %}
+        </div>
+        
+        <!-- Barre de recherche -->
+        <div class="row">
+            <div class="col-md-8">
+                <div class="input-group bg-white rounded-pill overflow-hidden">
+                    <span class="input-group-text bg-white border-0">
+                        <i class="fas fa-search text-muted"></i>
+                    </span>
+                    <input type="text" id="searchInput" class="form-control border-0 py-3" 
+                           placeholder="Rechercher un risque par mot-clé, secteur, direction...">
+                    <button class="btn btn-primary rounded-pill px-4" onclick="rechercherRisques()">
+                        Rechercher
+                    </button>
+                </div>
+            </div>
+            <div class="col-md-4">
+                <select id="secteurFilter" class="form-select" onchange="filtrerParSecteur()">
+                    <option value="all">📊 Tous les secteurs</option>
+                    {% for secteur in secteurs %}
+                    <option value="{{ secteur.code }}" {% if secteur_code == secteur.code %}selected{% endif %}>
+                        {{ secteur.nom }}
+                    </option>
+                    {% endfor %}
+                </select>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Breadcrumb navigation -->
+    <div class="breadcrumb-nav">
+        <nav aria-label="breadcrumb">
+            <ol class="breadcrumb mb-0">
+                <li class="breadcrumb-item"><a href="{{ url_for('bibliotheque_risques') }}">Bibliothèque</a></li>
+                {% if secteur %}
+                <li class="breadcrumb-item active">{{ secteur.nom }}</li>
+                {% endif %}
+                {% if direction %}
+                <li class="breadcrumb-item active">{{ direction.nom }}</li>
+                {% endif %}
+            </ol>
+        </nav>
+    </div>
+    
+    <!-- Filtres actifs -->
+    <div id="filtresActifs" class="selected-filters" style="display: none;">
+        <strong><i class="fas fa-filter me-2"></i>Filtres actifs :</strong>
+        <div id="filtresList"></div>
+    </div>
+    
+    <!-- Vue Secteurs (si aucun secteur sélectionné) -->
+    {% if not secteur %}
+    <div class="row mb-4">
+        <div class="col-12">
+            <h3 class="mb-4"><i class="fas fa-chart-pie me-2 text-primary"></i>Secteurs d'activité</h3>
+        </div>
+        {% for s in secteurs %}
+        <div class="col-md-4 col-lg-3 mb-4">
+            <div class="sector-card card h-100" onclick="window.location.href='{{ url_for('bibliotheque_risques_secteur', secteur_code=s.code) }}'">
+                <div class="sector-header" style="background: {{ s.couleur }};">
+                    <i class="fas {{ s.icone }} fa-2x mb-2"></i>
+                    <h5 class="mb-0">{{ s.nom }}</h5>
+                </div>
+                <div class="card-body">
+                    <p class="text-muted small">{{ s.description or 'Risques spécifiques à ce secteur' }}</p>
+                    <div class="d-flex justify-content-between">
+                        <span class="badge bg-primary">{{ s.nb_directions }} directions</span>
+                        <span class="badge bg-secondary">{{ s.risques|length }} risques</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+        {% endfor %}
+    </div>
+    {% endif %}
+    
+    <!-- Vue Directions (si secteur sélectionné mais pas direction) -->
+    {% if secteur and not direction %}
+    <div class="row mb-4">
+        <div class="col-12">
+            <div class="d-flex justify-content-between align-items-center mb-4">
+                <div>
+                    <h3><i class="fas fa-building me-2 text-primary"></i>Directions - {{ secteur.nom }}</h3>
+                    <p class="text-muted">Sélectionnez une direction pour voir les risques associés</p>
+                </div>
+                <a href="{{ url_for('bibliotheque_risques') }}" class="btn btn-outline-secondary">
+                    <i class="fas fa-arrow-left me-2"></i>Tous les secteurs
+                </a>
+            </div>
+        </div>
+        
+        {% for dir in directions %}
+        <div class="col-md-6 mb-3">
+            <div class="direction-card card" onclick="window.location.href='{{ url_for('bibliotheque_risques_direction', secteur_code=secteur.code, direction_id=dir.id) }}'">
+                <div class="card-body">
+                    <div class="d-flex justify-content-between align-items-center">
+                        <div>
+                            <h5 class="mb-1">{{ dir.nom }}</h5>
+                            <small class="text-muted">{{ dir.description or 'Risques liés à cette direction' }}</small>
+                        </div>
+                        <div class="text-end">
+                            <span class="badge bg-primary">{{ dir.risques|length }} risques</span>
+                            <i class="fas fa-chevron-right ms-2 text-muted"></i>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        {% endfor %}
+    </div>
+    {% endif %}
+    
+    <!-- Vue Risques (si direction sélectionnée) -->
+    {% if direction %}
+    <div class="row mb-4">
+        <div class="col-12">
+            <div class="d-flex justify-content-between align-items-center mb-4">
+                <div>
+                    <h3><i class="fas fa-exclamation-triangle me-2 text-primary"></i>Risques - {{ direction.nom }}</h3>
+                    <p class="text-muted">{{ secteur.nom }} > {{ direction.nom }}</p>
+                </div>
+                <div>
+                    <a href="{{ url_for('bibliotheque_risques_secteur', secteur_code=secteur.code) }}" class="btn btn-outline-secondary me-2">
+                        <i class="fas fa-arrow-left me-2"></i>Retour aux directions
+                    </a>
+                    <a href="{{ url_for('bibliotheque_risques') }}" class="btn btn-outline-primary">
+                        <i class="fas fa-home me-2"></i>Tous les secteurs
+                    </a>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Filtres supplémentaires pour les risques -->
+        <div class="col-12">
+            <div class="filter-panel">
+                <div class="row">
+                    <div class="col-md-3">
+                        <label class="form-label">Niveau de criticité</label>
+                        <select id="niveauFilter" class="form-select" onchange="filtrerRisques()">
+                            <option value="all">Tous les niveaux</option>
+                            <option value="critique">Critique</option>
+                            <option value="eleve">Élevé</option>
+                            <option value="moyen">Moyen</option>
+                            <option value="faible">Faible</option>
+                        </select>
+                    </div>
+                    <div class="col-md-3">
+                        <label class="form-label">Catégorie</label>
+                        <select id="categorieFilter" class="form-select" onchange="filtrerRisques()">
+                            <option value="all">Toutes les catégories</option>
+                            <option value="financier">Financier</option>
+                            <option value="conformite">Conformité</option>
+                            <option value="it">IT & Cyber</option>
+                            <option value="operationnel">Opérationnel</option>
+                            <option value="strategique">Stratégique</option>
+                            <option value="rh">RH</option>
+                            <option value="qualite">Qualité</option>
+                            <option value="environnement">Environnement</option>
+                        </select>
+                    </div>
+                    <div class="col-md-3">
+                        <label class="form-label">Impact minimum</label>
+                        <select id="impactFilter" class="form-select" onchange="filtrerRisques()">
+                            <option value="0">Tous impacts</option>
+                            <option value="3">≥ 3/5</option>
+                            <option value="4">≥ 4/5</option>
+                            <option value="5">= 5/5</option>
+                        </select>
+                    </div>
+                    <div class="col-md-3">
+                        <label class="form-label">Tri</label>
+                        <select id="sortFilter" class="form-select" onchange="filtrerRisques()">
+                            <option value="popularite">Popularité ▼</option>
+                            <option value="impact">Impact décroissant</option>
+                            <option value="probabilite">Probabilité décroissante</option>
+                            <option value="categorie">Par catégorie</option>
+                        </select>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Liste des risques -->
+        <div id="risquesList" class="row">
+            {% for risque in risques %}
+            <div class="col-md-6 col-lg-4 mb-3" 
+                 data-niveau="{{ risque.niveau_criticite_defaut }}"
+                 data-categorie="{{ risque.categorie }}"
+                 data-impact="{{ risque.impact_defaut }}">
+                <div class="risk-card card h-100" onclick="ajouterRisque({{ risque.id }})">
+                    <div class="card-body">
+                        <div class="d-flex justify-content-between align-items-start mb-2">
+                            <span class="badge bg-secondary">{{ risque.categorie|replace('_', ' ')|title }}</span>
+                            <span class="level-badge level-{{ risque.niveau_criticite_defaut }}">
+                                {{ risque.niveau_criticite_defaut|upper }}
+                            </span>
+                        </div>
+                        <h6 class="card-title fw-bold">{{ risque.intitule }}</h6>
+                        <p class="card-text small text-muted">{{ risque.description|truncate(80) }}</p>
+                        <div class="mt-2">
+                            <small class="text-muted">
+                                <i class="fas fa-chart-line me-1"></i>Impact: {{ risque.impact_defaut }}/5 | 
+                                Probabilité: {{ risque.probabilite_defaut }}/5
+                            </small>
+                        </div>
+                        <div class="mt-3">
+                            <span class="badge bg-info">
+                                <i class="fas fa-chart-bar me-1"></i>{{ risque.nb_utilisations }} utilisations
+                            </span>
+                            {% if risque.dispositifs_recommandes %}
+                            <span class="badge bg-warning text-dark ms-1">
+                                <i class="fas fa-shield-alt me-1"></i>Dispositifs
+                            </span>
+                            {% endif %}
+                        </div>
+                    </div>
+                    <div class="card-footer bg-transparent border-top-0 pb-3">
+                        <button class="btn btn-sm btn-primary w-100" onclick="event.stopPropagation(); ajouterRisque({{ risque.id }})">
+                            <i class="fas fa-plus me-1"></i> Ajouter à ma cartographie
+                        </button>
+                    </div>
+                </div>
+            </div>
+            {% endfor %}
+        </div>
+    </div>
+    {% endif %}
+</div>
+
+<!-- Modal pour sélectionner la cartographie -->
+<div class="modal fade" id="modalSelectCartographie" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header bg-primary text-white">
+                <h5 class="modal-title"><i class="fas fa-map me-2"></i>Ajouter le risque</h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <p>Sélectionnez la cartographie à laquelle ajouter ce risque :</p>
+                <select id="cartographieSelect" class="form-select">
+                    <option value="">-- Sélectionner une cartographie --</option>
+                    {% for carto in cartographies %}
+                    <option value="{{ carto.id }}">{{ carto.nom }} ({{ carto.direction.nom if carto.direction else 'Sans direction' }})</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Annuler</button>
+                <button type="button" class="btn btn-primary" onclick="confirmerAjoutRisque()">Ajouter</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+let selectedRisqueId = null;
+let allRisques = [];
+
+function ajouterRisque(risqueId) {
+    selectedRisqueId = risqueId;
+    const modal = new bootstrap.Modal(document.getElementById('modalSelectCartographie'));
+    modal.show();
+}
+
+function confirmerAjoutRisque() {
+    const cartographieId = document.getElementById('cartographieSelect').value;
+    
+    if (!cartographieId) {
+        alert('Veuillez sélectionner une cartographie');
+        return;
+    }
+    
+    fetch('/api/bibliotheque-risques/appliquer', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            'X-CSRFToken': '{{ csrf_token() }}'
+        },
+        body: JSON.stringify({
+            risque_id: selectedRisqueId,
+            cartographie_id: parseInt(cartographieId)
+        })
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            alert('Risque ajouté avec succès !');
+            const cartoId = document.getElementById('cartographieSelect').value;
+            if (cartoId) {
+                window.location.href = "{{ url_for('detail_cartographie', id=0) }}".replace('0', cartoId);
+            } else {
+                location.reload();
+            }
+        } else {
+            alert('Erreur: ' + data.error);
+        }
+    })
+    .catch(error => {
+        console.error('Erreur:', error);
+        alert('Erreur lors de l\'ajout du risque');
+    });
+}
+
+function rechercherRisques() {
+    const terme = document.getElementById('searchInput').value;
+    window.location.href = `{{ url_for('bibliotheque_risques_recherche') }}?q=${encodeURIComponent(terme)}`;
+}
+
+function filtrerParSecteur() {
+    const secteur = document.getElementById('secteurFilter').value;
+    if (secteur !== 'all') {
+        window.location.href = `{{ url_for('bibliotheque_risques_secteur', secteur_code='') }}${secteur}`;
+    } else {
+        window.location.href = `{{ url_for('bibliotheque_risques') }}`;
+    }
+}
+
+function filtrerRisques() {
+    const niveau = document.getElementById('niveauFilter').value;
+    const categorie = document.getElementById('categorieFilter').value;
+    const impactMin = parseInt(document.getElementById('impactFilter').value);
+    const sort = document.getElementById('sortFilter').value;
+    
+    let risquesFiltres = [...allRisques];
+    
+    if (niveau !== 'all') {
+        risquesFiltres = risquesFiltres.filter(r => r.niveau_criticite_defaut === niveau);
+    }
+    if (categorie !== 'all') {
+        risquesFiltres = risquesFiltres.filter(r => r.categorie === categorie);
+    }
+    if (impactMin > 0) {
+        risquesFiltres = risquesFiltres.filter(r => r.impact_defaut >= impactMin);
+    }
+    
+    // Tri
+    if (sort === 'popularite') {
+        risquesFiltres.sort((a,b) => (b.nb_utilisations || 0) - (a.nb_utilisations || 0));
+    } else if (sort === 'impact') {
+        risquesFiltres.sort((a,b) => b.impact_defaut - a.impact_defaut);
+    } else if (sort === 'probabilite') {
+        risquesFiltres.sort((a,b) => b.probabilite_defaut - a.probabilite_defaut);
+    } else if (sort === 'categorie') {
+        risquesFiltres.sort((a,b) => a.categorie.localeCompare(b.categorie));
+    }
+    
+    afficherRisquesFiltres(risquesFiltres);
+}
+
+function afficherRisquesFiltres(risques) {
+    const container = document.getElementById('risquesList');
+    if (!container) return;
+    
+    let html = '';
+    for (const risque of risques) {
+        html += `
+            <div class="col-md-6 col-lg-4 mb-3">
+                <div class="risk-card card h-100" onclick="ajouterRisque(${risque.id})">
+                    <div class="card-body">
+                        <div class="d-flex justify-content-between align-items-start mb-2">
+                            <span class="badge bg-secondary">${risque.categorie}</span>
+                            <span class="level-badge level-${risque.niveau_criticite_defaut}">
+                                ${risque.niveau_criticite_defaut.toUpperCase()}
+                            </span>
+                        </div>
+                        <h6 class="card-title fw-bold">${escapeHtml(risque.intitule)}</h6>
+                        <p class="card-text small text-muted">${escapeHtml(risque.description).substring(0, 80)}...</p>
+                        <div class="mt-2">
+                            <small class="text-muted">
+                                <i class="fas fa-chart-line me-1"></i>Impact: ${risque.impact_defaut}/5 | 
+                                Probabilité: ${risque.probabilite_defaut}/5
+                            </small>
+                        </div>
+                        <div class="mt-3">
+                            <span class="badge bg-info">
+                                <i class="fas fa-chart-bar me-1"></i>${risque.nb_utilisations || 0} utilisations
+                            </span>
+                        </div>
+                    </div>
+                    <div class="card-footer bg-transparent border-top-0 pb-3">
+                        <button class="btn btn-sm btn-primary w-100" onclick="event.stopPropagation(); ajouterRisque(${risque.id})">
+                            <i class="fas fa-plus me-1"></i> Ajouter
+                        </button>
+                    </div>
+                </div>
+            </div>
+        `;
+    }
+    
+    if (risques.length === 0) {
+        html = '<div class="col-12 text-center py-5"><i class="fas fa-search fa-3x text-muted mb-3"></i><h5>Aucun résultat</h5><p class="text-muted">Essayez d\'autres filtres</p></div>';
+    }
+    
+    container.innerHTML = html;
+}
+
+function escapeHtml(text) {
+    if (!text) return '';
+    const div = document.createElement('div');
+    div.textContent = text;
+    return div.innerHTML;
+}
+
+// Initialisation
+document.addEventListener('DOMContentLoaded', function() {
+    // Récupérer tous les risques pour le filtrage dynamique
+    fetch('/api/bibliotheque-risques/liste')
+        .then(r => r.json())
+        .then(data => {
+            if (data.success) {
+                allRisques = data.risques;
+            }
+        });
+});
+</script>
+{% endblock %}
