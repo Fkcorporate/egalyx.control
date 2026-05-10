@@ -316,7 +316,7 @@ class CartographieForm(FlaskForm):
     nom = StringField('Nom de la cartographie', validators=[DataRequired()])
     description = TextAreaField('Description', validators=[Optional()])
     
-    # 🔴 NOUVEAU: Lien direct vers le pôle (optionnel)
+    # Lien direct vers le pôle (optionnel)
     pole_id = SelectField('Pôle / Filiale', coerce=coerce_int_or_none, validators=[Optional()])
     
     direction_id = SelectField('Direction', coerce=coerce_int_or_none, validators=[Optional()])
@@ -331,10 +331,38 @@ class CartographieForm(FlaskForm):
     def __init__(self, *args, **kwargs):
         super(CartographieForm, self).__init__(*args, **kwargs)
         self.pole_id.choices = [(0, '--- Aucun pôle ---')]
-        self.direction_id.choices = [(0, '--- Sélectionner ---')]
-        self.service_id.choices = [(0, '--- Sélectionner ---')]
+        self.direction_id.choices = [(0, '--- Sélectionner une direction ---')]
+        self.service_id.choices = [(0, '--- Sélectionnez d\'abord une direction ---')]
+    
+    def update_service_choices(self, direction_id):
+        """Met à jour les choix du service en fonction de la direction sélectionnée"""
+        if direction_id and direction_id != 0:
+            from models import Service
+            from app import get_client_filter
+            from flask_login import current_user
+            
+            try:
+                services = get_client_filter(Service).filter_by(
+                    direction_id=direction_id,
+                    is_archived=False,
+                    is_active=True
+                ).order_by(Service.nom).all()
+                
+                if services:
+                    self.service_id.choices = [(0, '--- Sélectionner un service ---')] + [(s.id, s.nom) for s in services]
+                else:
+                    self.service_id.choices = [(0, '--- Aucun service disponible ---')]
+            except Exception as e:
+                print(f"Erreur chargement services: {e}")
+                self.service_id.choices = [(0, '--- Erreur de chargement ---')]
+        else:
+            self.service_id.choices = [(0, '--- Sélectionnez d\'abord une direction ---')]
     
     def validate(self, extra_validators=None):
+        # Mettre à jour les choices du service AVANT la validation
+        if hasattr(self, 'direction_id') and self.direction_id.data:
+            self.update_service_choices(self.direction_id.data)
+        
         if not super(CartographieForm, self).validate(extra_validators):
             return False
         
