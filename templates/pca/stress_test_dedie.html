@@ -1,0 +1,341 @@
+{% extends "base.html" %}
+
+{% block title %}Stress Test PCA - Egalyx Control{% endblock %}
+
+{% block content %}
+<style>
+    .page-header {
+        background: linear-gradient(135deg, #0A1929 0%, #1A3C6B 100%);
+        border-radius: 24px;
+        padding: 2rem;
+        margin-bottom: 2rem;
+        color: white;
+    }
+    
+    .stat-card {
+        transition: all 0.3s ease;
+        cursor: pointer;
+        border-radius: 20px;
+        background: white;
+        box-shadow: 0 2px 10px rgba(0,0,0,0.05);
+    }
+    
+    .stat-card:hover {
+        transform: translateY(-5px);
+        box-shadow: 0 10px 30px rgba(0,0,0,0.1);
+    }
+    
+    .plan-card {
+        background: white;
+        border-radius: 16px;
+        padding: 1.2rem;
+        margin-bottom: 1rem;
+        border: 1px solid #e2e8f0;
+        transition: all 0.3s ease;
+    }
+    
+    .plan-card:hover {
+        transform: translateY(-3px);
+        box-shadow: 0 10px 25px rgba(0,0,0,0.1);
+    }
+    
+    .plan-card.retard {
+        border-left: 4px solid #dc2626;
+    }
+    
+    .plan-card.termine {
+        border-left: 4px solid #10b981;
+    }
+    
+    .progress-bar-custom {
+        height: 8px;
+        border-radius: 10px;
+        background: #e2e8f0;
+        overflow: hidden;
+    }
+    
+    .progress-fill {
+        height: 100%;
+        border-radius: 10px;
+        transition: width 0.3s ease;
+    }
+    
+    .btn-action {
+        width: 36px;
+        height: 36px;
+        border-radius: 10px;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        background: #f1f5f9;
+        border: 1px solid #e2e8f0;
+        color: #64748b;
+        transition: all 0.3s ease;
+        cursor: pointer;
+        text-decoration: none;
+    }
+    
+    .btn-action:hover {
+        transform: translateY(-2px);
+        background: white;
+    }
+    
+    .btn-action.primary:hover { background: #0066CC; color: white; border-color: #0066CC; }
+    .btn-action.warning:hover { background: #F59E0B; color: white; border-color: #F59E0B; }
+    .btn-action.info:hover { background: #17a2b8; color: white; border-color: #17a2b8; }
+    
+    .scenario-badge {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.5rem;
+        padding: 0.25rem 0.75rem;
+        border-radius: 50px;
+        font-size: 0.75rem;
+        font-weight: 600;
+    }
+    
+    .scenario-cyber { background: #fee2e2; color: #dc2626; }
+    .scenario-humain { background: #fef3c7; color: #d97706; }
+    .scenario-technique { background: #dbeafe; color: #2563eb; }
+    .scenario-naturel { background: #e0f2fe; color: #0891b2; }
+</style>
+
+<div class="container-fluid px-4">
+    <!-- En-tête -->
+    <div class="page-header">
+        <div class="d-flex flex-wrap justify-content-between align-items-center">
+            <div>
+                <h1 class="h3 mb-1 fw-semibold">
+                    <i class="fas fa-bolt me-2"></i>
+                    Stress Test PCA
+                </h1>
+                <p class="text-white-50 small mb-0">
+                    Testez la résilience de vos plans de continuité d'activité
+                </p>
+            </div>
+            <div class="d-flex gap-2 mt-2 mt-sm-0">
+                <a href="{{ url_for('liste_plans_pca') }}" class="btn btn-outline-light btn-sm">
+                    <i class="fas fa-arrow-left me-1"></i> Retour
+                </a>
+                <button class="btn btn-light btn-sm" onclick="window.print()">
+                    <i class="fas fa-print me-1"></i> Imprimer
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Cartes statistiques -->
+    <div class="row g-3 mb-4">
+        <div class="col-md-3">
+            <div class="stat-card p-3">
+                <div class="d-flex justify-content-between align-items-center">
+                    <div>
+                        <span class="text-muted small text-uppercase">Plans PCA</span>
+                        <h2 class="mb-0 fw-bold mt-1">{{ stats.total }}</h2>
+                    </div>
+                    <div class="rounded-circle p-3" style="background: #e0f2fe;">
+                        <i class="fas fa-chalkboard-user text-primary fa-lg"></i>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="stat-card p-3">
+                <div class="d-flex justify-content-between align-items-center">
+                    <div>
+                        <span class="text-muted small text-uppercase">Maturité moyenne</span>
+                        <h2 class="mb-0 fw-bold mt-1">{{ stats.maturite_moyenne }}/5</h2>
+                    </div>
+                    <div class="rounded-circle p-3" style="background: #fef3c7;">
+                        <i class="fas fa-chart-line text-warning fa-lg"></i>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="stat-card p-3">
+                <div class="d-flex justify-content-between align-items-center">
+                    <div>
+                        <span class="text-muted small text-uppercase">Tests effectués</span>
+                        <h2 class="mb-0 fw-bold mt-1">{{ stats.avec_test }}</h2>
+                    </div>
+                    <div class="rounded-circle p-3" style="background: #dcfce7;">
+                        <i class="fas fa-check-circle text-success fa-lg"></i>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="stat-card p-3">
+                <div class="d-flex justify-content-between align-items-center">
+                    <div>
+                        <span class="text-muted small text-uppercase">Sans test</span>
+                        <h2 class="mb-0 fw-bold mt-1">{{ stats.sans_test }}</h2>
+                    </div>
+                    <div class="rounded-circle p-3" style="background: #fee2e2;">
+                        <i class="fas fa-exclamation-triangle text-danger fa-lg"></i>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Liste des plans avec stress test intégré -->
+    <div class="card border-0 shadow-sm">
+        <div class="card-header bg-white border-0 py-3">
+            <h5 class="mb-0 fw-semibold">
+                <i class="fas fa-list me-2 text-primary"></i>Stress Test par plan PCA
+            </h5>
+        </div>
+        <div class="card-body">
+            {% if plans %}
+                {% for plan in plans %}
+                <div class="plan-card" id="plan-{{ plan.id }}">
+                    <div class="d-flex flex-wrap justify-content-between align-items-start mb-3">
+                        <div>
+                            <h6 class="mb-1">
+                                <code class="text-primary">{{ plan.reference }}</code>
+                                <span class="badge bg-secondary ms-2">v{{ plan.version }}</span>
+                            </h6>
+                            <h5 class="mb-0">{{ plan.titre }}</h5>
+                            <div class="small text-muted mt-1">
+                                <i class="fas fa-calendar me-1"></i>Créé le {{ plan.created_at.strftime('%d/%m/%Y') }}
+                                {% if plan.date_dernier_test %}
+                                | <i class="fas fa-history me-1"></i>Dernier test: {{ plan.date_dernier_test.strftime('%d/%m/%Y') }}
+                                {% else %}
+                                | <i class="fas fa-exclamation-triangle text-warning me-1"></i>Aucun test effectué
+                                {% endif %}
+                            </div>
+                        </div>
+                        <div>
+                            <span class="badge bg-{{ 'success' if plan.statut == 'valide' else 'warning' if plan.statut == 'en_redaction' else 'danger' }} px-3 py-2">
+                                {{ plan.statut|upper }}
+                            </span>
+                        </div>
+                    </div>
+                    
+                    <div class="row g-3 mb-3">
+                        <div class="col-md-3">
+                            <strong class="small text-muted">Maturité</strong>
+                            <div class="d-flex align-items-center gap-2 mt-1">
+                                <div class="progress-bar-custom flex-grow-1">
+                                    <div class="progress-fill bg-primary" style="width: {{ plan.niveau_maturite * 20 if plan.niveau_maturite else 0 }}%"></div>
+                                </div>
+                                <span class="fw-bold small">{{ plan.niveau_maturite or 0 }}/5</span>
+                            </div>
+                        </div>
+                        <div class="col-md-3">
+                            <strong class="small text-muted">RTO</strong>
+                            <div class="mt-1">{{ plan.delai_arret_max or '-' }}</div>
+                        </div>
+                        <div class="col-md-3">
+                            <strong class="small text-muted">RPO</strong>
+                            <div class="mt-1">{{ plan.perte_donnees_max or '-' }}</div>
+                        </div>
+                        <div class="col-md-3">
+                            <strong class="small text-muted">Dernière évaluation</strong>
+                            <div class="mt-1">{{ plan.updated_at.strftime('%d/%m/%Y') if plan.updated_at else '-' }}</div>
+                        </div>
+                    </div>
+                    
+                    <!-- Sélecteur de scénario et résultat -->
+                    <div class="bg-light rounded p-3 mt-2">
+                        <div class="d-flex flex-wrap gap-2 align-items-center mb-3">
+                            <span class="fw-bold small"><i class="fas fa-bolt text-warning me-1"></i>Scénario :</span>
+                            <select class="form-select form-select-sm w-auto" id="scenario-{{ plan.id }}" style="width: auto;">
+                                <option value="cyber_ransomware">💣 Ransomware</option>
+                                <option value="cyber_ddos">🌐 Attaque DDoS</option>
+                                <option value="humain_greve">⚡ Grève générale</option>
+                                <option value="humain_pandemie">🦠 Pandémie</option>
+                                <option value="technique_incendie">🔥 Incendie</option>
+                                <option value="technique_panne_elec">⚡ Panne électrique</option>
+                                <option value="naturel_inondation">🌊 Inondation</option>
+                            </select>
+                            <button class="btn btn-warning btn-sm" onclick="lancerStressTest({{ plan.id }})">
+                                <i class="fas fa-play me-1"></i>Lancer le test
+                            </button>
+                        </div>
+                        <div id="resultat-{{ plan.id }}" class="small">
+                            <span class="text-muted">Sélectionnez un scénario et cliquez sur "Lancer le test"</span>
+                        </div>
+                    </div>
+                </div>
+                {% endfor %}
+            {% else %}
+                <div class="text-center py-5">
+                    <i class="fas fa-folder-open fa-3x text-muted mb-3 opacity-50"></i>
+                    <p class="text-muted mb-2">Aucun plan PCA trouvé.</p>
+                    <a href="{{ url_for('nouveau_plan_pca') }}" class="btn btn-primary btn-sm">
+                        <i class="fas fa-plus me-1"></i>Créer un plan PCA
+                    </a>
+                </div>
+            {% endif %}
+        </div>
+    </div>
+</div>
+
+<script>
+function lancerStressTest(planId) {
+    const scenarioSelect = document.getElementById(`scenario-${planId}`);
+    const scenario = scenarioSelect.value;
+    const resultatDiv = document.getElementById(`resultat-${planId}`);
+    
+    // Afficher le chargement
+    resultatDiv.innerHTML = '<div class="text-center py-2"><i class="fas fa-spinner fa-spin me-2"></i>Analyse en cours...</div>';
+    
+    fetch(`/pca/${planId}/stress-test-ajax`, {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            'X-CSRFToken': '{{ csrf_token() }}'
+        },
+        body: JSON.stringify({ scenario: scenario })
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            const r = data.resultats;
+            const couleur = r.couleur === 'success' ? 'success' : (r.couleur === 'warning' ? 'warning' : (r.couleur === 'danger' ? 'danger' : 'info'));
+            
+            let resilienceClass = '';
+            if (r.resilience_stress >= 80) resilienceClass = 'text-success';
+            else if (r.resilience_stress >= 60) resilienceClass = 'text-info';
+            else if (r.resilience_stress >= 40) resilienceClass = 'text-warning';
+            else resilienceClass = 'text-danger';
+            
+            let html = `
+                <div class="alert alert-${couleur} alert-sm p-2 mt-2 mb-0">
+                    <div class="d-flex flex-wrap justify-content-between align-items-center">
+                        <div>
+                            <strong>${r.scenario}</strong><br>
+                            <small>${r.description}</small>
+                        </div>
+                        <div class="text-end">
+                            <div class="h5 mb-0 ${resilienceClass}">${r.resilience_stress}%</div>
+                            <small class="text-muted">Résilience</small>
+                        </div>
+                    </div>
+                    <div class="progress mt-2" style="height: 6px;">
+                        <div class="progress-bar bg-${couleur}" style="width: ${r.resilience_stress}%"></div>
+                    </div>
+                    <div class="mt-2 small">
+                        <i class="fas fa-chart-line me-1"></i>Perte: ${r.perte}% | 
+                        <i class="fas fa-clock me-1"></i>${r.duree}
+                    </div>
+                    <div class="mt-2 small text-muted">
+                        <i class="fas fa-lightbulb me-1"></i>${r.conseil}
+                    </div>
+                </div>
+            `;
+            resultatDiv.innerHTML = html;
+        } else {
+            resultatDiv.innerHTML = `<div class="alert alert-danger alert-sm p-2 mt-2 mb-0">❌ Erreur: ${data.error}</div>`;
+        }
+    })
+    .catch(error => {
+        resultatDiv.innerHTML = `<div class="alert alert-danger alert-sm p-2 mt-2 mb-0">❌ Erreur: ${error.message}</div>`;
+    });
+}
+</script>
+
+{% endblock %}
