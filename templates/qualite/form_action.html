@@ -14,10 +14,10 @@
                 </ol>
             </nav>
             <h1 class="h2">
-                <i class="fas fa-tasks me-2"></i>
+                <i class="fas fa-edit me-2"></i>
                 {{ action }} une action d'amélioration
             </h1>
-            <p class="text-muted">Plan: {{ plan.reference }} - {{ plan.titre }}</p>
+            <p class="text-muted">Action: {{ action_obj.reference }} - {{ action_obj.intitule[:50] }}</p>
         </div>
     </div>
 
@@ -29,20 +29,26 @@
                 <div class="row">
                     <div class="col-md-6 mb-3">
                         {{ form.reference.label(class="form-label") }}
-                        <div class="input-group">
-                            {{ form.reference(class="form-control" + (" is-invalid" if form.reference.errors else ""), id="reference_field", readonly=true, style="background-color: #f8f9fa;") }}
-                            <button type="button" class="btn btn-outline-secondary" id="regenerateReferenceBtn" title="Régénérer une nouvelle référence">
-                                <i class="fas fa-sync-alt"></i>
-                            </button>
-                        </div>
+                        {% if action == 'Modifier' %}
+                            <!-- En modification, la référence est fixe et en lecture seule -->
+                            {{ form.reference(class="form-control", readonly=true, style="background-color: #f8f9fa;") }}
+                            <small class="text-muted">La référence ne peut pas être modifiée</small>
+                        {% else %}
+                            <!-- En création, champ généré automatiquement -->
+                            <input type="text" class="form-control" 
+                                   value="{{ form.reference.data or 'Générée automatiquement' }}" 
+                                   readonly disabled 
+                                   style="background-color: #f8f9fa;">
+                            {{ form.reference(type="hidden") }}
+                            <small class="text-muted">La référence est générée automatiquement à la création</small>
+                        {% endif %}
                         {% for error in form.reference.errors %}
-                            <div class="invalid-feedback">{{ error }}</div>
+                            <div class="invalid-feedback d-block">{{ error }}</div>
                         {% endfor %}
-                        <small class="text-muted">Référence générée automatiquement - Cliquez sur l'icône pour en générer une nouvelle si nécessaire</small>
                     </div>
                     <div class="col-md-6 mb-3">
                         {{ form.intitule.label(class="form-label") }}
-                        {{ form.intitule(class="form-control" + (" is-invalid" if form.intitule.errors else "")) }}
+                        {{ form.intitule(class="form-control" + (" is-invalid" if form.intitule.errors else ""), required=true) }}
                         {% for error in form.intitule.errors %}
                             <div class="invalid-feedback">{{ error }}</div>
                         {% endfor %}
@@ -52,13 +58,12 @@
                 <div class="mb-3">
                     {{ form.description.label(class="form-label") }}
                     {{ form.description(class="form-control", rows=4) }}
-                    <small class="text-muted">Description détaillée de l'action à mener.</small>
                 </div>
                 
                 <div class="row">
                     <div class="col-md-4 mb-3">
                         {{ form.date_echeance.label(class="form-label") }}
-                        {{ form.date_echeance(class="form-control", type="date") }}
+                        {{ form.date_echeance(class="form-control", type="date", required=true) }}
                     </div>
                     <div class="col-md-4 mb-3">
                         {{ form.priorite.label(class="form-label") }}
@@ -77,9 +82,12 @@
                     </div>
                     <div class="col-md-6 mb-3">
                         {{ form.pourcentage_realisation.label(class="form-label") }}
-                        {{ form.pourcentage_realisation(class="form-control", type="number", min="0", max="100") }}
-                        <input type="range" class="form-range mt-1" min="0" max="100" step="5" 
-                               oninput="this.previousElementSibling.previousElementSibling.value = this.value"
+                        <div class="input-group">
+                            {{ form.pourcentage_realisation(class="form-control", type="number", min="0", max="100") }}
+                            <span class="input-group-text">%</span>
+                        </div>
+                        <input type="range" class="form-range mt-2" min="0" max="100" step="5" 
+                               oninput="this.previousElementSibling.previousElementSibling.previousElementSibling.value = this.value"
                                value="{{ form.pourcentage_realisation.data or 0 }}">
                     </div>
                 </div>
@@ -90,10 +98,25 @@
                     <small class="text-muted">Commentaires sur l'avancement, difficultés rencontrées, etc.</small>
                 </div>
                 
+                <!-- Indicateur de retard si applicable -->
+                {% if action_obj and action_obj.est_en_retard() %}
+                <div class="alert alert-warning">
+                    <i class="fas fa-exclamation-triangle me-2"></i>
+                    <strong>Action en retard !</strong> Date d'échéance dépassée depuis le {{ action_obj.date_echeance.strftime('%d/%m/%Y') }}.
+                </div>
+                {% endif %}
+                
                 <hr>
                 <div class="d-flex justify-content-between">
                     <a href="{{ url_for('detail_plan_qualite', plan_id=plan.id) }}" class="btn btn-secondary">Annuler</a>
-                    {{ form.submit(class="btn btn-primary") }}
+                    <div>
+                        {% if action == 'Modifier' and action_obj and action_obj.statut != 'terminee' %}
+                        <button type="button" class="btn btn-success me-2" id="marquerTermineBtn">
+                            <i class="fas fa-check-circle me-1"></i>Marquer terminée
+                        </button>
+                        {% endif %}
+                        {{ form.submit(class="btn btn-primary") }}
+                    </div>
                 </div>
             </form>
         </div>
@@ -104,170 +127,61 @@
 // Synchronisation du slider avec le champ nombre
 document.querySelectorAll('input[type="range"]').forEach(slider => {
     const numberInput = slider.previousElementSibling.previousElementSibling;
-    slider.addEventListener('input', function() {
-        numberInput.value = this.value;
-    });
-    numberInput.addEventListener('input', function() {
-        slider.value = this.value;
-    });
-});
-
-// Fonction pour générer une nouvelle référence via API
-async function regenerateReference() {
-    const planId = {{ plan.id }};
-    const btn = document.getElementById('regenerateReferenceBtn');
-    const referenceField = document.getElementById('reference_field');
-    const originalBtnHtml = btn.innerHTML;
-    
-    btn.disabled = true;
-    btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i>';
-    
-    try {
-        const response = await fetch(`/api/qualite/generer-reference-action/${planId}`, {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-                'X-CSRFToken': '{{ csrf_token() }}'
-            }
+    if (numberInput && numberInput.type === 'number') {
+        slider.addEventListener('input', function() {
+            numberInput.value = this.value;
         });
-        
-        const data = await response.json();
-        
-        if (data.success) {
-            referenceField.value = data.reference;
-            // Effet visuel pour indiquer la mise à jour
-            referenceField.style.backgroundColor = '#d4edda';
-            referenceField.style.transition = 'background-color 0.5s';
-            setTimeout(() => {
-                referenceField.style.backgroundColor = '#f8f9fa';
-            }, 1000);
-            
-            // Toast de succès
-            if (typeof Swal !== 'undefined') {
-                Swal.fire({
-                    icon: 'success',
-                    title: 'Référence générée',
-                    text: `Nouvelle référence : ${data.reference}`,
-                    toast: true,
-                    position: 'top-end',
-                    showConfirmButton: false,
-                    timer: 2000
-                });
-            }
-        } else {
-            throw new Error(data.error || 'Erreur lors de la génération');
-        }
-    } catch (error) {
-        console.error('Erreur:', error);
-        if (typeof Swal !== 'undefined') {
-            Swal.fire({
-                icon: 'error',
-                title: 'Erreur',
-                text: 'Impossible de générer une nouvelle référence',
-                toast: true,
-                position: 'top-end',
-                showConfirmButton: false,
-                timer: 3000
-            });
-        }
-    } finally {
-        btn.disabled = false;
-        btn.innerHTML = originalBtnHtml;
+        numberInput.addEventListener('input', function() {
+            slider.value = this.value;
+        });
     }
-}
-
-// Fonction pour vérifier si une référence existe déjà
-async function checkReferenceExists(reference) {
-    if (!reference) return false;
-    
-    try {
-        const response = await fetch(`/api/qualite/verifier-reference-action/${plan.id}?reference=${encodeURIComponent(reference)}`);
-        const data = await response.json();
-        return data.exists;
-    } catch (error) {
-        console.error('Erreur lors de la vérification:', error);
-        return false;
-    }
-}
-
-// Au chargement de la page, vérifier si la référence existe déjà
-document.addEventListener('DOMContentLoaded', async function() {
-    const referenceField = document.getElementById('reference_field');
-    const form = document.getElementById('actionForm');
-    
-    if (referenceField && referenceField.value) {
-        const exists = await checkReferenceExists(referenceField.value);
-        if (exists) {
-            // La référence existe déjà, en générer automatiquement une nouvelle
-            if (typeof Swal !== 'undefined') {
-                Swal.fire({
-                    icon: 'warning',
-                    title: 'Référence déjà existante',
-                    text: 'La référence générée existe déjà. Une nouvelle référence va être créée.',
-                    toast: true,
-                    position: 'top-end',
-                    showConfirmButton: false,
-                    timer: 3000
-                });
-            }
-            await regenerateReference();
-        }
-    }
-    
-    // Ajouter un écouteur sur le formulaire pour vérifier à nouveau avant soumission
-    form.addEventListener('submit', async function(e) {
-        const reference = referenceField.value;
-        const exists = await checkReferenceExists(reference);
-        
-        if (exists) {
-            e.preventDefault();
-            const result = await Swal.fire({
-                icon: 'warning',
-                title: 'Référence déjà existante',
-                text: 'Cette référence est déjà utilisée. Voulez-vous générer une nouvelle référence ou annuler ?',
-                showCancelButton: true,
-                confirmButtonText: 'Générer nouvelle référence',
-                cancelButtonText: 'Annuler',
-                confirmButtonColor: '#3085d6',
-                cancelButtonColor: '#d33'
-            });
-            
-            if (result.isConfirmed) {
-                await regenerateReference();
-                form.submit();
-            }
-        }
-    });
 });
 
-// Afficher un message si le formulaire a été pré-rempli par l'IA
-document.addEventListener('DOMContentLoaded', function() {
-    const intituleField = document.getElementById('intitule');
+// Bouton "Marquer terminée"
+const marquerTermineBtn = document.getElementById('marquerTermineBtn');
+if (marquerTermineBtn) {
+    marquerTermineBtn.addEventListener('click', function() {
+        const pourcentageField = document.getElementById('pourcentage_realisation');
+        const statutField = document.getElementById('statut');
+        const commentaireField = document.getElementById('commentaire_realisation');
+        
+        if (pourcentageField) pourcentageField.value = 100;
+        if (statutField) statutField.value = 'terminee';
+        
+        // Mettre à jour le slider
+        const slider = document.querySelector('input[type="range"]');
+        if (slider) slider.value = 100;
+        
+        // Ajouter un commentaire automatique
+        if (commentaireField && !commentaireField.value) {
+            const today = new Date().toLocaleDateString('fr-FR');
+            commentaireField.value = `Action terminée le ${today}.\n` + commentaireField.value;
+        }
+        
+        // Optionnel: soumettre automatiquement
+        if (confirm('Marquer cette action comme terminée ?')) {
+            document.getElementById('actionForm').submit();
+        }
+    });
+}
+
+// Validation de la date d'échéance
+const dateEcheance = document.getElementById('date_echeance');
+if (dateEcheance) {
+    const today = new Date().toISOString().split('T')[0];
+    dateEcheance.setAttribute('min', today);
+}
+
+// Message de confirmation avant soumission si pourcentage = 100 mais statut != terminee
+document.getElementById('actionForm')?.addEventListener('submit', function(e) {
+    const pourcentage = document.getElementById('pourcentage_realisation')?.value;
+    const statut = document.getElementById('statut')?.value;
     
-    if (intituleField && intituleField.value && intituleField.value.length > 0) {
-        // Ajouter un indicateur visuel que le formulaire a été pré-rempli
-        const alertDiv = document.createElement('div');
-        alertDiv.className = 'alert alert-info alert-dismissible fade show mb-3';
-        alertDiv.innerHTML = `
-            <i class="fas fa-robot me-2"></i>
-            <strong>Formulaire pré-rempli par l'IA</strong> - Une recommandation IA a été utilisée pour pré-remplir ce formulaire.
-            <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
-        `;
-        const form = document.getElementById('actionForm');
-        const firstChild = form.firstChild;
-        form.insertBefore(alertDiv, firstChild);
+    if (pourcentage == 100 && statut !== 'terminee') {
+        if (!confirm('Le pourcentage est à 100% mais le statut n\'est pas "Terminée". Voulez-vous continuer ?')) {
+            e.preventDefault();
+        }
     }
 });
 </script>
-
-<style>
-    #reference_field:focus {
-        background-color: #f8f9fa !important;
-    }
-    
-    .btn-outline-secondary:hover {
-        background-color: #6c757d;
-        color: white;
-    }
-</style>
 {% endblock %}
