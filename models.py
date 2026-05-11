@@ -9321,12 +9321,12 @@ class CartographieRisqueFonction(db.Model):
 # ============================================
 
 class ActionAmeliorationQualite(db.Model):
-    """Action d'amélioration qualité liée à un plan - Version corrigée multi-tenant"""
+    """Action d'amélioration qualité liée à un plan"""
     __tablename__ = 'actions_amelioration_qualite'
 
     id = db.Column(db.Integer, primary_key=True)
     
-    # Référence - Plus d'unicité globale, la contrainte sera composite
+    # Référence - Pas de unique=True (la contrainte composite est en base)
     reference = db.Column(db.String(50), nullable=False)
     
     intitule = db.Column(db.String(200), nullable=False)
@@ -9338,7 +9338,6 @@ class ActionAmeliorationQualite(db.Model):
     # Dates et suivi
     date_echeance = db.Column(db.Date, nullable=False)
     priorite = db.Column(db.String(20), default='moyenne')
-    
     statut = db.Column(db.String(20), default='a_faire')
     pourcentage_realisation = db.Column(db.Integer, default=0)
     commentaire_realisation = db.Column(db.Text, nullable=True)
@@ -9361,18 +9360,6 @@ class ActionAmeliorationQualite(db.Model):
     client_id = db.Column(db.Integer, db.ForeignKey('clients.id'), nullable=False)
     
     # ============================================
-    # CONTRAINTES MULTI-TENANT CORRIGÉES
-    # ============================================
-    __table_args__ = (
-        UniqueConstraint('client_id', 'plan_qualite_id', 'reference', 
-                        name='uq_action_client_plan_reference'),
-        Index('idx_action_client_plan', 'client_id', 'plan_qualite_id'),
-        Index('idx_action_client_statut', 'client_id', 'statut'),
-        Index('idx_action_client_date_echeance', 'client_id', 'date_echeance'),
-        Index('idx_action_reference', 'reference'),
-    )
-    
-    # ============================================
     # RELATIONS
     # ============================================
     plan_qualite = db.relationship('PlanQualiteFonction', back_populates='actions_amelioration')
@@ -9381,20 +9368,25 @@ class ActionAmeliorationQualite(db.Model):
     archive_user = db.relationship('User', foreign_keys=[archived_by])
     
     # ============================================
-    # GÉNÉRATION DE RÉFÉRENCE CORRIGÉE
+    # GÉNÉRATION DE RÉFÉRENCE
     # ============================================
     @staticmethod
     def generate_reference(plan_qualite, client_id):
         """Génère une nouvelle référence unique pour ce client et ce plan"""
+        from sqlalchemy import func
+        
+        # Compter les actions pour ce client ET ce plan
         count = ActionAmeliorationQualite.query.filter_by(
             plan_qualite_id=plan_qualite.id,
             client_id=client_id
         ).count()
         
+        # Format: AQ-{reference_plan}-{numero:03d}
         next_number = count + 1
         base_reference = f"AQ-{plan_qualite.reference}"
         reference = f"{base_reference}-{next_number:03d}"
         
+        # Vérifier l'unicité pour ce client (sécurité)
         attempt = 0
         max_attempts = 100
         
@@ -9408,42 +9400,15 @@ class ActionAmeliorationQualite(db.Model):
             if not existing:
                 return reference
             
+            # Si existe, incrémenter
             next_number += 1
             reference = f"{base_reference}-{next_number:03d}"
             attempt += 1
         
+        # Ultime recours : timestamp
         import time
         timestamp = int(time.time())
         return f"{base_reference}-{timestamp}"
-    
-    @staticmethod
-    def generate_reference_safe(plan_qualite, client_id, session=None):
-        """Version sécurisée avec tentative d'insertion et rollback en cas de conflit"""
-        from sqlalchemy import func
-        
-        if session is None:
-            session = db.session
-        
-        max_attempts = 10
-        
-        for attempt in range(max_attempts):
-            count = session.query(func.count(ActionAmeliorationQualite.id)).filter(
-                ActionAmeliorationQualite.plan_qualite_id == plan_qualite.id,
-                ActionAmeliorationQualite.client_id == client_id
-            ).scalar() or 0
-            
-            next_number = count + 1 + attempt
-            reference = f"AQ-{plan_qualite.reference}-{next_number:03d}"
-            
-            exists = session.query(ActionAmeliorationQualite).filter(
-                ActionAmeliorationQualite.reference == reference,
-                ActionAmeliorationQualite.client_id == client_id
-            ).first() is not None
-            
-            if not exists:
-                return reference, True
-        
-        return None, False
     
     # ============================================
     # MÉTHODES UTILITAIRES
@@ -9452,7 +9417,7 @@ class ActionAmeliorationQualite(db.Model):
         """Vérifie si l'action est en retard"""
         if self.statut == 'terminee':
             return False
-        if self.date_echeance and date.today() > self.date_echeance:
+        if self.date_echeance and datetime.now().date() > self.date_echeance:
             return True
         return False
     
@@ -9462,7 +9427,7 @@ class ActionAmeliorationQualite(db.Model):
             return None
         if self.statut == 'terminee':
             return 0
-        delta = (self.date_echeance - date.today()).days
+        delta = (self.date_echeance - datetime.now().date()).days
         return delta if delta >= 0 else -delta
     
     def get_couleur_priorite(self):
@@ -9507,6 +9472,7 @@ class ActionAmeliorationQualite(db.Model):
         if pourcentage is not None:
             self.pourcentage_realisation = min(100, max(0, pourcentage))
         
+        # Mise à jour automatique du statut basée sur le pourcentage
         if self.pourcentage_realisation == 100:
             self.statut = 'terminee'
         elif self.pourcentage_realisation > 0:
@@ -9535,69 +9501,6 @@ class ActionAmeliorationQualite(db.Model):
     
     def __repr__(self):
         return f'<ActionAmelioration {self.reference}: {self.intitule[:50]}>'
-
-
-# ============================================
-# SIGNALS POUR LA GESTION DES RÉFÉRENCES
-# ============================================
-# À placer APRÈS la définition de la classe
-@event.listens_for(ActionAmeliorationQualite, 'before_insert')
-def set_action_reference(mapper, connection, target):
-    """
-    Event SQLAlchemy : Génère automatiquement la référence avant insertion
-    si elle n'est pas déjà définie
-    """
-    if not target.reference:
-        # Utiliser une requête directe pour éviter les problèmes de session
-        from sqlalchemy import func
-        
-        # Compter les actions existantes pour ce client et ce plan
-        count = connection.execute(
-            db.select(func.count(ActionAmeliorationQualite.id)).where(
-                ActionAmeliorationQualite.plan_qualite_id == target.plan_qualite_id,
-                ActionAmeliorationQualite.client_id == target.client_id
-            )
-        ).scalar() or 0
-        
-        next_number = count + 1
-        base_reference = f"AQ-{target.plan_qualite.reference}"
-        reference = f"{base_reference}-{next_number:03d}"
-        
-        # Vérifier que cette référence n'existe pas
-        attempt = 0
-        while attempt < 10:
-            exists = connection.execute(
-                db.select(ActionAmeliorationQualite.id).where(
-                    ActionAmeliorationQualite.reference == reference,
-                    ActionAmeliorationQualite.client_id == target.client_id
-                )
-            ).first() is not None
-            
-            if not exists:
-                target.reference = reference
-                return
-            
-            next_number += 1
-            reference = f"{base_reference}-{next_number:03d}"
-            attempt += 1
-        
-        # Fallback
-        import time
-        target.reference = f"{base_reference}-{int(time.time())}"
-
-
-# ============================================
-# VALIDATION DE LA RÉFÉRENCE
-# ============================================
-def validate_reference_format(reference):
-    """
-    Valide le format de la référence
-    
-    Format attendu: AQ-{texte}-{3 chiffres}
-    Exemple: AQ-PAQ-2026-002-001
-    """
-    pattern = r'^AQ-[A-Z0-9-]+-\d{3}$'
-    return bool(re.match(pattern, reference))
 
 
 # ============================================
