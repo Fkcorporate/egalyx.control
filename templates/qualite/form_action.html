@@ -29,11 +29,16 @@
                 <div class="row">
                     <div class="col-md-6 mb-3">
                         {{ form.reference.label(class="form-label") }}
-                        {{ form.reference(class="form-control" + (" is-invalid" if form.reference.errors else ""), readonly=true, style="background-color: #f8f9fa;") }}
+                        <div class="input-group">
+                            {{ form.reference(class="form-control" + (" is-invalid" if form.reference.errors else ""), id="reference_field", readonly=true, style="background-color: #f8f9fa;") }}
+                            <button type="button" class="btn btn-outline-secondary" id="regenerateReferenceBtn" title="Régénérer une nouvelle référence">
+                                <i class="fas fa-sync-alt"></i>
+                            </button>
+                        </div>
                         {% for error in form.reference.errors %}
                             <div class="invalid-feedback">{{ error }}</div>
                         {% endfor %}
-                        <small class="text-muted">Référence générée automatiquement</small>
+                        <small class="text-muted">Référence générée automatiquement - Cliquez sur l'icône pour en générer une nouvelle si nécessaire</small>
                     </div>
                     <div class="col-md-6 mb-3">
                         {{ form.intitule.label(class="form-label") }}
@@ -107,10 +112,137 @@ document.querySelectorAll('input[type="range"]').forEach(slider => {
     });
 });
 
+// Fonction pour générer une nouvelle référence via API
+async function regenerateReference() {
+    const planId = {{ plan.id }};
+    const btn = document.getElementById('regenerateReferenceBtn');
+    const referenceField = document.getElementById('reference_field');
+    const originalBtnHtml = btn.innerHTML;
+    
+    btn.disabled = true;
+    btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i>';
+    
+    try {
+        const response = await fetch(`/api/qualite/generer-reference-action/${planId}`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRFToken': '{{ csrf_token() }}'
+            }
+        });
+        
+        const data = await response.json();
+        
+        if (data.success) {
+            referenceField.value = data.reference;
+            // Effet visuel pour indiquer la mise à jour
+            referenceField.style.backgroundColor = '#d4edda';
+            referenceField.style.transition = 'background-color 0.5s';
+            setTimeout(() => {
+                referenceField.style.backgroundColor = '#f8f9fa';
+            }, 1000);
+            
+            // Toast de succès
+            if (typeof Swal !== 'undefined') {
+                Swal.fire({
+                    icon: 'success',
+                    title: 'Référence générée',
+                    text: `Nouvelle référence : ${data.reference}`,
+                    toast: true,
+                    position: 'top-end',
+                    showConfirmButton: false,
+                    timer: 2000
+                });
+            }
+        } else {
+            throw new Error(data.error || 'Erreur lors de la génération');
+        }
+    } catch (error) {
+        console.error('Erreur:', error);
+        if (typeof Swal !== 'undefined') {
+            Swal.fire({
+                icon: 'error',
+                title: 'Erreur',
+                text: 'Impossible de générer une nouvelle référence',
+                toast: true,
+                position: 'top-end',
+                showConfirmButton: false,
+                timer: 3000
+            });
+        }
+    } finally {
+        btn.disabled = false;
+        btn.innerHTML = originalBtnHtml;
+    }
+}
+
+// Fonction pour vérifier si une référence existe déjà
+async function checkReferenceExists(reference) {
+    if (!reference) return false;
+    
+    try {
+        const response = await fetch(`/api/qualite/verifier-reference-action/${plan.id}?reference=${encodeURIComponent(reference)}`);
+        const data = await response.json();
+        return data.exists;
+    } catch (error) {
+        console.error('Erreur lors de la vérification:', error);
+        return false;
+    }
+}
+
+// Au chargement de la page, vérifier si la référence existe déjà
+document.addEventListener('DOMContentLoaded', async function() {
+    const referenceField = document.getElementById('reference_field');
+    const form = document.getElementById('actionForm');
+    
+    if (referenceField && referenceField.value) {
+        const exists = await checkReferenceExists(referenceField.value);
+        if (exists) {
+            // La référence existe déjà, en générer automatiquement une nouvelle
+            if (typeof Swal !== 'undefined') {
+                Swal.fire({
+                    icon: 'warning',
+                    title: 'Référence déjà existante',
+                    text: 'La référence générée existe déjà. Une nouvelle référence va être créée.',
+                    toast: true,
+                    position: 'top-end',
+                    showConfirmButton: false,
+                    timer: 3000
+                });
+            }
+            await regenerateReference();
+        }
+    }
+    
+    // Ajouter un écouteur sur le formulaire pour vérifier à nouveau avant soumission
+    form.addEventListener('submit', async function(e) {
+        const reference = referenceField.value;
+        const exists = await checkReferenceExists(reference);
+        
+        if (exists) {
+            e.preventDefault();
+            const result = await Swal.fire({
+                icon: 'warning',
+                title: 'Référence déjà existante',
+                text: 'Cette référence est déjà utilisée. Voulez-vous générer une nouvelle référence ou annuler ?',
+                showCancelButton: true,
+                confirmButtonText: 'Générer nouvelle référence',
+                cancelButtonText: 'Annuler',
+                confirmButtonColor: '#3085d6',
+                cancelButtonColor: '#d33'
+            });
+            
+            if (result.isConfirmed) {
+                await regenerateReference();
+                form.submit();
+            }
+        }
+    });
+});
+
 // Afficher un message si le formulaire a été pré-rempli par l'IA
 document.addEventListener('DOMContentLoaded', function() {
     const intituleField = document.getElementById('intitule');
-    const descriptionField = document.getElementById('description');
     
     if (intituleField && intituleField.value && intituleField.value.length > 0) {
         // Ajouter un indicateur visuel que le formulaire a été pré-rempli
@@ -122,8 +254,20 @@ document.addEventListener('DOMContentLoaded', function() {
             <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
         `;
         const form = document.getElementById('actionForm');
-        form.insertBefore(alertDiv, form.firstChild);
+        const firstChild = form.firstChild;
+        form.insertBefore(alertDiv, firstChild);
     }
 });
 </script>
+
+<style>
+    #reference_field:focus {
+        background-color: #f8f9fa !important;
+    }
+    
+    .btn-outline-secondary:hover {
+        background-color: #6c757d;
+        color: white;
+    }
+</style>
 {% endblock %}
