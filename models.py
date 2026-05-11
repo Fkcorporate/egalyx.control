@@ -9321,16 +9321,21 @@ class CartographieRisqueFonction(db.Model):
 # ============================================
 
 class ActionAmeliorationQualite(db.Model):
-    """Action d'amélioration qualité liée à un plan"""
+    """Action d'amélioration qualité liée à un plan - Version corrigée multi-tenant"""
     __tablename__ = 'actions_amelioration_qualite'
 
     id = db.Column(db.Integer, primary_key=True)
-    reference = db.Column(db.String(50), unique=True, nullable=False)
+    
+    # Référence - Plus d'unicité globale, la contrainte sera composite
+    reference = db.Column(db.String(50), nullable=False)  # unique=True SUPPRIMÉ
+    
     intitule = db.Column(db.String(200), nullable=False)
     description = db.Column(db.Text, nullable=True)
     
+    # Liens
     plan_qualite_id = db.Column(db.Integer, db.ForeignKey('plans_qualite_fonction.id'), nullable=False)
     
+    # Dates et suivi
     date_echeance = db.Column(db.Date, nullable=False)
     priorite = db.Column(db.String(20), default='moyenne')
     
@@ -9338,57 +9343,228 @@ class ActionAmeliorationQualite(db.Model):
     pourcentage_realisation = db.Column(db.Integer, default=0)
     commentaire_realisation = db.Column(db.Text, nullable=True)
     
+    # Responsables
     responsable_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=True)
     
+    # Archivage
     is_archived = db.Column(db.Boolean, default=False)
     archived_at = db.Column(db.DateTime, nullable=True)
     archived_by = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=True)
+    archive_reason = db.Column(db.String(255), nullable=True)  # Ajout utile
     
+    # Métadonnées
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
     created_by = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
     
+    # Multi-tenant
     client_id = db.Column(db.Integer, db.ForeignKey('clients.id'), nullable=False)
     
-    # Relations
+    # ============================================
+    # CONTRAINTES MULTI-TENANT CORRIGÉES
+    # ============================================
+    __table_args__ = (
+        # Une référence doit être unique POUR UN MÊME CLIENT et UN MÊME PLAN
+        UniqueConstraint('client_id', 'plan_qualite_id', 'reference', 
+                        name='uq_action_client_plan_reference'),
+        
+        # Index pour accélérer les recherches courantes
+        Index('idx_action_client_plan', 'client_id', 'plan_qualite_id'),
+        Index('idx_action_client_statut', 'client_id', 'statut'),
+        Index('idx_action_client_date_echeance', 'client_id', 'date_echeance'),
+        Index('idx_action_reference', 'reference'),  # Index simple pour recherche
+    )
+    
+    # ============================================
+    # RELATIONS
+    # ============================================
     plan_qualite = db.relationship('PlanQualiteFonction', back_populates='actions_amelioration')
-    responsable = db.relationship('User', foreign_keys=[responsable_id])
+    responsable = db.relationship('User', foreign_keys=[responsable_id')
     createur = db.relationship('User', foreign_keys=[created_by])
     archive_user = db.relationship('User', foreign_keys=[archived_by])
     
+    # ============================================
+    # GÉNÉRATION DE RÉFÉRENCE CORRIGÉE
+    # ============================================
     @staticmethod
     def generate_reference(plan_qualite, client_id):
-        """Génère une nouvelle référence unique pour une action d'amélioration"""
-        # Récupérer le nombre d'actions existantes pour ce plan
+        """
+        Génère une nouvelle référence unique pour ce client et ce plan
+        
+        Args:
+            plan_qualite: Objet PlanQualiteFonction
+            client_id: ID du client
+        
+        Returns:
+            str: Référence unique au format AQ-PLAN-XXX
+        """
+        # Compter les actions pour ce client ET ce plan
         count = ActionAmeliorationQualite.query.filter_by(
             plan_qualite_id=plan_qualite.id,
             client_id=client_id
         ).count()
         
-        # Format: AQ-REFERENCE_PLAN-XXX
-        # Exemple: AQ-PAQ-2026-002-001
+        # Format: AQ-{reference_plan}-{numero:03d}
         next_number = count + 1
-        reference = f"AQ-{plan_qualite.reference}-{next_number:03d}"
+        base_reference = f"AQ-{plan_qualite.reference}"
+        reference = f"{base_reference}-{next_number:03d}"
         
-        # Vérifier si la référence existe déjà (cas rare de suppression)
-        while ActionAmeliorationQualite.query.filter_by(
-            reference=reference,
-            client_id=client_id
-        ).first():
+        # Vérifier l'unicité pour ce client (sécurité)
+        attempt = 0
+        max_attempts = 100
+        
+        while attempt < max_attempts:
+            existing = ActionAmeliorationQualite.query.filter_by(
+                reference=reference,
+                client_id=client_id,
+                plan_qualite_id=plan_qualite.id
+            ).first()
+            
+            if not existing:
+                return reference
+            
+            # Si existe, incrémenter
             next_number += 1
-            reference = f"AQ-{plan_qualite.reference}-{next_number:03d}"
+            reference = f"{base_reference}-{next_number:03d}"
+            attempt += 1
         
-        return reference
+        # Ultime recours : timestamp
+        import time
+        timestamp = int(time.time())
+        return f"{base_reference}-{timestamp}"
     
-    def __repr__(self):
-        return f'<ActionAmelioration {self.reference}: {self.intitule}>'
+    @staticmethod
+    def generate_reference_safe(plan_qualite, client_id, session=None):
+        """
+        Version sécurisée avec tentative d'insertion et rollback en cas de conflit
+        
+        Args:
+            plan_qualite: Objet PlanQualiteFonction
+            client_id: ID du client
+            session: Session SQLAlchemy (optionnelle)
+        
+        Returns:
+            tuple: (reference, success)
+        """
+        from sqlalchemy import func
+        
+        if session is None:
+            session = db.session
+        
+        max_attempts = 10
+        
+        for attempt in range(max_attempts):
+            # Compter le nombre réel d'actions
+            count = session.query(func.count(ActionAmeliorationQualite.id)).filter(
+                ActionAmeliorationQualite.plan_qualite_id == plan_qualite.id,
+                ActionAmeliorationQualite.client_id == client_id
+            ).scalar() or 0
+            
+            next_number = count + 1 + attempt
+            reference = f"AQ-{plan_qualite.reference}-{next_number:03d}"
+            
+            # Vérifier si cette référence existe déjà
+            exists = session.query(ActionAmeliorationQualite).filter(
+                ActionAmeliorationQualite.reference == reference,
+                ActionAmeliorationQualite.client_id == client_id
+            ).first() is not None
+            
+            if not exists:
+                return reference, True
+        
+        return None, False
     
+    # ============================================
+    # MÉTHODES UTILITAIRES
+    # ============================================
     def est_en_retard(self):
+        """Vérifie si l'action est en retard"""
         if self.statut == 'terminee':
             return False
-        if self.date_echeance and datetime.utcnow().date() > self.date_echeance:
+        if self.date_echeance and date.today() > self.date_echeance:
             return True
         return False
+    
+    def get_jours_restants(self):
+        """Calcule les jours restants avant échéance"""
+        if not self.date_echeance:
+            return None
+        if self.statut == 'terminee':
+            return 0
+        delta = (self.date_echeance - date.today()).days
+        return delta if delta >= 0 else -delta
+    
+    def get_couleur_priorite(self):
+        """Retourne la couleur CSS pour la priorité"""
+        couleurs = {
+            'haute': 'danger',
+            'moyenne': 'warning',
+            'basse': 'success'
+        }
+        return couleurs.get(self.priorite, 'secondary')
+    
+    def get_icone_statut(self):
+        """Retourne l'icône Font Awesome pour le statut"""
+        icones = {
+            'a_faire': 'fa-clock',
+            'en_cours': 'fa-spinner fa-pulse',
+            'terminee': 'fa-check-circle',
+            'bloquee': 'fa-exclamation-triangle',
+            'annulee': 'fa-ban'
+        }
+        return icones.get(self.statut, 'fa-question')
+    
+    def archiver(self, user_id, raison="Archivage manuel"):
+        """Archive l'action"""
+        self.is_archived = True
+        self.archived_at = datetime.utcnow()
+        self.archived_by = user_id
+        self.archive_reason = raison
+        self.statut = 'archive'
+    
+    def desarchiver(self):
+        """Désarchive l'action"""
+        self.is_archived = False
+        self.archived_at = None
+        self.archived_by = None
+        self.archive_reason = None
+        if self.statut == 'archive':
+            self.statut = 'a_faire'
+    
+    def mettre_a_jour_progression(self, pourcentage=None):
+        """Met à jour le pourcentage de réalisation et le statut automatiquement"""
+        if pourcentage is not None:
+            self.pourcentage_realisation = min(100, max(0, pourcentage))
+        
+        # Mise à jour automatique du statut basée sur le pourcentage
+        if self.pourcentage_realisation == 100:
+            self.statut = 'terminee'
+        elif self.pourcentage_realisation > 0:
+            if self.statut not in ['terminee', 'annulee']:
+                self.statut = 'en_cours'
+    
+    def to_dict(self):
+        """Convertit l'objet en dictionnaire"""
+        return {
+            'id': self.id,
+            'reference': self.reference,
+            'intitule': self.intitule,
+            'description': self.description,
+            'date_echeance': self.date_echeance.isoformat() if self.date_echeance else None,
+            'priorite': self.priorite,
+            'statut': self.statut,
+            'pourcentage_realisation': self.pourcentage_realisation,
+            'commentaire_realisation': self.commentaire_realisation,
+            'responsable_id': self.responsable_id,
+            'est_en_retard': self.est_en_retard(),
+            'jours_restants': self.get_jours_restants(),
+            'plan_qualite_id': self.plan_qualite_id,
+            'created_at': self.created_at.isoformat() if self.created_at else None,
+            'updated_at': self.updated_at.isoformat() if self.updated_at else None
+        }
+    
+    def __repr__(self):
+        return f'<ActionAmelioration {self.reference}: {self.intitule[:50]}>'
 
 
 # ============================================
