@@ -1,6 +1,6 @@
 {% extends "base.html" %}
 
-{% block title %}{{ action }} une action d'amélioration - Egalyx Control{% endblock %}
+{% block title %}{{ action_type if action_type else 'Créer' }} une action d'amélioration - Egalyx Control{% endblock %}
 
 {% block content %}
 <div class="container-fluid">
@@ -10,14 +10,17 @@
                 <ol class="breadcrumb">
                     <li class="breadcrumb-item"><a href="{{ url_for('liste_plans_qualite') }}">Plans qualité</a></li>
                     <li class="breadcrumb-item"><a href="{{ url_for('detail_plan_qualite', plan_id=plan.id) }}">{{ plan.reference }}</a></li>
-                    <li class="breadcrumb-item active">{{ action }} une action</li>
+                    <li class="breadcrumb-item active">{{ action_type if action_type else 'Créer' }} une action</li>
                 </ol>
             </nav>
             <h1 class="h2">
-                <i class="fas fa-edit me-2"></i>
-                {{ action }} une action d'amélioration
+                <i class="fas fa-tasks me-2"></i>
+                {{ action_type if action_type else 'Créer' }} une action d'amélioration
             </h1>
-            <p class="text-muted">Action: {{ action_obj.reference }} - {{ action_obj.intitule[:50] }}</p>
+            <p class="text-muted">Plan: {{ plan.reference }} - {{ plan.titre }}</p>
+            {% if action %}
+            <p class="text-muted small">Action: {{ action.reference }}</p>
+            {% endif %}
         </div>
     </div>
 
@@ -29,8 +32,8 @@
                 <div class="row">
                     <div class="col-md-6 mb-3">
                         {{ form.reference.label(class="form-label") }}
-                        {% if action == 'Modifier' %}
-                            <!-- En modification, la référence est fixe et en lecture seule -->
+                        {% if action %}
+                            <!-- En modification, la référence est fixe -->
                             {{ form.reference(class="form-control", readonly=true, style="background-color: #f8f9fa;") }}
                             <small class="text-muted">La référence ne peut pas être modifiée</small>
                         {% else %}
@@ -40,7 +43,7 @@
                                    readonly disabled 
                                    style="background-color: #f8f9fa;">
                             {{ form.reference(type="hidden") }}
-                            <small class="text-muted">La référence est générée automatiquement à la création</small>
+                            <small class="text-muted">La référence est générée automatiquement</small>
                         {% endif %}
                         {% for error in form.reference.errors %}
                             <div class="invalid-feedback d-block">{{ error }}</div>
@@ -58,6 +61,7 @@
                 <div class="mb-3">
                     {{ form.description.label(class="form-label") }}
                     {{ form.description(class="form-control", rows=4) }}
+                    <small class="text-muted">Description détaillée de l'action à mener.</small>
                 </div>
                 
                 <div class="row">
@@ -87,7 +91,7 @@
                             <span class="input-group-text">%</span>
                         </div>
                         <input type="range" class="form-range mt-2" min="0" max="100" step="5" 
-                               oninput="this.previousElementSibling.previousElementSibling.previousElementSibling.value = this.value"
+                               id="progressionSlider"
                                value="{{ form.pourcentage_realisation.data or 0 }}">
                     </div>
                 </div>
@@ -98,24 +102,28 @@
                     <small class="text-muted">Commentaires sur l'avancement, difficultés rencontrées, etc.</small>
                 </div>
                 
-                <!-- Indicateur de retard si applicable -->
-                {% if action_obj and action_obj.est_en_retard() %}
+                <!-- Indicateur de retard si applicable (seulement en modification) -->
+                {% if action and action.est_en_retard() and action.statut != 'terminee' %}
                 <div class="alert alert-warning">
                     <i class="fas fa-exclamation-triangle me-2"></i>
-                    <strong>Action en retard !</strong> Date d'échéance dépassée depuis le {{ action_obj.date_echeance.strftime('%d/%m/%Y') }}.
+                    <strong>Action en retard !</strong> Date d'échéance dépassée depuis le {{ action.date_echeance.strftime('%d/%m/%Y') }}.
                 </div>
                 {% endif %}
                 
                 <hr>
                 <div class="d-flex justify-content-between">
-                    <a href="{{ url_for('detail_plan_qualite', plan_id=plan.id) }}" class="btn btn-secondary">Annuler</a>
+                    <a href="{{ url_for('detail_plan_qualite', plan_id=plan.id) }}" class="btn btn-secondary">
+                        <i class="fas fa-times me-1"></i>Annuler
+                    </a>
                     <div>
-                        {% if action == 'Modifier' and action_obj and action_obj.statut != 'terminee' %}
+                        {% if action and action.statut != 'terminee' %}
                         <button type="button" class="btn btn-success me-2" id="marquerTermineBtn">
                             <i class="fas fa-check-circle me-1"></i>Marquer terminée
                         </button>
                         {% endif %}
-                        {{ form.submit(class="btn btn-primary") }}
+                        <button type="submit" class="btn btn-primary">
+                            <i class="fas fa-save me-1"></i>{{ action_type if action_type else 'Créer' }}
+                        </button>
                     </div>
                 </div>
             </form>
@@ -125,17 +133,17 @@
 
 <script>
 // Synchronisation du slider avec le champ nombre
-document.querySelectorAll('input[type="range"]').forEach(slider => {
-    const numberInput = slider.previousElementSibling.previousElementSibling;
-    if (numberInput && numberInput.type === 'number') {
-        slider.addEventListener('input', function() {
-            numberInput.value = this.value;
-        });
-        numberInput.addEventListener('input', function() {
-            slider.value = this.value;
-        });
-    }
-});
+const slider = document.getElementById('progressionSlider');
+const numberInput = document.getElementById('pourcentage_realisation');
+
+if (slider && numberInput) {
+    slider.addEventListener('input', function() {
+        numberInput.value = this.value;
+    });
+    numberInput.addEventListener('input', function() {
+        slider.value = this.value;
+    });
+}
 
 // Bouton "Marquer terminée"
 const marquerTermineBtn = document.getElementById('marquerTermineBtn');
@@ -147,32 +155,27 @@ if (marquerTermineBtn) {
         
         if (pourcentageField) pourcentageField.value = 100;
         if (statutField) statutField.value = 'terminee';
-        
-        // Mettre à jour le slider
-        const slider = document.querySelector('input[type="range"]');
         if (slider) slider.value = 100;
         
-        // Ajouter un commentaire automatique
         if (commentaireField && !commentaireField.value) {
             const today = new Date().toLocaleDateString('fr-FR');
-            commentaireField.value = `Action terminée le ${today}.\n` + commentaireField.value;
+            commentaireField.value = `Action terminée le ${today}.`;
         }
         
-        // Optionnel: soumettre automatiquement
         if (confirm('Marquer cette action comme terminée ?')) {
             document.getElementById('actionForm').submit();
         }
     });
 }
 
-// Validation de la date d'échéance
+// Validation de la date d'échéance (ne peut pas être dans le passé à la création)
 const dateEcheance = document.getElementById('date_echeance');
-if (dateEcheance) {
+if (dateEcheance && {{ 'true' if not action else 'false' }}) {
     const today = new Date().toISOString().split('T')[0];
     dateEcheance.setAttribute('min', today);
 }
 
-// Message de confirmation avant soumission si pourcentage = 100 mais statut != terminee
+// Message de confirmation avant soumission
 document.getElementById('actionForm')?.addEventListener('submit', function(e) {
     const pourcentage = document.getElementById('pourcentage_realisation')?.value;
     const statut = document.getElementById('statut')?.value;
@@ -183,5 +186,26 @@ document.getElementById('actionForm')?.addEventListener('submit', function(e) {
         }
     }
 });
+
+// Info flash pour pré-remplissage IA
+{% if request.args.get('intitule') %}
+document.addEventListener('DOMContentLoaded', function() {
+    const alertDiv = document.createElement('div');
+    alertDiv.className = 'alert alert-info alert-dismissible fade show mb-3';
+    alertDiv.innerHTML = `
+        <i class="fas fa-robot me-2"></i>
+        <strong>Suggestions IA appliquées</strong> - Le formulaire a été pré-rempli avec des recommandations.
+        <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+    `;
+    const form = document.getElementById('actionForm');
+    if (form) form.insertBefore(alertDiv, form.firstChild);
+});
+{% endif %}
 </script>
+
+<style>
+    input:read-only, input:disabled {
+        cursor: not-allowed;
+    }
+</style>
 {% endblock %}
