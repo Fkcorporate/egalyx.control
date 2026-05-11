@@ -9356,6 +9356,30 @@ class ActionAmeliorationQualite(db.Model):
     createur = db.relationship('User', foreign_keys=[created_by])
     archive_user = db.relationship('User', foreign_keys=[archived_by])
     
+    @staticmethod
+    def generate_reference(plan_qualite, client_id):
+        """Génère une nouvelle référence unique pour une action d'amélioration"""
+        # Récupérer le nombre d'actions existantes pour ce plan
+        count = ActionAmeliorationQualite.query.filter_by(
+            plan_qualite_id=plan_qualite.id,
+            client_id=client_id
+        ).count()
+        
+        # Format: AQ-REFERENCE_PLAN-XXX
+        # Exemple: AQ-PAQ-2026-002-001
+        next_number = count + 1
+        reference = f"AQ-{plan_qualite.reference}-{next_number:03d}"
+        
+        # Vérifier si la référence existe déjà (cas rare de suppression)
+        while ActionAmeliorationQualite.query.filter_by(
+            reference=reference,
+            client_id=client_id
+        ).first():
+            next_number += 1
+            reference = f"AQ-{plan_qualite.reference}-{next_number:03d}"
+        
+        return reference
+    
     def __repr__(self):
         return f'<ActionAmelioration {self.reference}: {self.intitule}>'
     
