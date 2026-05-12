@@ -1,0 +1,211 @@
+{% extends "base.html" %}
+
+{% block title %}Gestion des Webhooks{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <div class="row mb-4">
+        <div class="col-12">
+            <div class="page-header" style="background: linear-gradient(135deg, #1e3a8a 0%, #2563eb 100%); border-radius: 20px; padding: 30px; color: white;">
+                <div class="d-flex justify-content-between align-items-center">
+                    <div>
+                        <h1 class="mb-2"><i class="fas fa-code-branch me-3"></i>Webhooks</h1>
+                        <p class="mb-0 opacity-75">Automatisez les notifications vers vos systèmes externes</p>
+                    </div>
+                    <button class="btn btn-light" data-bs-toggle="modal" data-bs-target="#modalNouveauWebhook">
+                        <i class="fas fa-plus me-2"></i>Nouveau webhook
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="row">
+        {% for webhook in webhooks %}
+        <div class="col-md-6 col-lg-4 mb-4">
+            <div class="card h-100">
+                <div class="card-header {% if webhook.is_active %}bg-success{% else %}bg-secondary{% endif %} text-white">
+                    <div class="d-flex justify-content-between align-items-center">
+                        <span><i class="fas fa-code-branch me-2"></i>{{ webhook.name }}</span>
+                        <div>
+                            <button class="btn btn-sm btn-light me-1" onclick="testerWebhook({{ webhook.id }})">
+                                <i class="fas fa-vial"></i>
+                            </button>
+                            <button class="btn btn-sm btn-light" data-bs-toggle="modal" data-bs-target="#modalLogs{{ webhook.id }}">
+                                <i class="fas fa-history"></i>
+                            </button>
+                        </div>
+                    </div>
+                </div>
+                <div class="card-body">
+                    <p class="text-muted small">{{ webhook.description or 'Aucune description' }}</p>
+                    <div class="mb-2">
+                        <label class="text-muted small">URL</label>
+                        <code class="d-block small">{{ webhook.url|truncate(50) }}</code>
+                    </div>
+                    <div class="mb-2">
+                        <label class="text-muted small">Événements</label>
+                        <div>
+                            {% for event in webhook.events %}
+                            <span class="badge bg-primary me-1 mb-1">{{ event }}</span>
+                            {% endfor %}
+                        </div>
+                    </div>
+                    <div class="row small text-muted mt-3">
+                        <div class="col-4">
+                            <i class="fas fa-paper-plane me-1"></i> {{ webhook.total_sent }}
+                        </div>
+                        <div class="col-4">
+                            <i class="fas fa-check-circle text-success me-1"></i> {{ webhook.total_success }}
+                        </div>
+                        <div class="col-4">
+                            <i class="fas fa-exclamation-circle text-danger me-1"></i> {{ webhook.total_failed }}
+                        </div>
+                    </div>
+                    {% if webhook.last_sent_at %}
+                    <div class="small text-muted mt-2">
+                        Dernier envoi: {{ webhook.last_sent_at.strftime('%d/%m/%Y %H:%M') }}
+                    </div>
+                    {% endif %}
+                </div>
+                <div class="card-footer">
+                    <div class="d-flex justify-content-between">
+                        <button class="btn btn-sm btn-outline-secondary" onclick="toggleWebhook({{ webhook.id }})">
+                            <i class="fas fa-{{ 'pause' if webhook.is_active else 'play' }} me-1"></i>
+                            {{ 'Désactiver' if webhook.is_active else 'Activer' }}
+                        </button>
+                        <button class="btn btn-sm btn-outline-danger" onclick="supprimerWebhook({{ webhook.id }})">
+                            <i class="fas fa-trash me-1"></i>Supprimer
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Modal Logs -->
+        <div class="modal fade" id="modalLogs{{ webhook.id }}" tabindex="-1">
+            <div class="modal-dialog modal-lg">
+                <div class="modal-content">
+                    <div class="modal-header bg-primary text-white">
+                        <h5 class="modal-title">Logs - {{ webhook.name }}</h5>
+                        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+                    </div>
+                    <div class="modal-body">
+                        <div id="logsContent{{ webhook.id }}">Chargement...</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        {% endfor %}
+    </div>
+</div>
+
+<!-- Modal Nouveau Webhook -->
+<div class="modal fade" id="modalNouveauWebhook" tabindex="-1">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header bg-primary text-white">
+                <h5 class="modal-title"><i class="fas fa-plus me-2"></i>Nouveau webhook</h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+            </div>
+            <form action="{{ url_for('creer_webhook') }}" method="POST">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                <div class="modal-body">
+                    <div class="mb-3">
+                        <label class="form-label">Nom *</label>
+                        <input type="text" class="form-control" name="name" required placeholder="Ex: Slack - Notifications audits">
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">URL *</label>
+                        <input type="url" class="form-control" name="url" required placeholder="https://hooks.slack.com/services/...">
+                        <small class="text-muted">URL webhook de destination (Slack, Teams, Zapier, Make, etc.)</small>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Description</label>
+                        <textarea class="form-control" name="description" rows="2"></textarea>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Format</label>
+                        <select class="form-select" name="format">
+                            <option value="json">JSON</option>
+                            <option value="form_encoded">Form Encoded</option>
+                        </select>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Secret (optionnel)</label>
+                        <input type="text" class="form-control" name="secret" placeholder="Secret pour signer les requêtes">
+                        <small class="text-muted">Utilisé pour vérifier que les requêtes viennent bien de votre SaaS</small>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Événements à écouter</label>
+                        <div class="row">
+                            {% for event in events_available %}
+                            <div class="col-md-6">
+                                <div class="form-check">
+                                    <input class="form-check-input" type="checkbox" name="events" value="{{ event.value }}" id="event_{{ loop.index }}">
+                                    <label class="form-check-label" for="event_{{ loop.index }}">
+                                        {{ event.label }}
+                                    </label>
+                                </div>
+                            </div>
+                            {% endfor %}
+                        </div>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Annuler</button>
+                    <button type="submit" class="btn btn-primary">Créer</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<script>
+function testerWebhook(webhookId) {
+    fetch(`/admin/webhooks/${webhookId}/tester`, {
+        method: 'POST',
+        headers: { 'X-CSRFToken': document.querySelector('input[name="csrf_token"]').value }
+    })
+    .then(r => r.json())
+    .then(data => {
+        if (data.success) {
+            alert('✅ Webhook testé avec succès !');
+        } else {
+            alert('❌ Erreur: ' + data.message);
+        }
+    });
+}
+
+function toggleWebhook(webhookId) {
+    fetch(`/admin/webhooks/${webhookId}/toggle`, {
+        method: 'POST',
+        headers: { 'X-CSRFToken': document.querySelector('input[name="csrf_token"]').value }
+    })
+    .then(r => r.json())
+    .then(data => {
+        if (data.success) {
+            location.reload();
+        }
+    });
+}
+
+function supprimerWebhook(webhookId) {
+    if (confirm('Supprimer ce webhook définitivement ?')) {
+        fetch(`/admin/webhooks/${webhookId}/supprimer`, {
+            method: 'POST',
+            headers: { 'X-CSRFToken': document.querySelector('input[name="csrf_token"]').value }
+        })
+        .then(() => location.reload());
+    }
+}
+
+function chargerLogs(webhookId) {
+    fetch(`/admin/webhooks/${webhookId}/logs`)
+        .then(r => r.json())
+        .then(data => {
+            // Afficher les logs
+        });
+}
+</script>
+{% endblock %}

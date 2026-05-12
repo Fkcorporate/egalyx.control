@@ -1,0 +1,283 @@
+{% extends "base.html" %}
+
+{% block title %}Gestion des Clés API{% endblock %}
+
+{% block styles %}
+{{ super() }}
+<style>
+    .api-key-card {
+        background: white;
+        border-radius: 16px;
+        border: 1px solid #e2e8f0;
+        transition: all 0.3s ease;
+    }
+    .api-key-card:hover {
+        box-shadow: 0 10px 30px rgba(0,0,0,0.1);
+        transform: translateY(-2px);
+    }
+    .api-key-header {
+        background: linear-gradient(135deg, #1e3a8a 0%, #2563eb 100%);
+        color: white;
+        padding: 15px 20px;
+        border-radius: 16px 16px 0 0;
+    }
+    .permission-badge {
+        display: inline-block;
+        padding: 4px 10px;
+        border-radius: 20px;
+        font-size: 11px;
+        font-weight: 600;
+        margin: 2px;
+    }
+    .permission-read { background: #d1fae5; color: #065f46; }
+    .permission-write { background: #dbeafe; color: #1e40af; }
+    .code-block {
+        background: #f1f5f9;
+        padding: 10px;
+        border-radius: 8px;
+        font-family: monospace;
+        font-size: 12px;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <div class="row mb-4">
+        <div class="col-12">
+            <div class="page-header" style="background: linear-gradient(135deg, #1e3a8a 0%, #2563eb 100%); border-radius: 20px; padding: 30px; color: white;">
+                <div class="d-flex justify-content-between align-items-center">
+                    <div>
+                        <h1 class="mb-2"><i class="fas fa-key me-3"></i>Gestion des Clés API</h1>
+                        <p class="mb-0 opacity-75">Gérez les clés d'accès API pour vos intégrations externes</p>
+                    </div>
+                    <button class="btn btn-light" data-bs-toggle="modal" data-bs-target="#modalNouvelleCle">
+                        <i class="fas fa-plus me-2"></i>Nouvelle clé API
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="row">
+        {% for api_key in api_keys %}
+        <div class="col-md-6 col-lg-4 mb-4">
+            <div class="api-key-card">
+                <div class="api-key-header">
+                    <div class="d-flex justify-content-between align-items-center">
+                        <h5 class="mb-0">{{ api_key.name }}</h5>
+                        {% if api_key.is_active %}
+                        <span class="badge bg-success">Actif</span>
+                        {% else %}
+                        <span class="badge bg-danger">Révoqué</span>
+                        {% endif %}
+                    </div>
+                </div>
+                <div class="card-body">
+                    <p class="text-muted small">{{ api_key.description or 'Aucune description' }}</p>
+                    
+                    <div class="mb-3">
+                        <label class="text-muted small">Clé API</label>
+                        <div class="code-block">
+                            <code id="apiKey-{{ api_key.id }}">{{ api_key.api_key[:20] }}...{{ api_key.api_key[-10:] }}</code>
+                            <button class="btn btn-sm btn-outline-primary float-end" onclick="copierTexte('apiKey-{{ api_key.id }}')">
+                                <i class="fas fa-copy"></i>
+                            </button>
+                        </div>
+                    </div>
+                    
+                    <div class="mb-3">
+                        <label class="text-muted small">Permissions</label>
+                        <div>
+                            {% for perm, value in api_key.permissions.items() %}
+                                {% if value %}
+                                <span class="permission-badge {{ 'permission-read' if 'read' in perm else 'permission-write' }}">
+                                    {{ perm.replace('_', ' ').title() }}
+                                </span>
+                                {% endif %}
+                            {% endfor %}
+                        </div>
+                    </div>
+                    
+                    <div class="row small text-muted mb-3">
+                        <div class="col-6">
+                            <i class="fas fa-chart-line me-1"></i> {{ api_key.total_requests }} req
+                        </div>
+                        <div class="col-6">
+                            <i class="fas fa-clock me-1"></i> {{ api_key.rate_limit }}/h
+                        </div>
+                    </div>
+                    
+                    <div class="d-flex gap-2">
+                        <button class="btn btn-sm btn-outline-primary" onclick="showApiKeyDetails({{ api_key.id }})">
+                            <i class="fas fa-info-circle me-1"></i> Détails
+                        </button>
+                        <button class="btn btn-sm btn-outline-secondary" onclick="genererNouvelleCle({{ api_key.id }})">
+                            <i class="fas fa-sync-alt me-1"></i> Régénérer
+                        </button>
+                        {% if api_key.is_active %}
+                        <button class="btn btn-sm btn-outline-danger" onclick="revokeApiKey({{ api_key.id }})">
+                            <i class="fas fa-ban me-1"></i> Révoquer
+                        </button>
+                        {% endif %}
+                    </div>
+                </div>
+            </div>
+        </div>
+        {% endfor %}
+    </div>
+</div>
+
+<!-- Modal Nouvelle Clé API -->
+<div class="modal fade" id="modalNouvelleCle" tabindex="-1">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header bg-primary text-white">
+                <h5 class="modal-title"><i class="fas fa-plus me-2"></i>Créer une nouvelle clé API</h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+            </div>
+            <form action="{{ url_for('creer_api_key') }}" method="POST">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                <div class="modal-body">
+                    <div class="mb-3">
+                        <label class="form-label">Nom de la clé *</label>
+                        <input type="text" class="form-control" name="name" required placeholder="Ex: ERP SAP, Power BI, Script import...">
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Description</label>
+                        <textarea class="form-control" name="description" rows="2" placeholder="À quoi sert cette clé ?"></textarea>
+                    </div>
+                    
+                    <h6 class="fw-bold mb-3">Permissions</h6>
+                    <div class="row">
+                        <div class="col-md-6">
+                            <div class="card mb-3">
+                                <div class="card-header bg-light">
+                                    <strong>📋 Lecture seule</strong>
+                                </div>
+                                <div class="card-body">
+                                    <div class="form-check">
+                                        <input class="form-check-input" type="checkbox" name="read_audits" id="read_audits" checked>
+                                        <label class="form-check-label" for="read_audits">Audits</label>
+                                    </div>
+                                    <div class="form-check">
+                                        <input class="form-check-input" type="checkbox" name="read_constatations" id="read_constatations" checked>
+                                        <label class="form-check-label" for="read_constatations">Constatations</label>
+                                    </div>
+                                    <div class="form-check">
+                                        <input class="form-check-input" type="checkbox" name="read_recommandations" id="read_recommandations" checked>
+                                        <label class="form-check-label" for="read_recommandations">Recommandations</label>
+                                    </div>
+                                    <div class="form-check">
+                                        <input class="form-check-input" type="checkbox" name="read_plans_action" id="read_plans_action" checked>
+                                        <label class="form-check-label" for="read_plans_action">Plans d'action</label>
+                                    </div>
+                                    <div class="form-check">
+                                        <input class="form-check-input" type="checkbox" name="read_risques" id="read_risques" checked>
+                                        <label class="form-check-label" for="read_risques">Risques</label>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-md-6">
+                            <div class="card mb-3">
+                                <div class="card-header bg-light">
+                                    <strong>✏️ Écriture</strong>
+                                </div>
+                                <div class="card-body">
+                                    <div class="form-check">
+                                        <input class="form-check-input" type="checkbox" name="write_audits" id="write_audits">
+                                        <label class="form-check-label" for="write_audits">Créer des audits</label>
+                                    </div>
+                                    <div class="form-check">
+                                        <input class="form-check-input" type="checkbox" name="write_constatations" id="write_constatations">
+                                        <label class="form-check-label" for="write_constatations">Créer des constatations</label>
+                                    </div>
+                                    <div class="form-check">
+                                        <input class="form-check-input" type="checkbox" name="write_recommandations" id="write_recommandations">
+                                        <label class="form-check-label" for="write_recommandations">Créer des recommandations</label>
+                                    </div>
+                                    <div class="form-check">
+                                        <input class="form-check-input" type="checkbox" name="write_plans_action" id="write_plans_action">
+                                        <label class="form-check-label" for="write_plans_action">Créer des plans d'action</label>
+                                    </div>
+                                    <div class="form-check">
+                                        <input class="form-check-input" type="checkbox" name="write_risques" id="write_risques">
+                                        <label class="form-check-label" for="write_risques">Créer des risques</label>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="mb-3">
+                        <label class="form-label">Limite de requêtes par heure</label>
+                        <input type="number" class="form-control" name="rate_limit" value="1000" min="100" max="10000">
+                        <small class="text-muted">1000 requêtes par heure par défaut</small>
+                    </div>
+                    
+                    <div class="mb-3">
+                        <label class="form-label">Date d'expiration (optionnel)</label>
+                        <input type="date" class="form-control" name="expires_at">
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Annuler</button>
+                    <button type="submit" class="btn btn-primary">Créer la clé</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<script>
+function copierTexte(elementId) {
+    const element = document.getElementById(elementId);
+    const text = element.textContent;
+    navigator.clipboard.writeText(text);
+    showToast('Copié !', 'success');
+}
+
+function showApiKeyDetails(keyId) {
+    fetch(`/admin/api-keys/${keyId}/details`)
+        .then(r => r.json())
+        .then(data => {
+            alert(`Clé API: ${data.api_key}\nTotal requêtes: ${data.total_requests}\nDernière utilisation: ${data.last_request_at || 'Jamais'}`);
+        });
+}
+
+function genererNouvelleCle(keyId) {
+    if (confirm('Régénérer cette clé API ? L\'ancienne ne fonctionnera plus.')) {
+        fetch(`/admin/api-keys/${keyId}/regenerer`, {
+            method: 'POST',
+            headers: { 'X-CSRFToken': document.querySelector('input[name="csrf_token"]').value }
+        })
+        .then(r => r.json())
+        .then(data => {
+            if (data.success) {
+                alert(`Nouvelle clé: ${data.api_key}\nNouveau secret: ${data.api_secret}\nConservez ces informations !`);
+                location.reload();
+            }
+        });
+    }
+}
+
+function revokeApiKey(keyId) {
+    if (confirm('Révoquer cette clé API ?')) {
+        fetch(`/admin/api-keys/${keyId}/revoke`, {
+            method: 'POST',
+            headers: { 'X-CSRFToken': document.querySelector('input[name="csrf_token"]').value }
+        })
+        .then(r => r.json())
+        .then(data => {
+            if (data.success) location.reload();
+        });
+    }
+}
+
+function showToast(message, type) {
+    // Implémentation de votre toast
+    alert(message);
+}
+</script>
+{% endblock %}

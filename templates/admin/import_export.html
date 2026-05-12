@@ -1,0 +1,732 @@
+{% extends "base.html" %}
+
+{% block title %}Import / Export de données{% endblock %}
+
+{% block styles %}
+{{ super() }}
+<style>
+    .page-header {
+        background: linear-gradient(135deg, #1e3a8a 0%, #2563eb 100%);
+        border-radius: 20px;
+        padding: 30px;
+        margin-bottom: 30px;
+        color: white;
+    }
+    
+    .card-import {
+        border: none;
+        border-radius: 16px;
+        box-shadow: 0 10px 30px rgba(0,0,0,0.08);
+        transition: transform 0.2s ease, box-shadow 0.2s ease;
+        height: 100%;
+    }
+    
+    .card-import:hover {
+        transform: translateY(-5px);
+        box-shadow: 0 20px 40px rgba(0,0,0,0.12);
+    }
+    
+    .card-header-import {
+        background: linear-gradient(135deg, #f8f9fa, #ffffff);
+        border-bottom: 2px solid #e9ecef;
+        padding: 20px 25px;
+        border-radius: 16px 16px 0 0 !important;
+    }
+    
+    .nav-tabs-custom {
+        border-bottom: 2px solid #e9ecef;
+        margin-bottom: 20px;
+    }
+    
+    .nav-tabs-custom .nav-link {
+        border: none;
+        color: #6c757d;
+        font-weight: 500;
+        padding: 12px 24px;
+        border-radius: 12px;
+        margin-right: 10px;
+        transition: all 0.3s ease;
+    }
+    
+    .nav-tabs-custom .nav-link:hover {
+        background: #f8f9fa;
+        color: #2563eb;
+    }
+    
+    .nav-tabs-custom .nav-link.active {
+        background: linear-gradient(135deg, #2563eb, #1e3a8a);
+        color: white;
+    }
+    
+    .btn-import {
+        background: linear-gradient(135deg, #10b981, #059669);
+        border: none;
+        padding: 12px 30px;
+        font-weight: 600;
+        border-radius: 12px;
+        transition: all 0.3s ease;
+    }
+    
+    .btn-import:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 10px 25px rgba(16, 185, 129, 0.3);
+    }
+    
+    .export-card {
+        background: white;
+        border-radius: 12px;
+        padding: 20px;
+        text-align: center;
+        transition: all 0.3s ease;
+        border: 1px solid #e9ecef;
+        height: 100%;
+    }
+    
+    .export-card:hover {
+        transform: translateY(-5px);
+        box-shadow: 0 10px 25px rgba(0,0,0,0.1);
+        border-color: #2563eb;
+    }
+    
+    .export-icon {
+        width: 60px;
+        height: 60px;
+        background: linear-gradient(135deg, #dbeafe, #eff6ff);
+        border-radius: 50%;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        margin: 0 auto 15px;
+        font-size: 24px;
+        color: #2563eb;
+    }
+    
+    .historique-table {
+        border-radius: 12px;
+        overflow: hidden;
+    }
+    
+    .historique-table thead {
+        background: linear-gradient(135deg, #f1f5f9, #f8fafc);
+    }
+    
+    .badge-statut {
+        padding: 5px 12px;
+        border-radius: 20px;
+        font-size: 12px;
+        font-weight: 600;
+    }
+    
+    .badge-completed { background: #d1fae5; color: #065f46; }
+    .badge-partial { background: #fed7aa; color: #9a3412; }
+    .badge-failed { background: #fee2e2; color: #991b1b; }
+    .badge-processing { background: #dbeafe; color: #1e40af; }
+    
+    .mapping-preview {
+        background: #f8fafc;
+        border-radius: 12px;
+        padding: 15px;
+        margin-top: 15px;
+        border-left: 4px solid #2563eb;
+    }
+    
+    @keyframes spin {
+        to { transform: rotate(360deg); }
+    }
+    
+    .spinner-small {
+        width: 16px;
+        height: 16px;
+        border: 2px solid #e2e8f0;
+        border-top-color: #2563eb;
+        border-radius: 50%;
+        animation: spin 0.6s linear infinite;
+        display: inline-block;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    
+    <!-- En-tête -->
+    <div class="page-header">
+        <div class="d-flex justify-content-between align-items-center">
+            <div>
+                <h1 class="mb-2"><i class="fas fa-exchange-alt me-3"></i>Import / Export de données</h1>
+                <p class="mb-0 opacity-75">Importez vos données depuis Excel, CSV ou via API. Exportez vos données pour analyse externe.</p>
+            </div>
+            <div>
+                <a href="/static/templates/template_import_risques.xlsx" class="btn btn-light me-2">
+                    <i class="fas fa-download me-2"></i>Télécharger template
+                </a>
+            </div>
+        </div>
+    </div>
+
+    <div class="row">
+        
+        <!-- SECTION IMPORT -->
+        <div class="col-lg-6 mb-4">
+            <div class="card card-import">
+                <div class="card-header-import">
+                    <h5 class="mb-0"><i class="fas fa-upload me-2 text-success"></i>Import de données</h5>
+                    <small class="text-muted">Importez vos données depuis Excel, CSV ou via API</small>
+                </div>
+                <div class="card-body p-4">
+                    
+                    <ul class="nav nav-tabs-custom" id="importTabs" role="tablist">
+                        <li class="nav-item" role="presentation">
+                            <button class="nav-link active" id="excel-tab" data-bs-toggle="tab" data-bs-target="#excel-import" type="button" role="tab">
+                                <i class="fas fa-file-excel me-2"></i>Excel / CSV
+                            </button>
+                        </li>
+                        <li class="nav-item" role="presentation">
+                            <button class="nav-link" id="api-tab" data-bs-toggle="tab" data-bs-target="#api-import" type="button" role="tab">
+                                <i class="fas fa-plug me-2"></i>API externe
+                            </button>
+                        </li>
+                    </ul>
+                    
+                    <div class="tab-content">
+                        
+                        <!-- Import Excel/CSV -->
+                        <div class="tab-pane fade show active" id="excel-import" role="tabpanel">
+                            <form id="formImportExcel" enctype="multipart/form-data">
+                                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                                
+                                <div class="mb-3">
+                                    <label class="form-label fw-semibold">Type de données à importer</label>
+                                    <select class="form-select" name="type_import" id="typeImport" required>
+                                        <option value="">-- Sélectionner --</option>
+                                        <option value="risques">📋 Risques et cartographie</option>
+                                        <option value="audits">🎯 Audits</option>
+                                        <option value="constatations">⚠️ Constatations</option>
+                                        <option value="recommandations">💡 Recommandations</option>
+                                        <option value="plans_action">📌 Plans d'action</option>
+                                        <option value="kri">📊 KRI/KPI</option>
+                                    </select>
+                                </div>
+                                
+                                <!-- Cartographie de destination -->
+                                <div class="mb-3" id="cartographieSection" style="display: none;">
+                                    <label class="form-label fw-semibold">
+                                        <i class="fas fa-map me-2"></i>Cartographie de destination
+                                    </label>
+                                    <select class="form-select" name="cartographie_id" id="cartographieDest">
+                                        <option value="auto">🔄 Automatique (créer "Import Automatique")</option>
+                                        {% if cartographies %}
+                                            {% for carto in cartographies %}
+                                            <option value="{{ carto.id }}">🗺️ {{ carto.nom }} ({{ carto.risques|length }} risques)</option>
+                                            {% endfor %}
+                                        {% endif %}
+                                    </select>
+                                    <small class="text-muted mt-2 d-block">
+                                        <i class="fas fa-info-circle me-1"></i>
+                                        Les risques importés seront automatiquement liés à cette cartographie
+                                    </small>
+                                </div>
+                                
+                                <div class="mb-3">
+                                    <label class="form-label fw-semibold">Fichier Excel/CSV</label>
+                                    <input type="file" class="form-control" name="fichier" accept=".xlsx,.xls,.csv" required>
+                                    <small class="text-muted mt-2 d-block">
+                                        <i class="fas fa-info-circle me-1"></i>
+                                        Formats supportés: XLSX, XLS, CSV. Taille max: 10MB
+                                    </small>
+                                </div>
+                                
+                                <div id="mappingSection" style="display: none;">
+                                    <div class="mapping-preview">
+                                        <h6 class="fw-semibold mb-2"><i class="fas fa-code-branch me-2"></i>Aperçu du mapping</h6>
+                                        <div id="mappingContainer" class="small"></div>
+                                        <div class="mt-2 text-muted small">
+                                            <i class="fas fa-lightbulb me-1"></i>
+                                            Colonnes détectées automatiquement. Assurez-vous que votre fichier contient une colonne "intitule" ou "nom".
+                                        </div>
+                                    </div>
+                                </div>
+                                
+                                <div class="mt-4">
+                                    <button type="submit" class="btn btn-import w-100" id="btnImporter">
+                                        <i class="fas fa-upload me-2"></i>Importer les données
+                                    </button>
+                                </div>
+                            </form>
+                        </div>
+                        
+                        <!-- Import API externe -->
+                        <div class="tab-pane fade" id="api-import" role="tabpanel">
+                            <div class="alert alert-info mb-3">
+                                <i class="fas fa-info-circle me-2"></i>
+                                Utilisez votre clé API pour importer des données depuis vos systèmes externes.
+                            </div>
+                            
+                            <div class="mb-3">
+                                <label class="form-label fw-semibold">URL de votre source API</label>
+                                <input type="url" class="form-control" id="apiSourceUrl" placeholder="https://api.votresysteme.com/risques">
+                                <small class="text-muted">Endpoint API qui retourne des données JSON</small>
+                            </div>
+                            
+                            <div class="mb-3">
+                                <label class="form-label fw-semibold">Méthode d'authentification</label>
+                                <select class="form-select" id="apiAuthType">
+                                    <option value="none">Aucune</option>
+                                    <option value="bearer">Bearer Token</option>
+                                    <option value="basic">Basic Auth</option>
+                                    <option value="api_key">API Key</option>
+                                </select>
+                            </div>
+                            
+                            <div class="mb-3" id="apiTokenSection" style="display: none;">
+                                <label class="form-label fw-semibold">Token / Clé API</label>
+                                <input type="text" class="form-control" id="apiToken" placeholder="Bearer token ou API key">
+                            </div>
+                            
+                            <div class="mb-3">
+                                <label class="form-label fw-semibold">Type de données</label>
+                                <select class="form-select" id="apiTypeImport">
+                                    <option value="risques">📋 Risques</option>
+                                    <option value="audits">🎯 Audits</option>
+                                    <option value="kri">📊 KRI</option>
+                                </select>
+                            </div>
+                            
+                            <button class="btn btn-info w-100" onclick="importerDepuisAPI()">
+                                <i class="fas fa-cloud-download-alt me-2"></i>Importer depuis API externe
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <!-- SECTION EXPORT -->
+        <div class="col-lg-6 mb-4">
+            <div class="card card-import">
+                <div class="card-header-import">
+                    <h5 class="mb-0"><i class="fas fa-download me-2 text-info"></i>Export de données</h5>
+                    <small class="text-muted">Exportez vos données pour analyse externe ou migration</small>
+                </div>
+                <div class="card-body p-4">
+                    
+                    <div class="row g-3">
+                        <div class="col-md-6">
+                            <div class="export-card">
+                                <div class="export-icon">
+                                    <i class="fas fa-chart-line"></i>
+                                </div>
+                                <h6>KRI / Indicateurs</h6>
+                                <div class="mt-2">
+                                    <a href="{{ url_for('exporter_donnees', type='kri', format='excel') }}" class="btn btn-sm btn-outline-primary me-1">
+                                        <i class="fas fa-file-excel"></i> Excel
+                                    </a>
+                                    <a href="{{ url_for('exporter_donnees', type='kri', format='csv') }}" class="btn btn-sm btn-outline-secondary me-1">
+                                        <i class="fas fa-file-csv"></i> CSV
+                                    </a>
+                                    <a href="{{ url_for('exporter_donnees', type='kri', format='json') }}" class="btn btn-sm btn-outline-info">
+                                        <i class="fas fa-code"></i> JSON
+                                    </a>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <div class="col-md-6">
+                            <div class="export-card">
+                                <div class="export-icon">
+                                    <i class="fas fa-bug"></i>
+                                </div>
+                                <h6>Risques</h6>
+                                <div class="mt-2">
+                                    <a href="{{ url_for('exporter_donnees', type='risques', format='excel') }}" class="btn btn-sm btn-outline-primary me-1">
+                                        <i class="fas fa-file-excel"></i> Excel
+                                    </a>
+                                    <a href="{{ url_for('exporter_donnees', type='risques', format='csv') }}" class="btn btn-sm btn-outline-secondary me-1">
+                                        <i class="fas fa-file-csv"></i> CSV
+                                    </a>
+                                    <a href="{{ url_for('exporter_donnees', type='risques', format='json') }}" class="btn btn-sm btn-outline-info">
+                                        <i class="fas fa-code"></i> JSON
+                                    </a>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <div class="col-md-6">
+                            <div class="export-card">
+                                <div class="export-icon">
+                                    <i class="fas fa-clipboard-list"></i>
+                                </div>
+                                <h6>Audits</h6>
+                                <div class="mt-2">
+                                    <a href="{{ url_for('exporter_donnees', type='audits', format='excel') }}" class="btn btn-sm btn-outline-primary me-1">
+                                        <i class="fas fa-file-excel"></i> Excel
+                                    </a>
+                                    <a href="{{ url_for('exporter_donnees', type='audits', format='csv') }}" class="btn btn-sm btn-outline-secondary me-1">
+                                        <i class="fas fa-file-csv"></i> CSV
+                                    </a>
+                                    <a href="{{ url_for('exporter_donnees', type='audits', format='json') }}" class="btn btn-sm btn-outline-info">
+                                        <i class="fas fa-code"></i> JSON
+                                    </a>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <div class="col-md-6">
+                            <div class="export-card">
+                                <div class="export-icon">
+                                    <i class="fas fa-database"></i>
+                                </div>
+                                <h6>Export complet</h6>
+                                <div class="mt-2">
+                                    <a href="{{ url_for('exporter_donnees', type='complet', format='excel') }}" class="btn btn-sm btn-outline-primary me-1">
+                                        <i class="fas fa-file-excel"></i> Excel
+                                    </a>
+                                    <a href="{{ url_for('exporter_donnees', type='complet', format='json') }}" class="btn btn-sm btn-outline-info">
+                                        <i class="fas fa-code"></i> JSON
+                                    </a>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <hr class="my-4">
+                    
+                    <div class="row g-3">
+                        <div class="col-md-6">
+                            <label class="form-label fw-semibold">Filtrer par date (début)</label>
+                            <input type="date" class="form-control" id="exportDateDebut">
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label fw-semibold">Filtrer par date (fin)</label>
+                            <input type="date" class="form-control" id="exportDateFin">
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- HISTORIQUE DES IMPORTS -->
+    <div class="card mt-3">
+        <div class="card-header bg-light">
+            <div class="d-flex justify-content-between align-items-center">
+                <h5 class="mb-0"><i class="fas fa-history me-2"></i>Historique des imports</h5>
+                <button class="btn btn-sm btn-outline-secondary" onclick="chargerHistoriqueImports()">
+                    <i class="fas fa-sync-alt me-1"></i>Rafraîchir
+                </button>
+            </div>
+        </div>
+        <div class="card-body p-0">
+            <div class="table-responsive">
+                <table class="table table-hover mb-0 historique-table">
+                    <thead>
+                        <tr>
+                            <th>Date</th>
+                            <th>Type</th>
+                            <th>Statut</th>
+                            <th>Lignes</th>
+                            <th>Succès</th>
+                            <th>Erreurs</th>
+                            <th>Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody id="historiqueImports">
+                        <tr><td colspan="7" class="text-center py-4">
+                            <div class="spinner-border text-primary spinner-border-sm me-2"></div>
+                            Chargement...
+                        </td></tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Modal Détails Import -->
+<div class="modal fade" id="modalDetailsImport" tabindex="-1">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header bg-primary text-white">
+                <h5 class="modal-title"><i class="fas fa-info-circle me-2"></i>Détails de l'import</h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body" id="modalDetailsContent">
+                <div class="text-center py-4">
+                    <div class="spinner-border text-primary"></div>
+                    <p class="mt-2">Chargement...</p>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Fermer</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+// Afficher la section cartographie seulement pour les risques
+document.getElementById('typeImport').addEventListener('change', function() {
+    const type = this.value;
+    const cartographieSection = document.getElementById('cartographieSection');
+    
+    if (type === 'risques') {
+        cartographieSection.style.display = 'block';
+    } else {
+        cartographieSection.style.display = 'none';
+    }
+    
+    // Afficher le mapping preview
+    if (type) {
+        document.getElementById('mappingSection').style.display = 'block';
+        chargerMappingPreview(type);
+    } else {
+        document.getElementById('mappingSection').style.display = 'none';
+    }
+});
+
+// Gestion de l'authentification API
+document.getElementById('apiAuthType').addEventListener('change', function() {
+    const tokenSection = document.getElementById('apiTokenSection');
+    tokenSection.style.display = this.value !== 'none' ? 'block' : 'none';
+});
+
+function chargerMappingPreview(type) {
+    const mappingConfig = {
+        risques: {
+            required: ['intitule', 'nom', 'titre'],
+            optional: ['description', 'categorie', 'processus', 'cause_racine', 'consequences']
+        },
+        audits: {
+            required: ['titre'],
+            optional: ['description', 'type_audit', 'date_debut_prevue', 'date_fin_prevue']
+        },
+        constatations: {
+            required: ['description', 'type_constatation'],
+            optional: ['gravite', 'cause_racine', 'processus_concerne']
+        }
+    };
+    
+    const config = mappingConfig[type] || { required: [], optional: [] };
+    const container = document.getElementById('mappingContainer');
+    
+    let html = '<div class="mb-2"><strong>📌 Colonnes requises:</strong><br>';
+    config.required.forEach(col => {
+        html += `<span class="badge bg-danger me-1">${col}</span>`;
+    });
+    html += '</div><div class="mb-2"><strong>📎 Colonnes optionnelles:</strong><br>';
+    config.optional.forEach(col => {
+        html += `<span class="badge bg-secondary me-1">${col}</span>`;
+    });
+    html += '</div>';
+    
+    container.innerHTML = html;
+}
+
+// Formulaire d'import Excel
+document.getElementById('formImportExcel').addEventListener('submit', function(e) {
+    e.preventDefault();
+    
+    const btn = document.getElementById('btnImporter');
+    const originalText = btn.innerHTML;
+    btn.innerHTML = '<i class="fas fa-spinner fa-spin me-2"></i>Import en cours...';
+    btn.disabled = true;
+    
+    const formData = new FormData(this);
+    
+    fetch('/api/import/excel', {
+        method: 'POST',
+        body: formData,
+        headers: { 'X-CSRFToken': document.querySelector('input[name="csrf_token"]').value }
+    })
+    .then(r => r.json())
+    .then(data => {
+        if (data.success) {
+            let message = `✅ ${data.lignes_succes} éléments importés avec succès !`;
+            if (data.cartographie) {
+                message += `\n📁 Cartographie: ${data.cartographie.nom}`;
+            }
+            if (data.lignes_erreur > 0) {
+                message += `\n⚠️ ${data.lignes_erreur} erreurs`;
+            }
+            alert(message);
+            chargerHistoriqueImports();
+            document.getElementById('formImportExcel').reset();
+        } else {
+            alert('❌ Erreur: ' + data.error);
+        }
+    })
+    .catch(error => {
+        console.error('Erreur:', error);
+        alert('❌ Erreur réseau: ' + error.message);
+    })
+    .finally(() => {
+        btn.innerHTML = originalText;
+        btn.disabled = false;
+    });
+});
+
+function importerDepuisAPI() {
+    const url = document.getElementById('apiSourceUrl').value;
+    if (!url) {
+        alert('Veuillez entrer une URL source');
+        return;
+    }
+    
+    const btn = event.target;
+    const originalText = btn.innerHTML;
+    btn.innerHTML = '<i class="fas fa-spinner fa-spin me-2"></i>Import en cours...';
+    btn.disabled = true;
+    
+    fetch('/api/import/api', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            'X-CSRFToken': document.querySelector('input[name="csrf_token"]').value
+        },
+        body: JSON.stringify({
+            source_url: url,
+            auth_type: document.getElementById('apiAuthType').value,
+            auth_token: document.getElementById('apiToken').value,
+            type_import: document.getElementById('apiTypeImport').value
+        })
+    })
+    .then(r => r.json())
+    .then(data => {
+        if (data.success) {
+            alert(`✅ Import lancé avec succès !\n${data.message || ''}`);
+            chargerHistoriqueImports();
+        } else {
+            alert('❌ Erreur: ' + data.error);
+        }
+    })
+    .catch(error => {
+        console.error('Erreur:', error);
+        alert('❌ Erreur: ' + error.message);
+    })
+    .finally(() => {
+        btn.innerHTML = originalText;
+        btn.disabled = false;
+    });
+}
+
+function chargerHistoriqueImports() {
+    fetch('/api/imports/historique')
+        .then(r => r.json())
+        .then(data => {
+            const tbody = document.getElementById('historiqueImports');
+            if (!tbody) return;
+            
+            if (data.success && data.imports && data.imports.length > 0) {
+                let html = '';
+                data.imports.forEach(imp => {
+                    let statusClass = '';
+                    let statusText = '';
+                    
+                    switch(imp.statut) {
+                        case 'completed':
+                            statusClass = 'badge-completed';
+                            statusText = '✅ Terminé';
+                            break;
+                        case 'partial':
+                            statusClass = 'badge-partial';
+                            statusText = '⚠️ Partiel';
+                            break;
+                        case 'failed':
+                            statusClass = 'badge-failed';
+                            statusText = '❌ Échec';
+                            break;
+                        default:
+                            statusClass = 'badge-processing';
+                            statusText = '🔄 En cours';
+                    }
+                    
+                    html += `
+                    <tr>
+                        <td>${imp.created_at_formatee || new Date(imp.created_at).toLocaleString()}</td>
+                        <td>${imp.type_import}</td>
+                        <td><span class="badge-statut ${statusClass}">${statusText}</span></td>
+                        <td>${imp.total_lignes}</td>
+                        <td class="text-success">${imp.lignes_succes}</td>
+                        <td class="text-danger">${imp.lignes_erreur}</td>
+                        <td>
+                            ${imp.lignes_erreur > 0 ? 
+                                `<button class="btn btn-sm btn-outline-danger" onclick="voirDetailsImport(${imp.id})">
+                                    <i class="fas fa-eye"></i> Détails
+                                </button>` : 
+                                '<span class="text-muted">-</span>'
+                            }
+                        </td>
+                    </td>`;
+                });
+                tbody.innerHTML = html;
+            } else {
+                tbody.innerHTML = '<tr><td colspan="7" class="text-center py-4">📭 Aucun import pour le moment</td></tr>';
+            }
+        })
+        .catch(error => {
+            console.error('Erreur:', error);
+            const tbody = document.getElementById('historiqueImports');
+            if (tbody) {
+                tbody.innerHTML = '<tr><td colspan="7" class="text-center text-danger py-4">❌ Erreur de chargement</td></tr>';
+            }
+        });
+}
+
+function voirDetailsImport(importId) {
+    const modal = new bootstrap.Modal(document.getElementById('modalDetailsImport'));
+    const contentDiv = document.getElementById('modalDetailsContent');
+    
+    contentDiv.innerHTML = '<div class="text-center py-4"><div class="spinner-border text-primary"></div><p class="mt-2">Chargement...</p></div>';
+    modal.show();
+    
+    fetch(`/api/imports/${importId}/details`)
+        .then(r => r.json())
+        .then(data => {
+            if (data.success) {
+                let html = '';
+                
+                if (data.details && data.details.length > 0) {
+                    html += '<h6 class="fw-bold text-success">✅ Succès:</h6><ul class="mb-3">';
+                    data.details.slice(0, 10).forEach(d => {
+                        html += `<li>Ligne ${d.ligne}: ${d.reference || d.intitule || 'OK'}</li>`;
+                    });
+                    if (data.details.length > 10) {
+                        html += `<li><em>... et ${data.details.length - 10} autres</em></li>`;
+                    }
+                    html += '</ul>';
+                }
+                
+                if (data.erreurs && data.erreurs.length > 0) {
+                    html += '<h6 class="fw-bold text-danger">❌ Erreurs:</h6><ul class="mb-0">';
+                    data.erreurs.slice(0, 10).forEach(err => {
+                        html += `<li class="text-danger">${err}</li>`;
+                    });
+                    if (data.erreurs.length > 10) {
+                        html += `<li><em>... et ${data.erreurs.length - 10} autres</em></li>`;
+                    }
+                    html += '</ul>';
+                }
+                
+                if (!data.details?.length && !data.erreurs?.length) {
+                    html = '<div class="text-center py-4"><i class="fas fa-check-circle fa-3x text-success mb-3"></i><p>Aucun détail disponible</p></div>';
+                }
+                
+                contentDiv.innerHTML = html;
+            } else {
+                contentDiv.innerHTML = `<div class="alert alert-danger">Erreur: ${data.error || 'Impossible de charger les détails'}</div>`;
+            }
+        })
+        .catch(error => {
+            contentDiv.innerHTML = `<div class="alert alert-danger">Erreur réseau: ${error.message}</div>`;
+        });
+}
+
+// Initialisation
+document.addEventListener('DOMContentLoaded', function() {
+    chargerHistoriqueImports();
+    
+    // Rafraîchir l'historique toutes les 30 secondes
+    setInterval(chargerHistoriqueImports, 30000);
+});
+</script>
+{% endblock %}
