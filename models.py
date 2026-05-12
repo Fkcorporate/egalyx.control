@@ -11553,3 +11553,383 @@ class StatsBibliothequeRisque(db.Model):
     def __repr__(self):
         return f'<StatsBibliothequeRisque {self.action} pour risque {self.risque_bibliotheque_id}>'
 
+
+
+class ApiKey(db.Model):
+    """Clés API pour l'accès aux API publiques"""
+    __tablename__ = 'api_keys'
+    
+    id = db.Column(db.Integer, primary_key=True)
+    client_id = db.Column(db.Integer, db.ForeignKey('clients.id'), nullable=False)
+    name = db.Column(db.String(100), nullable=False)
+    description = db.Column(db.Text)
+    
+    # Clés
+    api_key = db.Column(db.String(64), unique=True, nullable=False)
+    api_secret = db.Column(db.String(128), nullable=False)
+    
+    # Permissions
+    permissions = db.Column(db.JSON, default={
+        'read_audits': True,
+        'write_audits': False,
+        'read_constatations': True,
+        'write_constatations': False,
+        'read_recommandations': True,
+        'write_recommandations': False,
+        'read_plans_action': True,
+        'write_plans_action': False,
+        'read_risques': True,
+        'write_risques': False,
+        'read_kri': True,
+        'write_kri': False,
+        'read_veille': True,
+        'write_veille': False
+    })
+    
+    # Rate limiting
+    rate_limit = db.Column(db.Integer, default=1000)  # Requêtes par heure
+    rate_limit_window = db.Column(db.Integer, default=3600)  # Fenêtre en secondes
+    
+    # IP Whitelist (sécurité)
+    ip_whitelist = db.Column(db.JSON, default=[])  # Liste des IP autorisées
+    
+    # Statistiques
+    total_requests = db.Column(db.Integer, default=0)
+    last_request_at = db.Column(db.DateTime)
+    
+    # Statut
+    is_active = db.Column(db.Boolean, default=True)
+    is_revoked = db.Column(db.Boolean, default=False)
+    expires_at = db.Column(db.DateTime, nullable=True)
+    
+    # Audit
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    created_by = db.Column(db.Integer, db.ForeignKey('user.id'))
+    revoked_at = db.Column(db.DateTime)
+    revoked_by = db.Column(db.Integer, db.ForeignKey('user.id'))
+    revoked_reason = db.Column(db.String(500))
+    
+    # Relations
+    client = db.relationship('Client', backref='api_keys')
+    createur = db.relationship('User', foreign_keys=[created_by], backref='api_keys_crees')
+    revokeur = db.relationship('User', foreign_keys=[revoked_by], backref='api_keys_revoques')
+    
+    def generate_keys(self):
+        """Générer une nouvelle paire de clés API"""
+        import secrets
+        self.api_key = secrets.token_urlsafe(32)
+        self.api_secret = secrets.token_urlsafe(64)
+        return self.api_key, self.api_secret
+    
+    def verify_signature(self, signature, method, path, body=''):
+        """Vérifier la signature HMAC-SHA256"""
+        import hmac
+        import hashlib
+        
+        message = f"{method}\n{path}\n{body}\n{self.api_key}"
+        expected = hmac.new(
+            self.api_secret.encode(),
+            message.encode(),
+            hashlib.sha256
+        ).hexdigest()
+        return hmac.compare_digest(expected, signature)
+    
+    def has_permission(self, permission):
+        """Vérifier si la clé a une permission"""
+        return self.permissions.get(permission, False)
+    
+    def is_ip_allowed(self, ip):
+        """Vérifier si l'IP est autorisée"""
+        if not self.ip_whitelist:
+            return True
+        return ip in self.ip_whitelist
+    
+    def record_request(self):
+        """Enregistrer une requête"""
+        self.total_requests += 1
+        self.last_request_at = datetime.utcnow()
+        db.session.commit()
+    
+    def revoke(self, user_id, reason=None):
+        """Révoquer la clé API"""
+        self.is_active = False
+        self.is_revoked = True
+        self.revoked_at = datetime.utcnow()
+        self.revoked_by = user_id
+        self.revoked_reason = reason
+    
+    def to_dict(self, show_secret=False):
+        data = {
+            'id': self.id,
+            'name': self.name,
+            'description': self.description,
+            'api_key': self.api_key,
+            'permissions': self.permissions,
+            'rate_limit': self.rate_limit,
+            'total_requests': self.total_requests,
+            'is_active': self.is_active,
+            'created_at': self.created_at.isoformat() if self.created_at else None,
+            'last_request_at': self.last_request_at.isoformat() if self.last_request_at else None,
+            'expires_at': self.expires_at.isoformat() if self.expires_at else None
+        }
+        if show_secret:
+            data['api_secret'] = self.api_secret
+        return data
+    
+    def __repr__(self):
+        return f'<ApiKey {self.name} - {self.client.nom}>'
+
+
+class ApiKeyUsageLog(db.Model):
+    """Log des utilisations des clés API"""
+    __tablename__ = 'api_key_usage_logs'
+    
+    id = db.Column(db.Integer, primary_key=True)
+    api_key_id = db.Column(db.Integer, db.ForeignKey('api_keys.id'), nullable=False)
+    client_id = db.Column(db.Integer, db.ForeignKey('clients.id'), nullable=False)
+    
+    # Requête
+    method = db.Column(db.String(10), nullable=False)
+    endpoint = db.Column(db.String(500), nullable=False)
+    status_code = db.Column(db.Integer)
+    response_time_ms = db.Column(db.Integer)
+    
+    # IP et User Agent
+    ip_address = db.Column(db.String(45))
+    user_agent = db.Column(db.String(500))
+    
+    # Métadonnées
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    
+    # Relations
+    api_key = db.relationship('ApiKey', backref='usage_logs')
+    client = db.relationship('Client')
+
+# ============================================
+# SYSTÈME D'IMPORT DE DONNÉES
+# ============================================
+
+class ImportJob(db.Model):
+    """Job d'import de données"""
+    __tablename__ = 'import_jobs'
+    
+    id = db.Column(db.Integer, primary_key=True)
+    client_id = db.Column(db.Integer, db.ForeignKey('clients.id'), nullable=False)
+    created_by = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
+    
+    # Type d'import
+    type_import = db.Column(db.String(50), nullable=False)  # risques, audits, constatations, etc.
+    source = db.Column(db.String(50), default='excel')  # excel, csv, api
+    
+    # Fichier source
+    fichier_nom = db.Column(db.String(500))
+    fichier_chemin = db.Column(db.String(1000))
+    
+    # Traitement
+    statut = db.Column(db.String(50), default='pending')  # pending, processing, completed, failed
+    total_lignes = db.Column(db.Integer, default=0)
+    lignes_traitees = db.Column(db.Integer, default=0)
+    lignes_succes = db.Column(db.Integer, default=0)
+    lignes_erreur = db.Column(db.Integer, default=0)
+    
+    # Résultats
+    resultats = db.Column(db.JSON, default=[])
+    erreurs = db.Column(db.JSON, default=[])
+    
+    # Mapping des colonnes
+    mapping_colonnes = db.Column(db.JSON, default={})
+    
+    # Métadonnées
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    completed_at = db.Column(db.DateTime)
+    
+    # Relations
+    client = db.relationship('Client')
+    createur = db.relationship('User', foreign_keys=[created_by])
+
+
+class MappingTemplate(db.Model):
+    """Templates de mapping pour les imports"""
+    __tablename__ = 'mapping_templates'
+    
+    id = db.Column(db.Integer, primary_key=True)
+    client_id = db.Column(db.Integer, db.ForeignKey('clients.id'), nullable=False)
+    name = db.Column(db.String(100), nullable=False)
+    type_import = db.Column(db.String(50), nullable=False)
+    mapping = db.Column(db.JSON, nullable=False)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+
+# ============================================
+# MODÈLE POUR LES WEBHOOKS
+# ============================================
+
+class WebhookConfiguration(db.Model):
+    """Configuration des webhooks pour les notifications externes"""
+    __tablename__ = 'webhook_configurations'
+    
+    id = db.Column(db.Integer, primary_key=True)
+    client_id = db.Column(db.Integer, db.ForeignKey('clients.id'), nullable=False)
+    
+    # Nom et description
+    name = db.Column(db.String(100), nullable=False)
+    description = db.Column(db.Text)
+    
+    # URL de destination
+    url = db.Column(db.String(500), nullable=False)
+    
+    # Type d'événements déclencheurs
+    events = db.Column(db.JSON, default=[])  # ['audit.approuve', 'recommandation.echeance', etc.]
+    
+    # Format et authentification
+    format = db.Column(db.String(20), default='json')  # json, form_encoded
+    secret = db.Column(db.String(100), nullable=True)  # Secret pour signer les requêtes
+    
+    # Headers personnalisés
+    custom_headers = db.Column(db.JSON, default={})
+    
+    # Statut
+    is_active = db.Column(db.Boolean, default=True)
+    
+    # Statistiques
+    total_sent = db.Column(db.Integer, default=0)
+    total_success = db.Column(db.Integer, default=0)
+    total_failed = db.Column(db.Integer, default=0)
+    last_sent_at = db.Column(db.DateTime)
+    last_error = db.Column(db.Text)
+    
+    # Audit
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    created_by = db.Column(db.Integer, db.ForeignKey('user.id'))
+    
+    # Relations
+    client = db.relationship('Client', backref='webhooks')
+    createur = db.relationship('User', foreign_keys=[created_by])
+    
+    def to_dict(self):
+        return {
+            'id': self.id,
+            'name': self.name,
+            'description': self.description,
+            'url': self.url,
+            'events': self.events,
+            'is_active': self.is_active,
+            'total_sent': self.total_sent,
+            'total_success': self.total_success,
+            'total_failed': self.total_failed,
+            'last_sent_at': self.last_sent_at.isoformat() if self.last_sent_at else None,
+            'last_error': self.last_error,
+            'created_at': self.created_at.isoformat() if self.created_at else None
+        }
+
+class WebhookDeliveryLog(db.Model):
+    """Log des envois de webhooks"""
+    __tablename__ = 'webhook_delivery_logs'
+    
+    id = db.Column(db.Integer, primary_key=True)
+    webhook_id = db.Column(db.Integer, db.ForeignKey('webhook_configurations.id'), nullable=False)
+    client_id = db.Column(db.Integer, db.ForeignKey('clients.id'), nullable=False)
+    
+    # Événement déclencheur
+    event = db.Column(db.String(100), nullable=False)
+    entite_type = db.Column(db.String(50))  # audit, recommandation, risque, etc.
+    entite_id = db.Column(db.Integer)
+    
+    # Requête
+    url = db.Column(db.String(500))
+    payload = db.Column(db.JSON)
+    response_status = db.Column(db.Integer)
+    response_body = db.Column(db.Text)
+    
+    # Timing
+    duration_ms = db.Column(db.Integer)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    
+    # Statut
+    success = db.Column(db.Boolean, default=False)
+    error_message = db.Column(db.Text)
+    
+    # Relations
+    webhook = db.relationship('WebhookConfiguration', backref='delivery_logs')
+    client = db.relationship('Client')
+    
+    def to_dict(self):
+        return {
+            'id': self.id,
+            'event': self.event,
+            'entite_type': self.entite_type,
+            'entite_id': self.entite_id,
+            'response_status': self.response_status,
+            'duration_ms': self.duration_ms,
+            'success': self.success,
+            'created_at': self.created_at.isoformat() if self.created_at else None,
+            'error_message': self.error_message
+        }
+
+
+# ============================================
+# MODÈLE POUR LES WEBHOOKS
+# ============================================
+
+class WebhookConfiguration(db.Model):
+    """Configuration des webhooks pour les notifications externes"""
+    __tablename__ = 'webhook_configurations'
+    
+    id = db.Column(db.Integer, primary_key=True)
+    client_id = db.Column(db.Integer, db.ForeignKey('clients.id'), nullable=False)
+    
+    # Nom et description
+    name = db.Column(db.String(100), nullable=False)
+    description = db.Column(db.Text)
+    
+    # URL de destination
+    url = db.Column(db.String(500), nullable=False)
+    
+    # Type d'événements déclencheurs
+    events = db.Column(db.JSON, default=[])  # ['audit.approuve', 'recommandation.echeance', etc.]
+    
+    # Format et authentification
+    format = db.Column(db.String(20), default='json')  # json, form_encoded
+    secret = db.Column(db.String(100), nullable=True)  # Secret pour signer les requêtes
+    
+    # Headers personnalisés
+    custom_headers = db.Column(db.JSON, default={})
+    
+    # Statut
+    is_active = db.Column(db.Boolean, default=True)
+    
+    # Statistiques
+    total_sent = db.Column(db.Integer, default=0)
+    total_success = db.Column(db.Integer, default=0)
+    total_failed = db.Column(db.Integer, default=0)
+    last_sent_at = db.Column(db.DateTime)
+    last_error = db.Column(db.Text)
+    
+    # Audit
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    created_by = db.Column(db.Integer, db.ForeignKey('user.id'))
+    
+    # Relations
+    client = db.relationship('Client', backref='webhooks')
+    createur = db.relationship('User', foreign_keys=[created_by])
+    
+    def to_dict(self):
+        return {
+            'id': self.id,
+            'name': self.name,
+            'description': self.description,
+            'url': self.url,
+            'events': self.events,
+            'is_active': self.is_active,
+            'total_sent': self.total_sent,
+            'total_success': self.total_success,
+            'total_failed': self.total_failed,
+            'last_sent_at': self.last_sent_at.isoformat() if self.last_sent_at else None,
+            'last_error': self.last_error,
+            'created_at': self.created_at.isoformat() if self.created_at else None
+        }
+
+
+
