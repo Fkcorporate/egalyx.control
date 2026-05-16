@@ -9984,7 +9984,7 @@ class DocumentPCA(db.Model):
 # ========================
 
 class Incident(db.Model):
-    """Gestion complète des incidents avec workflow avancé"""
+    """Gestion complète des incidents"""
     __tablename__ = 'incidents'
     
     # ==================== IDENTIFIANTS DE BASE ====================
@@ -9994,27 +9994,49 @@ class Incident(db.Model):
     description = db.Column(db.Text)
     
     # ==================== CLASSIFICATION ====================
-    gravite = db.Column(db.String(20), default='moyenne')  # critique, elevee, moyenne, mineure
-    type_incident = db.Column(db.String(50))  # securite, conformite, operationnel, technique, juridique
-    statut = db.Column(db.String(20), default='ouvert', index=True)  # ouvert, en_cours, resolu, ferme, rejete
+    gravite = db.Column(db.String(20), default='moyenne')
+    type_incident = db.Column(db.String(50))
+    statut = db.Column(db.String(20), default='ouvert', index=True)
     
-    # ==================== NIVEAU D'ESCALADE ====================
-    niveau_escalade = db.Column(db.Integer, default=1)  # 1, 2, 3
+    # ==================== REPORTING ====================
+    direction_associee = db.Column(db.String(200))
+    service_associe = db.Column(db.String(200))
+    fonction_associee = db.Column(db.String(100))
+    source = db.Column(db.String(50), default='interne')
+    
+    # ==================== COÛTS ET IMPACTS ====================
+    cout_estime = db.Column(db.Float, default=0.0)
+    temps_arret = db.Column(db.Integer, default=0)
+    impact_financier_reel = db.Column(db.Float)
+    heures_impactees = db.Column(db.Integer)
+    
+    # ==================== FICHIERS JOINTS ====================
+    fichiers_joints = db.Column(db.Text)
+    fichiers_metadonnees = db.Column(db.Text)
+    
+    # ==================== ESCALADE ====================
+    niveau_escalade = db.Column(db.Integer, default=1)
     escalation_auto = db.Column(db.Boolean, default=False)
     escalation_date = db.Column(db.DateTime)
     raison_escalade = db.Column(db.Text)
+    delai_escalade_niveau2 = db.Column(db.Integer, default=48)
+    delai_escalade_niveau3 = db.Column(db.Integer, default=72)
+    notification_envoyee_niveau2 = db.Column(db.Boolean, default=False)
+    notification_envoyee_niveau3 = db.Column(db.Boolean, default=False)
+    derniere_action_date = db.Column(db.DateTime, default=datetime.utcnow)
     
     # ==================== APPROBATION ====================
     approbation_requise = db.Column(db.Boolean, default=False)
-    approbation_statut = db.Column(db.String(20), default='en_attente')  # en_attente, approuve, rejete
+    approbation_statut = db.Column(db.String(20), default='en_attente')
     approbation_par_id = db.Column(db.Integer, db.ForeignKey('user.id'))
     approbation_date = db.Column(db.DateTime)
     commentaire_approbation = db.Column(db.Text)
     
     # ==================== DATES ====================
-    date_occurrence = db.Column(db.DateTime, nullable=False)
+    date_occurrence = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
     date_detection = db.Column(db.DateTime, default=datetime.utcnow)
     date_resolution = db.Column(db.DateTime)
+    date_approbation = db.Column(db.DateTime)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
     
@@ -10023,19 +10045,11 @@ class Incident(db.Model):
     sla_date_limite = db.Column(db.DateTime)
     sla_viole = db.Column(db.Boolean, default=False)
     
-    # ==================== DÉLAIS D'ESCALADE ====================
-    delai_escalade_niveau2 = db.Column(db.Integer, default=48)
-    delai_escalade_niveau3 = db.Column(db.Integer, default=72)
-    
-    # ==================== NOTIFICATIONS ====================
-    notification_envoyee_niveau2 = db.Column(db.Boolean, default=False)
-    notification_envoyee_niveau3 = db.Column(db.Boolean, default=False)
-    derniere_action_date = db.Column(db.DateTime, default=datetime.utcnow)
-    
     # ==================== LIENS MÉTIER ====================
     risque_id = db.Column(db.Integer, db.ForeignKey('risques.id'))
     dispositif_id = db.Column(db.Integer, db.ForeignKey('dispositifs_maitrise.id'))
     plan_action_id = db.Column(db.Integer, db.ForeignKey('plans_action.id'))
+    # ⚠️ SUPPRIMEZ ticket_source_id - PAS DE LIEN DIRECT VERS TICKET
     
     # ==================== ACTEURS ====================
     declare_par_id = db.Column(db.Integer, db.ForeignKey('user.id'))
@@ -10049,7 +10063,7 @@ class Incident(db.Model):
     lecons_apprises = db.Column(db.Text)
     commentaire_cloture = db.Column(db.Text)
     
-    # ==================== MÉTADONNÉES IA ====================
+    # ==================== IA ====================
     analyse_ia = db.Column(db.Text)
     ia_score_confiance = db.Column(db.Float, default=0)
     ia_recommandations = db.Column(db.Text)
@@ -10062,10 +10076,11 @@ class Incident(db.Model):
     archived_by = db.Column(db.Integer, db.ForeignKey('user.id'))
     archive_reason = db.Column(db.String(200))
     
-    # ==================== RELATIONS CORRIGÉES ====================
+    # ==================== RELATIONS ====================
     risque = db.relationship('Risque', backref='incidents', foreign_keys=[risque_id])
     dispositif = db.relationship('DispositifMaitrise', backref='incidents', foreign_keys=[dispositif_id])
     plan_action = db.relationship('PlanAction', backref='incidents', foreign_keys=[plan_action_id])
+    
     declare_par = db.relationship('User', foreign_keys=[declare_par_id], backref='incidents_declares')
     responsable = db.relationship('User', foreign_keys=[responsable_resolution_id], backref='incidents_responsables')
     superviseur = db.relationship('User', foreign_keys=[superviseur_id], backref='incidents_supervises')
@@ -10073,55 +10088,79 @@ class Incident(db.Model):
     approbateur = db.relationship('User', foreign_keys=[approbation_par_id])
     archiveur = db.relationship('User', foreign_keys=[archived_by])
     
-    # ==================== GÉNÉRATION DE RÉFÉRENCE ROBUSTE ====================
-    @classmethod
-    def generer_reference_unique(cls, client_id=None, tentative=0):
-        """
-        Génère une référence unique pour l'incident avec gestion des conflits
-        """
-        annee = datetime.utcnow().year
-        max_tentatives = 10
-        
-        # Construire la requête de base
-        query = cls.query.filter(cls.reference.like(f'INC-{annee}-%'))
-        if client_id:
-            query = query.filter(cls.client_id == client_id)
-        
-        # Compter les incidents existants
-        count = query.count()
-        
-        # Générer le numéro de base
-        base_num = count + 1 + tentative
-        
-        # Générer la référence
-        reference = f"INC-{annee}-{base_num:03d}"
-        
-        # Vérifier si la référence existe déjà
-        existing = cls.query.filter_by(reference=reference).first()
-        
-        if existing and tentative < max_tentatives:
-            # Conflit, réessayer avec tentative+1
-            return cls.generer_reference_unique(client_id, tentative + 1)
-        elif existing:
-            # Échec après max_tentatives, utiliser un timestamp
-            timestamp = int(datetime.utcnow().timestamp())
-            reference = f"INC-{annee}-{timestamp}"
-        
-        return reference
-    
-    # Garder la méthode generer_reference pour compatibilité (appelle la nouvelle méthode)
-    def generer_reference(self):
-        """Méthode de compatibilité - appelle generer_reference_unique"""
-        return self.generer_reference_unique(self.client_id)
-    
     def __init__(self, **kwargs):
         super(Incident, self).__init__(**kwargs)
         if not self.reference:
-            self.reference = self.generer_reference_unique(self.client_id)
+            self.reference = self.generer_reference()
         if not self.sla_date_limite and self.sla_heures:
             self.sla_date_limite = datetime.utcnow() + timedelta(hours=self.sla_heures)
     
+    # ==================== GÉNÉRATION DE RÉFÉRENCE ====================
+    def generer_reference(self):
+        annee = datetime.utcnow().year
+        query = Incident.query.filter(
+            Incident.reference.like(f'INC-{annee}-%'),
+            Incident.client_id == self.client_id
+        )
+        count = query.count()
+        return f"INC-{annee}-{count + 1:03d}"
+    
+    # ==================== MÉTHODES POUR FICHIERS JOINTS ====================
+    
+    def get_fichiers_joints_list(self):
+        """Retourne la liste des fichiers joints"""
+        if not self.fichiers_joints:
+            return []
+        return [f.strip() for f in self.fichiers_joints.split(',') if f.strip()]
+    
+    def get_fichiers_metadonnees_dict(self):
+        """Retourne les métadonnées des fichiers joints"""
+        if not self.fichiers_metadonnees:
+            return {}
+        try:
+            import json
+            return json.loads(self.fichiers_metadonnees)
+        except:
+            return {}
+    
+    def ajouter_fichier(self, filename, metadata=None):
+        """Ajoute un fichier joint"""
+        import json
+        
+        fichiers = self.get_fichiers_joints_list()
+        if filename not in fichiers:
+            fichiers.append(filename)
+            self.fichiers_joints = ','.join(fichiers)
+        
+        if metadata:
+            metadonnees = self.get_fichiers_metadonnees_dict()
+            metadonnees[filename] = metadata
+            self.fichiers_metadonnees = json.dumps(metadonnees, ensure_ascii=False)
+        self.updated_at = datetime.utcnow()
+    
+    def supprimer_fichier(self, filename):
+        """Supprime un fichier joint"""
+        fichiers = self.get_fichiers_joints_list()
+        if filename in fichiers:
+            fichiers.remove(filename)
+            self.fichiers_joints = ','.join(fichiers) if fichiers else None
+            
+            metadonnees = self.get_fichiers_metadonnees_dict()
+            if filename in metadonnees:
+                del metadonnees[filename]
+                self.fichiers_metadonnees = json.dumps(metadonnees) if metadonnees else None
+        
+        self.updated_at = datetime.utcnow()
+    
+    def get_cout_total_estime(self):
+        """Retourne le coût total estimé incluant le temps d'arrêt"""
+        cout_total = self.cout_estime or 0
+        if self.temps_arret and self.heures_impactees:
+            cout_total += (self.temps_arret / 60) * 50 * (self.heures_impactees or 1)
+        return round(cout_total, 2)
+    
     # ==================== MÉTHODES D'ESCALADE ====================
+    
     def escalader(self, raison=None, auto=False, user_id=None):
         from services.escalade_service import EscaladeService
         return EscaladeService.escalader(self, auto=auto, raison=raison)
@@ -10154,6 +10193,7 @@ class Incident(db.Model):
         return False
     
     # ==================== MÉTHODES D'APPROBATION ====================
+    
     def approuver(self, user_id, commentaire=None):
         self.approbation_statut = 'approuve'
         self.approbation_par_id = user_id
@@ -10187,6 +10227,7 @@ class Incident(db.Model):
         return False
     
     # ==================== MÉTHODES D'ARCHIVAGE ====================
+    
     def archiver(self, user_id, raison):
         self.is_archived = True
         self.archived_at = datetime.utcnow()
@@ -10201,7 +10242,32 @@ class Incident(db.Model):
         self.archive_reason = None
         self.updated_at = datetime.utcnow()
     
+    def supprimer_definitivement(self):
+        """Supprime définitivement l'incident et ses fichiers"""
+        import os
+        
+        for filename in self.get_fichiers_joints_list():
+            filepath = os.path.join('static/uploads/incidents', f"incident_{self.id}_{filename}")
+            if os.path.exists(filepath):
+                try:
+                    os.remove(filepath)
+                except:
+                    pass
+        
+        from models import IncidentHistorique
+        IncidentHistorique.query.filter_by(incident_id=self.id).delete()
+        db.session.delete(self)
+    
     def peut_archiver(self, user):
+        if not user.is_authenticated:
+            return False
+        if user.role == 'super_admin':
+            return True
+        if user.is_client_admin:
+            return True
+        return False
+    
+    def peut_supprimer_definitivement(self, user):
         if not user.is_authenticated:
             return False
         if user.role == 'super_admin':
@@ -10224,6 +10290,7 @@ class Incident(db.Model):
         return False
     
     # ==================== MÉTHODES DE CALCUL ====================
+    
     def get_delai_resolution(self):
         if self.date_resolution and self.date_occurrence:
             delta = self.date_resolution - self.date_occurrence
@@ -10244,6 +10311,7 @@ class Incident(db.Model):
         return "Escalade manuelle"
     
     # ==================== MÉTHODES DE LIBELLÉS ====================
+    
     def get_gravite_label(self):
         labels = {'critique': 'Critique', 'elevee': 'Élevée', 'moyenne': 'Moyenne', 'mineure': 'Mineure'}
         return labels.get(self.gravite, self.gravite)
@@ -10274,6 +10342,7 @@ class Incident(db.Model):
         return labels.get(self.approbation_statut, self.approbation_statut)
     
     # ==================== MÉTHODES IA ====================
+    
     def analyser_avec_ia(self):
         from services.incident_ia_service import IncidentIAService
         return IncidentIAService.analyser_incident(self)
@@ -10283,6 +10352,7 @@ class Incident(db.Model):
         return IncidentIAService.predire_recurrence(self)
     
     # ==================== MÉTHODES DE CONVERSION ====================
+    
     def to_dict(self):
         import json
         return {
@@ -10317,6 +10387,7 @@ class Incident(db.Model):
             'risque_id': self.risque_id,
             'dispositif_id': self.dispositif_id,
             'plan_action_id': self.plan_action_id,
+            'ticket_source_id': self.ticket_source_id,
             'declare_par': self.declare_par.username if self.declare_par else None,
             'responsable_resolution': self.responsable.username if self.responsable else None,
             'superviseur': self.superviseur.username if self.superviseur else None,
@@ -10329,14 +10400,25 @@ class Incident(db.Model):
             'ia_score_confiance': self.ia_score_confiance,
             'created_at': self.created_at.isoformat() if self.created_at else None,
             'updated_at': self.updated_at.isoformat() if self.updated_at else None,
-            'is_archived': self.is_archived
+            'is_archived': self.is_archived,
+            'direction_associee': self.direction_associee,
+            'service_associe': self.service_associe,
+            'fonction_associee': self.fonction_associee,
+            'source': self.source,
+            'cout_estime': self.cout_estime,
+            'cout_total_estime': self.get_cout_total_estime(),
+            'temps_arret': self.temps_arret,
+            'heures_impactees': self.heures_impactees,
+            'fichiers_joints': self.get_fichiers_joints_list()
         }
     
     def __repr__(self):
         return f'<Incident {self.reference}: {self.titre[:30]}>'
-
 # ========================
 # MODÈLE TICKET SUPPORT (NOUVEAU)
+# ========================
+# ========================
+# MODÈLE TICKET SUPPORT AMÉLIORÉ
 # ========================
 
 class TicketSupport(db.Model):
@@ -10348,24 +10430,29 @@ class TicketSupport(db.Model):
     
     # Informations client
     client_id = db.Column(db.Integer, db.ForeignKey('clients.id'))
-    client_nom = db.Column(db.String(200))
-    client_email = db.Column(db.String(120))
+    client_nom = db.Column(db.String(200), nullable=False)
+    client_email = db.Column(db.String(120), nullable=False)
     client_telephone = db.Column(db.String(20))
+    client_societe = db.Column(db.String(200))
     
-    # Contenu du ticket
+    # Direction/Service
+    direction = db.Column(db.String(200))
+    service = db.Column(db.String(200))
+    fonction = db.Column(db.String(100))
+    source = db.Column(db.String(50), default='formulaire')
+    
+    # Contenu
     sujet = db.Column(db.String(200), nullable=False)
     description = db.Column(db.Text, nullable=False)
-    pieces_jointes = db.Column(db.Text)  # URLs séparées par des virgules
+    pieces_jointes = db.Column(db.Text)
+    pieces_jointes_metadonnees = db.Column(db.Text)
     
-    # Priorité (client)
-    priorite_client = db.Column(db.String(20), default='normale')  # basse, normale, haute, critique
+    # Priorité et statut
+    priorite_client = db.Column(db.String(20), default='normale')
+    statut = db.Column(db.String(20), default='nouveau')
     
-    # Statut
-    statut = db.Column(db.String(20), default='nouveau')  # nouveau, en_cours, traite, ferme
-    
-    # Liens
+    # ⚠️ UN SEUL LIEN : un ticket peut être converti en incident
     incident_id = db.Column(db.Integer, db.ForeignKey('incidents.id'))
-    incident = db.relationship('Incident', backref='ticket')
     
     # Métadonnées
     ip_address = db.Column(db.String(45))
@@ -10373,27 +10460,1300 @@ class TicketSupport(db.Model):
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
     traite_par_id = db.Column(db.Integer, db.ForeignKey('user.id'))
-    traite_par = db.relationship('User')
+    
+    # ==================== RELATIONS ====================
+    # ✅ Relation simple vers Incident (unidirectionnelle)
+    incident = db.relationship('Incident', foreign_keys=[incident_id], uselist=False)
+    traite_par = db.relationship('User', foreign_keys=[traite_par_id])
+    
+    # ==================== MÉTHODES ====================
     
     def generer_reference(self):
+        """Génère une référence unique pour le ticket avec vérification"""
         annee = datetime.utcnow().year
-        count = TicketSupport.query.filter(
+        
+        # Trouver le dernier numéro utilisé pour l'année courante
+        dernier = TicketSupport.query.filter(
             TicketSupport.reference.like(f'TKT-{annee}-%')
-        ).count()
-        return f"TKT-{annee}-{count + 1:04d}"
+        ).order_by(TicketSupport.reference.desc()).first()
+        
+        if dernier:
+            # Extraire le numéro de la dernière référence
+            try:
+                num = int(dernier.reference.split('-')[-1]) + 1
+            except (ValueError, IndexError):
+                # Si le format est différent, compter simplement
+                count = TicketSupport.query.filter(
+                    TicketSupport.reference.like(f'TKT-{annee}-%')
+                ).count()
+                num = count + 1
+        else:
+            num = 1
+        
+        # S'assurer que la référence n'existe pas déjà (sécurité)
+        while True:
+            nouvelle_ref = f"TKT-{annee}-{num:04d}"
+            existing = TicketSupport.query.filter_by(reference=nouvelle_ref).first()
+            if not existing:
+                break
+            num += 1
+        
+        return nouvelle_ref
+    
+    def get_pieces_jointes_list(self):
+        if not self.pieces_jointes:
+            return []
+        return [p.strip() for p in self.pieces_jointes.split(',') if p.strip()]
+    
+    def get_pieces_jointes_metadonnees_dict(self):
+        if not self.pieces_jointes_metadonnees:
+            return {}
+        try:
+            import json
+            return json.loads(self.pieces_jointes_metadonnees)
+        except:
+            return {}
+    
+    def ajouter_piece_jointe(self, filename, metadata=None):
+        import json
+        
+        pieces = self.get_pieces_jointes_list()
+        if filename not in pieces:
+            pieces.append(filename)
+            self.pieces_jointes = ','.join(pieces)
+        
+        if metadata:
+            metadonnees = self.get_pieces_jointes_metadonnees_dict()
+            metadonnees[filename] = metadata
+            self.pieces_jointes_metadonnees = json.dumps(metadonnees, ensure_ascii=False)
+        
+        self.updated_at = datetime.utcnow()
+    
+    def convertir_en_incident(self, user_id):
+        """Convertit le ticket en incident avec transfert des fichiers"""
+        from models import Incident, FichierMetadata
+        import os
+        import shutil
+        from datetime import datetime
+        
+        # Récupérer la gravité depuis le formulaire si disponible
+        gravite = getattr(self, 'gravite_incident', 'moyenne')
+        
+        # Nettoyer la description (enlever les balises HTML)
+        description_clean = self.description
+        if '<br>' in description_clean:
+            description_clean = description_clean.replace('<br>', '\n')
+        if '&nbsp;' in description_clean:
+            description_clean = description_clean.replace('&nbsp;', ' ')
+        
+        # Créer l'incident
+        incident = Incident(
+            titre=self.sujet,
+            description=f"Ticket support: {self.reference}\n\n{description_clean}",
+            type_incident='technique',
+            gravite=gravite,
+            date_occurrence=self.created_at,
+            declare_par_id=user_id,
+            client_id=self.client_id,
+            created_by=user_id,
+            source='ticket',
+            direction_associee=self.direction,
+            service_associe=self.service,
+            fonction_associee=self.fonction
+        )
+        incident.reference = incident.generer_reference()
+        
+        db.session.add(incident)
+        db.session.flush()  # Pour obtenir l'ID de l'incident
+        
+        # ========== TRANSFÉRER LES FICHIERS JOINTS ==========
+        pieces = self.get_pieces_jointes_list()
+        upload_folder = 'static/uploads/incidents'
+        os.makedirs(upload_folder, exist_ok=True)
+        
+        fichiers_transferes = []
+        
+        for filename in pieces:
+            source_path = os.path.join('static/uploads/tickets', filename)
+            
+            # Vérifier si le fichier source existe
+            if os.path.exists(source_path):
+                # Générer un nouveau nom pour l'incident
+                new_filename = f"incident_{incident.id}_{filename}"
+                dest_path = os.path.join(upload_folder, new_filename)
+                
+                try:
+                    # Copier le fichier
+                    shutil.copy2(source_path, dest_path)
+                    
+                    # Ajouter le fichier à l'incident
+                    incident.ajouter_fichier(new_filename, {
+                        'nom_original': filename,
+                        'taille': os.path.getsize(dest_path),
+                        'type': 'application/octet-stream',
+                        'source': 'ticket',
+                        'ticket_reference': self.reference,
+                        'uploaded_at': datetime.utcnow().isoformat()
+                    })
+                    
+                    fichiers_transferes.append({
+                        'source': filename,
+                        'dest': new_filename,
+                        'taille': os.path.getsize(dest_path)
+                    })
+                    
+                    print(f"✅ Fichier transféré: {filename} → {new_filename}")
+                    
+                except Exception as e:
+                    print(f"❌ Erreur transfert fichier {filename}: {e}")
+            else:
+                print(f"⚠️ Fichier source non trouvé: {source_path}")
+        
+        # Lier le ticket à l'incident
+        self.incident_id = incident.id
+        self.statut = 'traite'
+        self.updated_at = datetime.utcnow()
+        
+        db.session.commit()
+        
+        print(f"📊 Résumé conversion: {len(fichiers_transferes)} fichier(s) transféré(s)")
+        
+        return incident
+    
+    def get_statut_label(self):
+        labels = {
+            'nouveau': '🆕 Nouveau',
+            'en_cours': '🔄 En cours',
+            'traite': '✅ Traité',
+            'archive': '📦 Archivé'
+        }
+        return labels.get(self.statut, self.statut)
+    
+    def get_statut_color(self):
+        colors = {
+            'nouveau': 'danger',
+            'en_cours': 'warning',
+            'traite': 'success',
+            'archive': 'secondary'
+        }
+        return colors.get(self.statut, 'secondary')
     
     def to_dict(self):
         return {
             'id': self.id,
             'reference': self.reference,
+            'client_nom': self.client_nom,
+            'client_email': self.client_email,
+            'client_societe': self.client_societe,
+            'direction': self.direction,
+            'service': self.service,
             'sujet': self.sujet,
             'description': self.description,
             'priorite_client': self.priorite_client,
             'statut': self.statut,
+            'statut_label': self.get_statut_label(),
+            'pieces_jointes': self.get_pieces_jointes_list(),
             'created_at': self.created_at.isoformat() if self.created_at else None,
             'incident_reference': self.incident.reference if self.incident else None
         }
+    
+    def __repr__(self):
+        return f'<TicketSupport {self.reference}: {self.sujet[:30]}>'
 
+# ========================
+# SERVICE D'INTÉGRATION INCIDENT - DISPOSITIF
+# ========================
+class DispositifHistoriqueEfficacite(db.Model):
+    """Historique des changements d'efficacité d'un dispositif"""
+    __tablename__ = 'dispositif_historique_efficacite'
+    
+    id = db.Column(db.Integer, primary_key=True)
+    dispositif_id = db.Column(db.Integer, db.ForeignKey('dispositifs_maitrise.id'), nullable=False)
+    efficacite = db.Column(db.Float, nullable=False)
+    ancienne_efficacite = db.Column(db.Float)
+    reduction = db.Column(db.Float)
+    date_changement = db.Column(db.DateTime, default=datetime.utcnow)
+    cause = db.Column(db.String(50))  # 'evaluation', 'incident', 'plan_action', 'manuel'
+    incident_id = db.Column(db.Integer, db.ForeignKey('incidents.id'))
+    commentaire = db.Column(db.Text)
+    
+    # Relations
+    dispositif = db.relationship('DispositifMaitrise', backref='historique_efficacite')
+    incident = db.relationship('Incident', backref='impacts_dispositif')
+    
+    def __repr__(self):
+        return f'<DispositifHistorique {self.dispositif_id}: {self.efficacite}/5>'
+    
+class IncidentDispositifService:
+    """Service d'intégration conforme ISO 31000 / ISO 22301"""
+    
+    @staticmethod
+    def evaluer_impact_sur_dispositif(incident_id, dispositif_id):
+        """Évalue l'impact d'un incident sur un dispositif de maîtrise"""
+        incident = Incident.query.get(incident_id)
+        dispositif = DispositifMaitrise.query.get(dispositif_id)
+        
+        if not incident or not dispositif:
+            return None
+        
+        # Calcul de l'impact selon la norme ISO 31000
+        impact_scores = {
+            'critique': 5,
+            'elevee': 4,
+            'moyenne': 3,
+            'mineure': 2
+        }
+        
+        impact_score = impact_scores.get(incident.gravite, 3)
+        
+        # Efficacité résiduelle du dispositif après incident
+        efficacite_residuelle = max(0, (dispositif.efficacite_reelle or 3) - (impact_score / 5))
+        
+        # Recommandations
+        if efficacite_residuelle < 2:
+            recommandation = "URGENT: Renforcer immédiatement le dispositif"
+            priorite = "haute"
+        elif efficacite_residuelle < 3:
+            recommandation = "À surveiller: Plan d'action correctif recommandé"
+            priorite = "moyenne"
+        else:
+            recommandation = "Dispositif résilient - Surveillance normale"
+            priorite = "basse"
+        
+        # Créer une alerte si nécessaire
+        if priorite == "haute":
+            from services.notification_service import NotificationService
+            NotificationService.create(
+                destinataire_id=dispositif.responsable_id,
+                type_notif='warning',
+                titre=f"Incident critique affectant {dispositif.reference}",
+                message=f"L'incident {incident.reference} réduit l'efficacité du dispositif à {efficacite_residuelle:.1f}/5",
+                entite_type='dispositif',
+                entite_id=dispositif.id
+            )
+        
+        return {
+            'impact_score': impact_score,
+            'efficacite_avant': dispositif.efficacite_reelle,
+            'efficacite_apres': efficacite_residuelle,
+            'perte_efficacite': round(dispositif.efficacite_reelle - efficacite_residuelle, 1) if dispositif.efficacite_reelle else 0,
+            'recommandation': recommandation,
+            'priorite': priorite,
+            'conforme_norme': "ISO 31000:2018"
+        }
+    
+    @staticmethod
+    def synchroniser_incident_vers_dispositif(incident_id, dispositif_id):
+        """Synchronise un incident vers un dispositif (création de plan d'action)"""
+        from services.incident_ia_service import IncidentIAService
+        
+        evaluation = IncidentDispositifService.evaluer_impact_sur_dispositif(incident_id, dispositif_id)
+        
+        if evaluation and evaluation['priorite'] == 'haute':
+            # Créer automatiquement un plan d'action
+            incident = Incident.query.get(incident_id)
+            dispositif = DispositifMaitrise.query.get(dispositif_id)
+            
+            from models import PlanAction
+            plan = PlanAction(
+                reference=f"PA-INC-{incident.id}-{dispositif.id}",
+                nom=f"Renforcement dispositif {dispositif.reference} suite incident {incident.reference}",
+                description=f"Suite à l'incident {incident.reference} ({incident.titre}), le dispositif {dispositif.reference} nécessite un renforcement.\n\n"
+                           f"Impact: {evaluation['perte_efficacite']} points perdus\n"
+                           f"Recommandation: {evaluation['recommandation']}",
+                risque_id=dispositif.risque_id,
+                dispositif_id=dispositif.id,
+                priorite='haute',
+                statut='en_cours',
+                created_by=incident.declare_par_id or 1,
+                client_id=incident.client_id
+            )
+            db.session.add(plan)
+            db.session.commit()
+            
+            return {'plan_action_cree': plan.id, **evaluation}
+        
+        return evaluation
+
+
+class IncidentDispositifIntegration:
+    """Service d'intégration incident ↔ dispositif"""
+    
+    @staticmethod
+    def evaluer_impact(incident, dispositif):
+        """Évalue l'impact d'un incident sur un dispositif"""
+        if not incident or not dispositif:
+            return None
+        
+        # Score de gravité de l'incident (1-5)
+        gravite_scores = {'mineure': 1, 'moyenne': 2, 'elevee': 4, 'critique': 5}
+        score_incident = gravite_scores.get(incident.gravite, 2)
+        
+        # Facteur de réduction selon le type de dispositif
+        facteurs_reduction = {
+            'Préventif': 0.4,
+            'Détectif': 0.6,
+            'Correctif': 0.8
+        }
+        facteur = facteurs_reduction.get(dispositif.type_dispositif, 0.5)
+        
+        # Calcul de la réduction d'efficacité (0-2 points)
+        reduction = round((score_incident / 5) * facteur * 2, 1)
+        
+        # Niveau d'impact
+        if reduction >= 1.5:
+            niveau_impact = 'critique'
+            recommandation = "URGENT: Plan d'action correctif immédiat requis"
+        elif reduction >= 0.8:
+            niveau_impact = 'important'
+            recommandation = "Plan d'action à programmer dans les 30 jours"
+        elif reduction >= 0.3:
+            niveau_impact = 'modere'
+            recommandation = "Surveillance renforcée recommandée"
+        else:
+            niveau_impact = 'mineur'
+            recommandation = "Pas d'action corrective immédiate"
+        
+        return {
+            'reduction_efficacite': reduction,
+            'niveau_impact': niveau_impact,
+            'score_incident': score_incident,
+            'recommandation': recommandation,
+            'conforme_norme': 'ISO 31000:2018'
+        }
+    
+    @staticmethod
+    def lier_dispositif(incident_id, dispositif_id, user_id):
+        """Lie un dispositif à un incident et évalue l'impact"""
+        from models import Incident, DispositifMaitrise, IncidentHistorique
+        from app import db
+        
+        incident = Incident.query.get(incident_id)
+        dispositif = DispositifMaitrise.query.get(dispositif_id)
+        
+        if not incident or not dispositif:
+            return {'success': False, 'error': 'Incident ou dispositif non trouvé'}
+        
+        # Vérifier la cohérence client
+        if incident.client_id != dispositif.client_id:
+            return {'success': False, 'error': 'Incohérence client'}
+        
+        # Lier le dispositif
+        incident.dispositif_id = dispositif_id
+        
+        # Évaluer l'impact
+        impact = IncidentDispositifIntegration.evaluer_impact(incident, dispositif)
+        
+        # Mettre à jour l'efficacité du dispositif si nécessaire
+        if impact['reduction_efficacite'] > 0:
+            ancienne_efficacite = dispositif.efficacite_reelle or 3
+            nouvelle_efficacite = max(1, ancienne_efficacite - impact['reduction_efficacite'])
+            dispositif.efficacite_reelle = nouvelle_efficacite
+            dispositif.commentaire_evaluation = (
+                f"Impact suite à l'incident {incident.reference}: "
+                f"réduction de {impact['reduction_efficacite']} points"
+            )
+        
+        # Journaliser
+        historique = IncidentHistorique(
+            incident_id=incident_id,
+            action='lier_dispositif',
+            details=f"Liaison avec dispositif {dispositif.reference}. Impact: {impact['reduction_efficacite']} points",
+            utilisateur_id=user_id
+        )
+        db.session.add(historique)
+        db.session.commit()
+        
+        return {
+            'success': True,
+            'impact': impact,
+            'message': f"Dispositif lié avec succès - Impact: {impact['niveau_impact']}"
+        }class Incident(db.Model):
+    """Gestion complète des incidents"""
+    __tablename__ = 'incidents'
+    
+    # ==================== IDENTIFIANTS DE BASE ====================
+    id = db.Column(db.Integer, primary_key=True)
+    reference = db.Column(db.String(30), unique=True, nullable=False)
+    titre = db.Column(db.String(200), nullable=False)
+    description = db.Column(db.Text)
+    
+    # ==================== CLASSIFICATION ====================
+    gravite = db.Column(db.String(20), default='moyenne')
+    type_incident = db.Column(db.String(50))
+    statut = db.Column(db.String(20), default='ouvert', index=True)
+    
+    # ==================== REPORTING ====================
+    direction_associee = db.Column(db.String(200))
+    service_associe = db.Column(db.String(200))
+    fonction_associee = db.Column(db.String(100))
+    source = db.Column(db.String(50), default='interne')
+    
+    # ==================== COÛTS ET IMPACTS ====================
+    cout_estime = db.Column(db.Float, default=0.0)
+    temps_arret = db.Column(db.Integer, default=0)
+    impact_financier_reel = db.Column(db.Float)
+    heures_impactees = db.Column(db.Integer)
+    
+    # ==================== FICHIERS JOINTS ====================
+    fichiers_joints = db.Column(db.Text)
+    fichiers_metadonnees = db.Column(db.Text)
+    
+    # ==================== ESCALADE ====================
+    niveau_escalade = db.Column(db.Integer, default=1)
+    escalation_auto = db.Column(db.Boolean, default=False)
+    escalation_date = db.Column(db.DateTime)
+    raison_escalade = db.Column(db.Text)
+    delai_escalade_niveau2 = db.Column(db.Integer, default=48)
+    delai_escalade_niveau3 = db.Column(db.Integer, default=72)
+    notification_envoyee_niveau2 = db.Column(db.Boolean, default=False)
+    notification_envoyee_niveau3 = db.Column(db.Boolean, default=False)
+    derniere_action_date = db.Column(db.DateTime, default=datetime.utcnow)
+    
+    # ==================== APPROBATION ====================
+    approbation_requise = db.Column(db.Boolean, default=False)
+    approbation_statut = db.Column(db.String(20), default='en_attente')
+    approbation_par_id = db.Column(db.Integer, db.ForeignKey('user.id'))
+    approbation_date = db.Column(db.DateTime)
+    commentaire_approbation = db.Column(db.Text)
+    
+    # ==================== DATES ====================
+    date_occurrence = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
+    date_detection = db.Column(db.DateTime, default=datetime.utcnow)
+    date_resolution = db.Column(db.DateTime)
+    date_approbation = db.Column(db.DateTime)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    
+    # ==================== SLA ====================
+    sla_heures = db.Column(db.Integer, default=48)
+    sla_date_limite = db.Column(db.DateTime)
+    sla_viole = db.Column(db.Boolean, default=False)
+    
+    # ==================== LIENS MÉTIER ====================
+    risque_id = db.Column(db.Integer, db.ForeignKey('risques.id'))
+    dispositif_id = db.Column(db.Integer, db.ForeignKey('dispositifs_maitrise.id'))
+    plan_action_id = db.Column(db.Integer, db.ForeignKey('plans_action.id'))
+    # ⚠️ SUPPRIMEZ ticket_source_id - PAS DE LIEN DIRECT VERS TICKET
+    
+    # ==================== ACTEURS ====================
+    declare_par_id = db.Column(db.Integer, db.ForeignKey('user.id'))
+    responsable_resolution_id = db.Column(db.Integer, db.ForeignKey('user.id'))
+    superviseur_id = db.Column(db.Integer, db.ForeignKey('user.id'))
+    directeur_id = db.Column(db.Integer, db.ForeignKey('user.id'))
+    
+    # ==================== RÉSOLUTION ====================
+    cause_racine = db.Column(db.Text)
+    actions_correctives = db.Column(db.Text)
+    lecons_apprises = db.Column(db.Text)
+    commentaire_cloture = db.Column(db.Text)
+    
+    # ==================== IA ====================
+    analyse_ia = db.Column(db.Text)
+    ia_score_confiance = db.Column(db.Float, default=0)
+    ia_recommandations = db.Column(db.Text)
+    
+    # ==================== MULTI-TENANT ====================
+    client_id = db.Column(db.Integer, db.ForeignKey('clients.id'), index=True)
+    created_by = db.Column(db.Integer, db.ForeignKey('user.id'))
+    is_archived = db.Column(db.Boolean, default=False)
+    archived_at = db.Column(db.DateTime)
+    archived_by = db.Column(db.Integer, db.ForeignKey('user.id'))
+    archive_reason = db.Column(db.String(200))
+    
+    # ==================== RELATIONS ====================
+    risque = db.relationship('Risque', backref='incidents', foreign_keys=[risque_id])
+    dispositif = db.relationship('DispositifMaitrise', backref='incidents', foreign_keys=[dispositif_id])
+    plan_action = db.relationship('PlanAction', backref='incidents', foreign_keys=[plan_action_id])
+    
+    declare_par = db.relationship('User', foreign_keys=[declare_par_id], backref='incidents_declares')
+    responsable = db.relationship('User', foreign_keys=[responsable_resolution_id], backref='incidents_responsables')
+    superviseur = db.relationship('User', foreign_keys=[superviseur_id], backref='incidents_supervises')
+    directeur = db.relationship('User', foreign_keys=[directeur_id], backref='incidents_directeur')
+    approbateur = db.relationship('User', foreign_keys=[approbation_par_id])
+    archiveur = db.relationship('User', foreign_keys=[archived_by])
+    
+    def __init__(self, **kwargs):
+        super(Incident, self).__init__(**kwargs)
+        if not self.reference:
+            self.reference = self.generer_reference()
+        if not self.sla_date_limite and self.sla_heures:
+            self.sla_date_limite = datetime.utcnow() + timedelta(hours=self.sla_heures)
+    
+    # ==================== GÉNÉRATION DE RÉFÉRENCE ====================
+    def generer_reference(self):
+        annee = datetime.utcnow().year
+        query = Incident.query.filter(
+            Incident.reference.like(f'INC-{annee}-%'),
+            Incident.client_id == self.client_id
+        )
+        count = query.count()
+        return f"INC-{annee}-{count + 1:03d}"
+    
+    # ==================== MÉTHODES POUR FICHIERS JOINTS ====================
+    
+    def get_fichiers_joints_list(self):
+        """Retourne la liste des fichiers joints"""
+        if not self.fichiers_joints:
+            return []
+        return [f.strip() for f in self.fichiers_joints.split(',') if f.strip()]
+    
+    def get_fichiers_metadonnees_dict(self):
+        """Retourne les métadonnées des fichiers joints"""
+        if not self.fichiers_metadonnees:
+            return {}
+        try:
+            import json
+            return json.loads(self.fichiers_metadonnees)
+        except:
+            return {}
+    
+    def ajouter_fichier(self, filename, metadata=None):
+        """Ajoute un fichier joint"""
+        import json
+        
+        fichiers = self.get_fichiers_joints_list()
+        if filename not in fichiers:
+            fichiers.append(filename)
+            self.fichiers_joints = ','.join(fichiers)
+        
+        if metadata:
+            metadonnees = self.get_fichiers_metadonnees_dict()
+            metadonnees[filename] = metadata
+            self.fichiers_metadonnees = json.dumps(metadonnees, ensure_ascii=False)
+        self.updated_at = datetime.utcnow()
+    
+    def supprimer_fichier(self, filename):
+        """Supprime un fichier joint"""
+        fichiers = self.get_fichiers_joints_list()
+        if filename in fichiers:
+            fichiers.remove(filename)
+            self.fichiers_joints = ','.join(fichiers) if fichiers else None
+            
+            metadonnees = self.get_fichiers_metadonnees_dict()
+            if filename in metadonnees:
+                del metadonnees[filename]
+                self.fichiers_metadonnees = json.dumps(metadonnees) if metadonnees else None
+        
+        self.updated_at = datetime.utcnow()
+    
+    def get_cout_total_estime(self):
+        """Retourne le coût total estimé incluant le temps d'arrêt"""
+        cout_total = self.cout_estime or 0
+        if self.temps_arret and self.heures_impactees:
+            cout_total += (self.temps_arret / 60) * 50 * (self.heures_impactees or 1)
+        return round(cout_total, 2)
+    
+    # ==================== MÉTHODES D'ESCALADE ====================
+    
+    def escalader(self, raison=None, auto=False, user_id=None):
+        from services.escalade_service import EscaladeService
+        return EscaladeService.escalader(self, auto=auto, raison=raison)
+    
+    def retro_escalader(self, niveau_cible=1, raison=None):
+        from services.escalade_service import EscaladeService
+        return EscaladeService.retro_escalader(self, niveau_cible, raison)
+    
+    def verifier_sla(self):
+        from services.escalade_service import EscaladeService
+        return EscaladeService.verifier_et_escalader_auto(self)
+    
+    def peut_escalader(self, user):
+        if not user.is_authenticated:
+            return False
+        if user.role == 'super_admin':
+            return True
+        if self.niveau_escalade >= 3:
+            return False
+        if self.is_archived:
+            return False
+        if self.statut in ['ferme', 'resolu', 'rejete']:
+            return False
+        if self.responsable_resolution_id == user.id:
+            return True
+        if self.niveau_escalade == 1 and self.superviseur_id == user.id:
+            return True
+        if self.niveau_escalade == 2 and self.directeur_id == user.id:
+            return True
+        return False
+    
+    # ==================== MÉTHODES D'APPROBATION ====================
+    
+    def approuver(self, user_id, commentaire=None):
+        self.approbation_statut = 'approuve'
+        self.approbation_par_id = user_id
+        self.approbation_date = datetime.utcnow()
+        self.commentaire_approbation = commentaire
+        self.statut = 'ferme'
+        self.date_resolution = datetime.utcnow()
+        self.updated_at = datetime.utcnow()
+    
+    def rejeter(self, user_id, commentaire):
+        self.approbation_statut = 'rejete'
+        self.approbation_par_id = user_id
+        self.approbation_date = datetime.utcnow()
+        self.commentaire_approbation = commentaire
+        self.statut = 'en_cours'
+        self.updated_at = datetime.utcnow()
+    
+    def peut_approuver(self, user):
+        if not user.is_authenticated:
+            return False
+        if user.role == 'super_admin':
+            return True
+        if not self.approbation_requise:
+            return False
+        if self.approbation_statut != 'en_attente':
+            return False
+        if self.superviseur_id == user.id:
+            return True
+        if self.directeur_id == user.id:
+            return True
+        return False
+    
+    # ==================== MÉTHODES D'ARCHIVAGE ====================
+    
+    def archiver(self, user_id, raison):
+        self.is_archived = True
+        self.archived_at = datetime.utcnow()
+        self.archived_by = user_id
+        self.archive_reason = raison
+        self.updated_at = datetime.utcnow()
+    
+    def desarchiver(self):
+        self.is_archived = False
+        self.archived_at = None
+        self.archived_by = None
+        self.archive_reason = None
+        self.updated_at = datetime.utcnow()
+    
+    def supprimer_definitivement(self):
+        """Supprime définitivement l'incident et ses fichiers"""
+        import os
+        
+        for filename in self.get_fichiers_joints_list():
+            filepath = os.path.join('static/uploads/incidents', f"incident_{self.id}_{filename}")
+            if os.path.exists(filepath):
+                try:
+                    os.remove(filepath)
+                except:
+                    pass
+        
+        from models import IncidentHistorique
+        IncidentHistorique.query.filter_by(incident_id=self.id).delete()
+        db.session.delete(self)
+    
+    def peut_archiver(self, user):
+        if not user.is_authenticated:
+            return False
+        if user.role == 'super_admin':
+            return True
+        if user.is_client_admin:
+            return True
+        return False
+    
+    def peut_supprimer_definitivement(self, user):
+        if not user.is_authenticated:
+            return False
+        if user.role == 'super_admin':
+            return True
+        if user.is_client_admin:
+            return True
+        return False
+    
+    def peut_modifier(self, user):
+        if not user.is_authenticated:
+            return False
+        if user.role == 'super_admin':
+            return True
+        if user.is_client_admin:
+            return True
+        if user.id == self.created_by:
+            return True
+        if user.id == self.responsable_resolution_id:
+            return True
+        return False
+    
+    # ==================== MÉTHODES DE CALCUL ====================
+    
+    def get_delai_resolution(self):
+        if self.date_resolution and self.date_occurrence:
+            delta = self.date_resolution - self.date_occurrence
+            return delta.days
+        return None
+    
+    def get_heures_restantes_sla(self):
+        if self.sla_date_limite and self.statut not in ['ferme', 'resolu']:
+            delta = self.sla_date_limite - datetime.utcnow()
+            return max(0, delta.total_seconds() / 3600)
+        return None
+    
+    def get_raison_escalade(self):
+        if self.raison_escalade:
+            return self.raison_escalade
+        if self.escalation_auto:
+            return f"Escalade automatique - SLA dépassé ({self.sla_heures}h)"
+        return "Escalade manuelle"
+    
+    # ==================== MÉTHODES DE LIBELLÉS ====================
+    
+    def get_gravite_label(self):
+        labels = {'critique': 'Critique', 'elevee': 'Élevée', 'moyenne': 'Moyenne', 'mineure': 'Mineure'}
+        return labels.get(self.gravite, self.gravite)
+    
+    def get_gravite_color(self):
+        colors = {'critique': 'danger', 'elevee': 'warning', 'moyenne': 'info', 'mineure': 'success'}
+        return colors.get(self.gravite, 'secondary')
+    
+    def get_type_label(self):
+        labels = {'securite': 'Sécurité', 'conformite': 'Conformité', 'operationnel': 'Opérationnel', 
+                  'technique': 'Technique', 'juridique': 'Juridique'}
+        return labels.get(self.type_incident, self.type_incident)
+    
+    def get_statut_label(self):
+        labels = {'ouvert': 'Ouvert', 'en_cours': 'En cours', 'resolu': 'Résolu', 'ferme': 'Fermé', 'rejete': 'Rejeté'}
+        return labels.get(self.statut, self.statut)
+    
+    def get_statut_color(self):
+        colors = {'ouvert': 'danger', 'en_cours': 'warning', 'resolu': 'info', 'ferme': 'success', 'rejete': 'secondary'}
+        return colors.get(self.statut, 'secondary')
+    
+    def get_niveau_escalade_label(self):
+        labels = {1: 'Niveau 1 (Support)', 2: 'Niveau 2 (Superviseur)', 3: 'Niveau 3 (Direction)'}
+        return labels.get(self.niveau_escalade, f'Niveau {self.niveau_escalade}')
+    
+    def get_approbation_statut_label(self):
+        labels = {'en_attente': 'En attente', 'approuve': 'Approuvé', 'rejete': 'Rejeté'}
+        return labels.get(self.approbation_statut, self.approbation_statut)
+    
+    # ==================== MÉTHODES IA ====================
+    
+    def analyser_avec_ia(self):
+        from services.incident_ia_service import IncidentIAService
+        return IncidentIAService.analyser_incident(self)
+    
+    def predire_recurrence(self):
+        from services.incident_ia_service import IncidentIAService
+        return IncidentIAService.predire_recurrence(self)
+    
+    # ==================== MÉTHODES DE CONVERSION ====================
+    
+    def to_dict(self):
+        import json
+        return {
+            'id': self.id,
+            'reference': self.reference,
+            'titre': self.titre,
+            'description': self.description,
+            'gravite': self.gravite,
+            'gravite_label': self.get_gravite_label(),
+            'gravite_color': self.get_gravite_color(),
+            'type_incident': self.type_incident,
+            'type_label': self.get_type_label(),
+            'statut': self.statut,
+            'statut_label': self.get_statut_label(),
+            'statut_color': self.get_statut_color(),
+            'niveau_escalade': self.niveau_escalade,
+            'niveau_escalade_label': self.get_niveau_escalade_label(),
+            'raison_escalade': self.get_raison_escalade(),
+            'escalation_auto': self.escalation_auto,
+            'escalation_date': self.escalade_date.isoformat() if self.escalade_date else None,
+            'approbation_requise': self.approbation_requise,
+            'approbation_statut': self.approbation_statut,
+            'approbation_statut_label': self.get_approbation_statut_label(),
+            'date_occurrence': self.date_occurrence.isoformat() if self.date_occurrence else None,
+            'date_detection': self.date_detection.isoformat() if self.date_detection else None,
+            'date_resolution': self.date_resolution.isoformat() if self.date_resolution else None,
+            'delai_resolution': self.get_delai_resolution(),
+            'sla_heures': self.sla_heures,
+            'sla_date_limite': self.sla_date_limite.isoformat() if self.sla_date_limite else None,
+            'sla_viole': self.sla_viole,
+            'heures_restantes_sla': self.get_heures_restantes_sla(),
+            'risque_id': self.risque_id,
+            'dispositif_id': self.dispositif_id,
+            'plan_action_id': self.plan_action_id,
+            'ticket_source_id': self.ticket_source_id,
+            'declare_par': self.declare_par.username if self.declare_par else None,
+            'responsable_resolution': self.responsable.username if self.responsable else None,
+            'superviseur': self.superviseur.username if self.superviseur else None,
+            'directeur': self.directeur.username if self.directeur else None,
+            'cause_racine': self.cause_racine,
+            'actions_correctives': self.actions_correctives,
+            'lecons_apprises': self.lecons_apprises,
+            'commentaire_cloture': self.commentaire_cloture,
+            'analyse_ia': json.loads(self.analyse_ia) if self.analyse_ia else None,
+            'ia_score_confiance': self.ia_score_confiance,
+            'created_at': self.created_at.isoformat() if self.created_at else None,
+            'updated_at': self.updated_at.isoformat() if self.updated_at else None,
+            'is_archived': self.is_archived,
+            'direction_associee': self.direction_associee,
+            'service_associe': self.service_associe,
+            'fonction_associee': self.fonction_associee,
+            'source': self.source,
+            'cout_estime': self.cout_estime,
+            'cout_total_estime': self.get_cout_total_estime(),
+            'temps_arret': self.temps_arret,
+            'heures_impactees': self.heures_impactees,
+            'fichiers_joints': self.get_fichiers_joints_list()
+        }
+    
+    def __repr__(self):
+        return f'<Incident {self.reference}: {self.titre[:30]}>'
+# ========================
+# MODÈLE TICKET SUPPORT (NOUVEAU)
+# ========================
+# ========================
+# MODÈLE TICKET SUPPORT AMÉLIORÉ
+# ========================
+
+class TicketSupport(db.Model):
+    """Interface client pour déclarer des incidents"""
+    __tablename__ = 'tickets_support'
+    
+    id = db.Column(db.Integer, primary_key=True)
+    reference = db.Column(db.String(30), unique=True, nullable=False)
+    
+    # Informations client
+    client_id = db.Column(db.Integer, db.ForeignKey('clients.id'))
+    client_nom = db.Column(db.String(200), nullable=False)
+    client_email = db.Column(db.String(120), nullable=False)
+    client_telephone = db.Column(db.String(20))
+    client_societe = db.Column(db.String(200))
+    
+    # Direction/Service
+    direction = db.Column(db.String(200))
+    service = db.Column(db.String(200))
+    fonction = db.Column(db.String(100))
+    source = db.Column(db.String(50), default='formulaire')
+    
+    # Contenu
+    sujet = db.Column(db.String(200), nullable=False)
+    description = db.Column(db.Text, nullable=False)
+    pieces_jointes = db.Column(db.Text)
+    pieces_jointes_metadonnees = db.Column(db.Text)
+    
+    # Priorité et statut
+    priorite_client = db.Column(db.String(20), default='normale')
+    statut = db.Column(db.String(20), default='nouveau')
+    
+    # ⚠️ UN SEUL LIEN : un ticket peut être converti en incident
+    incident_id = db.Column(db.Integer, db.ForeignKey('incidents.id'))
+    
+    # Métadonnées
+    ip_address = db.Column(db.String(45))
+    user_agent = db.Column(db.String(500))
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    traite_par_id = db.Column(db.Integer, db.ForeignKey('user.id'))
+    
+    # ==================== RELATIONS ====================
+    # ✅ Relation simple vers Incident (unidirectionnelle)
+    incident = db.relationship('Incident', foreign_keys=[incident_id], uselist=False)
+    traite_par = db.relationship('User', foreign_keys=[traite_par_id])
+    
+    # ==================== MÉTHODES ====================
+    
+    def generer_reference(self):
+        """Génère une référence unique pour le ticket avec vérification"""
+        annee = datetime.utcnow().year
+        
+        # Trouver le dernier numéro utilisé pour l'année courante
+        dernier = TicketSupport.query.filter(
+            TicketSupport.reference.like(f'TKT-{annee}-%')
+        ).order_by(TicketSupport.reference.desc()).first()
+        
+        if dernier:
+            # Extraire le numéro de la dernière référence
+            try:
+                num = int(dernier.reference.split('-')[-1]) + 1
+            except (ValueError, IndexError):
+                # Si le format est différent, compter simplement
+                count = TicketSupport.query.filter(
+                    TicketSupport.reference.like(f'TKT-{annee}-%')
+                ).count()
+                num = count + 1
+        else:
+            num = 1
+        
+        # S'assurer que la référence n'existe pas déjà (sécurité)
+        while True:
+            nouvelle_ref = f"TKT-{annee}-{num:04d}"
+            existing = TicketSupport.query.filter_by(reference=nouvelle_ref).first()
+            if not existing:
+                break
+            num += 1
+        
+        return nouvelle_ref
+    
+    def get_pieces_jointes_list(self):
+        if not self.pieces_jointes:
+            return []
+        return [p.strip() for p in self.pieces_jointes.split(',') if p.strip()]
+    
+    def get_pieces_jointes_metadonnees_dict(self):
+        if not self.pieces_jointes_metadonnees:
+            return {}
+        try:
+            import json
+            return json.loads(self.pieces_jointes_metadonnees)
+        except:
+            return {}
+    
+    def ajouter_piece_jointe(self, filename, metadata=None):
+        import json
+        
+        pieces = self.get_pieces_jointes_list()
+        if filename not in pieces:
+            pieces.append(filename)
+            self.pieces_jointes = ','.join(pieces)
+        
+        if metadata:
+            metadonnees = self.get_pieces_jointes_metadonnees_dict()
+            metadonnees[filename] = metadata
+            self.pieces_jointes_metadonnees = json.dumps(metadonnees, ensure_ascii=False)
+        
+        self.updated_at = datetime.utcnow()
+    
+    def convertir_en_incident(self, user_id):
+        """Convertit le ticket en incident avec transfert des fichiers"""
+        from models import Incident, FichierMetadata
+        import os
+        import shutil
+        from datetime import datetime
+        
+        # Récupérer la gravité depuis le formulaire si disponible
+        gravite = getattr(self, 'gravite_incident', 'moyenne')
+        
+        # Nettoyer la description (enlever les balises HTML)
+        description_clean = self.description
+        if '<br>' in description_clean:
+            description_clean = description_clean.replace('<br>', '\n')
+        if '&nbsp;' in description_clean:
+            description_clean = description_clean.replace('&nbsp;', ' ')
+        
+        # Créer l'incident
+        incident = Incident(
+            titre=self.sujet,
+            description=f"Ticket support: {self.reference}\n\n{description_clean}",
+            type_incident='technique',
+            gravite=gravite,
+            date_occurrence=self.created_at,
+            declare_par_id=user_id,
+            client_id=self.client_id,
+            created_by=user_id,
+            source='ticket',
+            direction_associee=self.direction,
+            service_associe=self.service,
+            fonction_associee=self.fonction
+        )
+        incident.reference = incident.generer_reference()
+        
+        db.session.add(incident)
+        db.session.flush()  # Pour obtenir l'ID de l'incident
+        
+        # ========== TRANSFÉRER LES FICHIERS JOINTS ==========
+        pieces = self.get_pieces_jointes_list()
+        upload_folder = 'static/uploads/incidents'
+        os.makedirs(upload_folder, exist_ok=True)
+        
+        fichiers_transferes = []
+        
+        for filename in pieces:
+            source_path = os.path.join('static/uploads/tickets', filename)
+            
+            # Vérifier si le fichier source existe
+            if os.path.exists(source_path):
+                # Générer un nouveau nom pour l'incident
+                new_filename = f"incident_{incident.id}_{filename}"
+                dest_path = os.path.join(upload_folder, new_filename)
+                
+                try:
+                    # Copier le fichier
+                    shutil.copy2(source_path, dest_path)
+                    
+                    # Ajouter le fichier à l'incident
+                    incident.ajouter_fichier(new_filename, {
+                        'nom_original': filename,
+                        'taille': os.path.getsize(dest_path),
+                        'type': 'application/octet-stream',
+                        'source': 'ticket',
+                        'ticket_reference': self.reference,
+                        'uploaded_at': datetime.utcnow().isoformat()
+                    })
+                    
+                    fichiers_transferes.append({
+                        'source': filename,
+                        'dest': new_filename,
+                        'taille': os.path.getsize(dest_path)
+                    })
+                    
+                    print(f"✅ Fichier transféré: {filename} → {new_filename}")
+                    
+                except Exception as e:
+                    print(f"❌ Erreur transfert fichier {filename}: {e}")
+            else:
+                print(f"⚠️ Fichier source non trouvé: {source_path}")
+        
+        # Lier le ticket à l'incident
+        self.incident_id = incident.id
+        self.statut = 'traite'
+        self.updated_at = datetime.utcnow()
+        
+        db.session.commit()
+        
+        print(f"📊 Résumé conversion: {len(fichiers_transferes)} fichier(s) transféré(s)")
+        
+        return incident
+    
+    def get_statut_label(self):
+        labels = {
+            'nouveau': '🆕 Nouveau',
+            'en_cours': '🔄 En cours',
+            'traite': '✅ Traité',
+            'archive': '📦 Archivé'
+        }
+        return labels.get(self.statut, self.statut)
+    
+    def get_statut_color(self):
+        colors = {
+            'nouveau': 'danger',
+            'en_cours': 'warning',
+            'traite': 'success',
+            'archive': 'secondary'
+        }
+        return colors.get(self.statut, 'secondary')
+    
+    def to_dict(self):
+        return {
+            'id': self.id,
+            'reference': self.reference,
+            'client_nom': self.client_nom,
+            'client_email': self.client_email,
+            'client_societe': self.client_societe,
+            'direction': self.direction,
+            'service': self.service,
+            'sujet': self.sujet,
+            'description': self.description,
+            'priorite_client': self.priorite_client,
+            'statut': self.statut,
+            'statut_label': self.get_statut_label(),
+            'pieces_jointes': self.get_pieces_jointes_list(),
+            'created_at': self.created_at.isoformat() if self.created_at else None,
+            'incident_reference': self.incident.reference if self.incident else None
+        }
+    
+    def __repr__(self):
+        return f'<TicketSupport {self.reference}: {self.sujet[:30]}>'
+
+# ========================
+# SERVICE D'INTÉGRATION INCIDENT - DISPOSITIF
+# ========================
+class DispositifHistoriqueEfficacite(db.Model):
+    """Historique des changements d'efficacité d'un dispositif"""
+    __tablename__ = 'dispositif_historique_efficacite'
+    
+    id = db.Column(db.Integer, primary_key=True)
+    dispositif_id = db.Column(db.Integer, db.ForeignKey('dispositifs_maitrise.id'), nullable=False)
+    efficacite = db.Column(db.Float, nullable=False)
+    ancienne_efficacite = db.Column(db.Float)
+    reduction = db.Column(db.Float)
+    date_changement = db.Column(db.DateTime, default=datetime.utcnow)
+    cause = db.Column(db.String(50))  # 'evaluation', 'incident', 'plan_action', 'manuel'
+    incident_id = db.Column(db.Integer, db.ForeignKey('incidents.id'))
+    commentaire = db.Column(db.Text)
+    
+    # Relations
+    dispositif = db.relationship('DispositifMaitrise', backref='historique_efficacite')
+    incident = db.relationship('Incident', backref='impacts_dispositif')
+    
+    def __repr__(self):
+        return f'<DispositifHistorique {self.dispositif_id}: {self.efficacite}/5>'
+    
+class IncidentDispositifService:
+    """Service d'intégration conforme ISO 31000 / ISO 22301"""
+    
+    @staticmethod
+    def evaluer_impact_sur_dispositif(incident_id, dispositif_id):
+        """Évalue l'impact d'un incident sur un dispositif de maîtrise"""
+        incident = Incident.query.get(incident_id)
+        dispositif = DispositifMaitrise.query.get(dispositif_id)
+        
+        if not incident or not dispositif:
+            return None
+        
+        # Calcul de l'impact selon la norme ISO 31000
+        impact_scores = {
+            'critique': 5,
+            'elevee': 4,
+            'moyenne': 3,
+            'mineure': 2
+        }
+        
+        impact_score = impact_scores.get(incident.gravite, 3)
+        
+        # Efficacité résiduelle du dispositif après incident
+        efficacite_residuelle = max(0, (dispositif.efficacite_reelle or 3) - (impact_score / 5))
+        
+        # Recommandations
+        if efficacite_residuelle < 2:
+            recommandation = "URGENT: Renforcer immédiatement le dispositif"
+            priorite = "haute"
+        elif efficacite_residuelle < 3:
+            recommandation = "À surveiller: Plan d'action correctif recommandé"
+            priorite = "moyenne"
+        else:
+            recommandation = "Dispositif résilient - Surveillance normale"
+            priorite = "basse"
+        
+        # Créer une alerte si nécessaire
+        if priorite == "haute":
+            from services.notification_service import NotificationService
+            NotificationService.create(
+                destinataire_id=dispositif.responsable_id,
+                type_notif='warning',
+                titre=f"Incident critique affectant {dispositif.reference}",
+                message=f"L'incident {incident.reference} réduit l'efficacité du dispositif à {efficacite_residuelle:.1f}/5",
+                entite_type='dispositif',
+                entite_id=dispositif.id
+            )
+        
+        return {
+            'impact_score': impact_score,
+            'efficacite_avant': dispositif.efficacite_reelle,
+            'efficacite_apres': efficacite_residuelle,
+            'perte_efficacite': round(dispositif.efficacite_reelle - efficacite_residuelle, 1) if dispositif.efficacite_reelle else 0,
+            'recommandation': recommandation,
+            'priorite': priorite,
+            'conforme_norme': "ISO 31000:2018"
+        }
+    
+    @staticmethod
+    def synchroniser_incident_vers_dispositif(incident_id, dispositif_id):
+        """Synchronise un incident vers un dispositif (création de plan d'action)"""
+        from services.incident_ia_service import IncidentIAService
+        
+        evaluation = IncidentDispositifService.evaluer_impact_sur_dispositif(incident_id, dispositif_id)
+        
+        if evaluation and evaluation['priorite'] == 'haute':
+            # Créer automatiquement un plan d'action
+            incident = Incident.query.get(incident_id)
+            dispositif = DispositifMaitrise.query.get(dispositif_id)
+            
+            from models import PlanAction
+            plan = PlanAction(
+                reference=f"PA-INC-{incident.id}-{dispositif.id}",
+                nom=f"Renforcement dispositif {dispositif.reference} suite incident {incident.reference}",
+                description=f"Suite à l'incident {incident.reference} ({incident.titre}), le dispositif {dispositif.reference} nécessite un renforcement.\n\n"
+                           f"Impact: {evaluation['perte_efficacite']} points perdus\n"
+                           f"Recommandation: {evaluation['recommandation']}",
+                risque_id=dispositif.risque_id,
+                dispositif_id=dispositif.id,
+                priorite='haute',
+                statut='en_cours',
+                created_by=incident.declare_par_id or 1,
+                client_id=incident.client_id
+            )
+            db.session.add(plan)
+            db.session.commit()
+            
+            return {'plan_action_cree': plan.id, **evaluation}
+        
+        return evaluation
+
+
+class IncidentDispositifIntegration:
+    """Service d'intégration incident ↔ dispositif"""
+    
+    @staticmethod
+    def evaluer_impact(incident, dispositif):
+        """Évalue l'impact d'un incident sur un dispositif"""
+        if not incident or not dispositif:
+            return None
+        
+        # Score de gravité de l'incident (1-5)
+        gravite_scores = {'mineure': 1, 'moyenne': 2, 'elevee': 4, 'critique': 5}
+        score_incident = gravite_scores.get(incident.gravite, 2)
+        
+        # Facteur de réduction selon le type de dispositif
+        facteurs_reduction = {
+            'Préventif': 0.4,
+            'Détectif': 0.6,
+            'Correctif': 0.8
+        }
+        facteur = facteurs_reduction.get(dispositif.type_dispositif, 0.5)
+        
+        # Calcul de la réduction d'efficacité (0-2 points)
+        reduction = round((score_incident / 5) * facteur * 2, 1)
+        
+        # Niveau d'impact
+        if reduction >= 1.5:
+            niveau_impact = 'critique'
+            recommandation = "URGENT: Plan d'action correctif immédiat requis"
+        elif reduction >= 0.8:
+            niveau_impact = 'important'
+            recommandation = "Plan d'action à programmer dans les 30 jours"
+        elif reduction >= 0.3:
+            niveau_impact = 'modere'
+            recommandation = "Surveillance renforcée recommandée"
+        else:
+            niveau_impact = 'mineur'
+            recommandation = "Pas d'action corrective immédiate"
+        
+        return {
+            'reduction_efficacite': reduction,
+            'niveau_impact': niveau_impact,
+            'score_incident': score_incident,
+            'recommandation': recommandation,
+            'conforme_norme': 'ISO 31000:2018'
+        }
+    
+    @staticmethod
+    def lier_dispositif(incident_id, dispositif_id, user_id):
+        """Lie un dispositif à un incident et évalue l'impact"""
+        from models import Incident, DispositifMaitrise, IncidentHistorique
+        from app import db
+        
+        incident = Incident.query.get(incident_id)
+        dispositif = DispositifMaitrise.query.get(dispositif_id)
+        
+        if not incident or not dispositif:
+            return {'success': False, 'error': 'Incident ou dispositif non trouvé'}
+        
+        # Vérifier la cohérence client
+        if incident.client_id != dispositif.client_id:
+            return {'success': False, 'error': 'Incohérence client'}
+        
+        # Lier le dispositif
+        incident.dispositif_id = dispositif_id
+        
+        # Évaluer l'impact
+        impact = IncidentDispositifIntegration.evaluer_impact(incident, dispositif)
+        
+        # Mettre à jour l'efficacité du dispositif si nécessaire
+        if impact['reduction_efficacite'] > 0:
+            ancienne_efficacite = dispositif.efficacite_reelle or 3
+            nouvelle_efficacite = max(1, ancienne_efficacite - impact['reduction_efficacite'])
+            dispositif.efficacite_reelle = nouvelle_efficacite
+            dispositif.commentaire_evaluation = (
+                f"Impact suite à l'incident {incident.reference}: "
+                f"réduction de {impact['reduction_efficacite']} points"
+            )
+        
+        # Journaliser
+        historique = IncidentHistorique(
+            incident_id=incident_id,
+            action='lier_dispositif',
+            details=f"Liaison avec dispositif {dispositif.reference}. Impact: {impact['reduction_efficacite']} points",
+            utilisateur_id=user_id
+        )
+        db.session.add(historique)
+        db.session.commit()
+        
+        return {
+            'success': True,
+            'impact': impact,
+            'message': f"Dispositif lié avec succès - Impact: {impact['niveau_impact']}"
+        }
 
 # ========================
 # MODÈLE HISTORIQUE INCIDENT (pour traçabilité)
