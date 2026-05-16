@@ -5455,6 +5455,7 @@ class Client(db.Model):
 
     # Configuration
     domaine = db.Column(db.String(200), unique=True)
+    sous_domaine = db.Column(db.String(200), unique=True)  # ← AJOUTÉ : sous-domaine pour multi-tenant
     logo = db.Column(db.String(500))
     theme_couleur = db.Column(db.String(50), default='#1A3C6B')
     langue = db.Column(db.String(10), default='fr')
@@ -5481,21 +5482,23 @@ class Client(db.Model):
     nb_audits = db.Column(db.Integer, default=0)
     derniere_activite = db.Column(db.DateTime)
 
-    # AJOUTER CES CHAMPS :
+    # Formule d'abonnement
     formule_id = db.Column(db.Integer, db.ForeignKey('formules_abonnement.id'))
-    users = db.relationship('User', back_populates='client', lazy='dynamic')
-
     
-    # AJOUTER CES RELATIONS :
-    formule = db.relationship('FormuleAbonnement', back_populates='clients')
-    abonnements = db.relationship('AbonnementClient', back_populates='client', lazy=True)
-
     # Timestamps
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
     
-    # Relations
+    # ========== RELATIONS ==========
+    # Relation avec User (propriétaire de la relation)
+    users = db.relationship('User', back_populates='client', lazy='dynamic')
     utilisateurs = db.relationship('User', back_populates='client', lazy=True)
+    
+    # Relation avec FormuleAbonnement
+    formule = db.relationship('FormuleAbonnement', back_populates='clients', foreign_keys=[formule_id])
+    abonnements = db.relationship('AbonnementClient', back_populates='client', lazy=True)
+    
+    # Relation avec EnvironnementClient
     environnements = db.relationship('EnvironnementClient', back_populates='client', lazy=True)
     
     def __repr__(self):
@@ -5525,6 +5528,39 @@ class Client(db.Model):
         elif metrique == 'audits':
             self.nb_audits += 1
         self.derniere_activite = datetime.utcnow()
+    
+    def get_sous_domaine_complet(self):
+        """Retourne le sous-domaine complet pour l'accès client"""
+        if self.sous_domaine:
+            return f"{self.sous_domaine}.egalyx.com"
+        return None
+    
+    def to_dict(self):
+        """Convertit le client en dictionnaire"""
+        return {
+            'id': self.id,
+            'nom': self.nom,
+            'reference': self.reference,
+            'description': self.description,
+            'contact_nom': self.contact_nom,
+            'contact_email': self.contact_email,
+            'contact_telephone': self.contact_telephone,
+            'domaine': self.domaine,
+            'sous_domaine': self.sous_domaine,
+            'sous_domaine_complet': self.get_sous_domaine_complet(),
+            'plan': self.plan,
+            'max_utilisateurs': self.max_utilisateurs,
+            'max_risques': self.max_risques,
+            'max_audits': self.max_audits,
+            'is_active': self.is_active,
+            'nb_utilisateurs': self.nb_utilisateurs,
+            'nb_risques': self.nb_risques,
+            'nb_audits': self.nb_audits,
+            'formule_id': self.formule_id,
+            'formule_nom': self.formule.nom if self.formule else None,
+            'created_at': self.created_at.isoformat() if self.created_at else None,
+            'updated_at': self.updated_at.isoformat() if self.updated_at else None
+        }
 
 # -------------------- ENVIRONNEMENT CLIENT --------------------
 class EnvironnementClient(db.Model):
