@@ -25,7 +25,7 @@
                         </span>
                     </div>
                     
-                    <form method="POST">
+                    <form method="POST" id="incidentForm">
                         {{ form.csrf_token }}
                         
                         <div class="row">
@@ -77,18 +77,54 @@
                             </div>
                         </div>
                         
+                        <!-- ========== SECTION RISQUE ET DISPOSITIF AVEC FILTRAGE DYNAMIQUE ========== -->
                         <div class="row">
                             <div class="col-md-6 mb-3">
                                 <label class="form-label">{{ form.risque_id.label }}</label>
-                                {{ form.risque_id(class="form-select") }}
+                                {{ form.risque_id(class="form-select", id="risqueSelect") }}
                                 <small class="text-muted">Lien vers un risque existant</small>
+                                {% if incident.risque %}
+                                <div class="mt-1">
+                                    <span class="badge bg-info">
+                                        <i class="fas fa-link me-1"></i> Risque actuel: {{ incident.risque.reference }}
+                                    </span>
+                                </div>
+                                {% endif %}
                             </div>
                             <div class="col-md-6 mb-3">
                                 <label class="form-label">{{ form.dispositif_id.label }}</label>
-                                {{ form.dispositif_id(class="form-select") }}
-                                <small class="text-muted">Lien vers un dispositif de maîtrise</small>
+                                {{ form.dispositif_id(class="form-select", id="dispositifSelect") }}
+                                <small class="text-muted">Lien vers un dispositif de maîtrise (filtré par risque)</small>
+                                {% if incident.dispositif %}
+                                <div class="mt-1">
+                                    <span class="badge bg-success">
+                                        <i class="fas fa-shield-alt me-1"></i> Dispositif actuel: {{ incident.dispositif.reference }}
+                                    </span>
+                                </div>
+                                {% endif %}
                             </div>
                         </div>
+                        
+                        <!-- Affichage du dispositif actuel si existant -->
+                        {% if incident.dispositif %}
+                        <div class="alert alert-success mb-3">
+                            <div class="d-flex justify-content-between align-items-center">
+                                <div>
+                                    <i class="fas fa-shield-alt me-2"></i>
+                                    <strong>Dispositif actuellement associé :</strong>
+                                    {{ incident.dispositif.reference }} - {{ incident.dispositif.nom }}
+                                    <br>
+                                    <small>Type: {{ incident.dispositif.type_dispositif or 'Non spécifié' }} | 
+                                    Efficacité: {{ incident.dispositif.efficacite_reelle or 'N/A' }}/5</small>
+                                </div>
+                                <button type="button" class="btn btn-sm btn-outline-danger" 
+                                        onclick="dissocierDispositif({{ incident.id }})">
+                                    <i class="fas fa-unlink me-1"></i> Dissocier
+                                </button>
+                            </div>
+                        </div>
+                        {% endif %}
+                        <!-- =========================================== -->
                         
                         <div class="row">
                             <div class="col-md-4 mb-3">
@@ -130,4 +166,170 @@
         </div>
     </div>
 </div>
+
+<script>
+// ============================================
+// FILTRAGE DYNAMIQUE DES DISPOSITIFS EN FONCTION DU RISQUE
+// ============================================
+
+// Récupérer les données depuis le backend
+let dispositifsParRisque = {};
+let dispositifsSansRisque = [];
+let dispositifActuelId = {{ incident.dispositif_id or 0 }};
+
+// Charger les dispositifs depuis l'API
+function chargerDispositifs() {
+    fetch('/api/dispositifs/liste')
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                // Organiser les dispositifs par risque
+                data.dispositifs.forEach(dispositif => {
+                    const risqueId = dispositif.risque_id || 0;
+                    if (!dispositifsParRisque[risqueId]) {
+                        dispositifsParRisque[risqueId] = [];
+                    }
+                    dispositifsParRisque[risqueId].push(dispositif);
+                });
+                
+                // Dispositifs sans risque
+                dispositifsSansRisque = dispositifsParRisque[0] || [];
+                
+                // Initialiser le filtre
+                filtrerDispositifs();
+            }
+        })
+        .catch(error => console.error('Erreur chargement dispositifs:', error));
+}
+
+// Filtrer les dispositifs selon le risque sélectionné
+function filtrerDispositifs() {
+    const risqueSelect = document.getElementById('risqueSelect');
+    const dispositifSelect = document.getElementById('dispositifSelect');
+    const risqueId = parseInt(risqueSelect.value) || 0;
+    
+    // Vider le select des dispositifs
+    dispositifSelect.innerHTML = '<option value="">-- Aucun dispositif sélectionné --</option>';
+    
+    // Ajouter une option pour "Aucun"
+    dispositifSelect.innerHTML += '<option value="0">Aucun dispositif</option>';
+    
+    // Récupérer les dispositifs correspondants
+    let dispositifs = [];
+    
+    // Dispositifs liés au risque sélectionné
+    if (dispositifsParRisque[risqueId]) {
+        dispositifs = [...dispositifsParRisque[risqueId]];
+    }
+    
+    // Ajouter les dispositifs sans risque
+    if (dispositifsSansRisque.length > 0) {
+        dispositifs = [...dispositifs, ...dispositifsSansRisque];
+    }
+    
+    // Dédupliquer par ID
+    const uniqueDispositifs = [];
+    const ids = new Set();
+    for (const d of dispositifs) {
+        if (!ids.has(d.id)) {
+            ids.add(d.id);
+            uniqueDispositifs.push(d);
+        }
+    }
+    
+    // Ajouter les dispositifs au select
+    uniqueDispositifs.forEach(dispositif => {
+        const option = document.createElement('option');
+        option.value = dispositif.id;
+        
+        // Indiquer si le dispositif a un risque différent
+        const hasDifferentRisk = dispositif.risque_id && dispositif.risque_id !== risqueId && risqueId !== 0;
+        const warningIcon = hasDifferentRisk ? '⚠️ ' : '';
+        
+        option.textContent = `${warningIcon}${dispositif.reference} - ${dispositif.nom} (${dispositif.type_dispositif || 'Non spécifié'})`;
+        
+        if (dispositif.id === dispositifActuelId) {
+            option.selected = true;
+        }
+        
+        // Ajouter un attribut data pour le warning
+        if (hasDifferentRisk) {
+            option.setAttribute('data-warning', 'true');
+            option.setAttribute('data-risque-id', dispositif.risque_id);
+        }
+        
+        dispositifSelect.appendChild(option);
+    });
+    
+    // Afficher un message si aucun dispositif
+    if (uniqueDispositifs.length === 0) {
+        const option = document.createElement('option');
+        option.value = "";
+        option.textContent = "❌ Aucun dispositif disponible pour ce risque";
+        option.disabled = true;
+        dispositifSelect.appendChild(option);
+    }
+}
+
+// Alerter si le dispositif sélectionné n'est pas lié au risque
+function verifierCoherenceDispositif() {
+    const risqueSelect = document.getElementById('risqueSelect');
+    const dispositifSelect = document.getElementById('dispositifSelect');
+    const selectedOption = dispositifSelect.options[dispositifSelect.selectedIndex];
+    
+    if (selectedOption && selectedOption.getAttribute('data-warning') === 'true') {
+        const risqueId = risqueSelect.value;
+        const dispositifRisqueId = selectedOption.getAttribute('data-risque-id');
+        
+        if (risqueId !== '0' && risqueId !== dispositifRisqueId) {
+            if (!confirm('⚠️ Attention : Ce dispositif n\'est pas lié au risque sélectionné.\n\nVoulez-vous quand même l\'associer ?')) {
+                // Revenir à la valeur précédente
+                dispositifSelect.value = dispositifActuelId || "0";
+                return false;
+            }
+        }
+    }
+    return true;
+}
+
+// Dissocier le dispositif
+function dissocierDispositif(incidentId) {
+    if (!confirm('Dissocier ce dispositif de l\'incident ?')) return;
+    
+    fetch(`/api/incident/${incidentId}/dispositif`, {
+        method: 'DELETE',
+        headers: {
+            'Content-Type': 'application/json',
+            'X-CSRFToken': '{{ csrf_token() }}'
+        }
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            location.reload();
+        } else {
+            alert('Erreur: ' + data.error);
+        }
+    })
+    .catch(error => alert('Erreur: ' + error));
+}
+
+// Événements
+document.addEventListener('DOMContentLoaded', function() {
+    chargerDispositifs();
+    
+    const risqueSelect = document.getElementById('risqueSelect');
+    if (risqueSelect) {
+        risqueSelect.addEventListener('change', filtrerDispositifs);
+    }
+    
+    const dispositifSelect = document.getElementById('dispositifSelect');
+    if (dispositifSelect) {
+        dispositifSelect.addEventListener('change', verifierCoherenceDispositif);
+    }
+    
+    // Sauvegarder la valeur initiale du dispositif
+    dispositifActuelId = parseInt(document.getElementById('dispositifSelect')?.value) || 0;
+});
+</script>
 {% endblock %}
