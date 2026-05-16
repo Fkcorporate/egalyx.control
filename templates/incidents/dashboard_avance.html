@@ -1,0 +1,349 @@
+{% extends "base.html" %}
+
+{% block title %}Dashboard incidents avancé{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <!-- ========== EN-TÊTE ========== -->
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <div>
+            <h1 class="h3 mb-1">
+                <i class="fas fa-chart-line me-2 text-primary"></i>
+                Dashboard incidents avancé
+            </h1>
+            <p class="text-muted small">Analyse et suivi des incidents par direction, service et période</p>
+        </div>
+        <div class="d-flex gap-2">
+            <button class="btn btn-outline-primary btn-sm" onclick="window.location.reload()">
+                <i class="fas fa-sync-alt me-1"></i> Rafraîchir
+            </button>
+            <a href="{{ url_for('liste_incidents') }}" class="btn btn-outline-secondary btn-sm">
+                <i class="fas fa-list me-1"></i> Voir la liste
+            </a>
+            <a href="{{ url_for('nouvel_incident') }}" class="btn btn-danger btn-sm">
+                <i class="fas fa-plus me-1"></i> Nouvel incident
+            </a>
+        </div>
+    </div>
+
+    <!-- ========== FILTRES ========== -->
+    <div class="card border-0 shadow-sm mb-4">
+        <div class="card-body">
+            <form method="GET" class="row g-3">
+                <div class="col-md-3">
+                    <label class="form-label">Date début</label>
+                    <input type="date" name="date_debut" class="form-control" value="{{ date_debut }}">
+                </div>
+                <div class="col-md-3">
+                    <label class="form-label">Date fin</label>
+                    <input type="date" name="date_fin" class="form-control" value="{{ date_fin }}">
+                </div>
+                <div class="col-md-3">
+                    <label class="form-label">Direction</label>
+                    <select name="direction" class="form-select">
+                        <option value="">Toutes</option>
+                        {% for dir in directions_list %}
+                        <option value="{{ dir }}" {% if direction_filter == dir %}selected{% endif %}>{{ dir }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="col-md-3">
+                    <label class="form-label">Statut</label>
+                    <select name="statut" class="form-select">
+                        <option value="">Tous</option>
+                        <option value="ouvert" {% if statut_filter == 'ouvert' %}selected{% endif %}>Ouvert</option>
+                        <option value="en_cours" {% if statut_filter == 'en_cours' %}selected{% endif %}>En cours</option>
+                        <option value="resolu" {% if statut_filter == 'resolu' %}selected{% endif %}>Résolu</option>
+                        <option value="ferme" {% if statut_filter == 'ferme' %}selected{% endif %}>Fermé</option>
+                    </select>
+                </div>
+                <div class="col-md-12">
+                    <button type="submit" class="btn btn-primary">
+                        <i class="fas fa-filter me-1"></i> Appliquer les filtres
+                    </button>
+                    <a href="{{ url_for('dashboard_incidents_avance') }}" class="btn btn-secondary">
+                        <i class="fas fa-undo me-1"></i> Réinitialiser
+                    </a>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- ========== STATISTIQUES GLOBALES ========== -->
+    <div class="row g-3 mb-4">
+        <div class="col-md-3">
+            <div class="card border-0 shadow-sm bg-primary text-white">
+                <div class="card-body text-center">
+                    <h2 class="mb-0">{{ stats_globales.total }}</h2>
+                    <small>Total incidents</small>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card border-0 shadow-sm bg-danger text-white">
+                <div class="card-body text-center">
+                    <h2 class="mb-0">{{ stats_globales.critiques }}</h2>
+                    <small>Critiques</small>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card border-0 shadow-sm bg-warning text-dark">
+                <div class="card-body text-center">
+                    <h2 class="mb-0">{{ stats_globales.en_cours }}</h2>
+                    <small>En cours</small>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card border-0 shadow-sm bg-success text-white">
+                <div class="card-body text-center">
+                    <h2 class="mb-0">{{ stats_globales.resolus }}</h2>
+                    <small>Résolus</small>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- ========== STATISTIQUES PAR DIRECTION ========== -->
+    <div class="card border-0 shadow-sm mb-4">
+        <div class="card-header bg-white">
+            <h5 class="mb-0">
+                <i class="fas fa-building me-2 text-primary"></i>
+                Incidents par direction
+            </h5>
+        </div>
+        <div class="card-body p-0">
+            <div class="table-responsive">
+                <table class="table table-hover mb-0">
+                    <thead class="table-light">
+                        <tr>
+                            <th>Direction</th>
+                            <th>Total</th>
+                            <th>Critiques</th>
+                            <th>Élevés</th>
+                            <th>Moyens</th>
+                            <th>Mineurs</th>
+                            <th>Taux critique</th>
+                            <th>Taux résolution</th>
+                            <th>Coût total</th>
+                            <th>Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for direction, data in stats_par_direction.items() %}
+                        <tr>
+                            <td><strong>{{ direction }}</strong></td>
+                            <td>{{ data.total }}</td>
+                            <td class="text-danger">{{ data.critiques }}</td>
+                            <td class="text-warning">{{ data.eleves }}</td>
+                            <td class="text-info">{{ data.moyens }}</td>
+                            <td class="text-secondary">{{ data.mineurs }}</td>
+                            <td>
+                                <div class="progress" style="height: 6px; width: 60px;">
+                                    <div class="progress-bar bg-danger" style="width: {{ data.taux_critique }}%"></div>
+                                </div>
+                                <small>{{ data.taux_critique }}%</small>
+                            </td>
+                            <td>
+                                <div class="progress" style="height: 6px; width: 60px;">
+                                    <div class="progress-bar bg-success" style="width: {{ data.taux_resolution }}%"></div>
+                                </div>
+                                <small>{{ data.taux_resolution }}%</small>
+                            </td>
+                            <td>
+                                {% if data.cout_total %}
+                                <span class="fw-bold">{{ "{:,.0f}".format(data.cout_total) }} €</span>
+                                {% else %}
+                                <span class="text-muted">-</span>
+                                {% endif %}
+                            </td>
+                            <td>
+                                <a href="{{ url_for('liste_incidents') }}?direction={{ direction }}" class="btn btn-sm btn-outline-primary">
+                                    <i class="fas fa-eye"></i> Voir
+                                </a>
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <!-- ========== STATISTIQUES PAR SERVICE ========== -->
+    {% if stats_par_service %}
+    <div class="card border-0 shadow-sm mb-4">
+        <div class="card-header bg-white">
+            <h5 class="mb-0">
+                <i class="fas fa-users me-2 text-primary"></i>
+                Incidents par service
+            </h5>
+        </div>
+        <div class="card-body p-0">
+            <div class="table-responsive">
+                <table class="table table-hover mb-0">
+                    <thead class="table-light">
+                        <tr>
+                            <th>Service</th>
+                            <th>Total</th>
+                            <th>Critiques</th>
+                            <th>Élevés</th>
+                            <th>Moyens</th>
+                            <th>Mineurs</th>
+                            <th>Taux critique</th>
+                            <th>Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for service, data in stats_par_service.items() %}
+                        <tr>
+                            <td><strong>{{ service }}</strong></td>
+                            <td>{{ data.total }}</td>
+                            <td class="text-danger">{{ data.critiques }}</td>
+                            <td class="text-warning">{{ data.eleves }}</td>
+                            <td class="text-info">{{ data.moyens }}</td>
+                            <td class="text-secondary">{{ data.mineurs }}</td>
+                            <td>
+                                <div class="progress" style="height: 6px; width: 60px;">
+                                    <div class="progress-bar bg-danger" style="width: {{ data.taux_critique }}%"></div>
+                                </div>
+                                <small>{{ data.taux_critique }}%</small>
+                            </td>
+                            <td>
+                                <a href="{{ url_for('liste_incidents') }}?service={{ service }}" class="btn btn-sm btn-outline-primary">
+                                    <i class="fas fa-eye"></i> Voir
+                                </a>
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+    {% endif %}
+
+    <!-- ========== ÉVOLUTION TEMPORELLE ========== -->
+    <div class="card border-0 shadow-sm mb-4">
+        <div class="card-header bg-white">
+            <h5 class="mb-0">
+                <i class="fas fa-chart-line me-2 text-primary"></i>
+                Évolution temporelle des incidents
+            </h5>
+        </div>
+        <div class="card-body">
+            <canvas id="evolutionChart" height="100"></canvas>
+        </div>
+    </div>
+
+    <!-- ========== TOP INCIDENTS PAR COÛT ========== -->
+    <div class="card border-0 shadow-sm">
+        <div class="card-header bg-white">
+            <h5 class="mb-0">
+                <i class="fas fa-euro-sign me-2 text-primary"></i>
+                Top 10 incidents par coût estimé
+            </h5>
+        </div>
+        <div class="card-body p-0">
+            <div class="table-responsive">
+                <table class="table table-hover mb-0">
+                    <thead class="table-light">
+                        <tr>
+                            <th>Référence</th>
+                            <th>Titre</th>
+                            <th>Direction</th>
+                            <th>Gravité</th>
+                            <th>Coût estimé</th>
+                            <th>Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for incident in top_cout %}
+                        <tr>
+                            <td><code>{{ incident.reference }}</code></td>
+                            <td>{{ incident.titre|truncate(50) }}</td>
+                            <td>{{ incident.direction_associee or '-' }}</td>
+                            <td>
+                                <span class="badge bg-{{ incident.get_gravite_color() }}">
+                                    {{ incident.get_gravite_label() }}
+                                </span>
+                            </td>
+                            <td>
+                                <span class="fw-bold">{{ "{:,.2f}".format(incident.cout_estime) if incident.cout_estime else '-' }} €</span>
+                            </td>
+                            <td>
+                                <a href="{{ url_for('detail_incident', id=incident.id) }}" class="btn btn-sm btn-outline-primary">
+                                    <i class="fas fa-eye"></i>
+                                </a>
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<script>
+// Graphique d'évolution
+const ctx = document.getElementById('evolutionChart').getContext('2d');
+const evolutionData = {{ evolution_mois|tojson|safe }};
+
+const mois = Object.keys(evolutionData);
+const totals = mois.map(m => evolutionData[m].total);
+const critiques = mois.map(m => evolutionData[m].critiques);
+const resolus = mois.map(m => evolutionData[m].resolus);
+
+new Chart(ctx, {
+    type: 'line',
+    data: {
+        labels: mois,
+        datasets: [
+            {
+                label: 'Total incidents',
+                data: totals,
+                borderColor: '#3b82f6',
+                backgroundColor: 'rgba(59, 130, 246, 0.1)',
+                fill: true,
+                tension: 0.3
+            },
+            {
+                label: 'Incidents critiques',
+                data: critiques,
+                borderColor: '#ef4444',
+                backgroundColor: 'rgba(239, 68, 68, 0.1)',
+                fill: true,
+                tension: 0.3
+            },
+            {
+                label: 'Incidents résolus',
+                data: resolus,
+                borderColor: '#10b981',
+                backgroundColor: 'rgba(16, 185, 129, 0.1)',
+                fill: true,
+                tension: 0.3
+            }
+        ]
+    },
+    options: {
+        responsive: true,
+        maintainAspectRatio: true,
+        plugins: {
+            tooltip: {
+                mode: 'index',
+                intersect: false
+            }
+        },
+        scales: {
+            y: {
+                beginAtZero: true,
+                title: { display: true, text: 'Nombre d\'incidents' }
+            }
+        }
+    }
+});
+</script>
+{% endblock %}
