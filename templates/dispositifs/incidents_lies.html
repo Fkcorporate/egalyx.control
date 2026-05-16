@@ -1,0 +1,255 @@
+{% extends "base.html" %}
+
+{% block title %}Incidents liés - {{ dispositif.reference }}{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <div class="row">
+        <div class="col-12">
+            <!-- En-tête -->
+            <div class="card mb-4">
+                <div class="card-header bg-primary text-white">
+                    <h4 class="mb-0">
+                        <i class="fas fa-shield-alt me-2"></i>
+                        {{ dispositif.reference }} - {{ dispositif.nom }}
+                    </h4>
+                </div>
+                <div class="card-body">
+                    <div class="row">
+                        <div class="col-md-4">
+                            <div class="info-group">
+                                <label class="text-muted small">Type</label>
+                                <p class="fw-semibold">{{ dispositif.type_dispositif or 'Non spécifié' }}</p>
+                            </div>
+                        </div>
+                        <div class="col-md-4">
+                            <div class="info-group">
+                                <label class="text-muted small">Efficacité</label>
+                                <p>
+                                    <span class="badge bg-{{ 'success' if (dispositif.efficacite_reelle or 0) >= 4 else 'warning' if (dispositif.efficacite_reelle or 0) >= 3 else 'danger' }} fs-6">
+                                        {{ dispositif.efficacite_reelle or 'N/A' }}/5
+                                    </span>
+                                </p>
+                            </div>
+                        </div>
+                        <div class="col-md-4">
+                            <div class="info-group">
+                                <label class="text-muted small">Risque associé</label>
+                                <p>
+                                    {% if dispositif.risque %}
+                                    <a href="{{ url_for('detail_risque', id=dispositif.risque.id) }}">
+                                        {{ dispositif.risque.reference }}
+                                    </a>
+                                    {% else %}
+                                    <span class="text-muted">Non associé</span>
+                                    {% endif %}
+                                </p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Statistiques d'impact -->
+            <div class="row mb-4">
+                <div class="col-md-3">
+                    <div class="card bg-primary text-white">
+                        <div class="card-body text-center">
+                            <h2 class="mb-0">{{ stats_impact.total }}</h2>
+                            <small>Incidents liés</small>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-md-3">
+                    <div class="card bg-danger text-white">
+                        <div class="card-body text-center">
+                            <h2 class="mb-0">{{ stats_impact.critiques }}</h2>
+                            <small>Incidents critiques</small>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-md-3">
+                    <div class="card bg-warning text-dark">
+                        <div class="card-body text-center">
+                            <h2 class="mb-0">{{ stats_impact.reduction_efficacite }}</h2>
+                            <small>Points perdus</small>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-md-3">
+                    <div class="card bg-success text-white">
+                        <div class="card-body text-center">
+                            <h2 class="mb-0">{{ stats_impact.plan_actions_crees }}</h2>
+                            <small>Plans d'action créés</small>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Liste des incidents -->
+            <div class="card">
+                <div class="card-header">
+                    <h5 class="mb-0">
+                        <i class="fas fa-exclamation-triangle me-2"></i>
+                        Incidents associés
+                    </h5>
+                </div>
+                <div class="card-body p-0">
+                    {% if incidents %}
+                    <div class="table-responsive">
+                        <table class="table table-hover mb-0">
+                            <thead class="table-light">
+                                <tr>
+                                    <th>Référence</th>
+                                    <th>Titre</th>
+                                    <th>Gravité</th>
+                                    <th>Statut</th>
+                                    <th>Date</th>
+                                    <th>Impact estimé</th>
+                                    <th>Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for incident in incidents %}
+                                <tr>
+                                    <td><code>{{ incident.reference }}</code></td>
+                                    <td>{{ incident.titre|truncate(50) }}</td>
+                                    <td>
+                                        <span class="badge bg-{{ incident.get_gravite_color() }}">
+                                            {{ incident.get_gravite_label() }}
+                                        </span>
+                                    </td>
+                                    <td>
+                                        <span class="badge bg-{{ incident.get_statut_color() }}">
+                                            {{ incident.get_statut_label() }}
+                                        </span>
+                                    </td>
+                                    <td>{{ incident.date_occurrence.strftime('%d/%m/%Y') }}</td>
+                                    <td>
+                                        {% set impact_score = {'critique': 1.5, 'elevee': 0.8, 'moyenne': 0.3, 'mineure': 0.1}.get(incident.gravite, 0) %}
+                                        <span class="badge bg-{{ 'danger' if impact_score >= 1 else 'warning' if impact_score >= 0.5 else 'info' }}">
+                                            -{{ impact_score }} pts
+                                        </span>
+                                    </td>
+                                    <td>
+                                        <div class="btn-group btn-group-sm">
+                                            <a href="{{ url_for('detail_incident', id=incident.id) }}" class="btn btn-outline-primary">
+                                                <i class="fas fa-eye"></i>
+                                            </a>
+                                            {% if incident.plan_action %}
+                                            <a href="{{ url_for('detail_plan_action', plan_id=incident.plan_action.id) }}" class="btn btn-outline-success">
+                                                <i class="fas fa-tasks"></i>
+                                            </a>
+                                            {% endif %}
+                                        </div>
+                                    </td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                    {% else %}
+                    <div class="text-center py-5">
+                        <i class="fas fa-check-circle fa-3x text-success mb-3"></i>
+                        <p class="text-muted mb-0">Aucun incident associé à ce dispositif</p>
+                        <small class="text-muted">Les incidents liés apparaîtront ici automatiquement</small>
+                    </div>
+                    {% endif %}
+                </div>
+            </div>
+            
+            <!-- Évolution de l'efficacité -->
+            <div class="card mt-4">
+                <div class="card-header">
+                    <h5 class="mb-0">
+                        <i class="fas fa-chart-line me-2"></i>
+                        Évolution de l'efficacité
+                    </h5>
+                </div>
+                <div class="card-body">
+                    <canvas id="efficaciteChart" height="100"></canvas>
+                    <p class="text-muted text-center small mt-2">
+                        Impact cumulé des incidents sur l'efficacité du dispositif
+                    </p>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<script>
+// Graphique d'évolution - VERSION CORRIGÉE (sans to_dict)
+const ctx = document.getElementById('efficaciteChart').getContext('2d');
+
+// Construction manuelle des données pour éviter les problèmes de sérialisation
+const incidentsData = [
+    {% for incident in incidents %}
+    {
+        gravite: "{{ incident.gravite }}",
+        date_occurrence: "{{ incident.date_occurrence.strftime('%Y-%m-%d') if incident.date_occurrence else '' }}"
+    }{% if not loop.last %},{% endif %}
+    {% endfor %}
+];
+
+// Construire l'historique d'efficacité
+let efficaciteCourante = {{ dispositif.efficacite_reelle or 5 }};
+const efficacites = [efficaciteCourante];
+const dates = ['Actuel'];
+
+for (let i = incidentsData.length - 1; i >= 0; i--) {
+    let impact = 0;
+    if (incidentsData[i].gravite === 'critique') impact = 1.5;
+    else if (incidentsData[i].gravite === 'elevee') impact = 0.8;
+    else if (incidentsData[i].gravite === 'moyenne') impact = 0.3;
+    else if (incidentsData[i].gravite === 'mineure') impact = 0.1;
+    
+    efficaciteCourante = Math.min(5, Math.max(1, efficaciteCourante + impact));
+    efficacites.unshift(efficaciteCourante);
+    dates.unshift(incidentsData[i].date_occurrence || 'Inconnue');
+}
+
+new Chart(ctx, {
+    type: 'line',
+    data: {
+        labels: dates,
+        datasets: [{
+            label: 'Efficacité du dispositif',
+            data: efficacites,
+            borderColor: '#3b82f6',
+            backgroundColor: 'rgba(59, 130, 246, 0.1)',
+            fill: true,
+            tension: 0.4
+        }]
+    },
+    options: {
+        responsive: true,
+        maintainAspectRatio: true,
+        scales: {
+            y: {
+                min: 0,
+                max: 5,
+                title: { display: true, text: 'Efficacité (/5)' }
+            }
+        },
+        plugins: {
+            tooltip: {
+                callbacks: {
+                    label: function(context) {
+                        return `Efficacité: ${context.raw}/5`;
+                    }
+                }
+            }
+        }
+    }
+});
+</script>
+
+<style>
+.info-group label {
+    font-size: 0.7rem;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+</style>
+{% endblock %}
