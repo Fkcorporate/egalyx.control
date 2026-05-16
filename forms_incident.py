@@ -41,7 +41,6 @@ class IncidentForm(FlaskForm):
     approbation_requise = BooleanField('Approbation requise avant clôture', default=False)
     
     submit = SubmitField('Créer l\'incident')
-    
 
 
 class IncidentResolutionForm(FlaskForm):
@@ -80,39 +79,111 @@ class IncidentApprobationForm(FlaskForm):
 class TicketSupportForm(FlaskForm):
     """Formulaire de ticket support (interface client)"""
     
-    nom = StringField('Nom complet', validators=[DataRequired()])
-    email = StringField('Email', validators=[DataRequired(), Email()])
+    # ========== INFORMATIONS CLIENT ==========
+    nom = StringField('Nom complet', validators=[DataRequired(message='Le nom est requis')])
+    email = StringField('Email', validators=[
+        DataRequired(message='L\'email est requis'),
+        Email(message='Format d\'email invalide')
+    ])
     telephone = StringField('Téléphone', validators=[Optional()])
-    societe = StringField('Société', validators=[DataRequired()])
+    societe = StringField('Société', validators=[DataRequired(message='La société est requise')])
     
-    sujet = StringField('Sujet', validators=[DataRequired(), Length(max=200)])
-    description = TextAreaField('Description du problème', validators=[DataRequired()])
+    # ========== DIRECTION ET SERVICE ==========
+    direction_type = SelectField('Type de direction', choices=[
+        ('', '-- Sélectionnez --'),
+        ('direction', 'Direction'),
+        ('service', 'Service'),
+        ('autre', 'Autre (saisie manuelle)')
+    ], validators=[DataRequired(message='Veuillez sélectionner un type')])
+    
+    direction_select = SelectField('Direction', choices=[], coerce=str, validators=[Optional()])
+    direction_manuel = StringField('Direction (manuelle)', validators=[Optional()], 
+                                   description='Saisissez le nom de la direction')
+    
+    service_select = SelectField('Service', choices=[], coerce=str, validators=[Optional()])
+    service_manuel = StringField('Service (manuel)', validators=[Optional()],
+                                 description='Saisissez le nom du service')
+    
+    fonction = StringField('Fonction / Poste', validators=[Optional()],
+                          description='Votre fonction dans l\'organisation')
+    
+    # ========== CONTENU DU TICKET ==========
+    sujet = StringField('Sujet', validators=[
+        DataRequired(message='Le sujet est requis'),
+        Length(max=200, message='Le sujet ne peut pas dépasser 200 caractères')
+    ])
+    description = TextAreaField('Description du problème', validators=[
+        DataRequired(message='La description est requise')
+    ])
+    
     priorite = SelectField('Priorité', choices=[
-        ('basse', 'Basse - Peu urgent'),
-        ('normale', 'Normale - À traiter sous 48h'),
-        ('haute', 'Haute - À traiter sous 24h'),
-        ('critique', 'Critique - Urgent')
+        ('basse', '🔵 Basse - Peu urgent'),
+        ('normale', '🟢 Normale - À traiter sous 48h'),
+        ('haute', '🟠 Haute - À traiter sous 24h'),
+        ('critique', '🔴 Critique - Urgent')
     ], default='normale')
     
     pieces_jointes = FileField('Pièces jointes', validators=[Optional()])
     
     submit = SubmitField('Envoyer le ticket')
 
-
 class IncidentSearchForm(FlaskForm):
     """Formulaire de recherche avancée"""
     
-    gravite = SelectField('Gravité', choices=[('', 'Toutes'), ('critique', 'Critique'), 
-                        ('elevee', 'Élevée'), ('moyenne', 'Moyenne'), ('mineure', 'Mineure')])
-    type_incident = SelectField('Type', choices=[('', 'Tous'), ('securite', 'Sécurité'),
-                              ('conformite', 'Conformité'), ('operationnel', 'Opérationnel'),
-                              ('technique', 'Technique'), ('juridique', 'Juridique')])
-    statut = SelectField('Statut', choices=[('', 'Tous'), ('ouvert', 'Ouvert'),
-                        ('en_cours', 'En cours'), ('resolu', 'Résolu'),
-                        ('ferme', 'Fermé'), ('rejete', 'Rejeté')])
-    escalation = SelectField('Niveau escalade', choices=[('', 'Tous'), ('1', 'Niveau 1'),
-                           ('2', 'Niveau 2'), ('3', 'Niveau 3')])
-    sla_viole = SelectField('SLA', choices=[('', 'Tous'), ('oui', 'Violé'), ('non', 'Respecté')])
+    gravite = SelectField('Gravité', choices=[
+        ('', 'Toutes'),
+        ('critique', 'Critique - Impact majeur'),
+        ('elevee', 'Élevée - Impact significatif'),
+        ('moyenne', 'Moyenne - Impact modéré'),
+        ('mineure', 'Mineure - Impact limité')
+    ])
+    
+    type_incident = SelectField('Type', choices=[
+        ('', 'Tous'),
+        ('securite', '🔒 Sécurité'),
+        ('conformite', '📋 Conformité'),
+        ('operationnel', '⚙️ Opérationnel'),
+        ('technique', '💻 Technique'),
+        ('juridique', '⚖️ Juridique')
+    ])
+    
+    statut = SelectField('Statut', choices=[
+        ('', 'Tous'),
+        ('ouvert', '🟢 Ouvert'),
+        ('en_cours', '🟡 En cours'),
+        ('resolu', '🔵 Résolu'),
+        ('ferme', '✅ Fermé'),
+        ('rejete', '❌ Rejeté')
+    ])
+    
+    escalation = SelectField('Niveau escalade', choices=[
+        ('', 'Tous'),
+        ('1', 'Niveau 1 - Support'),
+        ('2', 'Niveau 2 - Superviseur'),
+        ('3', 'Niveau 3 - Direction')
+    ])
+    
+    sla_viole = SelectField('SLA', choices=[
+        ('', 'Tous'),
+        ('oui', '⚠️ Violé'),
+        ('non', '✅ Respecté')
+    ])
+    
+    # ========== NOUVEAUX FILTRES ==========
+    direction = StringField('Direction', validators=[Optional()])
+    service = StringField('Service', validators=[Optional()])
+    source = SelectField('Source', choices=[
+        ('', 'Toutes'),
+        ('interne', 'Interne'),
+        ('formulaire', 'Formulaire web'),
+        ('email', 'Email'),
+        ('telephone', 'Téléphone'),
+        ('ticket', 'Ticket support')
+    ], default='')
+    # ======================================
+    
     date_debut = DateTimeField('Date début', format='%Y-%m-%d', validators=[Optional()])
     date_fin = DateTimeField('Date fin', format='%Y-%m-%d', validators=[Optional()])
-    submit = SubmitField('Rechercher')
+    
+    submit = SubmitField('🔍 Rechercher')
+    reset = SubmitField('🗑️ Réinitialiser')
