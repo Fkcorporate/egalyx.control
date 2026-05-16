@@ -1454,7 +1454,8 @@
                 <i class="fas fa-plus"></i> Nouvelle vérification
             </button>
         </div>
-        
+        <!-- ========== SECTION INCIDENTS LIÉS ========== -->
+
         {% if verifications %}
         <div class="verifications-timeline" id="verificationsContainer">
             {% for verification in verifications %}
@@ -1658,7 +1659,169 @@
         </div>
     </div>
 </div>
+<!-- ========== SECTION INCIDENTS LIÉS ========== -->
+<div class="fk-card-glass animate-in" style="margin-top: 1.5rem;">
+    <div class="card-header-modern">
+        <h5>
+            <i class="fas fa-exclamation-triangle me-2"></i>
+            Incidents associés
+            {% if incidents_lies %}
+            <span class="badge bg-warning ms-2">{{ incidents_lies|length }}</span>
+            {% endif %}
+        </h5>
+        {% if incidents_lies %}
+        <a href="{{ url_for('incidents_par_dispositif', dispositif_id=dispositif.id) }}" class="btn-add-plan" style="background: #f59e0b;">
+            <i class="fas fa-chart-line me-1"></i> Voir le détail
+        </a>
+        {% endif %}
+    </div>
+    <div class="card-body">
+        {% if incidents_lies %}
+        <div class="table-responsive">
+            <table class="table table-hover">
+                <thead class="table-light">
+                    <tr>
+                        <th>Référence</th>
+                        <th>Titre</th>
+                        <th>Gravité</th>
+                        <th>Statut</th>
+                        <th>Date</th>
+                        <th>Impact estimé</th>
+                        <th>Actions</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for incident in incidents_lies %}
+                    <tr>
+                        <td><code>{{ incident.reference }}</code></td>
+                        <td>{{ incident.titre|truncate(40) }}</td>
+                        <td>
+                            <span class="badge bg-{{ incident.get_gravite_color() }}">
+                                {{ incident.get_gravite_label() }}
+                            </span>
+                        </td>
+                        <td>
+                            <span class="badge bg-{{ incident.get_statut_color() }}">
+                                {{ incident.get_statut_label() }}
+                            </span>
+                        </td>
+                        <td>{{ incident.date_occurrence.strftime('%d/%m/%Y') }}</td>
+                        <td>
+                            {% set impact_score = {'critique': 1.5, 'elevee': 0.8, 'moyenne': 0.3, 'mineure': 0.1}.get(incident.gravite, 0) %}
+                            <span class="badge bg-{{ 'danger' if impact_score >= 1 else 'warning' if impact_score >= 0.5 else 'info' }}">
+                                -{{ impact_score }} pts
+                            </span>
+                        </td>
+                        <td>
+                            <div class="btn-group btn-group-sm">
+                                <a href="{{ url_for('detail_incident', id=incident.id) }}" class="btn btn-outline-primary">
+                                    <i class="fas fa-eye"></i>
+                                </a>
+                                {% if incident.plan_action %}
+                                <a href="{{ url_for('detail_plan_action', plan_id=incident.plan_action.id) }}" class="btn btn-outline-success">
+                                    <i class="fas fa-tasks"></i>
+                                </a>
+                                {% endif %}
+                            </div>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        
+        <!-- Graphique d'évolution -->
+        <div class="mt-3">
+            <canvas id="efficaciteImpactChart" height="80"></canvas>
+            <p class="text-muted text-center small mt-2">
+                <i class="fas fa-chart-line me-1"></i> Évolution de l'efficacité du dispositif suite aux incidents
+            </p>
+        </div>
+        
+        {% else %}
+        <div class="text-center py-4">
+            <i class="fas fa-check-circle fa-3x text-success mb-3"></i>
+            <p class="text-muted mb-0">Aucun incident associé à ce dispositif</p>
+            <small class="text-muted">Les incidents liés depuis le module incidents apparaîtront ici</small>
+        </div>
+        {% endif %}
+    </div>
+</div>
 
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<script>
+{% if incidents_lies %}
+// Graphique d'évolution de l'efficacité
+// Graphique d'évolution de l'efficacité - VERSION CORRIGÉE
+const ctx = document.getElementById('efficaciteImpactChart');
+if (ctx) {
+    const canvas = ctx.getContext('2d');
+    
+    // Construction manuelle des données pour éviter les problèmes de sérialisation
+    const incidentsData = [
+        {% for incident in incidents_lies %}
+        {
+            gravite: "{{ incident.gravite }}",
+            date_occurrence: "{{ incident.date_occurrence.strftime('%Y-%m-%d') if incident.date_occurrence else '' }}"
+        }{% if not loop.last %},{% endif %}
+        {% endfor %}
+    ];
+    
+    // Construire l'historique d'efficacité
+    let efficaciteCourante = {{ dispositif.efficacite_reelle or 5 }};
+    const efficacites = [efficaciteCourante];
+    const dates = ['Actuel'];
+    
+    for (let i = incidentsData.length - 1; i >= 0; i--) {
+        let impact = 0;
+        if (incidentsData[i].gravite === 'critique') impact = 1.5;
+        else if (incidentsData[i].gravite === 'elevee') impact = 0.8;
+        else if (incidentsData[i].gravite === 'moyenne') impact = 0.3;
+        else if (incidentsData[i].gravite === 'mineure') impact = 0.1;
+        
+        efficaciteCourante = Math.min(5, Math.max(1, efficaciteCourante + impact));
+        efficacites.unshift(efficaciteCourante);
+        dates.unshift(incidentsData[i].date_occurrence || 'Inconnue');
+    }
+    
+    new Chart(canvas, {
+        type: 'line',
+        data: {
+            labels: dates,
+            datasets: [{
+                label: 'Efficacité du dispositif',
+                data: efficacites,
+                borderColor: '#f59e0b',
+                backgroundColor: 'rgba(245, 158, 11, 0.1)',
+                fill: true,
+                tension: 0.3
+            }]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: true,
+            scales: {
+                y: {
+                    min: 0,
+                    max: 5,
+                    title: { display: true, text: 'Efficacité (/5)' },
+                    ticks: { stepSize: 1 }
+                }
+            },
+            plugins: {
+                tooltip: {
+                    callbacks: {
+                        label: function(context) {
+                            return `Efficacité: ${context.raw}/5`;
+                        }
+                    }
+                }
+            }
+        }
+    });
+}
+{% endif %}
+</script>
 <!-- Token CSRF -->
 <meta name="csrf-token" content="{{ csrf_token() }}">
 {% endblock %}
@@ -2226,4 +2389,5 @@ function afficherToutesVerifications(event) {
 }
 
 </script>
+
 {% endblock %}
