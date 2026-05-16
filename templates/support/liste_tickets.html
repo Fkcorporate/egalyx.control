@@ -7,18 +7,27 @@
     <div class="row">
         <div class="col-12">
             <div class="card">
-                <div class="card-header bg-primary text-white">
+                <div class="card-header bg-primary text-white d-flex justify-content-between align-items-center">
                     <h3 class="mb-0">
                         <i class="fas fa-headset me-2"></i>
                         Tickets support
                     </h3>
+                    <div>
+                        <span class="badge bg-light text-dark me-2">
+                            Actifs: {{ stats.total - stats.get('archives', 0) }}
+                        </span>
+                        <span class="badge bg-secondary">
+                            Archivés: {{ stats.get('archives', 0) }}
+                        </span>
+                    </div>
                 </div>
                 <div class="card-body">
-                    <!-- Statistiques -->
+                    
+                    <!-- ========== STATISTIQUES ========== -->
                     <div class="row mb-4">
                         <div class="col-md-3">
                             <div class="card bg-primary text-white">
-                                <div class="card-body">
+                                <div class="card-body text-center">
                                     <h5 class="card-title">Total</h5>
                                     <h2 class="mb-0">{{ stats.total }}</h2>
                                 </div>
@@ -26,7 +35,7 @@
                         </div>
                         <div class="col-md-3">
                             <div class="card bg-danger text-white">
-                                <div class="card-body">
+                                <div class="card-body text-center">
                                     <h5 class="card-title">Nouveaux</h5>
                                     <h2 class="mb-0">{{ stats.nouveaux }}</h2>
                                 </div>
@@ -34,7 +43,7 @@
                         </div>
                         <div class="col-md-3">
                             <div class="card bg-warning text-dark">
-                                <div class="card-body">
+                                <div class="card-body text-center">
                                     <h5 class="card-title">En cours</h5>
                                     <h2 class="mb-0">{{ stats.en_cours }}</h2>
                                 </div>
@@ -42,7 +51,7 @@
                         </div>
                         <div class="col-md-3">
                             <div class="card bg-success text-white">
-                                <div class="card-body">
+                                <div class="card-body text-center">
                                     <h5 class="card-title">Traités</h5>
                                     <h2 class="mb-0">{{ stats.traites }}</h2>
                                 </div>
@@ -50,13 +59,36 @@
                         </div>
                     </div>
                     
-                    <!-- Tableau des tickets -->
+                    <!-- ========== FILTRES ========== -->
+                    <div class="row mb-4">
+                        <div class="col-md-3">
+                            <select id="filterStatut" class="form-select" onchange="window.location.href='?statut='+this.value">
+                                <option value="">Tous les statuts</option>
+                                <option value="nouveau" {% if request.args.get('statut') == 'nouveau' %}selected{% endif %}>Nouveaux</option>
+                                <option value="en_cours" {% if request.args.get('statut') == 'en_cours' %}selected{% endif %}>En cours</option>
+                                <option value="traite" {% if request.args.get('statut') == 'traite' %}selected{% endif %}>Traités</option>
+                                <option value="archive" {% if request.args.get('statut') == 'archive' %}selected{% endif %}>Archivés</option>
+                            </select>
+                        </div>
+                        <div class="col-md-3">
+                            <div class="form-check form-switch mt-2">
+                                <input class="form-check-input" type="checkbox" id="showArchived" 
+                                       onchange="toggleArchived()" {% if request.args.get('show_archived') == 'true' %}checked{% endif %}>
+                                <label class="form-check-label" for="showArchived">
+                                    <i class="fas fa-archive me-1"></i> Afficher les archivés
+                                </label>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- ========== TABLEAU ========== -->
                     <div class="table-responsive">
                         <table class="table table-hover">
                             <thead class="table-dark">
                                 <tr>
                                     <th>Référence</th>
                                     <th>Client</th>
+                                    <th>Direction/Service</th>
                                     <th>Sujet</th>
                                     <th>Priorité</th>
                                     <th>Statut</th>
@@ -72,6 +104,14 @@
                                         {{ ticket.client_nom }}<br>
                                         <small class="text-muted">{{ ticket.client_email }}</small>
                                     </td>
+                                    <td>
+                                        {% if ticket.direction %}
+                                            <span class="badge bg-info">{{ ticket.direction }}</span>
+                                        {% endif %}
+                                        {% if ticket.service %}
+                                            <br><small class="text-muted">{{ ticket.service }}</small>
+                                        {% endif %}
+                                    </td>
                                     <td>{{ ticket.sujet[:50] }}{% if ticket.sujet|length > 50 %}...{% endif %}</td>
                                     <td>
                                         <span class="badge bg-{{ 'danger' if ticket.priorite_client == 'critique' else 'warning' if ticket.priorite_client == 'haute' else 'info' }}">
@@ -79,22 +119,37 @@
                                         </span>
                                     </td>
                                     <td>
-                                        <span class="badge bg-{{ 'danger' if ticket.statut == 'nouveau' else 'warning' if ticket.statut == 'en_cours' else 'success' }}">
+                                        <span class="badge bg-{{ 'danger' if ticket.statut == 'nouveau' else 'warning' if ticket.statut == 'en_cours' else 'success' if ticket.statut == 'traite' else 'secondary' }}">
                                             {{ ticket.statut|title }}
                                         </span>
                                     </td>
                                     <td>{{ ticket.created_at.strftime('%d/%m/%Y %H:%M') }}</td>
                                     <td>
-                                        <button type="button" class="btn btn-sm btn-primary" 
-                                                data-bs-toggle="modal" 
-                                                data-bs-target="#traiterModal{{ ticket.id }}">
-                                            <i class="fas fa-check-circle me-1"></i> Traiter
-                                        </button>
+                                        <div class="btn-group btn-group-sm">
+                                            <!-- Bouton Traiter (bleu) - OUVRE LE MODAL -->
+                                            <button type="button" class="btn btn-primary" 
+                                                    data-bs-toggle="modal" 
+                                                    data-bs-target="#traiterModal{{ ticket.id }}">
+                                                <i class="fas fa-check-circle"></i>
+                                            </button>
+                                            <!-- Bouton Archiver (orange) -->
+                                            {% if ticket.statut != 'archive' %}
+                                            <button type="button" class="btn btn-warning" 
+                                                    onclick="archiverTicket({{ ticket.id }}, '{{ ticket.reference }}')">
+                                                <i class="fas fa-archive"></i>
+                                            </button>
+                                            {% endif %}
+                                            <!-- Bouton Supprimer (rouge) -->
+                                            <button type="button" class="btn btn-danger" 
+                                                    onclick="supprimerTicket({{ ticket.id }}, '{{ ticket.reference }}')">
+                                                <i class="fas fa-trash"></i>
+                                            </button>
+                                        </div>
                                     </td>
-                                </tr>
+                                </table>
                                 {% else %}
                                 <tr>
-                                    <td colspan="7" class="text-center py-5">
+                                    <td colspan="8" class="text-center py-5">
                                         <i class="fas fa-ticket-alt fa-3x text-muted mb-3"></i>
                                         <p class="text-muted">Aucun ticket support</p>
                                     </td>
@@ -109,42 +164,180 @@
     </div>
 </div>
 
-<!-- Modals de traitement -->
+<!-- ========== MODALS DE TRAITEMENT ========== -->
 {% for ticket in tickets %}
 <div class="modal fade" id="traiterModal{{ ticket.id }}" tabindex="-1">
-    <div class="modal-dialog">
+    <div class="modal-dialog modal-lg">
         <div class="modal-content">
             <form method="POST" action="{{ url_for('traiter_ticket', id=ticket.id) }}">
                 <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                <div class="modal-header">
-                    <h5 class="modal-title">Traiter le ticket {{ ticket.reference }}</h5>
-                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                <div class="modal-header bg-primary text-white">
+                    <h5 class="modal-title">
+                        <i class="fas fa-headset me-2"></i>
+                        Traiter le ticket {{ ticket.reference }}
+                    </h5>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
                 </div>
                 <div class="modal-body">
+                    <div class="row">
+                        <div class="col-md-6">
+                            <div class="mb-3">
+                                <label class="form-label fw-bold">Client</label>
+                                <p>{{ ticket.client_nom }} - {{ ticket.client_email }}</p>
+                            </div>
+                        </div>
+                        <div class="col-md-6">
+                            <div class="mb-3">
+                                <label class="form-label fw-bold">Direction/Service</label>
+                                <p>{{ ticket.direction or '-' }} / {{ ticket.service or '-' }}</p>
+                            </div>
+                        </div>
+                    </div>
+                    
                     <div class="mb-3">
-                        <label class="form-label">Statut</label>
+                        <label class="form-label fw-bold">Sujet</label>
+                        <p>{{ ticket.sujet }}</p>
+                    </div>
+                    
+                    <div class="mb-3">
+                        <label class="form-label fw-bold">Description</label>
+                        <div class="p-3 bg-light rounded">
+                            {{ ticket.description|nl2br }}
+                        </div>
+                    </div>
+                    
+                    {% if ticket.get_pieces_jointes_list() %}
+                    <div class="mb-3">
+                        <label class="form-label fw-bold">Pièces jointes</label>
+                        <ul class="list-unstyled">
+                            {% for piece in ticket.get_pieces_jointes_list() %}
+                            <li><i class="fas fa-paperclip me-2"></i> {{ piece }}</li>
+                            {% endfor %}
+                        </ul>
+                    </div>
+                    {% endif %}
+                    
+                    <hr>
+                    
+                    <div class="mb-3">
+                        <label class="form-label fw-bold">Statut</label>
                         <select name="statut" class="form-select">
-                            <option value="en_cours">En cours</option>
-                            <option value="traite">Traité</option>
+                            <option value="en_cours" {% if ticket.statut == 'en_cours' %}selected{% endif %}>En cours</option>
+                            <option value="traite" {% if ticket.statut == 'traite' %}selected{% endif %}>Traité</option>
                         </select>
                     </div>
+                    
                     <div class="mb-3">
                         <div class="form-check">
-                            <input type="checkbox" name="convertir_incident" class="form-check-input" value="on">
-                            <label class="form-check-label">
+                            <input type="checkbox" name="convertir_incident" class="form-check-input" value="on" id="convertirIncident{{ ticket.id }}">
+                            <label class="form-check-label fw-bold" for="convertirIncident{{ ticket.id }}">
                                 Convertir en incident
                             </label>
                             <small class="d-block text-muted">Crée un incident à partir de ce ticket</small>
                         </div>
                     </div>
+                    
+                    <div id="incidentOptions{{ ticket.id }}" style="display: none;">
+                        <div class="alert alert-info mt-2">
+                            <i class="fas fa-info-circle me-2"></i>
+                            L'incident sera créé avec les informations suivantes :
+                            <ul class="mt-2 mb-0">
+                                <li>Titre: {{ ticket.sujet }}</li>
+                                <li>Direction: {{ ticket.direction or 'Non spécifiée' }}</li>
+                                <li>Service: {{ ticket.service or 'Non spécifié' }}</li>
+                            </ul>
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label fw-bold">Gravité de l'incident</label>
+                            <select name="gravite_incident" class="form-select">
+                                <option value="critique">Critique</option>
+                                <option value="elevee">Élevée</option>
+                                <option value="moyenne" selected>Moyenne</option>
+                                <option value="mineure">Mineure</option>
+                            </select>
+                        </div>
+                    </div>
                 </div>
                 <div class="modal-footer">
                     <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Annuler</button>
-                    <button type="submit" class="btn btn-primary">Enregistrer</button>
+                    <button type="submit" class="btn btn-primary">
+                        <i class="fas fa-save me-1"></i> Enregistrer
+                    </button>
                 </div>
             </form>
         </div>
     </div>
 </div>
 {% endfor %}
+
+<script>
+// Afficher/masquer les options incident
+document.querySelectorAll('[id^="convertirIncident"]').forEach(checkbox => {
+    checkbox.addEventListener('change', function() {
+        const id = this.id.replace('convertirIncident', '');
+        const optionsDiv = document.getElementById('incidentOptions' + id);
+        if (optionsDiv) {
+            optionsDiv.style.display = this.checked ? 'block' : 'none';
+        }
+    });
+});
+
+// Basculer l'affichage des archivés
+function toggleArchived() {
+    const showArchived = document.getElementById('showArchived').checked;
+    window.location.href = '?show_archived=' + showArchived;
+}
+
+// Archiver un ticket
+function archiverTicket(ticketId, reference) {
+    if (!confirm(`Archiver le ticket ${reference} ?`)) return;
+    
+    fetch(`/support/ticket/${ticketId}/archiver`, {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            'X-CSRFToken': '{{ csrf_token() }}'
+        }
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            alert('✅ Ticket archivé avec succès');
+            location.reload();
+        } else {
+            alert('❌ Erreur: ' + data.error);
+        }
+    })
+    .catch(error => {
+        console.error('Erreur:', error);
+        alert('❌ Erreur de communication');
+    });
+}
+
+// Supprimer définitivement un ticket
+function supprimerTicket(ticketId, reference) {
+    if (!confirm(`⚠️ SUPPRESSION DÉFINITIVE ⚠️\n\nSupprimer définitivement le ticket ${reference} ?\n\nCette action est irréversible.`)) return;
+    
+    fetch(`/support/ticket/${ticketId}/supprimer-definitivement`, {
+        method: 'DELETE',
+        headers: {
+            'Content-Type': 'application/json',
+            'X-CSRFToken': '{{ csrf_token() }}'
+        }
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            alert('✅ Ticket supprimé définitivement');
+            location.reload();
+        } else {
+            alert('❌ Erreur: ' + data.error);
+        }
+    })
+    .catch(error => {
+        console.error('Erreur:', error);
+        alert('❌ Erreur de communication');
+    });
+}
+</script>
 {% endblock %}
