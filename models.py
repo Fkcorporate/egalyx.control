@@ -10097,13 +10097,44 @@ class Incident(db.Model):
     
     # ==================== GÉNÉRATION DE RÉFÉRENCE ====================
     def generer_reference(self):
+        """Génère une référence unique pour l'incident"""
         annee = datetime.utcnow().year
-        query = Incident.query.filter(
+        
+        # Trouver le dernier numéro utilisé pour l'année courante ET le client
+        dernier = Incident.query.filter(
             Incident.reference.like(f'INC-{annee}-%'),
             Incident.client_id == self.client_id
-        )
-        count = query.count()
-        return f"INC-{annee}-{count + 1:03d}"
+        ).order_by(Incident.reference.desc()).first()
+        
+        if dernier:
+            try:
+                # Extraire le numéro
+                parts = dernier.reference.split('-')
+                if len(parts) >= 3:
+                    num = int(parts[-1]) + 1
+                else:
+                    num = 1
+            except (ValueError, IndexError):
+                count = Incident.query.filter(
+                    Incident.reference.like(f'INC-{annee}-%'),
+                    Incident.client_id == self.client_id
+                ).count()
+                num = count + 1
+        else:
+            num = 1
+        
+        # Boucle de sécurité pour éviter les doublons
+        while True:
+            nouvelle_ref = f"INC-{annee}-{num:03d}"
+            existing = Incident.query.filter_by(
+                reference=nouvelle_ref,
+                client_id=self.client_id
+            ).first()
+            if not existing:
+                break
+            num += 1
+        
+        return nouvelle_ref
     
     # ==================== MÉTHODES POUR FICHIERS JOINTS ====================
     
