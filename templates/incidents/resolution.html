@@ -3,10 +3,23 @@
 {% block title %}Résoudre l'incident {{ incident.reference }}{% endblock %}
 
 {% block content %}
+<style>
+    .preuve-item {
+        transition: all 0.3s ease;
+    }
+    .preuve-item:hover {
+        background-color: #f8f9fa;
+    }
+    .upload-progress {
+        height: 4px;
+        transition: width 0.3s ease;
+    }
+</style>
+
 <div class="container-fluid">
     <div class="row">
         <div class="col-md-8 mx-auto">
-            <div class="card">
+            <div class="card border-0 shadow-sm">
                 <div class="card-header bg-success text-white">
                     <h4 class="mb-0">
                         <i class="fas fa-check-circle me-2"></i>
@@ -15,7 +28,7 @@
                 </div>
                 <div class="card-body">
                     
-                    <!-- Affichage des suggestions IA (si disponibles) -->
+                    <!-- ========== SUGGESTIONS IA ========== -->
                     {% if suggestions_ia and (suggestions_ia.cause_racine or suggestions_ia.actions_correctives) %}
                     <div class="alert alert-info mb-4">
                         <div class="d-flex justify-content-between align-items-start">
@@ -35,6 +48,311 @@
                                 <p class="small mb-0">{{ suggestions_ia.cause_racine|default('Non disponible') }}</p>
                             </div>
                             <div class="col-md-6">
+                                <strong>Actions correctives suggérées :</strong>
+                                <p class="small mb-0">{{ suggestions_ia.actions_correctives|default('Non disponible')|nl2br }}</p>
+                            </div>
+                        </div>
+                        {% if suggestions_ia.lecons_apprises %}
+                        <div class="row mt-2">
+                            <div class="col-12">
+                                <strong>Leçons apprises suggérées :</strong>
+                                <p class="small mb-0">{{ suggestions_ia.lecons_apprises|nl2br }}</p>
+                            </div>
+                        </div>
+                        {% endif %}
+                    </div>
+                    {% endif %}
+                    
+                    <!-- ========== FORMULAIRE DE RÉSOLUTION ========== -->
+                    <form method="POST" id="resolutionForm" enctype="multipart/form-data">
+                        {{ form.csrf_token }}
+                        
+                        <div class="row">
+                            <div class="col-md-12 mb-3">
+                                <label class="form-label">{{ form.statut.label }}</label>
+                                {{ form.statut(class="form-select") }}
+                            </div>
+                        </div>
+                        
+                        <div class="row">
+                            <div class="col-md-12 mb-3">
+                                <label class="form-label">{{ form.cause_racine.label }}</label>
+                                {{ form.cause_racine(class="form-control", rows=4, id="cause_racine") }}
+                                <small class="text-muted">Analyse approfondie de la cause première de l'incident</small>
+                            </div>
+                        </div>
+                        
+                        <div class="row">
+                            <div class="col-md-12 mb-3">
+                                <label class="form-label">{{ form.actions_correctives.label }}</label>
+                                {{ form.actions_correctives(class="form-control", rows=4, id="actions_correctives") }}
+                                <small class="text-muted">Actions mises en place pour éviter la récurrence</small>
+                            </div>
+                        </div>
+                        
+                        <div class="row">
+                            <div class="col-md-12 mb-3">
+                                <label class="form-label">{{ form.lecons_apprises.label }}</label>
+                                {{ form.lecons_apprises(class="form-control", rows=3, id="lecons_apprises") }}
+                                <small class="text-muted">Enseignements tirés de cet incident</small>
+                            </div>
+                        </div>
+                        
+                        <div class="row">
+                            <div class="col-md-12 mb-3">
+                                <label class="form-label">{{ form.commentaire_cloture.label }}</label>
+                                {{ form.commentaire_cloture(class="form-control", rows=3, id="commentaire_cloture") }}
+                            </div>
+                        </div>
+                        
+                        <!-- ========== SECTION PREUVES ET FICHIERS ========== -->
+                        <div class="card mt-3 mb-3 border-info">
+                            <div class="card-header bg-info text-white">
+                                <h5 class="mb-0">
+                                    <i class="fas fa-paperclip me-2"></i>
+                                    Preuves et fichiers joints
+                                </h5>
+                            </div>
+                            <div class="card-body">
+                                <!-- Upload de fichiers -->
+                                <div class="mb-3">
+                                    <label class="form-label fw-bold">Ajouter des preuves</label>
+                                    <input type="file" name="preuves" id="preuvesInput" class="form-control" multiple 
+                                        accept=".pdf,.jpg,.jpeg,.png,.doc,.docx,.txt">
+                                    <small class="text-muted">Formats acceptés: PDF, JPG, PNG, DOC, DOCX, TXT (max 10 Mo par fichier)</small>
+                                    <div id="uploadProgress" class="progress mt-2" style="height: 4px; display: none;">
+                                        <div class="progress-bar bg-success upload-progress" style="width: 0%"></div>
+                                    </div>
+                                </div>
+                                
+                                <!-- ========== LISTE DES FICHIERS EXISTANTS ========== -->
+                                <div id="preuvesList">
+                                    {% if resolution_fichiers %}
+                                    <label class="form-label fw-bold mt-3">Fichiers déjà joints</label>
+                                    <div class="list-group">
+                                        {% for fichier in resolution_fichiers %}
+                                        <div class="list-group-item d-flex justify-content-between align-items-center preuve-item" id="preuve-{{ fichier.id }}">
+                                            <div>
+                                                <i class="fas fa-file-{{ 'pdf' if fichier.nom_fichier.endswith('.pdf') else 'image' if fichier.nom_fichier.endswith(('.jpg','.jpeg','.png')) else 'word' if fichier.nom_fichier.endswith(('.doc','.docx')) else 'alt' }} me-2"></i>
+                                                {{ fichier.nom_fichier }}
+                                                <small class="text-muted ms-2">({{ (fichier.taille / 1024)|round(1) if fichier.taille else 0 }} Ko) - ajouté le {{ fichier.created_at.strftime('%d/%m/%Y') }}</small>
+                                            </div>
+                                            <div>
+                                                <a href="{{ url_for('download_resolution_fichier', fichier_id=fichier.id) }}" class="btn btn-sm btn-outline-primary me-1" title="Télécharger">
+                                                    <i class="fas fa-download"></i>
+                                                </a>
+                                                {% if current_user.is_client_admin or current_user.id == incident.created_by %}
+                                                <button type="button" class="btn btn-sm btn-outline-danger" onclick="supprimerFichierResolution({{ fichier.id }})" title="Supprimer">
+                                                    <i class="fas fa-trash"></i>
+                                                </button>
+                                                {% endif %}
+                                            </div>
+                                        </div>
+                                        {% endfor %}
+                                    </div>
+                                    {% else %}
+                                    <p class="text-muted text-center py-3" id="noPreuvesMsg">
+                                        <i class="fas fa-info-circle me-1"></i> Aucune preuve jointe pour le moment
+                                    </p>
+                                    {% endif %}
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <div class="row">
+                            <div class="col-md-12 mb-3">
+                                <div class="form-check">
+                                    {{ form.creer_plan_action(class="form-check-input") }}
+                                    <label class="form-check-label">{{ form.creer_plan_action.label }}</label>
+                                    <small class="d-block text-muted">Crée automatiquement un plan d'action associé à cet incident</small>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <div class="d-flex justify-content-between mt-4">
+                            <a href="{{ url_for('detail_incident', id=incident.id) }}" class="btn btn-secondary">
+                                <i class="fas fa-arrow-left me-1"></i> Annuler
+                            </a>
+                            <button type="submit" class="btn btn-success" id="submitBtn">
+                                <i class="fas fa-check-circle me-1"></i> Enregistrer la résolution
+                            </button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+// ============================================
+// GESTION DES SUGGESTIONS IA
+// ============================================
+function appliquerSuggestionsIA() {
+    {% if suggestions_ia %}
+        var cause = {{ suggestions_ia.cause_racine|tojson|safe }};
+        var actions = {{ suggestions_ia.actions_correctives|tojson|safe }};
+        var lecons = {{ suggestions_ia.lecons_apprises|tojson|safe }};
+        var commentaire = {{ suggestions_ia.commentaire_cloture|tojson|safe }};
+        
+        if (cause) document.getElementById('cause_racine').value = cause;
+        if (actions) document.getElementById('actions_correctives').value = actions;
+        if (lecons) document.getElementById('lecons_apprises').value = lecons;
+        if (commentaire) document.getElementById('commentaire_cloture').value = commentaire;
+        
+        showNotification('Suggestions IA appliquées', 'success');
+    {% endif %}
+}
+
+// ============================================
+// GESTION DES FICHIERS (UPLOAD MULTIPLE)
+// ============================================
+const preuvesInput = document.getElementById('preuvesInput');
+const uploadProgress = document.getElementById('uploadProgress');
+const progressBar = document.querySelector('.upload-progress');
+const submitBtn = document.getElementById('submitBtn');
+
+async function uploadFiles(files) {
+    const formData = new FormData();
+    for (let file of files) {
+        formData.append('preuves', file);
+    }
+    
+    uploadProgress.style.display = 'block';
+    progressBar.style.width = '30%';
+    
+    try {
+        const response = await fetch(`/incident/{{ incident.id }}/resolution/upload`, {
+            method: 'POST',
+            headers: {
+                'X-CSRFToken': '{{ csrf_token() }}'
+            },
+            body: formData
+        });
+        
+        progressBar.style.width = '100%';
+        
+        const data = await response.json();
+        
+        if (data.success) {
+            // Recharger la liste des fichiers
+            await reloadPreuvesList();
+            showNotification(`${data.fichiers.length} fichier(s) uploadé(s) avec succès`, 'success');
+        } else {
+            showNotification('Erreur: ' + data.error, 'danger');
+        }
+    } catch (error) {
+        showNotification('Erreur lors de l\'upload: ' + error.message, 'danger');
+    } finally {
+        setTimeout(() => {
+            uploadProgress.style.display = 'none';
+            progressBar.style.width = '0%';
+        }, 1000);
+    }
+}
+
+
+
+async function supprimerFichierResolution(fichierId) {
+    if (!confirm('Supprimer ce fichier ?')) return;
+    
+    try {
+        const response = await fetch(`/api/resolution-fichier/${fichierId}`, {
+            method: 'DELETE',
+            headers: {
+                'X-CSRFToken': '{{ csrf_token() }}'
+            }
+        });
+        
+        const data = await response.json();
+        
+        if (data.success) {
+            const element = document.getElementById(`preuve-${fichierId}`);
+            if (element) element.remove();
+            
+            // Vérifier s'il reste des fichiers
+            const remaining = document.querySelectorAll('.preuve-item').length;
+            if (remaining === 0) {
+                document.getElementById('preuvesList').innerHTML = '<p class="text-muted text-center py-3"><i class="fas fa-info-circle me-1"></i> Aucune preuve jointe pour le moment</p>';
+            }
+            
+            showNotification('Fichier supprimé', 'success');
+        } else {
+            showNotification('Erreur: ' + data.error, 'danger');
+        }
+    } catch (error) {
+        showNotification('Erreur: ' + error.message, 'danger');
+    }
+}
+
+function showNotification(message, type) {
+    const notification = document.createElement('div');
+    notification.className = `alert alert-${type} position-fixed top-0 end-0 m-3`;
+    notification.style.zIndex = '9999';
+    notification.style.minWidth = '300px';
+    notification.innerHTML = `
+        <div class="d-flex align-items-center">
+            <i class="fas fa-${type === 'success' ? 'check-circle' : 'exclamation-circle'} me-2"></i>
+            <div>${message}</div>
+            <button type="button" class="btn-close ms-auto" onclick="this.parentElement.parentElement.remove()"></button>
+        </div>
+    `;
+    document.body.appendChild(notification);
+    setTimeout(() => notification.remove(), 3000);
+}
+
+// Gestionnaire d'upload
+preuvesInput.addEventListener('change', function(e) {
+    if (this.files.length > 0) {
+        uploadFiles(this.files);
+        this.value = ''; // Réinitialiser pour permettre de nouveaux uploads
+    }
+});
+
+// Soumission du formulaire
+document.getElementById('resolutionForm').addEventListener('submit', function(e) {
+    submitBtn.disabled = true;
+    submitBtn.innerHTML = '<i class="fas fa-spinner fa-spin me-1"></i> Enregistrement en cours...';
+});
+async function reloadPreuvesList() {
+    try {
+        const response = await fetch(`/incident/{{ incident.id }}/resolution/fichiers`);
+        const data = await response.json();
+        
+        const preuvesList = document.getElementById('preuvesList');
+        
+        if (data.fichiers && data.fichiers.length > 0) {
+            let html = '<label class="form-label fw-bold mt-3">Fichiers déjà joints</label><div class="list-group">';
+            for (let f of data.fichiers) {
+                html += `
+                    <div class="list-group-item d-flex justify-content-between align-items-center preuve-item" id="preuve-${f.id}">
+                        <div>
+                            <i class="fas fa-file-${f.ext === 'pdf' ? 'pdf' : (f.ext === 'jpg' || f.ext === 'png' ? 'image' : 'alt')} me-2"></i>
+                            ${f.nom}
+                            <small class="text-muted ms-2">(${f.taille}) - ajouté le ${f.date}</small>
+                        </div>
+                        <div>
+                            <a href="/download/resolution-fichier/${f.id}" class="btn btn-sm btn-outline-primary me-1" title="Télécharger">
+                                <i class="fas fa-download"></i>
+                            </a>
+                            <button type="button" class="btn btn-sm btn-outline-danger" onclick="supprimerFichierResolution(${f.id})" title="Supprimer">
+                                <i class="fas fa-trash"></i>
+                            </button>
+                        </div>
+                    </div>
+                `;
+            }
+            html += '</div>';
+            preuvesList.innerHTML = html;
+        } else {
+            preuvesList.innerHTML = '<p class="text-muted text-center py-3"><i class="fas fa-info-circle me-1"></i> Aucune preuve jointe pour le moment</p>';
+        }
+    } catch (error) {
+        console.error('Erreur rechargement:', error);
+    }
+}
+</script>
+{% endblock %}                            <div class="col-md-6">
                                 <strong>Actions correctives suggérées :</strong>
                                 <p class="small mb-0">{{ suggestions_ia.actions_correctives|default('Non disponible')|nl2br }}</p>
                             </div>
