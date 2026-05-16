@@ -1814,37 +1814,99 @@ function soumettreLiaison() {
     });
 }
 
+// ============================================
+// GESTION DES PLANS D'ACTION - VERSION CORRIGÉE
+// ============================================
 function detacherPlan(planId, planRef) {
-    if (confirm(`Détacher le plan ${planRef} de ce dispositif ?`)) {
-        const csrfToken = document.querySelector('meta[name="csrf-token"]')?.getAttribute('content');
-        
-        fetch(`/api/dispositif/${dispositifId}/detacher-plan/${planId}`, {
-            method: 'POST',
-            headers: {
-                'X-CSRFToken': csrfToken,
-                'Content-Type': 'application/json'
-            }
-        })
-        .then(response => response.json())
-        .then(data => {
-            if (data.success) {
-                afficherNotification('✅ Plan détaché avec succès', 'success');
-                
-                // NOTIFIER LES AUTRES PAGES
-                localStorage.setItem('dispositif_updated', Date.now().toString());
-                
-                // Recharger la page actuelle
-                setTimeout(() => {
-                    location.reload();
-                }, 1500);
+    if (!confirm(`Détacher le plan ${planRef} de ce dispositif ?`)) {
+        return;
+    }
+    
+    const csrfToken = document.querySelector('meta[name="csrf-token"]')?.getAttribute('content');
+    if (!csrfToken) {
+        afficherNotification('❌ Token CSRF manquant', 'danger');
+        return;
+    }
+    
+    fetch(`/api/dispositif/${dispositifId}/detacher-plan/${planId}`, {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            'X-CSRFToken': csrfToken,
+            'X-Requested-With': 'XMLHttpRequest'
+        }
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            afficherNotification('✅ Plan détaché avec succès', 'success');
+            
+            // 🔥 SUPPRESSION DYNAMIQUE DE L'ÉLÉMENT
+            const planCard = document.querySelector(`.plan-card[data-plan-id="${planId}"]`);
+            if (planCard) {
+                planCard.remove();
             } else {
-                afficherNotification('❌ Erreur: ' + data.error, 'danger');
+                // Fallback : masquer avec un effet de fondu
+                const allCards = document.querySelectorAll('.plan-card');
+                for (let card of allCards) {
+                    if (card.innerHTML.includes(planRef)) {
+                        card.style.transition = 'opacity 0.3s';
+                        card.style.opacity = '0';
+                        setTimeout(() => card.remove(), 300);
+                        break;
+                    }
+                }
             }
-        })
-        .catch(error => {
-            console.error('Erreur:', error);
-            afficherNotification('❌ Erreur de communication', 'danger');
-        });
+            
+            // Mettre à jour le compteur et la section "aucun plan"
+            mettreAJourCompteurPlans();
+            
+            // Optionnel : notifier les autres onglets
+            localStorage.setItem('dispositif_updated', Date.now().toString());
+        } else {
+            afficherNotification('❌ Erreur: ' + (data.error || 'Échec du détachement'), 'danger');
+        }
+    })
+    .catch(error => {
+        console.error('Erreur:', error);
+        afficherNotification('❌ Erreur de communication avec le serveur', 'danger');
+    });
+}
+
+// ============================================
+// METTRE À JOUR L'AFFICHAGE APRÈS SUPPRESSION
+// ============================================
+function mettreAJourCompteurPlans() {
+    const plansRestants = document.querySelectorAll('.plan-card').length;
+    const sectionPlans = document.querySelector('.plans-section');
+    const messageVide = document.querySelector('.plans-section .text-center');
+    
+    if (plansRestants === 0 && sectionPlans) {
+        // Afficher le message "Aucun plan" si plus de cartes
+        if (!messageVide) {
+            sectionPlans.innerHTML = `
+                <div class="card-header-modern">
+                    <h5><i class="fas fa-tasks"></i> Plans d'action associés</h5>
+                    <button class="btn-add-plan" onclick="ouvrirModalLierPlan()">
+                        <i class="fas fa-plus"></i> Lier un plan
+                    </button>
+                </div>
+                <div class="text-center py-5">
+                    <i class="fas fa-tasks fa-4x text-muted mb-3"></i>
+                    <h5 class="text-muted">Aucun plan d'action associé</h5>
+                    <p class="text-muted mb-3">Liez un plan d'action existant ou créez-en un nouveau</p>
+                    <button class="btn-add-plan" onclick="ouvrirModalLierPlan()">
+                        <i class="fas fa-plus"></i> Lier un plan d'action
+                    </button>
+                </div>
+            `;
+        }
+    } else {
+        // Mettre à jour le compteur dans le header si présent
+        const badge = document.querySelector('.card-header-modern .badge');
+        if (badge) {
+            badge.textContent = plansRestants;
+        }
     }
 }
 // ============================================
