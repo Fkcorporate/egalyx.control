@@ -1,0 +1,220 @@
+{% extends "base.html" %}
+
+{% block title %}Recherche avancée des risques{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <div>
+            <h1 class="h3 mb-1 fw-bold">
+                <i class="fas fa-search me-2"></i>
+                Recherche avancée des risques
+            </h1>
+            <p class="text-muted">Filtrez et recherchez parmi tous les risques</p>
+        </div>
+        <div>
+            <a href="{{ url_for('dashboard_risques') }}" class="btn btn-outline-secondary">
+                <i class="fas fa-chart-line me-2"></i>Retour au dashboard
+            </a>
+        </div>
+    </div>
+
+    <!-- Formulaire de recherche -->
+    <div class="card mb-4">
+        <div class="card-header bg-primary text-white">
+            <h5 class="mb-0"><i class="fas fa-filter me-2"></i>Filtres de recherche</h5>
+        </div>
+        <div class="card-body">
+            <form method="GET" action="{{ url_for('recherche_risques') }}" class="row g-3">
+                <div class="col-md-4">
+                    <label class="form-label">Recherche textuelle</label>
+                    <input type="text" name="q" class="form-control" 
+                           placeholder="Référence, intitulé, description..."
+                           value="{{ query }}">
+                </div>
+                
+                <div class="col-md-3">
+                    <label class="form-label">Catégorie</label>
+                    <select name="categorie" class="form-select">
+                        <option value="">Toutes les catégories</option>
+                        {% for cat in categories %}
+                            <option value="{{ cat[0] }}" {% if selected_categorie == cat[0] %}selected{% endif %}>
+                                {{ cat[0] }}
+                            </option>
+                        {% endfor %}
+                    </select>
+                </div>
+                
+                <div class="col-md-3">
+                    <label class="form-label">Niveau de risque</label>
+                    <select name="niveau_risque" class="form-select">
+                        <option value="">Tous les niveaux</option>
+                        <option value="Critique" {% if selected_niveau == 'Critique' %}selected{% endif %}>🔴 Critique</option>
+                        <option value="Élevé" {% if selected_niveau == 'Élevé' %}selected{% endif %}>🟠 Élevé</option>
+                        <option value="Moyen" {% if selected_niveau == 'Moyen' %}selected{% endif %}>🟡 Moyen</option>
+                        <option value="Faible" {% if selected_niveau == 'Faible' %}selected{% endif %}>🟢 Faible</option>
+                        <option value="Non évalué" {% if selected_niveau == 'Non évalué' %}selected{% endif %}>⚪ Non évalué</option>
+                    </select>
+                </div>
+                
+                <div class="col-md-2">
+                    <label class="form-label">Cartographie</label>
+                    <select name="cartographie_id" class="form-select">
+                        <option value="">Toutes</option>
+                        {% for carto in cartographies %}
+                            <option value="{{ carto.id }}" {% if selected_cartographie|string == carto.id|string %}selected{% endif %}>
+                                {{ carto.nom }}
+                            </option>
+                        {% endfor %}
+                    </select>
+                </div>
+                
+                <div class="col-12">
+                    <button type="submit" class="btn btn-primary">
+                        <i class="fas fa-search me-2"></i>Rechercher
+                    </button>
+                    <a href="{{ url_for('recherche_risques') }}" class="btn btn-secondary">
+                        <i class="fas fa-undo me-2"></i>Réinitialiser
+                    </a>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Résultats -->
+    <div class="card">
+        <div class="card-header d-flex justify-content-between align-items-center">
+            <h5 class="mb-0">
+                <i class="fas fa-list me-2"></i>
+                Résultats ({{ risques|length }} risque(s))
+            </h5>
+            <div>
+                <a href="{{ url_for('export_risques_excel_data') }}" class="btn btn-sm btn-success">
+                    <i class="fas fa-file-excel me-1"></i>Exporter Excel
+                </a>
+                <a href="{{ url_for('export_risques') }}" class="btn btn-sm btn-info">
+                    <i class="fas fa-download me-1"></i>Exporter JSON
+                </a>
+            </div>
+        </div>
+        <div class="card-body p-0">
+            {% if risques %}
+            <div class="table-responsive">
+                <table class="table table-hover mb-0">
+                    <thead class="table-light">
+                        <tr>
+                            <th>Référence</th>
+                            <th>Intitulé</th>
+                            <th>Catégorie</th>
+                            <th>Niveau</th>
+                            <th>Score</th>
+                            <th>Cartographie</th>
+                            <th>Dernière évaluation</th>
+                            <th>Action</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for risque in risques %}
+                        {% set derniere_eval = risque.evaluations|sort(attribute='created_at', reverse=True)|first if risque.evaluations else None %}
+                        <tr>
+                            <td><code>{{ risque.reference }}</code></td>
+                            <td>
+                                <div class="fw-bold">{{ risque.intitule[:80] }}{% if risque.intitule|length > 80 %}...{% endif %}</div>
+                                {% if risque.description %}
+                                <small class="text-muted">{{ risque.description[:100] }}{% if risque.description|length > 100 %}...{% endif %}</small>
+                                {% endif %}
+                             </div>
+                            </td>
+                            <td><span class="badge bg-secondary">{{ risque.categorie or 'Non définie' }}</span></td>
+                            <td>
+                                {% if derniere_eval %}
+                                    {% if derniere_eval.niveau_risque == 'Critique' %}
+                                        <span class="badge bg-danger">🔴 Critique</span>
+                                    {% elif derniere_eval.niveau_risque == 'Élevé' %}
+                                        <span class="badge bg-warning">🟠 Élevé</span>
+                                    {% elif derniere_eval.niveau_risque == 'Moyen' %}
+                                        <span class="badge bg-info">🟡 Moyen</span>
+                                    {% elif derniere_eval.niveau_risque == 'Faible' %}
+                                        <span class="badge bg-success">🟢 Faible</span>
+                                    {% else %}
+                                        <span class="badge bg-secondary">⚪ Non évalué</span>
+                                    {% endif %}
+                                {% else %}
+                                    <span class="badge bg-secondary">⚪ Non évalué</span>
+                                {% endif %}
+                             </div>
+                             <td class="text-center">
+                                {% if derniere_eval %}
+                                    <strong>{{ derniere_eval.score_risque }}/25</strong>
+                                {% else %}
+                                    <span class="text-muted">-</span>
+                                {% endif %}
+                             </div>
+                             <td>
+                                {% if risque.cartographie %}
+                                    <span class="badge bg-info">{{ risque.cartographie.nom }}</span>
+                                {% else %}
+                                    <span class="text-muted">-</span>
+                                {% endif %}
+                             </div>
+                             <td class="text-center">
+                                {% if derniere_eval and derniere_eval.created_at %}
+                                    <small>{{ derniere_eval.created_at.strftime('%d/%m/%Y') }}</small>
+                                {% else %}
+                                    <small class="text-muted">Jamais</small>
+                                {% endif %}
+                             </div>
+                             <td class="text-center">
+                                <a href="{{ url_for('detail_risque', id=risque.id) }}" class="btn btn-sm btn-outline-primary">
+                                    <i class="fas fa-eye"></i> Voir
+                                </a>
+                             </div>
+                         </td>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+            {% else %}
+            <div class="text-center py-5">
+                <i class="fas fa-inbox fa-3x text-muted mb-3"></i>
+                <p class="text-muted">Aucun risque ne correspond à vos critères</p>
+                <a href="{{ url_for('recherche_risques') }}" class="btn btn-sm btn-primary">
+                    <i class="fas fa-undo me-1"></i>Réinitialiser les filtres
+                </a>
+            </div>
+            {% endif %}
+        </div>
+    </div>
+</div>
+
+<style>
+    .table-hover tbody tr:hover {
+        background-color: rgba(37, 99, 235, 0.05);
+        cursor: pointer;
+    }
+    
+    [data-bs-theme="dark"] .table-hover tbody tr:hover {
+        background-color: rgba(59, 130, 246, 0.1);
+    }
+    
+    .badge {
+        font-weight: 500;
+    }
+</style>
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    // Rendre les lignes cliquables
+    document.querySelectorAll('.table tbody tr').forEach(row => {
+        row.style.cursor = 'pointer';
+        row.addEventListener('click', function(e) {
+            // Éviter le clic sur les boutons
+            if (e.target.tagName !== 'A' && !e.target.closest('.btn')) {
+                const link = this.querySelector('a:last-child');
+                if (link) window.location.href = link.href;
+            }
+        });
+    });
+});
+</script>
+{% endblock %}
