@@ -1217,6 +1217,7 @@
                                     </tr>
                                 </thead>
                                 <tbody>
+                                    <!-- Dans l'onglet Recommandations, dans la boucle des recommandations -->
                                     {% for recommandation in recommandations %}
                                     <tr>
                                         <td>
@@ -1263,10 +1264,16 @@
                                         </td>
                                         <td>
                                             <div class="btn-group btn-group-sm">
+                                                <!-- Bouton IA pour générer plan d'action -->
                                                 <button class="btn btn-outline-info" 
                                                         onclick="afficherResumeRecommandation({{ recommandation.id }})"
                                                         title="{{ t("Voir le résumé") }}">
                                                     <i class="fas fa-eye"></i>
+                                                </button>
+                                                <button class="btn btn-outline-info" 
+                                                        onclick="genererPlanAction({{ recommandation.id }})"
+                                                        title="{{ t("Générer plan d'action avec l'IA") }}">
+                                                    <i class="fas fa-magic"></i>
                                                 </button>
                                                 <button class="btn btn-outline-primary" 
                                                         data-bs-toggle="modal" 
@@ -1313,8 +1320,7 @@
             </div>
         </div>
 
-        <!-- Onglet Plans d'action -->
-        <!-- Onglet Plans d'action -->
+
 <!-- Onglet Plans d'action - VERSION CORRIGÉE -->
         <div class="tab-pane fade" id="plans-action" role="tabpanel">
             <div class="section-card">
@@ -5538,6 +5544,200 @@ document.addEventListener('DOMContentLoaded', function() {
     console.log('DOM chargé, chargement des preuves générales...');
     chargerPreuvesGenerales();
 });
+// ============================================
+// FONCTIONS IA POUR PLANS D'ACTION
+// ============================================
+
+let currentPlanSuggestion = null;
+let currentRecommandationId = null;
+
+async function genererPlanAction(recommandationId) {
+    currentRecommandationId = recommandationId;
+    
+    // Afficher un modal de chargement
+    const modalHtml = `
+        <div class="modal fade" id="modalPlanIA" tabindex="-1">
+            <div class="modal-dialog modal-lg">
+                <div class="modal-content">
+                    <div class="modal-header" style="background: linear-gradient(135deg, #1e3a8a, #2563eb); color: white;">
+                        <h5 class="modal-title">
+                            <i class="fas fa-robot me-2"></i>
+                            Génération du plan d'action par l'IA
+                        </h5>
+                        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+                    </div>
+                    <div class="modal-body text-center py-5">
+                        <div class="spinner-border text-primary" role="status">
+                            <span class="visually-hidden">Chargement...</span>
+                        </div>
+                        <p class="mt-3">L'IA analyse la recommandation et construit un plan d'action détaillé...</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    `;
+    
+    // Supprimer l'ancien modal
+    const oldModal = document.getElementById('modalPlanIA');
+    if (oldModal) oldModal.remove();
+    
+    document.body.insertAdjacentHTML('beforeend', modalHtml);
+    const modal = new bootstrap.Modal(document.getElementById('modalPlanIA'));
+    modal.show();
+    
+    try {
+        const response = await fetch(`/api/recommandation/${recommandationId}/generer-plan-action`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRFToken': getCsrfToken()
+            }
+        });
+        
+        const data = await response.json();
+        
+        if (data.success && data.plan_propose) {
+            currentPlanSuggestion = data.plan_propose;
+            afficherSuggestionPlanAction(data.plan_propose, data.audit_id);
+            modal.hide();
+        } else {
+            modal.hide();
+            showToast('error', data.error || 'Erreur lors de la génération');
+        }
+        
+    } catch (error) {
+        console.error('Erreur:', error);
+        modal.hide();
+        showToast('error', 'Erreur lors de la génération du plan');
+    }
+}
+
+function afficherSuggestionPlanAction(plan, auditId) {
+    const prioriteClass = plan.priorite === 'haute' ? 'danger' : 
+                         (plan.priorite === 'moyenne' ? 'warning' : 'info');
+    
+    let sousActionsHtml = '';
+    if (plan.sous_actions && plan.sous_actions.length > 0) {
+        sousActionsHtml = '<h6 class="mt-3 mb-2"><i class="fas fa-list-check me-2"></i>Sous-actions suggérées :</h6><ul class="list-group">';
+        plan.sous_actions.forEach(sa => {
+            sousActionsHtml += `
+                <li class="list-group-item">
+                    <div class="d-flex justify-content-between align-items-start">
+                        <div>
+                            <strong>Étape ${sa.ordre}</strong><br>
+                            ${escapeHtml(sa.description)}
+                            ${sa.commentaire ? `<br><small class="text-muted"><i class="fas fa-lightbulb me-1"></i>${escapeHtml(sa.commentaire)}</small>` : ''}
+                        </div>
+                        <div class="text-end">
+                            <span class="badge bg-info">${sa.duree_estimee_jours} jours</span><br>
+                            <small class="text-muted">Responsable: ${escapeHtml(sa.responsable_suggere || 'À définir')}</small>
+                        </div>
+                    </div>
+                </li>
+            `;
+        });
+        sousActionsHtml += '</ul>';
+    }
+    
+    const modalHtml = `
+        <div class="modal fade" id="modalPlanSuggestion" tabindex="-1">
+            <div class="modal-dialog modal-xl">
+                <div class="modal-content">
+                    <div class="modal-header" style="background: linear-gradient(135deg, #10b981, #059669); color: white;">
+                        <h5 class="modal-title">
+                            <i class="fas fa-tasks me-2"></i>
+                            Plan d'action suggéré par l'IA
+                        </h5>
+                        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+                    </div>
+                    <div class="modal-body">
+                        <div class="alert alert-info">
+                            <i class="fas fa-info-circle me-2"></i>
+                            L'IA a généré un plan d'action basé sur la recommandation.
+                        </div>
+                        
+                        <div class="card mb-3">
+                            <div class="card-header bg-light">
+                                <strong><i class="fas fa-file-alt me-2"></i> ${escapeHtml(plan.nom)}</strong>
+                                <span class="badge bg-${prioriteClass} float-end">Priorité ${plan.priorite}</span>
+                            </div>
+                            <div class="card-body">
+                                <p><strong>Description :</strong><br>${escapeHtml(plan.description || '')}</p>
+                                <p><strong>Durée estimée :</strong> ${plan.duree_estimee_jours} jours</p>
+                                ${sousActionsHtml}
+                            </div>
+                        </div>
+                    </div>
+                    <div class="modal-footer">
+                        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Annuler</button>
+                        <button type="button" class="btn btn-success" onclick="creerPlanActionDepuisIA(${auditId})">
+                            <i class="fas fa-check me-1"></i> Créer ce plan d'action
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    `;
+    
+    const oldModal = document.getElementById('modalPlanSuggestion');
+    if (oldModal) oldModal.remove();
+    
+    document.body.insertAdjacentHTML('beforeend', modalHtml);
+    const modal = new bootstrap.Modal(document.getElementById('modalPlanSuggestion'));
+    modal.show();
+}
+
+async function creerPlanActionDepuisIA(auditId) {
+    if (!currentPlanSuggestion) return;
+    
+    const btn = document.querySelector('#modalPlanSuggestion .btn-success');
+    if (btn) {
+        btn.disabled = true;
+        btn.innerHTML = '<i class="fas fa-spinner fa-spin me-1"></i> Création...';
+    }
+    
+    try {
+        const response = await fetch('/api/plan-action/creer-depuis-ia', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRFToken': getCsrfToken()
+            },
+            body: JSON.stringify({
+                recommandation_id: currentRecommandationId,
+                nom: currentPlanSuggestion.nom,
+                description: currentPlanSuggestion.description,
+                duree_estimee_jours: currentPlanSuggestion.duree_estimee_jours,
+                priorite: currentPlanSuggestion.priorite,
+                sous_actions: currentPlanSuggestion.sous_actions,
+                audit_id: auditId
+            })
+        });
+        
+        const data = await response.json();
+        
+        if (data.success) {
+            showToast('success', `✅ ${data.message}`);
+            setTimeout(() => {
+                location.reload();
+            }, 1500);
+        } else {
+            showToast('error', data.error || 'Erreur lors de la création');
+            if (btn) {
+                btn.disabled = false;
+                btn.innerHTML = '<i class="fas fa-check me-1"></i> Créer ce plan d\'action';
+            }
+        }
+        
+    } catch (error) {
+        console.error('Erreur:', error);
+        showToast('error', 'Erreur réseau');
+        if (btn) {
+            btn.disabled = false;
+            btn.innerHTML = '<i class="fas fa-check me-1"></i> Créer ce plan d\'action';
+        }
+    }
+}
 </script>
 {% endblock %}
 
