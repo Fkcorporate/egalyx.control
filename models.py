@@ -10020,7 +10020,7 @@ class DocumentPCA(db.Model):
 # ========================
 
 class Incident(db.Model):
-    """Gestion complète des incidents"""
+    """Gestion complète des incidents - Version EXCELLENTE"""
     __tablename__ = 'incidents'
     
     # ==================== IDENTIFIANTS DE BASE ====================
@@ -10042,7 +10042,7 @@ class Incident(db.Model):
     
     # ==================== COÛTS ET IMPACTS ====================
     cout_estime = db.Column(db.Float, default=0.0)
-    temps_arret = db.Column(db.Integer, default=0)
+    temps_arret = db.Column(db.Integer, default=0)  # en minutes
     impact_financier_reel = db.Column(db.Float)
     heures_impactees = db.Column(db.Integer)
     
@@ -10053,10 +10053,10 @@ class Incident(db.Model):
     # ==================== ESCALADE ====================
     niveau_escalade = db.Column(db.Integer, default=1)
     escalation_auto = db.Column(db.Boolean, default=False)
-    escalation_date = db.Column(db.DateTime)
+    escalation_date = db.Column(db.DateTime)  # ✅ CORRIGÉ: escalation_date (pas escalade_date)
     raison_escalade = db.Column(db.Text)
-    delai_escalade_niveau2 = db.Column(db.Integer, default=48)
-    delai_escalade_niveau3 = db.Column(db.Integer, default=72)
+    delai_escalade_niveau2 = db.Column(db.Integer, default=48)  # heures
+    delai_escalade_niveau3 = db.Column(db.Integer, default=72)  # heures
     notification_envoyee_niveau2 = db.Column(db.Boolean, default=False)
     notification_envoyee_niveau3 = db.Column(db.Boolean, default=False)
     derniere_action_date = db.Column(db.DateTime, default=datetime.utcnow)
@@ -10072,7 +10072,6 @@ class Incident(db.Model):
     date_occurrence = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
     date_detection = db.Column(db.DateTime, default=datetime.utcnow)
     date_resolution = db.Column(db.DateTime)
-    date_approbation = db.Column(db.DateTime)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
     
@@ -10085,7 +10084,6 @@ class Incident(db.Model):
     risque_id = db.Column(db.Integer, db.ForeignKey('risques.id'))
     dispositif_id = db.Column(db.Integer, db.ForeignKey('dispositifs_maitrise.id'))
     plan_action_id = db.Column(db.Integer, db.ForeignKey('plans_action.id'))
-    # ⚠️ SUPPRIMEZ ticket_source_id - PAS DE LIEN DIRECT VERS TICKET
     
     # ==================== ACTEURS ====================
     declare_par_id = db.Column(db.Integer, db.ForeignKey('user.id'))
@@ -10130,13 +10128,13 @@ class Incident(db.Model):
             self.reference = self.generer_reference()
         if not self.sla_date_limite and self.sla_heures:
             self.sla_date_limite = datetime.utcnow() + timedelta(hours=self.sla_heures)
+        if not self.escalation_date:
+            self.escalation_date = datetime.utcnow()
     
     # ==================== GÉNÉRATION DE RÉFÉRENCE ====================
     def generer_reference(self):
         """Génère une référence unique pour l'incident"""
         annee = datetime.utcnow().year
-        
-        # Trouver le dernier numéro utilisé pour l'année courante ET le client
         dernier = Incident.query.filter(
             Incident.reference.like(f'INC-{annee}-%'),
             Incident.client_id == self.client_id
@@ -10144,12 +10142,8 @@ class Incident(db.Model):
         
         if dernier:
             try:
-                # Extraire le numéro
                 parts = dernier.reference.split('-')
-                if len(parts) >= 3:
-                    num = int(parts[-1]) + 1
-                else:
-                    num = 1
+                num = int(parts[-1]) + 1 if len(parts) >= 3 else 1
             except (ValueError, IndexError):
                 count = Incident.query.filter(
                     Incident.reference.like(f'INC-{annee}-%'),
@@ -10159,29 +10153,22 @@ class Incident(db.Model):
         else:
             num = 1
         
-        # Boucle de sécurité pour éviter les doublons
         while True:
             nouvelle_ref = f"INC-{annee}-{num:03d}"
-            existing = Incident.query.filter_by(
-                reference=nouvelle_ref,
-                client_id=self.client_id
-            ).first()
+            existing = Incident.query.filter_by(reference=nouvelle_ref, client_id=self.client_id).first()
             if not existing:
                 break
             num += 1
         
         return nouvelle_ref
     
-    # ==================== MÉTHODES POUR FICHIERS JOINTS ====================
-    
+    # ==================== MÉTHODES FICHIERS ====================
     def get_fichiers_joints_list(self):
-        """Retourne la liste des fichiers joints"""
         if not self.fichiers_joints:
             return []
         return [f.strip() for f in self.fichiers_joints.split(',') if f.strip()]
     
     def get_fichiers_metadonnees_dict(self):
-        """Retourne les métadonnées des fichiers joints"""
         if not self.fichiers_metadonnees:
             return {}
         try:
@@ -10191,14 +10178,11 @@ class Incident(db.Model):
             return {}
     
     def ajouter_fichier(self, filename, metadata=None):
-        """Ajoute un fichier joint"""
         import json
-        
         fichiers = self.get_fichiers_joints_list()
         if filename not in fichiers:
             fichiers.append(filename)
             self.fichiers_joints = ','.join(fichiers)
-        
         if metadata:
             metadonnees = self.get_fichiers_metadonnees_dict()
             metadonnees[filename] = metadata
@@ -10206,21 +10190,17 @@ class Incident(db.Model):
         self.updated_at = datetime.utcnow()
     
     def supprimer_fichier(self, filename):
-        """Supprime un fichier joint"""
         fichiers = self.get_fichiers_joints_list()
         if filename in fichiers:
             fichiers.remove(filename)
             self.fichiers_joints = ','.join(fichiers) if fichiers else None
-            
             metadonnees = self.get_fichiers_metadonnees_dict()
             if filename in metadonnees:
                 del metadonnees[filename]
                 self.fichiers_metadonnees = json.dumps(metadonnees) if metadonnees else None
-        
         self.updated_at = datetime.utcnow()
     
     def get_cout_total_estime(self):
-        """Retourne le coût total estimé incluant le temps d'arrêt"""
         cout_total = self.cout_estime or 0
         if self.temps_arret and self.heures_impactees:
             cout_total += (self.temps_arret / 60) * 50 * (self.heures_impactees or 1)
@@ -10229,8 +10209,9 @@ class Incident(db.Model):
     # ==================== MÉTHODES D'ESCALADE ====================
     
     def escalader(self, raison=None, auto=False, user_id=None):
+        """Escalade l'incident au niveau supérieur"""
         from services.escalade_service import EscaladeService
-        return EscaladeService.escalader(self, auto=auto, raison=raison)
+        return EscaladeService.escalader(self, auto=auto, raison=raison, user_id=user_id)
     
     def retro_escalader(self, niveau_cible=1, raison=None):
         from services.escalade_service import EscaladeService
@@ -10239,6 +10220,21 @@ class Incident(db.Model):
     def verifier_sla(self):
         from services.escalade_service import EscaladeService
         return EscaladeService.verifier_et_escalader_auto(self)
+    
+    def restaurer_dispositif(self):
+        """Restaure l'efficacité du dispositif associé après résolution"""
+        if self.dispositif and self.statut in ['resolu', 'ferme']:
+            ancienne_efficacite = self.dispositif.efficacite_reelle or 5
+            nouvelle_efficacite = min(5, ancienne_efficacite + 1)
+            self.dispositif.efficacite_reelle = nouvelle_efficacite
+            self.dispositif.commentaire_evaluation = (
+                f"Rétablissement post-incident {self.reference}: "
+                f"efficacité restaurée de {ancienne_efficacite} à {nouvelle_efficacite}/5"
+            )
+            self.dispositif.updated_at = datetime.utcnow()
+            db.session.add(self.dispositif)
+            return True
+        return False
     
     def peut_escalader(self, user):
         if not user.is_authenticated:
@@ -10268,6 +10264,7 @@ class Incident(db.Model):
         self.commentaire_approbation = commentaire
         self.statut = 'ferme'
         self.date_resolution = datetime.utcnow()
+        self.restaurer_dispositif()  # ✅ AJOUTÉ: restaure le dispositif
         self.updated_at = datetime.utcnow()
     
     def rejeter(self, user_id, commentaire):
@@ -10310,9 +10307,7 @@ class Incident(db.Model):
         self.updated_at = datetime.utcnow()
     
     def supprimer_definitivement(self):
-        """Supprime définitivement l'incident et ses fichiers"""
         import os
-        
         for filename in self.get_fichiers_joints_list():
             filepath = os.path.join('static/uploads/incidents', f"incident_{self.id}_{filename}")
             if os.path.exists(filepath):
@@ -10320,7 +10315,6 @@ class Incident(db.Model):
                     os.remove(filepath)
                 except:
                     pass
-        
         from models import IncidentHistorique
         IncidentHistorique.query.filter_by(incident_id=self.id).delete()
         db.session.delete(self)
@@ -10328,31 +10322,23 @@ class Incident(db.Model):
     def peut_archiver(self, user):
         if not user.is_authenticated:
             return False
-        if user.role == 'super_admin':
-            return True
-        if user.is_client_admin:
+        if user.role == 'super_admin' or user.is_client_admin:
             return True
         return False
     
     def peut_supprimer_definitivement(self, user):
         if not user.is_authenticated:
             return False
-        if user.role == 'super_admin':
-            return True
-        if user.is_client_admin:
+        if user.role == 'super_admin' or user.is_client_admin:
             return True
         return False
     
     def peut_modifier(self, user):
         if not user.is_authenticated:
             return False
-        if user.role == 'super_admin':
+        if user.role == 'super_admin' or user.is_client_admin:
             return True
-        if user.is_client_admin:
-            return True
-        if user.id == self.created_by:
-            return True
-        if user.id == self.responsable_resolution_id:
+        if user.id == self.created_by or user.id == self.responsable_resolution_id:
             return True
         return False
     
@@ -10376,6 +10362,19 @@ class Incident(db.Model):
         if self.escalation_auto:
             return f"Escalade automatique - SLA dépassé ({self.sla_heures}h)"
         return "Escalade manuelle"
+    
+    def get_delai_restant_escalade(self):
+        """Retourne les heures restantes avant prochaine escalade"""
+        maintenant = datetime.utcnow()
+        if self.niveau_escalade == 1:
+            date_limite = self.created_at + timedelta(hours=self.delai_escalade_niveau2)
+            delta = date_limite - maintenant
+            return max(0, delta.total_seconds() / 3600)
+        elif self.niveau_escalade == 2:
+            date_limite = self.escalation_date + timedelta(hours=self.delai_escalade_niveau3)
+            delta = date_limite - maintenant
+            return max(0, delta.total_seconds() / 3600)
+        return 0
     
     # ==================== MÉTHODES DE LIBELLÉS ====================
     
@@ -10429,54 +10428,23 @@ class Incident(db.Model):
             'description': self.description,
             'gravite': self.gravite,
             'gravite_label': self.get_gravite_label(),
-            'gravite_color': self.get_gravite_color(),
             'type_incident': self.type_incident,
             'type_label': self.get_type_label(),
             'statut': self.statut,
             'statut_label': self.get_statut_label(),
-            'statut_color': self.get_statut_color(),
             'niveau_escalade': self.niveau_escalade,
             'niveau_escalade_label': self.get_niveau_escalade_label(),
-            'raison_escalade': self.get_raison_escalade(),
-            'escalation_auto': self.escalation_auto,
-            'escalation_date': self.escalade_date.isoformat() if self.escalade_date else None,
-            'approbation_requise': self.approbation_requise,
-            'approbation_statut': self.approbation_statut,
-            'approbation_statut_label': self.get_approbation_statut_label(),
+            'delai_restant_escalade': self.get_delai_restant_escalade(),
             'date_occurrence': self.date_occurrence.isoformat() if self.date_occurrence else None,
-            'date_detection': self.date_detection.isoformat() if self.date_detection else None,
             'date_resolution': self.date_resolution.isoformat() if self.date_resolution else None,
-            'delai_resolution': self.get_delai_resolution(),
             'sla_heures': self.sla_heures,
             'sla_date_limite': self.sla_date_limite.isoformat() if self.sla_date_limite else None,
             'sla_viole': self.sla_viole,
             'heures_restantes_sla': self.get_heures_restantes_sla(),
-            'risque_id': self.risque_id,
-            'dispositif_id': self.dispositif_id,
-            'plan_action_id': self.plan_action_id,
-            'ticket_source_id': self.ticket_source_id,
-            'declare_par': self.declare_par.username if self.declare_par else None,
-            'responsable_resolution': self.responsable.username if self.responsable else None,
-            'superviseur': self.superviseur.username if self.superviseur else None,
-            'directeur': self.directeur.username if self.directeur else None,
-            'cause_racine': self.cause_racine,
-            'actions_correctives': self.actions_correctives,
-            'lecons_apprises': self.lecons_apprises,
-            'commentaire_cloture': self.commentaire_cloture,
-            'analyse_ia': json.loads(self.analyse_ia) if self.analyse_ia else None,
-            'ia_score_confiance': self.ia_score_confiance,
-            'created_at': self.created_at.isoformat() if self.created_at else None,
-            'updated_at': self.updated_at.isoformat() if self.updated_at else None,
-            'is_archived': self.is_archived,
             'direction_associee': self.direction_associee,
             'service_associe': self.service_associe,
-            'fonction_associee': self.fonction_associee,
-            'source': self.source,
-            'cout_estime': self.cout_estime,
-            'cout_total_estime': self.get_cout_total_estime(),
-            'temps_arret': self.temps_arret,
-            'heures_impactees': self.heures_impactees,
-            'fichiers_joints': self.get_fichiers_joints_list()
+            'created_at': self.created_at.isoformat() if self.created_at else None,
+            'is_archived': self.is_archived
         }
     
     def __repr__(self):
