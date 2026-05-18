@@ -1,26 +1,27 @@
 {% extends "base.html" %}
 
-{% block title %}{{ action }} un incident{% endblock %}
+{% block title %}Nouvel incident - Egalyx Control{% endblock %}
 
 {% block content %}
 <div class="container-fluid">
     <div class="row">
         <div class="col-md-8 mx-auto">
-            <div class="card">
-                <div class="card-header {% if action == 'Modifier' %}bg-primary{% else %}bg-danger{% endif %} text-white">
+            <div class="card border-0 shadow-sm">
+                <div class="card-header bg-primary text-white">
                     <h4 class="mb-0">
-                        <i class="fas fa-exclamation-triangle me-2"></i>
+                        <i class="fas fa-plus-circle me-2"></i>
                         {{ action }} un incident
                     </h4>
                 </div>
                 <div class="card-body">
-                    <form method="POST">
+                    <form method="POST" id="incidentForm">
                         {{ form.csrf_token }}
                         
+                        <!-- ========== TITRE ET DESCRIPTION ========== -->
                         <div class="row">
                             <div class="col-md-12 mb-3">
                                 <label class="form-label">{{ form.titre.label }} <span class="text-danger">*</span></label>
-                                {{ form.titre(class="form-control" + (" is-invalid" if form.titre.errors else "")) }}
+                                {{ form.titre(class="form-control" + (" is-invalid" if form.titre.errors else ""), placeholder="Titre clair et concis") }}
                                 {% for error in form.titre.errors %}
                                     <div class="invalid-feedback">{{ error }}</div>
                                 {% endfor %}
@@ -30,80 +31,121 @@
                         <div class="row">
                             <div class="col-md-12 mb-3">
                                 <label class="form-label">{{ form.description.label }}</label>
-                                {{ form.description(class="form-control", rows=5) }}
+                                {{ form.description(class="form-control", rows=5, placeholder="Description détaillée de l'incident...") }}
                             </div>
                         </div>
                         
+                        <!-- ========== CLASSIFICATION ========== -->
                         <div class="row">
                             <div class="col-md-6 mb-3">
                                 <label class="form-label">{{ form.gravite.label }} <span class="text-danger">*</span></label>
-                                {{ form.gravite(class="form-select") }}
+                                {{ form.gravite(class="form-select" + (" is-invalid" if form.gravite.errors else "")) }}
+                                <small class="text-muted">Critique: impact majeur, Élevée: impact significatif, etc.</small>
+                                {% for error in form.gravite.errors %}
+                                    <div class="invalid-feedback">{{ error }}</div>
+                                {% endfor %}
                             </div>
                             <div class="col-md-6 mb-3">
                                 <label class="form-label">{{ form.type_incident.label }} <span class="text-danger">*</span></label>
-                                {{ form.type_incident(class="form-select") }}
+                                {{ form.type_incident(class="form-select" + (" is-invalid" if form.type_incident.errors else "")) }}
+                                {% for error in form.type_incident.errors %}
+                                    <div class="invalid-feedback">{{ error }}</div>
+                                {% endfor %}
                             </div>
                         </div>
                         
+                        <!-- ========== DIRECTION ET SERVICE ========== -->
+                        <div class="row">
+                            <div class="col-md-6 mb-3">
+                                <label class="form-label">{{ form.direction_associee.label }}</label>
+                                <select name="direction_associee" id="directionSelect" class="form-select">
+                                    <option value="">-- Sélectionner une direction --</option>
+                                    {% for dir_value, dir_label in form.direction_associee.choices %}
+                                        {% if dir_value %}
+                                        <option value="{{ dir_value }}" {% if form.direction_associee.data == dir_value %}selected{% endif %}>
+                                            {{ dir_label }}
+                                        </option>
+                                        {% endif %}
+                                    {% endfor %}
+                                    <option value="autre">➕ Autre (saisie manuelle)</option>
+                                </select>
+                                <div id="directionAutreDiv" style="display: none;" class="mt-2">
+                                    <input type="text" name="direction_associee_autre" id="directionAutre" class="form-control" 
+                                           placeholder="Nom de la direction" value="{{ request.form.get('direction_associee_autre', '') }}">
+                                </div>
+                                <small class="text-muted">Direction concernée par l'incident</small>
+                            </div>
+                            <div class="col-md-6 mb-3">
+                                <label class="form-label">{{ form.service_associe.label }}</label>
+                                <select name="service_associe" id="serviceSelect" class="form-select">
+                                    <option value="">-- Sélectionner un service --</option>
+                                    {% for serv_value, serv_label in form.service_associe.choices %}
+                                        {% if serv_value %}
+                                        <option value="{{ serv_value }}" {% if form.service_associe.data == serv_value %}selected{% endif %}>
+                                            {{ serv_label }}
+                                        </option>
+                                        {% endif %}
+                                    {% endfor %}
+                                    <option value="autre">➕ Autre (saisie manuelle)</option>
+                                </select>
+                                <div id="serviceAutreDiv" style="display: none;" class="mt-2">
+                                    <input type="text" name="service_associe_autre" id="serviceAutre" class="form-control" 
+                                           placeholder="Nom du service" value="{{ request.form.get('service_associe_autre', '') }}">
+                                </div>
+                                <small class="text-muted">Service concerné par l'incident</small>
+                            </div>
+                        </div>
+                        
+                        <!-- ========== DATES ========== -->
                         <div class="row">
                             <div class="col-md-6 mb-3">
                                 <label class="form-label">{{ form.date_occurrence.label }} <span class="text-danger">*</span></label>
-                                {{ form.date_occurrence(class="form-control", type="datetime-local") }}
+                                {{ form.date_occurrence(class="form-control" + (" is-invalid" if form.date_occurrence.errors else ""), type="datetime-local") }}
+                                {% for error in form.date_occurrence.errors %}
+                                    <div class="invalid-feedback">{{ error }}</div>
+                                {% endfor %}
                             </div>
                             <div class="col-md-6 mb-3">
                                 <label class="form-label">{{ form.sla_heures.label }}</label>
                                 {{ form.sla_heures(class="form-control", type="number", min="1", max="168") }}
-                                <small class="text-muted">Délai maximum pour résoudre (heures)</small>
+                                <small class="text-muted">Délai maximum pour résoudre (heures) - défaut: 48h</small>
                             </div>
                         </div>
                         
+                        <!-- ========== RISQUE ET DISPOSITIF ========== -->
                         <div class="row">
                             <div class="col-md-6 mb-3">
                                 <label class="form-label">{{ form.risque_id.label }}</label>
-                                {{ form.risque_id(class="form-select") }}
+                                {{ form.risque_id(class="form-select", id="risqueSelect") }}
+                                <small class="text-muted">Lien vers un risque existant (optionnel)</small>
                             </div>
                             <div class="col-md-6 mb-3">
                                 <label class="form-label">{{ form.dispositif_id.label }}</label>
-                                {{ form.dispositif_id(class="form-select") }}
+                                {{ form.dispositif_id(class="form-select", id="dispositifSelect") }}
+                                <small class="text-muted">Lien vers un dispositif de maîtrise (optionnel)</small>
                             </div>
                         </div>
                         
-                        <!-- ========== SECTION RESPONSABLES PAR NIVEAU ========== -->
-                        <div class="card bg-light mb-3">
-                            <div class="card-header">
-                                <strong><i class="fas fa-users me-2"></i> Hiérarchie des responsables</strong>
-                                <small class="text-muted ms-2">Définissez les responsables pour chaque niveau d'escalade</small>
+                        <!-- ========== RESPONSABLES PAR NIVEAU ========== -->
+                        <div class="row">
+                            <div class="col-md-4 mb-3">
+                                <label class="form-label">{{ form.responsable_resolution_id.label }}</label>
+                                {{ form.responsable_resolution_id(class="form-select") }}
+                                <small class="text-muted">Responsable direct de la résolution</small>
                             </div>
-                            <div class="card-body">
-                                <div class="row">
-                                    <div class="col-md-4 mb-3">
-                                        <label class="form-label">
-                                            <span class="badge bg-secondary me-1">Niveau 1</span>
-                                            {{ form.responsable_resolution_id.label }}
-                                        </label>
-                                        {{ form.responsable_resolution_id(class="form-select") }}
-                                        <small class="text-muted">Responsable direct de la résolution</small>
-                                    </div>
-                                    <div class="col-md-4 mb-3">
-                                        <label class="form-label">
-                                            <span class="badge bg-warning me-1">Niveau 2</span>
-                                            {{ form.superviseur_id.label }}
-                                        </label>
-                                        {{ form.superviseur_id(class="form-select") }}
-                                        <small class="text-muted">En cas d'escalade automatique</small>
-                                    </div>
-                                    <div class="col-md-4 mb-3">
-                                        <label class="form-label">
-                                            <span class="badge bg-danger me-1">Niveau 3</span>
-                                            {{ form.directeur_id.label }}
-                                        </label>
-                                        {{ form.directeur_id(class="form-select") }}
-                                        <small class="text-muted">Dernier niveau d'escalade</small>
-                                    </div>
-                                </div>
+                            <div class="col-md-4 mb-3">
+                                <label class="form-label">{{ form.superviseur_id.label }}</label>
+                                {{ form.superviseur_id(class="form-select") }}
+                                <small class="text-muted">En cas d'escalade niveau 2</small>
+                            </div>
+                            <div class="col-md-4 mb-3">
+                                <label class="form-label">{{ form.directeur_id.label }}</label>
+                                {{ form.directeur_id(class="form-select") }}
+                                <small class="text-muted">En cas d'escalade niveau 3</small>
                             </div>
                         </div>
                         
+                        <!-- ========== APPROBATION ========== -->
                         <div class="row">
                             <div class="col-md-12 mb-3">
                                 <div class="form-check">
@@ -114,11 +156,14 @@
                             </div>
                         </div>
                         
-                        <div class="d-flex justify-content-between">
+                        <!-- ========== BOUTONS ========== -->
+                        <div class="d-flex justify-content-between mt-4">
                             <a href="{{ url_for('liste_incidents') }}" class="btn btn-secondary">
                                 <i class="fas fa-arrow-left me-1"></i> Annuler
                             </a>
-                            {{ form.submit(class="btn btn-danger") }}
+                            <button type="submit" class="btn btn-primary" id="submitBtn">
+                                <i class="fas fa-save me-1"></i> {{ action }} l'incident
+                            </button>
                         </div>
                     </form>
                 </div>
@@ -126,4 +171,168 @@
         </div>
     </div>
 </div>
+
+<script>
+// ============================================
+// GESTION DIRECTION/SERVICE AVEC OPTION "AUTRE"
+// ============================================
+
+document.addEventListener('DOMContentLoaded', function() {
+    const directionSelect = document.getElementById('directionSelect');
+    const directionAutreDiv = document.getElementById('directionAutreDiv');
+    const directionAutre = document.getElementById('directionAutre');
+    
+    const serviceSelect = document.getElementById('serviceSelect');
+    const serviceAutreDiv = document.getElementById('serviceAutreDiv');
+    const serviceAutre = document.getElementById('serviceAutre');
+    
+    // ========== GESTION DIRECTION ==========
+    if (directionSelect) {
+        directionSelect.addEventListener('change', function() {
+            if (this.value === 'autre') {
+                directionAutreDiv.style.display = 'block';
+                directionAutre.required = true;
+                directionAutre.focus();
+            } else {
+                directionAutreDiv.style.display = 'none';
+                directionAutre.required = false;
+                directionAutre.value = '';
+            }
+        });
+        
+        // Vérifier si la valeur par défaut est 'autre'
+        if (directionSelect.value === 'autre') {
+            directionAutreDiv.style.display = 'block';
+            directionAutre.required = true;
+        }
+    }
+    
+    // ========== GESTION SERVICE ==========
+    if (serviceSelect) {
+        serviceSelect.addEventListener('change', function() {
+            if (this.value === 'autre') {
+                serviceAutreDiv.style.display = 'block';
+                serviceAutre.required = true;
+                serviceAutre.focus();
+            } else {
+                serviceAutreDiv.style.display = 'none';
+                serviceAutre.required = false;
+                serviceAutre.value = '';
+            }
+        });
+        
+        if (serviceSelect.value === 'autre') {
+            serviceAutreDiv.style.display = 'block';
+            serviceAutre.required = true;
+        }
+    }
+});
+
+// ============================================
+// FILTRAGE DYNAMIQUE DES DISPOSITIFS
+// ============================================
+
+let dispositifsParRisque = {};
+let dispositifsSansRisque = [];
+
+function chargerDispositifs() {
+    fetch('/api/dispositifs/liste')
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                data.dispositifs.forEach(dispositif => {
+                    const risqueId = dispositif.risque_id || 0;
+                    if (!dispositifsParRisque[risqueId]) {
+                        dispositifsParRisque[risqueId] = [];
+                    }
+                    dispositifsParRisque[risqueId].push(dispositif);
+                });
+                dispositifsSansRisque = dispositifsParRisque[0] || [];
+                filtrerDispositifs();
+            }
+        })
+        .catch(error => console.error('Erreur chargement dispositifs:', error));
+}
+
+function filtrerDispositifs() {
+    const risqueSelect = document.getElementById('risqueSelect');
+    const dispositifSelect = document.getElementById('dispositifSelect');
+    const risqueId = parseInt(risqueSelect.value) || 0;
+    
+    dispositifSelect.innerHTML = '<option value="0">-- Aucun dispositif associé --</option>';
+    
+    let dispositifs = [];
+    if (dispositifsParRisque[risqueId]) {
+        dispositifs = [...dispositifsParRisque[risqueId]];
+    }
+    if (dispositifsSansRisque.length > 0) {
+        dispositifs = [...dispositifs, ...dispositifsSansRisque];
+    }
+    
+    const uniqueDispositifs = [];
+    const ids = new Set();
+    for (const d of dispositifs) {
+        if (!ids.has(d.id)) {
+            ids.add(d.id);
+            uniqueDispositifs.push(d);
+        }
+    }
+    
+    uniqueDispositifs.sort((a, b) => a.reference.localeCompare(b.reference));
+    
+    uniqueDispositifs.forEach(dispositif => {
+        const option = document.createElement('option');
+        option.value = dispositif.id;
+        option.textContent = `${dispositif.reference} - ${dispositif.nom} (${dispositif.type_dispositif || 'Non spécifié'})`;
+        dispositifSelect.appendChild(option);
+    });
+}
+
+document.addEventListener('DOMContentLoaded', function() {
+    chargerDispositifs();
+    
+    const risqueSelect = document.getElementById('risqueSelect');
+    if (risqueSelect) {
+        risqueSelect.addEventListener('change', filtrerDispositifs);
+    }
+});
+</script>
+
+<style>
+    .form-control:focus, .form-select:focus {
+        border-color: #86b7fe;
+        box-shadow: 0 0 0 0.25rem rgba(13, 110, 253, 0.25);
+    }
+    
+    .card {
+        border-radius: 16px;
+        overflow: hidden;
+    }
+    
+    .card-header {
+        border-bottom: none;
+        padding: 1rem 1.5rem;
+    }
+    
+    .form-label {
+        font-weight: 500;
+        margin-bottom: 0.5rem;
+    }
+    
+    .text-muted {
+        font-size: 0.75rem;
+        margin-top: 0.25rem;
+    }
+    
+    [data-bs-theme="dark"] .card {
+        background: #1e293b;
+    }
+    
+    [data-bs-theme="dark"] .form-control,
+    [data-bs-theme="dark"] .form-select {
+        background: #334155;
+        border-color: #475569;
+        color: #f1f5f9;
+    }
+</style>
 {% endblock %}
