@@ -16,7 +16,7 @@
                 <div class="card-body">
                     <div class="alert alert-info mb-4">
                         <i class="fas fa-info-circle me-2"></i>
-                        <strong>Incident créé le :</strong> {{ incident.created_at.strftime('%d/%m/%Y à %H:%M') }}<br>
+                        <strong>Incident créé le :</strong> {{ incident.created_at.strftime('%d/%m/%Y à %H:%M') if incident.created_at else 'Date inconnue' }}<br>
                         <strong>Statut actuel :</strong> 
                         <span class="badge bg-{{ incident.get_statut_color() }}">{{ incident.get_statut_label() }}</span><br>
                         <strong>Niveau escalade :</strong> 
@@ -59,6 +59,45 @@
                                 {% for error in form.type_incident.errors %}
                                     <div class="invalid-feedback">{{ error }}</div>
                                 {% endfor %}
+                            </div>
+                        </div>
+                        
+                        <!-- ========== DIRECTION ET SERVICE (MODIFIABLES) ========== -->
+                        <!-- ========== DIRECTION ET SERVICE (MODIFIABLES) ========== -->
+                        <div class="row">
+                            <div class="col-md-6 mb-3">
+                                <label class="form-label">{{ form.direction_associee.label }}</label>
+                                {{ form.direction_associee(class="form-select", id="directionSelect") }}
+                                <div class="mt-1" id="directionAutreDiv" style="display: none;">
+                                    <label class="form-label small text-muted">Ou saisir manuellement :</label>
+                                    <input type="text" name="direction_associee_autre" id="directionAutre" class="form-control" 
+                                        placeholder="Nom de la direction" value="{{ request.form.get('direction_associee_autre', '') }}">
+                                </div>
+                                <small class="text-muted">Direction concernée par l'incident</small>
+                                {% if incident.direction_associee %}
+                                <div class="mt-1">
+                                    <span class="badge bg-info">
+                                        <i class="fas fa-building me-1"></i> Direction actuelle : {{ incident.direction_associee }}
+                                    </span>
+                                </div>
+                                {% endif %}
+                            </div>
+                            <div class="col-md-6 mb-3">
+                                <label class="form-label">{{ form.service_associe.label }}</label>
+                                {{ form.service_associe(class="form-select", id="serviceSelect") }}
+                                <div class="mt-1" id="serviceAutreDiv" style="display: none;">
+                                    <label class="form-label small text-muted">Ou saisir manuellement :</label>
+                                    <input type="text" name="service_associe_autre" id="serviceAutre" class="form-control" 
+                                        placeholder="Nom du service" value="{{ request.form.get('service_associe_autre', '') }}">
+                                </div>
+                                <small class="text-muted">Service concerné par l'incident</small>
+                                {% if incident.service_associe %}
+                                <div class="mt-1">
+                                    <span class="badge bg-secondary">
+                                        <i class="fas fa-users me-1"></i> Service actuel : {{ incident.service_associe }}
+                                    </span>
+                                </div>
+                                {% endif %}
                             </div>
                         </div>
                         
@@ -169,10 +208,115 @@
 
 <script>
 // ============================================
+// GESTION DIRECTION/SERVICE AVEC OPTION "AUTRE"
+// ============================================
+
+document.addEventListener('DOMContentLoaded', function() {
+    const directionSelect = document.getElementById('directionSelect');
+    const directionAutreDiv = document.getElementById('directionAutreDiv');
+    const directionAutre = document.getElementById('directionAutre');
+    
+    const serviceSelect = document.getElementById('serviceSelect');
+    const serviceAutreDiv = document.getElementById('serviceAutreDiv');
+    const serviceAutre = document.getElementById('serviceAutre');
+    
+    // ========== GESTION DIRECTION ==========
+    if (directionSelect) {
+        // Ajouter l'option "Autre" si elle n'existe pas
+        let hasOther = false;
+        for (let i = 0; i < directionSelect.options.length; i++) {
+            if (directionSelect.options[i].value === 'autre') {
+                hasOther = true;
+                break;
+            }
+        }
+        if (!hasOther) {
+            const option = document.createElement('option');
+            option.value = 'autre';
+            option.textContent = '➕ Autre (saisie manuelle)';
+            directionSelect.appendChild(option);
+        }
+        
+        directionSelect.addEventListener('change', function() {
+            if (this.value === 'autre') {
+                directionAutreDiv.style.display = 'block';
+                directionAutre.required = true;
+                directionAutre.focus();
+            } else {
+                directionAutreDiv.style.display = 'none';
+                directionAutre.required = false;
+                if (this.value) {
+                    directionAutre.value = '';
+                }
+            }
+        });
+        
+        // Si la valeur actuelle n'est pas dans la liste, sélectionner "Autre"
+        let isValueInList = false;
+        for (let i = 0; i < directionSelect.options.length; i++) {
+            if (directionSelect.options[i].value === directionSelect.value) {
+                isValueInList = true;
+                break;
+            }
+        }
+        if (!isValueInList && directionSelect.value && directionSelect.value !== '') {
+            directionSelect.value = 'autre';
+            directionAutreDiv.style.display = 'block';
+            directionAutre.value = directionSelect.value;
+            directionAutre.required = true;
+        }
+    }
+    
+    // ========== GESTION SERVICE ==========
+    if (serviceSelect) {
+        let hasOther = false;
+        for (let i = 0; i < serviceSelect.options.length; i++) {
+            if (serviceSelect.options[i].value === 'autre') {
+                hasOther = true;
+                break;
+            }
+        }
+        if (!hasOther) {
+            const option = document.createElement('option');
+            option.value = 'autre';
+            option.textContent = '➕ Autre (saisie manuelle)';
+            serviceSelect.appendChild(option);
+        }
+        
+        serviceSelect.addEventListener('change', function() {
+            if (this.value === 'autre') {
+                serviceAutreDiv.style.display = 'block';
+                serviceAutre.required = true;
+                serviceAutre.focus();
+            } else {
+                serviceAutreDiv.style.display = 'none';
+                serviceAutre.required = false;
+                if (this.value) {
+                    serviceAutre.value = '';
+                }
+            }
+        });
+        
+        let isValueInList = false;
+        for (let i = 0; i < serviceSelect.options.length; i++) {
+            if (serviceSelect.options[i].value === serviceSelect.value) {
+                isValueInList = true;
+                break;
+            }
+        }
+        if (!isValueInList && serviceSelect.value && serviceSelect.value !== '') {
+            serviceSelect.value = 'autre';
+            serviceAutreDiv.style.display = 'block';
+            serviceAutre.value = serviceSelect.value;
+            serviceAutre.required = true;
+        }
+    }
+});
+
+// ============================================
 // FILTRAGE DYNAMIQUE DES DISPOSITIFS EN FONCTION DU RISQUE
 // ============================================
 
-// Récupérer les données depuis le backend
 let dispositifsParRisque = {};
 let dispositifsSansRisque = [];
 let dispositifActuelId = {{ incident.dispositif_id or 0 }};
@@ -236,6 +380,9 @@ function filtrerDispositifs() {
             uniqueDispositifs.push(d);
         }
     }
+    
+    // Trier par référence
+    uniqueDispositifs.sort((a, b) => a.reference.localeCompare(b.reference));
     
     // Ajouter les dispositifs au select
     uniqueDispositifs.forEach(dispositif => {
