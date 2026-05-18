@@ -1,14 +1,51 @@
-# services/escalade_service.py
+# services/escalade_service.py - VERSION CORRIGÉE
+
 from datetime import datetime, timedelta
 from flask import current_app
 from models import db, Incident, Notification, User, IncidentHistorique
 
 class EscaladeService:
-    """Service de gestion des escalades d'incidents - Version EXCELLENTE"""
+    """Service de gestion des escalades d'incidents"""
     
     @staticmethod
-    def verifier_et_escalader_auto():
-        """Vérifie TOUS les incidents et escalade automatiquement si nécessaire"""
+    def verifier_et_escalader_auto(incident=None):
+        """
+        Vérifie si l'incident doit être escaladé automatiquement
+        Peut être appelée avec un incident spécifique ou sans argument (pour batch)
+        Retourne True si escalade effectuée
+        """
+        # Si un incident est passé en paramètre, vérifier uniquement celui-ci
+        if incident:
+            if incident.statut in ['ferme', 'resolu', 'rejete']:
+                return False
+            if incident.niveau_escalade >= 3:
+                return False
+            
+            maintenant = datetime.utcnow()
+            
+            # Vérifier escalade niveau 2
+            if incident.niveau_escalade == 1:
+                delai = getattr(incident, 'delai_escalade_niveau2', 48)
+                date_limite = incident.created_at + timedelta(hours=delai)
+                
+                if maintenant > date_limite and not getattr(incident, 'notification_envoyee_niveau2', False):
+                    return EscaladeService.escalader(incident, auto=True, raison=f"Délai dépassé ({delai}h sans résolution)")
+            
+            # Vérifier escalade niveau 3
+            elif incident.niveau_escalade == 2:
+                delai = getattr(incident, 'delai_escalade_niveau3', 72)
+                escalation_date = getattr(incident, 'escalation_date', None)
+                if escalation_date:
+                    date_limite = escalation_date + timedelta(hours=delai)
+                else:
+                    date_limite = incident.created_at + timedelta(hours=delai)
+                
+                if maintenant > date_limite and not getattr(incident, 'notification_envoyee_niveau3', False):
+                    return EscaladeService.escalader(incident, auto=True, raison=f"Nouveau délai dépassé ({delai}h sans résolution)")
+            
+            return False
+        
+        # Sinon, vérifier TOUS les incidents (batch)
         with current_app.app_context():
             maintenant = datetime.utcnow()
             incidents = Incident.query.filter(
@@ -17,25 +54,30 @@ class EscaladeService:
             ).all()
             
             escalades_declenchees = 0
-            for incident in incidents:
-                if incident.niveau_escalade >= 3:
+            for inc in incidents:
+                if inc.niveau_escalade >= 3:
                     continue
                 
                 # Vérifier escalade niveau 2
-                if incident.niveau_escalade == 1:
-                    date_limite = incident.created_at + timedelta(hours=incident.delai_escalade_niveau2)
-                    if maintenant > date_limite and not incident.notification_envoyee_niveau2:
-                        if EscaladeService.escalader(incident, auto=True, raison=f"Délai dépassé ({incident.delai_escalade_niveau2}h sans résolution)"):
+                if inc.niveau_escalade == 1:
+                    date_limite = inc.created_at + timedelta(hours=inc.delai_escalade_niveau2)
+                    if maintenant > date_limite and not inc.notification_envoyee_niveau2:
+                        if EscaladeService.escalader(inc, auto=True, raison=f"Délai dépassé ({inc.delai_escalade_niveau2}h sans résolution)"):
                             escalades_declenchees += 1
-                            print(f"⚠️ Escalade auto niveau 2 pour {incident.reference}")
+                            print(f"⚠️ Escalade auto niveau 2 pour {inc.reference}")
                 
                 # Vérifier escalade niveau 3
-                elif incident.niveau_escalade == 2:
-                    date_limite = incident.escalation_date + timedelta(hours=incident.delai_escalade_niveau3)
-                    if maintenant > date_limite and not incident.notification_envoyee_niveau3:
-                        if EscaladeService.escalader(incident, auto=True, raison=f"Nouveau délai dépassé ({incident.delai_escalade_niveau3}h sans résolution)"):
+                elif inc.niveau_escalade == 2:
+                    escalation_date = getattr(inc, 'escalation_date', None)
+                    if escalation_date:
+                        date_limite = escalation_date + timedelta(hours=inc.delai_escalade_niveau3)
+                    else:
+                        date_limite = inc.created_at + timedelta(hours=inc.delai_escalade_niveau3)
+                    
+                    if maintenant > date_limite and not inc.notification_envoyee_niveau3:
+                        if EscaladeService.escalader(inc, auto=True, raison=f"Nouveau délai dépassé ({inc.delai_escalade_niveau3}h sans résolution)"):
                             escalades_declenchees += 1
-                            print(f"⚠️ Escalade auto niveau 3 pour {incident.reference}")
+                            print(f"⚠️ Escalade auto niveau 3 pour {inc.reference}")
             
             db.session.commit()
             return escalades_declenchees
@@ -93,17 +135,15 @@ class EscaladeService:
         if niveau_cible >= incident.niveau_escalade:
             return False
         
-        ancien_niveau = incident.niveau_escalade
         incident.niveau_escalade = niveau_cible
         incident.raison_escalade = raison
         incident.updated_at = datetime.utcnow()
         
         # Remettre le responsable approprié
-        if niveau_cible == 1:
-            # Garder le responsable actuel
-            pass
-        elif niveau_cible == 2:
+        if niveau_cible == 2:
             incident.responsable_resolution_id = incident.superviseur_id
+        elif niveau_cible == 1:
+            incident.responsable_resolution_id = incident.responsable_resolution_id
         
         # Journaliser
         historique = IncidentHistorique(
@@ -121,11 +161,9 @@ class EscaladeService:
     @staticmethod
     def _creer_notifications_escalade(incident, ancien_responsable_id, nouveau_responsable_id, auto):
         """Crée les notifications pour l'escalade"""
+        from models import Notification
         
-        # Niveau d'urgence
         urgence = 'urgent' if incident.niveau_escalade >= 2 else 'important'
-        
-        # Message personnalisé
         raison = incident.raison_escalade or "Délai dépassé" if auto else "Escalade manuelle"
         
         if incident.niveau_escalade == 2:
@@ -172,21 +210,21 @@ class EscaladeService:
         
         # Notification d'alerte pour les admins (escalade auto uniquement)
         if auto:
-            from models import User
             admins = User.query.filter_by(role='admin', is_active=True).all()
             for admin in admins:
-                notification_admin = Notification(
-                    type_notification='warning',
-                    titre=f"🚨 Escalade automatique - {incident.reference}",
-                    message=f"L'incident {incident.reference} a été automatiquement escaladé au niveau {incident.niveau_escalade}. Raison: {raison}",
-                    destinataire_id=admin.id,
-                    entite_type='incident',
-                    entite_id=incident.id,
-                    urgence='urgent',
-                    created_at=datetime.utcnow(),
-                    client_id=incident.client_id
-                )
-                db.session.add(notification_admin)
+                if admin.id != nouveau_responsable_id and admin.id != ancien_responsable_id:
+                    notification_admin = Notification(
+                        type_notification='warning',
+                        titre=f"🚨 Escalade automatique - {incident.reference}",
+                        message=f"L'incident {incident.reference} a été automatiquement escaladé au niveau {incident.niveau_escalade}. Raison: {raison}",
+                        destinataire_id=admin.id,
+                        entite_type='incident',
+                        entite_id=incident.id,
+                        urgence='urgent',
+                        created_at=datetime.utcnow(),
+                        client_id=incident.client_id
+                    )
+                    db.session.add(notification_admin)
     
     @staticmethod
     def get_incidents_escalades(user_id, client_id=None):
