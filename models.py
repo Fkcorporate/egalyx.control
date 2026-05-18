@@ -10350,7 +10350,10 @@ class Incident(db.Model):
             return delta.days
         return None
     
+    # get_heures_restantes_sla
     def get_heures_restantes_sla(self):
+        from datetime import timedelta  # ← AJOUTER
+        
         if self.sla_date_limite and self.statut not in ['ferme', 'resolu']:
             delta = self.sla_date_limite - datetime.utcnow()
             return max(0, delta.total_seconds() / 3600)
@@ -10363,15 +10366,21 @@ class Incident(db.Model):
             return f"Escalade automatique - SLA dépassé ({self.sla_heures}h)"
         return "Escalade manuelle"
     
+    # Dans la classe Incident, méthode get_delai_restant_escalade
     def get_delai_restant_escalade(self):
         """Retourne les heures restantes avant prochaine escalade"""
+        from datetime import timedelta  # ← AJOUTER L'IMPORT ICI
+        
         maintenant = datetime.utcnow()
         if self.niveau_escalade == 1:
             date_limite = self.created_at + timedelta(hours=self.delai_escalade_niveau2)
             delta = date_limite - maintenant
             return max(0, delta.total_seconds() / 3600)
         elif self.niveau_escalade == 2:
-            date_limite = self.escalation_date + timedelta(hours=self.delai_escalade_niveau3)
+            if self.escalation_date:
+                date_limite = self.escalation_date + timedelta(hours=self.delai_escalade_niveau3)
+            else:
+                date_limite = self.created_at + timedelta(hours=self.delai_escalade_niveau3)
             delta = date_limite - maintenant
             return max(0, delta.total_seconds() / 3600)
         return 0
