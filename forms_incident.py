@@ -28,9 +28,39 @@ class IncidentForm(FlaskForm):
     
     date_occurrence = DateTimeField('Date d\'occurrence', format='%Y-%m-%dT%H:%M', 
                                     default=datetime.now, validators=[DataRequired()])
+
+    # ========== NOUVEAUX CHAMPS DIRECTION/SERVICE ==========
+    direction_associee = SelectField(
+        'Direction associée',
+        choices=[],  # Sera rempli dynamiquement
+        validators=[Optional()]
+    )
     
+    service_associe = SelectField(
+        'Service associé',
+        choices=[],  # Sera rempli dynamiquement
+        validators=[Optional()]
+    )
+    
+    # Champs pour la saisie manuelle (option "Autre")
+    direction_associee_autre = StringField(
+        'Autre direction',
+        validators=[Optional(), Length(max=200)]
+    )
+    
+    service_associe_autre = StringField(
+        'Autre service',
+        validators=[Optional(), Length(max=200)]
+    )
+    
+    # ========== LIENS MÉTIER ==========
     risque_id = SelectField('Risque associé', coerce=int, choices=[], validators=[Optional()])
     dispositif_id = SelectField('Dispositif concerné', coerce=int, choices=[], validators=[Optional()])
+    
+    # ========== NOUVEAUX CHAMPS : DIRECTION ET SERVICE ==========
+    direction = StringField('Direction', validators=[Optional()])
+    service = StringField('Service', validators=[Optional()])
+    fonction = StringField('Fonction / Poste', validators=[Optional()])
     
     # ========== RESPONSABLES PAR NIVEAU ==========
     responsable_resolution_id = SelectField('Responsable (Niveau 1)', coerce=int, choices=[], validators=[Optional()])
