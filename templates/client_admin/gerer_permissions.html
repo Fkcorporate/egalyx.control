@@ -1,33 +1,39 @@
 {% extends "base.html" %}
-{% block title %}Gérer les permissions - Gestionnaire{% endblock %}
+
+{% block title %}Gérer les permissions - {{ user.username }}{% endblock %}
 
 {% block content %}
 <div class="container-fluid py-4">
-    <!-- Navigation -->
-    <nav aria-label="breadcrumb" class="mb-4">
-        <ol class="breadcrumb">
-            <li class="breadcrumb-item"><a href="{{ url_for('dashboard') }}">Dashboard</a></li>
-            <li class="breadcrumb-item"><a href="{{ url_for('gestionnaire_utilisateurs') }}">Gestion des utilisateurs</a></li>
-            <li class="breadcrumb-item active">Permissions de {{ user.username }}</li>
-        </ol>
-    </nav>
-
     <div class="row">
-        <div class="col-lg-8">
+        <div class="col-12">
+            <nav aria-label="breadcrumb" class="mb-4">
+                <ol class="breadcrumb">
+                    <li class="breadcrumb-item"><a href="{{ url_for('dashboard') }}">Dashboard</a></li>
+                    <li class="breadcrumb-item"><a href="{{ url_for('client_admin_utilisateurs') }}">Gestion Utilisateurs</a></li>
+                    <li class="breadcrumb-item"><a href="{{ url_for('client_admin_editer_utilisateur', id=user.id) }}">{{ user.username }}</a></li>
+                    <li class="breadcrumb-item active">Permissions</li>
+                </ol>
+            </nav>
+            
             <div class="card card-modern">
-                <div class="card-header">
+                <div class="card-header d-flex justify-content-between align-items-center">
                     <h5 class="mb-0">
-                        <i class="fas fa-key me-2"></i>Gérer les permissions de {{ user.username }}
+                        <i class="fas fa-key me-2"></i>
+                        Gérer les permissions de {{ user.username }}
                     </h5>
+                    <span class="badge bg-{{ 'success' if user.is_active else 'danger' }}">
+                        {{ 'Actif' if user.is_active else 'Inactif' }}
+                    </span>
                 </div>
+                
                 <div class="card-body">
-                    <!-- ALERTE FORMULE -->
+                    <!-- ALERTE FORMULE CLIENT -->
                     {% if client and client.formule %}
                     <div class="alert alert-info mb-4">
                         <div class="d-flex align-items-center">
                             <i class="fas fa-layer-group fa-2x me-3"></i>
                             <div>
-                                <strong>Formule actuelle : {{ client.formule.nom }}</strong>
+                                <strong>Formule client : {{ client.formule.nom }}</strong>
                                 <p class="mb-0 small">
                                     Modules inclus : 
                                     {% for module, active in client.formule.modules.items() if active %}
@@ -39,16 +45,17 @@
                     </div>
                     {% endif %}
 
-                    {% if is_self_edit %}
+                    <!-- Informations utilisateur -->
                     <div class="alert alert-info mb-4">
-                        <i class="fas fa-info-circle me-2"></i>
-                        <strong>Modification de vos propres permissions</strong>
-                        <ul class="mb-0 mt-2">
-                            <li>Certaines permissions sont restreintes pour des raisons de sécurité</li>
-                            <li>Vous ne pouvez pas modifier vos permissions de gestion d'utilisateurs</li>
-                        </ul>
+                        <div class="d-flex align-items-center">
+                            <i class="fas fa-info-circle fa-2x me-3"></i>
+                            <div>
+                                <strong>Utilisateur :</strong> {{ user.username }} ({{ user.email }})<br>
+                                <strong>Rôle :</strong> {{ user.get_role_display_name() }}<br>
+                                <strong>Client :</strong> {{ client.nom }}
+                            </div>
+                        </div>
                     </div>
-                    {% endif %}
                     
                     <!-- Boutons d'actions globales -->
                     <div class="mb-4">
@@ -71,9 +78,12 @@
                                 <i class="fas fa-cogs"></i> Administration
                             </button>
                         </div>
+                        <button type="button" class="btn btn-sm btn-outline-danger ms-2" id="reset-to-default">
+                            <i class="fas fa-undo"></i> Réinitialiser
+                        </button>
                     </div>
                     
-                    <form method="POST" action="" id="permissionsForm">
+                    <form method="POST" action="{{ url_for('client_admin_gerer_permissions', id=user.id) }}">
                         {{ form.hidden_tag() }}
                         
                         <!-- ==================== SECTION 1: CONTRÔLE INTERNE ==================== -->
@@ -92,100 +102,148 @@
                                 <!-- Tableau de bord -->
                                 <div class="col-md-6 mb-3">
                                     <div class="form-check form-switch">
-                                        {{ form.can_view_dashboard(class="form-check-input") }}
-                                        <label class="form-check-label">Voir le tableau de bord</label>
+                                        <input class="form-check-input" type="checkbox" id="can_view_dashboard" name="can_view_dashboard"
+                                               {{ 'checked' if user.permissions.get('can_view_dashboard', true) else '' }}>
+                                        <label class="form-check-label" for="can_view_dashboard">
+                                            <strong>Voir le tableau de bord</strong>
+                                        </label>
                                     </div>
                                 </div>
                                 <div class="col-md-6 mb-3">
                                     <div class="form-check form-switch">
-                                        {{ form.can_view_reports(class="form-check-input") }}
-                                        <label class="form-check-label">Voir les rapports</label>
+                                        <input class="form-check-input" type="checkbox" id="can_view_reports" name="can_view_reports"
+                                               {{ 'checked' if user.permissions.get('can_view_reports', true) else '' }}>
+                                        <label class="form-check-label" for="can_view_reports">
+                                            <strong>Voir les rapports</strong>
+                                        </label>
                                     </div>
                                 </div>
                                 
                                 <!-- Cartographie risques -->
                                 <div class="col-md-6 mb-3">
                                     <div class="form-check form-switch">
-                                        {{ form.can_manage_risks(class="form-check-input") }}
-                                        <label class="form-check-label">Gérer les risques (Cartographie)</label>
+                                        <input class="form-check-input" type="checkbox" id="can_manage_risks" name="can_manage_risks"
+                                               {{ 'checked' if user.permissions.get('can_manage_risks', false) else '' }}>
+                                        <label class="form-check-label" for="can_manage_risks">
+                                            <strong>Gérer les risques (Cartographie)</strong>
+                                        </label>
                                     </div>
                                 </div>
                                 <div class="col-md-6 mb-3">
                                     <div class="form-check form-switch">
-                                        {{ form.can_validate_risks(class="form-check-input") }}
-                                        <label class="form-check-label">Valider les risques</label>
+                                        <input class="form-check-input" type="checkbox" id="can_validate_risks" name="can_validate_risks"
+                                               {{ 'checked' if user.permissions.get('can_validate_risks', false) else '' }}>
+                                        <label class="form-check-label" for="can_validate_risks">
+                                            <strong>Valider les risques</strong>
+                                        </label>
                                     </div>
                                 </div>
                                 
                                 <!-- Indicateurs KRI -->
                                 <div class="col-md-6 mb-3">
                                     <div class="form-check form-switch">
-                                        {{ form.can_manage_kri(class="form-check-input") }}
-                                        <label class="form-check-label">Gérer les indicateurs KRI</label>
+                                        <input class="form-check-input" type="checkbox" id="can_manage_kri" name="can_manage_kri"
+                                               {{ 'checked' if user.permissions.get('can_manage_kri', false) else '' }}>
+                                        <label class="form-check-label" for="can_manage_kri">
+                                            <strong>Gérer les indicateurs KRI</strong>
+                                        </label>
+                                    </div>
+                                </div>
+                                <div class="col-md-6 mb-3">
+                                    <div class="form-check form-switch">
+                                        <input class="form-check-input" type="checkbox" id="can_confirm_evaluations" name="can_confirm_evaluations"
+                                               {{ 'checked' if user.permissions.get('can_confirm_evaluations', false) else '' }}>
+                                        <label class="form-check-label" for="can_confirm_evaluations">
+                                            <strong>Confirmer les évaluations</strong>
+                                        </label>
                                     </div>
                                 </div>
                                 
                                 <!-- Veille règlementaire -->
                                 <div class="col-md-6 mb-3">
                                     <div class="form-check form-switch">
-                                        {{ form.can_manage_regulatory(class="form-check-input") }}
-                                        <label class="form-check-label">Gérer la veille règlementaire</label>
+                                        <input class="form-check-input" type="checkbox" id="can_manage_regulatory" name="can_manage_regulatory"
+                                               {{ 'checked' if user.permissions.get('can_manage_regulatory', false) else '' }}>
+                                        <label class="form-check-label" for="can_manage_regulatory">
+                                            <strong>Gérer la veille règlementaire</strong>
+                                        </label>
                                     </div>
                                 </div>
                                 
                                 <!-- Logigrammes -->
                                 <div class="col-md-6 mb-3">
                                     <div class="form-check form-switch">
-                                        {{ form.can_manage_logigram(class="form-check-input") }}
-                                        <label class="form-check-label">Gérer les logigrammes/processus</label>
+                                        <input class="form-check-input" type="checkbox" id="can_manage_logigram" name="can_manage_logigram"
+                                               {{ 'checked' if user.permissions.get('can_manage_logigram', false) else '' }}>
+                                        <label class="form-check-label" for="can_manage_logigram">
+                                            <strong>Gérer les logigrammes/processus</strong>
+                                        </label>
                                     </div>
                                 </div>
                                 
                                 <!-- Plans Qualité -->
                                 <div class="col-md-6 mb-3">
                                     <div class="form-check form-switch">
-                                        {{ form.can_manage_quality(class="form-check-input") if form.can_manage_quality else '' }}
-                                        <label class="form-check-label">Gérer les plans qualité</label>
+                                        <input class="form-check-input" type="checkbox" id="can_manage_quality" name="can_manage_quality"
+                                               {{ 'checked' if user.permissions.get('can_manage_quality', false) else '' }}>
+                                        <label class="form-check-label" for="can_manage_quality">
+                                            <strong>Gérer les plans qualité</strong>
+                                        </label>
                                     </div>
                                 </div>
                                 
                                 <!-- Campagnes de contrôle -->
                                 <div class="col-md-6 mb-3">
                                     <div class="form-check form-switch">
-                                        {{ form.can_manage_campaigns(class="form-check-input") if form.can_manage_campaigns else '' }}
-                                        <label class="form-check-label">Gérer les campagnes de contrôle</label>
+                                        <input class="form-check-input" type="checkbox" id="can_manage_campaigns" name="can_manage_campaigns"
+                                               {{ 'checked' if user.permissions.get('can_manage_campaigns', false) else '' }}>
+                                        <label class="form-check-label" for="can_manage_campaigns">
+                                            <strong>Gérer les campagnes de contrôle</strong>
+                                        </label>
                                     </div>
                                 </div>
                                 
                                 <!-- Plans de continuité (PCA) -->
                                 <div class="col-md-6 mb-3">
                                     <div class="form-check form-switch">
-                                        {{ form.can_manage_bcp(class="form-check-input") if form.can_manage_bcp else '' }}
-                                        <label class="form-check-label">Gérer les plans de continuité (PCA)</label>
+                                        <input class="form-check-input" type="checkbox" id="can_manage_bcp" name="can_manage_bcp"
+                                               {{ 'checked' if user.permissions.get('can_manage_bcp', false) else '' }}>
+                                        <label class="form-check-label" for="can_manage_bcp">
+                                            <strong>Gérer les plans de continuité (PCA)</strong>
+                                        </label>
                                     </div>
                                 </div>
                                 
                                 <!-- Gestion des incidents -->
                                 <div class="col-md-6 mb-3">
                                     <div class="form-check form-switch">
-                                        {{ form.can_manage_incidents(class="form-check-input") if form.can_manage_incidents else '' }}
-                                        <label class="form-check-label">Gérer les incidents</label>
+                                        <input class="form-check-input" type="checkbox" id="can_manage_incidents" name="can_manage_incidents"
+                                               {{ 'checked' if user.permissions.get('can_manage_incidents', false) else '' }}>
+                                        <label class="form-check-label" for="can_manage_incidents">
+                                            <strong>Gérer les incidents</strong>
+                                        </label>
                                     </div>
                                 </div>
                                 
                                 <!-- Tickets support -->
                                 <div class="col-md-6 mb-3">
                                     <div class="form-check form-switch">
-                                        {{ form.can_view_tickets(class="form-check-input") if form.can_view_tickets else '' }}
-                                        <label class="form-check-label">Voir les tickets support</label>
+                                        <input class="form-check-input" type="checkbox" id="can_view_tickets" name="can_view_tickets"
+                                               {{ 'checked' if user.permissions.get('can_view_tickets', true) else '' }}>
+                                        <label class="form-check-label" for="can_view_tickets">
+                                            <strong>Voir les tickets support</strong>
+                                        </label>
                                     </div>
                                 </div>
                                 
                                 <!-- Analyse IA -->
                                 <div class="col-md-6 mb-3">
                                     <div class="form-check form-switch">
-                                        {{ form.can_use_ia_analysis(class="form-check-input") if form.can_use_ia_analysis else '' }}
-                                        <label class="form-check-label">Utiliser l'analyse IA</label>
+                                        <input class="form-check-input" type="checkbox" id="can_use_ia_analysis" name="can_use_ia_analysis"
+                                               {{ 'checked' if user.permissions.get('can_use_ia_analysis', false) else '' }}>
+                                        <label class="form-check-label" for="can_use_ia_analysis">
+                                            <strong>Utiliser l'analyse IA</strong>
+                                        </label>
                                     </div>
                                 </div>
                             </div>
@@ -207,36 +265,42 @@
                                 <!-- Gestion des audits -->
                                 <div class="col-md-6 mb-3">
                                     <div class="form-check form-switch">
-                                        {{ form.can_manage_audit(class="form-check-input") }}
-                                        <label class="form-check-label">Gérer les audits</label>
-                                    </div>
-                                </div>
-                                <div class="col-md-6 mb-3">
-                                    <div class="form-check form-switch">
-                                        {{ form.can_confirm_evaluations(class="form-check-input") }}
-                                        <label class="form-check-label">Confirmer les évaluations</label>
+                                        <input class="form-check-input" type="checkbox" id="can_manage_audit" name="can_manage_audit"
+                                               {{ 'checked' if user.permissions.get('can_manage_audit', false) else '' }}>
+                                        <label class="form-check-label" for="can_manage_audit">
+                                            <strong>Gérer les audits</strong>
+                                        </label>
                                     </div>
                                 </div>
                                 
                                 <!-- Programme d'audit -->
                                 <div class="col-md-6 mb-3">
                                     <div class="form-check form-switch">
-                                        {{ form.can_manage_audit_program(class="form-check-input") if form.can_manage_audit_program else '' }}
-                                        <label class="form-check-label">Gérer le programme d'audit</label>
+                                        <input class="form-check-input" type="checkbox" id="can_manage_audit_program" name="can_manage_audit_program"
+                                               {{ 'checked' if user.permissions.get('can_manage_audit_program', false) else '' }}>
+                                        <label class="form-check-label" for="can_manage_audit_program">
+                                            <strong>Gérer le programme d'audit</strong>
+                                        </label>
                                     </div>
                                 </div>
                                 
                                 <!-- Plans d'action -->
                                 <div class="col-md-6 mb-3">
                                     <div class="form-check form-switch">
-                                        {{ form.can_manage_action_plans(class="form-check-input") }}
-                                        <label class="form-check-label">Gérer les plans d'action</label>
+                                        <input class="form-check-input" type="checkbox" id="can_manage_action_plans" name="can_manage_action_plans"
+                                               {{ 'checked' if user.permissions.get('can_manage_action_plans', false) else '' }}>
+                                        <label class="form-check-label" for="can_manage_action_plans">
+                                            <strong>Gérer les plans d'action</strong>
+                                        </label>
                                     </div>
                                 </div>
                                 <div class="col-md-6 mb-3">
                                     <div class="form-check form-switch">
-                                        {{ form.can_view_action_plans(class="form-check-input") }}
-                                        <label class="form-check-label">Voir les plans d'action</label>
+                                        <input class="form-check-input" type="checkbox" id="can_view_action_plans" name="can_view_action_plans"
+                                               {{ 'checked' if user.permissions.get('can_view_action_plans', true) else '' }}>
+                                        <label class="form-check-label" for="can_view_action_plans">
+                                            <strong>Voir les plans d'action</strong>
+                                        </label>
                                     </div>
                                 </div>
                             </div>
@@ -257,26 +321,38 @@
                             <div class="row">
                                 <div class="col-md-6 mb-3">
                                     <div class="form-check form-switch">
-                                        {{ form.can_manage_questionnaires(class="form-check-input") if form.can_manage_questionnaires else '' }}
-                                        <label class="form-check-label">Gérer les questionnaires</label>
+                                        <input class="form-check-input" type="checkbox" id="can_manage_questionnaires" name="can_manage_questionnaires"
+                                               {{ 'checked' if user.permissions.get('can_manage_questionnaires', false) else '' }}>
+                                        <label class="form-check-label" for="can_manage_questionnaires">
+                                            <strong>Gérer les questionnaires</strong>
+                                        </label>
                                     </div>
                                 </div>
                                 <div class="col-md-6 mb-3">
                                     <div class="form-check form-switch">
-                                        {{ form.can_create_questionnaires(class="form-check-input") if form.can_create_questionnaires else '' }}
-                                        <label class="form-check-label">Créer des questionnaires</label>
+                                        <input class="form-check-input" type="checkbox" id="can_create_questionnaires" name="can_create_questionnaires"
+                                               {{ 'checked' if user.permissions.get('can_create_questionnaires', false) else '' }}>
+                                        <label class="form-check-label" for="can_create_questionnaires">
+                                            <strong>Créer des questionnaires</strong>
+                                        </label>
                                     </div>
                                 </div>
                                 <div class="col-md-6 mb-3">
                                     <div class="form-check form-switch">
-                                        {{ form.can_view_responses(class="form-check-input") if form.can_view_responses else '' }}
-                                        <label class="form-check-label">Voir les réponses</label>
+                                        <input class="form-check-input" type="checkbox" id="can_view_responses" name="can_view_responses"
+                                               {{ 'checked' if user.permissions.get('can_view_responses', false) else '' }}>
+                                        <label class="form-check-label" for="can_view_responses">
+                                            <strong>Voir les réponses</strong>
+                                        </label>
                                     </div>
                                 </div>
                                 <div class="col-md-6 mb-3">
                                     <div class="form-check form-switch">
-                                        {{ form.can_export_responses(class="form-check-input") if form.can_export_responses else '' }}
-                                        <label class="form-check-label">Exporter les réponses</label>
+                                        <input class="form-check-input" type="checkbox" id="can_export_responses" name="can_export_responses"
+                                               {{ 'checked' if user.permissions.get('can_export_responses', false) else '' }}>
+                                        <label class="form-check-label" for="can_export_responses">
+                                            <strong>Exporter les réponses</strong>
+                                        </label>
                                     </div>
                                 </div>
                             </div>
@@ -297,31 +373,40 @@
                             <div class="row">
                                 <div class="col-md-6 mb-3">
                                     <div class="form-check form-switch">
-                                        {{ form.can_view_departments(class="form-check-input") }}
-                                        <label class="form-check-label">Voir les directions/services</label>
+                                        <input class="form-check-input" type="checkbox" id="can_view_departments" name="can_view_departments"
+                                               {{ 'checked' if user.permissions.get('can_view_departments', true) else '' }}>
+                                        <label class="form-check-label" for="can_view_departments">
+                                            <strong>Voir les directions/services</strong>
+                                        </label>
                                     </div>
                                 </div>
                                 <div class="col-md-6 mb-3">
                                     <div class="form-check form-switch">
-                                        {{ form.can_manage_departments(class="form-check-input") }}
-                                        <label class="form-check-label">Gérer les directions/services</label>
+                                        <input class="form-check-input" type="checkbox" id="can_manage_departments" name="can_manage_departments"
+                                               {{ 'checked' if user.permissions.get('can_manage_departments', false) else '' }}>
+                                        <label class="form-check-label" for="can_manage_departments">
+                                            <strong>Gérer les directions/services</strong>
+                                        </label>
                                     </div>
                                 </div>
                                 <div class="col-md-6 mb-3">
                                     <div class="form-check form-switch">
-                                        {{ form.can_access_all_departments(class="form-check-input") }}
-                                        <label class="form-check-label">Accès à tous les départements</label>
+                                        <input class="form-check-input" type="checkbox" id="can_access_all_departments" name="can_access_all_departments"
+                                               {{ 'checked' if user.permissions.get('can_access_all_departments', false) else '' }}>
+                                        <label class="form-check-label" for="can_access_all_departments">
+                                            <strong>Accès à tous les départements</strong>
+                                        </label>
                                     </div>
                                 </div>
                             </div>
                         </div>
                         
                         <!-- ==================== SECTION 5: GESTION DES UTILISATEURS ==================== -->
-                        {% if not is_self_edit %}
+                        {% if user.id != current_user.id %}
                         <div class="permission-category mb-4" data-section="users">
                             <div class="d-flex justify-content-between align-items-center mb-3 border-bottom pb-2">
                                 <h5 class="mb-0">
-                                    <i class="fas fa-users text-primary me-2"></i>
+                                    <i class="fas fa-users-cog text-primary me-2"></i>
                                     Gestion des utilisateurs
                                 </h5>
                                 <button type="button" class="btn btn-sm btn-outline-secondary" onclick="toggleSectionCheckboxes('users', this)">
@@ -332,50 +417,74 @@
                             <div class="row">
                                 <div class="col-md-6 mb-3">
                                     <div class="form-check form-switch">
-                                        {{ form.can_view_users_list(class="form-check-input") }}
-                                        <label class="form-check-label">Voir la liste des utilisateurs</label>
+                                        <input class="form-check-input" type="checkbox" id="can_view_users_list" name="can_view_users_list"
+                                               {{ 'checked' if user.permissions.get('can_view_users_list', true) else '' }}>
+                                        <label class="form-check-label" for="can_view_users_list">
+                                            <strong>Voir la liste des utilisateurs</strong>
+                                        </label>
                                     </div>
                                 </div>
                                 <div class="col-md-6 mb-3">
                                     <div class="form-check form-switch">
-                                        {{ form.can_create_users(class="form-check-input") if form.can_create_users else '' }}
-                                        <label class="form-check-label">Créer des utilisateurs</label>
+                                        <input class="form-check-input" type="checkbox" id="can_create_users" name="can_create_users"
+                                               {{ 'checked' if user.permissions.get('can_create_users', false) else '' }}>
+                                        <label class="form-check-label" for="can_create_users">
+                                            <strong>Créer des utilisateurs</strong>
+                                        </label>
                                     </div>
                                 </div>
                                 <div class="col-md-6 mb-3">
                                     <div class="form-check form-switch">
-                                        {{ form.can_edit_users(class="form-check-input") if form.can_edit_users else '' }}
-                                        <label class="form-check-label">Modifier des utilisateurs</label>
+                                        <input class="form-check-input" type="checkbox" id="can_edit_users" name="can_edit_users"
+                                               {{ 'checked' if user.permissions.get('can_edit_users', false) else '' }}>
+                                        <label class="form-check-label" for="can_edit_users">
+                                            <strong>Modifier des utilisateurs</strong>
+                                        </label>
                                     </div>
                                 </div>
                                 <div class="col-md-6 mb-3">
                                     <div class="form-check form-switch">
-                                        {{ form.can_deactivate_users(class="form-check-input") if form.can_deactivate_users else '' }}
-                                        <label class="form-check-label">Désactiver des utilisateurs</label>
+                                        <input class="form-check-input" type="checkbox" id="can_deactivate_users" name="can_deactivate_users"
+                                               {{ 'checked' if user.permissions.get('can_deactivate_users', false) else '' }}>
+                                        <label class="form-check-label" for="can_deactivate_users">
+                                            <strong>Désactiver des utilisateurs</strong>
+                                        </label>
                                     </div>
                                 </div>
                                 <div class="col-md-6 mb-3">
                                     <div class="form-check form-switch">
-                                        {{ form.can_delete_users(class="form-check-input") if form.can_delete_users else '' }}
-                                        <label class="form-check-label">Supprimer des utilisateurs</label>
+                                        <input class="form-check-input" type="checkbox" id="can_delete_users" name="can_delete_users"
+                                               {{ 'checked' if user.permissions.get('can_delete_users', false) else '' }}>
+                                        <label class="form-check-label" for="can_delete_users">
+                                            <strong>Supprimer des utilisateurs</strong>
+                                        </label>
                                     </div>
                                 </div>
                                 <div class="col-md-6 mb-3">
                                     <div class="form-check form-switch">
-                                        {{ form.can_manage_users(class="form-check-input") }}
-                                        <label class="form-check-label">Gérer les utilisateurs</label>
+                                        <input class="form-check-input" type="checkbox" id="can_manage_users" name="can_manage_users"
+                                               {{ 'checked' if user.permissions.get('can_manage_users', false) else '' }}>
+                                        <label class="form-check-label" for="can_manage_users">
+                                            <strong>Gérer les utilisateurs</strong>
+                                        </label>
                                     </div>
                                 </div>
                                 <div class="col-md-6 mb-3">
                                     <div class="form-check form-switch">
-                                        {{ form.can_manage_permissions(class="form-check-input") if form.can_manage_permissions else '' }}
-                                        <label class="form-check-label">Gérer les permissions</label>
+                                        <input class="form-check-input" type="checkbox" id="can_manage_permissions" name="can_manage_permissions"
+                                               {{ 'checked' if user.permissions.get('can_manage_permissions', false) else '' }}>
+                                        <label class="form-check-label" for="can_manage_permissions">
+                                            <strong>Gérer les permissions</strong>
+                                        </label>
                                     </div>
                                 </div>
                                 <div class="col-md-6 mb-3">
                                     <div class="form-check form-switch">
-                                        {{ form.can_block_users(class="form-check-input") if form.can_block_users else '' }}
-                                        <label class="form-check-label">Bloquer des utilisateurs</label>
+                                        <input class="form-check-input" type="checkbox" id="can_block_users" name="can_block_users"
+                                               {{ 'checked' if user.permissions.get('can_block_users', false) else '' }}>
+                                        <label class="form-check-label" for="can_block_users">
+                                            <strong>Bloquer des utilisateurs</strong>
+                                        </label>
                                     </div>
                                 </div>
                             </div>
@@ -383,13 +492,13 @@
                         {% endif %}
                         
                         <!-- ==================== SECTION 6: ADMINISTRATION ==================== -->
-                        <div class="permission-category mb-4" data-section="admin">
+                        <div class="permission-category mb-4" data-section="administration">
                             <div class="d-flex justify-content-between align-items-center mb-3 border-bottom pb-2">
                                 <h5 class="mb-0">
                                     <i class="fas fa-cogs text-secondary me-2"></i>
                                     Administration
                                 </h5>
-                                <button type="button" class="btn btn-sm btn-outline-secondary" onclick="toggleSectionCheckboxes('admin', this)">
+                                <button type="button" class="btn btn-sm btn-outline-secondary" onclick="toggleSectionCheckboxes('administration', this)">
                                     <i class="fas fa-layer-group me-1"></i> Tout
                                 </button>
                             </div>
@@ -397,32 +506,44 @@
                             <div class="row">
                                 <div class="col-md-6 mb-3">
                                     <div class="form-check form-switch">
-                                        {{ form.can_manage_settings(class="form-check-input") if form.can_manage_settings else '' }}
-                                        <label class="form-check-label">Gérer les paramètres généraux</label>
+                                        <input class="form-check-input" type="checkbox" id="can_manage_settings" name="can_manage_settings"
+                                               {{ 'checked' if user.permissions.get('can_manage_settings', false) else '' }}>
+                                        <label class="form-check-label" for="can_manage_settings">
+                                            <strong>Gérer les paramètres généraux</strong>
+                                        </label>
                                     </div>
                                 </div>
                                 <div class="col-md-6 mb-3">
                                     <div class="form-check form-switch">
-                                        {{ form.can_export_data(class="form-check-input") }}
-                                        <label class="form-check-label">Exporter des données</label>
+                                        <input class="form-check-input" type="checkbox" id="can_export_data" name="can_export_data"
+                                               {{ 'checked' if user.permissions.get('can_export_data', false) else '' }}>
+                                        <label class="form-check-label" for="can_export_data">
+                                            <strong>Exporter des données</strong>
+                                        </label>
                                     </div>
                                 </div>
                                 <div class="col-md-6 mb-3">
                                     <div class="form-check form-switch">
-                                        {{ form.can_archive_data(class="form-check-input") }}
-                                        <label class="form-check-label">Archiver des données</label>
+                                        <input class="form-check-input" type="checkbox" id="can_archive_data" name="can_archive_data"
+                                               {{ 'checked' if user.permissions.get('can_archive_data', false) else '' }}>
+                                        <label class="form-check-label" for="can_archive_data">
+                                            <strong>Archiver des données</strong>
+                                        </label>
                                     </div>
                                 </div>
                                 <div class="col-md-6 mb-3">
                                     <div class="form-check form-switch">
-                                        {{ form.can_delete_data(class="form-check-input") if form.can_delete_data else '' }}
-                                        <label class="form-check-label">Supprimer des données</label>
+                                        <input class="form-check-input" type="checkbox" id="can_delete_data" name="can_delete_data"
+                                               {{ 'checked' if user.permissions.get('can_delete_data', false) else '' }}>
+                                        <label class="form-check-label" for="can_delete_data">
+                                            <strong>Supprimer des données</strong>
+                                        </label>
                                     </div>
                                 </div>
                             </div>
                         </div>
                         
-                        <!-- ==================== SECTION 7: PARAMÉTRAGE ==================== -->
+                        <!-- ==================== SECTION 7: PARAMÉTRAGE AVANCÉ ==================== -->
                         <div class="permission-category mb-4" data-section="parametrage">
                             <div class="d-flex justify-content-between align-items-center mb-3 border-bottom pb-2">
                                 <h5 class="mb-0">
@@ -437,107 +558,57 @@
                             <div class="row">
                                 <div class="col-md-6 mb-3">
                                     <div class="form-check form-switch">
-                                        {{ form.can_manage_lists(class="form-check-input") if form.can_manage_lists else '' }}
-                                        <label class="form-check-label">Gérer les listes déroulantes</label>
+                                        <input class="form-check-input" type="checkbox" id="can_manage_lists" name="can_manage_lists"
+                                               {{ 'checked' if user.permissions.get('can_manage_lists', false) else '' }}>
+                                        <label class="form-check-label" for="can_manage_lists">
+                                            <strong>Gérer les listes déroulantes</strong>
+                                        </label>
                                     </div>
                                 </div>
                                 <div class="col-md-6 mb-3">
                                     <div class="form-check form-switch">
-                                        {{ form.can_manage_fields(class="form-check-input") if form.can_manage_fields else '' }}
-                                        <label class="form-check-label">Gérer les champs personnalisés</label>
+                                        <input class="form-check-input" type="checkbox" id="can_manage_fields" name="can_manage_fields"
+                                               {{ 'checked' if user.permissions.get('can_manage_fields', false) else '' }}>
+                                        <label class="form-check-label" for="can_manage_fields">
+                                            <strong>Gérer les champs personnalisés</strong>
+                                        </label>
                                     </div>
                                 </div>
                                 <div class="col-md-6 mb-3">
                                     <div class="form-check form-switch">
-                                        {{ form.can_manage_files(class="form-check-input") if form.can_manage_files else '' }}
-                                        <label class="form-check-label">Gérer les fichiers</label>
+                                        <input class="form-check-input" type="checkbox" id="can_manage_files" name="can_manage_files"
+                                               {{ 'checked' if user.permissions.get('can_manage_files', false) else '' }}>
+                                        <label class="form-check-label" for="can_manage_files">
+                                            <strong>Gérer les fichiers</strong>
+                                        </label>
                                     </div>
                                 </div>
                                 <div class="col-md-6 mb-3">
                                     <div class="form-check form-switch">
-                                        {{ form.can_manage_templates(class="form-check-input") if form.can_manage_templates else '' }}
-                                        <label class="form-check-label">Gérer les templates de permissions</label>
+                                        <input class="form-check-input" type="checkbox" id="can_manage_templates" name="can_manage_templates"
+                                               {{ 'checked' if user.permissions.get('can_manage_templates', false) else '' }}>
+                                        <label class="form-check-label" for="can_manage_templates">
+                                            <strong>Gérer les templates de permissions</strong>
+                                        </label>
                                     </div>
                                 </div>
                             </div>
                         </div>
                         
                         <!-- ==================== BOUTONS DE SAUVEGARDE ==================== -->
-                        <div class="mt-4">
-                            <button type="submit" class="btn btn-modern-primary" id="submitPermissions">
+                        <div class="mt-4 pt-3 border-top">
+                            <button type="submit" class="btn btn-primary">
                                 <i class="fas fa-save me-2"></i>Enregistrer les permissions
                             </button>
-                            <a href="{{ url_for('gestionnaire_utilisateurs') }}" class="btn btn-modern-outline">
-                                <i class="fas fa-arrow-left me-2"></i>Retour
-                            </a>
-                            <button type="button" class="btn btn-outline-secondary ms-2" id="reset-to-default">
-                                <i class="fas fa-undo me-2"></i>Réinitialiser
-                            </button>
+                            <a href="{{ url_for('client_admin_utilisateurs') }}" class="btn btn-secondary">Annuler</a>
                         </div>
                     </form>
-                </div>
-            </div>
-        </div>
-        
-        <!-- ==================== SIDEBAR INFORMATIONS ==================== -->
-        <div class="col-lg-4">
-            <div class="card card-modern">
-                <div class="card-header">
-                    <h5 class="mb-0">Informations</h5>
-                </div>
-                <div class="card-body">
-                    <!-- Informations utilisateur -->
-                    <div class="mb-4 text-center">
-                        <div class="rounded-circle bg-primary bg-opacity-10 d-inline-flex align-items-center justify-content-center mb-3" 
-                             style="width: 80px; height: 80px;">
-                            <i class="fas fa-user fa-2x text-primary"></i>
-                        </div>
-                        <h5>{{ user.username }}</h5>
-                        <p class="text-muted mb-2">
-                            {{ user.email }}
-                            <br>
-                            <span class="badge bg-{{ 'danger' if user.role == 'admin' else 'warning' if user.role == 'manager' else 'info' }}">
-                                {{ user.get_role_display_name() }}
-                            </span>
-                        </p>
-                    </div>
-                    
-                    <!-- Statistiques -->
-                    <div class="mb-4">
-                        <h6>Statistiques client :</h6>
-                        <div class="p-3 bg-light rounded">
-                            <p class="mb-2">
-                                <i class="fas fa-users me-2"></i>
-                                Utilisateurs actifs : {{ stats.total_users }}/{{ stats.max_users }}
-                            </p>
-                            <div class="progress" style="height: 8px;">
-                                <div class="progress-bar bg-success" 
-                                     style="width: {{ (stats.total_users/stats.max_users*100) if stats.max_users > 0 else 0 }}%">
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-                    
-                    <!-- Légende -->
-                    <div class="alert alert-info">
-                        <h6 class="mb-2">
-                            <i class="fas fa-info-circle me-2"></i>Légende :
-                        </h6>
-                        <ul class="small mb-0">
-                            <li><i class="fas fa-check-circle text-success me-1"></i> Permission activée</li>
-                            <li><i class="fas fa-times-circle text-danger me-1"></i> Permission désactivée</li>
-                            <li><i class="fas fa-layer-group me-1"></i> Bouton "Tout" = Activer/Désactiver la section</li>
-                        </ul>
-                    </div>
                 </div>
             </div>
         </div>
     </div>
 </div>
 
-{% endblock %}
-
-{% block scripts %}
 <script>
 // Stocker l'état initial des permissions
 let initialPermissions = {};
@@ -566,7 +637,29 @@ function toggleSectionCheckboxes(sectionName, buttonElement) {
         }
     }
     
+    // Mettre à jour le badge de la section
+    updateSectionBadge(section);
+    
     showToast(`Section ${sectionName}: ${newState ? 'Tous activés' : 'Tous désactivés'}`, 'info');
+}
+
+// Fonction pour mettre à jour le badge d'une section
+function updateSectionBadge(section) {
+    const checkboxes = section.querySelectorAll('.form-check-input:not(:disabled)');
+    const enabledCount = Array.from(checkboxes).filter(cb => cb.checked).length;
+    const totalCount = checkboxes.length;
+    
+    const header = section.querySelector('h5');
+    if (header) {
+        let badge = header.querySelector('.section-badge');
+        if (!badge) {
+            badge = document.createElement('span');
+            badge.className = 'section-badge ms-2';
+            header.appendChild(badge);
+        }
+        badge.className = `section-badge badge bg-${enabledCount === totalCount ? 'success' : enabledCount > 0 ? 'warning' : 'secondary'} ms-2`;
+        badge.textContent = `${enabledCount}/${totalCount}`;
+    }
 }
 
 // Fonction pour activer/désactiver une section entière (pour les boutons rapides)
@@ -579,6 +672,7 @@ function toggleSection(sectionName, activate) {
         checkbox.checked = activate;
     });
     
+    updateSectionBadge(section);
     showToast(`${sectionName}: ${activate ? 'Tous activés' : 'Tous désactivés'}`, 'info');
 }
 
@@ -587,6 +681,12 @@ function selectAllPermissions() {
     document.querySelectorAll('.form-check-input:not(:disabled)').forEach(checkbox => {
         checkbox.checked = true;
     });
+    
+    // Mettre à jour tous les badges
+    document.querySelectorAll('.permission-category').forEach(section => {
+        updateSectionBadge(section);
+    });
+    
     showToast('Toutes les permissions sélectionnées', 'success');
 }
 
@@ -595,6 +695,12 @@ function deselectAllPermissions() {
     document.querySelectorAll('.form-check-input:not(:disabled)').forEach(checkbox => {
         checkbox.checked = false;
     });
+    
+    // Mettre à jour tous les badges
+    document.querySelectorAll('.permission-category').forEach(section => {
+        updateSectionBadge(section);
+    });
+    
     showToast('Toutes les permissions désélectionnées', 'info');
 }
 
@@ -607,20 +713,26 @@ function resetToDefault() {
                 checkbox.checked = value;
             }
         }
+        
+        // Mettre à jour tous les badges
+        document.querySelectorAll('.permission-category').forEach(section => {
+            updateSectionBadge(section);
+        });
+        
         showToast('Permissions réinitialisées', 'info');
     }
 }
 
 // Fonction toast
 function showToast(message, type = 'info') {
-    const toastContainer = document.querySelector('.toast-container');
+    let toastContainer = document.querySelector('.toast-container-custom');
     if (!toastContainer) {
-        const container = document.createElement('div');
-        container.className = 'toast-container position-fixed bottom-0 end-0 p-3';
-        document.body.appendChild(container);
+        toastContainer = document.createElement('div');
+        toastContainer.className = 'toast-container-custom position-fixed bottom-0 end-0 p-3';
+        toastContainer.style.zIndex = '1060';
+        document.body.appendChild(toastContainer);
     }
     
-    const container = document.querySelector('.toast-container');
     const toast = document.createElement('div');
     toast.className = `toast align-items-center text-bg-${type === 'success' ? 'success' : type === 'warning' ? 'warning' : type === 'error' ? 'danger' : 'info'} border-0`;
     toast.setAttribute('role', 'alert');
@@ -634,23 +746,14 @@ function showToast(message, type = 'info') {
         </div>
     `;
     
-    container.appendChild(toast);
-    const bsToast = new bootstrap.Toast(toast);
+    toastContainer.appendChild(toast);
+    const bsToast = new bootstrap.Toast(toast, { delay: 3000 });
     bsToast.show();
     
     toast.addEventListener('hidden.bs.toast', () => {
         toast.remove();
     });
 }
-
-// Validation avant soumission
-document.getElementById('permissionsForm').addEventListener('submit', function(e) {
-    const submitBtn = document.getElementById('submitPermissions');
-    if (submitBtn) {
-        submitBtn.innerHTML = '<i class="fas fa-spinner fa-spin me-2"></i> Enregistrement...';
-        submitBtn.disabled = true;
-    }
-});
 
 // Initialisation
 document.addEventListener('DOMContentLoaded', function() {
@@ -659,6 +762,11 @@ document.addEventListener('DOMContentLoaded', function() {
         if (checkbox.id) {
             initialPermissions[checkbox.id] = checkbox.checked;
         }
+    });
+    
+    // Initialiser les badges pour chaque section
+    document.querySelectorAll('.permission-category').forEach(section => {
+        updateSectionBadge(section);
     });
     
     // Boutons globaux
@@ -676,19 +784,10 @@ document.addEventListener('DOMContentLoaded', function() {
         resetBtn.addEventListener('click', resetToDefault);
     }
     
-    // Compter et afficher le nombre de permissions par section
-    document.querySelectorAll('.permission-category').forEach(section => {
-        const checkboxes = section.querySelectorAll('.form-check-input:not(:disabled)');
-        const enabledCount = Array.from(checkboxes).filter(cb => cb.checked).length;
-        const totalCount = checkboxes.length;
-        
-        const header = section.querySelector('h5');
-        if (header && totalCount > 0) {
-            const badge = document.createElement('span');
-            badge.className = `badge bg-${enabledCount === totalCount ? 'success' : enabledCount > 0 ? 'warning' : 'secondary'} ms-2`;
-            badge.textContent = `${enabledCount}/${totalCount}`;
-            header.appendChild(badge);
-        }
+    // Ajouter des tooltips
+    const tooltipTriggerList = [].slice.call(document.querySelectorAll('[data-bs-toggle="tooltip"]'));
+    tooltipTriggerList.map(function (tooltipTriggerEl) {
+        return new bootstrap.Tooltip(tooltipTriggerEl);
     });
 });
 </script>
@@ -712,6 +811,7 @@ document.addEventListener('DOMContentLoaded', function() {
     font-weight: 600;
     display: flex;
     align-items: center;
+    margin-bottom: 0;
 }
 
 .permission-category h5 i {
@@ -737,31 +837,21 @@ document.addEventListener('DOMContentLoaded', function() {
 .card-modern {
     border: none;
     border-radius: 12px;
-    box-shadow: 0 4px 12px rgba(0,0,0,0.05);
-    overflow: hidden;
+    box-shadow: 0 4px 20px rgba(0,0,0,0.08);
 }
 
-.card-modern .card-header {
-    background: #fff;
-    border-bottom: 1px solid #e9ecef;
-    padding: 1.25rem 1.5rem;
-}
-
-.card-modern .card-body {
-    padding: 1.5rem;
-}
-
-.progress {
-    background-color: #E5E7EB;
-}
-
-.progress-bar {
-    transition: width 0.6s ease;
-}
-
-.badge {
+.section-badge {
     font-size: 0.7rem;
     padding: 0.25rem 0.5rem;
+}
+
+.btn-sm {
+    font-size: 0.75rem;
+    padding: 0.25rem 0.5rem;
+}
+
+.toast-container-custom {
+    z-index: 1060;
 }
 
 [data-bs-theme="dark"] .permission-category {
@@ -773,190 +863,8 @@ document.addEventListener('DOMContentLoaded', function() {
     color: #E2E8F0;
 }
 
-[data-bs-theme="dark"] .bg-light {
-    background-color: #1E293B !important;
-}
-</style>
-{% endblock %}                                <i class="fas fa-info-circle fa-2x me-3"></i>
-                                <div>
-                                    <strong>Utilisateur :</strong> {{ user.username }} ({{ user.email }})<br>
-                                    <strong>Rôle :</strong> {{ user.get_role_display_name() }}<br>
-                                    <strong>Client :</strong> {{ client.nom }}
-                                </div>
-                            </div>
-                        </div>
-                        
-                        <!-- Permissions de base -->
-                        <div class="mb-5">
-                            <h5 class="mb-3 border-bottom pb-2">
-                                <i class="fas fa-user-shield me-2"></i>
-                                Permissions de base
-                            </h5>
-                            
-                            <div class="row">
-                                {% for perm_key, perm_data in all_permissions.permissions_de_base.items() %}
-                                <div class="col-md-6 mb-3">
-                                    <div class="form-check form-switch">
-                                        <input class="form-check-input" 
-                                               type="checkbox" 
-                                               id="{{ perm_key }}" 
-                                               name="{{ perm_key }}"
-                                               {{ 'checked' if user.permissions.get(perm_key, perm_data.default) and perm_data.can_activate else '' }}
-                                               {{ 'disabled' if not perm_data.can_activate else '' }}>
-                                        <label class="form-check-label {{ 'text-muted' if not perm_data.can_activate else '' }}" 
-                                               for="{{ perm_key }}">
-                                            <strong>{{ perm_data.label }}</strong>
-                                            {% if perm_data.description %}
-                                            <br><small class="text-muted">{{ perm_data.description }}</small>
-                                            {% endif %}
-                                        </label>
-                                    </div>
-                                </div>
-                                {% endfor %}
-                            </div>
-                        </div>
-                        
-                        <!-- Permissions de gestion -->
-                        <div class="mb-5">
-                            <h5 class="mb-3 border-bottom pb-2">
-                                <i class="fas fa-users-cog me-2"></i>
-                                Permissions de gestion
-                            </h5>
-                            
-                            <div class="row">
-                                {% for perm_key, perm_data in all_permissions.permissions_gestion.items() %}
-                                <div class="col-md-6 mb-3">
-                                    <div class="form-check form-switch">
-                                        <input class="form-check-input" 
-                                               type="checkbox" 
-                                               id="{{ perm_key }}" 
-                                               name="{{ perm_key }}"
-                                               {{ 'checked' if user.permissions.get(perm_key, perm_data.default) and perm_data.can_activate else '' }}
-                                               {{ 'disabled' if not perm_data.can_activate else '' }}>
-                                        <label class="form-check-label {{ 'text-muted' if not perm_data.can_activate else '' }}" 
-                                               for="{{ perm_key }}">
-                                            <strong>{{ perm_data.label }}</strong>
-                                            {% if perm_data.description %}
-                                            <br><small class="text-muted">{{ perm_data.description }}</small>
-                                            {% endif %}
-                                        </label>
-                                    </div>
-                                </div>
-                                {% endfor %}
-                            </div>
-                        </div>
-                        
-                        <!-- Modules d'application -->
-                        <div class="mb-5">
-                            <h5 class="mb-3 border-bottom pb-2">
-                                <i class="fas fa-cubes me-2"></i>
-                                Modules d'application
-                            </h5>
-                            
-                            {% if all_permissions.modules %}
-                            <div class="row">
-                                {% for module_key, module_data in all_permissions.modules.items() %}
-                                <div class="col-md-6 mb-4">
-                                    <div class="card h-100 border-{{ 'success' if module_data.can_activate else 'secondary' }}">
-                                        <div class="card-body">
-                                            <div class="d-flex justify-content-between align-items-start mb-3">
-                                                <div>
-                                                    <h6 class="mb-1">
-                                                        <i class="{{ module_data.icon }} me-2"></i>
-                                                        {{ module_data.label }}
-                                                    </h6>
-                                                    <small class="text-muted">{{ module_data.description }}</small>
-                                                </div>
-                                                <div class="form-check form-switch">
-                                                    <input class="form-check-input" 
-                                                           type="checkbox" 
-                                                           id="module_{{ module_key }}" 
-                                                           name="module_{{ module_key }}"
-                                                           {{ 'checked' if user.permissions.get('module_' ~ module_key, true) and module_data.can_activate else '' }}
-                                                           {{ 'disabled' if not module_data.can_activate else '' }}>
-                                                </div>
-                                            </div>
-                                            
-                                            {% if module_data.permissions %}
-                                            <div class="border-top pt-2">
-                                                <small class="text-muted d-block mb-1">Permissions incluses :</small>
-                                                <div class="d-flex flex-wrap gap-1">
-                                                    {% for perm in module_data.permissions %}
-                                                    <span class="badge bg-info">{{ perm|replace('can_', '')|replace('_', ' ')|title }}</span>
-                                                    {% endfor %}
-                                                </div>
-                                            </div>
-                                            {% endif %}
-                                        </div>
-                                    </div>
-                                </div>
-                                {% endfor %}
-                            </div>
-                            {% else %}
-                            <div class="alert alert-warning">
-                                <i class="fas fa-exclamation-triangle me-2"></i>
-                                Aucun module disponible pour ce client
-                            </div>
-                            {% endif %}
-                        </div>
-                        
-                        <!-- Boutons d'action -->
-                        <div class="mt-4 pt-3 border-top">
-                            <button type="submit" class="btn btn-primary">
-                                <i class="fas fa-save me-2"></i>Enregistrer les permissions
-                            </button>
-                            <a href="{{ url_for('gestionnaire_utilisateurs') }}" class="btn btn-secondary">Annuler</a>
-                            <button type="button" class="btn btn-outline-primary float-end" onclick="selectAll(true)">
-                                Tout sélectionner
-                            </button>
-                            <button type="button" class="btn btn-outline-secondary float-end me-2" onclick="selectAll(false)">
-                                Tout désélectionner
-                            </button>
-                        </div>
-                    </form>
-                </div>
-            </div>
-        </div>
-    </div>
-</div>
-
-<script>
-function selectAll(select) {
-    document.querySelectorAll('input[type="checkbox"]:not(:disabled)').forEach(checkbox => {
-        checkbox.checked = select;
-    });
-}
-
-document.addEventListener('DOMContentLoaded', function() {
-    // Désactiver la soumission si aucune permission n'est sélectionnée
-    const form = document.querySelector('form');
-    form.addEventListener('submit', function(e) {
-        const checkedPermissions = document.querySelectorAll('input[type="checkbox"]:checked:not(:disabled)');
-        if (checkedPermissions.length === 0) {
-            e.preventDefault();
-            alert('Veuillez sélectionner au moins une permission.');
-            return false;
-        }
-        return true;
-    });
-});
-</script>
-
-<style>
-.card-modern {
-    border: none;
-    border-radius: 12px;
-    box-shadow: 0 4px 20px rgba(0,0,0,0.08);
-}
-
-.form-check-input:checked {
-    background-color: #0d6efd;
-    border-color: #0d6efd;
-}
-
-.form-check-input:disabled {
-    opacity: 0.5;
-    cursor: not-allowed;
+[data-bs-theme="dark"] .border-bottom {
+    border-color: #334155 !important;
 }
 </style>
 {% endblock %}
