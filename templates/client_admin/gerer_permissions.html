@@ -1,40 +1,783 @@
-<!-- templates/gestionnaire/gerer_permissions.html -->
 {% extends "base.html" %}
-
-{% block title %}Gérer les permissions - {{ user.username }}{% endblock %}
+{% block title %}Gérer les permissions - Gestionnaire{% endblock %}
 
 {% block content %}
 <div class="container-fluid py-4">
+    <!-- Navigation -->
+    <nav aria-label="breadcrumb" class="mb-4">
+        <ol class="breadcrumb">
+            <li class="breadcrumb-item"><a href="{{ url_for('dashboard') }}">Dashboard</a></li>
+            <li class="breadcrumb-item"><a href="{{ url_for('gestionnaire_utilisateurs') }}">Gestion des utilisateurs</a></li>
+            <li class="breadcrumb-item active">Permissions de {{ user.username }}</li>
+        </ol>
+    </nav>
+
     <div class="row">
-        <div class="col-12">
-            <nav aria-label="breadcrumb" class="mb-4">
-                <ol class="breadcrumb">
-                    <li class="breadcrumb-item"><a href="{{ url_for('dashboard') }}">Dashboard</a></li>
-                    <li class="breadcrumb-item"><a href="{{ url_for('gestionnaire_utilisateurs') }}">Gestion Utilisateurs</a></li>
-                    <li class="breadcrumb-item"><a href="{{ url_for('gestionnaire_editer_utilisateur', id=user.id) }}">{{ user.username }}</a></li>
-                    <li class="breadcrumb-item active">Permissions</li>
-                </ol>
-            </nav>
-            
+        <div class="col-lg-8">
             <div class="card card-modern">
-                <div class="card-header d-flex justify-content-between align-items-center">
+                <div class="card-header">
                     <h5 class="mb-0">
-                        <i class="fas fa-key me-2"></i>
-                        Gérer les permissions de {{ user.username }}
+                        <i class="fas fa-key me-2"></i>Gérer les permissions de {{ user.username }}
                     </h5>
-                    <span class="badge bg-{{ 'success' if user.is_active else 'danger' }}">
-                        {{ 'Actif' if user.is_active else 'Inactif' }}
-                    </span>
                 </div>
-                
                 <div class="card-body">
-                    <form method="POST" action="{{ url_for('gestionnaire_gerer_permissions', id=user.id) }}">
+                    <!-- ALERTE FORMULE -->
+                    {% if client and client.formule %}
+                    <div class="alert alert-info mb-4">
+                        <div class="d-flex align-items-center">
+                            <i class="fas fa-layer-group fa-2x me-3"></i>
+                            <div>
+                                <strong>Formule actuelle : {{ client.formule.nom }}</strong>
+                                <p class="mb-0 small">
+                                    Modules inclus : 
+                                    {% for module, active in client.formule.modules.items() if active %}
+                                    <span class="badge bg-primary">{{ module|replace('_', ' ')|title }}</span>
+                                    {% endfor %}
+                                </p>
+                            </div>
+                        </div>
+                    </div>
+                    {% endif %}
+
+                    {% if is_self_edit %}
+                    <div class="alert alert-info mb-4">
+                        <i class="fas fa-info-circle me-2"></i>
+                        <strong>Modification de vos propres permissions</strong>
+                        <ul class="mb-0 mt-2">
+                            <li>Certaines permissions sont restreintes pour des raisons de sécurité</li>
+                            <li>Vous ne pouvez pas modifier vos permissions de gestion d'utilisateurs</li>
+                        </ul>
+                    </div>
+                    {% endif %}
+                    
+                    <!-- Boutons d'actions globales -->
+                    <div class="mb-4">
+                        <div class="btn-group" role="group">
+                            <button type="button" class="btn btn-sm btn-outline-primary" id="select-all-sections">
+                                <i class="fas fa-check-double"></i> Tout sélectionner
+                            </button>
+                            <button type="button" class="btn btn-sm btn-outline-secondary" id="deselect-all-sections">
+                                <i class="fas fa-times"></i> Tout désélectionner
+                            </button>
+                        </div>
+                        <div class="btn-group ms-2" role="group">
+                            <button type="button" class="btn btn-sm btn-outline-success" onclick="toggleSection('controle-interne', true)">
+                                <i class="fas fa-play"></i> Contrôle Interne
+                            </button>
+                            <button type="button" class="btn btn-sm btn-outline-warning" onclick="toggleSection('audit', true)">
+                                <i class="fas fa-clipboard-list"></i> Audit
+                            </button>
+                            <button type="button" class="btn btn-sm btn-outline-info" onclick="toggleSection('administration', true)">
+                                <i class="fas fa-cogs"></i> Administration
+                            </button>
+                        </div>
+                    </div>
+                    
+                    <form method="POST" action="" id="permissionsForm">
                         {{ form.hidden_tag() }}
                         
-                        <!-- Informations utilisateur -->
-                        <div class="alert alert-info mb-4">
-                            <div class="d-flex align-items-center">
-                                <i class="fas fa-info-circle fa-2x me-3"></i>
+                        <!-- ==================== SECTION 1: CONTRÔLE INTERNE ==================== -->
+                        <div class="permission-category mb-4" data-section="controle-interne">
+                            <div class="d-flex justify-content-between align-items-center mb-3 border-bottom pb-2">
+                                <h5 class="mb-0">
+                                    <i class="fas fa-shield-alt text-primary me-2"></i>
+                                    Contrôle Interne
+                                </h5>
+                                <button type="button" class="btn btn-sm btn-outline-secondary" onclick="toggleSectionCheckboxes('controle-interne', this)">
+                                    <i class="fas fa-layer-group me-1"></i> Tout
+                                </button>
+                            </div>
+                            
+                            <div class="row">
+                                <!-- Tableau de bord -->
+                                <div class="col-md-6 mb-3">
+                                    <div class="form-check form-switch">
+                                        {{ form.can_view_dashboard(class="form-check-input") }}
+                                        <label class="form-check-label">Voir le tableau de bord</label>
+                                    </div>
+                                </div>
+                                <div class="col-md-6 mb-3">
+                                    <div class="form-check form-switch">
+                                        {{ form.can_view_reports(class="form-check-input") }}
+                                        <label class="form-check-label">Voir les rapports</label>
+                                    </div>
+                                </div>
+                                
+                                <!-- Cartographie risques -->
+                                <div class="col-md-6 mb-3">
+                                    <div class="form-check form-switch">
+                                        {{ form.can_manage_risks(class="form-check-input") }}
+                                        <label class="form-check-label">Gérer les risques (Cartographie)</label>
+                                    </div>
+                                </div>
+                                <div class="col-md-6 mb-3">
+                                    <div class="form-check form-switch">
+                                        {{ form.can_validate_risks(class="form-check-input") }}
+                                        <label class="form-check-label">Valider les risques</label>
+                                    </div>
+                                </div>
+                                
+                                <!-- Indicateurs KRI -->
+                                <div class="col-md-6 mb-3">
+                                    <div class="form-check form-switch">
+                                        {{ form.can_manage_kri(class="form-check-input") }}
+                                        <label class="form-check-label">Gérer les indicateurs KRI</label>
+                                    </div>
+                                </div>
+                                
+                                <!-- Veille règlementaire -->
+                                <div class="col-md-6 mb-3">
+                                    <div class="form-check form-switch">
+                                        {{ form.can_manage_regulatory(class="form-check-input") }}
+                                        <label class="form-check-label">Gérer la veille règlementaire</label>
+                                    </div>
+                                </div>
+                                
+                                <!-- Logigrammes -->
+                                <div class="col-md-6 mb-3">
+                                    <div class="form-check form-switch">
+                                        {{ form.can_manage_logigram(class="form-check-input") }}
+                                        <label class="form-check-label">Gérer les logigrammes/processus</label>
+                                    </div>
+                                </div>
+                                
+                                <!-- Plans Qualité -->
+                                <div class="col-md-6 mb-3">
+                                    <div class="form-check form-switch">
+                                        {{ form.can_manage_quality(class="form-check-input") if form.can_manage_quality else '' }}
+                                        <label class="form-check-label">Gérer les plans qualité</label>
+                                    </div>
+                                </div>
+                                
+                                <!-- Campagnes de contrôle -->
+                                <div class="col-md-6 mb-3">
+                                    <div class="form-check form-switch">
+                                        {{ form.can_manage_campaigns(class="form-check-input") if form.can_manage_campaigns else '' }}
+                                        <label class="form-check-label">Gérer les campagnes de contrôle</label>
+                                    </div>
+                                </div>
+                                
+                                <!-- Plans de continuité (PCA) -->
+                                <div class="col-md-6 mb-3">
+                                    <div class="form-check form-switch">
+                                        {{ form.can_manage_bcp(class="form-check-input") if form.can_manage_bcp else '' }}
+                                        <label class="form-check-label">Gérer les plans de continuité (PCA)</label>
+                                    </div>
+                                </div>
+                                
+                                <!-- Gestion des incidents -->
+                                <div class="col-md-6 mb-3">
+                                    <div class="form-check form-switch">
+                                        {{ form.can_manage_incidents(class="form-check-input") if form.can_manage_incidents else '' }}
+                                        <label class="form-check-label">Gérer les incidents</label>
+                                    </div>
+                                </div>
+                                
+                                <!-- Tickets support -->
+                                <div class="col-md-6 mb-3">
+                                    <div class="form-check form-switch">
+                                        {{ form.can_view_tickets(class="form-check-input") if form.can_view_tickets else '' }}
+                                        <label class="form-check-label">Voir les tickets support</label>
+                                    </div>
+                                </div>
+                                
+                                <!-- Analyse IA -->
+                                <div class="col-md-6 mb-3">
+                                    <div class="form-check form-switch">
+                                        {{ form.can_use_ia_analysis(class="form-check-input") if form.can_use_ia_analysis else '' }}
+                                        <label class="form-check-label">Utiliser l'analyse IA</label>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <!-- ==================== SECTION 2: AUDIT INTERNE ==================== -->
+                        <div class="permission-category mb-4" data-section="audit">
+                            <div class="d-flex justify-content-between align-items-center mb-3 border-bottom pb-2">
+                                <h5 class="mb-0">
+                                    <i class="fas fa-clipboard-check text-warning me-2"></i>
+                                    Audit Interne
+                                </h5>
+                                <button type="button" class="btn btn-sm btn-outline-secondary" onclick="toggleSectionCheckboxes('audit', this)">
+                                    <i class="fas fa-layer-group me-1"></i> Tout
+                                </button>
+                            </div>
+                            
+                            <div class="row">
+                                <!-- Gestion des audits -->
+                                <div class="col-md-6 mb-3">
+                                    <div class="form-check form-switch">
+                                        {{ form.can_manage_audit(class="form-check-input") }}
+                                        <label class="form-check-label">Gérer les audits</label>
+                                    </div>
+                                </div>
+                                <div class="col-md-6 mb-3">
+                                    <div class="form-check form-switch">
+                                        {{ form.can_confirm_evaluations(class="form-check-input") }}
+                                        <label class="form-check-label">Confirmer les évaluations</label>
+                                    </div>
+                                </div>
+                                
+                                <!-- Programme d'audit -->
+                                <div class="col-md-6 mb-3">
+                                    <div class="form-check form-switch">
+                                        {{ form.can_manage_audit_program(class="form-check-input") if form.can_manage_audit_program else '' }}
+                                        <label class="form-check-label">Gérer le programme d'audit</label>
+                                    </div>
+                                </div>
+                                
+                                <!-- Plans d'action -->
+                                <div class="col-md-6 mb-3">
+                                    <div class="form-check form-switch">
+                                        {{ form.can_manage_action_plans(class="form-check-input") }}
+                                        <label class="form-check-label">Gérer les plans d'action</label>
+                                    </div>
+                                </div>
+                                <div class="col-md-6 mb-3">
+                                    <div class="form-check form-switch">
+                                        {{ form.can_view_action_plans(class="form-check-input") }}
+                                        <label class="form-check-label">Voir les plans d'action</label>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <!-- ==================== SECTION 3: QUESTIONNAIRES ==================== -->
+                        <div class="permission-category mb-4" data-section="questionnaires">
+                            <div class="d-flex justify-content-between align-items-center mb-3 border-bottom pb-2">
+                                <h5 class="mb-0">
+                                    <i class="fas fa-poll text-info me-2"></i>
+                                    Questionnaires
+                                </h5>
+                                <button type="button" class="btn btn-sm btn-outline-secondary" onclick="toggleSectionCheckboxes('questionnaires', this)">
+                                    <i class="fas fa-layer-group me-1"></i> Tout
+                                </button>
+                            </div>
+                            
+                            <div class="row">
+                                <div class="col-md-6 mb-3">
+                                    <div class="form-check form-switch">
+                                        {{ form.can_manage_questionnaires(class="form-check-input") if form.can_manage_questionnaires else '' }}
+                                        <label class="form-check-label">Gérer les questionnaires</label>
+                                    </div>
+                                </div>
+                                <div class="col-md-6 mb-3">
+                                    <div class="form-check form-switch">
+                                        {{ form.can_create_questionnaires(class="form-check-input") if form.can_create_questionnaires else '' }}
+                                        <label class="form-check-label">Créer des questionnaires</label>
+                                    </div>
+                                </div>
+                                <div class="col-md-6 mb-3">
+                                    <div class="form-check form-switch">
+                                        {{ form.can_view_responses(class="form-check-input") if form.can_view_responses else '' }}
+                                        <label class="form-check-label">Voir les réponses</label>
+                                    </div>
+                                </div>
+                                <div class="col-md-6 mb-3">
+                                    <div class="form-check form-switch">
+                                        {{ form.can_export_responses(class="form-check-input") if form.can_export_responses else '' }}
+                                        <label class="form-check-label">Exporter les réponses</label>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <!-- ==================== SECTION 4: DIRECTIONS ET SERVICES ==================== -->
+                        <div class="permission-category mb-4" data-section="departments">
+                            <div class="d-flex justify-content-between align-items-center mb-3 border-bottom pb-2">
+                                <h5 class="mb-0">
+                                    <i class="fas fa-sitemap text-success me-2"></i>
+                                    Directions et Services
+                                </h5>
+                                <button type="button" class="btn btn-sm btn-outline-secondary" onclick="toggleSectionCheckboxes('departments', this)">
+                                    <i class="fas fa-layer-group me-1"></i> Tout
+                                </button>
+                            </div>
+                            
+                            <div class="row">
+                                <div class="col-md-6 mb-3">
+                                    <div class="form-check form-switch">
+                                        {{ form.can_view_departments(class="form-check-input") }}
+                                        <label class="form-check-label">Voir les directions/services</label>
+                                    </div>
+                                </div>
+                                <div class="col-md-6 mb-3">
+                                    <div class="form-check form-switch">
+                                        {{ form.can_manage_departments(class="form-check-input") }}
+                                        <label class="form-check-label">Gérer les directions/services</label>
+                                    </div>
+                                </div>
+                                <div class="col-md-6 mb-3">
+                                    <div class="form-check form-switch">
+                                        {{ form.can_access_all_departments(class="form-check-input") }}
+                                        <label class="form-check-label">Accès à tous les départements</label>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <!-- ==================== SECTION 5: GESTION DES UTILISATEURS ==================== -->
+                        {% if not is_self_edit %}
+                        <div class="permission-category mb-4" data-section="users">
+                            <div class="d-flex justify-content-between align-items-center mb-3 border-bottom pb-2">
+                                <h5 class="mb-0">
+                                    <i class="fas fa-users text-primary me-2"></i>
+                                    Gestion des utilisateurs
+                                </h5>
+                                <button type="button" class="btn btn-sm btn-outline-secondary" onclick="toggleSectionCheckboxes('users', this)">
+                                    <i class="fas fa-layer-group me-1"></i> Tout
+                                </button>
+                            </div>
+                            
+                            <div class="row">
+                                <div class="col-md-6 mb-3">
+                                    <div class="form-check form-switch">
+                                        {{ form.can_view_users_list(class="form-check-input") }}
+                                        <label class="form-check-label">Voir la liste des utilisateurs</label>
+                                    </div>
+                                </div>
+                                <div class="col-md-6 mb-3">
+                                    <div class="form-check form-switch">
+                                        {{ form.can_create_users(class="form-check-input") if form.can_create_users else '' }}
+                                        <label class="form-check-label">Créer des utilisateurs</label>
+                                    </div>
+                                </div>
+                                <div class="col-md-6 mb-3">
+                                    <div class="form-check form-switch">
+                                        {{ form.can_edit_users(class="form-check-input") if form.can_edit_users else '' }}
+                                        <label class="form-check-label">Modifier des utilisateurs</label>
+                                    </div>
+                                </div>
+                                <div class="col-md-6 mb-3">
+                                    <div class="form-check form-switch">
+                                        {{ form.can_deactivate_users(class="form-check-input") if form.can_deactivate_users else '' }}
+                                        <label class="form-check-label">Désactiver des utilisateurs</label>
+                                    </div>
+                                </div>
+                                <div class="col-md-6 mb-3">
+                                    <div class="form-check form-switch">
+                                        {{ form.can_delete_users(class="form-check-input") if form.can_delete_users else '' }}
+                                        <label class="form-check-label">Supprimer des utilisateurs</label>
+                                    </div>
+                                </div>
+                                <div class="col-md-6 mb-3">
+                                    <div class="form-check form-switch">
+                                        {{ form.can_manage_users(class="form-check-input") }}
+                                        <label class="form-check-label">Gérer les utilisateurs</label>
+                                    </div>
+                                </div>
+                                <div class="col-md-6 mb-3">
+                                    <div class="form-check form-switch">
+                                        {{ form.can_manage_permissions(class="form-check-input") if form.can_manage_permissions else '' }}
+                                        <label class="form-check-label">Gérer les permissions</label>
+                                    </div>
+                                </div>
+                                <div class="col-md-6 mb-3">
+                                    <div class="form-check form-switch">
+                                        {{ form.can_block_users(class="form-check-input") if form.can_block_users else '' }}
+                                        <label class="form-check-label">Bloquer des utilisateurs</label>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        {% endif %}
+                        
+                        <!-- ==================== SECTION 6: ADMINISTRATION ==================== -->
+                        <div class="permission-category mb-4" data-section="admin">
+                            <div class="d-flex justify-content-between align-items-center mb-3 border-bottom pb-2">
+                                <h5 class="mb-0">
+                                    <i class="fas fa-cogs text-secondary me-2"></i>
+                                    Administration
+                                </h5>
+                                <button type="button" class="btn btn-sm btn-outline-secondary" onclick="toggleSectionCheckboxes('admin', this)">
+                                    <i class="fas fa-layer-group me-1"></i> Tout
+                                </button>
+                            </div>
+                            
+                            <div class="row">
+                                <div class="col-md-6 mb-3">
+                                    <div class="form-check form-switch">
+                                        {{ form.can_manage_settings(class="form-check-input") if form.can_manage_settings else '' }}
+                                        <label class="form-check-label">Gérer les paramètres généraux</label>
+                                    </div>
+                                </div>
+                                <div class="col-md-6 mb-3">
+                                    <div class="form-check form-switch">
+                                        {{ form.can_export_data(class="form-check-input") }}
+                                        <label class="form-check-label">Exporter des données</label>
+                                    </div>
+                                </div>
+                                <div class="col-md-6 mb-3">
+                                    <div class="form-check form-switch">
+                                        {{ form.can_archive_data(class="form-check-input") }}
+                                        <label class="form-check-label">Archiver des données</label>
+                                    </div>
+                                </div>
+                                <div class="col-md-6 mb-3">
+                                    <div class="form-check form-switch">
+                                        {{ form.can_delete_data(class="form-check-input") if form.can_delete_data else '' }}
+                                        <label class="form-check-label">Supprimer des données</label>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <!-- ==================== SECTION 7: PARAMÉTRAGE ==================== -->
+                        <div class="permission-category mb-4" data-section="parametrage">
+                            <div class="d-flex justify-content-between align-items-center mb-3 border-bottom pb-2">
+                                <h5 class="mb-0">
+                                    <i class="fas fa-sliders-h text-info me-2"></i>
+                                    Paramétrage avancé
+                                </h5>
+                                <button type="button" class="btn btn-sm btn-outline-secondary" onclick="toggleSectionCheckboxes('parametrage', this)">
+                                    <i class="fas fa-layer-group me-1"></i> Tout
+                                </button>
+                            </div>
+                            
+                            <div class="row">
+                                <div class="col-md-6 mb-3">
+                                    <div class="form-check form-switch">
+                                        {{ form.can_manage_lists(class="form-check-input") if form.can_manage_lists else '' }}
+                                        <label class="form-check-label">Gérer les listes déroulantes</label>
+                                    </div>
+                                </div>
+                                <div class="col-md-6 mb-3">
+                                    <div class="form-check form-switch">
+                                        {{ form.can_manage_fields(class="form-check-input") if form.can_manage_fields else '' }}
+                                        <label class="form-check-label">Gérer les champs personnalisés</label>
+                                    </div>
+                                </div>
+                                <div class="col-md-6 mb-3">
+                                    <div class="form-check form-switch">
+                                        {{ form.can_manage_files(class="form-check-input") if form.can_manage_files else '' }}
+                                        <label class="form-check-label">Gérer les fichiers</label>
+                                    </div>
+                                </div>
+                                <div class="col-md-6 mb-3">
+                                    <div class="form-check form-switch">
+                                        {{ form.can_manage_templates(class="form-check-input") if form.can_manage_templates else '' }}
+                                        <label class="form-check-label">Gérer les templates de permissions</label>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <!-- ==================== BOUTONS DE SAUVEGARDE ==================== -->
+                        <div class="mt-4">
+                            <button type="submit" class="btn btn-modern-primary" id="submitPermissions">
+                                <i class="fas fa-save me-2"></i>Enregistrer les permissions
+                            </button>
+                            <a href="{{ url_for('gestionnaire_utilisateurs') }}" class="btn btn-modern-outline">
+                                <i class="fas fa-arrow-left me-2"></i>Retour
+                            </a>
+                            <button type="button" class="btn btn-outline-secondary ms-2" id="reset-to-default">
+                                <i class="fas fa-undo me-2"></i>Réinitialiser
+                            </button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+        
+        <!-- ==================== SIDEBAR INFORMATIONS ==================== -->
+        <div class="col-lg-4">
+            <div class="card card-modern">
+                <div class="card-header">
+                    <h5 class="mb-0">Informations</h5>
+                </div>
+                <div class="card-body">
+                    <!-- Informations utilisateur -->
+                    <div class="mb-4 text-center">
+                        <div class="rounded-circle bg-primary bg-opacity-10 d-inline-flex align-items-center justify-content-center mb-3" 
+                             style="width: 80px; height: 80px;">
+                            <i class="fas fa-user fa-2x text-primary"></i>
+                        </div>
+                        <h5>{{ user.username }}</h5>
+                        <p class="text-muted mb-2">
+                            {{ user.email }}
+                            <br>
+                            <span class="badge bg-{{ 'danger' if user.role == 'admin' else 'warning' if user.role == 'manager' else 'info' }}">
+                                {{ user.get_role_display_name() }}
+                            </span>
+                        </p>
+                    </div>
+                    
+                    <!-- Statistiques -->
+                    <div class="mb-4">
+                        <h6>Statistiques client :</h6>
+                        <div class="p-3 bg-light rounded">
+                            <p class="mb-2">
+                                <i class="fas fa-users me-2"></i>
+                                Utilisateurs actifs : {{ stats.total_users }}/{{ stats.max_users }}
+                            </p>
+                            <div class="progress" style="height: 8px;">
+                                <div class="progress-bar bg-success" 
+                                     style="width: {{ (stats.total_users/stats.max_users*100) if stats.max_users > 0 else 0 }}%">
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- Légende -->
+                    <div class="alert alert-info">
+                        <h6 class="mb-2">
+                            <i class="fas fa-info-circle me-2"></i>Légende :
+                        </h6>
+                        <ul class="small mb-0">
+                            <li><i class="fas fa-check-circle text-success me-1"></i> Permission activée</li>
+                            <li><i class="fas fa-times-circle text-danger me-1"></i> Permission désactivée</li>
+                            <li><i class="fas fa-layer-group me-1"></i> Bouton "Tout" = Activer/Désactiver la section</li>
+                        </ul>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+{% endblock %}
+
+{% block scripts %}
+<script>
+// Stocker l'état initial des permissions
+let initialPermissions = {};
+
+// Fonction pour basculer toutes les checkboxes d'une section
+function toggleSectionCheckboxes(sectionName, buttonElement) {
+    const section = document.querySelector(`.permission-category[data-section="${sectionName}"]`);
+    if (!section) return;
+    
+    const checkboxes = section.querySelectorAll('.form-check-input:not(:disabled)');
+    if (checkboxes.length === 0) return;
+    
+    // Vérifier si toutes sont déjà cochées
+    const allChecked = Array.from(checkboxes).every(cb => cb.checked);
+    const newState = !allChecked;
+    
+    checkboxes.forEach(checkbox => {
+        checkbox.checked = newState;
+    });
+    
+    // Changer l'icône du bouton
+    if (buttonElement) {
+        const icon = buttonElement.querySelector('i');
+        if (icon) {
+            icon.className = newState ? 'fas fa-check-double me-1' : 'fas fa-times me-1';
+        }
+    }
+    
+    showToast(`Section ${sectionName}: ${newState ? 'Tous activés' : 'Tous désactivés'}`, 'info');
+}
+
+// Fonction pour activer/désactiver une section entière (pour les boutons rapides)
+function toggleSection(sectionName, activate) {
+    const section = document.querySelector(`.permission-category[data-section="${sectionName}"]`);
+    if (!section) return;
+    
+    const checkboxes = section.querySelectorAll('.form-check-input:not(:disabled)');
+    checkboxes.forEach(checkbox => {
+        checkbox.checked = activate;
+    });
+    
+    showToast(`${sectionName}: ${activate ? 'Tous activés' : 'Tous désactivés'}`, 'info');
+}
+
+// Fonction pour sélectionner toutes les permissions
+function selectAllPermissions() {
+    document.querySelectorAll('.form-check-input:not(:disabled)').forEach(checkbox => {
+        checkbox.checked = true;
+    });
+    showToast('Toutes les permissions sélectionnées', 'success');
+}
+
+// Fonction pour désélectionner toutes les permissions
+function deselectAllPermissions() {
+    document.querySelectorAll('.form-check-input:not(:disabled)').forEach(checkbox => {
+        checkbox.checked = false;
+    });
+    showToast('Toutes les permissions désélectionnées', 'info');
+}
+
+// Fonction pour réinitialiser aux permissions initiales
+function resetToDefault() {
+    if (confirm('⚠️ Réinitialiser toutes les permissions aux valeurs précédentes ?')) {
+        for (const [permId, value] of Object.entries(initialPermissions)) {
+            const checkbox = document.getElementById(permId);
+            if (checkbox && !checkbox.disabled) {
+                checkbox.checked = value;
+            }
+        }
+        showToast('Permissions réinitialisées', 'info');
+    }
+}
+
+// Fonction toast
+function showToast(message, type = 'info') {
+    const toastContainer = document.querySelector('.toast-container');
+    if (!toastContainer) {
+        const container = document.createElement('div');
+        container.className = 'toast-container position-fixed bottom-0 end-0 p-3';
+        document.body.appendChild(container);
+    }
+    
+    const container = document.querySelector('.toast-container');
+    const toast = document.createElement('div');
+    toast.className = `toast align-items-center text-bg-${type === 'success' ? 'success' : type === 'warning' ? 'warning' : type === 'error' ? 'danger' : 'info'} border-0`;
+    toast.setAttribute('role', 'alert');
+    toast.innerHTML = `
+        <div class="d-flex">
+            <div class="toast-body">
+                <i class="fas fa-${type === 'success' ? 'check-circle' : type === 'warning' ? 'exclamation-triangle' : type === 'error' ? 'exclamation-circle' : 'info-circle'} me-2"></i>
+                ${message}
+            </div>
+            <button type="button" class="btn-close btn-close-white me-2 m-auto" data-bs-dismiss="toast"></button>
+        </div>
+    `;
+    
+    container.appendChild(toast);
+    const bsToast = new bootstrap.Toast(toast);
+    bsToast.show();
+    
+    toast.addEventListener('hidden.bs.toast', () => {
+        toast.remove();
+    });
+}
+
+// Validation avant soumission
+document.getElementById('permissionsForm').addEventListener('submit', function(e) {
+    const submitBtn = document.getElementById('submitPermissions');
+    if (submitBtn) {
+        submitBtn.innerHTML = '<i class="fas fa-spinner fa-spin me-2"></i> Enregistrement...';
+        submitBtn.disabled = true;
+    }
+});
+
+// Initialisation
+document.addEventListener('DOMContentLoaded', function() {
+    // Stocker l'état initial des permissions
+    document.querySelectorAll('.form-check-input').forEach(checkbox => {
+        if (checkbox.id) {
+            initialPermissions[checkbox.id] = checkbox.checked;
+        }
+    });
+    
+    // Boutons globaux
+    const selectAllBtn = document.getElementById('select-all-sections');
+    const deselectAllBtn = document.getElementById('deselect-all-sections');
+    const resetBtn = document.getElementById('reset-to-default');
+    
+    if (selectAllBtn) {
+        selectAllBtn.addEventListener('click', selectAllPermissions);
+    }
+    if (deselectAllBtn) {
+        deselectAllBtn.addEventListener('click', deselectAllPermissions);
+    }
+    if (resetBtn) {
+        resetBtn.addEventListener('click', resetToDefault);
+    }
+    
+    // Compter et afficher le nombre de permissions par section
+    document.querySelectorAll('.permission-category').forEach(section => {
+        const checkboxes = section.querySelectorAll('.form-check-input:not(:disabled)');
+        const enabledCount = Array.from(checkboxes).filter(cb => cb.checked).length;
+        const totalCount = checkboxes.length;
+        
+        const header = section.querySelector('h5');
+        if (header && totalCount > 0) {
+            const badge = document.createElement('span');
+            badge.className = `badge bg-${enabledCount === totalCount ? 'success' : enabledCount > 0 ? 'warning' : 'secondary'} ms-2`;
+            badge.textContent = `${enabledCount}/${totalCount}`;
+            header.appendChild(badge);
+        }
+    });
+});
+</script>
+
+<style>
+.permission-category {
+    background: #f8f9fa;
+    border-radius: 12px;
+    padding: 1.5rem;
+    margin-bottom: 1.5rem;
+    border: 1px solid #e9ecef;
+    transition: all 0.3s ease;
+}
+
+.permission-category:hover {
+    box-shadow: 0 2px 12px rgba(0,0,0,0.08);
+}
+
+.permission-category h5 {
+    color: #495057;
+    font-weight: 600;
+    display: flex;
+    align-items: center;
+}
+
+.permission-category h5 i {
+    width: 24px;
+    text-align: center;
+}
+
+.form-check-input:checked {
+    background-color: #0d6efd;
+    border-color: #0d6efd;
+}
+
+.form-check-input:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+
+.form-switch .form-check-input {
+    width: 3em;
+    height: 1.5em;
+}
+
+.card-modern {
+    border: none;
+    border-radius: 12px;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.05);
+    overflow: hidden;
+}
+
+.card-modern .card-header {
+    background: #fff;
+    border-bottom: 1px solid #e9ecef;
+    padding: 1.25rem 1.5rem;
+}
+
+.card-modern .card-body {
+    padding: 1.5rem;
+}
+
+.progress {
+    background-color: #E5E7EB;
+}
+
+.progress-bar {
+    transition: width 0.6s ease;
+}
+
+.badge {
+    font-size: 0.7rem;
+    padding: 0.25rem 0.5rem;
+}
+
+[data-bs-theme="dark"] .permission-category {
+    background: #1E293B;
+    border-color: #334155;
+}
+
+[data-bs-theme="dark"] .permission-category h5 {
+    color: #E2E8F0;
+}
+
+[data-bs-theme="dark"] .bg-light {
+    background-color: #1E293B !important;
+}
+</style>
+{% endblock %}                                <i class="fas fa-info-circle fa-2x me-3"></i>
                                 <div>
                                     <strong>Utilisateur :</strong> {{ user.username }} ({{ user.email }})<br>
                                     <strong>Rôle :</strong> {{ user.get_role_display_name() }}<br>
