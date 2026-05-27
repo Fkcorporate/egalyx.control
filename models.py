@@ -5802,7 +5802,7 @@ class FormuleAbonnement(db.Model):
     })
     
     # Modules accessibles - UTILISEZ LES NOMS EXACTS DE LA BASE DE DONNÉES
-  modules = db.Column(db.JSON, default={
+    modules = db.Column(db.JSON, default={
         # ==================== MODULES STANDARD ====================
         'cartographie': True,           # Cartographie des risques
         'matrices_risque': True,        # Matrices de risque
