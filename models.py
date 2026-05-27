@@ -78,6 +78,7 @@ class User(UserMixin, db.Model):
     # PERMISSIONS (JSON)
     # ============================================
     permissions = db.Column(db.JSON, default={
+        # ==================== PERMISSIONS EXISTANTES ====================
         'can_view_dashboard': True,
         'can_manage_risks': False,
         'can_manage_kri': False,
@@ -101,17 +102,61 @@ class User(UserMixin, db.Model):
         'can_delete_users': False,
         'can_block_users': False,
         'can_manage_permissions': False,
+        'can_manage_action_plans': False,
+        'can_view_action_plans': False,
+        
+        # ==================== NOUVELLES PERMISSIONS ====================
+        # Qualité
+        'can_manage_quality': False,
+        'can_manage_quality_plans': False,
+        'can_manage_quality_audits': False,
+        
+        # Campagnes de contrôle
+        'can_manage_campaigns': False,
+        'can_view_campaigns': False,
+        'can_conduct_campaigns': False,
+        
+        # Plans de continuité (PCA/BCP)
+        'can_manage_bcp': False,
+        'can_view_bcp': False,
+        'can_test_bcp': False,
+        
+        # Incidents
+        'can_manage_incidents': False,
+        'can_view_incidents': False,
+        'can_escalate_incidents': False,
+        'can_resolve_incidents': False,
+        
+        # Programme d'audit
+        'can_manage_audit_program': False,
+        'can_view_audit_program': False,
+        'can_plan_audits': False,
+        
+        # Questionnaires
+        'can_manage_questionnaires': False,
+        'can_create_questionnaires': False,
+        'can_view_responses': False,
+        'can_export_responses': False,
+        
+        # Support
+        'can_view_tickets': False,
+        'can_manage_tickets': False,
+        'can_resolve_tickets': False,
+        
         # Modules
         'module_cartographie': True,
         'module_kri': True,
         'module_audit': True,
-        'module_veille': True,
-        'module_processus': True,
-        'module_questionnaires': True,
+        'module_veille': False,
+        'module_processus': False,
+        'module_questionnaires': False,
         'module_plans_action': True,
         'module_analyse_ia': False,
-        'can_manage_quality': False
-
+        'module_qualite': False,
+        'module_campagnes': False,
+        'module_pca': False,
+        'module_incidents': False,
+        'module_programme_audit': False
     })
     
     # ============================================
@@ -5757,25 +5802,33 @@ class FormuleAbonnement(db.Model):
     })
     
     # Modules accessibles - UTILISEZ LES NOMS EXACTS DE LA BASE DE DONNÉES
-    modules = db.Column(db.JSON, default={
-        # Modules standards
-        'cartographie': True,
-        'matrices_risque': True,
-        'suivi_kri': True,
-        'audit_interne': True,
-        'plans_action': True,
+  modules = db.Column(db.JSON, default={
+        # ==================== MODULES STANDARD ====================
+        'cartographie': True,           # Cartographie des risques
+        'matrices_risque': True,        # Matrices de risque
+        'suivi_kri': True,              # Indicateurs KRI
+        'audit_interne': True,          # Audit interne
+        'plans_action': True,           # Plans d'action
+        'tickets_support': True,        # Tickets support
         
-        # Modules problématiques - NOMS EXACTS DE LA BASE DE DONNÉES
-        'veille_reglementaire': False,  # IMPORTANT: pas 'veille'
-        'gestion_processus': False,     # IMPORTANT: pas 'processus'
-        'analyse_ia': False,           # IMPORTANT: pas 'ia_analyse'
-        'tableaux_bord': False,        # IMPORTANT: pas 'tableaux_bord_personnalisables'
+        # ==================== MODULES PREMIUM ====================
+        'veille_reglementaire': False,   # Veille règlementaire
+        'gestion_processus': False,      # Gestion des processus (Logigrammes)
+        'qualite': False,                # Plans Qualité
+        'campagnes_controle': False,     # Campagnes de contrôle
+        'questionnaires_avances': False, # Questionnaires avancés
+        'programme_audit': False,        # Programme d'audit
+        'reporting_avance': False,       # Reporting avancé
         
-        # Autres modules
-        'organigramme': False,
-        'questionnaires': False,
-        'portail_fournisseurs': False,
-        'reporting_avance': False
+        # ==================== MODULES ENTERPRISE ====================
+        'analyse_ia': False,             # Analyse IA
+        'tableaux_bord': False,          # Tableaux de bord personnalisables
+        'pca': False,                    # Plan de continuité d'activité
+        'incidents': False,              # Gestion des incidents
+        'multi_sites': False,            # Multi-sites
+        'api_avancee': False,            # API avancée
+        'sso': False,                    # SSO
+        'custom_domain': False           # Domaine personnalisé
     })
     
     # Rôles autorisés
@@ -5787,53 +5840,58 @@ class FormuleAbonnement(db.Model):
         'can_view_dashboard': True,
         'can_view_reports': True,
         'can_view_departments': True,
-        'can_view_users_list': True,   # Peut voir la liste (lecture seule)
+        'can_view_users_list': True,
+        'can_view_notifications': True,
+        'can_view_action_plans': True,
+        'can_view_tickets': True,
         
-        # ==================== PERMISSIONS MODULAIRES ====================
-        # Cartographie
+        # ==================== GESTION RISQUES ====================
         'can_manage_risks': True,
         'can_validate_risks': True,
-        
-        # KRI
         'can_manage_kri': True,
         
-        # Audit
+        # ==================== GESTION AUDIT ====================
         'can_manage_audit': True,
         'can_confirm_evaluations': True,
+        'can_manage_action_plans': True,
         
-        # Veille règlementaire (lié au module 'veille_reglementaire')
-        'can_manage_regulatory': False,
+        # ==================== PERMISSIONS PREMIUM ====================
+        'can_manage_regulatory': False,      # Veille
+        'can_manage_logigram': False,        # Logigrammes
+        'can_manage_quality': False,         # Plans Qualité
+        'can_manage_campaigns': False,       # Campagnes de contrôle
+        'can_manage_questionnaires': False,  # Questionnaires
+        'can_manage_audit_program': False,   # Programme d'audit
+        'can_export_data': False,            # Export (Premium)
         
-        # Processus (lié au module 'gestion_processus')
-        'can_manage_logigram': False,
+        # ==================== PERMISSIONS ENTERPRISE ====================
+        'can_manage_bcp': False,             # PCA
+        'can_manage_incidents': False,       # Incidents
+        'can_use_ia_analysis': False,        # IA
+        'can_view_dashboard_advanced': False,# Dashboard avancé
+        'can_manage_api': False,             # API
+        'can_manage_sso': False,             # SSO
+        'can_manage_custom_domain': False,   # Domaine personnalisé
         
-        # Analyse IA (lié au module 'analyse_ia')
-        'can_use_ia_analysis': False,
-        
-        # Reporting
-        'can_export_data': False,
+        # ==================== GESTION UTILISATEURS ====================
+        'can_edit_users': False,
+        'can_create_users': False,
+        'can_deactivate_users': False,
+        'can_delete_users': False,
+        'can_manage_users': False,
+        'can_manage_permissions': False,
+        'can_block_users': False,
         
         # ==================== ADMINISTRATION ====================
         'can_manage_settings': False,
-        'can_manage_permissions': False,
-        'can_manage_users': False,
-        'can_edit_users': False,
         'can_manage_departments': False,
         'can_access_all_departments': False,
         'can_delete_data': False,
         'can_archive_data': False,
         
-        # ==================== PARAMÉTRAGE ====================
-        'can_manage_lists': False,
-        'can_manage_fields': False,
-        'can_manage_files': False,
-        'can_manage_templates': False,
-        
         # ==================== SYSTÈME ====================
         'can_manage_clients': False,
-        'can_provision_servers': False,
-        'can_manage_action_plans': True,  # Pour plans_action
-        'can_view_action_plans': True,    # Pour consultation
+        'can_provision_servers': False
     })
     
     is_active = db.Column(db.Boolean, default=True)
