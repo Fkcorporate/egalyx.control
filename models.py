@@ -547,7 +547,7 @@ class User(UserMixin, db.Model):
     # ============================================
     # MÉTHODES DE PERMISSIONS
     # ============================================
-    
+
     def has_permission(self, permission):
         """Vérifie si l'utilisateur a une permission spécifique"""
         
@@ -558,7 +558,13 @@ class User(UserMixin, db.Model):
             print(f"   ✅ Super admin - accès immédiat")
             return True
         
-        # 2. ADMIN CLIENT
+        # 2. Vérifier d'abord les permissions EXPLICITES dans la base (PRIORITÉ ABSOLUE)
+        if self.permissions and permission in self.permissions:
+            value = bool(self.permissions[permission])
+            print(f"   📋 Permission explicite dans DB: {permission} = {value}")
+            return value
+        
+        # 3. ADMIN CLIENT
         is_admin_client = (self.role == 'admin') or (getattr(self, 'is_client_admin', False))
         
         if is_admin_client:
@@ -587,56 +593,47 @@ class User(UserMixin, db.Model):
                 'can_manage_settings': True,
                 'can_archive_data': True,
                 'can_export_data': True,
-                'can_manage_regulatory': self.client and self.client.formule and 
-                                          self.client.formule.modules.get('veille_reglementaire', False) if self.client else False,
-                'can_manage_logigram': self.client and self.client.formule and 
-                                        self.client.formule.modules.get('gestion_processus', False) if self.client else False,
+                'can_manage_permissions': True,
                 'can_manage_clients': False,
                 'can_provision_servers': False,
-                'can_manage_permissions': True,
             }
+            
+            # Ajouter les permissions conditionnelles selon la formule
+            if self.client and self.client.formule:
+                permissions_admin_obligatoires['can_manage_regulatory'] = self.client.formule.modules.get('veille_reglementaire', False)
+                permissions_admin_obligatoires['can_manage_logigram'] = self.client.formule.modules.get('gestion_processus', False)
             
             if permission in permissions_admin_obligatoires:
                 return permissions_admin_obligatoires[permission]
         
-        # 3. GESTIONNAIRE (manager)
+        # 4. GESTIONNAIRE (manager) - RESPECTER LES PERMISSIONS DE LA BASE
         if self.role == 'manager':
             print(f"   👤 Utilisateur est un GESTIONNAIRE")
             
-            permissions_manager = {
+            # Permissions de base pour manager (uniquement si non définies en base)
+            manager_base_permissions = {
                 'can_view_dashboard': True,
                 'can_view_reports': True,
                 'can_view_departments': True,
                 'can_view_notifications': True,
-                'can_manage_risks': True,
-                'can_validate_risks': True,
-                'can_manage_kri': True,
-                'can_manage_audit': True,
                 'can_view_action_plans': True,
-                'can_manage_action_plans': True,
-                'can_access_all_departments': True,
                 'can_export_data': True,
-                'can_manage_users': True,
-                'can_edit_users': True,
-                'can_view_users_list': True,
-                'can_create_users': True,
-                'can_deactivate_users': True,
-                'can_delete_users': True,
-                'can_manage_permissions': True,
-                'can_manage_settings': True,
-                'can_manage_departments': True,
-                'can_manage_clients': False,
-                'can_provision_servers': False,
             }
             
-            if permission in permissions_manager:
-                return permissions_manager[permission]
+            # Vérifier si la permission est dans les permissions de base du manager
+            if permission in manager_base_permissions:
+                return manager_base_permissions[permission]
+            
+            # Pour les autres permissions (can_manage_risks, can_manage_kri, etc.)
+            # RETOURNER FALSE si non défini dans la base
+            print(f"   ❌ Permission '{permission}' non définie pour manager, REFUSÉE")
+            return False
         
-        # 4. PERMISSIONS EXPLICITES DANS LA BASE
+        # 5. PERMISSIONS EXPLICITES DANS LA BASE (déjà vérifié au début)
         if self.permissions and permission in self.permissions:
             return bool(self.permissions[permission])
         
-        # 5. PERMISSIONS PAR DÉFAUT SELON LE RÔLE
+        # 6. PERMISSIONS PAR DÉFAUT SELON LE RÔLE
         role_defaults = {
             'auditeur': {
                 'can_view_dashboard': True,
