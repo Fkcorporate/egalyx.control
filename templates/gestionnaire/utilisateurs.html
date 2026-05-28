@@ -85,11 +85,11 @@
                     <div class="d-flex align-items-center">
                         <div class="rounded-circle bg-info bg-opacity-10 d-flex align-items-center justify-content-center me-3" 
                              style="width: 48px; height: 48px;">
-                            <i class="fas fa-user-shield fa-lg text-info"></i>
+                            <i class="fas fa-user-tag fa-lg text-info"></i>
                         </div>
                         <div>
-                            <h4 class="mb-0">{{ stats.admin_count }}</h4>
-                            <p class="text-muted mb-0">Administrateurs</p>
+                            <h4 class="mb-0">{{ stats.user_count }}</h4>
+                            <p class="text-muted mb-0">Utilisateurs standards</p>
                         </div>
                     </div>
                 </div>
@@ -181,7 +181,7 @@
                             <tbody id="usersTableBody">
                                 {% for u in users %}
                                 <tr id="user-row-{{ u.id }}">
-                                    <td>
+                                    <td data-label="Utilisateur">
                                         <div class="d-flex align-items-center">
                                             <div class="rounded-circle bg-light d-flex align-items-center justify-content-center me-3" 
                                                  style="width: 36px; height: 36px;">
@@ -202,9 +202,10 @@
                                             </div>
                                         </div>
                                     </td>
-                                    <td>
+                                    <td data-label="Rôle">
                                         <span class="badge-modern 
-                                            {% if u.role == 'admin' or u.is_client_admin %}badge-danger
+                                            {% if u.is_client_admin %}badge-danger
+                                            {% elif u.role == 'admin' %}badge-danger
                                             {% elif u.role == 'manager' %}badge-warning
                                             {% elif u.role == 'auditeur' %}badge-info
                                             {% elif u.role == 'consultant' %}badge-success
@@ -213,50 +214,73 @@
                                             {% if u.is_client_admin %}
                                             <i class="fas fa-crown ms-1"></i>
                                             {% endif %}
-                                            {% if u.can_manage_users and not u.is_client_admin %}
+                                            {% if u.can_manage_users and not u.is_client_admin and u.role != 'admin' %}
                                             <i class="fas fa-user-shield ms-1 text-info"></i>
                                             {% endif %}
                                         </span>
                                     </td>
-                                    <td>{{ u.department or 'Non spécifié' }}</td>
-                                    <td>
+                                    <td data-label="Département">{{ u.department or 'Non spécifié' }}</td>
+                                    <td data-label="Statut">
                                         <span class="badge bg-{{ 'success' if u.is_active else 'danger' }}" id="status-badge-{{ u.id }}">
                                             {{ 'Actif' if u.is_active else 'Inactif' }}
                                         </span>
                                     </td>
-                                    <td>
+                                    <td data-label="Date création">
                                         <small>{{ u.created_at.strftime('%d/%m/%Y') }}</small>
                                     </td>
-                                    <td>
+                                    <td data-label="Dernière connexion">
                                         {% if u.last_login %}
                                         <small>{{ u.last_login.strftime('%d/%m/%Y %H:%M') }}</small>
                                         {% else %}
                                         <small class="text-muted">Jamais</small>
                                         {% endif %}
                                     </td>
-                                    <td>
+                                    <td data-label="Actions">
                                         <div class="btn-group btn-group-sm" role="group">
-                                            <!-- Voir/Éditer -->
-                                            {% if current_user.has_permission('can_edit_users') %}
-                                            <a href="{{ url_for('gestionnaire_editer_utilisateur', id=u.id) }}" 
-                                               class="btn btn-outline-primary btn-action"
-                                               title="Voir/Éditer">
-                                                <i class="fas fa-edit"></i>
-                                            </a>
+                                            
+                                            <!-- ==================== ÉDITER ==================== -->
+                                            <!-- Seulement si ce n'est pas un admin client ET pas un autre gestionnaire -->
+                                            {% if not u.is_client_admin and not (u.can_manage_users and u.id != current_user.id) %}
+                                                {% if current_user.has_permission('can_edit_users') and u.id != current_user.id %}
+                                                <a href="{{ url_for('gestionnaire_editer_utilisateur', id=u.id) }}" 
+                                                   class="btn btn-outline-primary btn-action"
+                                                   title="Voir/Éditer">
+                                                    <i class="fas fa-edit"></i>
+                                                </a>
+                                                {% endif %}
+                                            {% elif u.id == current_user.id %}
+                                            <button type="button" class="btn btn-outline-secondary btn-action" disabled 
+                                                    title="Vous ne pouvez pas modifier votre propre compte">
+                                                <i class="fas fa-user"></i>
+                                            </button>
+                                            {% elif u.is_client_admin %}
+                                            <button type="button" class="btn btn-outline-secondary btn-action" disabled 
+                                                    title="Impossible de modifier un administrateur client">
+                                                <i class="fas fa-crown"></i>
+                                            </button>
+                                            {% elif u.can_manage_users and u.id != current_user.id %}
+                                            <button type="button" class="btn btn-outline-secondary btn-action" disabled 
+                                                    title="Impossible de modifier un autre gestionnaire">
+                                                <i class="fas fa-user-shield"></i>
+                                            </button>
                                             {% endif %}
                                             
-                                            <!-- Gérer permissions -->
-                                            {% if current_user.has_permission('can_manage_permissions') %}
-                                            <a href="{{ url_for('gestionnaire_gerer_permissions', id=u.id) }}" 
-                                               class="btn btn-outline-info btn-action"
-                                               title="Gérer les permissions">
-                                                <i class="fas fa-key"></i>
-                                            </a>
+                                            <!-- ==================== GÉRER PERMISSIONS ==================== -->
+                                            <!-- UNIQUEMENT pour les utilisateurs standards, pas pour les gestionnaires ni admin client -->
+                                            {% if not u.is_client_admin and not u.can_manage_users and u.role != 'admin' and u.role != 'manager' %}
+                                                {% if current_user.has_permission('can_manage_permissions') %}
+                                                <a href="{{ url_for('gestionnaire_gerer_permissions', id=u.id) }}" 
+                                                   class="btn btn-outline-info btn-action"
+                                                   title="Gérer les permissions">
+                                                    <i class="fas fa-key"></i>
+                                                </a>
+                                                {% endif %}
                                             {% endif %}
                                             
-                                            <!-- Activer/Désactiver -->
-                                            {% if current_user.has_permission('can_deactivate_users') and u.id != current_user.id %}
-                                                {% if not u.is_client_admin and not (u.can_manage_users and u.id != current_user.id) %}
+                                            <!-- ==================== ACTIVER/DÉSACTIVER ==================== -->
+                                            <!-- UNIQUEMENT pour les utilisateurs standards -->
+                                            {% if not u.is_client_admin and not u.can_manage_users and u.id != current_user.id and u.role != 'admin' and u.role != 'manager' %}
+                                                {% if current_user.has_permission('can_deactivate_users') %}
                                                 <button type="button" class="btn btn-outline-{{ 'warning' if u.is_active else 'success' }} btn-action toggle-user-btn"
                                                         data-user-id="{{ u.id }}"
                                                         data-username="{{ u.username }}"
@@ -264,38 +288,22 @@
                                                         title="{{ 'Désactiver' if u.is_active else 'Activer' }}">
                                                     <i class="fas fa-{{ 'ban' if u.is_active else 'check' }}"></i>
                                                 </button>
-                                                {% else %}
-                                                <button type="button" class="btn btn-outline-secondary btn-action" disabled 
-                                                        title="{% if u.is_client_admin %}Administrateur client - modification restreinte{% else %}Impossible de modifier un autre gestionnaire{% endif %}">
-                                                    <i class="fas fa-{{ 'shield-alt' if u.is_client_admin else 'user-shield' }}"></i>
-                                                </button>
                                                 {% endif %}
-                                            {% elif u.id == current_user.id %}
-                                            <button type="button" class="btn btn-outline-secondary btn-action" disabled title="Vous ne pouvez pas modifier votre propre statut">
-                                                <i class="fas fa-user"></i>
-                                            </button>
                                             {% endif %}
                                             
-                                            <!-- Supprimer -->
-                                            {% if current_user.has_permission('can_delete_users') and u.id != current_user.id %}
-                                                {% if not u.is_client_admin and not (u.can_manage_users and u.id != current_user.id) %}
+                                            <!-- ==================== SUPPRIMER ==================== -->
+                                            <!-- UNIQUEMENT pour les utilisateurs standards -->
+                                            {% if not u.is_client_admin and not u.can_manage_users and u.id != current_user.id and u.role != 'admin' and u.role != 'manager' %}
+                                                {% if current_user.has_permission('can_delete_users') %}
                                                 <button type="button" class="btn btn-outline-danger btn-action delete-user-btn"
                                                         data-user-id="{{ u.id }}"
                                                         data-username="{{ u.username }}"
                                                         title="Supprimer">
                                                     <i class="fas fa-trash"></i>
                                                 </button>
-                                                {% else %}
-                                                <button type="button" class="btn btn-outline-secondary btn-action" disabled 
-                                                        title="{% if u.is_client_admin %}Impossible de supprimer un administrateur client{% else %}Impossible de supprimer un autre gestionnaire{% endif %}">
-                                                    <i class="fas fa-{{ 'shield-alt' if u.is_client_admin else 'user-shield' }}"></i>
-                                                </button>
                                                 {% endif %}
-                                            {% elif u.id == current_user.id %}
-                                            <button type="button" class="btn btn-outline-secondary btn-action" disabled title="Vous ne pouvez pas vous supprimer vous-même">
-                                                <i class="fas fa-user-slash"></i>
-                                            </button>
                                             {% endif %}
+                                            
                                         </div>
                                     </td>
                                 </tr>
@@ -366,7 +374,7 @@
                 </ul>
                 <div class="alert alert-info mt-3">
                     <i class="fas fa-lightbulb me-2"></i>
-                    <small><strong>Note :</strong> La suppression se fait par désactivation du compte.</small>
+                    <small><strong>Conseil :</strong> Si vous souhaitez simplement empêcher l'accès, désactivez le compte plutôt que de le supprimer.</small>
                 </div>
             </div>
             <div class="modal-footer">
@@ -385,7 +393,7 @@ let currentUserId = null;
 let currentUsername = null;
 let currentUserIsActive = null;
 
-// Fonction toast simple
+// Fonction toast
 function showToast(message, type = 'info') {
     const alertClass = type === 'success' ? 'alert-success' : 
                       type === 'warning' ? 'alert-warning' : 
@@ -404,24 +412,17 @@ function showToast(message, type = 'info') {
     `;
     
     document.body.appendChild(toast);
-    
-    setTimeout(() => {
-        if (toast.parentNode) {
-            toast.remove();
-        }
-    }, 4000);
+    setTimeout(() => { if (toast.parentNode) toast.remove(); }, 4000);
 }
 
 // Récupérer le token CSRF
 function getCSRFToken() {
-    const token = document.querySelector('meta[name="csrf-token"]')?.content || 
-                  document.querySelector('input[name="csrf_token"]')?.value;
-    return token || '';
+    return document.querySelector('meta[name="csrf-token"]')?.content || 
+           document.querySelector('input[name="csrf_token"]')?.value || '';
 }
 
-// Mettre à jour les statistiques après suppression
+// Mettre à jour les statistiques
 function updateStatsAfterDeletion() {
-    // Décrémenter les compteurs
     const totalEl = document.getElementById('stat-total');
     const actifsEl = document.getElementById('stat-actifs');
     
@@ -435,66 +436,32 @@ function updateStatsAfterDeletion() {
         actifsEl.textContent = Math.max(0, currentActifs - 1);
     }
     
-    // Mettre à jour la barre de progression
     updateUsageStats();
 }
 
-// Mettre à jour les statistiques d'utilisation
 function updateUsageStats() {
     const total = parseInt(document.getElementById('stat-total').textContent) || 0;
     const limit = {{ stats.limite }};
     
     if (limit > 0) {
         const percentage = Math.min(100, (total / limit) * 100);
-        
-        // Mettre à jour la barre
         const bar = document.getElementById('usage-bar');
-        if (bar) {
-            bar.style.width = percentage + '%';
-            
-            // Mettre à jour la couleur
-            if (total >= limit) {
-                bar.className = 'progress-bar bg-danger';
-            } else if (total >= limit * 0.9) {
-                bar.className = 'progress-bar bg-warning';
-            } else {
-                bar.className = 'progress-bar bg-success';
-            }
-        }
+        if (bar) bar.style.width = percentage + '%';
         
-        // Mettre à jour le badge
         const badge = document.getElementById('usage-badge');
         if (badge) {
             badge.textContent = `${total}/${limit} utilisateurs (${Math.round(percentage)}%)`;
-            
-            if (total >= limit) {
-                badge.className = 'badge bg-danger';
-            } else if (total >= limit * 0.9) {
-                badge.className = 'badge bg-warning';
-            } else {
-                badge.className = 'badge bg-success';
-            }
+            badge.className = `badge bg-${total >= limit ? 'danger' : total >= limit * 0.9 ? 'warning' : 'success'}`;
         }
         
-        // Mettre à jour le message
         const messageEl = document.getElementById('usage-message');
         if (messageEl) {
             if (total >= limit) {
-                messageEl.innerHTML = `
-                    <i class="fas fa-exclamation-triangle text-danger me-1"></i>
-                    <span class="text-danger">Limite atteinte ! Vous ne pouvez plus créer d'utilisateurs.</span>
-                `;
+                messageEl.innerHTML = '<i class="fas fa-exclamation-triangle text-danger me-1"></i><span class="text-danger">Limite atteinte !</span>';
             } else if (total >= limit * 0.9) {
-                messageEl.innerHTML = `
-                    <i class="fas fa-exclamation-circle text-warning me-1"></i>
-                    <span class="text-warning">Vous approchez de la limite (${Math.round(percentage)}%)</span>
-                `;
+                messageEl.innerHTML = `<i class="fas fa-exclamation-circle text-warning me-1"></i><span class="text-warning">Approche limite (${Math.round(percentage)}%)</span>`;
             } else {
-                const remaining = limit - total;
-                messageEl.innerHTML = `
-                    <i class="fas fa-check-circle text-success me-1"></i>
-                    <span>Bonne marge disponible (${remaining} places restantes)</span>
-                `;
+                messageEl.innerHTML = `<i class="fas fa-check-circle text-success me-1"></i><span>${limit - total} places restantes</span>`;
             }
         }
     }
@@ -502,35 +469,27 @@ function updateUsageStats() {
 
 // Attacher les événements
 function attachEventListeners() {
-    // Gestion des boutons via délégation d'événements
     document.addEventListener('click', function(e) {
         const toggleBtn = e.target.closest('.toggle-user-btn');
         const deleteBtn = e.target.closest('.delete-user-btn');
         
         if (toggleBtn) {
             e.preventDefault();
-            e.stopPropagation();
-            
             currentUserId = toggleBtn.getAttribute('data-user-id');
             currentUsername = toggleBtn.getAttribute('data-username');
             currentUserIsActive = toggleBtn.getAttribute('data-is-active') === 'true';
             
-            const action = currentUserIsActive ? 'désactiver' : 'activer';
             document.getElementById('toggleUserMessage').textContent = 
-                `Êtes-vous sûr de vouloir ${action} l'utilisateur "${currentUsername}" ?`;
+                `Êtes-vous sûr de vouloir ${currentUserIsActive ? 'désactiver' : 'activer'} l'utilisateur "${currentUsername}" ?`;
             
-            const modal = new bootstrap.Modal(document.getElementById('toggleUserModal'));
-            modal.show();
+            new bootstrap.Modal(document.getElementById('toggleUserModal')).show();
         }
         
         if (deleteBtn) {
             e.preventDefault();
-            e.stopPropagation();
-            
             currentUserId = deleteBtn.getAttribute('data-user-id');
             currentUsername = deleteBtn.getAttribute('data-username');
             
-            // Récupérer le statut actuel de l'utilisateur
             const userRow = document.getElementById(`user-row-${currentUserId}`);
             if (userRow) {
                 const statusBadge = userRow.querySelector('.badge');
@@ -540,38 +499,20 @@ function attachEventListeners() {
             document.getElementById('deleteUserMessage').textContent = 
                 `Êtes-vous absolument sûr de vouloir supprimer l'utilisateur "${currentUsername}" ?`;
             
-            const modal = new bootstrap.Modal(document.getElementById('deleteUserModal'));
-            modal.show();
+            new bootstrap.Modal(document.getElementById('deleteUserModal')).show();
         }
     });
 }
 
 // Initialisation
 document.addEventListener('DOMContentLoaded', function() {
-    console.log('Initialisation gestionnaire utilisateurs');
-    
-    // Initialiser DataTables (sans interférer avec les événements)
-    if (typeof $.fn.DataTable !== 'undefined' && $('#usersTable').length) {
-        $('#usersTable').DataTable({
-            language: { url: '//cdn.datatables.net/plug-ins/1.13.6/i18n/fr-FR.json' },
-            responsive: true,
-            pageLength: 25,
-            order: [[0, 'asc']],
-            columnDefs: [
-                { targets: 6, orderable: false, searchable: false }
-            ]
-        });
-    }
-    
-    // Attacher les événements
     attachEventListeners();
     
-    // Configurer les boutons de confirmation
     document.getElementById('confirmToggleUser').addEventListener('click', toggleUserStatus);
     document.getElementById('confirmDeleteUser').addEventListener('click', deleteUser);
 });
 
-// Fonction pour activer/désactiver un utilisateur
+// Activer/Désactiver
 async function toggleUserStatus() {
     const confirmBtn = document.getElementById('confirmToggleUser');
     const originalText = confirmBtn.innerHTML;
@@ -580,13 +521,9 @@ async function toggleUserStatus() {
     confirmBtn.disabled = true;
     
     try {
-        const csrfToken = getCSRFToken();
         const response = await fetch(`/gestionnaire/utilisateur/${currentUserId}/toggle-status`, {
             method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-                'X-CSRFToken': csrfToken
-            },
+            headers: { 'Content-Type': 'application/json', 'X-CSRFToken': getCSRFToken() },
             credentials: 'same-origin'
         });
         
@@ -594,29 +531,21 @@ async function toggleUserStatus() {
         
         if (data.success) {
             showToast(data.message, 'success');
-            
-            // Mettre à jour l'interface SANS recharger la page
             updateUserStatusUI(currentUserId, data.is_active);
-            
-            // Mettre à jour les statistiques
             updateStatsAfterToggle(currentUserId, data.is_active);
-            
-            // Fermer le modal
-            const modal = bootstrap.Modal.getInstance(document.getElementById('toggleUserModal'));
-            if (modal) modal.hide();
+            bootstrap.Modal.getInstance(document.getElementById('toggleUserModal')).hide();
         } else {
-            showToast(data.error || 'Erreur lors du traitement', 'error');
+            showToast(data.error || 'Erreur', 'error');
         }
     } catch (error) {
-        console.error('Erreur:', error);
-        showToast('Erreur réseau: ' + error.message, 'error');
+        showToast('Erreur réseau', 'error');
     } finally {
         confirmBtn.innerHTML = originalText;
         confirmBtn.disabled = false;
     }
 }
 
-// Fonction pour supprimer un utilisateur
+// Supprimer
 async function deleteUser() {
     const confirmBtn = document.getElementById('confirmDeleteUser');
     const originalText = confirmBtn.innerHTML;
@@ -625,13 +554,9 @@ async function deleteUser() {
     confirmBtn.disabled = true;
     
     try {
-        const csrfToken = getCSRFToken();
         const response = await fetch(`/gestionnaire/utilisateur/${currentUserId}/supprimer`, {
             method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-                'X-CSRFToken': csrfToken
-            },
+            headers: { 'Content-Type': 'application/json', 'X-CSRFToken': getCSRFToken() },
             credentials: 'same-origin'
         });
         
@@ -639,126 +564,63 @@ async function deleteUser() {
         
         if (data.success) {
             showToast(data.message, 'success');
-            
-            // Supprimer la ligne du tableau SANS recharger la page
             removeUserRow(currentUserId);
-            
-            // Mettre à jour les statistiques
             updateStatsAfterDeletion();
-            
-            // Fermer le modal
-            const modal = bootstrap.Modal.getInstance(document.getElementById('deleteUserModal'));
-            if (modal) modal.hide();
+            bootstrap.Modal.getInstance(document.getElementById('deleteUserModal')).hide();
         } else {
-            showToast(data.error || 'Erreur lors de la suppression', 'error');
+            showToast(data.error || 'Erreur', 'error');
         }
     } catch (error) {
-        console.error('Erreur:', error);
-        showToast('Erreur réseau: ' + error.message, 'error');
+        showToast('Erreur réseau', 'error');
     } finally {
         confirmBtn.innerHTML = originalText;
         confirmBtn.disabled = false;
     }
 }
 
-// Mettre à jour l'interface après activation/désactivation
 function updateUserStatusUI(userId, isActive) {
-    // Mettre à jour le badge
     const statusBadge = document.getElementById(`status-badge-${userId}`);
     if (statusBadge) {
         statusBadge.className = `badge bg-${isActive ? 'success' : 'danger'}`;
         statusBadge.textContent = isActive ? 'Actif' : 'Inactif';
     }
     
-    // Mettre à jour le bouton
     const toggleBtn = document.querySelector(`.toggle-user-btn[data-user-id="${userId}"]`);
     if (toggleBtn) {
         const newIsActive = !isActive;
         toggleBtn.className = `btn btn-outline-${newIsActive ? 'warning' : 'success'} btn-action toggle-user-btn`;
         toggleBtn.setAttribute('data-is-active', newIsActive.toString());
-        toggleBtn.setAttribute('title', newIsActive ? 'Désactiver' : 'Activer');
-        
-        const icon = toggleBtn.querySelector('i');
-        if (icon) {
-            icon.className = `fas fa-${newIsActive ? 'ban' : 'check'}`;
-        }
+        toggleBtn.title = newIsActive ? 'Désactiver' : 'Activer';
+        toggleBtn.querySelector('i').className = `fas fa-${newIsActive ? 'ban' : 'check'}`;
     }
 }
 
-// Mettre à jour les statistiques après activation/désactivation
 function updateStatsAfterToggle(userId, isActive) {
     const actifsEl = document.getElementById('stat-actifs');
-    if (!actifsEl) return;
-    
-    const currentActifs = parseInt(actifsEl.textContent) || 0;
-    
-    if (isActive) {
-        // Si on active, incrémenter
-        actifsEl.textContent = currentActifs + 1;
-    } else {
-        // Si on désactive, décrémenter
-        actifsEl.textContent = Math.max(0, currentActifs - 1);
+    if (actifsEl) {
+        const currentActifs = parseInt(actifsEl.textContent) || 0;
+        actifsEl.textContent = isActive ? currentActifs + 1 : Math.max(0, currentActifs - 1);
     }
-    
-    // Mettre à jour les statistiques d'utilisation
     updateUsageStats();
 }
 
-// Supprimer la ligne d'un utilisateur
 function removeUserRow(userId) {
     const row = document.getElementById(`user-row-${userId}`);
     if (row) {
-        // Animation de disparition
         row.style.transition = 'all 0.5s ease';
         row.style.opacity = '0';
         row.style.height = row.offsetHeight + 'px';
         
-        setTimeout(() => {
-            row.style.height = '0';
-            row.style.padding = '0';
-            row.style.margin = '0';
-            row.style.border = 'none';
-        }, 300);
-        
-        setTimeout(() => {
-            row.remove();
-            
-            // Vérifier si le tableau est vide
-            const tableBody = document.getElementById('usersTableBody');
-            if (tableBody && tableBody.children.length === 0) {
-                // Afficher le message "Aucun utilisateur"
-                const tableContainer = document.querySelector('.table-responsive');
-                if (tableContainer) {
-                    tableContainer.innerHTML = `
-                        <div class="text-center py-5">
-                            <i class="fas fa-users fa-3x text-muted mb-3"></i>
-                            <h5>Aucun utilisateur</h5>
-                            <p class="text-muted mb-4">Commencez par créer votre premier utilisateur</p>
-                            {% if current_user.has_permission('can_create_users') and stats.total < stats.limite %}
-                            <a href="{{ url_for('gestionnaire_creer_utilisateur') }}" class="btn btn-modern-primary">
-                                <i class="fas fa-user-plus me-2"></i>Créer un utilisateur
-                            </a>
-                            {% endif %}
-                        </div>
-                    `;
-                }
-            }
-        }, 800);
+        setTimeout(() => { row.style.height = '0'; row.style.padding = '0'; }, 300);
+        setTimeout(() => { row.remove(); }, 800);
     }
 }
 
-// Fonctions globales
-window.exportUsersToCSV = function() {
-    showToast('Export CSV en cours de développement...', 'info');
-};
-
-window.refreshUserList = function() {
-    window.location.reload();
-};
+window.exportUsersToCSV = () => showToast('Export CSV en développement...', 'info');
+window.refreshUserList = () => window.location.reload();
 </script>
 
 <style>
-/* Styles inchangés - mêmes que précédemment */
 .badge-modern {
     padding: 0.4rem 0.75rem;
     border-radius: 20px;
@@ -767,31 +629,11 @@ window.refreshUserList = function() {
     align-items: center;
     white-space: nowrap;
 }
-
-.badge-danger {
-    background: linear-gradient(135deg, #DC2626, #EF4444);
-    color: white;
-}
-
-.badge-warning {
-    background: linear-gradient(135deg, #F59E0B, #FBBF24);
-    color: #000;
-}
-
-.badge-info {
-    background: linear-gradient(135deg, #3B82F6, #60A5FA);
-    color: white;
-}
-
-.badge-success {
-    background: linear-gradient(135deg, #10B981, #34D399);
-    color: white;
-}
-
-.badge-secondary {
-    background: linear-gradient(135deg, #6B7280, #9CA3AF);
-    color: white;
-}
+.badge-danger { background: linear-gradient(135deg, #DC2626, #EF4444); color: white; }
+.badge-warning { background: linear-gradient(135deg, #F59E0B, #FBBF24); color: #000; }
+.badge-info { background: linear-gradient(135deg, #3B82F6, #60A5FA); color: white; }
+.badge-success { background: linear-gradient(135deg, #10B981, #34D399); color: white; }
+.badge-secondary { background: linear-gradient(135deg, #6B7280, #9CA3AF); color: white; }
 
 .card-modern {
     border: none;
@@ -799,116 +641,17 @@ window.refreshUserList = function() {
     box-shadow: 0 4px 12px rgba(0,0,0,0.05);
     overflow: hidden;
 }
+.card-modern .card-header { background: #fff; border-bottom: 1px solid #e9ecef; padding: 1.25rem 1.5rem; }
+.card-modern .card-body { padding: 1.5rem; }
+.card-stat .card-body { padding: 1.25rem; }
 
-.card-modern .card-header {
-    background: #fff;
-    border-bottom: 1px solid #e9ecef;
-    padding: 1.25rem 1.5rem;
-}
+.progress { background-color: #E5E7EB; border-radius: 5px; }
+.progress-bar { transition: width 0.6s ease; border-radius: 5px; }
 
-.card-modern .card-body {
-    padding: 1.5rem;
-}
-
-.card-stat .card-body {
-    padding: 1.25rem;
-}
-
-.progress {
-    background-color: #E5E7EB;
-    border-radius: 5px;
-}
-
-.progress-bar {
-    transition: width 0.6s ease;
-    border-radius: 5px;
-}
-
-.btn-group-sm .btn {
-    padding: 0.25rem 0.5rem;
-    font-size: 0.875rem;
-    margin: 0 1px;
-}
-
-.btn-action {
-    transition: all 0.2s ease;
-}
-
-.btn-action:hover:not(:disabled) {
-    transform: translateY(-1px);
-    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
-}
-
-.btn-outline-primary {
-    color: #0d6efd;
-    border-color: #0d6efd;
-}
-
-.btn-outline-primary:hover {
-    color: #fff;
-    background-color: #0d6efd;
-    border-color: #0d6efd;
-}
-
-.btn-outline-info {
-    color: #0dcaf0;
-    border-color: #0dcaf0;
-}
-
-.btn-outline-info:hover {
-    color: #000;
-    background-color: #0dcaf0;
-    border-color: #0dcaf0;
-}
-
-.btn-outline-warning {
-    color: #ffc107;
-    border-color: #ffc107;
-}
-
-.btn-outline-warning:hover {
-    color: #000;
-    background-color: #ffc107;
-    border-color: #ffc107;
-}
-
-.btn-outline-success {
-    color: #198754;
-    border-color: #198754;
-}
-
-.btn-outline-success:hover {
-    color: #fff;
-    background-color: #198754;
-    border-color: #198754;
-}
-
-.btn-outline-danger {
-    color: #dc3545;
-    border-color: #dc3545;
-}
-
-.btn-outline-danger:hover {
-    color: #fff;
-    background-color: #dc3545;
-    border-color: #dc3545;
-}
-
-.btn-outline-secondary {
-    color: #6c757d;
-    border-color: #6c757d;
-}
-
-.btn-outline-secondary:hover {
-    color: #fff;
-    background-color: #6c757d;
-    border-color: #6c757d;
-}
-
-.btn:disabled {
-    opacity: 0.5;
-    cursor: not-allowed;
-}
+.btn-group-sm .btn { padding: 0.25rem 0.5rem; font-size: 0.875rem; margin: 0 1px; }
+.btn-action { transition: all 0.2s ease; }
+.btn-action:hover:not(:disabled) { transform: translateY(-1px); box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
+.btn:disabled { opacity: 0.5; cursor: not-allowed; }
 
 .btn-modern-primary {
     background: linear-gradient(135deg, #0d6efd, #0dcaf0);
@@ -919,16 +662,8 @@ window.refreshUserList = function() {
     font-weight: 600;
     transition: all 0.3s ease;
 }
+.btn-modern-primary:hover { transform: translateY(-2px); box-shadow: 0 4px 12px rgba(13, 110, 253, 0.3); color: white; }
 
-.btn-modern-primary:hover {
-    transform: translateY(-2px);
-    box-shadow: 0 4px 12px rgba(13, 110, 253, 0.3);
-    color: white;
-}
-
-/* Animation pour la suppression */
-tr {
-    transition: all 0.5s ease;
-}
+tr { transition: all 0.5s ease; }
 </style>
 {% endblock %}
