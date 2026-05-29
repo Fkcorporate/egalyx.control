@@ -479,3 +479,202 @@ class ServiceAnalyseIA:
             'client_initialise': self.client is not None,
             'api_key_presente': self.api_key is not None
         }
+
+    def generer_lettre_mission(self, audit_id, feuille_id=None):
+        """Générer une lettre de mission pour un audit"""
+        
+        print(f"\n📝 GÉNÉRATION LETTRE DE MISSION")
+        print(f"   Audit ID: {audit_id}")
+        print(f"   Mode: {'Simulation' if self.mode_simulation else 'Réel'}")
+        
+        # Récupérer le contexte d'application
+        app_context = self.get_app_context()
+        if not app_context:
+            return self._simuler_lettre_mission(audit_id)
+        
+        with app_context:
+            from models import Audit, User, Client
+            from app import db
+            
+            audit = db.session.get(Audit, audit_id)
+            if not audit:
+                return self._simuler_lettre_mission(audit_id)
+            
+            if self.mode_simulation:
+                return self._simuler_lettre_mission(audit_id, audit)
+            
+            try:
+                return self._generer_lettre_mission_reelle(audit)
+            except Exception as e:
+                print(f"❌ Erreur génération lettre: {e}")
+                return self._simuler_lettre_mission(audit_id, audit)
+    
+    def _generer_lettre_mission_reelle(self, audit):
+        """Générer une lettre de mission réelle avec OpenAI"""
+        
+        # Récupérer les informations
+        responsable_nom = "Responsable concerné"
+        if audit.responsable:
+            responsable_nom = audit.responsable.username
+            if hasattr(audit.responsable, 'nom_complet') and audit.responsable.nom_complet:
+                responsable_nom = audit.responsable.nom_complet
+        
+        client_nom = "Votre société"
+        if audit.client_id:
+            from models import Client
+            client = Client.query.get(audit.client_id)
+            if client:
+                client_nom = client.nom if hasattr(client, 'nom') else (client.name if hasattr(client, 'name') else client_nom)
+        
+        date_debut = audit.date_debut_prevue.strftime('%d/%m/%Y') if audit.date_debut_prevue else "à définir"
+        date_fin = audit.date_fin_prevue.strftime('%d/%m/%Y') if audit.date_fin_prevue else "à définir"
+        
+        # Construire le prompt
+        prompt = f"""
+        Génère une lettre de mission d'audit professionnelle en français.
+        
+        Informations de l'audit:
+        - Référence: {audit.reference}
+        - Titre: {audit.titre}
+        - Type: {audit.type_audit or 'interne'}
+        - Responsable: {responsable_nom}
+        - Client: {client_nom}
+        - Date début: {date_debut}
+        - Date fin: {date_fin}
+        - Portée: {audit.portee or 'Non spécifiée'}
+        
+        Génère un objet JSON avec les champs suivants:
+        - destinataire (nom et fonction)
+        - societe
+        - objet
+        - introduction (2-3 paragraphes)
+        - objectifs (liste détaillée)
+        - perimetre
+        - modalites (modalités pratiques)
+        - equipe (composition)
+        - livrables
+        """
+        
+        try:
+            response = self.client.chat.completions.create(
+                model="gpt-3.5-turbo",
+                messages=[
+                    {"role": "system", "content": "Tu es un expert en audit interne. Génère des lettres de mission professionnelles au format JSON."},
+                    {"role": "user", "content": prompt}
+                ],
+                temperature=0.7,
+                max_tokens=1200
+            )
+            
+            content = response.choices[0].message.content
+            
+            # Extraire le JSON
+            import re
+            json_match = re.search(r'\{.*\}', content, re.DOTALL)
+            if json_match:
+                import json
+                lettre = json.loads(json_match.group())
+                lettre['_mode'] = 'openai'
+                lettre['_tokens'] = response.usage.total_tokens if hasattr(response, 'usage') else 0
+                return lettre
+            else:
+                raise ValueError("Pas de JSON trouvé")
+                
+        except Exception as e:
+            print(f"❌ Erreur OpenAI: {e}")
+            return self._simuler_lettre_mission(audit.id, audit)
+    
+    def _simuler_lettre_mission(self, audit_id, audit=None):
+        """Simuler une lettre de mission réaliste"""
+        
+        from datetime import datetime
+        from models import Audit, User
+        
+        # Si audit non fourni, essayer de le récupérer
+        if audit is None:
+            app_context = self.get_app_context()
+            if app_context:
+                with app_context:
+                    from app import db
+                    audit = db.session.get(Audit, audit_id)
+        
+        # Valeurs par défaut
+        responsable_nom = "Responsable concerné"
+        client_nom = "Votre société"
+        audit_ref = f"AUD-{audit_id:04d}"
+        audit_titre = "Audit"
+        audit_type = "interne"
+        portee = "L'ensemble des processus de l'entité"
+        
+        if audit:
+            audit_ref = audit.reference or audit_ref
+            audit_titre = audit.titre or audit_titre
+            audit_type = audit.type_audit or audit_type
+            portee = audit.portee or portee
+            
+            if audit.responsable:
+                responsable_nom = audit.responsable.username
+                if hasattr(audit.responsable, 'nom_complet') and audit.responsable.nom_complet:
+                    responsable_nom = audit.responsable.nom_complet
+            
+            if audit.client_id:
+                from models import Client
+                client = Client.query.get(audit.client_id)
+                if client:
+                    client_nom = client.nom if hasattr(client, 'nom') else (client.name if hasattr(client, 'name') else client_nom)
+        
+        date_debut = audit.date_debut_prevue.strftime('%d/%m/%Y') if audit and audit.date_debut_prevue else "à définir"
+        date_fin = audit.date_fin_prevue.strftime('%d/%m/%Y') if audit and audit.date_fin_prevue else "à définir"
+        
+        # Calcul durée
+        duree = "5 jours"
+        if audit and audit.date_debut_prevue and audit.date_fin_prevue:
+            jours = (audit.date_fin_prevue - audit.date_debut_prevue).days
+            duree = f"{jours} jours" if jours > 0 else "À définir"
+        
+        return {
+            "destinataire": responsable_nom,
+            "societe": client_nom,
+            "objet": f"Lettre de mission - Audit {audit_type.upper()} {audit_ref}",
+            "introduction": f"""Dans le cadre de notre plan d'audit annuel, nous vous informons de la réalisation d'une mission d'audit au sein de votre service.
+    
+    Cette mission s'inscrit dans notre démarche d'amélioration continue et vise à évaluer la conformité des processus avec les référentiels applicables.
+    
+    Nous vous remercions par avance pour votre collaboration et pour la mise à disposition des informations nécessaires à la bonne réalisation de cette mission.""",
+            "objectifs": f"""Les principaux objectifs de cette mission sont :
+    - Évaluer l'efficacité du contrôle interne
+    - Identifier les risques potentiels
+    - Formuler des recommandations d'amélioration
+    - Assurer la conformité réglementaire
+    - Proposer des axes de progrès""",
+            "perimetre": f"""Le périmètre de la mission couvre : {portee}
+    
+    Période concernée : du {date_debut} au {date_fin}
+    Durée estimée : {duree}""",
+            "modalites": """Les travaux seront réalisés selon les modalités suivantes :
+    - Entretiens avec les responsables et les opérationnels
+    - Analyse documentaire (procédures, instructions, registres)
+    - Tests de conformité sur échantillon
+    - Observations sur site
+    - Réunions de synthèse et de clôture
+    
+    L'équipe d'audit aura accès aux informations nécessaires à la bonne réalisation de la mission, dans le respect des règles de confidentialité.""",
+            "equipe": f"L'équipe d'audit est composée de professionnels qualifiés, sous la supervision de l'auditeur principal.",
+            "livrables": """Les livrables attendus à l'issue de la mission sont :
+    - Rapport d'audit détaillé
+    - Fiche de synthèse des constats
+    - Plan d'action correctif
+    - Présentation des résultats à la direction
+    - Suivi des actions mises en place""",
+            "date_debut": date_debut,
+            "date_fin": date_fin,
+            "duree": duree,
+            "date": datetime.now().strftime('%Y-%m-%d'),
+            "reference": f"LM-{audit_ref}-{datetime.now().year}",
+            "emetteur": "L'équipe d'audit - Auditeur principal",
+            "confidentialite": True,
+            "confidentialite_texte": """Les informations recueillies dans le cadre de cette mission sont strictement confidentielles et ne pourront être divulguées à des tiers sans autorisation préalable.
+    
+    Conformément aux dispositions légales et réglementaires, les données personnelles sont traitées dans le respect du RGPD. Chaque membre de l'équipe d'audit est tenu au secret professionnel.""",
+            "_mode": "simulation"
+        }
