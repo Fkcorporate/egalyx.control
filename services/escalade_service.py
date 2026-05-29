@@ -1,13 +1,44 @@
-# services/escalade_service.py - VERSION CORRIGÉE
+# services/escalade_service.py - VERSION CORRIGÉE AVEC CONTEXTE
 
 from datetime import datetime, timedelta
-from flask import current_app
 from models import db, Incident, Notification, User, IncidentHistorique
+
+# ============================================
+# FONCTION WRAPPER POUR LE CONTEXTE
+# ============================================
+
+def with_app_context(func):
+    """Wrapper pour exécuter une fonction avec le contexte d'application Flask"""
+    def wrapper(*args, **kwargs):
+        try:
+            from flask import current_app
+            # Essayer d'utiliser le contexte existant
+            with current_app.app_context():
+                return func(*args, **kwargs)
+        except RuntimeError:
+            # Si pas de contexte, en créer un nouveau
+            try:
+                from app import app
+                with app.app_context():
+                    return func(*args, **kwargs)
+            except ImportError:
+                # Dernier recours : essayer d'importer depuis sys.modules
+                import sys
+                app = sys.modules.get('app')
+                if app:
+                    with app.app_context():
+                        return func(*args, **kwargs)
+                else:
+                    # Fallback : exécuter sans contexte (pour les tests)
+                    return func(*args, **kwargs)
+    return wrapper
+
 
 class EscaladeService:
     """Service de gestion des escalades d'incidents"""
     
     @staticmethod
+    @with_app_context
     def verifier_et_escalader_auto(incident=None):
         """
         Vérifie si l'incident doit être escaladé automatiquement
@@ -46,41 +77,40 @@ class EscaladeService:
             return False
         
         # Sinon, vérifier TOUS les incidents (batch)
-        with current_app.app_context():
-            maintenant = datetime.utcnow()
-            incidents = Incident.query.filter(
-                Incident.statut.in_(['ouvert', 'en_cours']),
-                Incident.is_archived == False
-            ).all()
+        maintenant = datetime.utcnow()
+        incidents = Incident.query.filter(
+            Incident.statut.in_(['ouvert', 'en_cours']),
+            Incident.is_archived == False
+        ).all()
+        
+        escalades_declenchees = 0
+        for inc in incidents:
+            if inc.niveau_escalade >= 3:
+                continue
             
-            escalades_declenchees = 0
-            for inc in incidents:
-                if inc.niveau_escalade >= 3:
-                    continue
-                
-                # Vérifier escalade niveau 2
-                if inc.niveau_escalade == 1:
-                    date_limite = inc.created_at + timedelta(hours=inc.delai_escalade_niveau2)
-                    if maintenant > date_limite and not inc.notification_envoyee_niveau2:
-                        if EscaladeService.escalader(inc, auto=True, raison=f"Délai dépassé ({inc.delai_escalade_niveau2}h sans résolution)"):
-                            escalades_declenchees += 1
-                            print(f"⚠️ Escalade auto niveau 2 pour {inc.reference}")
-                
-                # Vérifier escalade niveau 3
-                elif inc.niveau_escalade == 2:
-                    escalation_date = getattr(inc, 'escalation_date', None)
-                    if escalation_date:
-                        date_limite = escalation_date + timedelta(hours=inc.delai_escalade_niveau3)
-                    else:
-                        date_limite = inc.created_at + timedelta(hours=inc.delai_escalade_niveau3)
-                    
-                    if maintenant > date_limite and not inc.notification_envoyee_niveau3:
-                        if EscaladeService.escalader(inc, auto=True, raison=f"Nouveau délai dépassé ({inc.delai_escalade_niveau3}h sans résolution)"):
-                            escalades_declenchees += 1
-                            print(f"⚠️ Escalade auto niveau 3 pour {inc.reference}")
+            # Vérifier escalade niveau 2
+            if inc.niveau_escalade == 1:
+                date_limite = inc.created_at + timedelta(hours=inc.delai_escalade_niveau2)
+                if maintenant > date_limite and not inc.notification_envoyee_niveau2:
+                    if EscaladeService.escalader(inc, auto=True, raison=f"Délai dépassé ({inc.delai_escalade_niveau2}h sans résolution)"):
+                        escalades_declenchees += 1
+                        print(f"⚠️ Escalade auto niveau 2 pour {inc.reference}")
             
-            db.session.commit()
-            return escalades_declenchees
+            # Vérifier escalade niveau 3
+            elif inc.niveau_escalade == 2:
+                escalation_date = getattr(inc, 'escalation_date', None)
+                if escalation_date:
+                    date_limite = escalation_date + timedelta(hours=inc.delai_escalade_niveau3)
+                else:
+                    date_limite = inc.created_at + timedelta(hours=inc.delai_escalade_niveau3)
+                
+                if maintenant > date_limite and not inc.notification_envoyee_niveau3:
+                    if EscaladeService.escalader(inc, auto=True, raison=f"Nouveau délai dépassé ({inc.delai_escalade_niveau3}h sans résolution)"):
+                        escalades_declenchees += 1
+                        print(f"⚠️ Escalade auto niveau 3 pour {inc.reference}")
+        
+        db.session.commit()
+        return escalades_declenchees
     
     @staticmethod
     def escalader(incident, auto=False, raison=None, user_id=None):
@@ -161,8 +191,6 @@ class EscaladeService:
     @staticmethod
     def _creer_notifications_escalade(incident, ancien_responsable_id, nouveau_responsable_id, auto):
         """Crée les notifications pour l'escalade"""
-        from models import Notification
-        
         urgence = 'urgent' if incident.niveau_escalade >= 2 else 'important'
         raison = incident.raison_escalade or "Délai dépassé" if auto else "Escalade manuelle"
         
@@ -260,3 +288,13 @@ class EscaladeService:
             stats['taux_escalade'] = round((stats['total_escalades'] / total) * 100, 1)
         
         return stats
+
+
+# ============================================
+# FONCTION EXTERNE POUR LE SCHEDULER
+# ============================================
+
+@with_app_context
+def verifier_et_escalader_auto_externe():
+    """Fonction externe pour le scheduler"""
+    return EscaladeService.verifier_et_escalader_auto()
