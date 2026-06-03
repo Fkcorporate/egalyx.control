@@ -12368,3 +12368,26 @@ class WebhookDeliveryLog(db.Model):
             'error_message': self.error_message
         }
 
+class ActualisationCartographie(db.Model):
+    __tablename__ = 'actualisations_cartographie'
+    
+    id = db.Column(db.Integer, primary_key=True)
+    cartographie_id = db.Column(db.Integer, db.ForeignKey('cartographie.id'))
+    campagne_id = db.Column(db.Integer, db.ForeignKey('campagne_evaluation.id'))
+    utilisateur_id = db.Column(db.Integer, db.ForeignKey('user.id'))
+    date_actualisation = db.Column(db.DateTime, default=datetime.utcnow)
+    
+    # Statistiques
+    nb_risques_total = db.Column(db.Integer)
+    nb_risques_mis_a_jour = db.Column(db.Integer)
+    nb_dispositifs_impactes = db.Column(db.Integer)
+    nb_incidents_integres = db.Column(db.Integer)
+    
+    # Résultats
+    nouveaux_critiques = db.Column(db.Integer)
+    reduction_moyenne = db.Column(db.Float)
+    
+    # Métadonnées
+    duree_ms = db.Column(db.Integer)
+    statut = db.Column(db.String(20), default='success')  # success, partial, failed
+    erreurs = db.Column(db.Text)  # JSON
