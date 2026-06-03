@@ -10075,7 +10075,7 @@ class DocumentPCA(db.Model):
 # ========================
 
 class Incident(db.Model):
-    """Gestion complète des incidents - Version EXCELLENTE"""
+    """Gestion complète des incidents - Version Révolutionnaire"""
     __tablename__ = 'incidents'
     
     # ==================== IDENTIFIANTS DE BASE ====================
@@ -10097,7 +10097,7 @@ class Incident(db.Model):
     
     # ==================== COÛTS ET IMPACTS ====================
     cout_estime = db.Column(db.Float, default=0.0)
-    temps_arret = db.Column(db.Integer, default=0)  # en minutes
+    temps_arret = db.Column(db.Integer, default=0)
     impact_financier_reel = db.Column(db.Float)
     heures_impactees = db.Column(db.Integer)
     
@@ -10108,10 +10108,10 @@ class Incident(db.Model):
     # ==================== ESCALADE ====================
     niveau_escalade = db.Column(db.Integer, default=1)
     escalation_auto = db.Column(db.Boolean, default=False)
-    escalation_date = db.Column(db.DateTime)  # ✅ CORRIGÉ: escalation_date (pas escalade_date)
+    escalation_date = db.Column(db.DateTime)
     raison_escalade = db.Column(db.Text)
-    delai_escalade_niveau2 = db.Column(db.Integer, default=48)  # heures
-    delai_escalade_niveau3 = db.Column(db.Integer, default=72)  # heures
+    delai_escalade_niveau2 = db.Column(db.Integer, default=48)
+    delai_escalade_niveau3 = db.Column(db.Integer, default=72)
     notification_envoyee_niveau2 = db.Column(db.Boolean, default=False)
     notification_envoyee_niveau3 = db.Column(db.Boolean, default=False)
     derniere_action_date = db.Column(db.DateTime, default=datetime.utcnow)
@@ -10135,10 +10135,10 @@ class Incident(db.Model):
     sla_date_limite = db.Column(db.DateTime)
     sla_viole = db.Column(db.Boolean, default=False)
     
-    # ==================== LIENS MÉTIER ====================
-    risque_id = db.Column(db.Integer, db.ForeignKey('risques.id'))
-    dispositif_id = db.Column(db.Integer, db.ForeignKey('dispositifs_maitrise.id'))
-    plan_action_id = db.Column(db.Integer, db.ForeignKey('plans_action.id'))
+    # ==================== 🔥 LIENS MÉTIER (DOUBLE RATTACHEMENT) 🔥 ====================
+    risque_id = db.Column(db.Integer, db.ForeignKey('risques.id'), nullable=False)
+    dispositif_id = db.Column(db.Integer, db.ForeignKey('dispositifs_maitrise.id'), nullable=False)
+    plan_action_id = db.Column(db.Integer, db.ForeignKey('plans_action.id'))  # ← AJOUTÉ !
     
     # ==================== ACTEURS ====================
     declare_par_id = db.Column(db.Integer, db.ForeignKey('user.id'))
@@ -10177,18 +10177,73 @@ class Incident(db.Model):
     approbateur = db.relationship('User', foreign_keys=[approbation_par_id])
     archiveur = db.relationship('User', foreign_keys=[archived_by])
     
-    def __init__(self, **kwargs):
-        super(Incident, self).__init__(**kwargs)
-        if not self.reference:
-            self.reference = self.generer_reference()
-        if not self.sla_date_limite and self.sla_heures:
-            self.sla_date_limite = datetime.utcnow() + timedelta(hours=self.sla_heures)
-        if not self.escalation_date:
-            self.escalation_date = datetime.utcnow()
+    # ==================== PROPRIÉTÉS CALCULÉES ====================
+    
+    @property
+    def a_impact_sur_risque(self):
+        return self.risque_id is not None
+    
+    @property
+    def a_impact_sur_dispositif(self):
+        return self.dispositif_id is not None
+    
+    @property
+    def impact_risque_coefficient(self):
+        coefficients = {'critique': 1.0, 'elevee': 0.5, 'moyenne': 0.2, 'mineure': 0.05}
+        return coefficients.get(self.gravite, 0)
+    
+    @property
+    def impact_dispositif_points(self):
+        coefficients = {'critique': 1.5, 'elevee': 0.8, 'moyenne': 0.3, 'mineure': 0.1}
+        return coefficients.get(self.gravite, 0)
+    
+    # ==================== MÉTHODES D'IMPACT ====================
+    
+    def get_impact_total(self):
+        return {
+            'impact_risque': self.impact_risque_coefficient,
+            'impact_dispositif': self.impact_dispositif_points,
+            'impact_total': self.impact_risque_coefficient + self.impact_dispositif_points / 5,
+            'conforme_norme': 'ISO 31000:2018'
+        }
+    
+    def appliquer_impact_sur_dispositif(self):
+        if not self.dispositif:
+            return False
+        
+        ancienne_efficacite = self.dispositif.efficacite_reelle or 5
+        nouvelle_efficacite = max(1, ancienne_efficacite - self.impact_dispositif_points)
+        
+        self.dispositif.efficacite_reelle = nouvelle_efficacite
+        self.dispositif.commentaire_evaluation = (
+            f"Réduction suite à l'incident {self.reference} ({self.get_gravite_label()}): "
+            f"-{self.impact_dispositif_points} points (de {ancienne_efficacite} à {nouvelle_efficacite}/5)"
+        )
+        self.dispositif.updated_at = datetime.utcnow()
+        
+        try:
+            historique = DispositifHistoriqueEfficacite(
+                dispositif_id=self.dispositif.id,
+                efficacite=nouvelle_efficacite,
+                ancienne_efficacite=ancienne_efficacite,
+                reduction=self.impact_dispositif_points,
+                cause='incident',
+                incident_id=self.id,
+                commentaire=f"Incident {self.reference}: {self.get_gravite_label()}"
+            )
+            db.session.add(historique)
+        except Exception as e:
+            print(f"⚠️ Erreur historique: {e}")
+        
+        return {
+            'ancienne_efficacite': ancienne_efficacite,
+            'nouvelle_efficacite': nouvelle_efficacite,
+            'perte': self.impact_dispositif_points
+        }
     
     # ==================== GÉNÉRATION DE RÉFÉRENCE ====================
+    
     def generer_reference(self):
-        """Génère une référence unique pour l'incident"""
         annee = datetime.utcnow().year
         dernier = Incident.query.filter(
             Incident.reference.like(f'INC-{annee}-%'),
@@ -10218,6 +10273,7 @@ class Incident(db.Model):
         return nouvelle_ref
     
     # ==================== MÉTHODES FICHIERS ====================
+    
     def get_fichiers_joints_list(self):
         if not self.fichiers_joints:
             return []
@@ -10264,7 +10320,6 @@ class Incident(db.Model):
     # ==================== MÉTHODES D'ESCALADE ====================
     
     def escalader(self, raison=None, auto=False, user_id=None):
-        """Escalade l'incident au niveau supérieur"""
         from services.escalade_service import EscaladeService
         return EscaladeService.escalader(self, auto=auto, raison=raison, user_id=user_id)
     
@@ -10277,10 +10332,9 @@ class Incident(db.Model):
         return EscaladeService.verifier_et_escalader_auto(self)
     
     def restaurer_dispositif(self):
-        """Restaure l'efficacité du dispositif associé après résolution"""
         if self.dispositif and self.statut in ['resolu', 'ferme']:
             ancienne_efficacite = self.dispositif.efficacite_reelle or 5
-            nouvelle_efficacite = min(5, ancienne_efficacite + 1)
+            nouvelle_efficacite = min(5, ancienne_efficacite + self.impact_dispositif_points)
             self.dispositif.efficacite_reelle = nouvelle_efficacite
             self.dispositif.commentaire_evaluation = (
                 f"Rétablissement post-incident {self.reference}: "
@@ -10319,7 +10373,7 @@ class Incident(db.Model):
         self.commentaire_approbation = commentaire
         self.statut = 'ferme'
         self.date_resolution = datetime.utcnow()
-        self.restaurer_dispositif()  # ✅ AJOUTÉ: restaure le dispositif
+        self.restaurer_dispositif()
         self.updated_at = datetime.utcnow()
     
     def rejeter(self, user_id, commentaire):
@@ -10370,7 +10424,6 @@ class Incident(db.Model):
                     os.remove(filepath)
                 except:
                     pass
-        from models import IncidentHistorique
         IncidentHistorique.query.filter_by(incident_id=self.id).delete()
         db.session.delete(self)
     
@@ -10405,27 +10458,13 @@ class Incident(db.Model):
             return delta.days
         return None
     
-    # get_heures_restantes_sla
     def get_heures_restantes_sla(self):
-        from datetime import timedelta  # ← AJOUTER
-        
         if self.sla_date_limite and self.statut not in ['ferme', 'resolu']:
             delta = self.sla_date_limite - datetime.utcnow()
             return max(0, delta.total_seconds() / 3600)
         return None
     
-    def get_raison_escalade(self):
-        if self.raison_escalade:
-            return self.raison_escalade
-        if self.escalation_auto:
-            return f"Escalade automatique - SLA dépassé ({self.sla_heures}h)"
-        return "Escalade manuelle"
-    
-    # Dans la classe Incident, méthode get_delai_restant_escalade
     def get_delai_restant_escalade(self):
-        """Retourne les heures restantes avant prochaine escalade"""
-        from datetime import timedelta  # ← AJOUTER L'IMPORT ICI
-        
         maintenant = datetime.utcnow()
         if self.niveau_escalade == 1:
             date_limite = self.created_at + timedelta(hours=self.delai_escalade_niveau2)
@@ -10484,7 +10523,6 @@ class Incident(db.Model):
     # ==================== MÉTHODES DE CONVERSION ====================
     
     def to_dict(self):
-        import json
         return {
             'id': self.id,
             'reference': self.reference,
@@ -10507,8 +10545,14 @@ class Incident(db.Model):
             'heures_restantes_sla': self.get_heures_restantes_sla(),
             'direction_associee': self.direction_associee,
             'service_associe': self.service_associe,
+            'risque_id': self.risque_id,
+            'dispositif_id': self.dispositif_id,
+            'plan_action_id': self.plan_action_id,
+            'risque_reference': self.risque.reference if self.risque else None,
+            'dispositif_reference': self.dispositif.reference if self.dispositif else None,
             'created_at': self.created_at.isoformat() if self.created_at else None,
-            'is_archived': self.is_archived
+            'is_archived': self.is_archived,
+            'impact_total': self.get_impact_total()
         }
     
     def __repr__(self):
