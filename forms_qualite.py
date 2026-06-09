@@ -1,18 +1,28 @@
 from flask_wtf import FlaskForm
 from flask_wtf.file import FileField, FileRequired, FileAllowed
-from wtforms import StringField, TextAreaField, SelectField, DateField, IntegerField, BooleanField, SubmitField, FieldList, FormField, FileField, TimeField, DateTimeField, HiddenField
+from wtforms import (
+    StringField, TextAreaField, SelectField, DateField, IntegerField, 
+    BooleanField, SubmitField, FieldList, FormField, FileField, 
+    TimeField, DateTimeField, HiddenField
+)
+from wtforms.validators import DataRequired, Length, Optional, NumberRange, ValidationError
 from datetime import datetime, timedelta
+
+# ============================================
+# FORMULAIRES POUR LE MODULE QUALITÉ
+# ============================================
 
 # Formulaire pour un objectif qualité individuel
 class ObjectifQualiteForm(FlaskForm):
     objectif = StringField('Objectif', validators=[DataRequired(), Length(max=255)])
-    
+
 # Formulaire pour un indicateur clé (KPI) individuel
 class IndicateurCleForm(FlaskForm):
     nom = StringField('Nom de l\'indicateur', validators=[DataRequired(), Length(max=100)])
     cible = StringField('Cible', validators=[DataRequired(), Length(max=100)])
     unite = StringField('Unité', validators=[Optional(), Length(max=50)])
-    
+
+# Formulaire principal Plan Qualité
 class PlanQualiteFonctionForm(FlaskForm):
     # ============================================
     # INFORMATIONS GÉNÉRALES
@@ -89,34 +99,31 @@ class PlanQualiteFonctionForm(FlaskForm):
     submit = SubmitField('Enregistrer le plan')
 
 
+# Formulaire Action d'amélioration
 class ActionAmeliorationQualiteForm(FlaskForm):
     reference = StringField('Référence', validators=[DataRequired(), Length(max=50)])
     intitule = StringField('Intitulé de l\'action', validators=[DataRequired(), Length(max=200)])
     description = TextAreaField('Description', validators=[Optional()])
-    
     date_echeance = DateField('Date d\'échéance', validators=[DataRequired()], default=(datetime.now() + timedelta(days=30)).date)
     priorite = SelectField('Priorité', choices=[
         ('basse', 'Basse'),
         ('moyenne', 'Moyenne'),
         ('haute', 'Haute')
     ], default='moyenne')
-    
     statut = SelectField('Statut', choices=[
         ('a_faire', 'À faire'),
         ('en_cours', 'En cours'),
         ('terminee', 'Terminée'),
         ('bloquee', 'Bloquée')
     ], default='a_faire')
-    
     pourcentage_realisation = IntegerField('Avancement (%)', validators=[NumberRange(min=0, max=100)], default=0)
     commentaire_realisation = TextAreaField('Commentaire de réalisation', validators=[Optional()])
-    
     responsable_id = SelectField('Responsable', coerce=int, choices=[], validators=[Optional()])
     submit = SubmitField('Enregistrer l\'action')
 
 
+# Formulaire Upload de fichier
 class UploadFichierPlanQualiteForm(FlaskForm):
-    """Formulaire pour uploader un fichier"""
     fichier = FileField('Fichier', validators=[
         FileRequired(message='Veuillez sélectionner un fichier'),
         FileAllowed(['pdf', 'doc', 'docx', 'xls', 'xlsx', 'ppt', 'pptx', 'jpg', 'jpeg', 'png', 'txt'], 
@@ -132,16 +139,14 @@ class UploadFichierPlanQualiteForm(FlaskForm):
     description = TextAreaField('Description', validators=[Optional(), Length(max=500)])
     submit = SubmitField('Uploader')
 
+
+# Formulaire pour la cartographie des risques
 class CartographieRisqueFonctionForm(FlaskForm):
-    """Formulaire pour la cartographie des risques par fonction"""
-    
-    # Identification
     pole = StringField('Pôle', validators=[DataRequired(), Length(max=100)])
     direction = StringField('Direction', validators=[DataRequired(), Length(max=100)])
     direction_partie_prenante = StringField('Direction partie prenante', validators=[Optional(), Length(max=200)])
     zone_risque_majeur = StringField('Zone de Risque majeur', validators=[DataRequired(), Length(max=200)])
     
-    # Évaluation
     impact = SelectField('Impact', choices=[
         ('Très fort à éviter', 'Très fort à éviter'),
         ('Fort à éviter', 'Fort à éviter'),
@@ -169,19 +174,16 @@ class CartographieRisqueFonctionForm(FlaskForm):
     
     typologie_risque = StringField('Typologie Risque', validators=[Optional(), Length(max=100)])
     
-    # Niveaux de contrôle
     niveau_1 = TextAreaField('Niveau 1 - Contrôle opérationnel', validators=[Optional()])
     niveau_2 = TextAreaField('Niveau 2 - Supervision', validators=[Optional()])
     niveau_3 = TextAreaField('Niveau 3 - Contrôle indépendant', validators=[Optional()])
     controle_externe = TextAreaField('Contrôle externe', validators=[Optional()])
-    controles_prestataires = TextAreaField('Contrôles réalisés par prestataires externes', validators=[Optional()])
+    controles_prestataires = TextAreaField('Contrôles réalisés poru prestataires externes', validators=[Optional()])
     
-    # Historique
     anciens_audits = TextAreaField('Anciens audits en lien avec le risque', validators=[Optional()])
     plan_audit_annuel = TextAreaField("Plan d'audit annuel", validators=[Optional()])
     observations = TextAreaField('Observations', validators=[Optional()])
     
-    # Fonctions d'assurance
     fonctions_assurance = StringField('Fonctions d\'assurance', validators=[Optional(), Length(max=200)])
     pole_audit = StringField('Pôle Audit', validators=[Optional(), Length(max=100)])
     pilote = StringField('Pilote', validators=[Optional(), Length(max=100)])
@@ -214,7 +216,7 @@ class NonConformiteForm(FlaskForm):
 # Formulaire pour les audits qualité
 class AuditQualiteForm(FlaskForm):
     titre = StringField('Titre de l\'audit', validators=[DataRequired(), Length(max=200)])
-    description = TextAreaField('Description', validators=[Optional()])  # ← AJOUTER CETTE LIGNE
+    description = TextAreaField('Description', validators=[Optional()])
     type_audit = SelectField('Type d\'audit', choices=[
         ('interne', 'Interne'),
         ('externe', 'Externe'),
@@ -227,7 +229,6 @@ class AuditQualiteForm(FlaskForm):
     date_prevue = DateField('Date prévue', validators=[Optional()])
     conclusion = TextAreaField('Conclusion', validators=[Optional()])
     
-    # Champs JSON
     equipe_audit_json = HiddenField('Équipe audit JSON', default='[]')
     recommandations_json = HiddenField('Recommandations JSON', default='[]')
     
@@ -243,21 +244,19 @@ class FormationQualiteForm(FlaskForm):
     date_formation = DateField('Date de la formation', validators=[Optional()])
     date_evaluation = DateField("Date d'évaluation", validators=[Optional()])
     
-    # Champs JSON
-    participants_json = HiddenField('Participants JSON')
-    objectifs_json = HiddenField('Objectifs JSON')
+    participants_json = HiddenField('Participants JSON', default='[]')
+    objectifs_json = HiddenField('Objectifs JSON', default='[]')
     
-    # Champs de certification et évaluation
-    certification_obtenue = HiddenField('Certification obtenue')
+    certification_obtenue = HiddenField('Certification obtenue', default='false')
     certification_nom = StringField('Nom de la certification', validators=[Optional(), Length(max=200)])
-    satisfaction_moyenne = HiddenField('Satisfaction moyenne')
+    satisfaction_moyenne = HiddenField('Satisfaction moyenne', default='0')
     efficacite = IntegerField('Efficacité (%)', validators=[Optional()])
     commentaires = TextAreaField('Commentaires', validators=[Optional()])
     
     submit = SubmitField('Enregistrer')
 
 
-# Formulaire pour les réunions (CORRIGÉ - remplacement de DateTimeField par StringField)
+# Formulaire pour les réunions
 class ReunionQualiteForm(FlaskForm):
     titre = StringField('Titre de la réunion', validators=[DataRequired(), Length(max=200)])
     type_reunion = SelectField('Type de réunion', choices=[
@@ -266,7 +265,6 @@ class ReunionQualiteForm(FlaskForm):
         ('copil', 'COPIL'),
         ('audit', 'Audit')
     ], default='revue_direction')
-    
     date_reunion = DateField('Date', validators=[DataRequired()], default=datetime.now().date)
     heure_reunion = TimeField('Heure', validators=[Optional()], default=datetime.now().time())
     duree_minutes = IntegerField('Durée (minutes)', validators=[Optional()])
@@ -279,15 +277,16 @@ class ReunionQualiteForm(FlaskForm):
         ('annulee', '❌ Annulée')
     ], default='planifiee')
     
-    # 🔥 Champs JSON avec HiddenField
-    participants_json = HiddenField('Participants JSON')
-    ordre_jour_json = HiddenField('Ordre du jour JSON')
-    decisions_json = HiddenField('Décisions JSON')
-    actions_json = HiddenField('Actions JSON')
+    participants_json = HiddenField('Participants JSON', default='[]')
+    ordre_jour_json = HiddenField('Ordre du jour JSON', default='[]')
+    decisions_json = HiddenField('Décisions JSON', default='[]')
+    actions_json = HiddenField('Actions JSON', default='[]')
     
     compte_rendu = TextAreaField('Compte rendu', validators=[Optional()])
-    submit = SubmitField('Enregistrer')
+    submit = SubmitField('Planifier')
 
+
+# Formulaire pour les grilles d'audit
 class GrilleAuditQualiteForm(FlaskForm):
     titre = StringField('Titre de la grille', validators=[DataRequired(), Length(max=200)])
     description = TextAreaField('Description', validators=[Optional()])
@@ -301,7 +300,9 @@ class GrilleAuditQualiteForm(FlaskForm):
     ], default='processus')
     est_active = BooleanField('Grille active', default=True)
     submit = SubmitField('Enregistrer')
-# Formulaire de filtrage pour la cartographie
+
+
+# Formulaire de filtrage
 class FiltreCartographieRisqueForm(FlaskForm):
     pole = SelectField('Pôle', choices=[], validators=[Optional()])
     direction = SelectField('Direction', choices=[], validators=[Optional()])
