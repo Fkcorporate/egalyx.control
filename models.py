@@ -10294,19 +10294,19 @@ class FormationQualite(db.Model):
     
     # Dates
     date_formation = db.Column(db.Date)
-    date_evaluation = db.Column(db.Date)
+    date_evaluation = db.Column(db.Date)  # ← AJOUTER CE CHAMP
     
-    # Évaluation
+    # Évaluation (CES CHAMPS DOIVENT EXISTER)
     satisfaction_moyenne = db.Column(db.Float, default=0)
-    efficacite = db.Column(db.Float, default=0)
-    commentaires = db.Column(db.JSON, default=[])
+    efficacite = db.Column(db.Float, default=0)  # ← Assurez-vous que c'est Float
+    commentaires = db.Column(db.Text)  # ← AJOUTER CE CHAMP
     
     # Certification
     certification_obtenue = db.Column(db.Boolean, default=False)
     certification_nom = db.Column(db.String(200))
     certification_date = db.Column(db.Date)
     
-    # 🔥 AJOUTER CES CHAMPS MANQUANTS
+    # Métadonnées
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
     client_id = db.Column(db.Integer, db.ForeignKey('clients.id'), nullable=True)
@@ -10315,9 +10315,6 @@ class FormationQualite(db.Model):
     # Relations
     plan_qualite = db.relationship('PlanQualiteFonction', back_populates='formations')
     createur = db.relationship('User', foreign_keys=[created_by])
-    
-    def __repr__(self):
-        return f'<FormationQualite {self.reference}>'
 
 
 class ReunionQualite(db.Model):
