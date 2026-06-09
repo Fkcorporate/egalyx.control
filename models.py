@@ -10279,10 +10279,10 @@ class FormationQualite(db.Model):
     __tablename__ = 'formations_qualite'
     
     id = db.Column(db.Integer, primary_key=True)
+    reference = db.Column(db.String(50), unique=True, nullable=False)
     plan_qualite_id = db.Column(db.Integer, db.ForeignKey('plans_qualite_fonction.id'), nullable=False)
     
     # Identification
-    reference = db.Column(db.String(50), unique=True, nullable=False)
     intitule = db.Column(db.String(200), nullable=False)
     description = db.Column(db.Text)
     objectifs = db.Column(db.JSON, default=[])
@@ -10298,7 +10298,7 @@ class FormationQualite(db.Model):
     
     # Évaluation
     satisfaction_moyenne = db.Column(db.Float, default=0)
-    efficacite = db.Column(db.Float, default=0)  # Test de connaissances
+    efficacite = db.Column(db.Float, default=0)
     commentaires = db.Column(db.JSON, default=[])
     
     # Certification
@@ -10306,10 +10306,18 @@ class FormationQualite(db.Model):
     certification_nom = db.Column(db.String(200))
     certification_date = db.Column(db.Date)
     
+    # 🔥 AJOUTER CES CHAMPS MANQUANTS
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    client_id = db.Column(db.Integer, db.ForeignKey('clients.id'), nullable=True)
+    created_by = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=True)
+    
     # Relations
     plan_qualite = db.relationship('PlanQualiteFonction', back_populates='formations')
+    createur = db.relationship('User', foreign_keys=[created_by])
     
-    __repr__ = lambda self: f'<FormationQualite {self.reference}>'
+    def __repr__(self):
+        return f'<FormationQualite {self.reference}>'
 
 
 class ReunionQualite(db.Model):
