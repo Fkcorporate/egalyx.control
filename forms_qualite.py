@@ -216,8 +216,14 @@ class AuditQualiteForm(FlaskForm):
     perimetre = TextAreaField('Périmètre', validators=[Optional()])
     criteres = TextAreaField('Critères d\'audit', validators=[Optional()])
     auditeur_principal_id = SelectField('Auditeur principal', coerce=int, choices=[], validators=[Optional()])
-    date_prevue = DateField('Date prévue', validators=[DataRequired()])
-    submit = SubmitField('Planifier')
+    date_prevue = DateField('Date prévue', validators=[Optional()])
+    conclusion = TextAreaField('Conclusion', validators=[Optional()])
+    
+    # Champs JSON pour l'équipe et les recommandations
+    equipe_audit_json = HiddenField('Équipe audit JSON')
+    recommandations_json = HiddenField('Recommandations JSON')
+    
+    submit = SubmitField('Enregistrer')
 
 
 # Formulaire pour les formations
