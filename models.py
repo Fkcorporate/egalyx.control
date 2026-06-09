@@ -10296,6 +10296,59 @@ class GrilleAuditQualite(db.Model):
     def __repr__(self):
         return f'<GrilleAuditQualite {self.reference}>'
 
+# ============================================
+# REPONSES AUDIT QUALITE (NOUVEAU)
+# ============================================
+
+class ReponseAuditQualite(db.Model):
+    """Réponses aux questions d'un audit qualité"""
+    __tablename__ = 'reponses_audit_qualite'
+    
+    id = db.Column(db.Integer, primary_key=True)
+    audit_qualite_id = db.Column(db.Integer, db.ForeignKey('audits_qualite.id'), nullable=False)
+    question_id = db.Column(db.Integer, nullable=False)
+    question = db.Column(db.Text, nullable=False)
+    reponse = db.Column(db.Text)
+    conforme = db.Column(db.Boolean, default=False)
+    commentaire = db.Column(db.Text)
+    preuve = db.Column(db.String(500))
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    
+    # Relations
+    audit_qualite = db.relationship('AuditQualite', backref='reponses_audit', foreign_keys=[audit_qualite_id])
+
+
+# ============================================
+# PLANS ACTION AUDIT QUALITE (NOUVEAU)
+# ============================================
+
+class PlanActionAudit(db.Model):
+    """Plans d'action spécifiques à un audit qualité"""
+    __tablename__ = 'plans_action_audit_qualite'
+    
+    id = db.Column(db.Integer, primary_key=True)
+    audit_qualite_id = db.Column(db.Integer, db.ForeignKey('audits_qualite.id'), nullable=False)
+    reference = db.Column(db.String(50), unique=True, nullable=False)
+    intitule = db.Column(db.String(200), nullable=False)
+    description = db.Column(db.Text)
+    source = db.Column(db.String(50))  # non_conformite, observation, recommandation
+    responsable_id = db.Column(db.Integer, db.ForeignKey('user.id'))
+    date_echeance = db.Column(db.Date)
+    priorite = db.Column(db.String(20), default='moyenne')
+    statut = db.Column(db.String(20), default='a_faire')
+    pourcentage_realisation = db.Column(db.Integer, default=0)
+    commentaire_realisation = db.Column(db.Text)
+    verification_efficacite = db.Column(db.Text)
+    date_verification = db.Column(db.Date)
+    efficace = db.Column(db.Boolean, default=False)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    client_id = db.Column(db.Integer, db.ForeignKey('clients.id'), nullable=True)
+    
+    # Relations
+    audit_qualite = db.relationship('AuditQualite', backref='plans_action')
+    responsable = db.relationship('User', foreign_keys=[responsable_id])
+
 
 class AuditQualite(db.Model):
     """Audit qualité (ISO 19011:2025) - Version CORRIGÉE"""
