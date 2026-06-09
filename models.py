@@ -10264,6 +10264,34 @@ class NonConformite(db.Model):
     responsable = db.relationship('User', foreign_keys=[responsable_id])
     createur = db.relationship('User', foreign_keys=[created_by])
 
+class GrilleAuditQualite(db.Model):
+    """Grille d'audit qualité"""
+    __tablename__ = 'grilles_audit_qualite'
+    
+    id = db.Column(db.Integer, primary_key=True)
+    reference = db.Column(db.String(50), unique=True, nullable=False)
+    titre = db.Column(db.String(200), nullable=False)
+    description = db.Column(db.Text)
+    referentiel = db.Column(db.String(100))
+    version = db.Column(db.String(20), default='1.0')
+    type_grille = db.Column(db.String(50), default='processus')
+    questions = db.Column(db.JSON, default=[])
+    est_active = db.Column(db.Boolean, default=True)
+    nb_utilisations = db.Column(db.Integer, default=0)
+    
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    client_id = db.Column(db.Integer, db.ForeignKey('clients.id'), nullable=True)
+    created_by = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=True)
+    
+    # Relations
+    createur = db.relationship('User', foreign_keys=[created_by])
+    audits = db.relationship('AuditQualite', backref='grille_associee', foreign_keys='AuditQualite.grille_id')
+    
+    def __repr__(self):
+        return f'<GrilleAuditQualite {self.reference}>'
+
+
 
 class AuditQualite(db.Model):
     """Audit qualité (ISO 19011:2025) - Version CORRIGÉE"""
