@@ -10205,8 +10205,8 @@ class NonConformite(db.Model):
     # Description
     titre = db.Column(db.String(200), nullable=False)
     description = db.Column(db.Text, nullable=False)
-    cause_racine = db.Column(db.Text)  # Analyse 5 pourquoi
-    gravite = db.Column(db.String(20), default='majeure')  # mineure, majeure, critique
+    cause_racine = db.Column(db.Text)
+    gravite = db.Column(db.String(20), default='majeure')
     
     # Traitement
     action_immediate = db.Column(db.Text)
@@ -10219,16 +10219,21 @@ class NonConformite(db.Model):
     efficace = db.Column(db.Boolean, default=False)
     
     # Clôture
-    statut = db.Column(db.String(20), default='ouverte')  # ouverte, en_traitement, verifiee, close
+    statut = db.Column(db.String(20), default='ouverte')
     date_ouverture = db.Column(db.DateTime, default=datetime.utcnow)
     date_cloture = db.Column(db.DateTime)
     responsable_id = db.Column(db.Integer, db.ForeignKey('user.id'))
     
+    # 🔥 AJOUTER CES CHAMPS
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    client_id = db.Column(db.Integer, db.ForeignKey('clients.id'), nullable=True)
+    created_by = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=True)
+    
     # Relations
     plan_qualite = db.relationship('PlanQualiteFonction', back_populates='non_conformites')
     responsable = db.relationship('User', foreign_keys=[responsable_id])
-    
-    __repr__ = lambda self: f'<NonConformite {self.reference}>'
+    createur = db.relationship('User', foreign_keys=[created_by])
 
 
 class AuditQualite(db.Model):
