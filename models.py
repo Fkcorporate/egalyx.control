@@ -10321,7 +10321,7 @@ class ReunionQualite(db.Model):
     
     # Identification
     titre = db.Column(db.String(200), nullable=False)
-    type_reunion = db.Column(db.String(50), default='revue_direction')  # revue_direction, comite_qualite, copil
+    type_reunion = db.Column(db.String(50), default='revue_direction')
     
     # Organisation
     date_reunion = db.Column(db.DateTime, nullable=False)
@@ -10346,13 +10346,21 @@ class ReunionQualite(db.Model):
     points_bloquants = db.Column(db.JSON, default=[])
     
     # Suivi
-    statut = db.Column(db.String(20), default='planifiee')  # planifiee, realisee, reportee, annulee
+    statut = db.Column(db.String(20), default='planifiee')
+    
+    # 🔥 AJOUTER CES CHAMPS MANQUANTS
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    client_id = db.Column(db.Integer, db.ForeignKey('clients.id'), nullable=True)
+    created_by = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=True)
     
     # Relations
     plan_qualite = db.relationship('PlanQualiteFonction', back_populates='reunions')
     animateur = db.relationship('User', foreign_keys=[animateur_id])
+    createur = db.relationship('User', foreign_keys=[created_by])
     
-    __repr__ = lambda self: f'<ReunionQualite {self.titre}>'
+    def __repr__(self):
+        return f'<ReunionQualite {self.titre}>'
 
 
 class CartographieRisqueFonction(db.Model):
