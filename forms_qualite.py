@@ -1,6 +1,7 @@
 from flask_wtf import FlaskForm
 from flask_wtf.file import FileField, FileRequired, FileAllowed
-from wtforms import StringField, TextAreaField, SelectField, DateField, IntegerField, BooleanField, SubmitField, FieldList, FormField, FileField, TimeField, DateTimeField, HiddenFieldfrom datetime import datetime, timedelta
+from wtforms import StringField, TextAreaField, SelectField, DateField, IntegerField, BooleanField, SubmitField, FieldList, FormField, FileField, TimeField, DateTimeField, HiddenField
+from datetime import datetime, timedelta
 
 # Formulaire pour un objectif qualité individuel
 class ObjectifQualiteForm(FlaskForm):
