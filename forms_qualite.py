@@ -280,7 +280,19 @@ class ReunionQualiteForm(FlaskForm):
     compte_rendu = TextAreaField('Compte rendu', validators=[Optional()])
     submit = SubmitField('Enregistrer')
 
-
+class GrilleAuditQualiteForm(FlaskForm):
+    titre = StringField('Titre de la grille', validators=[DataRequired(), Length(max=200)])
+    description = TextAreaField('Description', validators=[Optional()])
+    referentiel = StringField('Référentiel', validators=[Optional(), Length(max=100)])
+    version = StringField('Version', validators=[Optional(), Length(max=20)], default='1.0')
+    type_grille = SelectField('Type de grille', choices=[
+        ('processus', 'Audit de processus'),
+        ('conformite', 'Audit de conformité'),
+        ('systeme', 'Audit système'),
+        ('fournisseur', 'Audit fournisseur')
+    ], default='processus')
+    est_active = BooleanField('Grille active', default=True)
+    submit = SubmitField('Enregistrer')
 # Formulaire de filtrage pour la cartographie
 class FiltreCartographieRisqueForm(FlaskForm):
     pole = SelectField('Pôle', choices=[], validators=[Optional()])
