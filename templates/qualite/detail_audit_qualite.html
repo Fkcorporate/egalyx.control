@@ -49,6 +49,28 @@
         justify-content: center;
         background: white;
     }
+    .section-card {
+        margin-bottom: 1.5rem;
+    }
+    .member-badge {
+        background: #e9ecef;
+        border-radius: 50px;
+        padding: 0.5rem 1rem;
+        display: inline-flex;
+        align-items: center;
+        gap: 0.5rem;
+    }
+    .rec-list {
+        list-style: none;
+        padding-left: 0;
+    }
+    .rec-list li {
+        padding: 0.5rem;
+        border-bottom: 1px solid #e2e8f0;
+    }
+    .rec-list li:last-child {
+        border-bottom: none;
+    }
 </style>
 {% endblock %}
 
@@ -126,6 +148,28 @@
                                     {{ audit.date_prevue.strftime('%d/%m/%Y') }}
                                 {% else %}
                                     <span class="text-muted">Non planifiée</span>
+                                {% endif %}
+                            </div>
+                        </div>
+                        <div class="row mb-3">
+                            <div class="col-5 fw-semibold">Date début réelle:</div>
+                            <div class="col-7">
+                                {% if audit.date_debut %}
+                                    <i class="fas fa-play me-1 text-warning"></i>
+                                    {{ audit.date_debut.strftime('%d/%m/%Y') }}
+                                {% else %}
+                                    <span class="text-muted">Non débuté</span>
+                                {% endif %}
+                            </div>
+                        </div>
+                        <div class="row mb-3">
+                            <div class="col-5 fw-semibold">Date fin réelle:</div>
+                            <div class="col-7">
+                                {% if audit.date_fin %}
+                                    <i class="fas fa-stop me-1 text-warning"></i>
+                                    {{ audit.date_fin.strftime('%d/%m/%Y') }}
+                                {% else %}
+                                    <span class="text-muted">Non terminé</span>
                                 {% endif %}
                             </div>
                         </div>
@@ -219,7 +263,7 @@
                     {% if audit.equipe_audit and audit.equipe_audit|length > 0 %}
                         <div class="d-flex flex-wrap gap-2">
                             {% for membre in audit.equipe_audit %}
-                                <span class="badge bg-light text-dark p-2">
+                                <span class="member-badge">
                                     <i class="fas fa-user-check me-1 text-success"></i>{{ membre }}
                                 </span>
                             {% endfor %}
@@ -230,87 +274,94 @@
                 </div>
             </div>
 
-            <!-- Modal Ajouter Non-conformité -->
-            <div class="modal fade" id="addNonConformiteModal" tabindex="-1">
-                <div class="modal-dialog modal-lg">
-                    <div class="modal-content">
-                        <form method="POST" action="{{ url_for('ajouter_non_conformite_qualite', audit_id=audit.id) }}">
-                            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                            <div class="modal-header">
-                                <h5 class="modal-title">
-                                    <i class="fas fa-exclamation-triangle text-danger me-2"></i>Ajouter une non-conformité
-                                </h5>
-                                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
-                            </div>
-                            <div class="modal-body">
-                                <div class="mb-3">
-                                    <label class="form-label">Titre <span class="text-danger">*</span></label>
-                                    <input type="text" name="titre" class="form-control" required>
-                                </div>
-                                <div class="mb-3">
-                                    <label class="form-label">Description <span class="text-danger">*</span></label>
-                                    <textarea name="description" class="form-control" rows="3" required></textarea>
-                                </div>
-                                <div class="row">
-                                    <div class="col-md-6 mb-3">
-                                        <label class="form-label">Gravité</label>
-                                        <select name="gravite" class="form-select">
-                                            <option value="mineure">🟢 Mineure</option>
-                                            <option value="majeure">🟡 Majeure</option>
-                                            <option value="critique">🔴 Critique</option>
-                                        </select>
-                                    </div>
-                                    <div class="col-md-6 mb-3">
-                                        <label class="form-label">Cause racine</label>
-                                        <input type="text" name="cause_racine" class="form-control" placeholder="Analyse 5 pourquoi">
-                                    </div>
-                                </div>
-                                <div class="mb-3">
-                                    <label class="form-label">Action corrective</label>
-                                    <textarea name="action_corrective" class="form-control" rows="2" placeholder="Action à mettre en place pour corriger la non-conformité"></textarea>
-                                </div>
-                                <div class="alert alert-info small">
-                                    <i class="fas fa-info-circle me-1"></i>
-                                    Cette non-conformité sera associée au plan qualité <strong>{{ plan.reference }}</strong>
-                                </div>
-                            </div>
-                            <div class="modal-footer">
-                                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Annuler</button>
-                                <button type="submit" class="btn btn-danger">
-                                    <i class="fas fa-plus me-1"></i>Ajouter
-                                </button>
-                            </div>
-                        </form>
-                    </div>
+            <!-- Non-conformités -->
+            <div class="card shadow-sm mb-4">
+                <div class="card-header bg-white d-flex justify-content-between align-items-center">
+                    <h5 class="mb-0"><i class="fas fa-exclamation-triangle me-2 text-danger"></i>Non-conformités</h5>
+                    <button type="button" class="btn btn-sm btn-danger rounded-pill" data-bs-toggle="modal" data-bs-target="#addNonConformiteModal">
+                        <i class="fas fa-plus me-1"></i>Ajouter
+                    </button>
+                </div>
+                <div class="card-body">
+                    {% if non_conformites and non_conformites|length > 0 %}
+                        <div class="table-responsive">
+                            <table class="table table-sm">
+                                <thead class="table-light">
+                                    <tr>
+                                        <th>Réf.</th>
+                                        <th>Titre</th>
+                                        <th>Gravité</th>
+                                        <th>Statut</th>
+                                        <th>Actions</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {% for nc in non_conformites %}
+                                    <tr>
+                                        <td><code>{{ nc.reference }}</code></td>
+                                        <td>{{ nc.titre|truncate(40) }}</td>
+                                        <td>
+                                            <span class="badge {% if nc.gravite == 'critique' %}bg-danger{% elif nc.gravite == 'majeure' %}bg-warning{% else %}bg-info{% endif %}">
+                                                {{ nc.gravite|title }}
+                                            </span>
+                                        </td>
+                                        <td>
+                                            <span class="badge {% if nc.statut == 'close' %}bg-success{% else %}bg-secondary{% endif %}">
+                                                {{ nc.statut|title }}
+                                            </span>
+                                        </td>
+                                        <td>
+                                            <button class="btn btn-sm btn-outline-primary" onclick="voirNonConformite({{ nc.id }})">
+                                                <i class="fas fa-eye"></i>
+                                            </button>
+                                        </td>
+                                    </tr>
+                                    {% endfor %}
+                                </tbody>
+                            </table>
+                        </div>
+                    {% else %}
+                        <div class="text-center py-4">
+                            <i class="fas fa-check-circle fa-3x text-success mb-2"></i>
+                            <p class="text-muted mb-0">Aucune non-conformité détectée</p>
+                        </div>
+                    {% endif %}
                 </div>
             </div>
 
-            <!-- Conclusion et recommandations -->
-            {% if audit.conclusion or audit.recommandations %}
+            <!-- Recommandations -->
+            <div class="card shadow-sm mb-4">
+                <div class="card-header bg-white">
+                    <h5 class="mb-0"><i class="fas fa-lightbulb me-2 text-warning"></i>Recommandations</h5>
+                </div>
+                <div class="card-body">
+                    {% if audit.recommandations and audit.recommandations|length > 0 %}
+                        <ul class="rec-list">
+                            {% for rec in audit.recommandations %}
+                            <li>
+                                <i class="fas fa-arrow-right me-2 text-warning"></i>{{ rec }}
+                            </li>
+                            {% endfor %}
+                        </ul>
+                    {% else %}
+                        <p class="text-muted text-center mb-0">Aucune recommandation</p>
+                    {% endif %}
+                </div>
+            </div>
+
+            <!-- Conclusion -->
             <div class="card shadow-sm mb-4">
                 <div class="card-header bg-white">
                     <h5 class="mb-0"><i class="fas fa-file-alt me-2 text-primary"></i>Conclusion</h5>
                 </div>
                 <div class="card-body">
                     {% if audit.conclusion %}
-                    <div class="mb-3">
-                        <label class="fw-semibold">Conclusion:</label>
-                        <p class="mt-1 mb-0">{{ audit.conclusion }}</p>
-                    </div>
-                    {% endif %}
-                    {% if audit.recommandations and audit.recommandations|length > 0 %}
-                    <div>
-                        <label class="fw-semibold">Recommandations:</label>
-                        <ul class="mt-2">
-                            {% for rec in audit.recommandations %}
-                            <li>{{ rec }}</li>
-                            {% endfor %}
-                        </ul>
-                    </div>
+                        <p class="mb-0">{{ audit.conclusion }}</p>
+                    {% else %}
+                        <p class="text-muted text-center mb-0">Aucune conclusion</p>
                     {% endif %}
                 </div>
             </div>
-            {% endif %}
 
             <!-- Chronologie -->
             <div class="card shadow-sm mb-4">
@@ -383,20 +434,20 @@
                 </div>
                 <div class="modal-body">
                     <div class="mb-3">
-                        <label class="form-label">Titre</label>
+                        <label class="form-label">Titre <span class="text-danger">*</span></label>
                         <input type="text" name="titre" class="form-control" required>
                     </div>
                     <div class="mb-3">
-                        <label class="form-label">Description</label>
+                        <label class="form-label">Description <span class="text-danger">*</span></label>
                         <textarea name="description" class="form-control" rows="3" required></textarea>
                     </div>
                     <div class="row">
                         <div class="col-md-6 mb-3">
                             <label class="form-label">Gravité</label>
                             <select name="gravite" class="form-select">
-                                <option value="mineure">Mineure</option>
-                                <option value="majeure">Majeure</option>
-                                <option value="critique">Critique</option>
+                                <option value="mineure">🟢 Mineure</option>
+                                <option value="majeure">🟡 Majeure</option>
+                                <option value="critique">🔴 Critique</option>
                             </select>
                         </div>
                         <div class="col-md-6 mb-3">
@@ -406,12 +457,18 @@
                     </div>
                     <div class="mb-3">
                         <label class="form-label">Action corrective</label>
-                        <textarea name="action_corrective" class="form-control" rows="2"></textarea>
+                        <textarea name="action_corrective" class="form-control" rows="2" placeholder="Action à mettre en place"></textarea>
+                    </div>
+                    <div class="alert alert-info small">
+                        <i class="fas fa-info-circle me-1"></i>
+                        Cette non-conformité sera associée au plan qualité <strong>{{ plan.reference }}</strong>
                     </div>
                 </div>
                 <div class="modal-footer">
                     <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Annuler</button>
-                    <button type="submit" class="btn btn-danger">Ajouter</button>
+                    <button type="submit" class="btn btn-danger">
+                        <i class="fas fa-plus me-1"></i>Ajouter
+                    </button>
                 </div>
             </form>
         </div>
@@ -421,6 +478,10 @@
 <script>
 function voirNonConformite(id) {
     window.location.href = `/qualite/non-conformite/${id}`;
+}
+
+function exporterAudit(id) {
+    window.open(`/qualite/audit/${id}/export-pdf`, '_blank');
 }
 </script>
 {% endblock %}
