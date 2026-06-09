@@ -227,7 +227,20 @@ class FormationQualiteForm(FlaskForm):
     formateur = StringField('Formateur', validators=[Optional(), Length(max=200)])
     duree_heures = IntegerField('Durée (heures)', validators=[Optional()])
     date_formation = DateField('Date de la formation', validators=[Optional()])
-    submit = SubmitField('Ajouter')
+    date_evaluation = DateField("Date d'évaluation", validators=[Optional()])
+    
+    # Champs JSON
+    participants_json = HiddenField('Participants JSON')
+    objectifs_json = HiddenField('Objectifs JSON')
+    
+    # Champs de certification et évaluation
+    certification_obtenue = HiddenField('Certification obtenue')
+    certification_nom = StringField('Nom de la certification', validators=[Optional(), Length(max=200)])
+    satisfaction_moyenne = HiddenField('Satisfaction moyenne')
+    efficacite = IntegerField('Efficacité (%)', validators=[Optional()])
+    commentaires = TextAreaField('Commentaires', validators=[Optional()])
+    
+    submit = SubmitField('Enregistrer')
 
 
 # Formulaire pour les réunions (CORRIGÉ - remplacement de DateTimeField par StringField)
