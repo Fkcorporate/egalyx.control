@@ -206,7 +206,6 @@
         background: rgba(59, 130, 246, 0.2);
     }
 
-    /* Correction : informations du plan en blanc sur fond dégradé - texte bien visible */
     .plan-reference-info {
         background: rgba(255, 255, 255, 0.15);
         border-radius: 12px;
@@ -239,6 +238,31 @@
         color: rgba(255, 255, 255, 0.4);
         font-size: 0.8rem;
     }
+
+    .robustesse-card {
+        background: linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%);
+        border-radius: 16px;
+        transition: transform 0.3s ease;
+    }
+    
+    .robustesse-card:hover {
+        transform: translateY(-5px);
+    }
+    
+    .norme-badge {
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+        padding: 8px 16px;
+        border-radius: 30px;
+        font-size: 0.75rem;
+        font-weight: 600;
+    }
+    
+    .risk-faible { background: #d1fae5; color: #065f46; }
+    .risk-moyen { background: #fed7aa; color: #9b2c1d; }
+    .risk-eleve { background: #fecaca; color: #991b1b; }
+    .risk-critique { background: #450a0a; color: #fecaca; }
 </style>
 {% endblock %}
 
@@ -262,8 +286,6 @@
                     <i class="fas fa-clipboard-check me-2"></i>{{ plan.titre }}
                 </h1>
             
-                
-                <!-- SECTION VISIBLE : PAQ-2026-002 | Pôle: RH | 16/04/2026 -->
                 <div class="plan-reference-info">
                     <div class="info-line">
                         <span class="info-label">Référence plan :</span>
@@ -282,8 +304,12 @@
                     <a href="{{ url_for('modifier_plan_qualite', plan_id=plan.id) }}" class="btn btn-light rounded-pill px-3 me-2">
                         <i class="fas fa-edit me-1"></i>Modifier
                     </a>
-                    <a href="{{ url_for('export_plan_qualite_pdf', plan_id=plan.id) }}" class="btn btn-outline-danger btn-sm" target="_blank">
+                    <a href="{{ url_for('export_plan_qualite_pdf', plan_id=plan.id) }}" class="btn btn-outline-light btn-sm rounded-pill px-3" target="_blank">
                         <i class="fas fa-file-pdf me-1"></i> Exporter PDF
+                    </a>
+                    <!-- Bouton pour accéder au rapport -->
+                    <a href="{{ url_for('voir_rapport_qualite', plan_id=plan.id) }}" class="btn btn-outline-info btn-sm" target="_blank">
+                        <i class="fas fa-file-alt me-1"></i>Rapport complet
                     </a>
                     {% if not plan.is_archived %}
                     <button type="button" class="btn btn-outline-light rounded-pill px-3" data-bs-toggle="modal" data-bs-target="#archiveModal">
@@ -594,6 +620,181 @@
         
         <!-- COLONNE DROITE -->
         <div class="col-lg-8">
+            
+            <!-- ========== SECTION ANALYSE STRATÉGIQUE ========== -->
+            <div class="section-card animate-card border-info mb-4">
+                <div class="section-header bg-info bg-opacity-10">
+                    <h5 class="mb-0 fw-semibold text-info">
+                        <i class="fas fa-chart-line me-2"></i>Analyse stratégique & Performance
+                    </h5>
+                    <span class="badge bg-{% if stats_actions.avancement_moyen >= 80 %}success{% elif stats_actions.avancement_moyen >= 60 %}warning{% else %}secondary{% endif %} rounded-pill px-3 py-2">
+                        <i class="fas fa-chart-simple me-1"></i>Robustesse: {{ "%.0f"|format(stats_actions.avancement_moyen) }}%
+                    </span>
+                </div>
+                <div class="section-body">
+                    <div class="row g-3 mb-4">
+                        <!-- Score de robustesse -->
+                        <div class="col-md-4">
+                            <div class="robustesse-card p-3 text-center h-100">
+                                <div class="display-4 fw-bold text-primary">{{ "%.0f"|format(stats_actions.avancement_moyen) }}%</div>
+                                <div class="small text-muted">Score de robustesse</div>
+                                <div class="progress mt-2" style="height: 4px;">
+                                    <div class="progress-bar bg-{% if stats_actions.avancement_moyen >= 80 %}success{% elif stats_actions.avancement_moyen >= 60 %}warning{% else %}secondary{% endif %}" 
+                                         style="width: {{ stats_actions.avancement_moyen }}%"></div>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <!-- Niveau de certification -->
+                        <div class="col-md-4">
+                            <div class="robustesse-card p-3 text-center h-100">
+                                <div class="display-4 fw-bold 
+                                    {% if stats_actions.avancement_moyen >= 90 %}text-warning
+                                    {% elif stats_actions.avancement_moyen >= 75 %}text-info
+                                    {% elif stats_actions.avancement_moyen >= 60 %}text-secondary
+                                    {% else %}text-muted{% endif %}">
+                                    <i class="fas fa-{% if stats_actions.avancement_moyen >= 90 %}crown
+                                             {% elif stats_actions.avancement_moyen >= 75 %}medal
+                                             {% elif stats_actions.avancement_moyen >= 60 %}award
+                                             {% else %}shield-alt{% endif %}"></i>
+                                </div>
+                                <div class="fw-bold">
+                                    {% if stats_actions.avancement_moyen >= 90 %}PLATINUM
+                                    {% elif stats_actions.avancement_moyen >= 75 %}GOLD
+                                    {% elif stats_actions.avancement_moyen >= 60 %}SILVER
+                                    {% else %}BASE{% endif %}
+                                </div>
+                                <div class="small text-muted">Niveau de certification</div>
+                            </div>
+                        </div>
+                        
+                        <!-- Performance globale -->
+                        <div class="col-md-4">
+                            <div class="robustesse-card p-3 text-center h-100">
+                                <div class="display-4 fw-bold text-success">{{ "%.0f"|format(stats_actions.avancement_moyen) }}%</div>
+                                <div class="small text-muted">Score global</div>
+                                <div class="small mt-2">
+                                    <span class="text-success">{{ stats_actions.terminees }} terminées</span> | 
+                                    <span class="text-danger">{{ stats_actions.en_retard }} retard</span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- Conformité aux normes -->
+                    <div class="mt-3">
+                        <h6 class="fw-semibold mb-3"><i class="fas fa-certificate me-2"></i>Conformité aux normes internationales</h6>
+                        <div class="row g-2">
+                            <div class="col-md-6 col-lg-3">
+                                <div class="norme-badge {% if plan.responsable_conformite_id %}bg-success bg-opacity-10 border border-success{% else %}bg-secondary bg-opacity-10 border border-secondary{% endif %}">
+                                    <i class="fas fa-{% if plan.responsable_conformite_id %}check-circle text-success{% else %}times-circle text-muted{% endif %}"></i>
+                                    <span class="small fw-semibold">ISO 9001</span>
+                                </div>
+                            </div>
+                            <div class="col-md-6 col-lg-3">
+                                <div class="norme-badge {% if plan.date_prochaine_revue %}bg-success bg-opacity-10 border border-success{% else %}bg-secondary bg-opacity-10 border border-secondary{% endif %}">
+                                    <i class="fas fa-{% if plan.date_prochaine_revue %}check-circle text-success{% else %}times-circle text-muted{% endif %}"></i>
+                                    <span class="small fw-semibold">ISO 19011</span>
+                                </div>
+                            </div>
+                            <div class="col-md-6 col-lg-3">
+                                <div class="norme-badge bg-secondary bg-opacity-10 border border-secondary">
+                                    <i class="fas fa-times-circle text-muted"></i>
+                                    <span class="small fw-semibold">COSO ERM</span>
+                                </div>
+                            </div>
+                            <div class="col-md-6 col-lg-3">
+                                <div class="norme-badge {% if plan.niveau_maturite|int >= 3 %}bg-success bg-opacity-10 border border-success{% else %}bg-secondary bg-opacity-10 border border-secondary{% endif %}">
+                                    <i class="fas fa-{% if plan.niveau_maturite|int >= 3 %}check-circle text-success{% else %}times-circle text-muted{% endif %}"></i>
+                                    <span class="small fw-semibold">CMMI</span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- Feuille de route -->
+                    <div class="mt-4 pt-3 border-top">
+                        <h6 class="fw-semibold mb-3"><i class="fas fa-road me-2"></i>Feuille de route d'amélioration</h6>
+                        <div class="row">
+                            <div class="col-md-4">
+                                <div class="fw-semibold text-primary mb-1">Court Terme</div>
+                                <ul class="small text-muted mb-3 ps-3">
+                                    <li>Finaliser la documentation des procédures</li>
+                                    <li>Former les équipes aux nouveaux processus</li>
+                                </ul>
+                            </div>
+                            <div class="col-md-4">
+                                <div class="fw-semibold text-primary mb-1">Moyen Terme</div>
+                                <ul class="small text-muted mb-3 ps-3">
+                                    <li>Automatiser les contrôles qualité</li>
+                                    <li>Mettre en place le tableau de bord IA</li>
+                                </ul>
+                            </div>
+                            <div class="col-md-4">
+                                <div class="fw-semibold text-primary mb-1">Long Terme</div>
+                                <ul class="small text-muted mb-3 ps-3">
+                                    <li>Certification ISO 9001:2025</li>
+                                    <li>Intégration complète des indicateurs prédictifs</li>
+                                </ul>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- ========== SECTION GESTION AVANCÉE (4 TEMPLATES) ========== -->
+            <div class="section-card animate-card mb-4">
+                <div class="section-header bg-light">
+                    <h5 class="mb-0 fw-semibold">
+                        <i class="fas fa-folder-tree me-2 text-primary"></i>
+                        Gestion avancée
+                    </h5>
+                </div>
+                <div class="section-body">
+                    <div class="row g-2">
+                        <div class="col-md-3">
+                            <a href="{{ url_for('liste_non_conformites_qualite', plan_id=plan.id) }}" 
+                               class="btn btn-outline-danger w-100 py-3 text-start">
+                                <i class="fas fa-exclamation-triangle fa-lg me-2"></i>
+                                <div>
+                                    <strong>Non-conformités</strong>
+                                    <small class="d-block text-muted">Gérer les écarts qualité</small>
+                                </div>
+                            </a>
+                        </div>
+                        <div class="col-md-3">
+                            <a href="{{ url_for('liste_audits_qualite', plan_id=plan.id) }}" 
+                               class="btn btn-outline-primary w-100 py-3 text-start">
+                                <i class="fas fa-clipboard-list fa-lg me-2"></i>
+                                <div>
+                                    <strong>Audits qualité</strong>
+                                    <small class="d-block text-muted">Planifier et suivre les audits</small>
+                                </div>
+                            </a>
+                        </div>
+                        <div class="col-md-3">
+                            <a href="{{ url_for('liste_formations_qualite', plan_id=plan.id) }}" 
+                               class="btn btn-outline-success w-100 py-3 text-start">
+                                <i class="fas fa-graduation-cap fa-lg me-2"></i>
+                                <div>
+                                    <strong>Formations</strong>
+                                    <small class="d-block text-muted">Plan de formation qualité</small>
+                                </div>
+                            </a>
+                        </div>
+                        <div class="col-md-3">
+                            <a href="{{ url_for('liste_reunions_qualite', plan_id=plan.id) }}" 
+                               class="btn btn-outline-info w-100 py-3 text-start">
+                                <i class="fas fa-users fa-lg me-2"></i>
+                                <div>
+                                    <strong>Réunions qualité</strong>
+                                    <small class="d-block text-muted">Revues de direction</small>
+                                </div>
+                            </a>
+                        </div>
+                    </div>
+                </div>
+            </div>
             
             <!-- ASSISTANT IA - RECOMMANDATIONS -->
             <div class="section-card animate-card border-info">
@@ -1128,6 +1329,12 @@ document.addEventListener('DOMContentLoaded', function() {
         setTimeout(() => {
             card.style.opacity = '1';
         }, index * 50);
+    });
+    
+    // Initialiser les tooltips
+    const tooltipTriggerList = [].slice.call(document.querySelectorAll('[data-bs-toggle="tooltip"]'));
+    tooltipTriggerList.map(function (tooltipTriggerEl) {
+        return new bootstrap.Tooltip(tooltipTriggerEl);
     });
 });
 </script>
