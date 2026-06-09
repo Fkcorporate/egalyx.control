@@ -1,0 +1,426 @@
+{% extends "base.html" %}
+
+{% block title %}Détail audit qualité - {{ audit.reference }}{% endblock %}
+
+{% block styles %}
+{{ super() }}
+<style>
+    .status-badge {
+        padding: 0.5rem 1rem;
+        border-radius: 30px;
+        font-size: 0.85rem;
+        font-weight: 600;
+    }
+    .info-card {
+        background: #f8f9fa;
+        border-radius: 12px;
+        padding: 1rem;
+        margin-bottom: 1rem;
+    }
+    .conformity-circle {
+        width: 120px;
+        height: 120px;
+        border-radius: 50%;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        margin: 0 auto;
+        font-size: 2rem;
+        font-weight: bold;
+    }
+    .timeline-item {
+        position: relative;
+        padding-left: 2rem;
+        padding-bottom: 1.5rem;
+        border-left: 2px solid #dee2e6;
+    }
+    .timeline-item:last-child {
+        border-left: none;
+    }
+    .timeline-icon {
+        position: absolute;
+        left: -0.75rem;
+        top: 0;
+        width: 1.5rem;
+        height: 1.5rem;
+        border-radius: 50%;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        background: white;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="container-fluid px-4">
+    <!-- En-tête -->
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <div>
+            <nav aria-label="breadcrumb">
+                <ol class="breadcrumb">
+                    <li class="breadcrumb-item"><a href="{{ url_for('liste_plans_qualite') }}">Plans qualité</a></li>
+                    <li class="breadcrumb-item"><a href="{{ url_for('detail_plan_qualite', plan_id=plan.id) }}">{{ plan.reference }}</a></li>
+                    <li class="breadcrumb-item"><a href="{{ url_for('liste_audits_qualite', plan_id=plan.id) }}">Audits qualité</a></li>
+                    <li class="breadcrumb-item active">{{ audit.reference }}</li>
+                </ol>
+            </nav>
+            <div class="d-flex align-items-center gap-3">
+                <h1 class="h2 mb-0">
+                    <i class="fas fa-clipboard-list me-2 text-primary"></i>
+                    {{ audit.titre }}
+                </h1>
+                <span class="status-badge {% if audit.statut == 'realise' %}bg-success{% elif audit.statut == 'en_cours' %}bg-warning{% else %}bg-secondary{% endif %} text-white">
+                    {% if audit.statut == 'planifie' %}📅 Planifié
+                    {% elif audit.statut == 'en_cours' %}🔄 En cours
+                    {% elif audit.statut == 'realise' %}✅ Réalisé
+                    {% elif audit.statut == 'annule' %}❌ Annulé
+                    {% else %}{{ audit.statut }}{% endif %}
+                </span>
+            </div>
+            <p class="text-muted mt-2">
+                <i class="fas fa-tag me-1"></i>{{ audit.reference }} | 
+                Plan: {{ plan.reference }} - {{ plan.titre }}
+            </p>
+        </div>
+        <div>
+            <a href="{{ url_for('modifier_audit_qualite', audit_id=audit.id) }}" class="btn btn-warning">
+                <i class="fas fa-edit me-1"></i>Modifier
+            </a>
+            <a href="{{ url_for('liste_audits_qualite', plan_id=plan.id) }}" class="btn btn-secondary">
+                <i class="fas fa-arrow-left me-1"></i>Retour
+            </a>
+        </div>
+    </div>
+
+    <div class="row">
+        <!-- Colonne gauche - Informations -->
+        <div class="col-lg-4">
+            <!-- Informations générales -->
+            <div class="card shadow-sm mb-4">
+                <div class="card-header bg-white">
+                    <h5 class="mb-0"><i class="fas fa-info-circle me-2 text-primary"></i>Informations générales</h5>
+                </div>
+                <div class="card-body">
+                    <div class="info-card">
+                        <div class="row mb-3">
+                            <div class="col-5 fw-semibold">Référence:</div>
+                            <div class="col-7"><code>{{ audit.reference }}</code></div>
+                        </div>
+                        <div class="row mb-3">
+                            <div class="col-5 fw-semibold">Auditeur principal:</div>
+                            <div class="col-7">
+                                {% if audit.auditeur_principal %}
+                                    <i class="fas fa-user-circle me-1 text-primary"></i>
+                                    {{ audit.auditeur_principal.username }}
+                                {% else %}
+                                    <span class="text-muted">Non assigné</span>
+                                {% endif %}
+                            </div>
+                        </div>
+                        <div class="row mb-3">
+                            <div class="col-5 fw-semibold">Date prévue:</div>
+                            <div class="col-7">
+                                {% if audit.date_prevue %}
+                                    <i class="fas fa-calendar me-1"></i>
+                                    {{ audit.date_prevue.strftime('%d/%m/%Y') }}
+                                {% else %}
+                                    <span class="text-muted">Non planifiée</span>
+                                {% endif %}
+                            </div>
+                        </div>
+                        <div class="row mb-3">
+                            <div class="col-5 fw-semibold">Date réalisation:</div>
+                            <div class="col-7">
+                                {% if audit.date_realise %}
+                                    <i class="fas fa-check-circle me-1 text-success"></i>
+                                    {{ audit.date_realise.strftime('%d/%m/%Y') }}
+                                {% else %}
+                                    <span class="text-muted">Non réalisé</span>
+                                {% endif %}
+                            </div>
+                        </div>
+                        <div class="row mb-3">
+                            <div class="col-5 fw-semibold">Créé le:</div>
+                            <div class="col-7">
+                                {{ audit.created_at.strftime('%d/%m/%Y') if audit.created_at else '-' }}
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Résultats -->
+            <div class="card shadow-sm mb-4">
+                <div class="card-header bg-white">
+                    <h5 class="mb-0"><i class="fas fa-chart-line me-2 text-success"></i>Résultats</h5>
+                </div>
+                <div class="card-body text-center">
+                    <!-- Taux de conformité -->
+                    <div class="mb-4">
+                        <div class="conformity-circle" style="background: {% if stats.progression.taux_conformite >= 80 %}#d4edda{% elif stats.progression.taux_conformite >= 60 %}#fff3cd{% else %}#f8d7da{% endif %}">
+                            <span style="color: {% if stats.progression.taux_conformite >= 80 %}#155724{% elif stats.progression.taux_conformite >= 60 %}#856404{% else %}#721c24{% endif %}">
+                                {{ "%.0f"|format(stats.progression.taux_conformite) }}%
+                            </span>
+                        </div>
+                        <div class="mt-2 fw-semibold">Taux de conformité</div>
+                    </div>
+                    
+                    <div class="row">
+                        <div class="col-6">
+                            <div class="info-card text-center">
+                                <div class="h3 mb-0 text-info">{{ stats.progression.nb_observations }}</div>
+                                <small class="text-muted">Observations</small>
+                            </div>
+                        </div>
+                        <div class="col-6">
+                            <div class="info-card text-center">
+                                <div class="h3 mb-0 text-success">{{ stats.progression.nb_points_forts }}</div>
+                                <small class="text-muted">Points forts</small>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Colonne droite -->
+        <div class="col-lg-8">
+            <!-- Périmètre et critères -->
+            <div class="card shadow-sm mb-4">
+                <div class="card-header bg-white">
+                    <h5 class="mb-0"><i class="fas fa-chalkboard me-2 text-primary"></i>Périmètre & Critères</h5>
+                </div>
+                <div class="card-body">
+                    {% if audit.perimetre %}
+                    <div class="mb-3">
+                        <label class="fw-semibold">Périmètre:</label>
+                        <p class="mt-1 mb-0">{{ audit.perimetre }}</p>
+                    </div>
+                    {% endif %}
+                    {% if audit.criteres %}
+                    <div>
+                        <label class="fw-semibold">Critères d'audit:</label>
+                        <p class="mt-1 mb-0">{{ audit.criteres }}</p>
+                    </div>
+                    {% endif %}
+                    {% if not audit.perimetre and not audit.criteres %}
+                    <p class="text-muted text-center mb-0">Aucune information</p>
+                    {% endif %}
+                </div>
+            </div>
+
+            <!-- Équipe d'audit -->
+            <div class="card shadow-sm mb-4">
+                <div class="card-header bg-white">
+                    <h5 class="mb-0"><i class="fas fa-users me-2 text-success"></i>Équipe d'audit</h5>
+                </div>
+                <div class="card-body">
+                    {% if audit.equipe_audit and audit.equipe_audit|length > 0 %}
+                        <div class="d-flex flex-wrap gap-2">
+                            {% for membre in audit.equipe_audit %}
+                                <span class="badge bg-light text-dark p-2">
+                                    <i class="fas fa-user-check me-1 text-success"></i>{{ membre }}
+                                </span>
+                            {% endfor %}
+                        </div>
+                    {% else %}
+                        <p class="text-muted text-center mb-0">Aucun membre dans l'équipe</p>
+                    {% endif %}
+                </div>
+            </div>
+
+            <!-- Non-conformités -->
+            <div class="card shadow-sm mb-4">
+                <div class="card-header bg-white d-flex justify-content-between align-items-center">
+                    <h5 class="mb-0"><i class="fas fa-exclamation-triangle me-2 text-danger"></i>Non-conformités</h5>
+                    <button type="button" class="btn btn-sm btn-outline-danger" data-bs-toggle="modal" data-bs-target="#addNonConformiteModal">
+                        <i class="fas fa-plus me-1"></i>Ajouter
+                    </button>
+                </div>
+                <div class="card-body">
+                    {% if non_conformites and non_conformites|length > 0 %}
+                        <div class="table-responsive">
+                            <table class="table table-sm">
+                                <thead class="table-light">
+                                    <tr>
+                                        <th>Réf.</th>
+                                        <th>Titre</th>
+                                        <th>Gravité</th>
+                                        <th>Statut</th>
+                                        <th>Actions</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {% for nc in non_conformites %}
+                                    <tr>
+                                        <td><code>{{ nc.reference }}</code></td>
+                                        <td>{{ nc.titre|truncate(40) }}</td>
+                                        <td>
+                                            <span class="badge {% if nc.gravite == 'critique' %}bg-danger{% elif nc.gravite == 'majeure' %}bg-warning{% else %}bg-info{% endif %}">
+                                                {{ nc.gravite|title }}
+                                            </span>
+                                        </td>
+                                        <td>
+                                            <span class="badge {% if nc.statut == 'close' %}bg-success{% else %}bg-secondary{% endif %}">
+                                                {{ nc.statut|title }}
+                                            </span>
+                                        </td>
+                                        <td>
+                                            <button class="btn btn-sm btn-outline-primary" onclick="voirNonConformite({{ nc.id }})">
+                                                <i class="fas fa-eye"></i>
+                                            </button>
+                                        </td>
+                                    </tr>
+                                    {% endfor %}
+                                </tbody>
+                            </table>
+                        </div>
+                    {% else %}
+                        <div class="text-center py-4">
+                            <i class="fas fa-check-circle fa-3x text-success mb-2"></i>
+                            <p class="text-muted mb-0">Aucune non-conformité détectée</p>
+                        </div>
+                    {% endif %}
+                </div>
+            </div>
+
+            <!-- Conclusion et recommandations -->
+            {% if audit.conclusion or audit.recommandations %}
+            <div class="card shadow-sm mb-4">
+                <div class="card-header bg-white">
+                    <h5 class="mb-0"><i class="fas fa-file-alt me-2 text-primary"></i>Conclusion</h5>
+                </div>
+                <div class="card-body">
+                    {% if audit.conclusion %}
+                    <div class="mb-3">
+                        <label class="fw-semibold">Conclusion:</label>
+                        <p class="mt-1 mb-0">{{ audit.conclusion }}</p>
+                    </div>
+                    {% endif %}
+                    {% if audit.recommandations and audit.recommandations|length > 0 %}
+                    <div>
+                        <label class="fw-semibold">Recommandations:</label>
+                        <ul class="mt-2">
+                            {% for rec in audit.recommandations %}
+                            <li>{{ rec }}</li>
+                            {% endfor %}
+                        </ul>
+                    </div>
+                    {% endif %}
+                </div>
+            </div>
+            {% endif %}
+
+            <!-- Chronologie -->
+            <div class="card shadow-sm mb-4">
+                <div class="card-header bg-white">
+                    <h5 class="mb-0"><i class="fas fa-history me-2 text-secondary"></i>Chronologie</h5>
+                </div>
+                <div class="card-body">
+                    <div class="timeline">
+                        <div class="timeline-item">
+                            <div class="timeline-icon bg-primary">
+                                <i class="fas fa-plus-circle text-white small"></i>
+                            </div>
+                            <div class="fw-semibold">Création</div>
+                            <small class="text-muted">{{ audit.created_at.strftime('%d/%m/%Y à %H:%M') if audit.created_at else '-' }}</small>
+                        </div>
+                        {% if audit.date_prevue %}
+                        <div class="timeline-item">
+                            <div class="timeline-icon bg-info">
+                                <i class="fas fa-calendar text-white small"></i>
+                            </div>
+                            <div class="fw-semibold">Planification</div>
+                            <small class="text-muted">Prévu le {{ audit.date_prevue.strftime('%d/%m/%Y') }}</small>
+                        </div>
+                        {% endif %}
+                        {% if audit.date_debut %}
+                        <div class="timeline-item">
+                            <div class="timeline-icon bg-warning">
+                                <i class="fas fa-play text-white small"></i>
+                            </div>
+                            <div class="fw-semibold">Début</div>
+                            <small class="text-muted">{{ audit.date_debut.strftime('%d/%m/%Y') }}</small>
+                        </div>
+                        {% endif %}
+                        {% if audit.date_fin %}
+                        <div class="timeline-item">
+                            <div class="timeline-icon bg-warning">
+                                <i class="fas fa-stop text-white small"></i>
+                            </div>
+                            <div class="fw-semibold">Fin</div>
+                            <small class="text-muted">{{ audit.date_fin.strftime('%d/%m/%Y') }}</small>
+                        </div>
+                        {% endif %}
+                        {% if audit.date_realise %}
+                        <div class="timeline-item">
+                            <div class="timeline-icon bg-success">
+                                <i class="fas fa-check-circle text-white small"></i>
+                            </div>
+                            <div class="fw-semibold">Réalisation</div>
+                            <small class="text-muted">{{ audit.date_realise.strftime('%d/%m/%Y') }}</small>
+                        </div>
+                        {% endif %}
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Modal Ajouter Non-conformité -->
+<div class="modal fade" id="addNonConformiteModal" tabindex="-1">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <form method="POST" action="{{ url_for('ajouter_non_conformite_qualite', audit_id=audit.id) }}">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                <div class="modal-header">
+                    <h5 class="modal-title">
+                        <i class="fas fa-exclamation-triangle text-danger me-2"></i>Ajouter une non-conformité
+                    </h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="mb-3">
+                        <label class="form-label">Titre</label>
+                        <input type="text" name="titre" class="form-control" required>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Description</label>
+                        <textarea name="description" class="form-control" rows="3" required></textarea>
+                    </div>
+                    <div class="row">
+                        <div class="col-md-6 mb-3">
+                            <label class="form-label">Gravité</label>
+                            <select name="gravite" class="form-select">
+                                <option value="mineure">Mineure</option>
+                                <option value="majeure">Majeure</option>
+                                <option value="critique">Critique</option>
+                            </select>
+                        </div>
+                        <div class="col-md-6 mb-3">
+                            <label class="form-label">Cause racine</label>
+                            <input type="text" name="cause_racine" class="form-control" placeholder="Analyse 5 pourquoi">
+                        </div>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Action corrective</label>
+                        <textarea name="action_corrective" class="form-control" rows="2"></textarea>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Annuler</button>
+                    <button type="submit" class="btn btn-danger">Ajouter</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<script>
+function voirNonConformite(id) {
+    window.location.href = `/qualite/non-conformite/${id}`;
+}
+</script>
+{% endblock %}
