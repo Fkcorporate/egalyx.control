@@ -1,7 +1,6 @@
 from flask_wtf import FlaskForm
 from flask_wtf.file import FileField, FileRequired, FileAllowed
-from wtforms import StringField, TextAreaField, SelectField, DateField, IntegerField, BooleanField, SubmitField, FieldList, FormField, FileField, TimeField, DateTimeFieldfrom wtforms.validators import DataRequired, Length, Optional, NumberRange
-from datetime import datetime, timedelta
+from wtforms import StringField, TextAreaField, SelectField, DateField, IntegerField, BooleanField, SubmitField, FieldList, FormField, FileField, TimeField, DateTimeField, HiddenFieldfrom datetime import datetime, timedelta
 
 # Formulaire pour un objectif qualité individuel
 class ObjectifQualiteForm(FlaskForm):
@@ -246,8 +245,14 @@ class ReunionQualiteForm(FlaskForm):
     duree_minutes = IntegerField('Durée (minutes)', validators=[Optional()])
     lieu = StringField('Lieu', validators=[Optional(), Length(max=200)])
     animateur_id = SelectField('Animateur', coerce=int, choices=[], validators=[Optional()])
+    statut = SelectField('Statut', choices=[
+        ('planifiee', '📅 Planifiée'),
+        ('realisee', '✅ Réalisée'),
+        ('reportee', '⏰ Reportée'),
+        ('annulee', '❌ Annulée')
+    ], default='planifiee')
     
-    # Champs JSON
+    # 🔥 Champs JSON avec HiddenField
     participants_json = HiddenField('Participants JSON')
     ordre_jour_json = HiddenField('Ordre du jour JSON')
     decisions_json = HiddenField('Décisions JSON')
