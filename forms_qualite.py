@@ -241,15 +241,20 @@ class ReunionQualiteForm(FlaskForm):
         ('audit', 'Audit')
     ], default='revue_direction')
     
-    # 🔥 UTILISER DateField + TimeField au lieu de StringField
     date_reunion = DateField('Date', validators=[DataRequired()], default=datetime.now().date)
     heure_reunion = TimeField('Heure', validators=[Optional()], default=datetime.now().time())
-    
     duree_minutes = IntegerField('Durée (minutes)', validators=[Optional()])
     lieu = StringField('Lieu', validators=[Optional(), Length(max=200)])
     animateur_id = SelectField('Animateur', coerce=int, choices=[], validators=[Optional()])
-    ordre_jour = TextAreaField('Ordre du jour (un élément par ligne)', validators=[Optional()])
-    submit = SubmitField('Planifier')
+    
+    # Champs JSON
+    participants_json = HiddenField('Participants JSON')
+    ordre_jour_json = HiddenField('Ordre du jour JSON')
+    decisions_json = HiddenField('Décisions JSON')
+    actions_json = HiddenField('Actions JSON')
+    
+    compte_rendu = TextAreaField('Compte rendu', validators=[Optional()])
+    submit = SubmitField('Enregistrer')
 
 
 # Formulaire de filtrage pour la cartographie
