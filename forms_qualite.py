@@ -241,8 +241,11 @@ class ReunionQualiteForm(FlaskForm):
         ('copil', 'COPIL'),
         ('audit', 'Audit')
     ], default='revue_direction')
-    date_reunion = StringField('Date et heure (format: YYYY-MM-DD HH:MM)', validators=[DataRequired()], 
-                               default=datetime.now().strftime('%Y-%m-%d %H:%M'))
+    
+    # 🔥 UTILISER DateField + TimeField au lieu de StringField
+    date_reunion = DateField('Date', validators=[DataRequired()], default=datetime.now().date)
+    heure_reunion = TimeField('Heure', validators=[Optional()], default=datetime.now().time())
+    
     duree_minutes = IntegerField('Durée (minutes)', validators=[Optional()])
     lieu = StringField('Lieu', validators=[Optional(), Length(max=200)])
     animateur_id = SelectField('Animateur', coerce=int, choices=[], validators=[Optional()])
