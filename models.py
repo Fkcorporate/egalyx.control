@@ -10265,13 +10265,21 @@ class AuditQualite(db.Model):
     recommandations = db.Column(db.JSON, default=[])
     
     # Statut
-    statut = db.Column(db.String(20), default='planifie')  # planifie, en_cours, realise, annule
+    statut = db.Column(db.String(20), default='planifie')
+    
+    # 🔥 AJOUTER CES CHAMPS MANQUANTS
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    client_id = db.Column(db.Integer, db.ForeignKey('clients.id'), nullable=True)
+    created_by = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=True)
     
     # Relations
     plan_qualite = db.relationship('PlanQualiteFonction', back_populates='audits_qualite')
     auditeur_principal = db.relationship('User', foreign_keys=[auditeur_principal_id])
+    createur = db.relationship('User', foreign_keys=[created_by])
     
-    __repr__ = lambda self: f'<AuditQualite {self.reference}>'
+    def __repr__(self):
+        return f'<AuditQualite {self.reference}>'
 
 
 class FormationQualite(db.Model):
