@@ -213,15 +213,22 @@ class NonConformiteForm(FlaskForm):
 # Formulaire pour les audits qualité
 class AuditQualiteForm(FlaskForm):
     titre = StringField('Titre de l\'audit', validators=[DataRequired(), Length(max=200)])
+    description = TextAreaField('Description', validators=[Optional()])  # ← AJOUTER CETTE LIGNE
+    type_audit = SelectField('Type d\'audit', choices=[
+        ('interne', 'Interne'),
+        ('externe', 'Externe'),
+        ('fournisseur', 'Fournisseur')
+    ], default='interne')
     perimetre = TextAreaField('Périmètre', validators=[Optional()])
     criteres = TextAreaField('Critères d\'audit', validators=[Optional()])
+    objectifs_audit = TextAreaField('Objectifs', validators=[Optional()])
     auditeur_principal_id = SelectField('Auditeur principal', coerce=int, choices=[], validators=[Optional()])
     date_prevue = DateField('Date prévue', validators=[Optional()])
     conclusion = TextAreaField('Conclusion', validators=[Optional()])
     
-    # Champs JSON pour l'équipe et les recommandations
-    equipe_audit_json = HiddenField('Équipe audit JSON')
-    recommandations_json = HiddenField('Recommandations JSON')
+    # Champs JSON
+    equipe_audit_json = HiddenField('Équipe audit JSON', default='[]')
+    recommandations_json = HiddenField('Recommandations JSON', default='[]')
     
     submit = SubmitField('Enregistrer')
 
