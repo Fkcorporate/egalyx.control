@@ -2,6 +2,52 @@
 
 {% block title %}{{ action }} une formation - {{ plan.reference }}{% endblock %}
 
+{% block styles %}
+{{ super() }}
+<style>
+    .item-tag {
+        display: inline-flex;
+        align-items: center;
+        background: #e9ecef;
+        border-radius: 50px;
+        padding: 0.25rem 0.75rem;
+        margin: 0.25rem;
+        font-size: 0.85rem;
+    }
+    .item-tag .remove-item {
+        cursor: pointer;
+        margin-left: 0.5rem;
+        color: #dc3545;
+        font-size: 0.75rem;
+    }
+    .item-tag .remove-item:hover {
+        color: #a71d2a;
+    }
+    .items-list {
+        min-height: 60px;
+        border: 1px dashed #dee2e6;
+        border-radius: 8px;
+        padding: 0.5rem;
+        margin-top: 0.5rem;
+    }
+    .input-group-custom {
+        display: flex;
+        gap: 0.5rem;
+        margin-bottom: 0.5rem;
+    }
+    .rating-star {
+        cursor: pointer;
+        font-size: 1.5rem;
+        color: #dee2e6;
+        transition: color 0.2s;
+    }
+    .rating-star:hover,
+    .rating-star.active {
+        color: #ffc107;
+    }
+</style>
+{% endblock %}
+
 {% block content %}
 <div class="container-fluid px-4">
     <div class="row mb-4">
@@ -24,51 +70,366 @@
 
     <div class="card shadow-sm">
         <div class="card-body">
-            <form method="POST">
+            <form method="POST" id="formationForm">
                 {{ form.csrf_token }}
                 
-                <div class="row">
-                    <div class="col-md-12 mb-3">
-                        {{ form.intitule.label(class="form-label") }}
-                        {{ form.intitule(class="form-control") }}
-                        {% if form.intitule.errors %}
-                            <div class="text-danger small">{{ form.intitule.errors[0] }}</div>
-                        {% endif %}
+                <!-- Informations générales -->
+                <div class="card mb-4">
+                    <div class="card-header bg-light">
+                        <h5 class="mb-0"><i class="fas fa-info-circle me-2"></i>Informations générales</h5>
+                    </div>
+                    <div class="card-body">
+                        <div class="row">
+                            <div class="col-md-12 mb-3">
+                                {{ form.intitule.label(class="form-label") }}
+                                {{ form.intitule(class="form-control") }}
+                                {% if form.intitule.errors %}
+                                    <div class="text-danger small">{{ form.intitule.errors[0] }}</div>
+                                {% endif %}
+                            </div>
+                        </div>
+                        
+                        <div class="row">
+                            <div class="col-md-12 mb-3">
+                                {{ form.description.label(class="form-label") }}
+                                {{ form.description(class="form-control", rows=3) }}
+                            </div>
+                        </div>
+                        
+                        <div class="row">
+                            <div class="col-md-6 mb-3">
+                                {{ form.formateur.label(class="form-label") }}
+                                {{ form.formateur(class="form-control") }}
+                            </div>
+                            <div class="col-md-6 mb-3">
+                                {{ form.duree_heures.label(class="form-label") }}
+                                {{ form.duree_heures(class="form-control", type="number", step="0.5") }}
+                            </div>
+                        </div>
+                        
+                        <div class="row">
+                            <div class="col-md-6 mb-3">
+                                {{ form.date_formation.label(class="form-label") }}
+                                {{ form.date_formation(class="form-control", type="date") }}
+                            </div>
+                            <div class="col-md-6 mb-3">
+                                {{ form.date_evaluation.label(class="form-label") }}
+                                {{ form.date_evaluation(class="form-control", type="date") }}
+                            </div>
+                        </div>
                     </div>
                 </div>
                 
-                <div class="row">
-                    <div class="col-md-12 mb-3">
-                        {{ form.description.label(class="form-label") }}
-                        {{ form.description(class="form-control", rows=3) }}
+                <!-- Participants -->
+                <div class="card mb-4">
+                    <div class="card-header bg-light">
+                        <h5 class="mb-0"><i class="fas fa-users me-2 text-success"></i>Participants</h5>
+                    </div>
+                    <div class="card-body">
+                        <div class="input-group-custom">
+                            <input type="text" id="participantInput" class="form-control" placeholder="Nom du participant">
+                            <button type="button" class="btn btn-success" id="addParticipantBtn">
+                                <i class="fas fa-plus me-1"></i>Ajouter
+                            </button>
+                        </div>
+                        <div id="participantsContainer" class="items-list">
+                            <!-- Les participants seront affichés ici -->
+                        </div>
+                        <input type="hidden" name="participants_json" id="participantsJson" value='{{ formation.participants|tojson if formation and formation.participants else "[]" }}'>
+                        <small class="text-muted">Cliquez sur un nom pour le retirer</small>
                     </div>
                 </div>
                 
-                <div class="row">
-                    <div class="col-md-6 mb-3">
-                        {{ form.formateur.label(class="form-label") }}
-                        {{ form.formateur(class="form-control") }}
+                <!-- Objectifs -->
+                <div class="card mb-4">
+                    <div class="card-header bg-light">
+                        <h5 class="mb-0"><i class="fas fa-bullseye me-2 text-danger"></i>Objectifs de la formation</h5>
                     </div>
-                    <div class="col-md-6 mb-3">
-                        {{ form.duree_heures.label(class="form-label") }}
-                        {{ form.duree_heures(class="form-control", type="number", step="0.5") }}
+                    <div class="card-body">
+                        <div class="input-group-custom">
+                            <input type="text" id="objectifInput" class="form-control" placeholder="Objectif de la formation">
+                            <button type="button" class="btn btn-danger" id="addObjectifBtn">
+                                <i class="fas fa-plus me-1"></i>Ajouter
+                            </button>
+                        </div>
+                        <div id="objectifsContainer" class="items-list">
+                            <!-- Les objectifs seront affichés ici -->
+                        </div>
+                        <input type="hidden" name="objectifs_json" id="objectifsJson" value='{{ formation.objectifs|tojson if formation and formation.objectifs else "[]" }}'>
+                        <small class="text-muted">Cliquez sur un objectif pour le supprimer</small>
                     </div>
                 </div>
                 
-                <div class="row">
-                    <div class="col-md-6 mb-3">
-                        {{ form.date_formation.label(class="form-label") }}
-                        {{ form.date_formation(class="form-control", type="date") }}
+                <!-- Certification -->
+                <div class="card mb-4">
+                    <div class="card-header bg-light">
+                        <h5 class="mb-0"><i class="fas fa-certificate me-2 text-info"></i>Certification</h5>
+                    </div>
+                    <div class="card-body">
+                        <div class="row">
+                            <div class="col-md-6 mb-3">
+                                <label class="form-label">Certification obtenue ?</label>
+                                <select name="certification_obtenue" id="certificationObtenue" class="form-select">
+                                    <option value="false" {% if formation and not formation.certification_obtenue %}selected{% endif %}>Non</option>
+                                    <option value="true" {% if formation and formation.certification_obtenue %}selected{% endif %}>Oui</option>
+                                </select>
+                            </div>
+                            <div class="col-md-6 mb-3" id="certificationNomDiv">
+                                <label class="form-label">Nom de la certification</label>
+                                <input type="text" name="certification_nom" id="certificationNom" class="form-control" value="{{ formation.certification_nom if formation and formation.certification_nom else '' }}">
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- Évaluation de la formation -->
+                <div class="card mb-4">
+                    <div class="card-header bg-light">
+                        <h5 class="mb-0"><i class="fas fa-star me-2 text-warning"></i>Évaluation de la formation</h5>
+                    </div>
+                    <div class="card-body">
+                        <div class="row">
+                            <div class="col-md-6 mb-3">
+                                <label class="form-label">Satisfaction moyenne</label>
+                                <div class="rating" id="ratingStars">
+                                    <i class="fas fa-star rating-star" data-value="1"></i>
+                                    <i class="fas fa-star rating-star" data-value="2"></i>
+                                    <i class="fas fa-star rating-star" data-value="3"></i>
+                                    <i class="fas fa-star rating-star" data-value="4"></i>
+                                    <i class="fas fa-star rating-star" data-value="5"></i>
+                                </div>
+                                <input type="hidden" name="satisfaction_moyenne" id="satisfactionMoyenne" value="{{ formation.satisfaction_moyenne if formation and formation.satisfaction_moyenne else 0 }}">
+                            </div>
+                            <div class="col-md-6 mb-3">
+                                <label class="form-label">Efficacité (%)</label>
+                                <div class="input-group">
+                                    <input type="range" name="efficacite" id="efficacite" class="form-range" min="0" max="100" step="5" value="{{ formation.efficacite if formation and formation.efficacite else 0 }}">
+                                    <span class="input-group-text" id="efficaciteValue">{{ formation.efficacite if formation and formation.efficacite else 0 }}%</span>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="row">
+                            <div class="col-md-12 mb-3">
+                                <label class="form-label">Commentaires</label>
+                                <textarea name="commentaires" class="form-control" rows="3">{{ formation.commentaires if formation and formation.commentaires else '' }}</textarea>
+                            </div>
+                        </div>
                     </div>
                 </div>
                 
                 <hr>
                 <div class="d-flex justify-content-between">
-                    <a href="{{ url_for('liste_formations_qualite', plan_id=plan.id) }}" class="btn btn-secondary">Annuler</a>
-                    {{ form.submit(class="btn btn-success") }}
+                    <a href="{{ url_for('liste_formations_qualite', plan_id=plan.id) }}" class="btn btn-secondary">
+                        <i class="fas fa-arrow-left me-1"></i>Annuler
+                    </a>
+                    <button type="submit" class="btn btn-success">
+                        <i class="fas fa-save me-1"></i>{{ 'Mettre à jour' if action == 'Modifier' else 'Créer' }}
+                    </button>
                 </div>
             </form>
         </div>
     </div>
 </div>
+
+<script>
+// Gestion des participants
+let participants = [];
+
+// Gestion des objectifs
+let objectifs = [];
+
+// Charger les données existantes
+function loadExistingData() {
+    const participantsJson = document.getElementById('participantsJson').value;
+    if (participantsJson && participantsJson !== '[]') {
+        try {
+            participants = JSON.parse(participantsJson);
+        } catch(e) { participants = []; }
+    }
+    
+    const objectifsJson = document.getElementById('objectifsJson').value;
+    if (objectifsJson && objectifsJson !== '[]') {
+        try {
+            objectifs = JSON.parse(objectifsJson);
+        } catch(e) { objectifs = []; }
+    }
+    
+    renderParticipants();
+    renderObjectifs();
+}
+
+// Rendre les participants
+function renderParticipants() {
+    const container = document.getElementById('participantsContainer');
+    if (!container) return;
+    
+    container.innerHTML = '';
+    participants.forEach((p, index) => {
+        const tag = document.createElement('div');
+        tag.className = 'item-tag';
+        tag.innerHTML = `
+            <i class="fas fa-user me-1"></i>
+            ${escapeHtml(p)}
+            <span class="remove-item" data-index="${index}">
+                <i class="fas fa-times-circle"></i>
+            </span>
+        `;
+        container.appendChild(tag);
+    });
+    
+    document.querySelectorAll('#participantsContainer .remove-item').forEach(el => {
+        el.addEventListener('click', function() {
+            const index = parseInt(this.dataset.index);
+            participants.splice(index, 1);
+            renderParticipants();
+            updateParticipantsJson();
+        });
+    });
+}
+
+// Rendre les objectifs
+function renderObjectifs() {
+    const container = document.getElementById('objectifsContainer');
+    if (!container) return;
+    
+    container.innerHTML = '';
+    objectifs.forEach((obj, index) => {
+        const tag = document.createElement('div');
+        tag.className = 'item-tag';
+        tag.innerHTML = `
+            <i class="fas fa-bullseye me-1"></i>
+            ${escapeHtml(obj)}
+            <span class="remove-item" data-index="${index}">
+                <i class="fas fa-times-circle"></i>
+            </span>
+        `;
+        container.appendChild(tag);
+    });
+    
+    document.querySelectorAll('#objectifsContainer .remove-item').forEach(el => {
+        el.addEventListener('click', function() {
+            const index = parseInt(this.dataset.index);
+            objectifs.splice(index, 1);
+            renderObjectifs();
+            updateObjectifsJson();
+        });
+    });
+}
+
+function updateParticipantsJson() {
+    document.getElementById('participantsJson').value = JSON.stringify(participants);
+}
+
+function updateObjectifsJson() {
+    document.getElementById('objectifsJson').value = JSON.stringify(objectifs);
+}
+
+// Ajouter un participant
+document.getElementById('addParticipantBtn')?.addEventListener('click', function() {
+    const input = document.getElementById('participantInput');
+    const nom = input.value.trim();
+    if (nom) {
+        participants.push(nom);
+        renderParticipants();
+        updateParticipantsJson();
+        input.value = '';
+    }
+});
+
+// Ajouter un objectif
+document.getElementById('addObjectifBtn')?.addEventListener('click', function() {
+    const input = document.getElementById('objectifInput');
+    const obj = input.value.trim();
+    if (obj) {
+        objectifs.push(obj);
+        renderObjectifs();
+        updateObjectifsJson();
+        input.value = '';
+    }
+});
+
+// Enter key support
+document.getElementById('participantInput')?.addEventListener('keypress', function(e) {
+    if (e.key === 'Enter') {
+        e.preventDefault();
+        document.getElementById('addParticipantBtn').click();
+    }
+});
+
+document.getElementById('objectifInput')?.addEventListener('keypress', function(e) {
+    if (e.key === 'Enter') {
+        e.preventDefault();
+        document.getElementById('addObjectifBtn').click();
+    }
+});
+
+// Gestion de la certification
+document.getElementById('certificationObtenue')?.addEventListener('change', function() {
+    const div = document.getElementById('certificationNomDiv');
+    if (this.value === 'true') {
+        div.style.display = 'block';
+    } else {
+        div.style.display = 'none';
+    }
+});
+
+// Initialiser l'affichage de la certification
+if (document.getElementById('certificationObtenue')?.value === 'false') {
+    document.getElementById('certificationNomDiv').style.display = 'none';
+}
+
+// Gestion du rating étoiles
+function initRating() {
+    const stars = document.querySelectorAll('.rating-star');
+    const ratingInput = document.getElementById('satisfactionMoyenne');
+    const currentRating = parseInt(ratingInput.value) || 0;
+    
+    stars.forEach(star => {
+        const value = parseInt(star.dataset.value);
+        if (value <= currentRating) {
+            star.classList.add('active');
+        }
+        
+        star.addEventListener('click', function() {
+            const newRating = parseInt(this.dataset.value);
+            ratingInput.value = newRating;
+            
+            stars.forEach(s => {
+                if (parseInt(s.dataset.value) <= newRating) {
+                    s.classList.add('active');
+                } else {
+                    s.classList.remove('active');
+                }
+            });
+        });
+    });
+}
+
+// Gestion du slider d'efficacité
+document.getElementById('efficacite')?.addEventListener('input', function() {
+    document.getElementById('efficaciteValue').innerText = this.value + '%';
+});
+
+function escapeHtml(text) {
+    if (!text) return '';
+    const div = document.createElement('div');
+    div.textContent = text;
+    return div.innerHTML;
+}
+
+// Initialiser
+document.addEventListener('DOMContentLoaded', function() {
+    loadExistingData();
+    initRating();
+    
+    // Ajouter les JSON au formulaire
+    const form = document.getElementById('formationForm');
+    if (form) {
+        form.addEventListener('submit', function() {
+            updateParticipantsJson();
+            updateObjectifsJson();
+        });
+    }
+});
+</script>
 {% endblock %}
