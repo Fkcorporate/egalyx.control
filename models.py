@@ -10268,51 +10268,86 @@ class NonConformite(db.Model):
 
 
 class AuditQualite(db.Model):
-    """Audit qualité (ISO 19011:2025)"""
+    """Audit qualité (ISO 19011:2025) - Version CORRIGÉE"""
     __tablename__ = 'audits_qualite'
     
     id = db.Column(db.Integer, primary_key=True)
     reference = db.Column(db.String(50), unique=True, nullable=False)
     plan_qualite_id = db.Column(db.Integer, db.ForeignKey('plans_qualite_fonction.id'), nullable=False)
     
-    # Périmètre
+    # ============================================
+    # 1. INFORMATIONS GÉNÉRALES
+    # ============================================
     titre = db.Column(db.String(200), nullable=False)
-    perimetre = db.Column(db.Text)
-    criteres = db.Column(db.Text)
+    description = db.Column(db.Text, nullable=True)  # ← AJOUTER CETTE LIGNE
+    type_audit = db.Column(db.String(50), default='interne')
     
-    # Équipe
-    auditeur_principal_id = db.Column(db.Integer, db.ForeignKey('user.id'))
+    # ============================================
+    # 2. PÉRIMÈTRE ET CRITÈRES
+    # ============================================
+    perimetre = db.Column(db.Text, nullable=True)
+    criteres = db.Column(db.Text, nullable=True)
+    objectifs_audit = db.Column(db.Text, nullable=True)
+    
+    # ============================================
+    # 3. ÉQUIPE D'AUDIT
+    # ============================================
+    auditeur_principal_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=True)
     equipe_audit = db.Column(db.JSON, default=[])
+    expert_technique_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=True)
     
-    # Dates
-    date_prevue = db.Column(db.Date)
-    date_debut = db.Column(db.Date)
-    date_fin = db.Column(db.Date)
-    date_realise = db.Column(db.Date)
+    # ============================================
+    # 4. GRILLE ASSOCIÉE
+    # ============================================
+    grille_id = db.Column(db.Integer, db.ForeignKey('grilles_audit_qualite.id'), nullable=True)
     
-    # Résultats
+    # ============================================
+    # 5. PLANIFICATION
+    # ============================================
+    date_prevue = db.Column(db.Date, nullable=True)
+    date_debut = db.Column(db.Date, nullable=True)
+    date_fin = db.Column(db.Date, nullable=True)
+    date_realise = db.Column(db.Date, nullable=True)
+    duree_estimee = db.Column(db.Integer, nullable=True)  # en heures
+    
+    # ============================================
+    # 6. RÉSULTATS
+    # ============================================
+    taux_conformite = db.Column(db.Float, default=0)
     nb_non_conformites = db.Column(db.Integer, default=0)
     nb_observations = db.Column(db.Integer, default=0)
     nb_points_forts = db.Column(db.Integer, default=0)
-    taux_conformite = db.Column(db.Float, default=0)
+    nb_opportunites = db.Column(db.Integer, default=0)
     
-    # Conclusions
-    conclusion = db.Column(db.Text)
+    # ============================================
+    # 7. CONCLUSION ET RECOMMANDATIONS
+    # ============================================
+    conclusion = db.Column(db.Text, nullable=True)
     recommandations = db.Column(db.JSON, default=[])
+    actions_prioritaires = db.Column(db.JSON, default=[])
     
-    # Statut
+    # ============================================
+    # 8. STATUT
+    # ============================================
     statut = db.Column(db.String(20), default='planifie')
+    niveau_conformite = db.Column(db.String(20), nullable=True)
     
-    # 🔥 AJOUTER CES CHAMPS MANQUANTS
+    # ============================================
+    # 9. MÉTADONNÉES
+    # ============================================
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
-    client_id = db.Column(db.Integer, db.ForeignKey('clients.id'), nullable=True)
     created_by = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=True)
+    client_id = db.Column(db.Integer, db.ForeignKey('clients.id'), nullable=True)
     
-    # Relations
+    # ============================================
+    # RELATIONS
+    # ============================================
     plan_qualite = db.relationship('PlanQualiteFonction', back_populates='audits_qualite')
     auditeur_principal = db.relationship('User', foreign_keys=[auditeur_principal_id])
+    expert_technique = db.relationship('User', foreign_keys=[expert_technique_id])
     createur = db.relationship('User', foreign_keys=[created_by])
+    grille = db.relationship('GrilleAuditQualite', backref='audits')
     
     def __repr__(self):
         return f'<AuditQualite {self.reference}>'
