@@ -9951,12 +9951,42 @@ class PlanQualiteFonction(db.Model):
     
     @property
     def roadmap_amelioration(self):
-        """Feuille de route d'amélioration continue"""
+        """Feuille de route d'amélioration continue - Version DYNAMIQUE"""
+        actions = []
+        
+        # Analyser les lacunes du plan
+        if not self.responsable_conformite_id:
+            actions.append("👉 Assigner un responsable conformité")
+        
+        if not self.date_prochaine_revue:
+            actions.append("👉 Planifier la prochaine revue du plan")
+        
+        if not self.objectifs_qualite or len(self.objectifs_qualite) == 0:
+            actions.append("👉 Définir des objectifs qualité SMART")
+        
+        if not self.indicateurs_cles or len(self.indicateurs_cles) == 0:
+            actions.append("👉 Mettre en place des indicateurs KPI")
+        
+        if self.niveau_maturite and int(self.niveau_maturite) < 3:
+            actions.append(f"👉 Améliorer le niveau de maturité ({self.niveau_maturite}/5 → 3/5)")
+        
+        # Compter les actions en retard
+        actions_retard = sum(1 for a in self.actions_amelioration if a.est_en_retard())
+        if actions_retard > 0:
+            actions.append(f"👉 Traiter {actions_retard} action(s) en retard")
+        
+        # Compter les actions non terminées
+        actions_non_terminees = sum(1 for a in self.actions_amelioration if a.statut != 'terminee')
+        if actions_non_terminees > 0:
+            actions.append(f"👉 Avancer sur {actions_non_terminees} action(s) en cours")
+        
+        # Construire la roadmap
         return {
+            'prioritaire': [a for a in actions if '👉' in a][:3],
             'court_terme': [
                 'Finaliser la documentation des procédures',
                 'Former les équipes aux nouveaux processus'
-            ],
+            ] + ([f"⚡ {a.replace('👉 ', '')}" for a in actions[:2]] if actions else []),
             'moyen_terme': [
                 'Automatiser les contrôles qualité',
                 'Mettre en place le tableau de bord IA'
@@ -9964,7 +9994,8 @@ class PlanQualiteFonction(db.Model):
             'long_terme': [
                 'Certification ISO 9001:2025',
                 'Intégration complète des indicateurs prédictifs'
-            ]
+            ],
+            'actions_urgentes': actions[:3] if actions else []
         }
     
     # ============================================
