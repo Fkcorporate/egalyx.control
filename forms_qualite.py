@@ -1,7 +1,6 @@
 from flask_wtf import FlaskForm
 from flask_wtf.file import FileField, FileRequired, FileAllowed
-from wtforms import StringField, TextAreaField, SelectField, DateField, IntegerField, BooleanField, SubmitField, FieldList, FormField, DateTimeField  # ← AJOUTER DateTimeField
-from wtforms.validators import DataRequired, Length, Optional, NumberRange
+from wtforms import StringField, TextAreaField, SelectField, DateField, IntegerField, BooleanField, SubmitField, FieldList, FormField, FileField, TimeField, DateTimeFieldfrom wtforms.validators import DataRequired, Length, Optional, NumberRange
 from datetime import datetime, timedelta
 
 # Formulaire pour un objectif qualité individuel
