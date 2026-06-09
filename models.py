@@ -10284,13 +10284,17 @@ class GrilleAuditQualite(db.Model):
     client_id = db.Column(db.Integer, db.ForeignKey('clients.id'), nullable=True)
     created_by = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=True)
     
-    # Relations
-    createur = db.relationship('User', foreign_keys=[created_by])
-    audits = db.relationship('AuditQualite', backref='grille_associee', foreign_keys='AuditQualite.grille_id')
+    # ✅ UNE SEULE RELATION - c'est ici qu'on définit le backref
+    audits = db.relationship('AuditQualite', 
+                            backref='grille',  # ← backref s'appelle 'grille'
+                            foreign_keys='AuditQualite.grille_id',
+                            lazy='dynamic')
+    
+    # Relation avec le créateur
+    createur = db.relationship('User', foreign_keys=[created_by], backref='grilles_audit_qualite')
     
     def __repr__(self):
         return f'<GrilleAuditQualite {self.reference}>'
-
 
 
 class AuditQualite(db.Model):
@@ -10305,7 +10309,7 @@ class AuditQualite(db.Model):
     # 1. INFORMATIONS GÉNÉRALES
     # ============================================
     titre = db.Column(db.String(200), nullable=False)
-    description = db.Column(db.Text, nullable=True)  # ← AJOUTER CETTE LIGNE
+    description = db.Column(db.Text, nullable=True)
     type_audit = db.Column(db.String(50), default='interne')
     
     # ============================================
@@ -10323,9 +10327,12 @@ class AuditQualite(db.Model):
     expert_technique_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=True)
     
     # ============================================
-    # 4. GRILLE ASSOCIÉE
+    # 4. GRILLE ASSOCIÉE - Foreign Key SEULEMENT
     # ============================================
     grille_id = db.Column(db.Integer, db.ForeignKey('grilles_audit_qualite.id'), nullable=True)
+    
+    # ✅ PAS DE db.relationship ici ! La relation est gérée par GrilleAuditQualite.audits
+    # Pour accéder à la grille depuis un audit, utilisez: audit.grille
     
     # ============================================
     # 5. PLANIFICATION
@@ -10367,13 +10374,12 @@ class AuditQualite(db.Model):
     client_id = db.Column(db.Integer, db.ForeignKey('clients.id'), nullable=True)
     
     # ============================================
-    # RELATIONS
+    # RELATIONS (sauf grille qui est déjà définie via backref)
     # ============================================
     plan_qualite = db.relationship('PlanQualiteFonction', back_populates='audits_qualite')
-    auditeur_principal = db.relationship('User', foreign_keys=[auditeur_principal_id])
-    expert_technique = db.relationship('User', foreign_keys=[expert_technique_id])
-    createur = db.relationship('User', foreign_keys=[created_by])
-    grille = db.relationship('GrilleAuditQualite', backref='audits')
+    auditeur_principal = db.relationship('User', foreign_keys=[auditeur_principal_id], backref='audits_qualite_principal')
+    expert_technique = db.relationship('User', foreign_keys=[expert_technique_id], backref='audits_qualite_expert')
+    createur = db.relationship('User', foreign_keys=[created_by], backref='audits_qualite_crees')
     
     def __repr__(self):
         return f'<AuditQualite {self.reference}>'
