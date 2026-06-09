@@ -2,6 +2,42 @@
 
 {% block title %}{{ action }} une réunion - {{ plan.reference }}{% endblock %}
 
+{% block styles %}
+{{ super() }}
+<style>
+    .participant-tag {
+        display: inline-flex;
+        align-items: center;
+        background: #e9ecef;
+        border-radius: 50px;
+        padding: 0.25rem 0.75rem;
+        margin: 0.25rem;
+        font-size: 0.85rem;
+    }
+    .participant-tag .remove-participant {
+        cursor: pointer;
+        margin-left: 0.5rem;
+        color: #dc3545;
+        font-size: 0.75rem;
+    }
+    .participant-tag .remove-participant:hover {
+        color: #a71d2a;
+    }
+    .participants-list {
+        min-height: 80px;
+        border: 1px dashed #dee2e6;
+        border-radius: 8px;
+        padding: 0.5rem;
+        margin-top: 0.5rem;
+    }
+    .input-group-custom {
+        display: flex;
+        gap: 0.5rem;
+        margin-bottom: 0.5rem;
+    }
+</style>
+{% endblock %}
+
 {% block content %}
 <div class="container-fluid px-4">
     <div class="row mb-4">
@@ -24,64 +60,455 @@
 
     <div class="card shadow-sm">
         <div class="card-body">
-            <form method="POST">
+            <form method="POST" id="reunionForm">
                 {{ form.csrf_token }}
                 
-                <div class="row">
-                    <div class="col-md-12 mb-3">
-                        {{ form.titre.label(class="form-label") }}
-                        {{ form.titre(class="form-control") }}
-                        {% if form.titre.errors %}
-                            <div class="text-danger small">{{ form.titre.errors[0] }}</div>
-                        {% endif %}
+                <!-- Informations générales -->
+                <div class="card mb-4">
+                    <div class="card-header bg-light">
+                        <h5 class="mb-0"><i class="fas fa-info-circle me-2"></i>Informations générales</h5>
+                    </div>
+                    <div class="card-body">
+                        <div class="row">
+                            <div class="col-md-12 mb-3">
+                                {{ form.titre.label(class="form-label") }}
+                                {{ form.titre(class="form-control", placeholder="Ex: Revue de direction Q1 2024") }}
+                                {% if form.titre.errors %}
+                                    <div class="text-danger small">{{ form.titre.errors[0] }}</div>
+                                {% endif %}
+                            </div>
+                        </div>
+                        
+                        <div class="row">
+                            <div class="col-md-6 mb-3">
+                                {{ form.type_reunion.label(class="form-label") }}
+                                {{ form.type_reunion(class="form-select") }}
+                            </div>
+                            <div class="col-md-6 mb-3">
+                                {{ form.statut.label(class="form-label") }}
+                                <select name="statut" class="form-select">
+                                    <option value="planifiee" {% if reunion and reunion.statut == 'planifiee' %}selected{% endif %}>📅 Planifiée</option>
+                                    <option value="realisee" {% if reunion and reunion.statut == 'realisee' %}selected{% endif %}>✅ Réalisée</option>
+                                    <option value="reportee" {% if reunion and reunion.statut == 'reportee' %}selected{% endif %}>⏰ Reportée</option>
+                                    <option value="annulee" {% if reunion and reunion.statut == 'annulee' %}selected{% endif %}>❌ Annulée</option>
+                                </select>
+                            </div>
+                        </div>
+                        
+                        <div class="row">
+                            <div class="col-md-4 mb-3">
+                                {{ form.date_reunion.label(class="form-label") }}
+                                {{ form.date_reunion(class="form-control", type="date") }}
+                            </div>
+                            <div class="col-md-4 mb-3">
+                                {{ form.heure_reunion.label(class="form-label") }}
+                                {{ form.heure_reunion(class="form-control", type="time") }}
+                            </div>
+                            <div class="col-md-4 mb-3">
+                                {{ form.duree_minutes.label(class="form-label") }}
+                                {{ form.duree_minutes(class="form-control", type="number", placeholder="60") }}
+                            </div>
+                        </div>
+                        
+                        <div class="row">
+                            <div class="col-md-6 mb-3">
+                                {{ form.lieu.label(class="form-label") }}
+                                {{ form.lieu(class="form-control", placeholder="Salle de réunion A, Visio: https://..." ) }}
+                            </div>
+                            <div class="col-md-6 mb-3">
+                                {{ form.animateur_id.label(class="form-label") }}
+                                {{ form.animateur_id(class="form-select") }}
+                            </div>
+                        </div>
                     </div>
                 </div>
                 
-                <div class="row">
-                    <div class="col-md-6 mb-3">
-                        {{ form.type_reunion.label(class="form-label") }}
-                        {{ form.type_reunion(class="form-select") }}
+                <!-- Participants (DYNAMIQUE) -->
+                <div class="card mb-4">
+                    <div class="card-header bg-light">
+                        <h5 class="mb-0"><i class="fas fa-users me-2 text-success"></i>Participants</h5>
                     </div>
-                    <div class="col-md-6 mb-3">
-                        {{ form.date_reunion.label(class="form-label") }}
-                        {{ form.date_reunion(class="form-control", placeholder="YYYY-MM-DD HH:MM") }}
-                        <small class="text-muted">Format: 2024-12-31 14:30</small>
-                    </div>
-                </div>
-                
-                <div class="row">
-                    <div class="col-md-6 mb-3">
-                        {{ form.duree_minutes.label(class="form-label") }}
-                        {{ form.duree_minutes(class="form-control", type="number") }}
-                    </div>
-                    <div class="col-md-6 mb-3">
-                        {{ form.lieu.label(class="form-label") }}
-                        {{ form.lieu(class="form-control") }}
+                    <div class="card-body">
+                        <div class="input-group-custom">
+                            <input type="text" id="participantInput" class="form-control" placeholder="Nom du participant">
+                            <button type="button" class="btn btn-success" id="addParticipantBtn">
+                                <i class="fas fa-plus me-1"></i>Ajouter
+                            </button>
+                        </div>
+                        <div id="participantsContainer" class="participants-list">
+                            <!-- Les participants seront affichés ici -->
+                        </div>
+                        <input type="hidden" name="participants_json" id="participantsJson" value='{{ reunion.participants|tojson if reunion and reunion.participants else "[]" }}'>
+                        <small class="text-muted">Cliquez sur le nom d'un participant pour le retirer</small>
                     </div>
                 </div>
                 
-                <div class="row">
-                    <div class="col-md-6 mb-3">
-                        {{ form.animateur_id.label(class="form-label") }}
-                        {{ form.animateur_id(class="form-select") }}
+                <!-- Ordre du jour -->
+                <div class="card mb-4">
+                    <div class="card-header bg-light">
+                        <h5 class="mb-0"><i class="fas fa-list me-2 text-warning"></i>Ordre du jour</h5>
+                    </div>
+                    <div class="card-body">
+                        <div class="input-group-custom">
+                            <input type="text" id="ordreJourInput" class="form-control" placeholder="Point de l'ordre du jour">
+                            <button type="button" class="btn btn-warning" id="addOrdreBtn">
+                                <i class="fas fa-plus me-1"></i>Ajouter
+                            </button>
+                        </div>
+                        <div id="ordreJourContainer" class="participants-list">
+                            <!-- Les points seront affichés ici -->
+                        </div>
+                        <input type="hidden" name="ordre_jour_json" id="ordreJourJson" value='{{ reunion.ordre_jour|tojson if reunion and reunion.ordre_jour else "[]" }}'>
+                        <small class="text-muted">Cliquez sur un point pour le supprimer</small>
                     </div>
                 </div>
                 
-                <div class="row">
-                    <div class="col-md-12 mb-3">
-                        {{ form.ordre_jour.label(class="form-label") }}
-                        {{ form.ordre_jour(class="form-control", rows=5, placeholder="1. Point 1&#10;2. Point 2&#10;3. Point 3") }}
-                        <small class="text-muted">Un élément par ligne</small>
+                <!-- Compte rendu -->
+                <div class="card mb-4">
+                    <div class="card-header bg-light">
+                        <h5 class="mb-0"><i class="fas fa-file-alt me-2 text-primary"></i>Compte rendu</h5>
+                    </div>
+                    <div class="card-body">
+                        {{ form.compte_rendu.label(class="form-label") }}
+                        {{ form.compte_rendu(class="form-control", rows=8, placeholder="Rédigez ici le compte rendu détaillé de la réunion...") }}
+                    </div>
+                </div>
+                
+                <!-- Décisions -->
+                <div class="card mb-4">
+                    <div class="card-header bg-light">
+                        <h5 class="mb-0"><i class="fas fa-gavel me-2 text-danger"></i>Décisions</h5>
+                    </div>
+                    <div class="card-body">
+                        <div class="input-group-custom">
+                            <input type="text" id="decisionInput" class="form-control" placeholder="Décision prise">
+                            <button type="button" class="btn btn-danger" id="addDecisionBtn">
+                                <i class="fas fa-plus me-1"></i>Ajouter
+                            </button>
+                        </div>
+                        <div id="decisionsContainer" class="participants-list">
+                            <!-- Les décisions seront affichées ici -->
+                        </div>
+                        <input type="hidden" name="decisions_json" id="decisionsJson" value='{{ reunion.decisions|tojson if reunion and reunion.decisions else "[]" }}'>
+                        <small class="text-muted">Cliquez sur une décision pour la supprimer</small>
+                    </div>
+                </div>
+                
+                <!-- Actions à suivre -->
+                <div class="card mb-4">
+                    <div class="card-header bg-light">
+                        <h5 class="mb-0"><i class="fas fa-tasks me-2 text-success"></i>Actions à suivre</h5>
+                    </div>
+                    <div class="card-body">
+                        <div class="input-group-custom">
+                            <input type="text" id="actionInput" class="form-control" placeholder="Action à réaliser">
+                            <button type="button" class="btn btn-success" id="addActionBtn">
+                                <i class="fas fa-plus me-1"></i>Ajouter
+                            </button>
+                        </div>
+                        <div id="actionsContainer" class="participants-list">
+                            <!-- Les actions seront affichées ici -->
+                        </div>
+                        <input type="hidden" name="actions_json" id="actionsJson" value='{{ reunion.actions|tojson if reunion and reunion.actions else "[]" }}'>
+                        <small class="text-muted">Cliquez sur une action pour la supprimer</small>
                     </div>
                 </div>
                 
                 <hr>
                 <div class="d-flex justify-content-between">
-                    <a href="{{ url_for('liste_reunions_qualite', plan_id=plan.id) }}" class="btn btn-secondary">Annuler</a>
-                    {{ form.submit(class="btn btn-info") }}
+                    <a href="{{ url_for('liste_reunions_qualite', plan_id=plan.id) }}" class="btn btn-secondary">
+                        <i class="fas fa-arrow-left me-1"></i>Annuler
+                    </a>
+                    <button type="submit" class="btn btn-info">
+                        <i class="fas fa-save me-1"></i>{{ 'Mettre à jour' if action == 'Modifier' else 'Créer' }}
+                    </button>
                 </div>
             </form>
         </div>
     </div>
 </div>
+
+<script>
+// Gestion des participants
+let participants = [];
+
+// Gestion de l'ordre du jour
+let ordreJour = [];
+
+// Gestion des décisions
+let decisions = [];
+
+// Gestion des actions
+let actions = [];
+
+// Charger les données existantes
+function loadExistingData() {
+    const participantsJson = document.getElementById('participantsJson').value;
+    if (participantsJson && participantsJson !== '[]') {
+        try {
+            participants = JSON.parse(participantsJson);
+        } catch(e) { participants = []; }
+    }
+    
+    const ordreJourJson = document.getElementById('ordreJourJson').value;
+    if (ordreJourJson && ordreJourJson !== '[]') {
+        try {
+            ordreJour = JSON.parse(ordreJourJson);
+        } catch(e) { ordreJour = []; }
+    }
+    
+    const decisionsJson = document.getElementById('decisionsJson').value;
+    if (decisionsJson && decisionsJson !== '[]') {
+        try {
+            decisions = JSON.parse(decisionsJson);
+        } catch(e) { decisions = []; }
+    }
+    
+    const actionsJson = document.getElementById('actionsJson').value;
+    if (actionsJson && actionsJson !== '[]') {
+        try {
+            actions = JSON.parse(actionsJson);
+        } catch(e) { actions = []; }
+    }
+    
+    renderParticipants();
+    renderOrdreJour();
+    renderDecisions();
+    renderActions();
+}
+
+// Rendre les participants
+function renderParticipants() {
+    const container = document.getElementById('participantsContainer');
+    if (!container) return;
+    
+    container.innerHTML = '';
+    participants.forEach((p, index) => {
+        const tag = document.createElement('div');
+        tag.className = 'participant-tag';
+        tag.innerHTML = `
+            <i class="fas fa-user me-1"></i>
+            ${escapeHtml(p)}
+            <span class="remove-participant" data-index="${index}">
+                <i class="fas fa-times-circle"></i>
+            </span>
+        `;
+        container.appendChild(tag);
+    });
+    
+    // Ajouter les événements de suppression
+    document.querySelectorAll('.remove-participant').forEach(el => {
+        el.addEventListener('click', function() {
+            const index = parseInt(this.dataset.index);
+            participants.splice(index, 1);
+            renderParticipants();
+            updateParticipantsJson();
+        });
+    });
+}
+
+// Rendre l'ordre du jour
+function renderOrdreJour() {
+    const container = document.getElementById('ordreJourContainer');
+    if (!container) return;
+    
+    container.innerHTML = '';
+    ordreJour.forEach((item, index) => {
+        const tag = document.createElement('div');
+        tag.className = 'participant-tag';
+        tag.innerHTML = `
+            <i class="fas fa-list-ul me-1"></i>
+            ${escapeHtml(item)}
+            <span class="remove-participant" data-index="${index}">
+                <i class="fas fa-times-circle"></i>
+            </span>
+        `;
+        container.appendChild(tag);
+    });
+    
+    document.querySelectorAll('#ordreJourContainer .remove-participant').forEach(el => {
+        el.addEventListener('click', function() {
+            const index = parseInt(this.dataset.index);
+            ordreJour.splice(index, 1);
+            renderOrdreJour();
+            updateOrdreJourJson();
+        });
+    });
+}
+
+// Rendre les décisions
+function renderDecisions() {
+    const container = document.getElementById('decisionsContainer');
+    if (!container) return;
+    
+    container.innerHTML = '';
+    decisions.forEach((item, index) => {
+        const tag = document.createElement('div');
+        tag.className = 'participant-tag';
+        tag.innerHTML = `
+            <i class="fas fa-gavel me-1"></i>
+            ${escapeHtml(item)}
+            <span class="remove-participant" data-index="${index}">
+                <i class="fas fa-times-circle"></i>
+            </span>
+        `;
+        container.appendChild(tag);
+    });
+    
+    document.querySelectorAll('#decisionsContainer .remove-participant').forEach(el => {
+        el.addEventListener('click', function() {
+            const index = parseInt(this.dataset.index);
+            decisions.splice(index, 1);
+            renderDecisions();
+            updateDecisionsJson();
+        });
+    });
+}
+
+// Rendre les actions
+function renderActions() {
+    const container = document.getElementById('actionsContainer');
+    if (!container) return;
+    
+    container.innerHTML = '';
+    actions.forEach((item, index) => {
+        const tag = document.createElement('div');
+        tag.className = 'participant-tag';
+        tag.innerHTML = `
+            <i class="fas fa-tasks me-1"></i>
+            ${escapeHtml(item)}
+            <span class="remove-participant" data-index="${index}">
+                <i class="fas fa-times-circle"></i>
+            </span>
+        `;
+        container.appendChild(tag);
+    });
+    
+    document.querySelectorAll('#actionsContainer .remove-participant').forEach(el => {
+        el.addEventListener('click', function() {
+            const index = parseInt(this.dataset.index);
+            actions.splice(index, 1);
+            renderActions();
+            updateActionsJson();
+        });
+    });
+}
+
+// Mettre à jour le JSON des participants
+function updateParticipantsJson() {
+    document.getElementById('participantsJson').value = JSON.stringify(participants);
+}
+
+function updateOrdreJourJson() {
+    document.getElementById('ordreJourJson').value = JSON.stringify(ordreJour);
+}
+
+function updateDecisionsJson() {
+    document.getElementById('decisionsJson').value = JSON.stringify(decisions);
+}
+
+function updateActionsJson() {
+    document.getElementById('actionsJson').value = JSON.stringify(actions);
+}
+
+// Ajouter un participant
+document.getElementById('addParticipantBtn')?.addEventListener('click', function() {
+    const input = document.getElementById('participantInput');
+    const nom = input.value.trim();
+    if (nom) {
+        participants.push(nom);
+        renderParticipants();
+        updateParticipantsJson();
+        input.value = '';
+    }
+});
+
+// Ajouter un point à l'ordre du jour
+document.getElementById('addOrdreBtn')?.addEventListener('click', function() {
+    const input = document.getElementById('ordreJourInput');
+    const point = input.value.trim();
+    if (point) {
+        ordreJour.push(point);
+        renderOrdreJour();
+        updateOrdreJourJson();
+        input.value = '';
+    }
+});
+
+// Ajouter une décision
+document.getElementById('addDecisionBtn')?.addEventListener('click', function() {
+    const input = document.getElementById('decisionInput');
+    const decision = input.value.trim();
+    if (decision) {
+        decisions.push(decision);
+        renderDecisions();
+        updateDecisionsJson();
+        input.value = '';
+    }
+});
+
+// Ajouter une action
+document.getElementById('addActionBtn')?.addEventListener('click', function() {
+    const input = document.getElementById('actionInput');
+    const action = input.value.trim();
+    if (action) {
+        actions.push(action);
+        renderActions();
+        updateActionsJson();
+        input.value = '';
+    }
+});
+
+// Enter key support
+document.getElementById('participantInput')?.addEventListener('keypress', function(e) {
+    if (e.key === 'Enter') {
+        e.preventDefault();
+        document.getElementById('addParticipantBtn').click();
+    }
+});
+
+document.getElementById('ordreJourInput')?.addEventListener('keypress', function(e) {
+    if (e.key === 'Enter') {
+        e.preventDefault();
+        document.getElementById('addOrdreBtn').click();
+    }
+});
+
+document.getElementById('decisionInput')?.addEventListener('keypress', function(e) {
+    if (e.key === 'Enter') {
+        e.preventDefault();
+        document.getElementById('addDecisionBtn').click();
+    }
+});
+
+document.getElementById('actionInput')?.addEventListener('keypress', function(e) {
+    if (e.key === 'Enter') {
+        e.preventDefault();
+        document.getElementById('addActionBtn').click();
+    }
+});
+
+function escapeHtml(text) {
+    if (!text) return '';
+    const div = document.createElement('div');
+    div.textContent = text;
+    return div.innerHTML;
+}
+
+// Initialiser
+document.addEventListener('DOMContentLoaded', function() {
+    loadExistingData();
+    
+    // Ajouter le champ participants_json au formulaire si nécessaire
+    const form = document.getElementById('reunionForm');
+    if (form) {
+        form.addEventListener('submit', function() {
+            updateParticipantsJson();
+            updateOrdreJourJson();
+            updateDecisionsJson();
+            updateActionsJson();
+        });
+    }
+});
+</script>
 {% endblock %}
