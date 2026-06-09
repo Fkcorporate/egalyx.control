@@ -9678,19 +9678,17 @@ class PlanQualiteFonction(db.Model):
         return 'secondary'
         
     def get_statut_revue(self):
-    """Retourne le statut de la revue: non_planifie, retard, proche, ok"""
-    from datetime import datetime, timedelta  # Import local
-    
-    if not self.date_prochaine_revue:
-        return 'non_planifie'
-    
-    today = datetime.now().date()
-    if self.date_prochaine_revue < today:
-        return 'retard'
-    elif self.date_prochaine_revue <= today + timedelta(days=30):
-        return 'proche'
-    else:
-        return 'ok'
+        """Retourne le statut de la revue: non_planifie, retard, proche, ok"""
+        if not self.date_prochaine_revue:
+            return 'non_planifie'
+        
+        today = datetime.now().date()
+        if self.date_prochaine_revue < today:
+            return 'retard'
+        elif self.date_prochaine_revue <= today + timedelta(days=30):
+            return 'proche'
+        else:
+            return 'ok'
 
     def get_jours_restants_revue(self):
         """Retourne le nombre de jours restants avant la revue"""
