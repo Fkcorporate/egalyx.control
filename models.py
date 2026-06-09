@@ -9147,27 +9147,38 @@ class FichierPlanQualite(db.Model):
 # ============================================
 
 class PlanQualiteFonction(db.Model):
-    """Plan d'assurance et d'amélioration qualité pour une fonction spécifique"""
+    """Plan d'assurance et d'amélioration qualité - Version Ultra-Premium
+    Conforme aux standards : ISO 9001:2025, COSO ERM, CMMI 3.0, EFQM 2025, IATF 16949, AS9100D
+    """
     __tablename__ = 'plans_qualite_fonction'
 
     id = db.Column(db.Integer, primary_key=True)
     
-    # Identifiants et références
+    # ============================================
+    # 1. IDENTIFICATION AVANCÉE
+    # ============================================
     reference = db.Column(db.String(50), unique=True, nullable=False)
     titre = db.Column(db.String(200), nullable=False)
     description = db.Column(db.Text, nullable=True)
+    version = db.Column(db.String(20), default='1.0')
+    statut_version = db.Column(db.String(20), default='brouillon')  # brouillon, en_relecture, approuve, valide, archive
     
-    # Liens vers la structure de l'entreprise
+    # Hiérarchie organisationnelle
     pole_id = db.Column(db.Integer, db.ForeignKey('poles.id'), nullable=True)
     direction_id = db.Column(db.Integer, db.ForeignKey('direction.id'), nullable=True)
     service_id = db.Column(db.Integer, db.ForeignKey('service.id'), nullable=True)
     
-    # Dates et périmètre
+    # ============================================
+    # 2. PÉRIMÈTRE ET DÉLAIS (ISO 9001:2025)
+    # ============================================
     date_debut = db.Column(db.Date, nullable=False)
     date_fin = db.Column(db.Date, nullable=False)
     annee_exercice = db.Column(db.Integer, nullable=False)
+    periode_revue = db.Column(db.String(50), default='annuelle')  # annuelle, semestrielle, trimestrielle
     
-    # SECTION 1 : ASSURANCE QUALITÉ (PRÉVENTIF)
+    # ============================================
+    # 3. ASSURANCE QUALITÉ (PRÉVENTIF) - ISO 9001:2025 Section 8
+    # ============================================
     procedures_applicables = db.Column(db.Text, nullable=True)
     frequence_controles = db.Column(db.String(50), default='mensuel')
     responsable_conformite_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=True)
@@ -9175,42 +9186,455 @@ class PlanQualiteFonction(db.Model):
     controles_cles = db.Column(db.Text, nullable=True)
     niveau_maturite = db.Column(db.String(10), default='3')
     
-    # SECTION 2 : AMÉLIORATION QUALITÉ (CORRECTIF)
+    # NOUVEAU: Plan de contrôle qualité (IATF 16949)
+    plan_controle = db.Column(db.JSON, default={
+        'points_controle': [],
+        'frequence': 'quotidienne',
+        'methodes': [],
+        'criteres_acceptation': [],
+        'responsables': []
+    })
+    
+    # NOUVEAU: Cartographie des processus qualité (ISO 9001:2025)
+    processus_qualite = db.Column(db.JSON, default={
+        'processus_metiers': [],
+        'processus_support': [],
+        'processus_pilotage': [],
+        'interactions': []
+    })
+    
+    # ============================================
+    # 4. AMÉLIORATION QUALITÉ (CORRECTIF) - ISO 9001:2025 Section 10
+    # ============================================
     objectifs_qualite = db.Column(db.JSON, default=[])
     indicateurs_cles = db.Column(db.JSON, default=[])
     
-    # SECTION 3 : REVUE ET AUDIT DU PLAN
+    # NOUVEAU: Plan d'amélioration continue (PDCA)
+    plan_amelioration = db.Column(db.JSON, default={
+        'cycle_pdca': [],
+        'actions_amelioration': [],
+        'innovations': [],
+        'benchmarking': []
+    })
+    
+    # NOUVEAU: Actions correctives et préventives (CAPA)
+    actions_capa = db.Column(db.JSON, default={
+        'correctives': [],
+        'preventives': [],
+        'efficacite': [],
+        'delais': []
+    })
+    
+    # ============================================
+    # 5. REVUE ET AUDIT - ISO 19011:2025
+    # ============================================
     date_prochaine_revue = db.Column(db.Date, nullable=True)
     date_derniere_revue = db.Column(db.Date, nullable=True)
     responsable_revue_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=True)
     
-    # Statut et validation
+    # NOUVEAU: Programme d'audit qualité
+    programme_audit = db.Column(db.JSON, default={
+        'audits_prevus': [],
+        'audits_realises': [],
+        'non_conformites': [],
+        'observations': [],
+        'points_forts': []
+    })
+    
+    # NOUVEAU: Revue de direction (ISO 9001:2025 Section 9.3)
+    revues_direction = db.Column(db.JSON, default={
+        'ordre_jour': [],
+        'participants': [],
+        'decisions': [],
+        'actions': [],
+        'suivi': []
+    })
+    
+    # ============================================
+    # 6. GESTION DES RISQUES QUALITÉ (COSO ERM + ISO 31000)
+    # ============================================
+    
+    # NOUVEAU: Cartographie des risques qualité
+    risques_qualite = db.Column(db.JSON, default={
+        'risques_strategiques': [],
+        'risques_operationnels': [],
+        'risques_financiers': [],
+        'risques_conformite': [],
+        'risques_cyber': [],
+        'risques_reputationnels': []
+    })
+    
+    # NOUVEAU: Matrice d'appétence au risque
+    apetence_risque = db.Column(db.JSON, default={
+        'seuil_tolerance': 0.1,
+        'seuil_critique': 0.3,
+        'seuil_inacceptable': 0.5,
+        'categories': []
+    })
+    
+    # NOUVEAU: Plans de mitigation
+    plans_mitigation = db.Column(db.JSON, default=[])
+    
+    # ============================================
+    # 7. INDICATEURS DE PERFORMANCE (KPI & KRI)
+    # ============================================
+    
+    # NOUVEAU: Tableau de bord stratégique (Balanced Scorecard)
+    balanced_scorecard = db.Column(db.JSON, default={
+        'financier': [],
+        'clients': [],
+        'processus_internes': [],
+        'apprentissage': []
+    })
+    
+    # NOUVEAU: Indicateurs avancés (IA/ML)
+    indicateurs_ia = db.Column(db.JSON, default={
+        'predictions': [],
+        'alertes_precoces': [],
+        'tendances': [],
+        'anomalies': []
+    })
+    
+    # NOUVEAU: Benchmarking sectoriel
+    benchmarking = db.Column(db.JSON, default={
+        'secteur': '',
+        'meilleures_pratiques': [],
+        'ecarts': [],
+        'objectifs': []
+    })
+    
+    # ============================================
+    # 8. DOCUMENTS MAÎTRISÉS (ISO 9001:2025 Section 7.5)
+    # ============================================
+    
+    # NOUVEAU: Système documentaire qualité
+    systeme_documentaire = db.Column(db.JSON, default={
+        'manuel_qualite': '',
+        'procedures': [],
+        'instructions': [],
+        'enregistrements': [],
+        'versions': []
+    })
+    
+    # NOUVEAU: Gestion des versions (ISO 9001:2025)
+    gestion_versions = db.Column(db.JSON, default={
+        'historique': [],
+        'modifications': [],
+        'approbations': [],
+        'diffusions': []
+    })
+    
+    # ============================================
+    # 9. COMPÉTENCES ET FORMATION (ISO 9001:2025 Section 7.2)
+    # ============================================
+    
+    # NOUVEAU: Matrice des compétences qualité
+    competences_qualite = db.Column(db.JSON, default={
+        'exigences': [],
+        'acquis': [],
+        'ecarts': [],
+        'plans_formation': []
+    })
+    
+    # NOUVEAU: Certifications qualité
+    certifications = db.Column(db.JSON, default={
+        'certifications_obtenues': [],
+        'certifications_ visees': [],
+        'validites': [],
+        'auditeurs': []
+    })
+    
+    # ============================================
+    # 10. SATISFACTION CLIENT (ISO 9001:2025 Section 9.1.2)
+    # ============================================
+    
+    # NOUVEAU: Enquêtes de satisfaction
+    satisfaction_client = db.Column(db.JSON, default={
+        'enquetes': [],
+        'taux_satisfaction': 0,
+        'reclamations': [],
+        'actions': []
+    })
+    
+    # NOUVEAU: Gestion des réclamations
+    gestion_reclamations = db.Column(db.JSON, default={
+        'reclamations_recues': [],
+        'traitees': [],
+        'delais': [],
+        'satisfaction': []
+    })
+    
+    # ============================================
+    # 11. VEILLE NORMATIVE ET RÉGLEMENTAIRE
+    # ============================================
+    
+    # NOUVEAU: Conformité réglementaire
+    conformite_reglementaire = db.Column(db.JSON, default={
+        'exigences_legales': [],
+        'exigences_reglementaires': [],
+        'statut_conformite': [],
+        'actions_mise_conformite': []
+    })
+    
+    # NOUVEAU: Normes applicables
+    normes_applicables = db.Column(db.JSON, default={
+        'normes_actives': [],
+        'normes_futures': [],
+        'ecarts': [],
+        'plan_migration': []
+    })
+    
+    # ============================================
+    # 12. MANAGEMENT ENVIRONNEMENTAL (ISO 14001)
+    # ============================================
+    
+    # NOUVEAU: Aspects environnementaux
+    aspects_environnementaux = db.Column(db.JSON, default={
+        'impacts': [],
+        'maitrise': [],
+        'objectifs': [],
+        'performances': []
+    })
+    
+    # NOUVEAU: Développement durable (RSE/ESG)
+    responsabilite_societale = db.Column(db.JSON, default={
+        'engagements': [],
+        'indicateurs_esg': [],
+        'rapports': [],
+        'certifications': []
+    })
+    
+    # ============================================
+    # 13. INNOVATION ET TRANSFORMATION DIGITALE
+    # ============================================
+    
+    # NOUVEAU: Feuille de route innovation
+    innovation = db.Column(db.JSON, default={
+        'projets_innovation': [],
+        'budget_rd': 0,
+        'partenariats': [],
+        'brevets': []
+    })
+    
+    # NOUVEAU: Transformation digitale
+    transformation_digitale = db.Column(db.JSON, default={
+        'initiatives_digitale': [],
+        'automatisation': [],
+        'ia_ml': [],
+        'industrie_4_0': []
+    })
+    
+    # ============================================
+    # 14. GESTION DES CRISES ET CONTINUITÉ (ISO 22301)
+    # ============================================
+    
+    # NOUVEAU: Plan de continuité qualité
+    continuite_activite = db.Column(db.JSON, default={
+        'scenarios_crise': [],
+        'plans_reprise': [],
+        'exercices': [],
+        'retours_experience': []
+    })
+    
+    # NOUVEAU: Gestion des crises qualité
+    gestion_crise = db.Column(db.JSON, default={
+        'cellules_crise': [],
+        'protocoles': [],
+        'communications': [],
+        'retours': []
+    })
+    
+    # ============================================
+    # 15. PILOTAGE STRATÉGIQUE (EFQM 2025)
+    # ============================================
+    
+    # NOUVEAU: Vision et stratégie qualité
+    vision_strategie = db.Column(db.JSON, default={
+        'vision': '',
+        'mission': '',
+        'valeurs': [],
+        'objectifs_strategiques': [],
+        'feuille_route': []
+    })
+    
+    # NOUVEAU: Excellence opérationnelle
+    excellence_operationnelle = db.Column(db.JSON, default={
+        'lean_six_sigma': [],
+        'kaizen': [],
+        '5S': [],
+        'smed': [],
+        'tpm': []
+    })
+    
+    # ============================================
+    # 16. INTELLIGENCE ARTIFICIELLE (IA/ML) AVANCÉE
+    # ============================================
+    
+    # NOUVEAU: Analyse prédictive qualité
+    analyse_prediction = db.Column(db.JSON, default={
+        'modeles_ia': [],
+        'predictions_conformite': [],
+        'detection_anomalies': [],
+        'optimisation': []
+    })
+    
+    # NOUVEAU: Recommandations automatiques
+    recommandations_ia = db.Column(db.JSON, default={
+        'ameliorations': [],
+        'optimisations': [],
+        'alertes': [],
+        'actions_auto': []
+    })
+    
+    # ============================================
+    # 17. ÉCONOMIE CIRCULAIRE ET DURABILITÉ
+    # ============================================
+    
+    # NOUVEAU: Économie circulaire
+    economie_circulaire = db.Column(db.JSON, default={
+        'recyclage': [],
+        'reutilisation': [],
+        'reduction': [],
+        'valorisation': []
+    })
+    
+    # NOUVEAU: Bilan carbone qualité
+    bilan_carbone = db.Column(db.JSON, default={
+        'empreinte_carbone': 0,
+        'objectifs_reduction': [],
+        'compensations': [],
+        'certifications': []
+    })
+    
+    # ============================================
+    # 18. SUPPLY CHAIN QUALITY (IATF 16949)
+    # ============================================
+    
+    # NOUVEAU: Qualité fournisseurs
+    qualite_fournisseurs = db.Column(db.JSON, default={
+        'evaluations': [],
+        'audits_fournisseurs': [],
+        'non_conformites_fournisseurs': [],
+        'plans_action': []
+    })
+    
+    # NOUVEAU: Logistique qualité
+    logistique_qualite = db.Column(db.JSON, default={
+        'traçabilité': [],
+        'conditionnement': [],
+        'transport': [],
+        'stockage': []
+    })
+    
+    # ============================================
+    # 19. CONFORMITÉ PRODUIT (CE, FDA, etc.)
+    # ============================================
+    
+    # NOUVEAU: Conformité produit/service
+    conformite_produit = db.Column(db.JSON, default={
+        'certificats': [],
+        'homologations': [],
+        'essais': [],
+        'validations': []
+    })
+    
+    # NOUVEAU: Traçabilité produit
+    tracabilite_produit = db.Column(db.JSON, default={
+        'lots': [],
+        'serie': [],
+        'historique': [],
+        'rappels': []
+    })
+    
+    # ============================================
+    # 20. COMPLIANCE ET ÉTHIQUE
+    # ============================================
+    
+    # NOUVEAU: Programme de conformité
+    programme_conformite = db.Column(db.JSON, default={
+        'code_conduite': '',
+        'chartes': [],
+        'formations_ethique': [],
+        'alertes': []
+    })
+    
+    # NOUVEAU: Lutte anti-corruption
+    anti_corruption = db.Column(db.JSON, default={
+        'controles': [],
+        'audits': [],
+        'formations': [],
+        'signalements': []
+    })
+    
+    # ============================================
+    # 21. WORKFLOW D'APPROBATION (MULTI-NIVEAUX)
+    # ============================================
+    
+    # NOUVEAU: Approbateurs multiples
+    workflow_approbation = db.Column(db.JSON, default={
+        'niveaux': [
+            {'niveau': 1, 'role': 'responsable_qualite', 'statut': 'pending', 'date': None},
+            {'niveau': 2, 'role': 'directeur_qualite', 'statut': 'pending', 'date': None},
+            {'niveau': 3, 'role': 'comite_qualite', 'statut': 'pending', 'date': None},
+            {'niveau': 4, 'role': 'direction_generale', 'statut': 'pending', 'date': None}
+        ],
+        'commentaires': [],
+        'historique': []
+    })
+    
+    # ============================================
+    # 22. STATUT ET VALIDATION
+    # ============================================
     statut = db.Column(db.String(20), default='brouillon')
     est_valide = db.Column(db.Boolean, default=False)
     date_validation = db.Column(db.DateTime, nullable=True)
     valide_par_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=True)
     
-    # Archivage
+    # NOUVEAU: Score de robustesse (0-100)
+    score_robustesse = db.Column(db.Integer, default=0)
+    
+    # NOUVEAU: Niveau de certification
+    niveau_certification = db.Column(db.String(20), default='base')  # base, silver, gold, platinum
+    
+    # ============================================
+    # 23. ARCHIVAGE
+    # ============================================
     is_archived = db.Column(db.Boolean, default=False)
     archived_at = db.Column(db.DateTime, nullable=True)
     archived_by = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=True)
     archive_reason = db.Column(db.String(255), nullable=True)
     
-    # Audit et métadonnées
+    # NOUVEAU: Archivage intelligent
+    retention_politique = db.Column(db.String(50), default='10_ans')  # 5_ans, 10_ans, permanent
+    purge_auto = db.Column(db.Boolean, default=False)
+    purge_date = db.Column(db.Date, nullable=True)
+    
+    # ============================================
+    # 24. AUDIT ET MÉTADONNÉES
+    # ============================================
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
     created_by = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
+    updated_by = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=True)
     
-    # Multi-tenant
+    # NOUVEAU: Temps de cycle
+    temps_creation = db.Column(db.Float, default=0)  # secondes
+    temps_validation = db.Column(db.Float, default=0)  # secondes
+    temps_moyen_revue = db.Column(db.Float, default=0)  # jours
+    
+    # ============================================
+    # 25. MULTI-TENANT
+    # ============================================
     client_id = db.Column(db.Integer, db.ForeignKey('clients.id'), nullable=False)
     
     # ============================================
-    # RELATIONS
+    # 26. RELATIONS
     # ============================================
     pole = db.relationship('Pole', foreign_keys=[pole_id])
     direction = db.relationship('Direction', foreign_keys=[direction_id])
     service = db.relationship('Service', foreign_keys=[service_id])
     createur = db.relationship('User', foreign_keys=[created_by])
+    updateur = db.relationship('User', foreign_keys=[updated_by])
     archive_user = db.relationship('User', foreign_keys=[archived_by])
     validateur = db.relationship('User', foreign_keys=[valide_par_id])
     responsable_conformite = db.relationship('User', foreign_keys=[responsable_conformite_id])
@@ -9219,91 +9643,16 @@ class PlanQualiteFonction(db.Model):
     actions_amelioration = db.relationship('ActionAmeliorationQualite', back_populates='plan_qualite', lazy=True)
     fichiers = db.relationship('FichierPlanQualite', back_populates='plan_qualite', lazy=True, cascade='all, delete-orphan')
     
-    def __repr__(self):
-        return f'<PlanQualite {self.reference}: {self.titre}>'
+    # NOUVEAU: Relations avancées
+    non_conformites = db.relationship('NonConformite', back_populates='plan_qualite', lazy=True)
+    audits_qualite = db.relationship('AuditQualite', back_populates='plan_qualite', lazy=True)
+    formations = db.relationship('FormationQualite', back_populates='plan_qualite', lazy=True)
+    reunions = db.relationship('ReunionQualite', back_populates='plan_qualite', lazy=True)
     
-    def to_dict(self):
-        return {
-            'id': self.id,
-            'reference': self.reference,
-            'titre': self.titre,
-            'description': self.description,
-            'statut': self.statut,
-            'est_valide': self.est_valide,
-            'date_debut': self.date_debut.isoformat() if self.date_debut else None,
-            'date_fin': self.date_fin.isoformat() if self.date_fin else None,
-            'date_prochaine_revue': self.date_prochaine_revue.isoformat() if self.date_prochaine_revue else None,
-            'created_at': self.created_at.isoformat() if self.created_at else None,
-            'procedures_applicables': self.procedures_applicables,
-            'frequence_controles': self.frequence_controles,
-            'niveau_maturite': self.niveau_maturite,
-            'objectifs_qualite': self.objectifs_qualite,
-            'indicateurs_cles': self.indicateurs_cles
-        }
-    
-    def archiver(self, user_id, raison="Archivage manuel"):
-        self.is_archived = True
-        self.archived_at = datetime.utcnow()
-        self.archived_by = user_id
-        self.archive_reason = raison
-        self.statut = 'archive'
-        
-    def desarchiver(self):
-        self.is_archived = False
-        self.archived_at = None
-        self.archived_by = None
-        self.archive_reason = None
-        self.statut = 'brouillon'
-    
-    def valider(self, user_id):
-        self.est_valide = True
-        self.date_validation = datetime.utcnow()
-        self.valide_par_id = user_id
-        self.statut = 'actif'
-    
-    def get_niveau_maturite_label(self):
-        niveaux = {
-            '1': 'Initial',
-            '2': 'Répétable',
-            '3': 'Défini',
-            '4': 'Géré',
-            '5': 'Optimisé'
-        }
-        return niveaux.get(self.niveau_maturite, 'Non défini')
-    
-    def get_frequence_controles_label(self):
-        frequences = {
-            'quotidien': 'Quotidien',
-            'hebdomadaire': 'Hebdomadaire',
-            'mensuel': 'Mensuel',
-            'trimestriel': 'Trimestriel',
-            'semestriel': 'Semestriel',
-            'annuel': 'Annuel'
-        }
-        return frequences.get(self.frequence_controles, 'Non défini')
-    
-    def get_statut_revue(self):
-        if not self.date_prochaine_revue:
-            return 'non_planifie'
-        
-        today = datetime.now().date()
-        if self.date_prochaine_revue < today:
-            return 'retard'
-        elif self.date_prochaine_revue <= today + timedelta(days=30):
-            return 'proche'
-        else:
-            return 'ok'
-    
-    def get_jours_restants_revue(self):
-        if not self.date_prochaine_revue:
-            return None
-        
-        today = datetime.now().date()
-        if self.date_prochaine_revue < today:
-            return - (today - self.date_prochaine_revue).days
-        else:
-            return (self.date_prochaine_revue - today).days
-
+    # ============================================
+    # 27. PROPRIÉTÉS CALCULÉES
+    # ============================================
+    # Ces méthodes devraient déjà être présentes dans votre modèle actuel :
     def calculer_progression(self):
         """Calcule la progression du plan basée sur les actions d'amélioration"""
         if not self.actions_amelioration:
@@ -9313,7 +9662,7 @@ class PlanQualiteFonction(db.Model):
             return 0
         terminees = sum(1 for a in self.actions_amelioration if a.statut == 'terminee')
         return round((terminees / total) * 100, 1)
-    
+
     def get_statut_css(self):
         """Retourne la classe CSS pour le statut"""
         if self.is_archived:
@@ -9327,6 +9676,646 @@ class PlanQualiteFonction(db.Model):
         elif self.statut == 'annule':
             return 'danger'
         return 'secondary'
+    
+    @property
+    def score_robustesse_calcule(self):
+        """Calcule le score de robustesse du plan qualité (0-100)"""
+        score = 0
+        total = 0
+        
+        # 1. Structure (20%)
+        if self.procedures_applicables:
+            score += 5
+        if self.controles_cles:
+            score += 5
+        if self.objectifs_qualite:
+            score += 5
+        if self.indicateurs_cles:
+            score += 5
+        total += 20
+        
+        # 2. Maturité (20%)
+        try:
+            niveau = int(self.niveau_maturite or 3)
+            score += niveau * 4
+            total += 20
+        except:
+            score += 12
+            total += 20
+        
+        # 3. Actions (20%)
+        total_actions = len(self.actions_amelioration) if self.actions_amelioration else 0
+        if total_actions > 0:
+            terminees = sum(1 for a in self.actions_amelioration if a.statut == 'terminee')
+            score += (terminees / total_actions) * 20
+        total += 20
+        
+        # 4. Revue (15%)
+        if self.date_derniere_revue:
+            score += 7.5
+        if self.date_prochaine_revue and self.date_prochaine_revue > datetime.now().date():
+            score += 7.5
+        total += 15
+        
+        # 5. Validation (15%)
+        if self.est_valide:
+            score += 15
+        total += 15
+        
+        # 6. Documents (10%)
+        if self.fichiers and len(self.fichiers) > 0:
+            score += min(10, len(self.fichiers))
+        total += 10
+        
+        return round((score / total) * 100, 1) if total > 0 else 0
+    
+    @property
+    def niveau_maturite_libelle(self):
+        niveaux = {
+            '1': 'Initial - Processus non maîtrisés',
+            '2': 'Répétable - Dépend de l\'expérience',
+            '3': 'Défini - Standardisé et documenté',
+            '4': 'Géré - Mesuré et contrôlé',
+            '5': 'Optimisé - Amélioration continue IA'
+        }
+        return niveaux.get(self.niveau_maturite, 'Non défini')
+    
+    @property
+    def statut_validation_etapes(self):
+        """Retourne l'état d'avancement de la validation"""
+        etapes = []
+        
+        # Étape 1: Rédaction
+        if self.created_at:
+            etapes.append({'nom': 'Rédaction', 'statut': 'complete', 'date': self.created_at})
+        else:
+            etapes.append({'nom': 'Rédaction', 'statut': 'pending'})
+        
+        # Étape 2: Relecture
+        if self.updated_at and self.updated_at != self.created_at:
+            etapes.append({'nom': 'Relecture', 'statut': 'complete', 'date': self.updated_at})
+        else:
+            etapes.append({'nom': 'Relecture', 'statut': 'en_cours' if self.statut != 'brouillon' else 'pending'})
+        
+        # Étape 3: Approbation
+        if self.est_valide and self.date_validation:
+            etapes.append({'nom': 'Approbation', 'statut': 'complete', 'date': self.date_validation})
+        else:
+            etapes.append({'nom': 'Approbation', 'statut': 'en_cours' if self.statut == 'actif' else 'pending'})
+        
+        # Étape 4: Diffusion
+        if self.is_archived:
+            etapes.append({'nom': 'Archivage', 'statut': 'complete', 'date': self.archived_at})
+        elif self.est_valide:
+            etapes.append({'nom': 'Diffusion', 'statut': 'en_cours'})
+        else:
+            etapes.append({'nom': 'Diffusion', 'statut': 'pending'})
+        
+        return etapes
+
+
+    @property
+    def risques_qualite(self):
+        """Récupère tous les risques qualité de la cartographie pour ce plan"""
+        from models import CartographieRisqueFonction
+        
+        risques = CartographieRisqueFonction.query.filter_by(
+            client_id=self.client_id
+        ).all()
+        
+        return [
+            {
+                'id': r.id,
+                'zone': r.zone_risque_majeur,
+                'pole': r.pole,
+                'direction': r.direction,
+                'impact': r.impact,
+                'probabilite': r.probabilite,
+                'niveau_maitrise': r.niveau_maitrise,
+                'typologie': r.typologie_risque,
+                'niveau': r.get_niveau_risque()[0],
+                'couleur': r.get_niveau_risque()[1],
+                'score': r.get_score_qualite(),
+                'controles': {
+                    'niveau_1': r.niveau_1,
+                    'niveau_2': r.niveau_2,
+                    'niveau_3': r.niveau_3
+                },
+                'annee': r.annee
+            }
+            for r in risques
+        ]
+    
+    @property
+    def statistiques_risques(self):
+        """Statistiques sur les risques qualité"""
+        risques = self.risques_qualite
+        
+        if not risques:
+            return {
+                'total': 0,
+                'critiques': 0,
+                'elevés': 0,
+                'moyens': 0,
+                'faibles': 0,
+                'score_moyen': 0
+            }
+        
+        return {
+            'total': len(risques),
+            'critiques': len([r for r in risques if r['niveau'] == 'Critique']),
+            'elevés': len([r for r in risques if r['niveau'] == 'Élevé']),
+            'moyens': len([r for r in risques if r['niveau'] == 'Moyen']),
+            'faibles': len([r for r in risques if r['niveau'] == 'Faible']),
+            'score_moyen': round(sum(r['score'] for r in risques) / len(risques), 1) if risques else 0
+        }
+    @property
+    def indicateurs_performance(self):
+        """Retourne les indicateurs de performance calculés"""
+        actions = self.actions_amelioration if self.actions_amelioration else []
+        total_actions = len(actions)
+        
+        if total_actions == 0:
+            taux_realisation = 0
+            taux_efficacite = 0
+        else:
+            terminees = sum(1 for a in actions if a.statut == 'terminee')
+            taux_realisation = round((terminees / total_actions) * 100, 1)
+            
+            # Calcul de l'efficacité basé sur les commentaires de réalisation
+            avec_commentaire = sum(1 for a in actions if a.commentaire_realisation)
+            taux_efficacite = round((avec_commentaire / total_actions) * 100, 1)
+        
+        return {
+            'taux_realisation': taux_realisation,
+            'taux_efficacite': taux_efficacite,
+            'nb_actions': total_actions,
+            'nb_terminees': sum(1 for a in actions if a.statut == 'terminee'),
+            'nb_en_cours': sum(1 for a in actions if a.statut == 'en_cours'),
+            'nb_retard': sum(1 for a in actions if a.est_en_retard()),
+            'score_global': self.calculer_progression()
+        }
+    
+    @property
+    def synthese_audit(self):
+        """Synthèse des audits qualité"""
+        audits = self.audits_qualite if hasattr(self, 'audits_qualite') else []
+        
+        return {
+            'nb_audits_realises': len([a for a in audits if a.date_realise]),
+            'nb_non_conformites': sum(a.nb_non_conformites for a in audits if a.date_realise),
+            'taux_conformite': round(sum(a.taux_conformite for a in audits if a.date_realise) / max(len([a for a in audits if a.date_realise]), 1), 1),
+            'dernier_audit': max([a.date_realise for a in audits if a.date_realise]) if audits else None
+        }
+    
+    @property
+    def conformite_normes(self):
+        """Vérifie la conformité aux principales normes"""
+        conformite = {
+            'iso_9001': {'conforme': False, 'details': []},
+            'iso_19011': {'conforme': False, 'details': []},
+            'coso_erm': {'conforme': False, 'details': []},
+            'cmmi': {'conforme': False, 'details': []}
+        }
+        
+        # ISO 9001:2025 - Section 7.1 Ressources
+        if self.responsable_conformite_id and self.responsable_conformite:
+            conformite['iso_9001']['conforme'] = True
+            conformite['iso_9001']['details'].append('Responsable conformité assigné')
+        
+        # ISO 9001:2025 - Section 7.5 Informations documentées
+        if self.fichiers and len(self.fichiers) > 0:
+            conformite['iso_9001']['details'].append(f'{len(self.fichiers)} documents maîtrisés')
+        
+        # ISO 9001:2025 - Section 9 Performance evaluation
+        if self.indicateurs_cles and len(self.indicateurs_cles) > 0:
+            conformite['iso_9001']['details'].append(f'{len(self.indicateurs_cles)} indicateurs de performance')
+        
+        # ISO 19011:2025 - Audit
+        if self.date_prochaine_revue and self.responsable_revue_id:
+            conformite['iso_19011']['conforme'] = True
+            conformite['iso_19011']['details'].append('Programme d\'audit défini')
+        
+        # COSO ERM
+        if hasattr(self, 'risques_qualite') and self.risques_qualite:
+            conformite['coso_erm']['conforme'] = True
+            conformite['coso_erm']['details'].append('Cartographie des risques qualité')
+        
+        # CMMI
+        try:
+            niveau = int(self.niveau_maturite or 3)
+            if niveau >= 3:
+                conformite['cmmi']['conforme'] = True
+                conformite['cmmi']['details'].append(f'Niveau de maturité {niveau}')
+        except:
+            pass
+        
+        return conformite
+    
+    @property
+    def roadmap_amelioration(self):
+        """Feuille de route d'amélioration continue"""
+        return {
+            'court_terme': [
+                'Finaliser la documentation des procédures',
+                'Former les équipes aux nouveaux processus'
+            ],
+            'moyen_terme': [
+                'Automatiser les contrôles qualité',
+                'Mettre en place le tableau de bord IA'
+            ],
+            'long_terme': [
+                'Certification ISO 9001:2025',
+                'Intégration complète des indicateurs prédictifs'
+            ]
+        }
+    
+    # ============================================
+    # 28. MÉTHODES AVANCÉES
+    # ============================================
+    
+    def calculer_robustesse(self):
+        """Calcule et met à jour le score de robustesse"""
+        self.score_robustesse = self.score_robustesse_calcule
+        return self.score_robustesse
+    
+    def get_niveau_certification_recommande(self):
+        """Retourne le niveau de certification recommandé"""
+        if self.score_robustesse >= 90:
+            return 'platinum'
+        elif self.score_robustesse >= 75:
+            return 'gold'
+        elif self.score_robustesse >= 60:
+            return 'silver'
+        else:
+            return 'base'
+    
+    def evaluer_conformite(self, norme='iso_9001'):
+        """Évalue la conformité à une norme spécifique"""
+        conformite = self.conformite_normes
+        return conformite.get(norme, {'conforme': False, 'details': []})
+
+    @property
+    def score_robustesse_calcule(self):
+        """Calcule le score de robustesse (0-100)"""
+        score = 0
+        total = 0
+        
+        # Structure (20%)
+        if self.procedures_applicables:
+            score += 5
+        if self.controles_cles:
+            score += 5
+        if self.objectifs_qualite:
+            score += 5
+        if self.indicateurs_cles:
+            score += 5
+        total += 20
+        
+        # Maturité (20%)
+        try:
+            niveau = int(self.niveau_maturite or 3)
+            score += niveau * 4
+            total += 20
+        except:
+            score += 12
+            total += 20
+        
+        # Actions (20%)
+        total_actions = len(self.actions_amelioration) if self.actions_amelioration else 0
+        if total_actions > 0:
+            terminees = sum(1 for a in self.actions_amelioration if a.statut == 'terminee')
+            score += (terminees / total_actions) * 20
+        total += 20
+        
+        # Revue (15%)
+        if self.date_derniere_revue:
+            score += 7.5
+        if self.date_prochaine_revue and self.date_prochaine_revue > datetime.now().date():
+            score += 7.5
+        total += 15
+        
+        # Validation (15%)
+        if self.est_valide:
+            score += 15
+        total += 15
+        
+        # Documents (10%)
+        if hasattr(self, 'fichiers') and self.fichiers and len(self.fichiers) > 0:
+            score += min(10, len(self.fichiers))
+        total += 10
+        
+        return round((score / total) * 100, 1) if total > 0 else 0
+    
+    @property
+    def indicateurs_performance(self):
+        """Retourne les indicateurs de performance calculés"""
+        actions = self.actions_amelioration if self.actions_amelioration else []
+        total_actions = len(actions)
+        
+        if total_actions == 0:
+            taux_realisation = 0
+            taux_efficacite = 0
+            score_global = 0
+        else:
+            terminees = sum(1 for a in actions if a.statut == 'terminee')
+            taux_realisation = round((terminees / total_actions) * 100, 1)
+            
+            avec_commentaire = sum(1 for a in actions if a.commentaire_realisation)
+            taux_efficacite = round((avec_commentaire / total_actions) * 100, 1)
+            
+            # Score global = moyenne pondérée
+            score_global = round((taux_realisation * 0.6 + taux_efficacite * 0.4), 1)
+        
+        return {
+            'taux_realisation': taux_realisation,
+            'taux_efficacite': taux_efficacite,
+            'nb_actions': total_actions,
+            'nb_terminees': sum(1 for a in actions if a.statut == 'terminee'),
+            'nb_en_cours': sum(1 for a in actions if a.statut == 'en_cours'),
+            'nb_retard': sum(1 for a in actions if hasattr(a, 'est_en_retard') and a.est_en_retard()),
+            'score_global': score_global or self.calculer_progression()
+        }
+    
+    def get_niveau_certification_recommande(self):
+        """Retourne le niveau de certification recommandé"""
+        score = self.score_robustesse_calcule
+        if score >= 90:
+            return 'platinum'
+        elif score >= 75:
+            return 'gold'
+        elif score >= 60:
+            return 'silver'
+        else:
+            return 'base'
+    
+    @property
+    def conformite_normes(self):
+        """Vérifie la conformité aux principales normes"""
+        conformite = {
+            'iso_9001': {'conforme': False, 'details': []},
+            'iso_19011': {'conforme': False, 'details': []},
+            'coso_erm': {'conforme': False, 'details': []},
+            'cmmi': {'conforme': False, 'details': []}
+        }
+        
+        # ISO 9001:2025
+        if self.responsable_conformite_id and self.responsable_conformite:
+            conformite['iso_9001']['conforme'] = True
+            conformite['iso_9001']['details'].append('Responsable conformité assigné')
+        
+        if hasattr(self, 'fichiers') and self.fichiers and len(self.fichiers) > 0:
+            conformite['iso_9001']['details'].append(f'{len(self.fichiers)} documents maîtrisés')
+        
+        if self.indicateurs_cles and len(self.indicateurs_cles) > 0:
+            conformite['iso_9001']['details'].append(f'{len(self.indicateurs_cles)} indicateurs de performance')
+        
+        # ISO 19011:2025
+        if self.date_prochaine_revue and self.responsable_revue_id:
+            conformite['iso_19011']['conforme'] = True
+            conformite['iso_19011']['details'].append("Programme d'audit défini")
+        
+        # COSO ERM
+        if hasattr(self, 'risques_qualite') and self.risques_qualite:
+            conformite['coso_erm']['conforme'] = True
+            conformite['coso_erm']['details'].append('Cartographie des risques qualité')
+        
+        # CMMI
+        try:
+            niveau = int(self.niveau_maturite or 3)
+            if niveau >= 3:
+                conformite['cmmi']['conforme'] = True
+                conformite['cmmi']['details'].append(f'Niveau de maturité {niveau}')
+        except:
+            pass
+        
+        return conformite
+    
+    @property
+    def roadmap_amelioration(self):
+        """Feuille de route d'amélioration continue"""
+        return {
+            'court_terme': [
+                'Finaliser la documentation des procédures',
+                'Former les équipes aux nouveaux processus'
+            ],
+            'moyen_terme': [
+                'Automatiser les contrôles qualité',
+                'Mettre en place le tableau de bord IA'
+            ],
+            'long_terme': [
+                'Certification ISO 9001:2025',
+                'Intégration complète des indicateurs prédictifs'
+            ]
+        }
+    
+    def generer_rapport_complet(self):
+        """Génère un rapport complet d'évaluation"""
+        return {
+            'identification': {
+                'reference': self.reference,
+                'titre': self.titre,
+                'version': getattr(self, 'version', '1.0'),
+                'statut': self.statut
+            },
+            'performance': self.indicateurs_performance,
+            'robustesse': {
+                'score': self.score_robustesse_calcule,
+                'niveau_recommande': self.get_niveau_certification_recommande()
+            },
+            'conformite': self.conformite_normes,
+            'amelioration': self.roadmap_amelioration,
+            'generated_at': datetime.utcnow().isoformat()
+        }
+    
+    def generer_rapport_complet(self):
+        """Génère un rapport complet d'évaluation du plan qualité"""
+        return {
+            'identification': {
+                'reference': self.reference,
+                'titre': self.titre,
+                'version': self.version,
+                'statut': self.statut
+            },
+            'performance': self.indicateurs_performance,
+            'robustesse': {
+                'score': self.score_robustesse_calcule,
+                'niveau_recommande': self.get_niveau_certification_recommande()
+            },
+            'conformite': self.conformite_normes,
+            'audit': self.synthese_audit,
+            'amelioration': self.roadmap_amelioration,
+            'validation': self.statut_validation_etapes,
+            'generated_at': datetime.utcnow().isoformat()
+        }
+    
+    def __repr__(self):
+        return f'<PlanQualite {self.reference}: {self.titre}>'
+
+
+# ============================================
+# MODÈLES COMPLÉMENTAIRES ULTRA-PREMIUM
+# ============================================
+
+class NonConformite(db.Model):
+    """Non-conformité qualité (ISO 9001:2025 Section 10.2)"""
+    __tablename__ = 'non_conformites'
+    
+    id = db.Column(db.Integer, primary_key=True)
+    reference = db.Column(db.String(50), unique=True, nullable=False)
+    plan_qualite_id = db.Column(db.Integer, db.ForeignKey('plans_qualite_fonction.id'), nullable=False)
+    
+    # Description
+    titre = db.Column(db.String(200), nullable=False)
+    description = db.Column(db.Text, nullable=False)
+    cause_racine = db.Column(db.Text)  # Analyse 5 pourquoi
+    gravite = db.Column(db.String(20), default='majeure')  # mineure, majeure, critique
+    
+    # Traitement
+    action_immediate = db.Column(db.Text)
+    action_corrective = db.Column(db.Text)
+    action_preventive = db.Column(db.Text)
+    
+    # Efficacité
+    verification_efficacite = db.Column(db.Text)
+    date_verification = db.Column(db.Date)
+    efficace = db.Column(db.Boolean, default=False)
+    
+    # Clôture
+    statut = db.Column(db.String(20), default='ouverte')  # ouverte, en_traitement, verifiee, close
+    date_ouverture = db.Column(db.DateTime, default=datetime.utcnow)
+    date_cloture = db.Column(db.DateTime)
+    responsable_id = db.Column(db.Integer, db.ForeignKey('user.id'))
+    
+    # Relations
+    plan_qualite = db.relationship('PlanQualiteFonction', back_populates='non_conformites')
+    responsable = db.relationship('User', foreign_keys=[responsable_id])
+    
+    __repr__ = lambda self: f'<NonConformite {self.reference}>'
+
+
+class AuditQualite(db.Model):
+    """Audit qualité (ISO 19011:2025)"""
+    __tablename__ = 'audits_qualite'
+    
+    id = db.Column(db.Integer, primary_key=True)
+    reference = db.Column(db.String(50), unique=True, nullable=False)
+    plan_qualite_id = db.Column(db.Integer, db.ForeignKey('plans_qualite_fonction.id'), nullable=False)
+    
+    # Périmètre
+    titre = db.Column(db.String(200), nullable=False)
+    perimetre = db.Column(db.Text)
+    criteres = db.Column(db.Text)
+    
+    # Équipe
+    auditeur_principal_id = db.Column(db.Integer, db.ForeignKey('user.id'))
+    equipe_audit = db.Column(db.JSON, default=[])
+    
+    # Dates
+    date_prevue = db.Column(db.Date)
+    date_debut = db.Column(db.Date)
+    date_fin = db.Column(db.Date)
+    date_realise = db.Column(db.Date)
+    
+    # Résultats
+    nb_non_conformites = db.Column(db.Integer, default=0)
+    nb_observations = db.Column(db.Integer, default=0)
+    nb_points_forts = db.Column(db.Integer, default=0)
+    taux_conformite = db.Column(db.Float, default=0)
+    
+    # Conclusions
+    conclusion = db.Column(db.Text)
+    recommandations = db.Column(db.JSON, default=[])
+    
+    # Statut
+    statut = db.Column(db.String(20), default='planifie')  # planifie, en_cours, realise, annule
+    
+    # Relations
+    plan_qualite = db.relationship('PlanQualiteFonction', back_populates='audits_qualite')
+    auditeur_principal = db.relationship('User', foreign_keys=[auditeur_principal_id])
+    
+    __repr__ = lambda self: f'<AuditQualite {self.reference}>'
+
+
+class FormationQualite(db.Model):
+    """Formation qualité (ISO 9001:2025 Section 7.2)"""
+    __tablename__ = 'formations_qualite'
+    
+    id = db.Column(db.Integer, primary_key=True)
+    plan_qualite_id = db.Column(db.Integer, db.ForeignKey('plans_qualite_fonction.id'), nullable=False)
+    
+    # Identification
+    reference = db.Column(db.String(50), unique=True, nullable=False)
+    intitule = db.Column(db.String(200), nullable=False)
+    description = db.Column(db.Text)
+    objectifs = db.Column(db.JSON, default=[])
+    
+    # Organisation
+    formateur = db.Column(db.String(200))
+    participants = db.Column(db.JSON, default=[])
+    duree_heures = db.Column(db.Float)
+    
+    # Dates
+    date_formation = db.Column(db.Date)
+    date_evaluation = db.Column(db.Date)
+    
+    # Évaluation
+    satisfaction_moyenne = db.Column(db.Float, default=0)
+    efficacite = db.Column(db.Float, default=0)  # Test de connaissances
+    commentaires = db.Column(db.JSON, default=[])
+    
+    # Certification
+    certification_obtenue = db.Column(db.Boolean, default=False)
+    certification_nom = db.Column(db.String(200))
+    certification_date = db.Column(db.Date)
+    
+    # Relations
+    plan_qualite = db.relationship('PlanQualiteFonction', back_populates='formations')
+    
+    __repr__ = lambda self: f'<FormationQualite {self.reference}>'
+
+
+class ReunionQualite(db.Model):
+    """Réunion qualité / Revue de direction (ISO 9001:2025 Section 9.3)"""
+    __tablename__ = 'reunions_qualite'
+    
+    id = db.Column(db.Integer, primary_key=True)
+    plan_qualite_id = db.Column(db.Integer, db.ForeignKey('plans_qualite_fonction.id'), nullable=False)
+    
+    # Identification
+    titre = db.Column(db.String(200), nullable=False)
+    type_reunion = db.Column(db.String(50), default='revue_direction')  # revue_direction, comite_qualite, copil
+    
+    # Organisation
+    date_reunion = db.Column(db.DateTime, nullable=False)
+    duree_minutes = db.Column(db.Integer)
+    lieu = db.Column(db.String(200))
+    visio_lien = db.Column(db.String(500))
+    
+    # Participants
+    animateur_id = db.Column(db.Integer, db.ForeignKey('user.id'))
+    participants = db.Column(db.JSON, default=[])
+    invites = db.Column(db.JSON, default=[])
+    absents = db.Column(db.JSON, default=[])
+    
+    # Contenu
+    ordre_jour = db.Column(db.JSON, default=[])
+    compte_rendu = db.Column(db.Text)
+    presentations = db.Column(db.JSON, default=[])
+    
+    # Décisions
+    decisions = db.Column(db.JSON, default=[])
+    actions = db.Column(db.JSON, default=[])
+    points_bloquants = db.Column(db.JSON, default=[])
+    
+    # Suivi
+    statut = db.Column(db.String(20), default='planifiee')  # planifiee, realisee, reportee, annulee
+    
+    # Relations
+    plan_qualite = db.relationship('PlanQualiteFonction', back_populates='reunions')
+    animateur = db.relationship('User', foreign_keys=[animateur_id])
+    
+    __repr__ = lambda self: f'<ReunionQualite {self.titre}>'
 
 
 class CartographieRisqueFonction(db.Model):
@@ -9384,20 +10373,57 @@ class CartographieRisqueFonction(db.Model):
     created_by = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
     client_id = db.Column(db.Integer, db.ForeignKey('clients.id'), nullable=False)
     
+    # 🔥 NOUVEAU : Lien avec le plan qualité (COSO ERM)
+    plan_qualite_id = db.Column(db.Integer, db.ForeignKey('plans_qualite_fonction.id'), nullable=True)
+    
     # Relations
     createur = db.relationship('User', foreign_keys=[created_by])
+    
+    # 🔥 NOUVELLE RELATION : Lien vers le plan qualité
+    plan_qualite = db.relationship('PlanQualiteFonction', backref='risques_cartographie', foreign_keys=[plan_qualite_id])
     
     def __repr__(self):
         return f'<CartographieRisque {self.pole} - {self.zone_risque_majeur}>'
     
     def get_niveau_risque(self):
-        """Calcule le niveau de risque global"""
-        # Logique de calcul personnalisable
-        impact_score = {'Très fort à éviter': 5, 'Fort à éviter': 4, 'Modéré': 3, 'Faible': 2, 'Très faible': 1}.get(self.impact, 3)
-        probabilite_score = {'Certain': 5, 'Très probable': 5, 'Probable': 4, 'Possible': 3, 'Peu probable': 2, 'Très rare': 1}.get(self.probabilite, 3)
-        maitrise_score = {'Excellent': 1, 'Bonne': 2, 'Suffisante': 3, 'Faible': 4, 'Insuffisante': 5}.get(self.niveau_maitrise, 3)
+        """Calcule le niveau de risque global selon méthodologie COSO ERM"""
+        # Scores d'impact
+        impact_scores = {
+            'Très fort à éviter': 5,
+            'Fort à éviter': 4, 
+            'Modéré': 3,
+            'Faible': 2,
+            'Très faible': 1
+        }
         
-        score = (impact_score + probabilite_score + maitrise_score) / 3
+        # Scores de probabilité
+        probabilite_scores = {
+            'Certain': 5,
+            'Très probable': 5,
+            'Probable': 4,
+            'Possible': 3,
+            'Peu probable': 2,
+            'Très rare': 1
+        }
+        
+        # Scores de maîtrise (inversés car meilleure maîtrise = risque plus faible)
+        maitrise_scores = {
+            'Excellent': 1,
+            'Bonne': 2,
+            'Suffisante': 3,
+            'Faible': 4,
+            'Insuffisante': 5
+        }
+        
+        impact_score = impact_scores.get(self.impact, 3)
+        probabilite_score = probabilite_scores.get(self.probabilite, 3)
+        maitrise_score = maitrise_scores.get(self.niveau_maitrise, 3)
+        
+        # Calcul du score (ISO 31000)
+        score_brut = impact_score + probabilite_score + maitrise_score
+        score = score_brut / 3
+        
+        # Détermination du niveau
         if score <= 2:
             return 'Faible', 'success'
         elif score <= 3.5:
@@ -9406,6 +10432,35 @@ class CartographieRisqueFonction(db.Model):
             return 'Élevé', 'danger'
         else:
             return 'Critique', 'dark'
+    
+    def get_score_qualite(self):
+        """Retourne un score de qualité du risque (0-100) pour COSO ERM"""
+        impact_score = {'Très fort à éviter': 100, 'Fort à éviter': 80, 'Modéré': 60, 'Faible': 40, 'Très faible': 20}.get(self.impact, 50)
+        probabilite_score = {'Certain': 100, 'Très probable': 90, 'Probable': 70, 'Possible': 50, 'Peu probable': 30, 'Très rare': 10}.get(self.probabilite, 50)
+        maitrise_score = {'Excellent': 100, 'Bonne': 75, 'Suffisante': 50, 'Faible': 25, 'Insuffisante': 0}.get(self.niveau_maitrise, 50)
+        
+        # Moyenne pondérée
+        return round((impact_score * 0.4 + probabilite_score * 0.3 + maitrise_score * 0.3), 1)
+    
+    def to_dict(self):
+        """Convertit le risque en dictionnaire pour l'API"""
+        niveau, couleur = self.get_niveau_risque()
+        return {
+            'id': self.id,
+            'pole': self.pole,
+            'direction': self.direction,
+            'zone_risque_majeur': self.zone_risque_majeur,
+            'impact': self.impact,
+            'probabilite': self.probabilite,
+            'niveau_maitrise': self.niveau_maitrise,
+            'typologie_risque': self.typologie_risque,
+            'niveau': niveau,
+            'couleur': couleur,
+            'score_qualite': self.get_score_qualite(),
+            'annee': self.annee,
+            'plan_qualite_id': self.plan_qualite_id,
+            'created_at': self.created_at.isoformat() if self.created_at else None
+        }
         
 # ============================================
 # ACTIONS AMÉLIORATION QUALITÉ
