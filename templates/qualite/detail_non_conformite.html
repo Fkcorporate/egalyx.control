@@ -1,0 +1,306 @@
+{% extends "base.html" %}
+
+{% block title %}Non-conformité - {{ nc.reference }}{% endblock %}
+
+{% block styles %}
+{{ super() }}
+<style>
+    .status-badge {
+        padding: 0.5rem 1rem;
+        border-radius: 30px;
+        font-size: 0.85rem;
+        font-weight: 600;
+    }
+    .gravite-badge {
+        padding: 0.25rem 0.75rem;
+        border-radius: 20px;
+        font-size: 0.75rem;
+        font-weight: 600;
+    }
+    .info-card {
+        background: #f8f9fa;
+        border-radius: 12px;
+        padding: 1rem;
+        margin-bottom: 1rem;
+    }
+    .timeline-item {
+        position: relative;
+        padding-left: 2rem;
+        padding-bottom: 1.5rem;
+        border-left: 2px solid #dee2e6;
+    }
+    .timeline-item:last-child {
+        border-left: none;
+    }
+    .timeline-icon {
+        position: absolute;
+        left: -0.75rem;
+        top: 0;
+        width: 1.5rem;
+        height: 1.5rem;
+        border-radius: 50%;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        background: white;
+    }
+    .action-card {
+        transition: transform 0.2s;
+    }
+    .action-card:hover {
+        transform: translateY(-3px);
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="container-fluid px-4">
+    <!-- En-tête -->
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <div>
+            <nav aria-label="breadcrumb">
+                <ol class="breadcrumb">
+                    <li class="breadcrumb-item"><a href="{{ url_for('liste_plans_qualite') }}">Plans qualité</a></li>
+                    <li class="breadcrumb-item"><a href="{{ url_for('detail_plan_qualite', plan_id=plan.id) }}">{{ plan.reference }}</a></li>
+                    <li class="breadcrumb-item"><a href="{{ url_for('liste_non_conformites_qualite', plan_id=plan.id) }}">Non-conformités</a></li>
+                    <li class="breadcrumb-item active">{{ nc.reference }}</li>
+                </ol>
+            </nav>
+            <div class="d-flex align-items-center gap-3">
+                <h1 class="h2 mb-0">
+                    <i class="fas fa-exclamation-triangle me-2 text-danger"></i>
+                    {{ nc.titre }}
+                </h1>
+                <span class="status-badge {% if nc.statut == 'close' %}bg-success{% elif nc.statut == 'en_traitement' %}bg-warning{% else %}bg-danger{% endif %} text-white">
+                    {% if nc.statut == 'ouverte' %}🔴 Ouverte
+                    {% elif nc.statut == 'en_traitement' %}🟡 En traitement
+                    {% elif nc.statut == 'verifiee' %}🔵 Vérifiée
+                    {% elif nc.statut == 'close' %}✅ Close
+                    {% else %}{{ nc.statut }}{% endif %}
+                </span>
+            </div>
+            <p class="text-muted mt-2">
+                <i class="fas fa-tag me-1"></i>{{ nc.reference }} | 
+                Plan: {{ plan.reference }} - {{ plan.titre }}
+            </p>
+        </div>
+        <div>
+            <a href="{{ url_for('modifier_non_conformite', nc_id=nc.id) }}" class="btn btn-warning">
+                <i class="fas fa-edit me-1"></i>Modifier
+            </a>
+            <a href="{{ url_for('liste_non_conformites_qualite', plan_id=plan.id) }}" class="btn btn-secondary">
+                <i class="fas fa-arrow-left me-1"></i>Retour
+            </a>
+        </div>
+    </div>
+
+    <div class="row">
+        <!-- Colonne gauche -->
+        <div class="col-lg-5">
+            <!-- Informations générales -->
+            <div class="card shadow-sm mb-4">
+                <div class="card-header bg-white">
+                    <h5 class="mb-0"><i class="fas fa-info-circle me-2 text-primary"></i>Informations générales</h5>
+                </div>
+                <div class="card-body">
+                    <div class="info-card">
+                        <div class="row mb-3">
+                            <div class="col-4 fw-semibold">Gravité:</div>
+                            <div class="col-8">
+                                <span class="gravite-badge {% if nc.gravite == 'critique' %}bg-danger{% elif nc.gravite == 'majeure' %}bg-warning{% else %}bg-info{% endif %} text-white">
+                                    {% if nc.gravite == 'critique' %}🔴 Critique
+                                    {% elif nc.gravite == 'majeure' %}🟡 Majeure
+                                    {% else %}🟢 Mineure{% endif %}
+                                </span>
+                            </div>
+                        </div>
+                        <div class="row mb-3">
+                            <div class="col-4 fw-semibold">Date d'ouverture:</div>
+                            <div class="col-7">
+                                <i class="fas fa-calendar-plus me-1 text-success"></i>
+                                {{ nc.date_ouverture.strftime('%d/%m/%Y à %H:%M') if nc.date_ouverture else '-' }}
+                            </div>
+                        </div>
+                        <div class="row mb-3">
+                            <div class="col-4 fw-semibold">Jours ouverts:</div>
+                            <div class="col-7">
+                                <span class="badge {% if stats.duree_ouverture > 30 %}bg-danger{% elif stats.duree_ouverture > 15 %}bg-warning{% else %}bg-secondary{% endif %}">
+                                    {{ stats.duree_ouverture }} jours
+                                </span>
+                            </div>
+                        </div>
+                        <div class="row mb-3">
+                            <div class="col-4 fw-semibold">Responsable:</div>
+                            <div class="col-7">
+                                {% if nc.responsable %}
+                                    <i class="fas fa-user-circle me-1 text-primary"></i>
+                                    {{ nc.responsable.username }}
+                                {% else %}
+                                    <span class="text-muted">Non assigné</span>
+                                {% endif %}
+                            </div>
+                        </div>
+                        <div class="row mb-3">
+                            <div class="col-4 fw-semibold">Date de clôture:</div>
+                            <div class="col-7">
+                                {% if nc.date_cloture %}
+                                    <i class="fas fa-check-circle me-1 text-success"></i>
+                                    {{ nc.date_cloture.strftime('%d/%m/%Y') }}
+                                {% else %}
+                                    <span class="text-muted">Non clôturée</span>
+                                {% endif %}
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Analyse 5 pourquoi -->
+            {% if nc.cause_racine %}
+            <div class="card shadow-sm mb-4">
+                <div class="card-header bg-white">
+                    <h5 class="mb-0"><i class="fas fa-question-circle me-2 text-info"></i>Analyse 5 pourquoi</h5>
+                </div>
+                <div class="card-body">
+                    <p class="mb-0">{{ nc.cause_racine }}</p>
+                </div>
+            </div>
+            {% endif %}
+
+            <!-- Actions -->
+            <div class="card shadow-sm mb-4">
+                <div class="card-header bg-white">
+                    <h5 class="mb-0"><i class="fas fa-tasks me-2 text-success"></i>Actions</h5>
+                </div>
+                <div class="card-body">
+                    {% if nc.action_immediate %}
+                    <div class="action-card card mb-3 border-left-3 border-danger">
+                        <div class="card-body py-2">
+                            <div class="fw-semibold text-danger">Action immédiate</div>
+                            <p class="small mb-0 mt-1">{{ nc.action_immediate }}</p>
+                        </div>
+                    </div>
+                    {% endif %}
+                    
+                    {% if nc.action_corrective %}
+                    <div class="action-card card mb-3 border-left-3 border-warning">
+                        <div class="card-body py-2">
+                            <div class="fw-semibold text-warning">Action corrective</div>
+                            <p class="small mb-0 mt-1">{{ nc.action_corrective }}</p>
+                        </div>
+                    </div>
+                    {% endif %}
+                    
+                    {% if nc.action_preventive %}
+                    <div class="action-card card border-left-3 border-success">
+                        <div class="card-body py-2">
+                            <div class="fw-semibold text-success">Action préventive</div>
+                            <p class="small mb-0 mt-1">{{ nc.action_preventive }}</p>
+                        </div>
+                    </div>
+                    {% endif %}
+                    
+                    {% if not nc.action_immediate and not nc.action_corrective and not nc.action_preventive %}
+                    <p class="text-muted text-center mb-0">Aucune action définie</p>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+
+        <!-- Colonne droite -->
+        <div class="col-lg-7">
+            <!-- Description -->
+            <div class="card shadow-sm mb-4">
+                <div class="card-header bg-white">
+                    <h5 class="mb-0"><i class="fas fa-align-left me-2 text-primary"></i>Description</h5>
+                </div>
+                <div class="card-body">
+                    <p class="mb-0">{{ nc.description }}</p>
+                </div>
+            </div>
+
+            <!-- Vérification d'efficacité -->
+            <div class="card shadow-sm mb-4">
+                <div class="card-header bg-white">
+                    <h5 class="mb-0"><i class="fas fa-check-double me-2 text-info"></i>Vérification d'efficacité</h5>
+                </div>
+                <div class="card-body">
+                    {% if nc.verification_efficacite %}
+                        <div class="mb-3">
+                            <label class="fw-semibold">Commentaire:</label>
+                            <p class="mt-1 mb-0">{{ nc.verification_efficacite }}</p>
+                        </div>
+                        <div class="row">
+                            <div class="col-6">
+                                <label class="fw-semibold">Date de vérification:</label>
+                                <p>{{ nc.date_verification.strftime('%d/%m/%Y') if nc.date_verification else '-' }}</p>
+                            </div>
+                            <div class="col-6">
+                                <label class="fw-semibold">Efficace:</label>
+                                <p>
+                                    {% if nc.efficace %}
+                                        <span class="badge bg-success">✅ Oui</span>
+                                    {% else %}
+                                        <span class="badge bg-danger">❌ Non</span>
+                                    {% endif %}
+                                </p>
+                            </div>
+                        </div>
+                    {% else %}
+                        <p class="text-muted text-center mb-0">Vérification d'efficacité non réalisée</p>
+                    {% endif %}
+                </div>
+            </div>
+
+            <!-- Chronologie -->
+            <div class="card shadow-sm mb-4">
+                <div class="card-header bg-white">
+                    <h5 class="mb-0"><i class="fas fa-history me-2 text-secondary"></i>Historique</h5>
+                </div>
+                <div class="card-body">
+                    <div class="timeline">
+                        <div class="timeline-item">
+                            <div class="timeline-icon bg-danger">
+                                <i class="fas fa-plus-circle text-white small"></i>
+                            </div>
+                            <div class="fw-semibold">Création de la non-conformité</div>
+                            <small class="text-muted">{{ nc.date_ouverture.strftime('%d/%m/%Y à %H:%M') if nc.date_ouverture else '-' }}</small>
+                        </div>
+                        
+                        {% if nc.date_verification %}
+                        <div class="timeline-item">
+                            <div class="timeline-icon bg-info">
+                                <i class="fas fa-check-double text-white small"></i>
+                            </div>
+                            <div class="fw-semibold">Vérification d'efficacité</div>
+                            <small class="text-muted">{{ nc.date_verification.strftime('%d/%m/%Y') }}</small>
+                            <div class="mt-1">
+                                <span class="badge {% if nc.efficace %}bg-success{% else %}bg-danger{% endif %}">
+                                    {% if nc.efficace %}Efficace{% else %}Inefficace{% endif %}
+                                </span>
+                            </div>
+                        </div>
+                        {% endif %}
+                        
+                        {% if nc.date_cloture %}
+                        <div class="timeline-item">
+                            <div class="timeline-icon bg-success">
+                                <i class="fas fa-check-circle text-white small"></i>
+                            </div>
+                            <div class="fw-semibold">Clôture</div>
+                            <small class="text-muted">{{ nc.date_cloture.strftime('%d/%m/%Y') }}</small>
+                        </div>
+                        {% endif %}
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+function voirPlan() {
+    window.location.href = `/qualite/plan/{{ plan.id }}`;
+}
+</script>
+{% endblock %}
