@@ -9676,6 +9676,43 @@ class PlanQualiteFonction(db.Model):
         elif self.statut == 'annule':
             return 'danger'
         return 'secondary'
+        
+    def get_statut_revue(self):
+    """Retourne le statut de la revue: non_planifie, retard, proche, ok"""
+    from datetime import datetime, timedelta  # Import local
+    
+    if not self.date_prochaine_revue:
+        return 'non_planifie'
+    
+    today = datetime.now().date()
+    if self.date_prochaine_revue < today:
+        return 'retard'
+    elif self.date_prochaine_revue <= today + timedelta(days=30):
+        return 'proche'
+    else:
+        return 'ok'
+
+    def get_jours_restants_revue(self):
+        """Retourne le nombre de jours restants avant la revue"""
+        if not self.date_prochaine_revue:
+            return None
+        
+        today = datetime.now().date()
+        if self.date_prochaine_revue < today:
+            return - (today - self.date_prochaine_revue).days
+        else:
+            return (self.date_prochaine_revue - today).days
+        
+    def get_niveau_maturite_label(self):
+        """Retourne le libellé du niveau de maturité"""
+        niveaux = {
+            '1': 'Initial',
+            '2': 'Répétable',
+            '3': 'Défini',
+            '4': 'Géré',
+            '5': 'Optimisé'
+        }
+        return niveaux.get(self.niveau_maturite, 'Non défini')
     
     @property
     def score_robustesse_calcule(self):
