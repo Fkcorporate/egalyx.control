@@ -1,7 +1,6 @@
-# forms_qualite.py
 from flask_wtf import FlaskForm
 from flask_wtf.file import FileField, FileRequired, FileAllowed
-from wtforms import StringField, TextAreaField, SelectField, DateField, IntegerField, BooleanField, SubmitField, FieldList, FormField
+from wtforms import StringField, TextAreaField, SelectField, DateField, IntegerField, BooleanField, SubmitField, FieldList, FormField, DateTimeField  # ← AJOUTER DateTimeField
 from wtforms.validators import DataRequired, Length, Optional, NumberRange
 from datetime import datetime, timedelta
 
@@ -190,3 +189,77 @@ class CartographieRisqueFonctionForm(FlaskForm):
     
     annee = IntegerField('Année', validators=[DataRequired()], default=datetime.now().year)
     submit = SubmitField('Enregistrer')
+
+
+# ============================================
+# FORMULAIRES POUR LE MODULE QUALITÉ ULTRA-PREMIUM
+# ============================================
+
+# Formulaire pour les non-conformités
+class NonConformiteForm(FlaskForm):
+    titre = StringField('Titre', validators=[DataRequired(), Length(max=200)])
+    description = TextAreaField('Description', validators=[DataRequired()])
+    cause_racine = TextAreaField('Cause racine (5 pourquoi)', validators=[Optional()])
+    gravite = SelectField('Gravité', choices=[
+        ('mineure', 'Mineure'),
+        ('majeure', 'Majeure'),
+        ('critique', 'Critique')
+    ], default='majeure')
+    action_immediate = TextAreaField('Action immédiate', validators=[Optional()])
+    action_corrective = TextAreaField('Action corrective', validators=[Optional()])
+    action_preventive = TextAreaField('Action préventive', validators=[Optional()])
+    responsable_id = SelectField('Responsable', coerce=int, choices=[], validators=[Optional()])
+    submit = SubmitField('Enregistrer')
+
+
+# Formulaire pour les audits qualité
+class AuditQualiteForm(FlaskForm):
+    titre = StringField('Titre de l\'audit', validators=[DataRequired(), Length(max=200)])
+    perimetre = TextAreaField('Périmètre', validators=[Optional()])
+    criteres = TextAreaField('Critères d\'audit', validators=[Optional()])
+    auditeur_principal_id = SelectField('Auditeur principal', coerce=int, choices=[], validators=[Optional()])
+    date_prevue = DateField('Date prévue', validators=[DataRequired()])
+    submit = SubmitField('Planifier')
+
+
+# Formulaire pour les formations
+class FormationQualiteForm(FlaskForm):
+    intitule = StringField('Intitulé de la formation', validators=[DataRequired(), Length(max=200)])
+    description = TextAreaField('Description', validators=[Optional()])
+    formateur = StringField('Formateur', validators=[Optional(), Length(max=200)])
+    duree_heures = IntegerField('Durée (heures)', validators=[Optional()])
+    date_formation = DateField('Date de la formation', validators=[Optional()])
+    submit = SubmitField('Ajouter')
+
+
+# Formulaire pour les réunions (CORRIGÉ - remplacement de DateTimeField par StringField)
+class ReunionQualiteForm(FlaskForm):
+    titre = StringField('Titre de la réunion', validators=[DataRequired(), Length(max=200)])
+    type_reunion = SelectField('Type de réunion', choices=[
+        ('revue_direction', 'Revue de direction'),
+        ('comite_qualite', 'Comité qualité'),
+        ('copil', 'COPIL'),
+        ('audit', 'Audit')
+    ], default='revue_direction')
+    date_reunion = StringField('Date et heure (format: YYYY-MM-DD HH:MM)', validators=[DataRequired()], 
+                               default=datetime.now().strftime('%Y-%m-%d %H:%M'))
+    duree_minutes = IntegerField('Durée (minutes)', validators=[Optional()])
+    lieu = StringField('Lieu', validators=[Optional(), Length(max=200)])
+    animateur_id = SelectField('Animateur', coerce=int, choices=[], validators=[Optional()])
+    ordre_jour = TextAreaField('Ordre du jour (un élément par ligne)', validators=[Optional()])
+    submit = SubmitField('Planifier')
+
+
+# Formulaire de filtrage pour la cartographie
+class FiltreCartographieRisqueForm(FlaskForm):
+    pole = SelectField('Pôle', choices=[], validators=[Optional()])
+    direction = SelectField('Direction', choices=[], validators=[Optional()])
+    niveau = SelectField('Niveau de risque', choices=[
+        ('', 'Tous'),
+        ('Faible', 'Faible'),
+        ('Moyen', 'Moyen'),
+        ('Élevé', 'Élevé'),
+        ('Critique', 'Critique')
+    ], validators=[Optional()])
+    annee = SelectField('Année', choices=[], validators=[Optional()])
+    submit = SubmitField('Filtrer')
