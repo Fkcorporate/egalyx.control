@@ -2,6 +2,66 @@
 
 {% block title %}{{ action }} un audit qualité - {{ plan.reference }}{% endblock %}
 
+{% block styles %}
+{{ super() }}
+<style>
+    .section-card {
+        border: 1px solid #e2e8f0;
+        border-radius: 12px;
+        margin-bottom: 1.5rem;
+        overflow: hidden;
+    }
+    .section-header {
+        background: #f8fafc;
+        padding: 0.75rem 1.25rem;
+        border-bottom: 1px solid #e2e8f0;
+        font-weight: 600;
+    }
+    .member-tag {
+        display: inline-flex;
+        align-items: center;
+        background: #e9ecef;
+        border-radius: 50px;
+        padding: 0.25rem 0.75rem;
+        margin: 0.25rem;
+        font-size: 0.85rem;
+    }
+    .member-tag .remove-member {
+        cursor: pointer;
+        margin-left: 0.5rem;
+        color: #dc3545;
+        font-size: 0.75rem;
+    }
+    .members-list {
+        min-height: 80px;
+        border: 1px dashed #dee2e6;
+        border-radius: 8px;
+        padding: 0.5rem;
+        margin-top: 0.5rem;
+    }
+    .input-group-custom {
+        display: flex;
+        gap: 0.5rem;
+        margin-bottom: 0.5rem;
+    }
+    .rec-item {
+        display: inline-flex;
+        align-items: center;
+        background: #e9ecef;
+        border-radius: 50px;
+        padding: 0.25rem 0.75rem;
+        margin: 0.25rem;
+        font-size: 0.85rem;
+    }
+    .rec-item .remove-rec {
+        cursor: pointer;
+        margin-left: 0.5rem;
+        color: #dc3545;
+        font-size: 0.75rem;
+    }
+</style>
+{% endblock %}
+
 {% block content %}
 <div class="container-fluid px-4">
     <div class="row mb-4">
@@ -24,53 +84,337 @@
 
     <div class="card shadow-sm">
         <div class="card-body">
-            <form method="POST">
+            <form method="POST" id="auditForm">
                 {{ form.csrf_token }}
                 
-                <div class="row">
-                    <div class="col-md-12 mb-3">
-                        {{ form.titre.label(class="form-label") }}
-                        {{ form.titre(class="form-control") }}
-                        {% if form.titre.errors %}
-                            <div class="text-danger small">{{ form.titre.errors[0] }}</div>
-                        {% endif %}
+                <!-- Section 1: Informations générales -->
+                <div class="section-card">
+                    <div class="section-header">
+                        <i class="fas fa-info-circle me-2 text-primary"></i>Informations générales
+                    </div>
+                    <div class="p-3">
+                        <div class="row">
+                            <div class="col-md-12 mb-3">
+                                {{ form.titre.label(class="form-label") }}
+                                {{ form.titre(class="form-control", placeholder="Ex: Audit qualité Q1 2024") }}
+                                {% if form.titre.errors %}
+                                    <div class="text-danger small">{{ form.titre.errors[0] }}</div>
+                                {% endif %}
+                            </div>
+                        </div>
+                        
+                        <div class="row">
+                            <div class="col-md-12 mb-3">
+                                {{ form.perimetre.label(class="form-label") }}
+                                {{ form.perimetre(class="form-control", rows=3, placeholder="Décrivez le périmètre de l'audit (processus, services, périmètre géographique...)") }}
+                                <small class="text-muted">Définissez clairement ce qui sera audité</small>
+                            </div>
+                        </div>
+                        
+                        <div class="row">
+                            <div class="col-md-12 mb-3">
+                                {{ form.criteres.label(class="form-label") }}
+                                {{ form.criteres(class="form-control", rows=3, placeholder="Critères d'audit (normes, référentiels, exigences réglementaires...)") }}
+                                <small class="text-muted">ISO 9001, normes internes, exigences clients...</small>
+                            </div>
+                        </div>
                     </div>
                 </div>
                 
-                <div class="row">
-                    <div class="col-md-12 mb-3">
-                        {{ form.perimetre.label(class="form-label") }}
-                        {{ form.perimetre(class="form-control", rows=3) }}
-                        <small class="text-muted">Décrivez le périmètre de l'audit (processus, services, périmètre géographique...)</small>
+                <!-- Section 2: Planification -->
+                <div class="section-card">
+                    <div class="section-header">
+                        <i class="fas fa-calendar-alt me-2 text-success"></i>Planification
+                    </div>
+                    <div class="p-3">
+                        <div class="row">
+                            <div class="col-md-6 mb-3">
+                                {{ form.auditeur_principal_id.label(class="form-label") }}
+                                {{ form.auditeur_principal_id(class="form-select") }}
+                                <small class="text-muted">Auditeur responsable de la mission</small>
+                            </div>
+                            <div class="col-md-6 mb-3">
+                                {{ form.date_prevue.label(class="form-label") }}
+                                {{ form.date_prevue(class="form-control", type="date") }}
+                                <small class="text-muted">Date prévue pour l'audit</small>
+                            </div>
+                        </div>
+                        
+                        <div class="row">
+                            <div class="col-md-6 mb-3">
+                                <label class="form-label">Date de début réelle</label>
+                                <input type="date" name="date_debut" class="form-control" value="{{ audit.date_debut.strftime('%Y-%m-%d') if audit and audit.date_debut else '' }}">
+                            </div>
+                            <div class="col-md-6 mb-3">
+                                <label class="form-label">Date de fin réelle</label>
+                                <input type="date" name="date_fin" class="form-control" value="{{ audit.date_fin.strftime('%Y-%m-%d') if audit and audit.date_fin else '' }}">
+                            </div>
+                        </div>
+                        
+                        <div class="row">
+                            <div class="col-md-6 mb-3">
+                                <label class="form-label">Statut</label>
+                                <select name="statut" class="form-select">
+                                    <option value="planifie" {% if audit and audit.statut == 'planifie' %}selected{% endif %}>📅 Planifié</option>
+                                    <option value="en_cours" {% if audit and audit.statut == 'en_cours' %}selected{% endif %}>🔄 En cours</option>
+                                    <option value="realise" {% if audit and audit.statut == 'realise' %}selected{% endif %}>✅ Réalisé</option>
+                                    <option value="annule" {% if audit and audit.statut == 'annule' %}selected{% endif %}>❌ Annulé</option>
+                                </select>
+                            </div>
+                            <div class="col-md-6 mb-3">
+                                <label class="form-label">Date de réalisation</label>
+                                <input type="date" name="date_realise" class="form-control" value="{{ audit.date_realise.strftime('%Y-%m-%d') if audit and audit.date_realise else '' }}">
+                            </div>
+                        </div>
                     </div>
                 </div>
                 
-                <div class="row">
-                    <div class="col-md-12 mb-3">
-                        {{ form.criteres.label(class="form-label") }}
-                        {{ form.criteres(class="form-control", rows=3) }}
-                        <small class="text-muted">Critères d'audit (normes, référentiels, exigences réglementaires...)</small>
+                <!-- Section 3: Équipe d'audit -->
+                <div class="section-card">
+                    <div class="section-header">
+                        <i class="fas fa-users me-2 text-info"></i>Équipe d'audit
+                    </div>
+                    <div class="p-3">
+                        <div class="input-group-custom">
+                            <input type="text" id="membreInput" class="form-control" placeholder="Nom du membre de l'équipe">
+                            <button type="button" class="btn btn-info" id="addMembreBtn">
+                                <i class="fas fa-plus me-1"></i>Ajouter
+                            </button>
+                        </div>
+                        <div id="equipeContainer" class="members-list">
+                            <!-- Les membres seront affichés ici -->
+                        </div>
+                        <input type="hidden" name="equipe_audit_json" id="equipeAuditJson" value='{{ audit.equipe_audit|tojson if audit and audit.equipe_audit else "[]" }}'>
+                        <small class="text-muted">Cliquez sur un nom pour le retirer</small>
                     </div>
                 </div>
                 
-                <div class="row">
-                    <div class="col-md-6 mb-3">
-                        {{ form.auditeur_principal_id.label(class="form-label") }}
-                        {{ form.auditeur_principal_id(class="form-select") }}
+                <!-- Section 4: Résultats -->
+                <div class="section-card">
+                    <div class="section-header">
+                        <i class="fas fa-chart-line me-2 text-warning"></i>Résultats de l'audit
                     </div>
-                    <div class="col-md-6 mb-3">
-                        {{ form.date_prevue.label(class="form-label") }}
-                        {{ form.date_prevue(class="form-control", type="date") }}
+                    <div class="p-3">
+                        <div class="row">
+                            <div class="col-md-4 mb-3">
+                                <label class="form-label">Taux de conformité (%)</label>
+                                <div class="input-group">
+                                    <input type="range" name="taux_conformite" id="tauxConformite" class="form-range" min="0" max="100" step="5" value="{{ audit.taux_conformite if audit and audit.taux_conformite else 0 }}">
+                                    <span class="input-group-text" id="tauxValue">{{ audit.taux_conformite if audit and audit.taux_conformite else 0 }}%</span>
+                                </div>
+                            </div>
+                            <div class="col-md-4 mb-3">
+                                <label class="form-label">Nombre d'observations</label>
+                                <input type="number" name="nb_observations" class="form-control" value="{{ audit.nb_observations if audit and audit.nb_observations else 0 }}" min="0">
+                            </div>
+                            <div class="col-md-4 mb-3">
+                                <label class="form-label">Points forts</label>
+                                <input type="number" name="nb_points_forts" class="form-control" value="{{ audit.nb_points_forts if audit and audit.nb_points_forts else 0 }}" min="0">
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- Section 5: Recommandations -->
+                <div class="section-card">
+                    <div class="section-header">
+                        <i class="fas fa-lightbulb me-2 text-warning"></i>Recommandations
+                    </div>
+                    <div class="p-3">
+                        <div class="input-group-custom">
+                            <input type="text" id="recommandationInput" class="form-control" placeholder="Recommandation">
+                            <button type="button" class="btn btn-warning" id="addRecommandationBtn">
+                                <i class="fas fa-plus me-1"></i>Ajouter
+                            </button>
+                        </div>
+                        <div id="recommandationsContainer" class="members-list">
+                            <!-- Les recommandations seront affichées ici -->
+                        </div>
+                        <input type="hidden" name="recommandations_json" id="recommandationsJson" value='{{ audit.recommandations|tojson if audit and audit.recommandations else "[]" }}'>
+                        <small class="text-muted">Cliquez sur une recommandation pour la supprimer</small>
+                    </div>
+                </div>
+                
+                <!-- Section 6: Conclusion -->
+                <div class="section-card">
+                    <div class="section-header">
+                        <i class="fas fa-file-alt me-2 text-primary"></i>Conclusion
+                    </div>
+                    <div class="p-3">
+                        {{ form.conclusion.label(class="form-label") }}
+                        {{ form.conclusion(class="form-control", rows=5, placeholder="Rédigez ici la conclusion de l'audit...") }}
                     </div>
                 </div>
                 
                 <hr>
                 <div class="d-flex justify-content-between">
-                    <a href="{{ url_for('liste_audits_qualite', plan_id=plan.id) }}" class="btn btn-secondary">Annuler</a>
-                    {{ form.submit(class="btn btn-primary") }}
+                    <a href="{{ url_for('liste_audits_qualite', plan_id=plan.id) }}" class="btn btn-secondary">
+                        <i class="fas fa-arrow-left me-1"></i>Annuler
+                    </a>
+                    <button type="submit" class="btn btn-primary">
+                        <i class="fas fa-save me-1"></i>{{ 'Mettre à jour' if action == 'Modifier' else 'Créer' }}
+                    </button>
                 </div>
             </form>
         </div>
     </div>
 </div>
+
+<script>
+// Gestion de l'équipe d'audit
+let equipeAudit = [];
+
+// Gestion des recommandations
+let recommandations = [];
+
+// Charger les données existantes
+function loadExistingData() {
+    const equipeJson = document.getElementById('equipeAuditJson').value;
+    if (equipeJson && equipeJson !== '[]') {
+        try {
+            equipeAudit = JSON.parse(equipeJson);
+        } catch(e) { equipeAudit = []; }
+    }
+    
+    const recJson = document.getElementById('recommandationsJson').value;
+    if (recJson && recJson !== '[]') {
+        try {
+            recommandations = JSON.parse(recJson);
+        } catch(e) { recommandations = []; }
+    }
+    
+    renderEquipe();
+    renderRecommandations();
+}
+
+// Rendre l'équipe
+function renderEquipe() {
+    const container = document.getElementById('equipeContainer');
+    if (!container) return;
+    
+    container.innerHTML = '';
+    equipeAudit.forEach((m, index) => {
+        const tag = document.createElement('div');
+        tag.className = 'member-tag';
+        tag.innerHTML = `
+            <i class="fas fa-user-check me-1 text-success"></i>
+            ${escapeHtml(m)}
+            <span class="remove-member" data-index="${index}">
+                <i class="fas fa-times-circle"></i>
+            </span>
+        `;
+        container.appendChild(tag);
+    });
+    
+    document.querySelectorAll('#equipeContainer .remove-member').forEach(el => {
+        el.addEventListener('click', function() {
+            const index = parseInt(this.dataset.index);
+            equipeAudit.splice(index, 1);
+            renderEquipe();
+            updateEquipeJson();
+        });
+    });
+}
+
+// Rendre les recommandations
+function renderRecommandations() {
+    const container = document.getElementById('recommandationsContainer');
+    if (!container) return;
+    
+    container.innerHTML = '';
+    recommandations.forEach((rec, index) => {
+        const tag = document.createElement('div');
+        tag.className = 'rec-item';
+        tag.innerHTML = `
+            <i class="fas fa-lightbulb me-1 text-warning"></i>
+            ${escapeHtml(rec)}
+            <span class="remove-rec" data-index="${index}">
+                <i class="fas fa-times-circle"></i>
+            </span>
+        `;
+        container.appendChild(tag);
+    });
+    
+    document.querySelectorAll('#recommandationsContainer .remove-rec').forEach(el => {
+        el.addEventListener('click', function() {
+            const index = parseInt(this.dataset.index);
+            recommandations.splice(index, 1);
+            renderRecommandations();
+            updateRecommandationsJson();
+        });
+    });
+}
+
+function updateEquipeJson() {
+    document.getElementById('equipeAuditJson').value = JSON.stringify(equipeAudit);
+}
+
+function updateRecommandationsJson() {
+    document.getElementById('recommandationsJson').value = JSON.stringify(recommandations);
+}
+
+// Ajouter un membre
+document.getElementById('addMembreBtn')?.addEventListener('click', function() {
+    const input = document.getElementById('membreInput');
+    const nom = input.value.trim();
+    if (nom) {
+        equipeAudit.push(nom);
+        renderEquipe();
+        updateEquipeJson();
+        input.value = '';
+    }
+});
+
+// Ajouter une recommandation
+document.getElementById('addRecommandationBtn')?.addEventListener('click', function() {
+    const input = document.getElementById('recommandationInput');
+    const rec = input.value.trim();
+    if (rec) {
+        recommandations.push(rec);
+        renderRecommandations();
+        updateRecommandationsJson();
+        input.value = '';
+    }
+});
+
+// Slider taux de conformité
+document.getElementById('tauxConformite')?.addEventListener('input', function() {
+    document.getElementById('tauxValue').innerText = this.value + '%';
+});
+
+// Enter key support
+document.getElementById('membreInput')?.addEventListener('keypress', function(e) {
+    if (e.key === 'Enter') {
+        e.preventDefault();
+        document.getElementById('addMembreBtn').click();
+    }
+});
+
+document.getElementById('recommandationInput')?.addEventListener('keypress', function(e) {
+    if (e.key === 'Enter') {
+        e.preventDefault();
+        document.getElementById('addRecommandationBtn').click();
+    }
+});
+
+function escapeHtml(text) {
+    if (!text) return '';
+    const div = document.createElement('div');
+    div.textContent = text;
+    return div.innerHTML;
+}
+
+// Initialiser
+document.addEventListener('DOMContentLoaded', function() {
+    loadExistingData();
+    
+    const form = document.getElementById('auditForm');
+    if (form) {
+        form.addEventListener('submit', function() {
+            updateEquipeJson();
+            updateRecommandationsJson();
+        });
+    }
+});
+</script>
 {% endblock %}
