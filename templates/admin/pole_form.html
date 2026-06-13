@@ -34,6 +34,34 @@
                         {% endfor %}
                     </div>
                     
+                    <!-- 🔴 NOUVEAU: Sélection du pays -->
+                    <div class="mb-3">
+                        <label class="form-label fw-bold">
+                            <i class="fas fa-globe text-primary me-2"></i>
+                            Pays / Région
+                        </label>
+                        <select class="form-select" name="pays_id" id="pays_id">
+                            <option value="0">--- Aucun pays ---</option>
+                            {% if pays_list %}
+                                {% for pays in pays_list %}
+                                <option value="{{ pays.id }}" 
+                                        {% if form.pays_id.data == pays.id %}selected{% endif %}>
+                                    {{ pays.drapeau or '🌍' }} {{ pays.nom }} ({{ pays.code }})
+                                </option>
+                                {% endfor %}
+                            {% endif %}
+                        </select>
+                        <small class="form-text text-muted">
+                            <i class="fas fa-info-circle me-1"></i>
+                            Rattachez ce pôle à un pays pour l'organisation géographique
+                        </small>
+                        {% if form.pays_id is defined %}
+                            {% for error in form.pays_id.errors %}
+                            <div class="text-danger">{{ error }}</div>
+                            {% endfor %}
+                        {% endif %}
+                    </div>
+                    
                     <div class="mb-3">
                         {{ form.couleur.label(class="form-label fw-bold") }}
                         <div class="input-group">
@@ -105,7 +133,31 @@
                         {% endfor %}
                     </div>
                     
-                    <div class="d-grid gap-2 d-md-flex justify-content-md-end">
+                    <!-- Aperçu -->
+                    <div class="card bg-light mt-3">
+                        <div class="card-body">
+                            <h6 class="fw-bold mb-2">
+                                <i class="fas fa-eye me-2"></i>Aperçu
+                            </h6>
+                            <div class="d-flex align-items-center flex-wrap gap-2" id="apercuPole">
+                                <span class="badge" id="apercuCouleur" style="background-color: {{ form.couleur.data or '#3b82f6' }};">
+                                    <i class="fas fa-layer-group me-1"></i>
+                                    <span id="apercuNom">{{ form.nom.data or 'Nom du pôle' }}</span>
+                                </span>
+                                <span id="apercuPays" class="text-muted">
+                                    {% if form.pays_id.data and form.pays_id.data != 0 and pays_list %}
+                                    {% set pays_selected = pays_list|selectattr('id', 'equalto', form.pays_id.data)|first %}
+                                    {% if pays_selected %}
+                                    <i class="fas fa-globe me-1"></i>
+                                    {{ pays_selected.drapeau or '🌍' }} {{ pays_selected.nom }}
+                                    {% endif %}
+                                    {% endif %}
+                                </span>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="d-grid gap-2 d-md-flex justify-content-md-end mt-4">
                         <a href="{{ url_for('admin_poles') }}" class="btn btn-secondary me-md-2">
                             <i class="fas fa-arrow-left"></i> Annuler
                         </a>
@@ -127,28 +179,54 @@
                 <p><strong>Qu'est-ce qu'un pôle ?</strong></p>
                 <p>Un pôle (ou filiale) est une entité qui regroupe plusieurs directions.</p>
                 
+                <p><strong>Organisation par pays :</strong></p>
+                <p>Vous pouvez maintenant rattacher chaque pôle à un pays pour une organisation géographique claire.</p>
+                
                 <p><strong>Exemple :</strong></p>
                 <ul>
-                    <li><strong>Pôle Finance</strong>
+                    <li><strong>France 🇫🇷</strong>
                         <ul>
-                            <li>Direction Financière</li>
-                            <li>Direction Comptable</li>
-                            <li>Direction du Contrôle de Gestion</li>
+                            <li>Pôle Finance France</li>
+                            <li>Pôle Industriel France</li>
                         </ul>
                     </li>
-                    <li><strong>Pôle Industriel</strong>
+                    <li><strong>Belgique 🇧🇪</strong>
                         <ul>
-                            <li>Direction Production</li>
-                            <li>Direction Logistique</li>
-                            <li>Direction Maintenance</li>
+                            <li>Pôle Finance Belgique</li>
+                            <li>Pôle Commercial Belgique</li>
                         </ul>
                     </li>
                 </ul>
                 
                 <div class="alert alert-primary mt-3">
                     <i class="fas fa-lightbulb me-2"></i>
-                    <strong>Astuce :</strong> Les pôles sont optionnels. Si votre organisation est petite, vous pouvez vous passer de cette hiérarchie.
+                    <strong>Astuce :</strong> Les pôles peuvent être rattachés à des pays ou rester sans pays selon votre organisation.
                 </div>
+                
+                <!-- Liste des pays existants -->
+                {% if pays_list %}
+                <div class="mt-3">
+                    <h6 class="fw-bold">Pays disponibles :</h6>
+                    <div class="list-group small">
+                        {% for pays in pays_list[:5] %}
+                        <div class="list-group-item d-flex justify-content-between align-items-center">
+                            <span>
+                                {{ pays.drapeau or '🌍' }} {{ pays.nom }}
+                                <span class="text-muted">({{ pays.code }})</span>
+                            </span>
+                            <span class="badge bg-secondary">{{ pays.poles|length }} pôle(s)</span>
+                        </div>
+                        {% endfor %}
+                        {% if pays_list|length > 5 %}
+                        <div class="text-center mt-2">
+                            <a href="{{ url_for('admin_pays') }}" class="small">
+                                Voir tous les pays ({{ pays_list|length }})
+                            </a>
+                        </div>
+                        {% endif %}
+                    </div>
+                </div>
+                {% endif %}
             </div>
         </div>
     </div>
@@ -161,26 +239,32 @@ function toggleResponsableType() {
     const zoneManuel = document.getElementById('zone_manuel');
     
     if (typeUtilisateur) {
-        zoneUtilisateur.style.display = 'block';
-        zoneManuel.style.display = 'none';
-        document.getElementById('responsable_nom_manuel').value = '';
+        if (zoneUtilisateur) zoneUtilisateur.style.display = 'block';
+        if (zoneManuel) zoneManuel.style.display = 'none';
+        if (document.getElementById('responsable_nom_manuel')) {
+            document.getElementById('responsable_nom_manuel').value = '';
+        }
     } else {
-        zoneUtilisateur.style.display = 'none';
-        zoneManuel.style.display = 'block';
-        document.getElementById('responsable_id').value = '0';
+        if (zoneUtilisateur) zoneUtilisateur.style.display = 'none';
+        if (zoneManuel) zoneManuel.style.display = 'block';
+        if (document.getElementById('responsable_id')) {
+            document.getElementById('responsable_id').value = '0';
+        }
     }
 }
 
-// Gestion de la couleur
+// Gestion de la couleur et de l'aperçu
 document.addEventListener('DOMContentLoaded', function() {
     toggleResponsableType();
     
     const colorInput = document.querySelector('input[type="color"]');
     const colorText = document.getElementById('couleur_text');
+    const apercuCouleur = document.getElementById('apercuCouleur');
     
     if (colorInput && colorText) {
         colorInput.addEventListener('input', function(e) {
             colorText.value = e.target.value;
+            if (apercuCouleur) apercuCouleur.style.backgroundColor = e.target.value;
         });
         
         colorText.addEventListener('input', function(e) {
@@ -190,9 +274,94 @@ document.addEventListener('DOMContentLoaded', function() {
             }
             if (/^#[0-9A-F]{6}$/i.test(value)) {
                 colorInput.value = value;
+                if (apercuCouleur) apercuCouleur.style.backgroundColor = value;
             }
         });
     }
+    
+    // Mise à jour de l'aperçu du nom
+    const nomInput = document.querySelector('input[name="nom"]');
+    const apercuNom = document.getElementById('apercuNom');
+    if (nomInput && apercuNom) {
+        nomInput.addEventListener('input', function() {
+            apercuNom.textContent = this.value || 'Nom du pôle';
+        });
+    }
+    
+    // Mise à jour de l'aperçu du pays
+    const paysSelect = document.getElementById('pays_id');
+    const apercuPays = document.getElementById('apercuPays');
+    if (paysSelect && apercuPays) {
+        paysSelect.addEventListener('change', function() {
+            const selectedOption = this.options[this.selectedIndex];
+            if (this.value && this.value != '0') {
+                const drapeau = selectedOption.text.split(' ')[0];
+                const nomPays = selectedOption.text.split(')')[0].split(' ').slice(1).join(' ');
+                apercuPays.innerHTML = `<i class="fas fa-globe me-1"></i>${drapeau} ${nomPays}`;
+                apercuPays.style.display = 'inline';
+            } else {
+                apercuPays.innerHTML = '';
+                apercuPays.style.display = 'none';
+            }
+        });
+        
+        // Déclencher l'aperçu initial
+        paysSelect.dispatchEvent(new Event('change'));
+    }
 });
 </script>
+
+<style>
+/* Styles additionnels */
+.card {
+    border-radius: 12px;
+    overflow: hidden;
+}
+
+.card-header {
+    font-weight: 600;
+}
+
+.btn {
+    border-radius: 8px;
+    font-weight: 500;
+    transition: all 0.2s ease;
+}
+
+.btn-primary {
+    background-color: #3b82f6;
+    border-color: #3b82f6;
+}
+
+.btn-primary:hover {
+    background-color: #2563eb;
+    border-color: #2563eb;
+    transform: translateY(-1px);
+}
+
+.btn-secondary:hover {
+    transform: translateY(-1px);
+}
+
+.form-control:focus {
+    border-color: #3b82f6;
+    box-shadow: 0 0 0 0.2rem rgba(59, 130, 246, 0.25);
+}
+
+#apercuCouleur {
+    transition: background-color 0.2s ease;
+    font-size: 1rem;
+    padding: 0.6rem 1.2rem;
+}
+
+#apercuPays {
+    font-size: 0.9rem;
+    padding: 0.5rem 0;
+}
+
+.list-group-item {
+    padding: 0.5rem 0.75rem;
+    font-size: 0.85rem;
+}
+</style>
 {% endblock %}
