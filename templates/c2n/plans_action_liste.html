@@ -1,0 +1,504 @@
+{% extends "base.html" %}
+
+{% block title %}Plans d'action C2N{% endblock %}
+
+{% block styles %}
+{{ super() }}
+<style>
+    .stat-card {
+        border-radius: 20px;
+        transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+        border: none;
+        overflow: hidden;
+        position: relative;
+        cursor: pointer;
+    }
+    .stat-card::before {
+        content: '';
+        position: absolute;
+        top: 0;
+        left: 0;
+        right: 0;
+        height: 4px;
+        background: linear-gradient(90deg, var(--fk-accent), #10b981);
+    }
+    .stat-card:hover {
+        transform: translateY(-4px);
+        box-shadow: 0 12px 28px rgba(0,0,0,0.12);
+    }
+    .stat-value { font-size: 32px; font-weight: 800; }
+    .filter-bar {
+        background: white;
+        border-radius: 16px;
+        padding: 0.75rem 1.25rem;
+        box-shadow: 0 1px 3px rgba(0,0,0,0.05);
+    }
+    [data-bs-theme="dark"] .filter-bar { background: #1e293b; }
+    
+    .plan-card {
+        background: white;
+        border-radius: 16px;
+        padding: 1rem;
+        margin-bottom: 1rem;
+        border-left: 4px solid;
+        box-shadow: 0 1px 3px rgba(0,0,0,0.05);
+        transition: all 0.2s ease;
+        cursor: pointer;
+    }
+    [data-bs-theme="dark"] .plan-card { background: #1e293b; }
+    .plan-card:hover { transform: translateX(4px); box-shadow: 0 4px 12px rgba(0,0,0,0.1); }
+    .plan-card.haute { border-left-color: #dc2626; }
+    .plan-card.moyenne { border-left-color: #f59e0b; }
+    .plan-card.basse { border-left-color: #10b981; }
+    .plan-card.retard { background: #fef2f2; }
+    .plan-card.archive { opacity: 0.7; background: #f1f5f9; }
+    [data-bs-theme="dark"] .plan-card.archive { background: #1e293b; opacity: 0.7; }
+    
+    .progress-custom { height: 6px; border-radius: 10px; background: #e2e8f0; overflow: hidden; }
+    .progress-custom-bar { height: 100%; border-radius: 10px; transition: width 0.3s ease; }
+    
+    .badge-statut {
+        padding: 4px 12px;
+        border-radius: 30px;
+        font-size: 0.7rem;
+        font-weight: 600;
+    }
+    .badge-statut.a_faire { background: #6c757d; color: white; }
+    .badge-statut.en_cours { background: #f59e0b; color: white; }
+    .badge-statut.terminee { background: #10b981; color: white; }
+    .badge-statut.bloquee { background: #dc2626; color: white; }
+    .badge-statut.annulee { background: #4a5568; color: white; }
+    
+    .source-badge {
+        padding: 2px 8px;
+        border-radius: 20px;
+        font-size: 0.6rem;
+        font-weight: 500;
+    }
+    .source-nc { background: #fee2e2; color: #dc2626; }
+    .source-reco { background: #e0f2fe; color: #0284c7; }
+    .source-direct { background: #e2e8f0; color: #475569; }
+    
+    .action-buttons-card {
+        display: flex;
+        gap: 8px;
+        opacity: 0;
+        transition: all 0.2s ease;
+    }
+    .plan-card:hover .action-buttons-card {
+        opacity: 1;
+    }
+    .btn-icon-sm {
+        width: 32px;
+        height: 32px;
+        padding: 0;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        border-radius: 10px;
+    }
+    
+    .empty-state { padding: 3rem 1rem; text-align: center; }
+    .empty-state-icon {
+        width: 80px;
+        height: 80px;
+        margin: 0 auto 1.5rem;
+        background: #f1f5f9;
+        border-radius: 50%;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 2.5rem;
+        color: #94a3b8;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="container-fluid px-4">
+    
+    <!-- En-tête -->
+    <div class="d-flex flex-wrap justify-content-between align-items-center mb-4">
+        <div>
+            <h1 class="h2 mb-1 fw-bold">
+                <i class="fas fa-tasks me-2" style="color: var(--fk-accent);"></i>
+                Plans d'action
+            </h1>
+            <nav aria-label="breadcrumb">
+                <ol class="breadcrumb mb-0">
+                    <li class="breadcrumb-item"><a href="{{ url_for('c2n_dashboard') }}">Tableau de bord C2N</a></li>
+                    <li class="breadcrumb-item active">Plans d'action</li>
+                </ol>
+            </nav>
+            <p class="text-muted mt-2 mb-0">
+                <i class="fas fa-chart-line me-1"></i>
+                Suivi des actions correctives
+            </p>
+        </div>
+        <div class="mt-2 mt-sm-0">
+            <div class="form-check form-switch">
+                <input class="form-check-input" type="checkbox" id="showArchivedSwitch" {% if show_archived %}checked{% endif %} onchange="toggleArchived()">
+                <label class="form-check-label" for="showArchivedSwitch">
+                    <i class="fas fa-archive me-1"></i>Afficher les archivés
+                </label>
+            </div>
+        </div>
+    </div>
+
+    <!-- Cartes statistiques -->
+    <div class="row g-3 mb-4">
+        <div class="col-sm-6 col-lg-2">
+            <div class="card stat-card h-100" onclick="filtrerPar('')">
+                <div class="card-body">
+                    <div class="d-flex justify-content-between">
+                        <div>
+                            <div class="small">Total</div>
+                            <div class="stat-value text-primary">{{ stats.total|default(0) }}</div>
+                        </div>
+                        <i class="fas fa-list fa-2x opacity-50"></i>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="col-sm-6 col-lg-2">
+            <div class="card stat-card h-100" onclick="filtrerPar('a_faire')">
+                <div class="card-body">
+                    <div class="d-flex justify-content-between">
+                        <div>
+                            <div class="small">À faire</div>
+                            <div class="stat-value text-secondary">{{ stats.a_faire|default(0) }}</div>
+                        </div>
+                        <i class="fas fa-clock fa-2x opacity-50"></i>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="col-sm-6 col-lg-2">
+            <div class="card stat-card h-100" onclick="filtrerPar('en_cours')">
+                <div class="card-body">
+                    <div class="d-flex justify-content-between">
+                        <div>
+                            <div class="small">En cours</div>
+                            <div class="stat-value text-warning">{{ stats.en_cours|default(0) }}</div>
+                        </div>
+                        <i class="fas fa-play-circle fa-2x opacity-50"></i>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="col-sm-6 col-lg-2">
+            <div class="card stat-card h-100" onclick="filtrerPar('terminee')">
+                <div class="card-body">
+                    <div class="d-flex justify-content-between">
+                        <div>
+                            <div class="small">Terminés</div>
+                            <div class="stat-value text-success">{{ stats.termines|default(0) }}</div>
+                        </div>
+                        <i class="fas fa-check-double fa-2x opacity-50"></i>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="col-sm-6 col-lg-2">
+            <div class="card stat-card h-100" onclick="filtrerPar('en_retard')">
+                <div class="card-body">
+                    <div class="d-flex justify-content-between">
+                        <div>
+                            <div class="small">En retard</div>
+                            <div class="stat-value text-danger">{{ stats.en_retard|default(0) }}</div>
+                        </div>
+                        <i class="fas fa-exclamation-triangle fa-2x opacity-50"></i>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="col-sm-6 col-lg-2">
+            <div class="card stat-card h-100">
+                <div class="card-body">
+                    <div class="d-flex justify-content-between">
+                        <div>
+                            <div class="small">Taux complétion</div>
+                            <div class="stat-value text-info">
+                                {% if stats.total > 0 %}
+                                    {{ ((stats.termines|default(0) / stats.total) * 100)|round|int }}%
+                                {% else %}0%{% endif %}
+                            </div>
+                        </div>
+                        <i class="fas fa-chart-line fa-2x opacity-50"></i>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Barre de filtres -->
+    <div class="filter-bar mb-4">
+        <form method="GET" class="row g-3">
+            <input type="hidden" name="show_archived" id="showArchivedInput" value="{{ 'true' if show_archived else 'false' }}">
+            <div class="col-md-3">
+                <select name="statut" class="form-select" onchange="this.form.submit()">
+                    <option value="">Tous les statuts</option>
+                    <option value="a_faire" {% if request.args.get('statut') == 'a_faire' %}selected{% endif %}>📋 À faire</option>
+                    <option value="en_cours" {% if request.args.get('statut') == 'en_cours' %}selected{% endif %}>▶️ En cours</option>
+                    <option value="terminee" {% if request.args.get('statut') == 'terminee' %}selected{% endif %}>✅ Terminé</option>
+                    <option value="bloquee" {% if request.args.get('statut') == 'bloquee' %}selected{% endif %}>⚠️ Bloqué</option>
+                    <option value="annulee" {% if request.args.get('statut') == 'annulee' %}selected{% endif %}>❌ Annulé</option>
+                </select>
+            </div>
+            <div class="col-md-3">
+                <select name="priorite" class="form-select" onchange="this.form.submit()">
+                    <option value="">Toutes priorités</option>
+                    <option value="haute" {% if request.args.get('priorite') == 'haute' %}selected{% endif %}>🔴 Haute</option>
+                    <option value="moyenne" {% if request.args.get('priorite') == 'moyenne' %}selected{% endif %}>🟡 Moyenne</option>
+                    <option value="basse" {% if request.args.get('priorite') == 'basse' %}selected{% endif %}>🟢 Basse</option>
+                </select>
+            </div>
+            <div class="col-md-4">
+                <input type="text" name="recherche" class="form-control" placeholder="Référence, action, responsable..." value="{{ request.args.get('recherche', '') }}">
+            </div>
+            <div class="col-md-2">
+                <button type="submit" class="btn btn-primary w-100">Filtrer</button>
+            </div>
+        </form>
+    </div>
+
+    <!-- Liste des plans d'action -->
+    {% if plans %}
+        {% for plan in plans %}
+        {% set est_retard = plan.date_echeance and plan.date_echeance < now.date() and plan.statut not in ['terminee', 'annulee'] and not plan.is_archived %}
+        <div class="plan-card {{ plan.priorite }} {% if est_retard %}retard{% endif %} {% if plan.is_archived %}archive{% endif %}" 
+             onclick="if(event.target.closest('.action-buttons-card')) return; window.location.href='{{ url_for('c2n_detail_plan_action', id=plan.id) }}'">
+            <div class="row align-items-center">
+                <div class="col-md-5">
+                    <div class="d-flex gap-2 mb-2 flex-wrap">
+                        <span class="badge-statut {{ plan.statut }}">
+                            {{ plan.get_statut_label() }}
+                        </span>
+                        <span class="source-badge 
+                            {% if plan.non_conformite_id %}source-nc
+                            {% elif plan.recommandation_id %}source-reco
+                            {% else %}source-direct{% endif %}">
+                            {% if plan.non_conformite_id %}
+                            📋 Non-conformité
+                            {% elif plan.recommandation_id %}
+                            💡 Recommandation
+                            {% else %}
+                            ➕ Direct
+                            {% endif %}
+                        </span>
+                        {% if plan.is_archived %}
+                        <span class="badge bg-secondary">
+                            <i class="fas fa-archive me-1"></i>Archivé
+                        </span>
+                        {% endif %}
+                    </div>
+                    <div class="fw-semibold">{{ plan.action_corrective|truncate(80) }}</div>
+                    <div class="small text-muted mt-1">
+                        <i class="fas fa-tag me-1"></i>
+                        <code>{{ plan.reference }}</code>
+                        <i class="fas fa-calendar ms-2 me-1"></i>
+                        {{ plan.created_at.strftime('%d/%m/%Y') }}
+                    </div>
+                </div>
+                <div class="col-md-3">
+                    <div class="small text-muted">Responsable</div>
+                    <div class="fw-semibold">
+                        {% if plan.responsable %}
+                        <i class="fas fa-user-circle me-1"></i>{{ plan.responsable.username }}
+                        {% else %}
+                        <span class="text-muted">Non assigné</span>
+                        {% endif %}
+                    </div>
+                    <div class="small text-muted mt-2">Priorité</div>
+                    <div>
+                        {% if plan.priorite == 'haute' %}
+                        <span class="badge bg-danger">🔴 Haute</span>
+                        {% elif plan.priorite == 'moyenne' %}
+                        <span class="badge bg-warning">🟡 Moyenne</span>
+                        {% else %}
+                        <span class="badge bg-success">🟢 Basse</span>
+                        {% endif %}
+                    </div>
+                </div>
+                <div class="col-md-2">
+                    <div class="small text-muted">Échéance</div>
+                    <div class="fw-semibold {% if est_retard %}text-danger{% endif %}">
+                        {% if plan.date_echeance %}
+                            {{ plan.date_echeance.strftime('%d/%m/%Y') }}
+                            {% if est_retard %}
+                            <i class="fas fa-exclamation-triangle ms-1"></i>
+                            {% endif %}
+                        {% else %}
+                            <span class="text-muted">Non définie</span>
+                        {% endif %}
+                    </div>
+                    <div class="mt-2">
+                        <div class="d-flex align-items-center gap-2">
+                            <div class="progress-custom flex-grow-1">
+                                <div class="progress-custom-bar bg-success" style="width: {{ plan.taux_avancement }}%"></div>
+                            </div>
+                            <span class="small fw-semibold">{{ plan.taux_avancement }}%</span>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-md-2 text-end">
+                    <div class="action-buttons-card" onclick="event.stopPropagation()">
+                        {% if not plan.is_archived %}
+                            <button class="btn btn-sm btn-outline-primary btn-icon-sm" onclick="archiverPlan({{ plan.id }})" title="Archiver">
+                                <i class="fas fa-archive"></i>
+                            </button>
+                        {% else %}
+                            <button class="btn btn-sm btn-outline-success btn-icon-sm" onclick="restaurerPlan({{ plan.id }})" title="Restaurer">
+                                <i class="fas fa-undo-alt"></i>
+                            </button>
+                            <button class="btn btn-sm btn-outline-danger btn-icon-sm" onclick="supprimerPlan({{ plan.id }})" title="Supprimer définitivement">
+                                <i class="fas fa-trash"></i>
+                            </button>
+                        {% endif %}
+                        <i class="fas fa-chevron-right text-muted ms-2"></i>
+                    </div>
+                </div>
+            </div>
+        </div>
+        {% endfor %}
+        
+        <!-- Pagination -->
+        {% if pagination and pagination.pages > 1 %}
+        <nav class="mt-4">
+            <ul class="pagination justify-content-center">
+                {% if pagination.has_prev %}
+                <li class="page-item">
+                    <a class="page-link" href="{{ url_for('c2n_liste_plans_action', page=pagination.prev_num, statut=request.args.get('statut'), priorite=request.args.get('priorite'), recherche=request.args.get('recherche'), show_archived='true' if show_archived else 'false') }}">
+                        <i class="fas fa-chevron-left"></i> Précédent
+                    </a>
+                </li>
+                {% endif %}
+                
+                {% for page_num in pagination.iter_pages(left_edge=2, left_current=2, right_current=2, right_edge=2) %}
+                    {% if page_num %}
+                        {% if page_num == pagination.page %}
+                        <li class="page-item active"><span class="page-link">{{ page_num }}</span></li>
+                        {% else %}
+                        <li class="page-item">
+                            <a class="page-link" href="{{ url_for('c2n_liste_plans_action', page=page_num, statut=request.args.get('statut'), priorite=request.args.get('priorite'), recherche=request.args.get('recherche'), show_archived='true' if show_archived else 'false') }}">
+                                {{ page_num }}
+                            </a>
+                        </li>
+                        {% endif %}
+                    {% else %}
+                        <li class="page-item disabled"><span class="page-link">...</span></li>
+                    {% endif %}
+                {% endfor %}
+                
+                {% if pagination.has_next %}
+                <li class="page-item">
+                    <a class="page-link" href="{{ url_for('c2n_liste_plans_action', page=pagination.next_num, statut=request.args.get('statut'), priorite=request.args.get('priorite'), recherche=request.args.get('recherche'), show_archived='true' if show_archived else 'false') }}">
+                        Suivant <i class="fas fa-chevron-right"></i>
+                    </a>
+                </li>
+                {% endif %}
+            </ul>
+        </nav>
+        {% endif %}
+        
+    {% else %}
+    <div class="empty-state">
+        <div class="empty-state-icon">
+            <i class="fas fa-tasks"></i>
+        </div>
+        <h6 class="mb-2">Aucun plan d'action trouvé</h6>
+        <p class="text-muted small mb-3">
+            {% if request.args.get('statut') or request.args.get('priorite') %}
+            Aucun résultat ne correspond à vos critères.
+            {% else %}
+            Aucun plan d'action n'a encore été créé.
+            {% endif %}
+        </p>
+    </div>
+    {% endif %}
+</div>
+
+<script>
+function filtrerPar(statut) {
+    const url = new URL(window.location.href);
+    if (statut) {
+        url.searchParams.set('statut', statut);
+    } else {
+        url.searchParams.delete('statut');
+    }
+    window.location.href = url.toString();
+}
+
+function toggleArchived() {
+    const checkbox = document.getElementById('showArchivedSwitch');
+    const input = document.getElementById('showArchivedInput');
+    const url = new URL(window.location.href);
+    
+    if (checkbox.checked) {
+        url.searchParams.set('show_archived', 'true');
+    } else {
+        url.searchParams.delete('show_archived');
+    }
+    window.location.href = url.toString();
+}
+
+async function archiverPlan(planId) {
+    const raison = prompt("Raison de l'archivage (optionnelle):", "");
+    
+    const formData = new FormData();
+    formData.append('raison', raison || '');
+    formData.append('csrf_token', '{{ csrf_token() }}');
+    
+    const response = await fetch(`/c2n/plan-action/${planId}/archiver`, {
+        method: 'POST',
+        body: formData
+    });
+    
+    const data = await response.json();
+    if (data.success) {
+        location.reload();
+        alert(data.message);
+    } else {
+        alert('Erreur: ' + data.error);
+    }
+}
+
+async function restaurerPlan(planId) {
+    if (!confirm('Restaurer ce plan d\'action ?')) return;
+    
+    const response = await fetch(`/c2n/plan-action/${planId}/restaurer`, {
+        method: 'POST',
+        headers: {
+            'X-CSRFToken': '{{ csrf_token() }}'
+        }
+    });
+    
+    const data = await response.json();
+    if (data.success) {
+        location.reload();
+        alert(data.message);
+    } else {
+        alert('Erreur: ' + data.error);
+    }
+}
+
+async function supprimerPlan(planId) {
+    if (!confirm('⚠️ Suppression définitive ! Cette action est irréversible. Confirmer ?')) return;
+    
+    const response = await fetch(`/c2n/plan-action/${planId}/supprimer`, {
+        method: 'DELETE',
+        headers: {
+            'X-CSRFToken': '{{ csrf_token() }}'
+        }
+    });
+    
+    const data = await response.json();
+    if (data.success) {
+        location.reload();
+        alert(data.message);
+    } else {
+        alert('Erreur: ' + data.error);
+    }
+}
+</script>
+{% endblock %}

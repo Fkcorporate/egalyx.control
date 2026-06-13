@@ -1,0 +1,267 @@
+{# templates/c2n/plan_action_form.html #}
+{% extends "base.html" %}
+
+{% block title %}Nouveau plan d'action - C2N{% endblock %}
+
+{% block styles %}
+{{ super() }}
+<style>
+    .form-section {
+        background: #f8fafc;
+        border-radius: 16px;
+        padding: 20px;
+        margin-bottom: 24px;
+    }
+    [data-bs-theme="dark"] .form-section {
+        background: #1e293b;
+    }
+    .section-title {
+        font-size: 1rem;
+        font-weight: 600;
+        margin-bottom: 1rem;
+        padding-bottom: 0.5rem;
+        border-bottom: 2px solid var(--fk-accent);
+        display: inline-block;
+    }
+    .info-badge {
+        background: #e0f2fe;
+        border-radius: 12px;
+        padding: 16px;
+        margin-bottom: 20px;
+    }
+    [data-bs-theme="dark"] .info-badge {
+        background: #0c4a6e;
+    }
+    .priorite-option {
+        padding: 10px;
+        border-radius: 10px;
+        cursor: pointer;
+        transition: all 0.2s ease;
+        border: 2px solid transparent;
+        text-align: center;
+    }
+    .priorite-option:hover {
+        transform: translateY(-2px);
+    }
+    .priorite-option.basse { background: #d1fae5; border-color: #10b981; }
+    .priorite-option.moyenne { background: #fed7aa; border-color: #f59e0b; }
+    .priorite-option.haute { background: #fee2e2; border-color: #dc2626; }
+    [data-bs-theme="dark"] .priorite-option.basse { background: #064e3b; }
+    [data-bs-theme="dark"] .priorite-option.moyenne { background: #78350f; }
+    [data-bs-theme="dark"] .priorite-option.haute { background: #7f1d1d; }
+    .priorite-option input:checked + .priorite-content {
+        font-weight: bold;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <div class="row mb-4">
+        <div class="col">
+            <nav aria-label="breadcrumb">
+                <ol class="breadcrumb">
+                    <li class="breadcrumb-item"><a href="{{ url_for('c2n_liste_planifications') }}">Planification</a></li>
+                    <li class="breadcrumb-item"><a href="{{ url_for('c2n_liste_non_conformites') }}">Non-conformités</a></li>
+                    <li class="breadcrumb-item"><a href="{{ url_for('c2n_detail_non_conformite', id=nc.id) }}">{{ nc.reference }}</a></li>
+                    <li class="breadcrumb-item active">Nouveau plan d'action</li>
+                </ol>
+            </nav>
+            <h1 class="h2">
+                <i class="fas fa-tasks me-2 text-primary"></i>
+                Nouveau plan d'action
+            </h1>
+            <p class="text-muted">
+                Non-conformité: <strong>{{ nc.reference }}</strong> - {{ nc.description|truncate(100) }}
+            </p>
+        </div>
+    </div>
+
+    <div class="row">
+        <div class="col-md-8">
+            <div class="card shadow-sm">
+                <div class="card-body">
+                    <form method="POST" id="planActionForm">
+                        {{ form.csrf_token }}
+                        
+                        <!-- Information sur la non-conformité -->
+                        <div class="info-badge">
+                            <div class="d-flex align-items-center gap-3">
+                                <i class="fas fa-exclamation-triangle fa-2x text-warning"></i>
+                                <div>
+                                    <div class="small text-muted">Non-conformité associée</div>
+                                    <div class="fw-semibold">{{ nc.reference }} - {{ nc.get_criticite_label() }}</div>
+                                    <div class="small">{{ nc.description|truncate(150) }}</div>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <!-- Action corrective -->
+                        <div class="form-section">
+                            <h6 class="section-title">
+                                <i class="fas fa-pen me-2 text-primary"></i>
+                                Action corrective
+                            </h6>
+                            <div class="mb-3">
+                                {{ form.action_corrective.label(class="form-label fw-semibold") }}
+                                {{ form.action_corrective(class="form-control" + (" is-invalid" if form.action_corrective.errors else ""), rows=5, placeholder="Décrivez l'action corrective à mettre en place...") }}
+                                {% for error in form.action_corrective.errors %}
+                                    <div class="invalid-feedback">{{ error }}</div>
+                                {% endfor %}
+                                <small class="text-muted">Soyez précis : quoi, comment, avec quels moyens</small>
+                            </div>
+                        </div>
+                        
+                        <!-- Responsable et échéance -->
+                        <div class="form-section">
+                            <h6 class="section-title">
+                                <i class="fas fa-user-clock me-2 text-primary"></i>
+                                Planification
+                            </h6>
+                            <div class="row">
+                                <div class="col-md-6 mb-3">
+                                    {{ form.responsable_id.label(class="form-label fw-semibold") }}
+                                    {{ form.responsable_id(class="form-select" + (" is-invalid" if form.responsable_id.errors else "")) }}
+                                    {% for error in form.responsable_id.errors %}
+                                        <div class="invalid-feedback">{{ error }}</div>
+                                    {% endfor %}
+                                    <small class="text-muted">Personne responsable de l'exécution</small>
+                                </div>
+                                <div class="col-md-6 mb-3">
+                                    {{ form.date_echeance.label(class="form-label fw-semibold") }}
+                                    {{ form.date_echeance(class="form-control" + (" is-invalid" if form.date_echeance.errors else ""), type="date") }}
+                                    {% for error in form.date_echeance.errors %}
+                                        <div class="invalid-feedback">{{ error }}</div>
+                                    {% endfor %}
+                                    <small class="text-muted">Date limite de réalisation</small>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <!-- Statut et avancement -->
+                        <div class="form-section">
+                            <h6 class="section-title">
+                                <i class="fas fa-chart-line me-2 text-primary"></i>
+                                Suivi
+                            </h6>
+                            <div class="row">
+                                <div class="col-md-6 mb-3">
+                                    {{ form.statut.label(class="form-label fw-semibold") }}
+                                    {{ form.statut(class="form-select" + (" is-invalid" if form.statut.errors else "")) }}
+                                    {% for error in form.statut.errors %}
+                                        <div class="invalid-feedback">{{ error }}</div>
+                                    {% endfor %}
+                                </div>
+                                <div class="col-md-6 mb-3">
+                                    {{ form.taux_avancement.label(class="form-label fw-semibold") }}
+                                    {{ form.taux_avancement(class="form-control" + (" is-invalid" if form.taux_avancement.errors else ""), type="number", min="0", max="100") }}
+                                    {% for error in form.taux_avancement.errors %}
+                                        <div class="invalid-feedback">{{ error }}</div>
+                                    {% endfor %}
+                                    <small class="text-muted">Pourcentage d'avancement</small>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <hr>
+                        <div class="d-flex justify-content-between">
+                            <a href="{{ url_for('c2n_detail_non_conformite', id=nc.id) }}" class="btn btn-secondary">
+                                <i class="fas fa-times me-1"></i>Annuler
+                            </a>
+                            <button type="submit" class="btn btn-primary">
+                                <i class="fas fa-save me-1"></i>Créer le plan d'action
+                            </button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+        
+        <div class="col-md-4">
+            <!-- Guide rapide -->
+            <div class="card shadow-sm mb-4">
+                <div class="card-header bg-white">
+                    <h6 class="mb-0 fw-semibold">
+                        <i class="fas fa-lightbulb me-2 text-warning"></i>
+                        Bonnes pratiques
+                    </h6>
+                </div>
+                <div class="card-body">
+                    <div class="mb-3">
+                        <div class="fw-semibold small text-primary">Action corrective efficace</div>
+                        <ul class="small mt-2 mb-0 ps-3">
+                            <li>Spécifique et mesurable</li>
+                            <li>Atteignable et réaliste</li>
+                            <li>Temporellement défini</li>
+                            <li>Responsable clairement identifié</li>
+                        </ul>
+                    </div>
+                    <div>
+                        <div class="fw-semibold small text-primary">Exemple SMART</div>
+                        <div class="small text-muted mt-1">
+                            "Mettre en place un workflow automatisé de validation des factures d'ici le 15/03/2025"
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Non-conformité associée -->
+            <div class="card shadow-sm">
+                <div class="card-header bg-white">
+                    <h6 class="mb-0 fw-semibold">
+                        <i class="fas fa-exclamation-triangle me-2 text-warning"></i>
+                        Non-conformité
+                    </h6>
+                </div>
+                <div class="card-body">
+                    <div class="mb-2">
+                        <span class="text-muted small">Référence</span>
+                        <div><code>{{ nc.reference }}</code></div>
+                    </div>
+                    <div class="mb-2">
+                        <span class="text-muted small">Criticité</span>
+                        <div>
+                            <span class="badge {% if nc.niveau_criticite == 'critique' %}bg-danger{% elif nc.niveau_criticite == 'majeur' %}bg-warning{% else %}bg-info{% endif %}">
+                                {{ nc.get_criticite_label() }}
+                            </span>
+                        </div>
+                    </div>
+                    <div class="mb-2">
+                        <span class="text-muted small">Nombre d'écarts</span>
+                        <div>{{ nc.nombre_ecarts }}</div>
+                    </div>
+                    <div>
+                        <span class="text-muted small">Date création</span>
+                        <div>{{ nc.created_at.strftime('%d/%m/%Y') if nc.created_at else '-' }}</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    // Synchronisation statut / avancement
+    const statutSelect = document.querySelector('select[name="statut"]');
+    const avancementInput = document.querySelector('input[name="taux_avancement"]');
+    
+    if (statutSelect && avancementInput) {
+        statutSelect.addEventListener('change', function() {
+            if (this.value === 'terminee') {
+                avancementInput.value = 100;
+            } else if (this.value === 'a_faire') {
+                avancementInput.value = 0;
+            }
+        });
+    }
+    
+    // Validation de la date d'échéance (doit être dans le futur)
+    const dateEcheance = document.querySelector('input[name="date_echeance"]');
+    if (dateEcheance) {
+        const today = new Date().toISOString().split('T')[0];
+        dateEcheance.setAttribute('min', today);
+    }
+});
+</script>
+{% endblock %}

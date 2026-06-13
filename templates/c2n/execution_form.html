@@ -1,0 +1,453 @@
+{# templates/c2n/execution_form.html #}
+{% extends "base.html" %}
+
+{% block title %}Exécution du contrôle - {{ planification.reference }}{% endblock %}
+
+{% block styles %}
+{{ super() }}
+<style>
+    .execution-card {
+        border-radius: 16px;
+        transition: all 0.3s ease;
+        border: none;
+        box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+    }
+    .execution-card:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 8px 20px rgba(0,0,0,0.12);
+    }
+    .taux-display {
+        font-size: 48px;
+        font-weight: 700;
+        text-align: center;
+        padding: 20px;
+        border-radius: 16px;
+        background: linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%);
+    }
+    .taux-display.success { background: linear-gradient(135deg, #d1fae5 0%, #a7f3d0 100%); color: #065f46; }
+    .taux-display.warning { background: linear-gradient(135deg, #fed7aa 0%, #fdba74 100%); color: #9b2c1d; }
+    .taux-display.danger { background: linear-gradient(135deg, #fee2e2 0%, #fecaca 100%); color: #991b1b; }
+    .info-badge {
+        background: #f3f4f6;
+        padding: 12px;
+        border-radius: 12px;
+        margin-bottom: 16px;
+    }
+    [data-bs-theme="dark"] .info-badge {
+        background: #1f2937;
+    }
+    .conformite-stats {
+        background: #f8fafc;
+        border-radius: 12px;
+        padding: 16px;
+        margin-top: 16px;
+    }
+    [data-bs-theme="dark"] .conformite-stats {
+        background: #1e293b;
+    }
+    .stat-badge {
+        display: inline-block;
+        padding: 8px 16px;
+        border-radius: 12px;
+        font-weight: 600;
+        text-align: center;
+    }
+    .stat-badge.conformes {
+        background: #d1fae5;
+        color: #065f46;
+    }
+    .stat-badge.anomalies {
+        background: #fee2e2;
+        color: #991b1b;
+    }
+    [data-bs-theme="dark"] .stat-badge.conformes {
+        background: #064e3b;
+        color: #86efac;
+    }
+    [data-bs-theme="dark"] .stat-badge.anomalies {
+        background: #7f1d1d;
+        color: #fca5a5;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <div class="row mb-4">
+        <div class="col">
+            <nav aria-label="breadcrumb">
+                <ol class="breadcrumb">
+                    <li class="breadcrumb-item"><a href="{{ url_for('c2n_liste_planifications') }}">Planification</a></li>
+                    <li class="breadcrumb-item"><a href="{{ url_for('c2n_detail_planification', id=planification.id) }}">{{ planification.reference }}</a></li>
+                    <li class="breadcrumb-item active">Exécution</li>
+                </ol>
+            </nav>
+            <h1 class="h2">
+                <i class="fas fa-play-circle me-2 text-success"></i>
+                Exécution du contrôle
+            </h1>
+            <p class="text-muted">{{ planification.referentiel.nom }}</p>
+        </div>
+    </div>
+
+    <div class="row">
+        <div class="col-md-8">
+            <div class="card execution-card">
+                <div class="card-body">
+                    <form method="POST" enctype="multipart/form-data" id="executionForm">
+                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                        
+                        <!-- Informations du contrôle -->
+                        <div class="info-badge mb-4">
+                            <div class="row">
+                                <div class="col-md-6">
+                                    <small class="text-muted">Référence contrôle</small>
+                                    <div><strong>{{ planification.referentiel.code_controle }}</strong></div>
+                                </div>
+                                <div class="col-md-6">
+                                    <small class="text-muted">Contrôleur assigné</small>
+                                    <div><strong>{{ planification.controleur.username if planification.controleur else 'Non assigné' }}</strong></div>
+                                </div>
+                                <div class="col-md-6 mt-2">
+                                    <small class="text-muted">Date prévue</small>
+                                    <div>{{ planification.date_prevue.strftime('%d/%m/%Y') }}</div>
+                                </div>
+                                <div class="col-md-6 mt-2">
+                                    <small class="text-muted">Périmètre</small>
+                                    <div>{{ planification.perimetre or '-' }}</div>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <!-- Volumes -->
+                        <div class="row mb-4">
+                            <div class="col-md-4">
+                                <label class="form-label fw-semibold">
+                                    <i class="fas fa-chart-line me-1 text-primary"></i>
+                                    Volume prévisionnel
+                                </label>
+                                <input type="number" name="volume_previsionnel" 
+                                       class="form-control form-control-lg" 
+                                       value="{{ execution.volume_previsionnel if execution else 0 }}"
+                                       min="0" step="1" id="volumePrevisionnel">
+                                <small class="text-muted">Nombre total d'éléments à contrôler</small>
+                            </div>
+                            <div class="col-md-4">
+                                <label class="form-label fw-semibold">
+                                    <i class="fas fa-chart-simple me-1 text-primary"></i>
+                                    Volume contrôlé
+                                </label>
+                                <input type="number" name="volume_controle" 
+                                       class="form-control form-control-lg" 
+                                       value="{{ execution.volume_controle if execution else 0 }}"
+                                       min="0" step="1" id="volumeControle">
+                                <small class="text-muted">Nombre d'éléments effectivement contrôlés</small>
+                            </div>
+                            <div class="col-md-4">
+                                <label class="form-label fw-semibold">
+                                    <i class="fas fa-percent me-1 text-primary"></i>
+                                    Taux de réalisation
+                                </label>
+                                <div class="form-control form-control-lg bg-light" id="tauxRealisation">
+                                    0%
+                                </div>
+                                <small class="text-muted">Calculé automatiquement</small>
+                            </div>
+                        </div>
+                        
+                        <!-- 🔥 NOUVEAU : Conformes et anomalies -->
+                        <div class="conformite-stats mb-4">
+                            <div class="row">
+                                <div class="col-md-6">
+                                    <label class="form-label fw-semibold text-success">
+                                        <i class="fas fa-check-circle me-1"></i>
+                                        Nombre de conformes
+                                    </label>
+                                    <input type="number" name="nb_conformes" 
+                                           class="form-control form-control-lg" 
+                                           value="{{ execution.nb_conformes if execution else 0 }}"
+                                           min="0" step="1" id="nbConformes">
+                                    <small class="text-muted">Éléments jugés conformes</small>
+                                </div>
+                                <div class="col-md-6">
+                                    <label class="form-label fw-semibold text-danger">
+                                        <i class="fas fa-exclamation-triangle me-1"></i>
+                                        Nombre d'anomalies
+                                    </label>
+                                    <input type="number" name="nb_anomalies" 
+                                           class="form-control form-control-lg" 
+                                           value="{{ execution.nb_anomalies if execution else 0 }}"
+                                           min="0" step="1" id="nbAnomalies">
+                                    <small class="text-muted">Éléments non conformes</small>
+                                </div>
+                            </div>
+                            <div class="row mt-3">
+                                <div class="col-6 text-center">
+                                    <div class="stat-badge conformes w-100" id="conformesDisplay">
+                                        {{ execution.nb_conformes if execution else 0 }} conformes
+                                    </div>
+                                </div>
+                                <div class="col-6 text-center">
+                                    <div class="stat-badge anomalies w-100" id="anomaliesDisplay">
+                                        {{ execution.nb_anomalies if execution else 0 }} anomalies
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <!-- Taux de conformité (calculé automatiquement) -->
+                        <div class="mb-4">
+                            <label class="form-label fw-semibold">
+                                <i class="fas fa-percent me-1 text-primary"></i>
+                                Taux de conformité
+                            </label>
+                            <div id="tauxContainer">
+                                <div class="taux-display" id="tauxDisplay">
+                                    <span id="tauxValue">0</span>%
+                                </div>
+                            </div>
+                            <input type="hidden" name="taux_conformite" id="tauxConformite" value="0">
+                        </div>
+                        
+                        <!-- Résultats -->
+                        <div class="mb-3">
+                            <label class="form-label fw-semibold">
+                                <i class="fas fa-file-alt me-1 text-primary"></i>
+                                Résultats du contrôle
+                            </label>
+                            <textarea name="resultats" class="form-control" rows="4" 
+                                      placeholder="Décrivez les résultats du contrôle...">{{ execution.resultats if execution else '' }}</textarea>
+                        </div>
+                        
+                        <!-- Commentaires -->
+                        <div class="mb-3">
+                            <label class="form-label fw-semibold">
+                                <i class="fas fa-comment-dots me-1 text-primary"></i>
+                                Commentaires
+                            </label>
+                            <textarea name="commentaires" class="form-control" rows="3" 
+                                      placeholder="Observations, points d'attention...">{{ execution.commentaires if execution else '' }}</textarea>
+                        </div>
+                        
+                        <!-- Conclusion -->
+                        <div class="mb-3">
+                            <label class="form-label fw-semibold">
+                                <i class="fas fa-flag-checkered me-1 text-primary"></i>
+                                Conclusion
+                            </label>
+                            <textarea name="conclusion" class="form-control" rows="2" 
+                                      placeholder="Conclusion du contrôle...">{{ execution.conclusion if execution else '' }}</textarea>
+                        </div>
+                        
+                        <!-- Pièces justificatives -->
+                        <div class="mb-4">
+                            <label class="form-label fw-semibold">
+                                <i class="fas fa-paperclip me-1 text-primary"></i>
+                                Pièces justificatives
+                            </label>
+                            <input type="file" name="pieces_jointes" class="form-control" multiple accept=".pdf,.doc,.docx,.xls,.xlsx,.jpg,.jpeg,.png">
+                            <small class="text-muted">PDF, Word, Excel, Images (max 10 Mo par fichier)</small>
+                            
+                            {% if execution and execution.pieces_justificatives %}
+                            <div class="mt-2">
+                                <small class="text-muted">Fichiers déjà attachés :</small>
+                                <ul class="list-unstyled mt-1">
+                                    {% for fichier in execution.pieces_justificatives.split(',') %}
+                                    <li><i class="fas fa-file me-1"></i> {{ fichier }}</li>
+                                    {% endfor %}
+                                </ul>
+                            </div>
+                            {% endif %}
+                        </div>
+                        
+                        <hr>
+                        <div class="d-flex justify-content-between">
+                            <a href="{{ url_for('c2n_detail_planification', id=planification.id) }}" class="btn btn-secondary">
+                                <i class="fas fa-times me-1"></i>Annuler
+                            </a>
+                            <div>
+                                <button type="submit" name="action" value="save" class="btn btn-info me-2">
+                                    <i class="fas fa-save me-1"></i>Sauvegarder
+                                </button>
+                                <button type="submit" name="action" value="submit" class="btn btn-primary">
+                                    <i class="fas fa-paper-plane me-1"></i>Soumettre à validation
+                                </button>
+                            </div>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+        
+        <div class="col-md-4">
+            <!-- Informations sur le référentiel -->
+            <div class="card execution-card mb-3">
+                <div class="card-header bg-white">
+                    <h6 class="mb-0 fw-semibold">
+                        <i class="fas fa-info-circle me-2 text-primary"></i>
+                        Référentiel du contrôle
+                    </h6>
+                </div>
+                <div class="card-body">
+                    <div class="mb-2">
+                        <small class="text-muted">Code</small>
+                        <div><code>{{ planification.referentiel.code_controle }}</code></div>
+                    </div>
+                    <div class="mb-2">
+                        <small class="text-muted">Nom</small>
+                        <div><strong>{{ planification.referentiel.nom }}</strong></div>
+                    </div>
+                    <div class="mb-2">
+                        <small class="text-muted">Objectif</small>
+                        <div class="small">{{ planification.referentiel.objectif or '-' }}</div>
+                    </div>
+                    <div class="mb-2">
+                        <small class="text-muted">Fréquence</small>
+                        <div>
+                            {% if planification.referentiel.frequence == 'mensuel' %}
+                            <span class="badge bg-info">Mensuel</span>
+                            {% elif planification.referentiel.frequence == 'trimestriel' %}
+                            <span class="badge bg-warning">Trimestriel</span>
+                            {% else %}
+                            <span class="badge bg-success">Annuel</span>
+                            {% endif %}
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Rappel des bonnes pratiques -->
+            <div class="card execution-card">
+                <div class="card-header bg-white">
+                    <h6 class="mb-0 fw-semibold">
+                        <i class="fas fa-lightbulb me-2 text-warning"></i>
+                        Bonnes pratiques
+                    </h6>
+                </div>
+                <div class="card-body">
+                    <ul class="small mb-0 ps-3">
+                        <li>Vérifiez l'exhaustivité de l'échantillon</li>
+                        <li>Documentez les écarts constatés</li>
+                        <li>Annexez les justificatifs pertinents</li>
+                        <li>Soyez précis dans vos conclusions</li>
+                        <li>Assurez-vous que conformes + anomalies = volume contrôlé</li>
+                    </ul>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    const volumePrevisionnel = document.getElementById('volumePrevisionnel');
+    const volumeControle = document.getElementById('volumeControle');
+    const nbConformes = document.getElementById('nbConformes');
+    const nbAnomalies = document.getElementById('nbAnomalies');
+    const tauxValue = document.getElementById('tauxValue');
+    const tauxConformite = document.getElementById('tauxConformite');
+    const tauxDisplay = document.getElementById('tauxDisplay');
+    const tauxRealisation = document.getElementById('tauxRealisation');
+    const conformesDisplay = document.getElementById('conformesDisplay');
+    const anomaliesDisplay = document.getElementById('anomaliesDisplay');
+    
+    function calculerTauxRealisation() {
+        let prev = parseInt(volumePrevisionnel.value) || 0;
+        let controle = parseInt(volumeControle.value) || 0;
+        
+        let taux = 0;
+        if (prev > 0) {
+            taux = Math.round((controle / prev) * 100);
+        }
+        
+        tauxRealisation.textContent = taux + '%';
+        return taux;
+    }
+    
+    function calculerTauxConformite() {
+        let controle = parseInt(volumeControle.value) || 0;
+        let conformes = parseInt(nbConformes.value) || 0;
+        
+        let taux = 0;
+        if (controle > 0) {
+            taux = Math.round((conformes / controle) * 100 * 10) / 10;
+        }
+        
+        tauxValue.textContent = taux;
+        tauxConformite.value = taux;
+        
+        // Changer la couleur selon le taux
+        tauxDisplay.className = 'taux-display';
+        if (taux >= 80) {
+            tauxDisplay.classList.add('success');
+        } else if (taux >= 60) {
+            tauxDisplay.classList.add('warning');
+        } else {
+            tauxDisplay.classList.add('danger');
+        }
+        
+        return taux;
+    }
+    
+    function mettreAJourAffichage() {
+        let conformes = parseInt(nbConformes.value) || 0;
+        let anomalies = parseInt(nbAnomalies.value) || 0;
+        let controle = parseInt(volumeControle.value) || 0;
+        
+        conformesDisplay.textContent = conformes + ' conforme' + (conformes > 1 ? 's' : '');
+        anomaliesDisplay.textContent = anomalies + ' anomalie' + (anomalies > 1 ? 's' : '');
+        
+        // Vérifier la cohérence
+        if (controle > 0 && (conformes + anomalies) !== controle) {
+            if (conformes + anomalies > controle) {
+                // Ajuster anomalies
+                nbAnomalies.value = controle - conformes;
+            } else {
+                // Ajuster conformes
+                nbConformes.value = controle - anomalies;
+            }
+            // Recalculer
+            conformes = parseInt(nbConformes.value) || 0;
+            anomalies = parseInt(nbAnomalies.value) || 0;
+            conformesDisplay.textContent = conformes + ' conforme' + (conformes > 1 ? 's' : '');
+            anomaliesDisplay.textContent = anomalies + ' anomalie' + (anomalies > 1 ? 's' : '');
+        }
+        
+        calculerTauxRealisation();
+        calculerTauxConformite();
+    }
+    
+    // Écouteurs d'événements
+    volumePrevisionnel.addEventListener('input', function() {
+        calculerTauxRealisation();
+    });
+    
+    volumeControle.addEventListener('input', function() {
+        calculerTauxRealisation();
+        calculerTauxConformite();
+        mettreAJourAffichage();
+    });
+    
+    nbConformes.addEventListener('input', function() {
+        calculerTauxConformite();
+        mettreAJourAffichage();
+    });
+    
+    nbAnomalies.addEventListener('input', function() {
+        let anomalies = parseInt(nbAnomalies.value) || 0;
+        let controle = parseInt(volumeControle.value) || 0;
+        if (controle > 0 && anomalies > controle) {
+            nbAnomalies.value = controle;
+        }
+        nbConformes.value = controle - anomalies;
+        calculerTauxConformite();
+        mettreAJourAffichage();
+    });
+    
+    // Calcul initial
+    calculerTauxRealisation();
+    calculerTauxConformite();
+    mettreAJourAffichage();
+});
+</script>
+{% endblock %}

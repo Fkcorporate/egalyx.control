@@ -1,0 +1,576 @@
+{# templates/c2n/planification_form.html #}
+{% extends "base.html" %}
+
+{% block title %}{{ action }} une planification - C2N{% endblock %}
+
+{% block styles %}
+{{ super() }}
+<style>
+    .form-section {
+        background: #f8fafc;
+        border-radius: 16px;
+        padding: 20px;
+        margin-bottom: 24px;
+    }
+    [data-bs-theme="dark"] .form-section {
+        background: #1e293b;
+    }
+    .section-title {
+        font-size: 1rem;
+        font-weight: 600;
+        margin-bottom: 1rem;
+        padding-bottom: 0.5rem;
+        border-bottom: 2px solid var(--fk-accent);
+        display: inline-block;
+    }
+    .info-badge {
+        background: #e0f2fe;
+        border-radius: 12px;
+        padding: 16px;
+        margin-bottom: 20px;
+    }
+    [data-bs-theme="dark"] .info-badge {
+        background: #0c4a6e;
+    }
+    .preview-card {
+        background: #f1f5f9;
+        border-radius: 12px;
+        padding: 16px;
+        margin-top: 20px;
+    }
+    [data-bs-theme="dark"] .preview-card {
+        background: #0f172a;
+    }
+    .org-select {
+        transition: all 0.2s ease;
+    }
+    .required-field::after {
+        content: " *";
+        color: #dc2626;
+        font-weight: bold;
+    }
+    .filter-hint {
+        font-size: 0.65rem;
+        color: #6c757d;
+        margin-top: 4px;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <div class="row mb-4">
+        <div class="col">
+            <nav aria-label="breadcrumb">
+                <ol class="breadcrumb">
+                    <li class="breadcrumb-item"><a href="{{ url_for('c2n_liste_planifications') }}">Planification</a></li>
+                    <li class="breadcrumb-item active">{{ action }}</li>
+                </ol>
+            </nav>
+            <h1 class="h2">
+                <i class="fas fa-calendar-plus me-2 text-primary"></i>
+                {{ action }} une planification
+            </h1>
+            <p class="text-muted">Planifiez un contrôle à réaliser</p>
+        </div>
+    </div>
+
+    <div class="row">
+        <div class="col-md-8">
+            <div class="card shadow-sm">
+                <div class="card-body">
+                    <form method="POST" id="planificationForm" novalidate>
+                        {{ form.csrf_token }}
+                        
+                        <!-- Référentiel -->
+                        <div class="form-section">
+                            <h6 class="section-title">
+                                <i class="fas fa-book me-2 text-primary"></i>
+                                Référentiel du contrôle
+                            </h6>
+                            <div class="mb-3">
+                                {{ form.referentiel_id.label(class="form-label fw-semibold required-field") }}
+                                {{ form.referentiel_id(class="form-select" + (" is-invalid" if form.referentiel_id.errors else ""), id="referentielSelect") }}
+                                {% for error in form.referentiel_id.errors %}
+                                    <div class="invalid-feedback">{{ error }}</div>
+                                {% endfor %}
+                                <small class="text-muted">Sélectionnez le contrôle à planifier</small>
+                            </div>
+                            
+                            <div id="referentielPreview" class="preview-card d-none">
+                                <div class="d-flex justify-content-between align-items-start">
+                                    <div>
+                                        <div class="small text-muted">Code</div>
+                                        <div><strong id="previewCode">-</strong></div>
+                                        <div class="small text-muted mt-2">Objectif</div>
+                                        <div class="small" id="previewObjectif">-</div>
+                                    </div>
+                                    <div>
+                                        <div class="small text-muted">Fréquence</div>
+                                        <div><span id="previewFrequence" class="badge bg-secondary">-</span></div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <!-- Période -->
+                        <div class="form-section">
+                            <h6 class="section-title">
+                                <i class="fas fa-calendar-alt me-2 text-primary"></i>
+                                Période de planificación
+                            </h6>
+                            <div class="row">
+                                <div class="col-md-4 mb-3">
+                                    {{ form.annee.label(class="form-label fw-semibold required-field") }}
+                                    {{ form.annee(class="form-select" + (" is-invalid" if form.annee.errors else ""), id="anneeSelect") }}
+                                    {% for error in form.annee.errors %}
+                                        <div class="invalid-feedback">{{ error }}</div>
+                                    {% endfor %}
+                                </div>
+                                <div class="col-md-4 mb-3">
+                                    {{ form.mois.label(class="form-label fw-semibold") }}
+                                    {{ form.mois(class="form-select" + (" is-invalid" if form.mois.errors else ""), id="moisSelect") }}
+                                    {% for error in form.mois.errors %}
+                                        <div class="invalid-feedback">{{ error }}</div>
+                                    {% endfor %}
+                                    <small class="text-muted">Laissez "Annuel" pour un plan annuel</small>
+                                </div>
+                                <div class="col-md-4 mb-3">
+                                    {{ form.date_prevue.label(class="form-label fw-semibold required-field") }}
+                                    {{ form.date_prevue(class="form-control" + (" is-invalid" if form.date_prevue.errors else ""), type="date", id="datePrevue") }}
+                                    {% for error in form.date_prevue.errors %}
+                                        <div class="invalid-feedback">{{ error }}</div>
+                                    {% endfor %}
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <!-- 🔥 ORGANISATION CIBLE - TOUS CHAMPS OUVERTS -->
+                        <div class="form-section">
+                            <h6 class="section-title">
+                                <i class="fas fa-building me-2 text-primary"></i>
+                                Organisation cible
+                            </h6>
+                            
+                            <div class="alert alert-info small mb-3">
+                                <i class="fas fa-info-circle me-2"></i>
+                                Tous les champs sont optionnels. Les sélections dans un champ peuvent filtrer les suivants.
+                            </div>
+                            
+                            <div class="row">
+                                <div class="col-md-4 mb-3">
+                                    <label class="form-label fw-semibold">Pays (optionnel)</label>
+                                    <select name="pays_id" id="paysSelect" class="form-select org-select">
+                                        <option value="">-- Aucun --</option>
+                                        {% for pays in pays_list %}
+                                        <option value="{{ pays.id }}" data-pays="{{ pays.id }}" {% if planification and planification.pays_id == pays.id %}selected{% endif %}>
+                                            {{ pays.drapeau }} {{ pays.nom }}
+                                        </option>
+                                        {% endfor %}
+                                    </select>
+                                    <div class="filter-hint">
+                                        <i class="fas fa-filter me-1"></i>Filtre les pôles de ce pays
+                                    </div>
+                                </div>
+                                <div class="col-md-4 mb-3">
+                                    <label class="form-label fw-semibold">Pôle / Filiale (optionnel)</label>
+                                    <select name="pole_id" id="poleSelect" class="form-select org-select">
+                                        <option value="">-- Aucun --</option>
+                                        {% for pole in poles_list %}
+                                        <option value="{{ pole.id }}" data-pays="{{ pole.pays_id }}" {% if planification and planification.pole_id == pole.id %}selected{% endif %}>
+                                            {{ pole.nom }}
+                                        </option>
+                                        {% endfor %}
+                                    </select>
+                                    <div class="filter-hint">
+                                        <i class="fas fa-filter me-1"></i>Filtre les directions de ce pôle
+                                    </div>
+                                </div>
+                                <div class="col-md-4 mb-3">
+                                    <label class="form-label fw-semibold">Direction</label>
+                                    <select name="direction_id" id="directionSelect" class="form-select org-select">
+                                        <option value="">-- Aucune --</option>
+                                        {% for direction in directions_list %}
+                                        <option value="{{ direction.id }}" data-pole="{{ direction.pole_id }}" {% if planification and planification.direction_id == direction.id %}selected{% endif %}>
+                                            {{ direction.nom }}
+                                        </option>
+                                        {% endfor %}
+                                    </select>
+                                    <div class="filter-hint">
+                                        <i class="fas fa-filter me-1"></i>Filtre les services de cette direction
+                                    </div>
+                                </div>
+                                <div class="col-md-4 mb-3">
+                                    <label class="form-label fw-semibold">Service (optionnel)</label>
+                                    <select name="service_id" id="serviceSelect" class="form-select org-select">
+                                        <option value="">-- Aucun --</option>
+                                        {% for service in services_list %}
+                                        <option value="{{ service.id }}" data-direction="{{ service.direction_id }}" {% if planification and planification.service_id == service.id %}selected{% endif %}>
+                                            {{ service.nom }}
+                                        </option>
+                                        {% endfor %}
+                                    </select>
+                                </div>
+                                <div class="col-md-8 mb-3">
+                                    <label class="form-label fw-semibold">Ou saisie manuelle</label>
+                                    <input type="text" name="organisation_manuel" class="form-control" 
+                                           placeholder="Nom de l'organisation cible (si non listée)"
+                                           value="{{ planification.organisation_manuel if planification else '' }}">
+                                    <small class="text-muted">Utilisez ce champ si l'organisation n'est pas dans la liste</small>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <!-- Périmètre -->
+                        <div class="form-section">
+                            <h6 class="section-title">
+                                <i class="fas fa-chart-line me-2 text-primary"></i>
+                                Périmètre
+                            </h6>
+                            <div class="mb-3">
+                                {{ form.perimetre.label(class="form-label fw-semibold") }}
+                                {{ form.perimetre(class="form-control" + (" is-invalid" if form.perimetre.errors else ""), rows=3, placeholder="Ex: Toutes les filiales françaises, Direction Financière, etc.") }}
+                                {% for error in form.perimetre.errors %}
+                                    <div class="invalid-feedback">{{ error }}</div>
+                                {% endfor %}
+                                <small class="text-muted">Définissez clairement le périmètre du contrôle</small>
+                            </div>
+                        </div>
+                        
+                        <!-- Contrôleur -->
+                        <div class="form-section">
+                            <h6 class="section-title">
+                                <i class="fas fa-user-check me-2 text-primary"></i>
+                                Assignation
+                            </h6>
+                            <div class="mb-3">
+                                {{ form.controleur_id.label(class="form-label fw-semibold") }}
+                                {{ form.controleur_id(class="form-select" + (" is-invalid" if form.controleur_id.errors else "")) }}
+                                {% for error in form.controleur_id.errors %}
+                                    <div class="invalid-feedback">{{ error }}</div>
+                                {% endfor %}
+                                <small class="text-muted">Personne responsable de l'exécution du contrôle</small>
+                            </div>
+                        </div>
+                        
+                        <hr>
+                        <div class="d-flex justify-content-between">
+                            <a href="{{ url_for('c2n_liste_planifications') }}" class="btn btn-secondary">
+                                <i class="fas fa-times me-1"></i>Annuler
+                            </a>
+                            <button type="submit" class="btn btn-primary">
+                                <i class="fas fa-save me-1"></i>{{ action }}
+                            </button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+        
+        <div class="col-md-4">
+            <!-- Guide -->
+            <div class="card shadow-sm mb-4">
+                <div class="card-header bg-white">
+                    <h6 class="mb-0 fw-semibold">
+                        <i class="fas fa-lightbulb me-2 text-warning"></i>
+                        Comment utiliser les filtres
+                    </h6>
+                </div>
+                <div class="card-body">
+                    <ul class="small mb-0 ps-3">
+                        <li>🌍 <strong>Sélectionnez un pays</strong> → Filtre les pôles de ce pays</li>
+                        <li>🏢 <strong>Sélectionnez un pôle</strong> → Filtre les directions de ce pôle</li>
+                        <li>📋 <strong>Sélectionnez une direction</strong> → Filtre les services de cette direction</li>
+                        <li>👥 <strong>Sélectionnez un service</strong> → Précise l'organisation</li>
+                        <li>✏️ <strong>Saisie manuelle</strong> → Alternative si non listé</li>
+                    </ul>
+                    <hr class="my-2">
+                    <div class="small text-muted">
+                        <i class="fas fa-info-circle me-1"></i>
+                        Tous les champs sont indépendants. Vous pouvez sélectionner un pôle sans pays, etc.
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Récapitulatif -->
+            <div class="card shadow-sm">
+                <div class="card-header bg-white">
+                    <h6 class="mb-0 fw-semibold">
+                        <i class="fas fa-chart-simple me-2 text-primary"></i>
+                        Récapitulatif
+                    </h6>
+                </div>
+                <div class="card-body">
+                    <div id="recapContent">
+                        <p class="text-muted small text-center mb-0">
+                            Sélectionnez un référentiel<br>
+                            pour voir le récapitulatif
+                        </p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    // Données des référentiels
+    const referentielsData = {};
+    {% for ref in form.referentiel_id.choices %}
+        {% if ref[0] != 0 %}
+        referentielsData[{{ ref[0] }}] = {
+            code: "{{ ref[1].split(' - ')[0] }}",
+            nom: "{{ ref[1].split(' - ')[1] if ref[1].split(' - ')|length > 1 else ref[1] }}"
+        };
+        {% endif %}
+    {% endfor %}
+    
+    // Mise à jour de l'aperçu du référentiel
+    const referentielSelect = document.getElementById('referentielSelect');
+    const previewDiv = document.getElementById('referentielPreview');
+    const previewCode = document.getElementById('previewCode');
+    const previewObjectif = document.getElementById('previewObjectif');
+    const previewFrequence = document.getElementById('previewFrequence');
+    const recapContent = document.getElementById('recapContent');
+    
+    function updatePreview() {
+        const selectedId = referentielSelect.value;
+        if (selectedId && referentielsData[selectedId]) {
+            const data = referentielsData[selectedId];
+            previewCode.textContent = data.code;
+            previewObjectif.textContent = data.objectif || 'Non spécifié';
+            previewFrequence.className = "badge bg-secondary";
+            previewFrequence.textContent = "Fréquence";
+            previewDiv.classList.remove('d-none');
+            
+            recapContent.innerHTML = `
+                <div class="small">
+                    <div class="mb-2">
+                        <span class="text-muted">Contrôle:</span>
+                        <div class="fw-semibold">${data.code} - ${data.nom}</div>
+                    </div>
+                    <div class="mb-2">
+                        <span class="text-muted">Pays:</span>
+                        <div id="recapPays">Non sélectionné</div>
+                    </div>
+                    <div class="mb-2">
+                        <span class="text-muted">Pôle:</span>
+                        <div id="recapPole">Non sélectionné</div>
+                    </div>
+                    <div class="mb-2">
+                        <span class="text-muted">Direction:</span>
+                        <div id="recapDirection">Non sélectionnée</div>
+                    </div>
+                    <div class="mb-2">
+                        <span class="text-muted">Service:</span>
+                        <div id="recapService">Non sélectionné</div>
+                    </div>
+                    <div class="mb-2">
+                        <span class="text-muted">Contrôleur:</span>
+                        <div id="recapControleur">Non sélectionné</div>
+                    </div>
+                    <div>
+                        <span class="text-muted">Date prévue:</span>
+                        <div id="recapDate">Non définie</div>
+                    </div>
+                </div>
+            `;
+        } else {
+            previewDiv.classList.add('d-none');
+            recapContent.innerHTML = `<p class="text-muted small text-center mb-0">Sélectionnez un référentiel pour voir le récapitulatif</p>`;
+        }
+    }
+    
+    referentielSelect.addEventListener('change', updatePreview);
+    updatePreview();
+    
+    // ============================================
+    // FILTRES CASCADANTS INDÉPENDANTS
+    // ============================================
+    
+    const paysSelect = document.getElementById('paysSelect');
+    const poleSelect = document.getElementById('poleSelect');
+    const directionSelect = document.getElementById('directionSelect');
+    const serviceSelect = document.getElementById('serviceSelect');
+    const controleurSelect = document.querySelector('select[name="controleur_id"]');
+    const datePrevue = document.getElementById('datePrevue');
+    
+    // Stocker les options originales
+    const originalPoleOptions = Array.from(poleSelect.options);
+    const originalDirectionOptions = Array.from(directionSelect.options);
+    const originalServiceOptions = Array.from(serviceSelect.options);
+    
+    // Fonction pour filtrer les pôles par pays
+    function filterPoles() {
+        const selectedPaysId = paysSelect.value;
+        
+        // Sauvegarder la valeur sélectionnée actuelle
+        const currentPoleId = poleSelect.value;
+        
+        // Vider et reconstruire
+        poleSelect.innerHTML = '<option value="">-- Aucun --</option>';
+        
+        originalPoleOptions.forEach(option => {
+            if (option.value === "") return;
+            const optionPaysId = option.getAttribute('data-pays');
+            
+            if (!selectedPaysId || optionPaysId == selectedPaysId) {
+                const newOption = document.createElement('option');
+                newOption.value = option.value;
+                newOption.textContent = option.textContent;
+                newOption.setAttribute('data-pays', optionPaysId || '');
+                poleSelect.appendChild(newOption);
+            }
+        });
+        
+        // Restaurer la sélection si possible
+        if (currentPoleId && Array.from(poleSelect.options).some(opt => opt.value == currentPoleId)) {
+            poleSelect.value = currentPoleId;
+        }
+        
+        // Mettre à jour les directions après filtrage des pôles
+        filterDirections();
+    }
+    
+    // Fonction pour filtrer les directions par pôle
+    function filterDirections() {
+        const selectedPoleId = poleSelect.value;
+        
+        // Sauvegarder la valeur sélectionnée actuelle
+        const currentDirectionId = directionSelect.value;
+        
+        // Vider et reconstruire
+        directionSelect.innerHTML = '<option value="">-- Aucune --</option>';
+        
+        originalDirectionOptions.forEach(option => {
+            if (option.value === "") return;
+            const optionPoleId = option.getAttribute('data-pole');
+            
+            if (!selectedPoleId || optionPoleId == selectedPoleId) {
+                const newOption = document.createElement('option');
+                newOption.value = option.value;
+                newOption.textContent = option.textContent;
+                newOption.setAttribute('data-pole', optionPoleId || '');
+                directionSelect.appendChild(newOption);
+            }
+        });
+        
+        // Restaurer la sélection si possible
+        if (currentDirectionId && Array.from(directionSelect.options).some(opt => opt.value == currentDirectionId)) {
+            directionSelect.value = currentDirectionId;
+        }
+        
+        // Mettre à jour les services après filtrage des directions
+        filterServices();
+    }
+    
+    // Fonction pour filtrer les services par direction
+    function filterServices() {
+        const selectedDirectionId = directionSelect.value;
+        
+        // Sauvegarder la valeur sélectionnée actuelle
+        const currentServiceId = serviceSelect.value;
+        
+        // Vider et reconstruire
+        serviceSelect.innerHTML = '<option value="">-- Aucun --</option>';
+        
+        originalServiceOptions.forEach(option => {
+            if (option.value === "") return;
+            const optionDirectionId = option.getAttribute('data-direction');
+            
+            if (!selectedDirectionId || optionDirectionId == selectedDirectionId) {
+                const newOption = document.createElement('option');
+                newOption.value = option.value;
+                newOption.textContent = option.textContent;
+                newOption.setAttribute('data-direction', optionDirectionId || '');
+                serviceSelect.appendChild(newOption);
+            }
+        });
+        
+        // Restaurer la sélection si possible
+        if (currentServiceId && Array.from(serviceSelect.options).some(opt => opt.value == currentServiceId)) {
+            serviceSelect.value = currentServiceId;
+        }
+    }
+    
+    // Mise à jour du récapitulatif
+    function updateRecapDetails() {
+        if (previewDiv.classList.contains('d-none')) return;
+        
+        const paysOption = paysSelect.options[paysSelect.selectedIndex];
+        const paysText = paysOption ? paysOption.textContent : 'Non sélectionné';
+        
+        const poleOption = poleSelect.options[poleSelect.selectedIndex];
+        const poleText = poleOption ? poleOption.textContent : 'Non sélectionné';
+        
+        const directionOption = directionSelect.options[directionSelect.selectedIndex];
+        const directionText = directionOption ? directionOption.textContent : 'Non sélectionnée';
+        
+        const serviceOption = serviceSelect.options[serviceSelect.selectedIndex];
+        const serviceText = serviceOption ? serviceOption.textContent : 'Non sélectionné';
+        
+        const controleurOption = controleurSelect.options[controleurSelect.selectedIndex];
+        const controleurText = controleurOption ? controleurOption.textContent : 'Non sélectionné';
+        
+        const recapPays = document.getElementById('recapPays');
+        const recapPole = document.getElementById('recapPole');
+        const recapDirection = document.getElementById('recapDirection');
+        const recapService = document.getElementById('recapService');
+        const recapControleur = document.getElementById('recapControleur');
+        const recapDate = document.getElementById('recapDate');
+        
+        if (recapPays) recapPays.textContent = paysText;
+        if (recapPole) recapPole.textContent = poleText;
+        if (recapDirection) recapDirection.textContent = directionText;
+        if (recapService) recapService.textContent = serviceText;
+        if (recapControleur) recapControleur.textContent = controleurText;
+        if (recapDate && datePrevue.value) {
+            recapDate.textContent = new Date(datePrevue.value).toLocaleDateString('fr-FR');
+        } else if (recapDate) {
+            recapDate.textContent = 'Non définie';
+        }
+    }
+    
+    // Écouteurs d'événements pour les filtres cascadants
+    paysSelect.addEventListener('change', function() {
+        filterPoles();
+        updateRecapDetails();
+    });
+    
+    poleSelect.addEventListener('change', function() {
+        filterDirections();
+        updateRecapDetails();
+    });
+    
+    directionSelect.addEventListener('change', function() {
+        filterServices();
+        updateRecapDetails();
+    });
+    
+    serviceSelect.addEventListener('change', updateRecapDetails);
+    controleurSelect.addEventListener('change', updateRecapDetails);
+    datePrevue.addEventListener('change', updateRecapDetails);
+    
+    // Synchronisation date_prevue
+    const anneeSelect = document.getElementById('anneeSelect');
+    const moisSelect = document.getElementById('moisSelect');
+    
+    function syncDatePrevue() {
+        const annee = anneeSelect.value;
+        const mois = moisSelect.value;
+        if (annee && mois && mois != '0' && !datePrevue.value) {
+            datePrevue.value = `${annee}-${String(mois).padStart(2, '0')}-15`;
+            updateRecapDetails();
+        }
+    }
+    
+    anneeSelect.addEventListener('change', syncDatePrevue);
+    moisSelect.addEventListener('change', syncDatePrevue);
+    
+    // Initialisation des filtres
+    filterPoles();
+    updateRecapDetails();
+});
+</script>
+{% endblock %}

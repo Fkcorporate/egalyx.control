@@ -1,0 +1,338 @@
+{# templates/c2n/non_conformite_detail.html #}
+{% extends "base.html" %}
+
+{% block title %}Non-conformité {{ nc.reference }} - C2N{% endblock %}
+
+{% block styles %}
+{{ super() }}
+<style>
+    .criticite-badge {
+        padding: 8px 20px;
+        border-radius: 40px;
+        font-weight: 600;
+        font-size: 14px;
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+    }
+    .criticite-mineur { background: #fef3c7; color: #d97706; }
+    .criticite-majeur { background: #fed7aa; color: #ea580c; }
+    .criticite-critique { background: #fee2e2; color: #dc2626; }
+    
+    [data-bs-theme="dark"] .criticite-mineur { background: #2d2a1a; color: #fde047; }
+    [data-bs-theme="dark"] .criticite-majeur { background: #2d241a; color: #fdba74; }
+    [data-bs-theme="dark"] .criticite-critique { background: #2d1a1a; color: #fca5a5; }
+    
+    .statut-badge {
+        padding: 6px 16px;
+        border-radius: 30px;
+        font-weight: 600;
+        font-size: 13px;
+    }
+    .statut-ouvert { background: #dc2626; color: white; }
+    .statut-en_cours { background: #f59e0b; color: white; }
+    .statut-ferme { background: #10b981; color: white; }
+    
+    .info-section {
+        background: #f8fafc;
+        border-radius: 16px;
+        padding: 20px;
+        margin-bottom: 20px;
+    }
+    
+    [data-bs-theme="dark"] .info-section {
+        background: #1e293b;
+    }
+    
+    .plan-card {
+        border-left: 4px solid;
+        transition: all 0.2s ease;
+        cursor: pointer;
+    }
+    .plan-card:hover {
+        transform: translateX(4px);
+        box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+    }
+    .plan-card.a_faire { border-left-color: #6c757d; }
+    .plan-card.en_cours { border-left-color: #f59e0b; }
+    .plan-card.termine { border-left-color: #10b981; }
+    
+    .progress-custom {
+        height: 8px;
+        border-radius: 10px;
+        background: #e2e8f0;
+        overflow: hidden;
+    }
+    .progress-custom-bar {
+        height: 100%;
+        border-radius: 10px;
+        transition: width 0.3s ease;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <div class="row mb-4">
+        <div class="col">
+            <nav aria-label="breadcrumb">
+                <ol class="breadcrumb">
+                    <li class="breadcrumb-item"><a href="{{ url_for('c2n_liste_planifications') }}">Planification</a></li>
+                    <li class="breadcrumb-item"><a href="{{ url_for('c2n_liste_non_conformites') }}">Non-conformités</a></li>
+                    <li class="breadcrumb-item active">{{ nc.reference }}</li>
+                </ol>
+            </nav>
+        </div>
+    </div>
+
+    <div class="row">
+        <div class="col-md-8">
+            <!-- En-tête avec criticité -->
+            <div class="d-flex justify-content-between align-items-start mb-4 flex-wrap gap-2">
+                <div>
+                    <h1 class="h2 mb-2">
+                        <i class="fas fa-exclamation-triangle me-2 text-warning"></i>
+                        {{ nc.reference }}
+                    </h1>
+                    <div class="d-flex gap-2 flex-wrap">
+                        <span class="criticite-badge criticite-{{ nc.niveau_criticite }}">
+                            <i class="fas fa-flag"></i>
+                            {{ nc.get_criticite_label() }}
+                        </span>
+                        <span class="statut-badge statut-{{ nc.statut }}">
+                            <i class="fas {% if nc.statut == 'ouvert' %}fa-circle{% elif nc.statut == 'en_cours' %}fa-play-circle{% else %}fa-check-circle{% endif %} me-1"></i>
+                            {{ nc.statut|upper }}
+                        </span>
+                        <span class="badge bg-secondary">
+                            <i class="fas fa-calendar me-1"></i>
+                            {{ nc.created_at.strftime('%d/%m/%Y') }}
+                        </span>
+                    </div>
+                </div>
+                <div>
+                    {% if nc.statut != 'ferme' %}
+                    <a href="{{ url_for('c2n_nouveau_plan_action', nc_id=nc.id) }}" class="btn btn-primary rounded-pill">
+                        <i class="fas fa-plus me-1"></i>Créer un plan d'action
+                    </a>
+                    {% endif %}
+                </div>
+            </div>
+
+            <!-- Description détaillée -->
+            <div class="info-section">
+                <h6 class="fw-semibold mb-3">
+                    <i class="fas fa-align-left me-2 text-primary"></i>
+                    Description
+                </h6>
+                <p class="mb-0">{{ nc.description }}</p>
+            </div>
+
+            <!-- Écarts et impact -->
+            <div class="row g-3 mb-4">
+                <div class="col-md-4">
+                    <div class="info-section text-center">
+                        <div class="display-4 fw-bold text-primary">{{ nc.nombre_ecarts }}</div>
+                        <div class="text-muted small">Nombre d'écarts</div>
+                    </div>
+                </div>
+                <div class="col-md-8">
+                    <div class="info-section">
+                        <h6 class="fw-semibold mb-2">
+                            <i class="fas fa-bullseye me-2 text-primary"></i>
+                            Impact
+                        </h6>
+                        <p class="mb-0">{{ nc.impact or 'Non spécifié' }}</p>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Cause racine -->
+            <div class="info-section">
+                <h6 class="fw-semibold mb-3">
+                    <i class="fas fa-search me-2 text-primary"></i>
+                    Cause racine
+                </h6>
+                <p class="mb-0">{{ nc.cause_racine or 'Non spécifiée' }}</p>
+            </div>
+
+            <!-- Plans d'action associés -->
+            <div class="card shadow-sm mt-4">
+                <div class="card-header bg-white">
+                    <h6 class="mb-0 fw-semibold">
+                        <i class="fas fa-tasks me-2 text-primary"></i>
+                        Plans d'action associés
+                        <span class="badge bg-secondary ms-2">{{ nc.plans_action.count() }}</span>
+                    </h6>
+                </div>
+                <div class="card-body">
+                    {% if nc.plans_action.count() > 0 %}
+                        {% for plan in nc.plans_action %}
+                        <div class="plan-card {{ plan.statut }} p-3 mb-3 rounded border">
+                            <div class="d-flex justify-content-between align-items-start">
+                                <div>
+                                    <div class="fw-semibold">{{ plan.reference }}</div>
+                                    <div class="small text-muted mt-1">{{ plan.action_corrective|truncate(150) }}</div>
+                                </div>
+                                <a href="{{ url_for('c2n_detail_plan_action', id=plan.id) }}" class="btn btn-sm btn-outline-primary">
+                                    <i class="fas fa-arrow-right"></i>
+                                </a>
+                            </div>
+                            <div class="row mt-2">
+                                <div class="col-md-6">
+                                    <small class="text-muted">
+                                        <i class="fas fa-user me-1"></i>
+                                        Responsable: {{ plan.responsable.username if plan.responsable else 'Non assigné' }}
+                                    </small>
+                                </div>
+                                <div class="col-md-6">
+                                    <small class="text-muted">
+                                        <i class="fas fa-calendar me-1"></i>
+                                        Échéance: {{ plan.date_echeance.strftime('%d/%m/%Y') if plan.date_echeance else 'Non définie' }}
+                                        {% if plan.date_echeance and plan.date_echeance < now.date() and plan.statut != 'terminee' %}
+                                        <span class="text-danger ms-1">(En retard)</span>
+                                        {% endif %}
+                                    </small>
+                                </div>
+                            </div>
+                            <div class="mt-2">
+                                <div class="d-flex justify-content-between small mb-1">
+                                    <span>Avancement</span>
+                                    <span>{{ plan.taux_avancement }}%</span>
+                                </div>
+                                <div class="progress-custom">
+                                    <div class="progress-custom-bar bg-success" style="width: {{ plan.taux_avancement }}%"></div>
+                                </div>
+                            </div>
+                        </div>
+                        {% endfor %}
+                    {% else %}
+                        <div class="text-center py-4">
+                            <i class="fas fa-inbox fa-3x text-muted mb-3"></i>
+                            <p class="text-muted mb-0">Aucun plan d'action associé</p>
+                            <a href="{{ url_for('c2n_nouveau_plan_action', nc_id=nc.id) }}" class="btn btn-sm btn-primary mt-3">
+                                <i class="fas fa-plus me-1"></i>Créer un plan d'action
+                            </a>
+                        </div>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+
+        <div class="col-md-4">
+            <!-- Contrôle associé -->
+            <div class="card shadow-sm mb-4">
+                <div class="card-header bg-white">
+                    <h6 class="mb-0 fw-semibold">
+                        <i class="fas fa-clipboard-list me-2 text-primary"></i>
+                        Contrôle associé
+                    </h6>
+                </div>
+                <div class="card-body">
+                    <div class="mb-2">
+                        <small class="text-muted">Référence</small>
+                        <div><code>{{ nc.execution.planification.reference }}</code></div>
+                    </div>
+                    <div class="mb-2">
+                        <small class="text-muted">Contrôle</small>
+                        <div><strong>{{ nc.execution.planification.referentiel.nom }}</strong></div>
+                    </div>
+                    <div class="mb-2">
+                        <small class="text-muted">Date d'exécution</small>
+                        <div>{{ nc.execution.date_execution.strftime('%d/%m/%Y %H:%M') if nc.execution.date_execution else '-' }}</div>
+                    </div>
+                    <div class="mb-2">
+                        <small class="text-muted">Taux de conformité</small>
+                        <div>
+                            <span class="badge {% if nc.execution.taux_conformite >= 80 %}bg-success{% elif nc.execution.taux_conformite >= 60 %}bg-warning{% else %}bg-danger{% endif %}">
+                                {{ nc.execution.taux_conformite }}%
+                            </span>
+                        </div>
+                    </div>
+                    <a href="{{ url_for('c2n_detail_planification', id=nc.execution.planification.id) }}" class="btn btn-outline-primary w-100 mt-3">
+                        <i class="fas fa-eye me-1"></i>Voir le contrôle
+                    </a>
+                </div>
+            </div>
+
+            <!-- Actions rapides -->
+            <div class="card shadow-sm">
+                <div class="card-header bg-white">
+                    <h6 class="mb-0 fw-semibold">
+                        <i class="fas fa-bolt me-2 text-primary"></i>
+                        Actions rapides
+                    </h6>
+                </div>
+                <div class="card-body">
+                    {% if nc.statut != 'ferme' %}
+                    <button class="btn btn-success w-100 mb-2" onclick="fermerNC({{ nc.id }})">
+                        <i class="fas fa-check-circle me-2"></i>Clôturer la non-conformité
+                    </button>
+                    {% endif %}
+                    
+                    {% if nc.plans_action.count() == 0 %}
+                    <a href="{{ url_for('c2n_nouveau_plan_action', nc_id=nc.id) }}" class="btn btn-primary w-100 mb-2">
+                        <i class="fas fa-tasks me-2"></i>Créer un plan d'action
+                    </a>
+                    {% endif %}
+                    
+                    <button class="btn btn-outline-secondary w-100" onclick="window.print()">
+                        <i class="fas fa-print me-2"></i>Imprimer
+                    </button>
+                </div>
+            </div>
+            
+            <!-- Métadonnées -->
+            <div class="card shadow-sm mt-4">
+                <div class="card-header bg-white">
+                    <h6 class="mb-0 fw-semibold">
+                        <i class="fas fa-info-circle me-2 text-primary"></i>
+                        Métadonnées
+                    </h6>
+                </div>
+                <div class="card-body">
+                    <div class="small">
+                        <div class="d-flex justify-content-between mb-2">
+                            <span class="text-muted">Créé par :</span>
+                            <span>{{ nc.createur.username if nc.createur else 'Système' }}</span>
+                        </div>
+                        <div class="d-flex justify-content-between mb-2">
+                            <span class="text-muted">Créé le :</span>
+                            <span>{{ nc.created_at.strftime('%d/%m/%Y à %H:%M') if nc.created_at else '-' }}</span>
+                        </div>
+                        <div class="d-flex justify-content-between">
+                            <span class="text-muted">Dernière modif :</span>
+                            <span>{{ nc.updated_at.strftime('%d/%m/%Y à %H:%M') if nc.updated_at else '-' }}</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+function fermerNC(ncId) {
+    if (confirm('Confirmez-vous la clôture de cette non-conformité ?')) {
+        fetch(`/c2n/non-conformite/${ncId}/fermer`, {
+            method: 'POST',
+            headers: { 
+                'X-CSRFToken': '{{ csrf_token() }}',
+                'Content-Type': 'application/json'
+            }
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                location.reload();
+            } else {
+                alert('Erreur: ' + (data.error || 'Impossible de fermer la non-conformité'));
+            }
+        })
+        .catch(error => {
+            console.error('Erreur:', error);
+            alert('Erreur lors de la communication avec le serveur');
+        });
+    }
+}
+</script>
+{% endblock %}

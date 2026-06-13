@@ -1,0 +1,448 @@
+{# templates/c2n/referentiel_form.html #}
+{% extends "base.html" %}
+
+{% block title %}{{ action }} un référentiel - C2N{% endblock %}
+
+{% block styles %}
+{{ super() }}
+<style>
+    .form-section {
+        background: #f8fafc;
+        border-radius: 16px;
+        padding: 20px;
+        margin-bottom: 24px;
+    }
+    [data-bs-theme="dark"] .form-section {
+        background: #1e293b;
+    }
+    .section-title {
+        font-size: 1rem;
+        font-weight: 600;
+        margin-bottom: 1rem;
+        padding-bottom: 0.5rem;
+        border-bottom: 2px solid var(--fk-accent);
+        display: inline-block;
+    }
+    .risk-item {
+        background: #f8fafc;
+        border-radius: 8px;
+        padding: 10px;
+        margin-bottom: 8px;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        border-left: 3px solid var(--fk-accent);
+    }
+    [data-bs-theme="dark"] .risk-item {
+        background: #1e293b;
+    }
+    .risk-selector {
+        background: #f1f5f9;
+        border-radius: 12px;
+        padding: 16px;
+        margin-bottom: 16px;
+    }
+    [data-bs-theme="dark"] .risk-selector {
+        background: #0f172a;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <div class="row mb-4">
+        <div class="col">
+            <nav aria-label="breadcrumb">
+                <ol class="breadcrumb">
+                    <li class="breadcrumb-item"><a href="{{ url_for('c2n_liste_referentiel') }}">Référentiel</a></li>
+                    <li class="breadcrumb-item active">{{ action }} un contrôle</li>
+                </ol>
+            </nav>
+            <h1 class="h2">
+                <i class="fas fa-book me-2 text-primary"></i>
+                {{ action }} un référentiel de contrôle
+            </h1>
+            <p class="text-muted">Définissez les caractéristiques du contrôle à référencer</p>
+        </div>
+    </div>
+
+    <div class="row">
+        <div class="col-md-8">
+            <div class="card shadow-sm">
+                <div class="card-body">
+                    <form method="POST" id="referentielForm">
+                        {{ form.csrf_token }}
+                        
+                        <!-- Identification -->
+                        <div class="form-section">
+                            <h6 class="section-title">
+                                <i class="fas fa-tag me-2 text-primary"></i>
+                                Identification
+                            </h6>
+                            <div class="row">
+                                <div class="col-md-4 mb-3">
+                                    {{ form.code_controle.label(class="form-label fw-semibold") }}
+                                    {{ form.code_controle(class="form-control" + (" is-invalid" if form.code_controle.errors else ""), 
+                                        placeholder="Ex: FIN-001, RH-002, IT-003", id="codeControle") }}
+                                    {% for error in form.code_controle.errors %}
+                                        <div class="invalid-feedback">{{ error }}</div>
+                                    {% endfor %}
+                                    <small class="text-muted">Code unique du contrôle</small>
+                                </div>
+                                <div class="col-md-8 mb-3">
+                                    {{ form.nom.label(class="form-label fw-semibold") }}
+                                    {{ form.nom(class="form-control" + (" is-invalid" if form.nom.errors else ""), 
+                                        placeholder="Nom du contrôle", id="nomControle") }}
+                                    {% for error in form.nom.errors %}
+                                        <div class="invalid-feedback">{{ error }}</div>
+                                    {% endfor %}
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <!-- Organisation -->
+                        <div class="form-section">
+                            <h6 class="section-title">
+                                <i class="fas fa-building me-2 text-primary"></i>
+                                Organisation
+                            </h6>
+                            <div class="row">
+                                <div class="col-md-6 mb-3">
+                                    {{ form.processus.label(class="form-label fw-semibold") }}
+                                    {{ form.processus(class="form-control", placeholder="Ex: Comptabilité, Achats, RH...") }}
+                                </div>
+                                <div class="col-md-6 mb-3">
+                                    {{ form.metier.label(class="form-label fw-semibold") }}
+                                    {{ form.metier(class="form-control", placeholder="Ex: Finance, RH, IT, Achats...") }}
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <!-- Objectif -->
+                        <div class="form-section">
+                            <h6 class="section-title">
+                                <i class="fas fa-bullseye me-2 text-primary"></i>
+                                Objectif
+                            </h6>
+                            <div class="mb-3">
+                                {{ form.objectif.label(class="form-label fw-semibold") }}
+                                {{ form.objectif(class="form-control", rows=3) }}
+                            </div>
+                        </div>
+                        
+                        <!-- Dans la section des risques couverts -->
+                        <div class="form-section">
+                            <h6 class="section-title">
+                                <i class="fas fa-shield-alt me-2 text-primary"></i>
+                                Risques couverts
+                            </h6>
+                            
+                            <!-- Sélecteur de cartographie -->
+                            <div class="risk-selector mb-3">
+                                <label class="form-label fw-semibold">Ou sélectionner depuis une cartographie</label>
+                                <div class="row">
+                                    <div class="col-md-8">
+                                        <select id="cartographieSelect" class="form-select">
+                                            <option value="">-- Sélectionner une cartographie --</option>
+                                            {% for carto in cartographies %}
+                                            <option value="{{ carto.id }}" data-nb-risques="{{ carto.risques|length }}">
+                                                {{ carto.nom }} 
+                                                {% if carto.pole %} ({{ carto.pole.nom }}){% endif %}
+                                                - {{ carto.risques|length }} risque(s)
+                                            </option>
+                                            {% endfor %}
+                                        </select>
+                                        {% if cartographies|length == 0 %}
+                                        <div class="alert alert-warning small mt-2">
+                                            <i class="fas fa-exclamation-triangle me-2"></i>
+                                            Aucune cartographie disponible. 
+                                            <a href="{{ url_for('liste_cartographies') }}">Créez une cartographie</a> pour importer des risques.
+                                        </div>
+                                        {% endif %}
+                                    </div>
+                                    <div class="col-md-4">
+                                        <button type="button" class="btn btn-outline-primary w-100" id="loadRisquesBtn" {% if cartographies|length == 0 %}disabled{% endif %}>
+                                            <i class="fas fa-sync-alt me-1"></i>Charger les risques
+                                        </button>
+                                    </div>
+                                </div>
+                                <div id="risquesList" class="mt-3" style="max-height: 250px; overflow-y: auto;"></div>
+                                <small class="text-muted">Sélectionnez les risques dans la cartographie (filtrée par votre client)</small>
+                            </div>
+                            
+                            <!-- Saisie manuelle -->
+                            <div class="mb-3">
+                                <label class="form-label fw-semibold">Ou saisie manuelle (un par ligne)</label>
+                                <textarea name="risques_couverts" id="risquesManuels" class="form-control" rows="4" 
+                                        placeholder="Saisissez un risque par ligne...">{{ form.risques_couverts.data if form.risques_couverts.data else '' }}</textarea>
+                                <small class="text-muted">Chaque ligne sera convertie en risque</small>
+                            </div>
+                            
+                            <!-- Prévisualisation -->
+                            <div id="selectedRisksPreview" class="mt-3">
+                                <label class="form-label fw-semibold">Risques sélectionnés :</label>
+                                <div id="selectedRisksContainer"></div>
+                            </div>
+                            <input type="hidden" name="risques_couverts_json" id="risquesCouvertsJson">
+                        </div>
+                        
+                        <!-- Configuration -->
+                        <div class="form-section">
+                            <h6 class="section-title">
+                                <i class="fas fa-chart-line me-2 text-primary"></i>
+                                Configuration
+                            </h6>
+                            <div class="row">
+                                <div class="col-md-6 mb-3">
+                                    {{ form.frequence.label(class="form-label fw-semibold") }}
+                                    {{ form.frequence(class="form-select" + (" is-invalid" if form.frequence.errors else "")) }}
+                                    {% for error in form.frequence.errors %}
+                                        <div class="invalid-feedback">{{ error }}</div>
+                                    {% endfor %}
+                                </div>
+                                <div class="col-md-6 mb-3">
+                                    {{ form.responsable_id.label(class="form-label fw-semibold") }}
+                                    {{ form.responsable_id(class="form-select" + (" is-invalid" if form.responsable_id.errors else "")) }}
+                                    {% for error in form.responsable_id.errors %}
+                                        <div class="invalid-feedback">{{ error }}</div>
+                                    {% endfor %}
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <hr>
+                        <div class="d-flex justify-content-between">
+                            <a href="{{ url_for('c2n_liste_referentiel') }}" class="btn btn-secondary">
+                                <i class="fas fa-times me-1"></i>Annuler
+                            </a>
+                            <button type="submit" class="btn btn-primary">
+                                <i class="fas fa-save me-1"></i>{{ action }}
+                            </button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+        
+        <div class="col-md-4">
+            <!-- Aperçu -->
+            <div class="card shadow-sm mb-4">
+                <div class="card-header bg-white">
+                    <h6 class="mb-0 fw-semibold">
+                        <i class="fas fa-eye me-2 text-primary"></i>
+                        Aperçu
+                    </h6>
+                </div>
+                <div class="card-body">
+                    <div id="previewContent">
+                        <p class="text-muted small text-center mb-0">
+                            Remplissez le formulaire<br>
+                            pour voir l'aperçu
+                        </p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    // Gestion des risques
+    let selectedRisks = [];
+    
+    // Charger les risques d'une cartographie
+    document.getElementById('loadRisquesBtn')?.addEventListener('click', function() {
+        const cartoId = document.getElementById('cartographieSelect').value;
+        if (!cartoId) {
+            alert('Veuillez sélectionner une cartographie');
+            return;
+        }
+        
+        fetch(`/api/cartographie/${cartoId}/risques`)
+            .then(response => response.json())
+            .then(data => {
+                const container = document.getElementById('risquesList');
+                if (data.risques && data.risques.length > 0) {
+                    container.innerHTML = `
+                        <div class="list-group">
+                            ${data.risques.map(risque => `
+                                <div class="list-group-item list-group-item-action">
+                                    <div class="form-check">
+                                        <input class="form-check-input" type="checkbox" value="${risque.id}" 
+                                               data-intitule="${risque.intitule}" data-reference="${risque.reference}"
+                                               onchange="toggleRisk(this)">
+                                        <label class="form-check-label">
+                                            <strong>${risque.reference}</strong> - ${risque.intitule}
+                                        </label>
+                                    </div>
+                                </div>
+                            `).join('')}
+                        </div>
+                        <button type="button" class="btn btn-sm btn-success mt-2" onclick="addSelectedRisks()">
+                            <i class="fas fa-plus me-1"></i>Ajouter les risques sélectionnés
+                        </button>
+                    `;
+                } else {
+                    container.innerHTML = '<p class="text-muted">Aucun risque dans cette cartographie</p>';
+                }
+            })
+            .catch(error => {
+                console.error('Erreur:', error);
+                alert('Erreur lors du chargement des risques');
+            });
+    });
+    
+    // Fonction pour basculer un risque
+    window.toggleRisk = function(checkbox) {
+        const riskId = checkbox.value;
+        const riskIntitule = checkbox.getAttribute('data-intitule');
+        const riskReference = checkbox.getAttribute('data-reference');
+        
+        if (checkbox.checked) {
+            if (!selectedRisks.find(r => r.id == riskId)) {
+                selectedRisks.push({
+                    id: riskId,
+                    reference: riskReference,
+                    intitule: riskIntitule
+                });
+            }
+        } else {
+            selectedRisks = selectedRisks.filter(r => r.id != riskId);
+        }
+        updateSelectedRisksPreview();
+    };
+    
+    // Ajouter les risques sélectionnés
+    window.addSelectedRisks = function() {
+        updateManualRisksFromSelected();
+        document.getElementById('risquesList').innerHTML = '';
+        alert(`${selectedRisks.length} risque(s) ajouté(s) à la liste`);
+    };
+    
+    // Mettre à jour la zone de texte manuelle avec les risques sélectionnés
+    function updateManualRisksFromSelected() {
+        const manualTextarea = document.getElementById('risquesManuels');
+        let currentRisks = manualTextarea.value.split('\n').filter(r => r.trim());
+        
+        // Ajouter les nouveaux risques non déjà présents
+        selectedRisks.forEach(risk => {
+            const riskText = `[${risk.reference}] ${risk.intitule}`;
+            if (!currentRisks.some(r => r.includes(risk.reference))) {
+                currentRisks.push(riskText);
+            }
+        });
+        
+        manualTextarea.value = currentRisks.join('\n');
+        updateSelectedRisksPreview();
+    }
+    
+    // Mettre à jour l'aperçu des risques sélectionnés
+    function updateSelectedRisksPreview() {
+        const container = document.getElementById('selectedRisksContainer');
+        const manualTextarea = document.getElementById('risquesManuels');
+        const risks = manualTextarea.value.split('\n').filter(r => r.trim());
+        
+        if (risks.length > 0) {
+            container.innerHTML = `
+                <div class="border rounded p-2">
+                    ${risks.map(risk => `
+                        <div class="risk-item">
+                            <span>${risk}</span>
+                            <button type="button" class="btn btn-sm btn-link text-danger" onclick="removeRisk('${escapeHtml(risk)}')">
+                                <i class="fas fa-trash"></i>
+                            </button>
+                        </div>
+                    `).join('')}
+                </div>
+            `;
+        } else {
+            container.innerHTML = '<p class="text-muted small">Aucun risque sélectionné</p>';
+        }
+        
+        // Mettre à jour le champ JSON
+        document.getElementById('risquesCouvertsJson').value = JSON.stringify(risks);
+    }
+    
+    // Supprimer un risque
+    window.removeRisk = function(riskText) {
+        const manualTextarea = document.getElementById('risquesManuels');
+        let risks = manualTextarea.value.split('\n').filter(r => r.trim());
+        risks = risks.filter(r => r !== riskText);
+        manualTextarea.value = risks.join('\n');
+        updateSelectedRisksPreview();
+    };
+    
+    // Écouter les changements dans la zone de texte manuelle
+    document.getElementById('risquesManuels')?.addEventListener('input', updateSelectedRisksPreview);
+    
+    // Initialiser l'aperçu
+    updateSelectedRisksPreview();
+    
+    // Validation du code
+    const codeInput = document.getElementById('codeControle');
+    if (codeInput) {
+        codeInput.addEventListener('input', function() {
+            this.value = this.value.toUpperCase().replace(/[^A-Z0-9-]/g, '');
+        });
+    }
+    
+    // Aperçu en temps réel
+    function updatePreview() {
+        const code = document.getElementById('codeControle')?.value || 'XXX-XXX';
+        const nom = document.getElementById('nomControle')?.value || 'Nom du contrôle';
+        const frequence = document.querySelector('select[name="frequence"]')?.options[document.querySelector('select[name="frequence"]')?.selectedIndex]?.text || 'Non définie';
+        const processus = document.querySelector('input[name="processus"]')?.value || 'Non spécifié';
+        const metier = document.querySelector('input[name="metier"]')?.value || 'Non spécifié';
+        
+        let frequenceClass = 'bg-info';
+        if (frequence === 'Mensuel') frequenceClass = 'bg-primary';
+        else if (frequence === 'Trimestriel') frequenceClass = 'bg-warning';
+        else if (frequence === 'Annuel') frequenceClass = 'bg-success';
+        
+        const previewContent = document.getElementById('previewContent');
+        if (previewContent) {
+            previewContent.innerHTML = `
+                <div class="code-preview mb-3 text-center">
+                    <code>${escapeHtml(code)}</code>
+                </div>
+                <div class="mb-2">
+                    <div class="small text-muted">Nom</div>
+                    <div class="fw-semibold">${escapeHtml(nom)}</div>
+                </div>
+                <div class="mb-2">
+                    <div class="small text-muted">Fréquence</div>
+                    <div><span class="badge ${frequenceClass}">${escapeHtml(frequence)}</span></div>
+                </div>
+                <div class="mb-2">
+                    <div class="small text-muted">Processus</div>
+                    <div>${escapeHtml(processus)}</div>
+                </div>
+                <div>
+                    <div class="small text-muted">Métier</div>
+                    <div>${escapeHtml(metier)}</div>
+                </div>
+            `;
+        }
+    }
+    
+    function escapeHtml(text) {
+        if (!text) return '';
+        const div = document.createElement('div');
+        div.textContent = text;
+        return div.innerHTML;
+    }
+    
+    // Écouter les changements pour l'aperçu
+    const inputs = ['codeControle', 'nomControle', 'processus', 'metier'];
+    inputs.forEach(id => {
+        const el = document.getElementById(id);
+        if (el) el.addEventListener('input', updatePreview);
+    });
+    const freqSelect = document.querySelector('select[name="frequence"]');
+    if (freqSelect) freqSelect.addEventListener('change', updatePreview);
+    
+    updatePreview();
+});
+</script>
+{% endblock %}

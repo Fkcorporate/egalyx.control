@@ -1,0 +1,532 @@
+{# templates/c2n/a_valider_liste.html #}
+{% extends "base.html" %}
+
+{% block title %}Contrôles à valider - C2N{% endblock %}
+
+{% block styles %}
+{{ super() }}
+<style>
+    .stat-card {
+        border-radius: 20px;
+        transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+        border: none;
+        overflow: hidden;
+        position: relative;
+    }
+    .stat-card::before {
+        content: '';
+        position: absolute;
+        top: 0;
+        left: 0;
+        right: 0;
+        height: 4px;
+        background: linear-gradient(90deg, var(--fk-accent), #10b981);
+    }
+    .stat-card:hover {
+        transform: translateY(-4px);
+        box-shadow: 0 12px 28px rgba(0,0,0,0.12);
+    }
+    .stat-icon {
+        width: 48px;
+        height: 48px;
+        border-radius: 16px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+    }
+    .stat-value {
+        font-size: 32px;
+        font-weight: 800;
+        line-height: 1.2;
+    }
+    .filter-bar {
+        background: white;
+        border-radius: 16px;
+        padding: 0.75rem 1.25rem;
+        transition: all 0.2s ease;
+        box-shadow: 0 1px 3px rgba(0,0,0,0.05);
+    }
+    [data-bs-theme="dark"] .filter-bar {
+        background: #1e293b;
+    }
+    .validation-row {
+        transition: all 0.2s ease;
+        border-left: 3px solid transparent;
+        cursor: pointer;
+    }
+    .validation-row:hover {
+        background-color: rgba(59, 130, 246, 0.03);
+        border-left-color: var(--fk-accent);
+    }
+    .validation-row.urgent {
+        background-color: rgba(220, 38, 38, 0.05);
+    }
+    .badge-statut {
+        padding: 6px 14px;
+        border-radius: 30px;
+        font-size: 0.7rem;
+        font-weight: 600;
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+    }
+    .badge-statut.soumis { background: #f59e0b; color: white; }
+    .badge-statut.valide { background: #10b981; color: white; }
+    .badge-statut.rejete { background: #dc2626; color: white; }
+    
+    .urgence-badge {
+        padding: 4px 10px;
+        border-radius: 20px;
+        font-size: 0.65rem;
+        font-weight: 600;
+    }
+    .urgence-elevee { background: #dc2626; color: white; }
+    .urgence-moyenne { background: #f59e0b; color: white; }
+    .urgence-faible { background: #10b981; color: white; }
+    
+    .action-buttons {
+        display: flex;
+        gap: 8px;
+        opacity: 0.6;
+        transition: all 0.2s ease;
+    }
+    tr:hover .action-buttons {
+        opacity: 1;
+    }
+    .btn-icon-sm {
+        width: 32px;
+        height: 32px;
+        padding: 0;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        border-radius: 10px;
+    }
+    .empty-state {
+        padding: 3rem 1rem;
+        text-align: center;
+    }
+    .empty-state-icon {
+        width: 80px;
+        height: 80px;
+        margin: 0 auto 1.5rem;
+        background: #f1f5f9;
+        border-radius: 50%;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 2.5rem;
+        color: #94a3b8;
+    }
+    [data-bs-theme="dark"] .empty-state-icon {
+        background: #1e293b;
+    }
+    .preview-card {
+        background: #f8fafc;
+        border-radius: 12px;
+        padding: 12px;
+        margin-top: 8px;
+        display: none;
+    }
+    [data-bs-theme="dark"] .preview-card {
+        background: #1e293b;
+    }
+    .validation-modal-body {
+        max-height: 60vh;
+        overflow-y: auto;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="container-fluid px-4">
+    <!-- En-tête -->
+    <div class="d-flex flex-wrap justify-content-between align-items-center mb-4">
+        <div>
+            <h1 class="h2 mb-1 fw-bold">
+                <i class="fas fa-stamp me-2" style="color: var(--fk-accent);"></i>
+                Contrôles à valider
+            </h1>
+            <nav aria-label="breadcrumb">
+                <ol class="breadcrumb mb-0">
+                    <li class="breadcrumb-item"><a href="{{ url_for('c2n_dashboard') }}">Tableau de bord C2N</a></li>
+                    <li class="breadcrumb-item"><a href="{{ url_for('c2n_liste_planifications') }}">Planification</a></li>
+                    <li class="breadcrumb-item active">À valider</li>
+                </ol>
+            </nav>
+            <p class="text-muted mt-2 mb-0">
+                <i class="fas fa-clock me-1"></i>
+                Contrôles soumis en attente de validation
+            </p>
+        </div>
+        <div class="mt-2 mt-sm-0">
+            <a href="{{ url_for('c2n_liste_planifications') }}" class="btn btn-outline-secondary rounded-pill px-3">
+                <i class="fas fa-calendar-alt me-1"></i> Toute la planification
+            </a>
+        </div>
+    </div>
+
+    <!-- Cartes statistiques -->
+    <div class="row g-3 mb-4">
+        <div class="col-sm-6 col-lg-3">
+            <div class="card stat-card h-100">
+                <div class="card-body">
+                    <div class="d-flex justify-content-between align-items-start">
+                        <div>
+                            <span class="text-muted small text-uppercase fw-semibold">En attente</span>
+                            <div class="stat-value text-warning">{{ stats.soumis|default(0) }}</div>
+                            <small class="text-muted">à valider</small>
+                        </div>
+                        <div class="stat-icon bg-warning bg-opacity-10 text-warning">
+                            <i class="fas fa-clock fa-lg"></i>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="col-sm-6 col-lg-3">
+            <div class="card stat-card h-100">
+                <div class="card-body">
+                    <div class="d-flex justify-content-between align-items-start">
+                        <div>
+                            <span class="text-muted small text-uppercase fw-semibold">Validés</span>
+                            <div class="stat-value text-success">{{ stats.valide|default(0) }}</div>
+                            <small class="text-muted">ce mois</small>
+                        </div>
+                        <div class="stat-icon bg-success bg-opacity-10 text-success">
+                            <i class="fas fa-check-circle fa-lg"></i>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="col-sm-6 col-lg-3">
+            <div class="card stat-card h-100">
+                <div class="card-body">
+                    <div class="d-flex justify-content-between align-items-start">
+                        <div>
+                            <span class="text-muted small text-uppercase fw-semibold">Taux validation</span>
+                            <div class="stat-value text-info">{{ stats.taux_validation|default(0) }}%</div>
+                            <small class="text-muted">de réussite</small>
+                        </div>
+                        <div class="stat-icon bg-info bg-opacity-10 text-info">
+                            <i class="fas fa-chart-line fa-lg"></i>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="col-sm-6 col-lg-3">
+            <div class="card stat-card h-100">
+                <div class="card-body">
+                    <div class="d-flex justify-content-between align-items-start">
+                        <div>
+                            <span class="text-muted small text-uppercase fw-semibold">Délai moyen</span>
+                            <div class="stat-value text-primary">{{ stats.delai_moyen|default(0) }}</div>
+                            <small class="text-muted">jours d'attente</small>
+                        </div>
+                        <div class="stat-icon bg-primary bg-opacity-10 text-primary">
+                            <i class="fas fa-hourglass-half fa-lg"></i>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Barre de filtres -->
+    <div class="filter-bar mb-4 shadow-sm">
+        <form method="GET" id="filterForm" class="row g-3 align-items-end">
+            <div class="col-md-3">
+                <label class="form-label small fw-semibold text-muted mb-1">
+                    <i class="fas fa-filter me-1"></i>Priorité
+                </label>
+                <select name="priorite" class="form-select" onchange="this.form.submit()">
+                    <option value="">Toutes</option>
+                    <option value="haute" {% if request.args.get('priorite') == 'haute' %}selected{% endif %}>🔴 Haute</option>
+                    <option value="moyenne" {% if request.args.get('priorite') == 'moyenne' %}selected{% endif %}>🟡 Moyenne</option>
+                    <option value="basse" {% if request.args.get('priorite') == 'basse' %}selected{% endif %}>🟢 Basse</option>
+                </select>
+            </div>
+            <div class="col-md-3">
+                <label class="form-label small fw-semibold text-muted mb-1">
+                    <i class="fas fa-building me-1"></i>Métier
+                </label>
+                <select name="metier" class="form-select" onchange="this.form.submit()">
+                    <option value="">Tous</option>
+                    {% for metier in metiers_list %}
+                    <option value="{{ metier }}" {% if request.args.get('metier') == metier %}selected{% endif %}>{{ metier }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="col-md-4">
+                <label class="form-label small fw-semibold text-muted mb-1">
+                    <i class="fas fa-search me-1"></i>Recherche
+                </label>
+                <input type="text" name="recherche" class="form-control" 
+                       placeholder="Référence, contrôle, contrôleur..."
+                       value="{{ request.args.get('recherche', '') }}">
+            </div>
+            <div class="col-md-2">
+                <button type="submit" class="btn btn-primary rounded-pill w-100">
+                    <i class="fas fa-search me-1"></i>Filtrer
+                </button>
+            </div>
+        </form>
+    </div>
+
+    <!-- Tableau des contrôles à valider -->
+    <div class="card shadow-sm">
+        <div class="card-header bg-white border-0 py-3">
+            <div class="d-flex justify-content-between align-items-center">
+                <h5 class="mb-0 fw-semibold">
+                    <i class="fas fa-list me-2 text-primary"></i>
+                    Contrôles en attente de validation
+                </h5>
+                <span class="badge bg-primary bg-opacity-10 text-primary px-3 py-2 rounded-pill">
+                    <i class="fas fa-clock me-1"></i>{{ a_valider|length }} en attente
+                </span>
+            </div>
+        </div>
+        <div class="card-body p-0">
+            {% if a_valider %}
+            <div class="table-responsive">
+                <table class="table table-hover align-middle mb-0">
+                    <thead class="bg-light">
+                        <tr>
+                            <th class="ps-3 py-3 small fw-semibold text-muted">Référence</th>
+                            <th class="py-3 small fw-semibold text-muted">Contrôle</th>
+                            <th class="py-3 small fw-semibold text-muted">Métier</th>
+                            <th class="py-3 small fw-semibold text-muted">Soumis par</th>
+                            <th class="py-3 small fw-semibold text-muted">Date soumission</th>
+                            <th class="py-3 small fw-semibold text-muted">Attente</th>
+                            <th class="py-3 small fw-semibold text-muted">Taux</th>
+                            <th class="text-end pe-3 py-3 small fw-semibold text-muted">Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for p in a_valider %}
+                        {% set jours_attente = ((now.date() - p.updated_at.date()).days) if p.updated_at else 0 %}
+                        {% set est_urgent = jours_attente >= 7 %}
+                        <tr class="validation-row {% if est_urgent %}urgent{% endif %}" 
+                            onclick="window.location.href='{{ url_for('c2n_detail_planification', id=p.id) }}'"
+                            style="cursor: pointer;">
+                            <td class="ps-3">
+                                <code class="small fw-semibold">{{ p.reference }}</code>
+                               </td>
+                            <td>
+                                <div class="fw-semibold">{{ p.referentiel.nom|truncate(50) }}</div>
+                                <small class="text-muted">{{ p.referentiel.code_controle }}</small>
+                               </td>
+                            <td>
+                                {% if p.referentiel.metier %}
+                                <span class="badge bg-secondary bg-opacity-10 text-secondary">
+                                    {{ p.referentiel.metier }}
+                                </span>
+                                {% else %}
+                                -
+                                {% endif %}
+                               </td>
+                            <td>
+                                <div class="d-flex align-items-center gap-1">
+                                    <i class="fas fa-user-circle text-muted"></i>
+                                    <span>{{ p.controleur.username if p.controleur else 'Inconnu' }}</span>
+                                </div>
+                               </td>
+                            <td>
+                                <div class="small">
+                                    <div>{{ p.updated_at.strftime('%d/%m/%Y') }}</div>
+                                    <div class="text-muted">{{ p.updated_at.strftime('%H:%M') }}</div>
+                                </div>
+                               </td>
+                            <td>
+                                <div class="d-flex flex-column align-items-start">
+                                    <span class="fw-semibold {% if est_urgent %}text-danger{% endif %}">
+                                        {{ jours_attente }} jour(s)
+                                    </span>
+                                    {% if est_urgent %}
+                                    <span class="urgence-badge urgence-elevee mt-1">
+                                        <i class="fas fa-exclamation-triangle me-1"></i>Urgent
+                                    </span>
+                                    {% endif %}
+                                </div>
+                               </td>
+                            <td>
+                                {% if p.execution and p.execution.taux_conformite %}
+                                <div class="d-flex align-items-center gap-2">
+                                    <div class="progress" style="width: 60px; height: 6px;">
+                                        <div class="progress-bar {% if p.execution.taux_conformite >= 80 %}bg-success{% elif p.execution.taux_conformite >= 60 %}bg-warning{% else %}bg-danger{% endif %}" 
+                                             style="width: {{ p.execution.taux_conformite }}%">
+                                        </div>
+                                    </div>
+                                    <span class="small fw-semibold">{{ p.execution.taux_conformite }}%</span>
+                                </div>
+                                {% else %}
+                                <span class="text-muted">-</span>
+                                {% endif %}
+                               </td>
+                            <td class="text-end pe-3">
+                                <div class="action-buttons" onclick="event.stopPropagation();">
+                                    <button type="button" class="btn btn-sm btn-success rounded-pill px-3" 
+                                            data-bs-toggle="modal" data-bs-target="#validateModal{{ p.id }}"
+                                            title="Valider">
+                                        <i class="fas fa-check me-1"></i>Valider
+                                    </button>
+                                    <button type="button" class="btn btn-sm btn-danger rounded-pill px-3" 
+                                            data-bs-toggle="modal" data-bs-target="#rejectModal{{ p.id }}"
+                                            title="Rejeter">
+                                        <i class="fas fa-times me-1"></i>Rejeter
+                                    </button>
+                                    <a href="{{ url_for('c2n_detail_planification', id=p.id) }}" 
+                                       class="btn btn-sm btn-outline-secondary rounded-pill px-3"
+                                       title="Détails">
+                                        <i class="fas fa-eye"></i>
+                                    </a>
+                                </div>
+
+                                <!-- Modal Validation -->
+                                <div class="modal fade" id="validateModal{{ p.id }}" tabindex="-1">
+                                    <div class="modal-dialog modal-dialog-centered">
+                                        <div class="modal-content">
+                                            <form method="POST" action="{{ url_for('c2n_valider_controle', planification_id=p.id) }}">
+                                                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                                                <input type="hidden" name="action" value="approuve">
+                                                <div class="modal-header">
+                                                    <h5 class="modal-title">
+                                                        <i class="fas fa-check-circle text-success me-2"></i>
+                                                        Valider le contrôle
+                                                    </h5>
+                                                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                                                </div>
+                                                <div class="modal-body">
+                                                    <p>Valider le contrôle :</p>
+                                                    <div class="alert alert-light">
+                                                        <strong>{{ p.reference }}</strong><br>
+                                                        {{ p.referentiel.nom }}
+                                                    </div>
+                                                    <div class="mb-3">
+                                                        <label class="form-label fw-semibold">Commentaire (optionnel)</label>
+                                                        <textarea name="commentaire" class="form-control" rows="3" 
+                                                                  placeholder="Ajoutez un commentaire sur votre validation..."></textarea>
+                                                    </div>
+                                                    <div class="alert alert-info small">
+                                                        <i class="fas fa-info-circle me-2"></i>
+                                                        La validation du niveau 1 déclenchera automatiquement la validation niveau 2 si configurée.
+                                                    </div>
+                                                </div>
+                                                <div class="modal-footer">
+                                                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Annuler</button>
+                                                    <button type="submit" class="btn btn-success">
+                                                        <i class="fas fa-check me-1"></i>Valider
+                                                    </button>
+                                                </div>
+                                            </form>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <!-- Modal Rejet -->
+                                <div class="modal fade" id="rejectModal{{ p.id }}" tabindex="-1">
+                                    <div class="modal-dialog modal-dialog-centered">
+                                        <div class="modal-content">
+                                            <form method="POST" action="{{ url_for('c2n_valider_controle', planification_id=p.id) }}">
+                                                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                                                <input type="hidden" name="action" value="rejete">
+                                                <div class="modal-header">
+                                                    <h5 class="modal-title">
+                                                        <i class="fas fa-times-circle text-danger me-2"></i>
+                                                        Rejeter le contrôle
+                                                    </h5>
+                                                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                                                </div>
+                                                <div class="modal-body">
+                                                    <p>Rejeter le contrôle :</p>
+                                                    <div class="alert alert-light">
+                                                        <strong>{{ p.reference }}</strong><br>
+                                                        {{ p.referentiel.nom }}
+                                                    </div>
+                                                    <div class="mb-3">
+                                                        <label class="form-label fw-semibold text-danger">Raison du rejet *</label>
+                                                        <textarea name="commentaire" class="form-control" rows="3" required
+                                                                  placeholder="Expliquez pourquoi ce contrôle est rejeté..."></textarea>
+                                                    </div>
+                                                    <div class="alert alert-warning small">
+                                                        <i class="fas fa-exclamation-triangle me-2"></i>
+                                                        Le contrôle devra être corrigé et resoumis.
+                                                    </div>
+                                                </div>
+                                                <div class="modal-footer">
+                                                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Annuler</button>
+                                                    <button type="submit" class="btn btn-danger">
+                                                        <i class="fas fa-times me-1"></i>Rejeter
+                                                    </button>
+                                                </div>
+                                            </form>
+                                        </div>
+                                    </div>
+                                </div>
+                               </td>
+                         </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+            {% else %}
+            <div class="empty-state">
+                <div class="empty-state-icon">
+                    <i class="fas fa-check-circle"></i>
+                </div>
+                <h6 class="mb-2">Aucun contrôle à valider</h6>
+                <p class="text-muted small mb-3">
+                    Tous les contrôles soumis ont été traités.
+                </p>
+                <a href="{{ url_for('c2n_liste_planifications') }}" class="btn btn-outline-primary rounded-pill px-4">
+                    <i class="fas fa-calendar-alt me-2"></i>Voir la planification
+                </a>
+            </div>
+            {% endif %}
+        </div>
+    </div>
+
+    <!-- Légende -->
+    <div class="row mt-4">
+        <div class="col-12">
+            <div class="card bg-light border-0">
+                <div class="card-body py-2">
+                    <div class="d-flex flex-wrap gap-3 justify-content-center">
+                        <span class="small text-muted"><i class="fas fa-clock text-warning me-1"></i> En attente</span>
+                        <span class="small text-muted"><i class="fas fa-check-circle text-success me-1"></i> Validé</span>
+                        <span class="small text-muted"><i class="fas fa-times-circle text-danger me-1"></i> Rejeté</span>
+                        <span class="small text-muted"><i class="fas fa-exclamation-triangle text-danger me-1"></i> Urgent (>7 jours)</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    // Auto-submit sur changement de filtre
+    const filterSelects = document.querySelectorAll('#filterForm select');
+    filterSelects.forEach(select => {
+        select.addEventListener('change', function() {
+            this.form.submit();
+        });
+    });
+    
+    // Tooltips
+    const tooltipTriggerList = [].slice.call(document.querySelectorAll('[title]'));
+    tooltipTriggerList.forEach(function(el) {
+        new bootstrap.Tooltip(el);
+    });
+    
+    // Arrêter la propagation du clic sur les modals
+    document.querySelectorAll('[data-bs-toggle="modal"]').forEach(btn => {
+        btn.addEventListener('click', function(e) {
+            e.stopPropagation();
+        });
+    });
+});
+</script>
+{% endblock %}

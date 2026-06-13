@@ -1,0 +1,497 @@
+{% extends "base.html" %}
+
+{% block title %}Dashboard Recommandations - C2N{% endblock %}
+
+{% block styles %}
+{{ super() }}
+<style>
+    .stat-card {
+        border-radius: 20px;
+        transition: all 0.3s ease;
+        border: none;
+        overflow: hidden;
+        position: relative;
+        cursor: pointer;
+    }
+    .stat-card::before {
+        content: '';
+        position: absolute;
+        top: 0;
+        left: 0;
+        right: 0;
+        height: 4px;
+        background: linear-gradient(90deg, var(--fk-accent), #10b981);
+    }
+    .stat-card:hover {
+        transform: translateY(-4px);
+        box-shadow: 0 12px 28px rgba(0,0,0,0.12);
+    }
+    .stat-value {
+        font-size: 32px;
+        font-weight: 800;
+    }
+    
+    .timeline-item {
+        position: relative;
+        padding-left: 30px;
+        padding-bottom: 20px;
+        border-left: 2px solid #e2e8f0;
+    }
+    .timeline-item:last-child {
+        border-left: 2px solid transparent;
+    }
+    .timeline-icon {
+        position: absolute;
+        left: -10px;
+        top: 0;
+        width: 20px;
+        height: 20px;
+        border-radius: 50%;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 10px;
+    }
+    .timeline-icon.critique { background: #dc2626; color: white; }
+    .timeline-icon.urgent { background: #f59e0b; color: white; }
+    .timeline-icon.normal { background: #3b82f6; color: white; }
+    .timeline-icon.termine { background: #10b981; color: white; }
+    
+    .echange-card {
+        background: white;
+        border-radius: 16px;
+        padding: 1rem;
+        margin-bottom: 1rem;
+        transition: all 0.2s ease;
+        border-left: 4px solid;
+        box-shadow: 0 1px 3px rgba(0,0,0,0.05);
+    }
+    [data-bs-theme="dark"] .echange-card {
+        background: #1e293b;
+    }
+    .echange-card.retard { border-left-color: #dc2626; background: #fef2f2; }
+    .echange-card.proche { border-left-color: #f59e0b; background: #fffbeb; }
+    .echange-card.normal { border-left-color: #10b981; }
+    [data-bs-theme="dark"] .echange-card.retard { background: #2d1a1a; }
+    [data-bs-theme="dark"] .echange-card.proche { background: #2d241a; }
+    
+    .progress-custom {
+        height: 6px;
+        border-radius: 10px;
+        background: #e2e8f0;
+        overflow: hidden;
+    }
+    .progress-custom-bar {
+        height: 100%;
+        border-radius: 10px;
+        transition: width 0.3s ease;
+    }
+    
+    .gauge-container {
+        position: relative;
+        width: 120px;
+        height: 120px;
+        margin: 0 auto;
+    }
+    .gauge-value {
+        position: absolute;
+        top: 50%;
+        left: 50%;
+        transform: translate(-50%, -50%);
+        font-size: 24px;
+        font-weight: 700;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="container-fluid px-4">
+    
+    <!-- En-tête -->
+    <div class="d-flex flex-wrap justify-content-between align-items-center mb-4">
+        <div>
+            <h1 class="h2 mb-1 fw-bold">
+                <i class="fas fa-lightbulb me-2" style="color: var(--fk-accent);"></i>
+                Dashboard Recommandations
+            </h1>
+            <nav aria-label="breadcrumb">
+                <ol class="breadcrumb mb-0">
+                    <li class="breadcrumb-item"><a href="{{ url_for('c2n_dashboard') }}">Tableau de bord C2N</a></li>
+                    <li class="breadcrumb-item active">Recommandations</li>
+                </ol>
+            </nav>
+            <p class="text-muted mt-2 mb-0">
+                <i class="fas fa-chart-line me-1"></i>
+                Suivez l'état d'avancement de vos recommandations
+            </p>
+        </div>
+        <div>
+            <button type="button" class="btn btn-primary rounded-pill px-4" data-bs-toggle="modal" data-bs-target="#addRecommendationModal">
+                <i class="fas fa-plus me-2"></i>Nouvelle recommandation
+            </button>
+            <a href="{{ url_for('c2n_recommandations_central') }}" class="btn btn-outline-secondary rounded-pill px-3 ms-2">
+                <i class="fas fa-list me-1"></i>Voir tout
+            </a>
+        </div>
+    </div>
+
+    <!-- Cartes KPI -->
+    <div class="row g-3 mb-4">
+        <div class="col-md-3">
+            <div class="card stat-card h-100" onclick="filtrer('proposee')">
+                <div class="card-body">
+                    <div class="d-flex justify-content-between">
+                        <div>
+                            <span class="text-muted small">En attente</span>
+                            <div class="stat-value text-warning">{{ stats.proposee|default(0) }}</div>
+                            <small class="text-muted">à traiter</small>
+                        </div>
+                        <div class="bg-warning bg-opacity-10 rounded p-2">
+                            <i class="fas fa-clock fa-2x text-warning"></i>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card stat-card h-100" onclick="filtrer('acceptee')">
+                <div class="card-body">
+                    <div class="d-flex justify-content-between">
+                        <div>
+                            <span class="text-muted small">En cours</span>
+                            <div class="stat-value text-info">{{ stats.acceptee|default(0) }}</div>
+                            <small class="text-muted">en plan d'action</small>
+                        </div>
+                        <div class="bg-info bg-opacity-10 rounded p-2">
+                            <i class="fas fa-tasks fa-2x text-info"></i>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card stat-card h-100" onclick="filtrer('realisee')">
+                <div class="card-body">
+                    <div class="d-flex justify-content-between">
+                        <div>
+                            <span class="text-muted small">Réalisées</span>
+                            <div class="stat-value text-success">{{ stats.realisee|default(0) }}</div>
+                            <small class="text-muted">terminées</small>
+                        </div>
+                        <div class="bg-success bg-opacity-10 rounded p-2">
+                            <i class="fas fa-check-circle fa-2x text-success"></i>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card stat-card h-100">
+                <div class="card-body">
+                    <div class="d-flex justify-content-between">
+                        <div>
+                            <span class="text-muted small">Taux acceptation</span>
+                            <div class="stat-value text-primary">{{ stats.taux_acceptation|default(0) }}%</div>
+                            <small class="text-muted">recommandations acceptées</small>
+                        </div>
+                        <div class="bg-primary bg-opacity-10 rounded p-2">
+                            <i class="fas fa-chart-line fa-2x text-primary"></i>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Jauges et progression -->
+    <div class="row g-3 mb-4">
+        <div class="col-md-4">
+            <div class="card h-100">
+                <div class="card-header bg-white">
+                    <h6 class="mb-0 fw-semibold">
+                        <i class="fas fa-chart-simple me-2 text-primary"></i>
+                        Progression globale
+                    </h6>
+                </div>
+                <div class="card-body text-center">
+                    <div class="gauge-container">
+                        <canvas id="gaugeChart" width="120" height="120"></canvas>
+                        <div class="gauge-value">{{ stats.pourcentage_realisation|default(0) }}%</div>
+                    </div>
+                    <div class="mt-3">
+                        <div class="d-flex justify-content-between small mb-1">
+                            <span>Acceptées</span>
+                            <span>{{ stats.acceptee|default(0) }}/{{ stats.total|default(1) }}</span>
+                        </div>
+                        <div class="progress-custom">
+                            <div class="progress-custom-bar bg-info" style="width: {{ (stats.acceptee|default(0) / stats.total|default(1) * 100)|round|int }}%"></div>
+                        </div>
+                        <div class="d-flex justify-content-between small mt-2 mb-1">
+                            <span>Réalisées</span>
+                            <span>{{ stats.realisee|default(0) }}/{{ stats.acceptee|default(1) }}</span>
+                        </div>
+                        <div class="progress-custom">
+                            <div class="progress-custom-bar bg-success" style="width: {{ (stats.realisee|default(0) / stats.acceptee|default(1) * 100)|round|int if stats.acceptee|default(0) > 0 else 0 }}%"></div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <div class="col-md-8">
+            <div class="card h-100">
+                <div class="card-header bg-white">
+                    <h6 class="mb-0 fw-semibold">
+                        <i class="fas fa-calendar-alt me-2 text-primary"></i>
+                        Échéancier des recommandations
+                    </h6>
+                </div>
+                <div class="card-body" style="max-height: 300px; overflow-y: auto;">
+                    {% if echeances %}
+                        {% for echeance in echeances %}
+                        <div class="echange-card {{ echeance.classe }}">
+                            <div class="d-flex justify-content-between align-items-start">
+                                <div class="flex-grow-1">
+                                    <div class="d-flex align-items-center gap-2 mb-1">
+                                        <span class="badge {{ echeance.badge_classe }}">{{ echeance.statut_label }}</span>
+                                        <span class="badge {{ echeance.priorite_classe }}">{{ echeance.priorite_label }}</span>
+                                    </div>
+                                    <div class="fw-semibold">{{ echeance.titre }}</div>
+                                    <div class="small text-muted mt-1">{{ echeance.description|truncate(100) }}</div>
+                                    <div class="d-flex justify-content-between align-items-center mt-2">
+                                        <div>
+                                            <span class="small text-muted">
+                                                <i class="fas fa-calendar me-1"></i>
+                                                {% if echeance.jours_restants > 0 %}
+                                                    Échéance dans {{ echeance.jours_restants }} jours
+                                                {% elif echeance.jours_restants == 0 %}
+                                                    Échéance aujourd'hui
+                                                {% else %}
+                                                    En retard de {{ -echeance.jours_restants }} jours
+                                                {% endif %}
+                                            </span>
+                                        </div>
+                                        <div class="d-flex gap-2">
+                                            <button class="btn btn-sm btn-outline-primary" onclick="modifierRecommandation({{ echeance.id }})">
+                                                <i class="fas fa-edit"></i>
+                                            </button>
+                                            {% if echeance.statut == 'proposee' %}
+                                            <button class="btn btn-sm btn-outline-success" onclick="accepterRecommandation({{ echeance.id }})">
+                                                <i class="fas fa-check"></i> Accepter
+                                            </button>
+                                            {% endif %}
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        {% endfor %}
+                    {% else %}
+                        <div class="text-center py-4">
+                            <i class="fas fa-calendar-check fa-3x text-muted mb-2"></i>
+                            <p class="text-muted mb-0">Aucune recommandation avec échéance</p>
+                        </div>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Chronologie des recommandations -->
+    <div class="card">
+        <div class="card-header bg-white">
+            <h6 class="mb-0 fw-semibold">
+                <i class="fas fa-timeline me-2 text-primary"></i>
+                Chronologie des recommandations
+            </h6>
+        </div>
+        <div class="card-body">
+            <div class="timeline">
+                {% for reco in dernieres_recommandations %}
+                <div class="timeline-item">
+                    <div class="timeline-icon {{ reco.couleur }}">
+                        <i class="fas fa-{{ reco.icone }} fa-xs"></i>
+                    </div>
+                    <div class="mb-2">
+                        <span class="badge {{ reco.badge_classe }}">{{ reco.statut_label }}</span>
+                        <span class="badge {{ reco.priorite_classe }} ms-1">{{ reco.priorite_label }}</span>
+                        <span class="small text-muted ms-2">{{ reco.created_at|format_date }}</span>
+                    </div>
+                    <div class="fw-semibold">{{ reco.titre }}</div>
+                    <div class="small text-muted">{{ reco.description|truncate(150) }}</div>
+                    <div class="mt-2">
+                        <button class="btn btn-sm btn-outline-secondary" onclick="voirDetail({{ reco.id }})">
+                            <i class="fas fa-eye me-1"></i>Voir détails
+                        </button>
+                        {% if reco.statut == 'proposee' %}
+                        <button class="btn btn-sm btn-outline-success ms-1" onclick="accepterRecommandation({{ reco.id }})">
+                            <i class="fas fa-check me-1"></i>Accepter
+                        </button>
+                        {% endif %}
+                    </div>
+                </div>
+                {% else %}
+                <div class="text-center py-4">
+                    <i class="fas fa-inbox fa-3x text-muted mb-2"></i>
+                    <p class="text-muted mb-0">Aucune recommandation récente</p>
+                </div>
+                {% endfor %}
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Modal Modification Recommandation -->
+<div class="modal fade" id="editRecommendationModal" tabindex="-1">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">
+                    <i class="fas fa-edit me-2 text-primary"></i>
+                    Modifier la recommandation
+                </h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <form id="editRecommendationForm">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                <input type="hidden" name="recommandation_id" id="editRecoId">
+                <div class="modal-body">
+                    <div class="mb-3">
+                        <label class="form-label fw-semibold">Titre</label>
+                        <input type="text" name="titre" id="editTitre" class="form-control" required>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label fw-semibold">Description</label>
+                        <textarea name="description" id="editDescription" class="form-control" rows="3"></textarea>
+                    </div>
+                    <div class="row">
+                        <div class="col-md-6 mb-3">
+                            <label class="form-label fw-semibold">Priorité</label>
+                            <select name="priorite" id="editPriorite" class="form-select">
+                                <option value="basse">🟢 Basse</option>
+                                <option value="moyenne">🟡 Moyenne</option>
+                                <option value="haute">🔴 Haute</option>
+                            </select>
+                        </div>
+                        <div class="col-md-6 mb-3">
+                            <label class="form-label fw-semibold">Catégorie</label>
+                            <select name="categorie" id="editCategorie" class="form-select">
+                                <option value="processus">📊 Processus</option>
+                                <option value="technique">💻 Technique</option>
+                                <option value="formation">👥 Formation</option>
+                                <option value="organisationnel">🏢 Organisationnel</option>
+                            </select>
+                        </div>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label fw-semibold">Date d'échéance (optionnelle)</label>
+                        <input type="date" name="date_echeance" id="editDateEcheance" class="form-control">
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Annuler</button>
+                    <button type="submit" class="btn btn-primary">Enregistrer</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<script>
+// Graphique jauge
+const ctx = document.getElementById('gaugeChart')?.getContext('2d');
+if (ctx) {
+    new Chart(ctx, {
+        type: 'doughnut',
+        data: {
+            datasets: [{
+                data: [{{ stats.pourcentage_realisation|default(0) }}, 100 - {{ stats.pourcentage_realisation|default(0) }}],
+                backgroundColor: ['#10b981', '#e2e8f0'],
+                borderWidth: 0,
+                cutout: '70%'
+            }]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: true,
+            plugins: { legend: { display: false }, tooltip: { enabled: false } }
+        }
+    });
+}
+
+function filtrer(statut) {
+    window.location.href = "{{ url_for('c2n_recommandations_central') }}?statut=" + statut;
+}
+
+async function modifierRecommandation(id) {
+    const response = await fetch(`/c2n/recommandation/${id}/get`);
+    const data = await response.json();
+    
+    if (data.success) {
+        document.getElementById('editRecoId').value = data.recommandation.id;
+        document.getElementById('editTitre').value = data.recommandation.titre;
+        document.getElementById('editDescription').value = data.recommandation.description || '';
+        document.getElementById('editPriorite').value = data.recommandation.priorite;
+        document.getElementById('editCategorie').value = data.recommandation.categorie;
+        document.getElementById('editDateEcheance').value = data.recommandation.date_echeance || '';
+        
+        new bootstrap.Modal(document.getElementById('editRecommendationModal')).show();
+    }
+}
+
+document.getElementById('editRecommendationForm')?.addEventListener('submit', async function(e) {
+    e.preventDefault();
+    const formData = new FormData(this);
+    
+    const response = await fetch('/c2n/recommandation/modifier', {
+        method: 'POST',
+        headers: { 'X-CSRFToken': document.querySelector('input[name="csrf_token"]').value },
+        body: formData
+    });
+    
+    const data = await response.json();
+    if (data.success) {
+        location.reload();
+        showToast('Recommandation modifiée', 'success');
+    } else {
+        showToast('Erreur: ' + data.error, 'danger');
+    }
+});
+
+async function accepterRecommandation(id) {
+    const dateEcheance = prompt("Date d'échéance (YYYY-MM-DD):", getDefaultEcheance());
+    if (!dateEcheance) return;
+    
+    const response = await fetch(`/c2n/recommandation/${id}/accepter`, {
+        method: 'POST',
+        headers: {
+            'X-CSRFToken': document.querySelector('input[name="csrf_token"]').value,
+            'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ date_echeance: dateEcheance })
+    });
+    
+    const data = await response.json();
+    if (data.success) {
+        location.reload();
+        showToast(data.message, 'success');
+    }
+}
+
+function getDefaultEcheance() {
+    const date = new Date();
+    date.setDate(date.getDate() + 30);
+    return date.toISOString().split('T')[0];
+}
+
+function voirDetail(id) {
+    window.location.href = `/c2n/recommandation/${id}/detail`;
+}
+
+function showToast(message, type) {
+    // Implémentation toast
+    alert(message);
+}
+</script>
+{% endblock %}

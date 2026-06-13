@@ -1,0 +1,1086 @@
+{% extends "base.html" %}
+
+{% block title %}Espace Recommandations - C2N{% endblock %}
+
+{% block styles %}
+{{ super() }}
+<style>
+    .stat-card {
+        border-radius: 20px;
+        transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+        border: none;
+        overflow: hidden;
+        position: relative;
+        cursor: pointer;
+    }
+    .stat-card::before {
+        content: '';
+        position: absolute;
+        top: 0;
+        left: 0;
+        right: 0;
+        height: 4px;
+        background: linear-gradient(90deg, var(--fk-accent), #10b981);
+    }
+    .stat-card:hover {
+        transform: translateY(-4px);
+        box-shadow: 0 12px 28px rgba(0,0,0,0.12);
+    }
+    .stat-icon {
+        width: 48px;
+        height: 48px;
+        border-radius: 16px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+    }
+    .stat-value {
+        font-size: 32px;
+        font-weight: 800;
+        line-height: 1.2;
+    }
+    
+    .filter-bar {
+        background: white;
+        border-radius: 16px;
+        padding: 0.75rem 1.25rem;
+        transition: all 0.2s ease;
+        box-shadow: 0 1px 3px rgba(0,0,0,0.05);
+    }
+    [data-bs-theme="dark"] .filter-bar {
+        background: #1e293b;
+    }
+    
+    .recommendation-card {
+        background: white;
+        border-radius: 16px;
+        padding: 1.25rem;
+        margin-bottom: 1rem;
+        border-left: 4px solid;
+        box-shadow: 0 1px 3px rgba(0,0,0,0.05);
+        transition: all 0.2s ease;
+    }
+    [data-bs-theme="dark"] .recommendation-card {
+        background: #1e293b;
+    }
+    .recommendation-card:hover {
+        transform: translateX(4px);
+        box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+    }
+    .recommendation-card.haute { border-left-color: #dc2626; }
+    .recommendation-card.moyenne { border-left-color: #f59e0b; }
+    .recommendation-card.basse { border-left-color: #10b981; }
+    
+    .progress-custom {
+        height: 6px;
+        border-radius: 10px;
+        background: #e2e8f0;
+        overflow: hidden;
+    }
+    .progress-custom-bar {
+        height: 100%;
+        border-radius: 10px;
+        transition: width 0.3s ease;
+    }
+    
+    .badge-statut {
+        padding: 4px 12px;
+        border-radius: 30px;
+        font-size: 0.7rem;
+        font-weight: 600;
+    }
+    .badge-statut.proposee { background: #f59e0b; color: white; }
+    .badge-statut.acceptee { background: #3b82f6; color: white; }
+    .badge-statut.rejetee { background: #6c757d; color: white; }
+    .badge-statut.realisee { background: #10b981; color: white; }
+    
+    .echeance-retard { color: #dc2626; font-weight: bold; }
+    .echeance-proche { color: #f59e0b; }
+    .echeance-ok { color: #10b981; }
+    
+    .action-btn-group {
+        display: flex;
+        gap: 8px;
+        flex-wrap: wrap;
+    }
+    .btn-action-sm {
+        padding: 4px 8px;
+        font-size: 0.7rem;
+        border-radius: 20px;
+    }
+    
+    .empty-state {
+        padding: 3rem 1rem;
+        text-align: center;
+    }
+    .empty-state-icon {
+        width: 80px;
+        height: 80px;
+        margin: 0 auto 1.5rem;
+        background: #f1f5f9;
+        border-radius: 50%;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 2.5rem;
+        color: #94a3b8;
+    }
+    
+    @keyframes fadeInUp {
+        from { opacity: 0; transform: translateY(20px); }
+        to { opacity: 1; transform: translateY(0); }
+    }
+    .animate-card {
+        animation: fadeInUp 0.4s ease-out forwards;
+        opacity: 0;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="container-fluid px-4">
+    
+    <!-- ============================================ -->
+    <!-- EN-TÊTE -->
+    <!-- ============================================ -->
+    <div class="d-flex flex-wrap justify-content-between align-items-center mb-4">
+        <div>
+            <h1 class="h2 mb-1 fw-bold">
+                <i class="fas fa-lightbulb me-2" style="color: var(--fk-accent);"></i>
+                Espace Recommandations
+            </h1>
+            <nav aria-label="breadcrumb">
+                <ol class="breadcrumb mb-0">
+                    <li class="breadcrumb-item"><a href="{{ url_for('c2n_dashboard') }}">Tableau de bord C2N</a></li>
+                    <li class="breadcrumb-item active" aria-current="page">Recommandations</li>
+                </ol>
+            </nav>
+            <p class="text-muted mt-2 mb-0">
+                <i class="fas fa-chart-line me-1"></i>
+                Centralisez, suivez et gérez toutes vos recommandations avec leur échéancier
+            </p>
+        </div>
+        <div class="mt-2 mt-sm-0">
+            <button type="button" class="btn btn-primary rounded-pill px-4 shadow-sm" data-bs-toggle="modal" data-bs-target="#addRecommendationModal">
+                <i class="fas fa-plus me-2"></i>Nouvelle recommandation
+            </button>
+        </div>
+    </div>
+
+    <!-- ============================================ -->
+    <!-- CARTES STATISTIQUES -->
+    <!-- ============================================ -->
+    <div class="row g-3 mb-4">
+        <div class="col-sm-6 col-lg-2 animate-card" onclick="filtrerPar('')">
+            <div class="card stat-card h-100">
+                <div class="card-body">
+                    <div class="d-flex justify-content-between align-items-start">
+                        <div>
+                            <span class="text-muted small text-uppercase fw-semibold">Total</span>
+                            <div class="stat-value text-primary">{{ stats.total|default(0) }}</div>
+                            <small class="text-muted">recommandations</small>
+                        </div>
+                        <div class="stat-icon bg-primary bg-opacity-10 text-primary">
+                            <i class="fas fa-list fa-lg"></i>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="col-sm-6 col-lg-2 animate-card" onclick="filtrerPar('proposee')">
+            <div class="card stat-card h-100">
+                <div class="card-body">
+                    <div class="d-flex justify-content-between align-items-start">
+                        <div>
+                            <span class="text-muted small text-uppercase fw-semibold">En attente</span>
+                            <div class="stat-value text-warning">{{ stats.proposee|default(0) }}</div>
+                            <small class="text-muted">à traiter</small>
+                        </div>
+                        <div class="stat-icon bg-warning bg-opacity-10 text-warning">
+                            <i class="fas fa-clock fa-lg"></i>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="col-sm-6 col-lg-2 animate-card" onclick="filtrerPar('acceptee')">
+            <div class="card stat-card h-100">
+                <div class="card-body">
+                    <div class="d-flex justify-content-between align-items-start">
+                        <div>
+                            <span class="text-muted small text-uppercase fw-semibold">Acceptées</span>
+                            <div class="stat-value text-info">{{ stats.acceptee|default(0) }}</div>
+                            <small class="text-muted">en plan d'action</small>
+                        </div>
+                        <div class="stat-icon bg-info bg-opacity-10 text-info">
+                            <i class="fas fa-tasks fa-lg"></i>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="col-sm-6 col-lg-2 animate-card" onclick="filtrerPar('realisee')">
+            <div class="card stat-card h-100">
+                <div class="card-body">
+                    <div class="d-flex justify-content-between align-items-start">
+                        <div>
+                            <span class="text-muted small text-uppercase fw-semibold">Réalisées</span>
+                            <div class="stat-value text-success">{{ stats.realisee|default(0) }}</div>
+                            <small class="text-muted">terminées</small>
+                        </div>
+                        <div class="stat-icon bg-success bg-opacity-10 text-success">
+                            <i class="fas fa-check-double fa-lg"></i>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="col-sm-6 col-lg-3 animate-card" onclick="filtrerPar('en_retard')">
+            <div class="card stat-card h-100">
+                <div class="card-body">
+                    <div class="d-flex justify-content-between align-items-start">
+                        <div>
+                            <span class="text-muted small text-uppercase fw-semibold">En retard</span>
+                            <div class="stat-value text-danger">{{ stats.en_retard|default(0) }}</div>
+                            <small class="text-muted">échéance dépassée</small>
+                        </div>
+                        <div class="stat-icon bg-danger bg-opacity-10 text-danger">
+                            <i class="fas fa-exclamation-triangle fa-lg"></i>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="col-sm-6 col-lg-3 animate-card">
+            <div class="card stat-card h-100">
+                <div class="card-body">
+                    <div class="d-flex justify-content-between align-items-start">
+                        <div>
+                            <span class="text-muted small text-uppercase fw-semibold">Taux réalisation</span>
+                            <div class="stat-value text-info">{{ stats.progression_moyenne|default(0) }}%</div>
+                            <small class="text-muted">moyen</small>
+                        </div>
+                        <div class="stat-icon bg-info bg-opacity-10 text-info">
+                            <i class="fas fa-chart-line fa-lg"></i>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- ============================================ -->
+    <!-- BARRE DE FILTRES -->
+    <!-- ============================================ -->
+    <div class="filter-bar mb-4 shadow-sm">
+        <form method="GET" id="filterForm" class="row g-3">
+            <div class="col-md-2">
+                <label class="form-label small fw-semibold text-muted mb-1">
+                    <i class="fas fa-filter me-1"></i>Statut
+                </label>
+                <select name="statut" class="form-select" onchange="this.form.submit()">
+                    <option value="">Tous</option>
+                    <option value="proposee" {% if request.args.get('statut') == 'proposee' %}selected{% endif %}>🟡 En attente</option>
+                    <option value="acceptee" {% if request.args.get('statut') == 'acceptee' %}selected{% endif %}>🔵 Acceptées</option>
+                    <option value="rejetee" {% if request.args.get('statut') == 'rejetee' %}selected{% endif %}>⚪ Rejetées</option>
+                    <option value="realisee" {% if request.args.get('statut') == 'realisee' %}selected{% endif %}>🟢 Réalisées</option>
+
+                </select>
+            </div>
+            <div class="col-md-2">
+                <label class="form-label small fw-semibold text-muted mb-1">
+                    <i class="fas fa-flag me-1"></i>Priorité
+                </label>
+                <select name="priorite" class="form-select" onchange="this.form.submit()">
+                    <option value="">Toutes</option>
+                    <option value="haute" {% if request.args.get('priorite') == 'haute' %}selected{% endif %}>🔴 Haute</option>
+                    <option value="moyenne" {% if request.args.get('priorite') == 'moyenne' %}selected{% endif %}>🟡 Moyenne</option>
+                    <option value="basse" {% if request.args.get('priorite') == 'basse' %}selected{% endif %}>🟢 Basse</option>
+                </select>
+            </div>
+            <div class="col-md-2">
+                <label class="form-label small fw-semibold text-muted mb-1">
+                    <i class="fas fa-tag me-1"></i>Source
+                </label>
+                <select name="source" class="form-select" onchange="this.form.submit()">
+                    <option value="">Toutes</option>
+                    <option value="ia" {% if request.args.get('source') == 'ia' %}selected{% endif %}>🤖 IA</option>
+                    <option value="manuel" {% if request.args.get('source') == 'manuel' %}selected{% endif %}>👤 Manuelle</option>
+                </select>
+            </div>
+            <div class="col-md-2">
+                <label class="form-label small fw-semibold text-muted mb-1">
+                    <i class="fas fa-chart-line me-1"></i>Catégorie
+                </label>
+                <select name="categorie" class="form-select" onchange="this.form.submit()">
+                    <option value="">Toutes</option>
+                    <option value="processus" {% if request.args.get('categorie') == 'processus' %}selected{% endif %}>📊 Processus</option>
+                    <option value="technique" {% if request.args.get('categorie') == 'technique' %}selected{% endif %}>💻 Technique</option>
+                    <option value="formation" {% if request.args.get('categorie') == 'formation' %}selected{% endif %}>👥 Formation</option>
+                    <option value="organisationnel" {% if request.args.get('categorie') == 'organisationnel' %}selected{% endif %}>🏢 Organisationnel</option>
+                </select>
+            </div>
+            <div class="col-md-4">
+                <label class="form-label small fw-semibold text-muted mb-1">
+                    <i class="fas fa-search me-1"></i>Recherche
+                </label>
+                <input type="text" name="recherche" class="form-control" 
+                       placeholder="Titre, description, responsable..."
+                       value="{{ request.args.get('recherche', '') }}">
+            </div>
+        </form>
+        
+        <!-- Filtres actifs -->
+        {% if request.args.get('statut') or request.args.get('priorite') or request.args.get('source') or request.args.get('categorie') or request.args.get('recherche') %}
+        <div class="mt-3 pt-2 border-top">
+            <div class="d-flex flex-wrap gap-2 align-items-center">
+                <span class="small text-muted">Filtres actifs :</span>
+                {% if request.args.get('statut') %}
+                <span class="badge bg-secondary">
+                    Statut: {{ request.args.get('statut') }}
+                    <a href="{{ url_for('c2n_recommandations_central', priorite=request.args.get('priorite'), source=request.args.get('source'), categorie=request.args.get('categorie'), recherche=request.args.get('recherche')) }}" class="text-white ms-1">&times;</a>
+                </span>
+                {% endif %}
+                {% if request.args.get('priorite') %}
+                <span class="badge bg-secondary">
+                    Priorité: {{ request.args.get('priorite') }}
+                    <a href="{{ url_for('c2n_recommandations_central', statut=request.args.get('statut'), source=request.args.get('source'), categorie=request.args.get('categorie'), recherche=request.args.get('recherche')) }}" class="text-white ms-1">&times;</a>
+                </span>
+                {% endif %}
+                <a href="{{ url_for('c2n_recommandations_central') }}" class="btn btn-sm btn-link text-danger p-0 ms-2">Effacer tous les filtres</a>
+            </div>
+        </div>
+        {% endif %}
+    </div>
+
+    <!-- ============================================ -->
+    <!-- LISTE DES RECOMMANDATIONS -->
+    <!-- ============================================ -->
+    {% if recommandations %}
+        {% for reco in recommandations %}
+        {% set est_retard = reco.date_echeance and reco.date_echeance < now.date() and reco.statut in ['proposee', 'acceptee'] %}
+        {% set jours_restants = (reco.date_echeance - now.date()).days if reco.date_echeance and not est_retard else 0 %}
+        {% set est_proche = jours_restants > 0 and jours_restants <= 7 %}
+        <div class="recommendation-card {{ reco.priorite }}" id="reco-{{ reco.id }}">
+            <div class="row">
+                <div class="col-md-7">
+                    <div class="d-flex flex-wrap gap-2 mb-2">
+                        <span class="badge-statut {{ reco.statut }}">
+                            {% if reco.statut == 'proposee' %}🟡 En attente
+                            {% elif reco.statut == 'acceptee' %}🔵 Acceptée
+                            {% elif reco.statut == 'rejetee' %}⚪ Rejetée
+                            {% else %}🟢 Réalisée{% endif %}
+                        </span>
+                        <span class="badge bg-secondary">
+                            {{ get_categorie_icon(reco.categorie) }} {{ get_categorie_label(reco.categorie) }}
+                        </span>
+                        {% if reco.source == 'ia' %}
+                        <span class="badge bg-info">🤖 IA</span>
+                        {% endif %}
+                        <span class="badge {{ 'bg-danger' if reco.priorite == 'haute' else 'bg-warning' if reco.priorite == 'moyenne' else 'bg-success' }}">
+                            {% if reco.priorite == 'haute' %}🔴 Haute
+                            {% elif reco.priorite == 'moyenne' %}🟡 Moyenne
+                            {% else %}🟢 Basse{% endif %}
+                        </span>
+                    </div>
+                    <h6 class="fw-semibold mb-1">{{ reco.titre }}</h6>
+                    <p class="small text-muted mb-2">{{ reco.description|truncate(120) }}</p>
+                    <div class="small text-muted">
+                        <i class="fas fa-user me-1"></i>{{ reco.createur.username if reco.createur else 'Système' }} •
+                        <i class="fas fa-calendar me-1 ms-2"></i>{{ reco.created_at|format_date }} •
+                        <i class="fas fa-tasks me-1 ms-2"></i>
+                        <a href="{{ url_for('c2n_detail_planification', id=reco.planification_id) }}" class="text-decoration-none">
+                            {{ reco.planification.reference if reco.planification else 'Voir contrôle' }}
+                        </a>
+                    </div>
+                    {% if reco.responsable %}
+                    <div class="small text-muted mt-1">
+                        <i class="fas fa-user-check me-1"></i>Responsable: {{ reco.responsable.username }}
+                    </div>
+                    {% endif %}
+                    {% if reco.commentaire_suivi %}
+                    <div class="small text-muted mt-1">
+                        <i class="fas fa-comment me-1"></i>{{ reco.commentaire_suivi|truncate(80) }}
+                    </div>
+                    {% endif %}
+                </div>
+                <div class="col-md-3">
+                    <div class="mb-2">
+                        <div class="small text-muted">Échéance</div>
+                        <div class="fw-semibold {% if est_retard %}echeance-retard{% elif est_proche %}echeance-proche{% endif %}">
+                            {% if reco.date_echeance %}
+                                {{ reco.date_echeance|format_date }}
+                                {% if est_retard %}
+                                <i class="fas fa-exclamation-triangle ms-1"></i> ({{ jours_restants|abs }}j)
+                                {% elif est_proche %}
+                                <i class="fas fa-clock ms-1"></i> (J-{{ jours_restants }})
+                                {% endif %}
+                            {% else %}
+                                <span class="text-muted">Non définie</span>
+                            {% endif %}
+                        </div>
+                    </div>
+                    <div>
+                        <div class="small text-muted">Progression</div>
+                        <div class="d-flex align-items-center gap-2">
+                            <div class="progress-custom flex-grow-1">
+                                <div class="progress-custom-bar bg-success" style="width: {{ reco.progression }}%"></div>
+                            </div>
+                            <span class="small fw-semibold">{{ reco.progression }}%</span>
+                        </div>
+                    </div>
+                    {% if reco.plan_action_id %}
+                    <div class="mt-2">
+                        <a href="{{ url_for('c2n_detail_plan_action', id=reco.plan_action_id) }}" class="btn btn-sm btn-outline-info w-100">
+                            <i class="fas fa-tasks me-1"></i>Voir plan d'action
+                        </a>
+                    </div>
+                    {% endif %}
+                </div>
+                <div class="col-md-2 text-end">
+                    <div class="action-btn-group">
+                        {% if reco.statut == 'proposee' %}
+                        <button class="btn btn-sm btn-outline-success" onclick="accepterRecommandation({{ reco.id }})" title="Accepter">
+                            <i class="fas fa-check"></i> Accepter
+                        </button>
+                        <button class="btn btn-sm btn-outline-danger" onclick="rejeterRecommandation({{ reco.id }})" title="Rejeter">
+                            <i class="fas fa-times"></i> Rejeter
+                        </button>
+                        {% endif %}
+                        {% if reco.statut == 'rejetee' %}
+                        <button class="btn btn-sm btn-outline-warning" onclick="rouvrirRecommandation({{ reco.id }})" title="Rouvrir">
+                            <i class="fas fa-undo-alt"></i> Rouvrir
+                        </button>
+                        {% endif %}
+                        {% if reco.statut in ['acceptee', 'proposee'] %}
+                        <button class="btn btn-sm btn-outline-primary" onclick="updateProgression({{ reco.id }}, {{ reco.progression }})" title="Mettre à jour">
+                            <i class="fas fa-chart-line"></i> Avancement
+                        </button>
+                        {% endif %}
+                        <button class="btn btn-sm btn-outline-secondary" onclick="modifierRecommandation({{ reco.id }})" title="Modifier">
+                            <i class="fas fa-edit"></i>
+                        </button>
+                        <button class="btn btn-sm btn-outline-danger" onclick="supprimerRecommandation({{ reco.id }})" title="Supprimer">
+                            <i class="fas fa-trash"></i>
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+        {% endfor %}
+        
+        <!-- Pagination -->
+        {% if pagination and pagination.pages > 1 %}
+        <nav class="mt-4">
+            <ul class="pagination justify-content-center">
+                {% if pagination.has_prev %}
+                <li class="page-item">
+                    <a class="page-link" href="{{ url_for('c2n_recommandations_central', page=pagination.prev_num, statut=request.args.get('statut'), priorite=request.args.get('priorite'), source=request.args.get('source'), categorie=request.args.get('categorie'), recherche=request.args.get('recherche')) }}">
+                        <i class="fas fa-chevron-left"></i> Précédent
+                    </a>
+                </li>
+                {% endif %}
+                
+                {% for page_num in pagination.iter_pages(left_edge=2, left_current=2, right_current=2, right_edge=2) %}
+                    {% if page_num %}
+                        {% if page_num == pagination.page %}
+                        <li class="page-item active"><span class="page-link">{{ page_num }}</span></li>
+                        {% else %}
+                        <li class="page-item">
+                            <a class="page-link" href="{{ url_for('c2n_recommandations_central', page=page_num, statut=request.args.get('statut'), priorite=request.args.get('priorite'), source=request.args.get('source'), categorie=request.args.get('categorie'), recherche=request.args.get('recherche')) }}">
+                                {{ page_num }}
+                            </a>
+                        </li>
+                        {% endif %}
+                    {% else %}
+                        <li class="page-item disabled"><span class="page-link">...</span></li>
+                    {% endif %}
+                {% endfor %}
+                
+                {% if pagination.has_next %}
+                <li class="page-item">
+                    <a class="page-link" href="{{ url_for('c2n_recommandations_central', page=pagination.next_num, statut=request.args.get('statut'), priorite=request.args.get('priorite'), source=request.args.get('source'), categorie=request.args.get('categorie'), recherche=request.args.get('recherche')) }}">
+                        Suivant <i class="fas fa-chevron-right"></i>
+                    </a>
+                </li>
+                {% endif %}
+            </ul>
+        </nav>
+        {% endif %}
+        
+    {% else %}
+    <div class="empty-state">
+        <div class="empty-state-icon">
+            <i class="fas fa-lightbulb"></i>
+        </div>
+        <h6 class="mb-2">Aucune recommandation trouvée</h6>
+        <p class="text-muted small mb-3">
+            {% if request.args.get('statut') or request.args.get('priorite') or request.args.get('source') %}
+            Aucun résultat ne correspond à vos critères de recherche.
+            {% else %}
+            Commencez par ajouter une recommandation ou générez-en avec l'IA.
+            {% endif %}
+        </p>
+        <button type="button" class="btn btn-primary rounded-pill px-4" data-bs-toggle="modal" data-bs-target="#addRecommendationModal">
+            <i class="fas fa-plus me-2"></i>Nouvelle recommandation
+        </button>
+    </div>
+    {% endif %}
+</div>
+
+<!-- ============================================ -->
+<!-- MODALS -->
+<!-- ============================================ -->
+
+<!-- Modal Ajouter Recommandation -->
+<div class="modal fade" id="addRecommendationModal" tabindex="-1">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">
+                    <i class="fas fa-plus-circle me-2 text-primary"></i>
+                    Nouvelle recommandation
+                </h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <form id="addRecommendationForm">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                <div class="modal-body">
+                    <div class="mb-3">
+                        <label class="form-label fw-semibold">Planification associée *</label>
+                        <select name="planification_id" class="form-select" required>
+                            <option value="">-- Sélectionner un contrôle --</option>
+                            {% for p in planifications %}
+                            <option value="{{ p.id }}">{{ p.reference }} - {{ p.referentiel.nom }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label fw-semibold">Titre *</label>
+                        <input type="text" name="titre" class="form-control" required 
+                               placeholder="Ex: Renforcer le contrôle des factures">
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label fw-semibold">Description</label>
+                        <textarea name="description" class="form-control" rows="3" 
+                                  placeholder="Description détaillée..."></textarea>
+                    </div>
+                    <div class="row">
+                        <div class="col-md-6 mb-3">
+                            <label class="form-label fw-semibold">Priorité</label>
+                            <select name="priorite" class="form-select">
+                                <option value="basse">🟢 Basse</option>
+                                <option value="moyenne" selected>🟡 Moyenne</option>
+                                <option value="haute">🔴 Haute</option>
+                            </select>
+                        </div>
+                        <div class="col-md-6 mb-3">
+                            <label class="form-label fw-semibold">Catégorie</label>
+                            <select name="categorie" class="form-select">
+                                <option value="processus">📊 Processus</option>
+                                <option value="technique">💻 Technique</option>
+                                <option value="formation">👥 Formation</option>
+                                <option value="organisationnel">🏢 Organisationnel</option>
+                            </select>
+                        </div>
+                    </div>
+                    <div class="row">
+                        <div class="col-md-6 mb-3">
+                            <label class="form-label fw-semibold">Date d'échéance</label>
+                            <input type="date" name="date_echeance" class="form-control">
+                        </div>
+                        <div class="col-md-6 mb-3">
+                            <label class="form-label fw-semibold">Responsable</label>
+                            <select name="responsable_id" class="form-select">
+                                <option value="">-- Sélectionner --</option>
+                                {% for user in users_list %}
+                                <option value="{{ user.id }}">{{ user.username }}</option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Annuler</button>
+                    <button type="submit" class="btn btn-primary">Ajouter</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<!-- Modal Accepter Recommandation -->
+<div class="modal fade" id="acceptRecommendationModal" tabindex="-1">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">
+                    <i class="fas fa-tasks me-2 text-success"></i>
+                    Accepter la recommandation
+                </h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <input type="hidden" id="acceptRecoId" value="">
+                <div class="mb-3">
+                    <label class="form-label fw-semibold">Date d'échéance *</label>
+                    <input type="date" id="acceptDateEcheance" class="form-control" required>
+                </div>
+                <div class="mb-3">
+                    <label class="form-label fw-semibold">Responsable</label>
+                    <select id="acceptResponsableId" class="form-select">
+                        <option value="">-- Sélectionner --</option>
+                        {% for user in users_list %}
+                        <option value="{{ user.id }}">{{ user.username }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="alert alert-info small">
+                    <i class="fas fa-info-circle me-2"></i>
+                    Un plan d'action sera créé automatiquement.
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Annuler</button>
+                <button type="button" class="btn btn-success" onclick="confirmAccepter()">Accepter & créer plan</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Modal Mise à jour progression -->
+<div class="modal fade" id="updateProgressModal" tabindex="-1">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">
+                    <i class="fas fa-chart-line me-2 text-primary"></i>
+                    Mettre à jour la progression
+                </h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <input type="hidden" id="updateRecoId" value="">
+                <div class="mb-3">
+                    <label class="form-label fw-semibold">Progression (%)</label>
+                    <input type="range" id="updateProgressSlider" class="form-range" min="0" max="100" step="5" value="0">
+                    <div class="text-center mt-2">
+                        <span class="badge bg-primary" id="updateProgressValue">0%</span>
+                    </div>
+                </div>
+                <div class="mb-3">
+                    <label class="form-label fw-semibold">Commentaire (optionnel)</label>
+                    <textarea id="updateProgressComment" class="form-control" rows="2" placeholder="Ajoutez un commentaire sur l'avancement..."></textarea>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Annuler</button>
+                <button type="button" class="btn btn-primary" onclick="confirmUpdateProgression()">Mettre à jour</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Modal Modifier Recommandation -->
+<div class="modal fade" id="editRecommendationModal" tabindex="-1">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">
+                    <i class="fas fa-edit me-2 text-primary"></i>
+                    Modifier la recommandation
+                </h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <form id="editRecommendationForm">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                <input type="hidden" name="reco_id" id="editRecoId" value="">
+                <div class="modal-body">
+                    <div class="mb-3">
+                        <label class="form-label fw-semibold">Titre</label>
+                        <input type="text" name="titre" id="editTitre" class="form-control" required>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label fw-semibold">Description</label>
+                        <textarea name="description" id="editDescription" class="form-control" rows="3"></textarea>
+                    </div>
+                    <div class="row">
+                        <div class="col-md-6 mb-3">
+                            <label class="form-label fw-semibold">Priorité</label>
+                            <select name="priorite" id="editPriorite" class="form-select">
+                                <option value="basse">🟢 Basse</option>
+                                <option value="moyenne">🟡 Moyenne</option>
+                                <option value="haute">🔴 Haute</option>
+                            </select>
+                        </div>
+                        <div class="col-md-6 mb-3">
+                            <label class="form-label fw-semibold">Catégorie</label>
+                            <select name="categorie" id="editCategorie" class="form-select">
+                                <option value="processus">📊 Processus</option>
+                                <option value="technique">💻 Technique</option>
+                                <option value="formation">👥 Formation</option>
+                                <option value="organisationnel">🏢 Organisationnel</option>
+                            </select>
+                        </div>
+                    </div>
+                    <div class="row">
+                        <div class="col-md-6 mb-3">
+                            <label class="form-label fw-semibold">Date d'échéance</label>
+                            <input type="date" name="date_echeance" id="editDateEcheance" class="form-control">
+                        </div>
+                        <div class="col-md-6 mb-3">
+                            <label class="form-label fw-semibold">Responsable</label>
+                            <select name="responsable_id" id="editResponsableId" class="form-select">
+                                <option value="">-- Sélectionner --</option>
+                                {% for user in users_list %}
+                                <option value="{{ user.id }}">{{ user.username }}</option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label fw-semibold">Progression (%)</label>
+                        <input type="range" name="progression" id="editProgression" class="form-range" min="0" max="100" step="5">
+                        <div class="text-center mt-1" id="editProgressionValue">0%</div>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Annuler</button>
+                    <button type="submit" class="btn btn-primary">Enregistrer</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<script>
+// ============================================
+// FONCTIONS DE FILTRAGE
+// ============================================
+
+function filtrerPar(statut) {
+    const url = new URL(window.location.href);
+    if (statut) {
+        url.searchParams.set('statut', statut);
+    } else {
+        url.searchParams.delete('statut');
+    }
+    window.location.href = url.toString();
+}
+
+// ============================================
+// AJOUTER RECOMMANDATION
+// ============================================
+
+document.getElementById('addRecommendationForm')?.addEventListener('submit', async function(e) {
+    e.preventDefault();
+    
+    const formData = new FormData(this);
+    
+    const response = await fetch('/c2n/recommandation/ajouter', {
+        method: 'POST',
+        headers: {
+            'X-CSRFToken': document.querySelector('input[name="csrf_token"]').value
+        },
+        body: formData
+    });
+    
+    const data = await response.json();
+    
+    if (data.success) {
+        const modal = bootstrap.Modal.getInstance(document.getElementById('addRecommendationModal'));
+        modal.hide();
+        this.reset();
+        location.reload();
+        showToast('Recommandation ajoutée avec succès', 'success');
+    } else {
+        showToast('Erreur: ' + data.error, 'danger');
+    }
+});
+
+// ============================================
+// ACCEPTER RECOMMANDATION
+// ============================================
+
+let currentRecoId = null;
+
+function accepterRecommandation(recoId) {
+    currentRecoId = recoId;
+    document.getElementById('acceptRecoId').value = recoId;
+    
+    const defaultDate = new Date();
+    defaultDate.setDate(defaultDate.getDate() + 30);
+    document.getElementById('acceptDateEcheance').value = defaultDate.toISOString().split('T')[0];
+    document.getElementById('acceptResponsableId').value = '';
+    
+    const modal = new bootstrap.Modal(document.getElementById('acceptRecommendationModal'));
+    modal.show();
+}
+
+async function confirmAccepter() {
+    const recoId = currentRecoId;
+    const dateEcheance = document.getElementById('acceptDateEcheance').value;
+    const responsableId = document.getElementById('acceptResponsableId').value;
+    
+    if (!dateEcheance) {
+        showToast('Veuillez sélectionner une date d\'échéance', 'warning');
+        return;
+    }
+    
+    const response = await fetch(`/c2n/recommandation/${recoId}/accepter`, {
+        method: 'POST',
+        headers: {
+            'X-CSRFToken': document.querySelector('input[name="csrf_token"]').value,
+            'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+            date_echeance: dateEcheance,
+            responsable_id: responsableId || null
+        })
+    });
+    
+    const data = await response.json();
+    
+    if (data.success) {
+        const modal = bootstrap.Modal.getInstance(document.getElementById('acceptRecommendationModal'));
+        modal.hide();
+        location.reload();
+        showToast(data.message, 'success');
+    } else {
+        showToast('Erreur: ' + data.error, 'danger');
+    }
+}
+
+// ============================================
+// REJETER RECOMMANDATION
+// ============================================
+
+async function rejeterRecommandation(recoId) {
+    const raison = prompt("Raison du rejet (optionnelle):", "");
+    
+    const response = await fetch(`/c2n/recommandation/${recoId}/rejeter`, {
+        method: 'POST',
+        headers: {
+            'X-CSRFToken': document.querySelector('input[name="csrf_token"]').value,
+            'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ raison: raison || "" })
+    });
+    
+    const data = await response.json();
+    
+    if (data.success) {
+        location.reload();
+        showToast('Recommandation rejetée', 'info');
+    } else {
+        showToast('Erreur: ' + data.error, 'danger');
+    }
+}
+
+// ============================================
+// SUPPRIMER RECOMMANDATION
+// ============================================
+
+async function supprimerRecommandation(recoId) {
+    if (!confirm('Supprimer cette recommandation ?')) return;
+    
+    const response = await fetch(`/c2n/recommandation/${recoId}/supprimer`, {
+        method: 'DELETE',
+        headers: {
+            'X-CSRFToken': document.querySelector('input[name="csrf_token"]').value
+        }
+    });
+    
+    const data = await response.json();
+    
+    if (data.success) {
+        location.reload();
+        showToast('Recommandation supprimée', 'success');
+    } else {
+        showToast('Erreur: ' + data.error, 'danger');
+    }
+}
+
+// ============================================
+// METTRE À JOUR PROGRESSION
+// ============================================
+
+let currentUpdateRecoId = null;
+
+function updateProgression(recoId, currentProgress) {
+    currentUpdateRecoId = recoId;
+    document.getElementById('updateRecoId').value = recoId;
+    const slider = document.getElementById('updateProgressSlider');
+    slider.value = currentProgress;
+    document.getElementById('updateProgressValue').textContent = currentProgress + '%';
+    document.getElementById('updateProgressComment').value = '';
+    
+    const modal = new bootstrap.Modal(document.getElementById('updateProgressModal'));
+    modal.show();
+}
+
+document.getElementById('updateProgressSlider')?.addEventListener('input', function() {
+    document.getElementById('updateProgressValue').textContent = this.value + '%';
+});
+
+async function confirmUpdateProgression() {
+    const recoId = currentUpdateRecoId;
+    const progression = document.getElementById('updateProgressSlider').value;
+    const commentaire = document.getElementById('updateProgressComment').value;
+    
+    const response = await fetch(`/c2n/recommandation/${recoId}/progression`, {
+        method: 'PUT',
+        headers: {
+            'X-CSRFToken': document.querySelector('input[name="csrf_token"]').value,
+            'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+            progression: parseInt(progression),
+            commentaire: commentaire
+        })
+    });
+    
+    const data = await response.json();
+    
+    if (data.success) {
+        const modal = bootstrap.Modal.getInstance(document.getElementById('updateProgressModal'));
+        modal.hide();
+        location.reload();
+        showToast('Progression mise à jour', 'success');
+    } else {
+        showToast('Erreur: ' + data.error, 'danger');
+    }
+}
+
+// ============================================
+// MODIFIER RECOMMANDATION
+// ============================================
+
+async function modifierRecommandation(recoId) {
+    const response = await fetch(`/c2n/recommandation/${recoId}/detail`);
+    const data = await response.json();
+    
+    if (data.success) {
+        const reco = data.recommandation;
+        document.getElementById('editRecoId').value = reco.id;
+        document.getElementById('editTitre').value = reco.titre;
+        document.getElementById('editDescription').value = reco.description || '';
+        document.getElementById('editPriorite').value = reco.priorite;
+        document.getElementById('editCategorie').value = reco.categorie;
+        document.getElementById('editDateEcheance').value = reco.date_echeance || '';
+        document.getElementById('editResponsableId').value = reco.responsable_id || '';
+        
+        const slider = document.getElementById('editProgression');
+        slider.value = reco.progression || 0;
+        document.getElementById('editProgressionValue').textContent = (reco.progression || 0) + '%';
+        
+        const modal = new bootstrap.Modal(document.getElementById('editRecommendationModal'));
+        modal.show();
+    }
+}
+
+document.getElementById('editProgression')?.addEventListener('input', function() {
+    document.getElementById('editProgressionValue').textContent = this.value + '%';
+});
+
+document.getElementById('editRecommendationForm')?.addEventListener('submit', async function(e) {
+    e.preventDefault();
+    
+    const recoId = document.getElementById('editRecoId').value;
+    const formData = new FormData(this);
+    
+    const response = await fetch(`/c2n/recommandation/${recoId}/modifier`, {
+        method: 'PUT',
+        headers: {
+            'X-CSRFToken': document.querySelector('input[name="csrf_token"]').value
+        },
+        body: formData
+    });
+    
+    const data = await response.json();
+    
+    if (data.success) {
+        const modal = bootstrap.Modal.getInstance(document.getElementById('editRecommendationModal'));
+        modal.hide();
+        location.reload();
+        showToast('Recommandation modifiée', 'success');
+    } else {
+        showToast('Erreur: ' + data.error, 'danger');
+    }
+});
+
+// ============================================
+// TOAST NOTIFICATION
+// ============================================
+
+function showToast(message, type) {
+    const toastContainer = document.getElementById('toast-container') || (() => {
+        const container = document.createElement('div');
+        container.id = 'toast-container';
+        container.className = 'toast-container position-fixed top-0 end-0 p-3';
+        container.style.zIndex = '1100';
+        document.body.appendChild(container);
+        return container;
+    })();
+    
+    const toast = document.createElement('div');
+    toast.className = `toast align-items-center text-bg-${type === 'success' ? 'success' : type === 'danger' ? 'danger' : 'info'} border-0 mb-2`;
+    toast.setAttribute('role', 'alert');
+    toast.innerHTML = `
+        <div class="d-flex">
+            <div class="toast-body">
+                <i class="fas fa-${type === 'success' ? 'check-circle' : type === 'danger' ? 'exclamation-circle' : 'info-circle'} me-2"></i>
+                ${message}
+            </div>
+            <button type="button" class="btn-close btn-close-white me-2 m-auto" data-bs-dismiss="toast"></button>
+        </div>
+    `;
+    
+    toastContainer.appendChild(toast);
+    const bsToast = new bootstrap.Toast(toast, { delay: 3000 });
+    bsToast.show();
+    toast.addEventListener('hidden.bs.toast', () => toast.remove());
+}
+
+// ============================================
+// INITIALISATION
+// ============================================
+
+document.addEventListener('DOMContentLoaded', function() {
+    // Tooltips
+    const tooltipTriggerList = [].slice.call(document.querySelectorAll('[title]'));
+    tooltipTriggerList.forEach(function(el) {
+        new bootstrap.Tooltip(el);
+    });
+    
+    // Animation des cartes
+    const statCards = document.querySelectorAll('.stat-card');
+    statCards.forEach((card, index) => {
+        card.style.opacity = '0';
+        setTimeout(() => {
+            card.style.transition = 'all 0.3s ease';
+            card.style.opacity = '1';
+        }, index * 50);
+    });
+});
+async function rouvrirRecommandation(recoId) {
+    if (!confirm('Rouvrir cette recommandation rejetée ?')) return;
+    
+    const response = await fetch(`/c2n/recommandation/${recoId}/rouvrir`, {
+        method: 'POST',
+        headers: {
+            'X-CSRFToken': document.querySelector('input[name="csrf_token"]').value
+        }
+    });
+    
+    const data = await response.json();
+    
+    if (data.success) {
+        location.reload();
+        showToast('Recommandation rouverte', 'success');
+    } else {
+        showToast('Erreur: ' + data.error, 'danger');
+    }
+}
+</script>
+{% endblock %}

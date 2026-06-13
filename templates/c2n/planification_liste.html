@@ -1,0 +1,590 @@
+{# templates/c2n/planification_liste.html #}
+{% extends "base.html" %}
+
+{% block title %}Planification des contrôles - C2N{% endblock %}
+
+{% block styles %}
+{{ super() }}
+<style>
+    .stat-card {
+        border-radius: 20px;
+        transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+        border: none;
+        overflow: hidden;
+        position: relative;
+    }
+    .stat-card::before {
+        content: '';
+        position: absolute;
+        top: 0;
+        left: 0;
+        right: 0;
+        height: 4px;
+        background: linear-gradient(90deg, var(--fk-accent), #10b981);
+    }
+    .stat-card:hover {
+        transform: translateY(-4px);
+        box-shadow: 0 12px 28px rgba(0,0,0,0.12);
+    }
+    .stat-icon {
+        width: 48px;
+        height: 48px;
+        border-radius: 16px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+    }
+    .stat-value {
+        font-size: 32px;
+        font-weight: 800;
+        line-height: 1.2;
+    }
+    .filter-bar {
+        background: white;
+        border-radius: 16px;
+        padding: 0.75rem 1.25rem;
+        transition: all 0.2s ease;
+        box-shadow: 0 1px 3px rgba(0,0,0,0.05);
+    }
+    [data-bs-theme="dark"] .filter-bar {
+        background: #1e293b;
+    }
+    .planification-row {
+        transition: all 0.2s ease;
+        border-left: 3px solid transparent;
+    }
+    .planification-row:hover {
+        background-color: rgba(59, 130, 246, 0.03);
+        border-left-color: var(--fk-accent);
+    }
+    .planification-row.retard {
+        background-color: rgba(220, 38, 38, 0.05);
+    }
+    .badge-statut {
+        padding: 6px 14px;
+        border-radius: 30px;
+        font-size: 0.7rem;
+        font-weight: 600;
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+    }
+    .badge-statut.a_faire { background: #6c757d; color: white; }
+    .badge-statut.en_cours { background: #0ea5e9; color: white; }
+    .badge-statut.soumis { background: #f59e0b; color: white; }
+    .badge-statut.valide { background: #10b981; color: white; }
+    .badge-statut.rejete { background: #dc2626; color: white; }
+    
+    .org-badge {
+        padding: 4px 10px;
+        border-radius: 20px;
+        font-size: 0.65rem;
+        background: #e2e8f0;
+        display: inline-flex;
+        align-items: center;
+        gap: 4px;
+    }
+    [data-bs-theme="dark"] .org-badge {
+        background: #334155;
+        color: #e2e8f0;
+    }
+    
+    .date-badge {
+        font-size: 0.7rem;
+        padding: 4px 10px;
+        border-radius: 20px;
+        background: #f1f5f9;
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+    }
+    [data-bs-theme="dark"] .date-badge {
+        background: #1e293b;
+    }
+    .date-badge.retard {
+        background: #fee2e2;
+        color: #dc2626;
+    }
+    .action-btn-group {
+        opacity: 0.6;
+        transition: all 0.2s ease;
+    }
+    tr:hover .action-btn-group {
+        opacity: 1;
+    }
+    .btn-icon-sm {
+        width: 32px;
+        height: 32px;
+        padding: 0;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        border-radius: 10px;
+        margin: 0 2px;
+    }
+    .empty-state {
+        padding: 3rem 1rem;
+        text-align: center;
+    }
+    .empty-state-icon {
+        width: 80px;
+        height: 80px;
+        margin: 0 auto 1.5rem;
+        background: #f1f5f9;
+        border-radius: 50%;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 2.5rem;
+        color: #94a3b8;
+    }
+    [data-bs-theme="dark"] .empty-state-icon {
+        background: #1e293b;
+    }
+    .filter-tag {
+        background: #e2e8f0;
+        padding: 4px 12px;
+        border-radius: 20px;
+        font-size: 0.7rem;
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+    }
+    .filter-tag .remove {
+        cursor: pointer;
+        color: #ef4444;
+    }
+    .filter-tag .remove:hover {
+        color: #dc2626;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="container-fluid px-4">
+    <!-- En-tête -->
+    <div class="d-flex flex-wrap justify-content-between align-items-center mb-4">
+        <div>
+            <h1 class="h2 mb-1 fw-bold">
+                <i class="fas fa-calendar-alt me-2" style="color: var(--fk-accent);"></i>
+                Planification des contrôles
+            </h1>
+            <nav aria-label="breadcrumb">
+                <ol class="breadcrumb mb-0">
+                    <li class="breadcrumb-item"><a href="{{ url_for('c2n_dashboard') }}">Tableau de bord C2N</a></li>
+                    <li class="breadcrumb-item active" aria-current="page">Planification</li>
+                </ol>
+            </nav>
+            <p class="text-muted mt-2 mb-0">
+                <i class="fas fa-chart-line me-1"></i>
+                Planification annuelle des contrôles internes
+            </p>
+        </div>
+        <div class="mt-2 mt-sm-0">
+            <a href="{{ url_for('c2n_nouvelle_planification') }}" class="btn btn-primary rounded-pill px-4 shadow-sm">
+                <i class="fas fa-plus me-2"></i>Nouvelle planification
+            </a>
+        </div>
+    </div>
+
+    <!-- Cartes statistiques -->
+    <div class="row g-3 mb-4">
+        <div class="col-sm-6 col-lg-2">
+            <div class="card stat-card h-100">
+                <div class="card-body">
+                    <div class="d-flex justify-content-between align-items-start">
+                        <div>
+                            <span class="text-muted small text-uppercase fw-semibold">Total</span>
+                            <div class="stat-value text-primary">{{ stats.total|default(0) }}</div>
+                            <small class="text-muted">planifications</small>
+                        </div>
+                        <div class="stat-icon bg-primary bg-opacity-10 text-primary">
+                            <i class="fas fa-list fa-lg"></i>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="col-sm-6 col-lg-2">
+            <div class="card stat-card h-100">
+                <div class="card-body">
+                    <div class="d-flex justify-content-between align-items-start">
+                        <div>
+                            <span class="text-muted small text-uppercase fw-semibold">À faire</span>
+                            <div class="stat-value text-secondary">{{ stats.a_faire|default(0) }}</div>
+                            <small class="text-muted">en attente</small>
+                        </div>
+                        <div class="stat-icon bg-secondary bg-opacity-10 text-secondary">
+                            <i class="fas fa-clock fa-lg"></i>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="col-sm-6 col-lg-2">
+            <div class="card stat-card h-100">
+                <div class="card-body">
+                    <div class="d-flex justify-content-between align-items-start">
+                        <div>
+                            <span class="text-muted small text-uppercase fw-semibold">En cours</span>
+                            <div class="stat-value text-info">{{ stats.en_cours|default(0) }}</div>
+                            <small class="text-muted">en exécution</small>
+                        </div>
+                        <div class="stat-icon bg-info bg-opacity-10 text-info">
+                            <i class="fas fa-play-circle fa-lg"></i>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="col-sm-6 col-lg-2">
+            <div class="card stat-card h-100">
+                <div class="card-body">
+                    <div class="d-flex justify-content-between align-items-start">
+                        <div>
+                            <span class="text-muted small text-uppercase fw-semibold">Soumis</span>
+                            <div class="stat-value text-warning">{{ stats.soumis|default(0) }}</div>
+                            <small class="text-muted">à valider</small>
+                        </div>
+                        <div class="stat-icon bg-warning bg-opacity-10 text-warning">
+                            <i class="fas fa-paper-plane fa-lg"></i>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="col-sm-6 col-lg-2">
+            <div class="card stat-card h-100">
+                <div class="card-body">
+                    <div class="d-flex justify-content-between align-items-start">
+                        <div>
+                            <span class="text-muted small text-uppercase fw-semibold">Validés</span>
+                            <div class="stat-value text-success">{{ stats.valide|default(0) }}</div>
+                            <small class="text-muted">approuvés</small>
+                        </div>
+                        <div class="stat-icon bg-success bg-opacity-10 text-success">
+                            <i class="fas fa-check-circle fa-lg"></i>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="col-sm-6 col-lg-2">
+            <div class="card stat-card h-100">
+                <div class="card-body">
+                    <div class="d-flex justify-content-between align-items-start">
+                        <div>
+                            <span class="text-muted small text-uppercase fw-semibold">Rejetés</span>
+                            <div class="stat-value text-danger">{{ stats.rejete|default(0) }}</div>
+                            <small class="text-muted">à corriger</small>
+                        </div>
+                        <div class="stat-icon bg-danger bg-opacity-10 text-danger">
+                            <i class="fas fa-times-circle fa-lg"></i>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 🔥 BARRE DE FILTRES AVEC ORGANISATION -->
+    <div class="filter-bar mb-4 shadow-sm">
+        <form method="GET" id="filterForm">
+            <div class="row g-3 align-items-end">
+                <div class="col-md-2">
+                    <label class="form-label small fw-semibold text-muted mb-1">
+                        <i class="fas fa-calendar me-1"></i>Année
+                    </label>
+                    <select name="annee" class="form-select" onchange="this.form.submit()">
+                        {% for y in range(now.year - 1, now.year + 5) %}
+                        <option value="{{ y }}" {% if annee == y %}selected{% endif %}>{{ y }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="col-md-2">
+                    <label class="form-label small fw-semibold text-muted mb-1">
+                        <i class="fas fa-filter me-1"></i>Statut
+                    </label>
+                    <select name="statut" class="form-select" onchange="this.form.submit()">
+                        <option value="">Tous les statuts</option>
+                        <option value="a_faire" {% if request.args.get('statut') == 'a_faire' %}selected{% endif %}>📋 À faire</option>
+                        <option value="en_cours" {% if request.args.get('statut') == 'en_cours' %}selected{% endif %}>▶️ En cours</option>
+                        <option value="soumis" {% if request.args.get('statut') == 'soumis' %}selected{% endif %}>📤 Soumis</option>
+                        <option value="valide" {% if request.args.get('statut') == 'valide' %}selected{% endif %}>✅ Validé</option>
+                        <option value="rejete" {% if request.args.get('statut') == 'rejete' %}selected{% endif %}>❌ Rejeté</option>
+                    </select>
+                </div>
+                <div class="col-md-2">
+                    <label class="form-label small fw-semibold text-muted mb-1">
+                        <i class="fas fa-building me-1"></i>Pôle
+                    </label>
+                    <select name="pole_id" class="form-select" onchange="this.form.submit()">
+                        <option value="">Tous les pôles</option>
+                        {% for pole in poles_list %}
+                        <option value="{{ pole.id }}" {% if request.args.get('pole_id')|int == pole.id %}selected{% endif %}>
+                            {{ pole.nom }}
+                        </option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="col-md-2">
+                    <label class="form-label small fw-semibold text-muted mb-1">
+                        <i class="fas fa-sitemap me-1"></i>Direction
+                    </label>
+                    <select name="direction_id" class="form-select" onchange="this.form.submit()">
+                        <option value="">Toutes les directions</option>
+                        {% for direction in directions_list %}
+                        <option value="{{ direction.id }}" {% if request.args.get('direction_id')|int == direction.id %}selected{% endif %}>
+                            {{ direction.nom }}
+                        </option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="col-md-2">
+                    <label class="form-label small fw-semibold text-muted mb-1">
+                        <i class="fas fa-chart-line me-1"></i>Métier
+                    </label>
+                    <select name="metier" class="form-select" onchange="this.form.submit()">
+                        <option value="">Tous les métiers</option>
+                        {% for metier in metiers_list %}
+                        <option value="{{ metier }}" {% if request.args.get('metier') == metier %}selected{% endif %}>
+                            {{ metier }}
+                        </option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="col-md-2">
+                    <button type="submit" class="btn btn-primary rounded-pill w-100">
+                        <i class="fas fa-search me-1"></i>Filtrer
+                    </button>
+                </div>
+            </div>
+        </form>
+        
+        <!-- Filtres actifs -->
+        {% if request.args.get('pole_id') or request.args.get('direction_id') or request.args.get('metier') %}
+        <div class="mt-3 pt-2 border-top">
+            <div class="d-flex flex-wrap gap-2 align-items-center">
+                <span class="small text-muted">Filtres actifs :</span>
+                {% if request.args.get('pole_id') %}
+                <span class="filter-tag">
+                    <i class="fas fa-building"></i> Pôle sélectionné
+                    <a href="{{ url_for('c2n_liste_planifications', annee=annee, statut=request.args.get('statut'), direction_id=request.args.get('direction_id'), metier=request.args.get('metier')) }}" class="remove">✕</a>
+                </span>
+                {% endif %}
+                {% if request.args.get('direction_id') %}
+                <span class="filter-tag">
+                    <i class="fas fa-sitemap"></i> Direction sélectionnée
+                    <a href="{{ url_for('c2n_liste_planifications', annee=annee, statut=request.args.get('statut'), pole_id=request.args.get('pole_id'), metier=request.args.get('metier')) }}" class="remove">✕</a>
+                </span>
+                {% endif %}
+                {% if request.args.get('metier') %}
+                <span class="filter-tag">
+                    <i class="fas fa-chart-line"></i> Métier: {{ request.args.get('metier') }}
+                    <a href="{{ url_for('c2n_liste_planifications', annee=annee, statut=request.args.get('statut'), pole_id=request.args.get('pole_id'), direction_id=request.args.get('direction_id')) }}" class="remove">✕</a>
+                </span>
+                {% endif %}
+                <a href="{{ url_for('c2n_liste_planifications', annee=annee) }}" class="btn btn-sm btn-link text-danger p-0 ms-2">Effacer tous les filtres</a>
+            </div>
+        </div>
+        {% endif %}
+    </div>
+
+    <!-- Tableau des planifications -->
+    <div class="card shadow-sm">
+        <div class="card-header bg-white border-0 py-3">
+            <div class="d-flex justify-content-between align-items-center">
+                <h5 class="mb-0 fw-semibold">
+                    <i class="fas fa-table me-2 text-primary"></i>
+                    Liste des planifications
+                </h5>
+                <span class="badge bg-primary bg-opacity-10 text-primary px-3 py-2 rounded-pill">
+                    <i class="fas fa-database me-1"></i>{{ planifications|length }} planification(s)
+                </span>
+            </div>
+        </div>
+        <div class="card-body p-0">
+            {% if planifications %}
+            <div class="table-responsive">
+                <table class="table table-hover align-middle mb-0">
+                    <thead class="bg-light">
+                        <tr>
+                            <th class="ps-3 py-3 small fw-semibold text-muted">Référence</th>
+                            <th class="py-3 small fw-semibold text-muted">Contrôle</th>
+                            <th class="py-3 small fw-semibold text-muted">Organisation</th>
+                            <th class="py-3 small fw-semibold text-muted">Date prévue</th>
+                            <th class="py-3 small fw-semibold text-muted">Contrôleur</th>
+                            <th class="py-3 small fw-semibold text-muted">Métier</th>
+                            <th class="py-3 small fw-semibold text-muted">Statut</th>
+                            <th class="text-end pe-3 py-3 small fw-semibold text-muted">Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for p in planifications %}
+                        {% set est_retard = p.date_prevue < now.date() and p.statut not in ['valide', 'rejete'] %}
+                        <tr class="planification-row {% if est_retard %}retard{% endif %}">
+                            <td class="ps-3">
+                                <code class="small text-muted">{{ p.reference }}</code>
+                                <div class="small text-muted">{{ p.created_at.strftime('%d/%m/%Y') }}</div>
+                               </td>
+                            <td>
+                                <div class="fw-semibold">{{ p.referentiel.nom|truncate(40) }}</div>
+                                <small class="text-muted">{{ p.referentiel.code_controle }}</small>
+                               </td>
+                            <td>
+                                {% if p.organisation_hierarchie and p.organisation_hierarchie != "Non spécifiée" %}
+                                <div class="org-badge" title="{{ p.organisation_hierarchie }}">
+                                    <i class="fas fa-building me-1"></i>
+                                    {{ p.organisation_complete|truncate(30) }}
+                                </div>
+                                {% elif p.perimetre %}
+                                <div class="org-badge">
+                                    <i class="fas fa-chart-line me-1"></i>
+                                    {{ p.perimetre|truncate(30) }}
+                                </div>
+                                {% else %}
+                                <span class="text-muted">-</span>
+                                {% endif %}
+                               </td>
+                            <td>
+                                <div class="d-flex flex-column gap-1">
+                                    <span class="date-badge {% if est_retard %}retard{% endif %}">
+                                        <i class="far fa-calendar-alt"></i>
+                                        {{ p.date_prevue.strftime('%d/%m/%Y') }}
+                                    </span>
+                                    {% if p.mois %}
+                                    <span class="date-badge">
+                                        <i class="fas fa-chart-line"></i>
+                                        Mois: {{ p.mois }}/{{ p.annee }}
+                                    </span>
+                                    {% else %}
+                                    <span class="date-badge">
+                                        <i class="fas fa-chart-line"></i>
+                                        Annuel: {{ p.annee }}
+                                    </span>
+                                    {% endif %}
+                                </div>
+                               </td>
+                            <td>
+                                <div>
+                                    <i class="fas fa-user-circle me-1 text-muted"></i>
+                                    {{ p.controleur.username if p.controleur else 'Non assigné' }}
+                                </div>
+                               </td>
+                            <td>
+                                {% if p.referentiel.metier %}
+                                <span class="badge bg-secondary bg-opacity-10 text-secondary">
+                                    {{ p.referentiel.metier }}
+                                </span>
+                                {% else %}
+                                -
+                                {% endif %}
+                               </td>
+                            <td>
+                                <span class="badge-statut {{ p.statut }}">
+                                    <i class="fas {% if p.statut == 'a_faire' %}fa-circle{% elif p.statut == 'en_cours' %}fa-play-circle{% elif p.statut == 'soumis' %}fa-paper-plane{% elif p.statut == 'valide' %}fa-check-circle{% else %}fa-times-circle{% endif %}"></i>
+                                    {{ p.get_statut_label() }}
+                                </span>
+                                {% if est_retard %}
+                                <span class="badge bg-danger ms-1">Retard</span>
+                                {% endif %}
+                               </td>
+                            <td class="text-end pe-3">
+                                <div class="action-btn-group">
+                                    <a href="{{ url_for('c2n_detail_planification', id=p.id) }}" 
+                                       class="btn btn-outline-primary btn-icon-sm" title="Détails">
+                                        <i class="fas fa-eye"></i>
+                                    </a>
+                                    {% if p.statut == 'a_faire' and p.controleur_id == current_user.id %}
+                                    <a href="{{ url_for('c2n_executer_controle', id=p.id) }}" 
+                                       class="btn btn-outline-success btn-icon-sm" title="Exécuter">
+                                        <i class="fas fa-play"></i>
+                                    </a>
+                                    {% endif %}
+                                    {% if p.statut == 'a_faire' %}
+                                    <a href="{{ url_for('c2n_modifier_planification', id=p.id) }}" 
+                                       class="btn btn-outline-secondary btn-icon-sm" title="Modifier">
+                                        <i class="fas fa-edit"></i>
+                                    </a>
+                                    {% endif %}
+                                    {% if p.execution and p.execution.non_conformites_c2n and p.execution.non_conformites_c2n.count() > 0 %}
+                                    <span class="badge bg-warning ms-1" title="Non-conformités associées">
+                                        <i class="fas fa-exclamation-triangle"></i> {{ p.execution.non_conformites_c2n.count() }}
+                                    </span>
+                                    {% endif %}
+                                </div>
+                               </td>
+                         </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+            {% else %}
+            <div class="empty-state">
+                <div class="empty-state-icon">
+                    <i class="fas fa-calendar-times"></i>
+                </div>
+                <h6 class="mb-2">Aucune planification trouvée</h6>
+                <p class="text-muted small mb-3">
+                    {% if request.args.get('statut') or request.args.get('annee') %}
+                    Aucun résultat ne correspond à vos critères de recherche.
+                    {% else %}
+                    Aucune planification n'a encore été créée pour l'année {{ annee }}.
+                    {% endif %}
+                </p>
+                <a href="{{ url_for('c2n_nouvelle_planification') }}" class="btn btn-primary rounded-pill px-4">
+                    <i class="fas fa-plus me-2"></i>Créer une planification
+                </a>
+            </div>
+            {% endif %}
+        </div>
+    </div>
+
+    <!-- Légende -->
+    <div class="row mt-4">
+        <div class="col-12">
+            <div class="card bg-light border-0">
+                <div class="card-body py-2">
+                    <div class="d-flex flex-wrap gap-3 justify-content-center">
+                        <span class="small text-muted"><i class="fas fa-circle text-secondary me-1"></i> À faire</span>
+                        <span class="small text-muted"><i class="fas fa-play-circle text-info me-1"></i> En cours</span>
+                        <span class="small text-muted"><i class="fas fa-paper-plane text-warning me-1"></i> Soumis</span>
+                        <span class="small text-muted"><i class="fas fa-check-circle text-success me-1"></i> Validé</span>
+                        <span class="small text-muted"><i class="fas fa-times-circle text-danger me-1"></i> Rejeté</span>
+                        <span class="small text-muted"><i class="fas fa-clock text-danger me-1"></i> En retard</span>
+                        <span class="small text-muted"><i class="fas fa-building me-1"></i> Organisation cible</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    // Auto-submit sur changement de filtre
+    const filterSelects = document.querySelectorAll('#filterForm select');
+    filterSelects.forEach(select => {
+        select.addEventListener('change', function() {
+            this.form.submit();
+        });
+    });
+    
+    // Tooltips
+    const tooltipTriggerList = [].slice.call(document.querySelectorAll('[title]'));
+    tooltipTriggerList.forEach(function(el) {
+        new bootstrap.Tooltip(el);
+    });
+    
+    // Animation des cartes
+    const statCards = document.querySelectorAll('.stat-card');
+    statCards.forEach((card, index) => {
+        card.style.opacity = '0';
+        setTimeout(() => {
+            card.style.transition = 'all 0.3s ease';
+            card.style.opacity = '1';
+        }, index * 50);
+    });
+});
+</script>
+{% endblock %}

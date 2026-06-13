@@ -1,0 +1,275 @@
+{# templates/c2n/non_conformite_form.html #}
+{% extends "base.html" %}
+
+{% block title %}Nouvelle non-conformité - C2N{% endblock %}
+
+{% block styles %}
+{{ super() }}
+<style>
+    .form-section {
+        background: #f8fafc;
+        border-radius: 16px;
+        padding: 20px;
+        margin-bottom: 24px;
+    }
+    [data-bs-theme="dark"] .form-section {
+        background: #1e293b;
+    }
+    .section-title {
+        font-size: 1rem;
+        font-weight: 600;
+        margin-bottom: 1rem;
+        padding-bottom: 0.5rem;
+        border-bottom: 2px solid var(--fk-accent);
+        display: inline-block;
+    }
+    .criticite-option {
+        padding: 12px;
+        border-radius: 12px;
+        cursor: pointer;
+        transition: all 0.2s ease;
+        border: 2px solid transparent;
+    }
+    .criticite-option:hover {
+        transform: translateY(-2px);
+    }
+    .criticite-option input:checked + .criticite-content {
+        font-weight: bold;
+    }
+    .criticite-option.mineur { background: #fef3c7; border-color: #d97706; }
+    .criticite-option.majeur { background: #fed7aa; border-color: #ea580c; }
+    .criticite-option.critique { background: #fee2e2; border-color: #dc2626; }
+    [data-bs-theme="dark"] .criticite-option.mineur { background: #2d2a1a; }
+    [data-bs-theme="dark"] .criticite-option.majeur { background: #2d241a; }
+    [data-bs-theme="dark"] .criticite-option.critique { background: #2d1a1a; }
+    
+    .info-badge {
+        background: #e0f2fe;
+        border-radius: 12px;
+        padding: 16px;
+        margin-bottom: 20px;
+    }
+    [data-bs-theme="dark"] .info-badge {
+        background: #0c4a6e;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <div class="row mb-4">
+        <div class="col">
+            <nav aria-label="breadcrumb">
+                <ol class="breadcrumb">
+                    <li class="breadcrumb-item"><a href="{{ url_for('c2n_liste_planifications') }}">Planification</a></li>
+                    <li class="breadcrumb-item"><a href="{{ url_for('c2n_liste_non_conformites') }}">Non-conformités</a></li>
+                    <li class="breadcrumb-item active">Nouvelle non-conformité</li>
+                </ol>
+            </nav>
+            <h1 class="h2">
+                <i class="fas fa-exclamation-triangle me-2 text-warning"></i>
+                Signaler une non-conformité
+            </h1>
+            <p class="text-muted">
+                Contrôle: <strong>{{ execution.planification.referentiel.nom }}</strong> 
+                ({{ execution.planification.reference }})
+            </p>
+        </div>
+    </div>
+
+    <div class="row">
+        <div class="col-md-8">
+            <div class="card shadow-sm">
+                <div class="card-body">
+                    <form method="POST" id="ncForm">
+                        {{ form.csrf_token }}
+                        
+                        <!-- Information sur le contrôle -->
+                        <div class="info-badge">
+                            <div class="d-flex align-items-center gap-3">
+                                <i class="fas fa-clipboard-list fa-2x text-primary"></i>
+                                <div>
+                                    <div class="small text-muted">Contrôle concerné</div>
+                                    <div class="fw-semibold">{{ execution.planification.referentiel.nom }}</div>
+                                    <div class="small">Réf: {{ execution.planification.reference }} | Date: {{ execution.planification.date_prevue.strftime('%d/%m/%Y') }}</div>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <!-- Description -->
+                        <div class="form-section">
+                            <h6 class="section-title">
+                                <i class="fas fa-align-left me-2 text-primary"></i>
+                                Description de la non-conformité
+                            </h6>
+                            <div class="mb-3">
+                                {{ form.description.label(class="form-label fw-semibold") }}
+                                {{ form.description(class="form-control" + (" is-invalid" if form.description.errors else ""), rows=5, placeholder="Décrivez précisément l'écart constaté...") }}
+                                {% for error in form.description.errors %}
+                                    <div class="invalid-feedback">{{ error }}</div>
+                                {% endfor %}
+                                <small class="text-muted">Soyez précis et factuel dans votre description</small>
+                            </div>
+                        </div>
+                        
+                        <!-- Écarts et criticité -->
+                        <div class="form-section">
+                            <h6 class="section-title">
+                                <i class="fas fa-chart-simple me-2 text-primary"></i>
+                                Évaluation
+                            </h6>
+                            <div class="row">
+                                <div class="col-md-4 mb-3">
+                                    {{ form.nombre_ecarts.label(class="form-label fw-semibold") }}
+                                    {{ form.nombre_ecarts(class="form-control" + (" is-invalid" if form.nombre_ecarts.errors else ""), type="number", min="0", placeholder="0") }}
+                                    {% for error in form.nombre_ecarts.errors %}
+                                        <div class="invalid-feedback">{{ error }}</div>
+                                    {% endfor %}
+                                    <small class="text-muted">Nombre total d'écarts constatés</small>
+                                </div>
+                                <div class="col-md-8 mb-3">
+                                    <label class="form-label fw-semibold">Niveau de criticité</label>
+                                    <div class="row g-2">
+                                        {% for value, label in form.niveau_criticite.choices %}
+                                        <div class="col-md-4">
+                                            <label class="criticite-option {{ value }} d-block text-center">
+                                                <input type="radio" name="niveau_criticite" value="{{ value }}" 
+                                                       class="d-none" {% if form.niveau_criticite.data == value %}checked{% endif %}>
+                                                <div class="criticite-content p-2">
+                                                    <i class="fas {% if value == 'mineur' %}fa-info-circle{% elif value == 'majeur' %}fa-exclamation-triangle{% else %}fa-skull-crossbones{% endif %} fa-lg mb-1"></i>
+                                                    <div class="fw-semibold small">{{ label|striptags }}</div>
+                                                </div>
+                                            </label>
+                                        </div>
+                                        {% endfor %}
+                                    </div>
+                                    {% for error in form.niveau_criticite.errors %}
+                                        <div class="text-danger small mt-1">{{ error }}</div>
+                                    {% endfor %}
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <!-- Impact -->
+                        <div class="form-section">
+                            <h6 class="section-title">
+                                <i class="fas fa-bullseye me-2 text-primary"></i>
+                                Impact
+                            </h6>
+                            <div class="mb-3">
+                                {{ form.impact.label(class="form-label fw-semibold") }}
+                                {{ form.impact(class="form-control" + (" is-invalid" if form.impact.errors else ""), rows=3, placeholder="Quel est l'impact de cette non-conformité sur l'organisation, les processus, la conformité...") }}
+                                {% for error in form.impact.errors %}
+                                    <div class="invalid-feedback">{{ error }}</div>
+                                {% endfor %}
+                            </div>
+                        </div>
+                        
+                        <!-- Cause racine -->
+                        <div class="form-section">
+                            <h6 class="section-title">
+                                <i class="fas fa-search me-2 text-primary"></i>
+                                Cause racine
+                            </h6>
+                            <div class="mb-3">
+                                {{ form.cause_racine.label(class="form-label fw-semibold") }}
+                                {{ form.cause_racine(class="form-control" + (" is-invalid" if form.cause_racine.errors else ""), rows=3, placeholder="Analysez la cause profonde du problème (méthode des 5 pourquoi)...") }}
+                                {% for error in form.cause_racine.errors %}
+                                    <div class="invalid-feedback">{{ error }}</div>
+                                {% endfor %}
+                                <small class="text-muted">Utilisez la méthode des 5 pourquoi pour identifier la cause racine</small>
+                            </div>
+                        </div>
+                        
+                        <hr>
+                        <div class="d-flex justify-content-between">
+                            <a href="{{ url_for('c2n_detail_planification', id=execution.planification.id) }}" class="btn btn-secondary">
+                                <i class="fas fa-times me-1"></i>Annuler
+                            </a>
+                            <button type="submit" class="btn btn-warning">
+                                <i class="fas fa-save me-1"></i>Créer la non-conformité
+                            </button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+        
+        <div class="col-md-4">
+            <!-- Guide rapide -->
+            <div class="card shadow-sm mb-4">
+                <div class="card-header bg-white">
+                    <h6 class="mb-0 fw-semibold">
+                        <i class="fas fa-lightbulb me-2 text-warning"></i>
+                        Guide pour la déclaration
+                    </h6>
+                </div>
+                <div class="card-body">
+                    <div class="mb-3">
+                        <div class="fw-semibold small text-primary">Niveaux de criticité</div>
+                        <ul class="small mt-2 mb-0 ps-3">
+                            <li><span class="badge bg-warning me-1">Mineur</span> - Écart sans conséquence majeure</li>
+                            <li><span class="badge bg-orange me-1">Majeur</span> - Écart significatif nécessitant action</li>
+                            <li><span class="badge bg-danger me-1">Critique</span> - Écart grave, action immédiate requise</li>
+                        </ul>
+                    </div>
+                    <div>
+                        <div class="fw-semibold small text-primary">Méthode des 5 pourquoi</div>
+                        <ol class="small mt-2 mb-0 ps-3">
+                            <li>Pourquoi le problème s'est-il produit ?</li>
+                            <li>Pourquoi cette cause existe-t-elle ?</li>
+                            <li>Pourquoi... (répéter 5 fois)</li>
+                        </ol>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Contrôle associé -->
+            <div class="card shadow-sm">
+                <div class="card-header bg-white">
+                    <h6 class="mb-0 fw-semibold">
+                        <i class="fas fa-clipboard-list me-2 text-primary"></i>
+                        Contrôle associé
+                    </h6>
+                </div>
+                <div class="card-body">
+                    <div class="small">
+                        <div class="mb-2">
+                            <span class="text-muted">Taux de conformité:</span>
+                            <span class="badge {% if execution.taux_conformite >= 80 %}bg-success{% elif execution.taux_conformite >= 60 %}bg-warning{% else %}bg-danger{% endif %} ms-2">
+                                {{ execution.taux_conformite }}%
+                            </span>
+                        </div>
+                        <div class="mb-2">
+                            <span class="text-muted">Volume contrôlé:</span>
+                            <span>{{ execution.volume_controle }}/{{ execution.volume_previsionnel }}</span>
+                        </div>
+                        <div>
+                            <span class="text-muted">Date exécution:</span>
+                            <span>{{ execution.date_execution.strftime('%d/%m/%Y') if execution.date_execution else '-' }}</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    // Gestion des options de criticité
+    const criticiteOptions = document.querySelectorAll('.criticite-option');
+    criticiteOptions.forEach(option => {
+        option.addEventListener('click', function() {
+            const radio = this.querySelector('input[type="radio"]');
+            if (radio) {
+                radio.checked = true;
+                // Mettre en surbrillance l'option sélectionnée
+                criticiteOptions.forEach(opt => opt.style.opacity = '0.7');
+                this.style.opacity = '1';
+            }
+        });
+    });
+});
+</script>
+{% endblock %}

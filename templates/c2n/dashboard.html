@@ -1,0 +1,949 @@
+{# templates/c2n/dashboard.html #}
+{% extends "base.html" %}
+
+{% block title %}Tableau de bord C2N - Contrôle Interne Niveau 2{% endblock %}
+
+{% block styles %}
+{{ super() }}
+<style>
+    /* ============================================ */
+    /* STYLES PREMIUM POUR LE DASHBOARD C2N */
+    /* ============================================ */
+    
+    .dashboard-stat {
+        border-radius: 20px;
+        transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+        border: none;
+        overflow: hidden;
+        position: relative;
+        cursor: pointer;
+    }
+    
+    .dashboard-stat::before {
+        content: '';
+        position: absolute;
+        top: 0;
+        left: 0;
+        right: 0;
+        height: 4px;
+        background: linear-gradient(90deg, var(--fk-accent), #10b981);
+    }
+    
+    .dashboard-stat:hover {
+        transform: translateY(-4px);
+        box-shadow: 0 12px 28px rgba(0,0,0,0.12);
+    }
+    
+    .stat-icon {
+        width: 56px;
+        height: 56px;
+        border-radius: 18px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 26px;
+        transition: all 0.3s ease;
+    }
+    
+    .stat-value {
+        font-size: 32px;
+        font-weight: 800;
+        line-height: 1.2;
+        margin-bottom: 4px;
+    }
+    
+    .stat-label {
+        font-size: 0.75rem;
+        text-transform: uppercase;
+        letter-spacing: 1px;
+        color: var(--fk-steel);
+        font-weight: 600;
+    }
+    
+    /* Filtres */
+    .filter-card {
+        background: white;
+        border-radius: 16px;
+        padding: 1rem 1.25rem;
+        transition: all 0.2s ease;
+        box-shadow: 0 1px 3px rgba(0,0,0,0.05);
+    }
+    [data-bs-theme="dark"] .filter-card {
+        background: #1e293b;
+    }
+    
+    /* Cartes d'alerte */
+    .alert-card {
+        border-radius: 16px;
+        border-left: 4px solid;
+        transition: all 0.2s ease;
+        cursor: pointer;
+    }
+    
+    .alert-card:hover {
+        transform: translateX(4px);
+    }
+    
+    .alert-card.critical { border-left-color: #dc2626; background: linear-gradient(135deg, #fff5f5 0%, #ffffff 100%); }
+    .alert-card.warning { border-left-color: #f59e0b; background: linear-gradient(135deg, #fffbeb 0%, #ffffff 100%); }
+    .alert-card.info { border-left-color: #3b82f6; background: linear-gradient(135deg, #eff6ff 0%, #ffffff 100%); }
+    .alert-card.success { border-left-color: #10b981; background: linear-gradient(135deg, #ecfdf5 0%, #ffffff 100%); }
+    
+    [data-bs-theme="dark"] .alert-card.critical { background: linear-gradient(135deg, #2d1a1a 0%, #1e293b 100%); }
+    [data-bs-theme="dark"] .alert-card.warning { background: linear-gradient(135deg, #2d241a 0%, #1e293b 100%); }
+    [data-bs-theme="dark"] .alert-card.info { background: linear-gradient(135deg, #1a2d3d 0%, #1e293b 100%); }
+    [data-bs-theme="dark"] .alert-card.success { background: linear-gradient(135deg, #064e3b 0%, #1e293b 100%); }
+    
+    /* Graphiques */
+    .chart-container {
+        position: relative;
+        height: 300px;
+        width: 100%;
+    }
+    
+    /* Progression */
+    .progress-custom {
+        height: 8px;
+        border-radius: 10px;
+        background: #e2e8f0;
+        overflow: hidden;
+    }
+    
+    .progress-custom-bar {
+        height: 100%;
+        border-radius: 10px;
+        transition: width 0.6s ease;
+    }
+    
+    /* Badges */
+    .badge-criticite {
+        padding: 6px 14px;
+        border-radius: 30px;
+        font-size: 0.7rem;
+        font-weight: 600;
+    }
+    .badge-criticite.critique { background: #fee2e2; color: #dc2626; }
+    .badge-criticite.majeur { background: #fed7aa; color: #ea580c; }
+    .badge-criticite.mineur { background: #fef3c7; color: #d97706; }
+    
+    [data-bs-theme="dark"] .badge-criticite.critique { background: #2d1a1a; color: #fca5a5; }
+    [data-bs-theme="dark"] .badge-criticite.majeur { background: #2d241a; color: #fdba74; }
+    [data-bs-theme="dark"] .badge-criticite.mineur { background: #2d2a1a; color: #fde047; }
+    
+    /* Animation */
+    @keyframes fadeInUp {
+        from {
+            opacity: 0;
+            transform: translateY(20px);
+        }
+        to {
+            opacity: 1;
+            transform: translateY(0);
+        }
+    }
+    
+    .animate-card {
+        animation: fadeInUp 0.4s ease-out forwards;
+        opacity: 0;
+    }
+    
+    .animate-card:nth-child(1) { animation-delay: 0.05s; }
+    .animate-card:nth-child(2) { animation-delay: 0.1s; }
+    .animate-card:nth-child(3) { animation-delay: 0.15s; }
+    .animate-card:nth-child(4) { animation-delay: 0.2s; }
+    .animate-card:nth-child(5) { animation-delay: 0.25s; }
+    .animate-card:nth-child(6) { animation-delay: 0.3s; }
+    
+    /* Organisation badge */
+    .org-badge {
+        padding: 4px 10px;
+        border-radius: 20px;
+        font-size: 0.7rem;
+        background: #e2e8f0;
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+    }
+    [data-bs-theme="dark"] .org-badge {
+        background: #334155;
+        color: #e2e8f0;
+    }
+    
+    /* Filtres sélectionnés */
+    .filter-tag {
+        background: #e2e8f0;
+        padding: 4px 12px;
+        border-radius: 20px;
+        font-size: 0.7rem;
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+    }
+    .filter-tag .remove {
+        cursor: pointer;
+        color: #ef4444;
+    }
+    .filter-tag .remove:hover {
+        color: #dc2626;
+    }
+    [data-bs-theme="dark"] .filter-tag {
+        background: #334155;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="container-fluid px-4">
+    
+    <!-- ============================================ -->
+    <!-- EN-TÊTE MODERNE -->
+    <!-- ============================================ -->
+    <div class="d-flex flex-wrap justify-content-between align-items-center mb-4">
+        <div>
+            <h1 class="h2 mb-1 fw-bold">
+                <i class="fas fa-shield-alt me-2" style="color: var(--fk-accent);"></i>
+                Contrôle Interne Niveau 2
+            </h1>
+            <nav aria-label="breadcrumb">
+                <ol class="breadcrumb mb-0">
+                    <li class="breadcrumb-item"><a href="{{ url_for('dashboard') }}" class="text-decoration-none">Accueil</a></li>
+                    <li class="breadcrumb-item active" aria-current="page">Tableau de bord C2N</li>
+                </ol>
+            </nav>
+            <p class="text-muted mt-2 mb-0">
+                <i class="fas fa-chart-line me-1"></i>
+                Vue consolidée des contrôles internes, non-conformités et plans d'action
+            </p>
+        </div>
+        <div class="mt-2 mt-sm-0">
+            <div class="dropdown d-inline-block me-2">
+                <button class="btn btn-outline-secondary rounded-pill px-3 dropdown-toggle" type="button" data-bs-toggle="dropdown">
+                    <i class="fas fa-download me-1"></i> Exporter
+                </button>
+                <ul class="dropdown-menu dropdown-menu-end">
+                    <li><a class="dropdown-item" href="#" onclick="exportDashboard('excel')"><i class="fas fa-file-excel me-2 text-success"></i>Excel</a></li>
+                    <li><a class="dropdown-item" href="#" onclick="exportDashboard('pdf')"><i class="fas fa-file-pdf me-2 text-danger"></i>PDF</a></li>
+                    <li><a class="dropdown-item" href="#" onclick="exportDashboard('csv')"><i class="fas fa-file-csv me-2 text-info"></i>CSV</a></li>
+                </ul>
+            </div>
+            <a href="{{ url_for('c2n_liste_planifications') }}" class="btn btn-outline-primary rounded-pill px-3">
+                <i class="fas fa-calendar-alt me-1"></i> Planification
+            </a>
+            <a href="{{ url_for('c2n_liste_referentiel') }}" class="btn btn-outline-secondary rounded-pill px-3">
+                <i class="fas fa-book me-1"></i> Référentiel
+            </a>
+        </div>
+    </div>
+
+    <!-- ============================================ -->
+    <!-- FILTRES PAR ORGANISATION (NOUVEAU) -->
+    <!-- ============================================ -->
+    <div class="filter-card mb-4">
+        <form method="GET" id="filterForm" class="row g-3">
+            <div class="col-md-3">
+                <label class="form-label small fw-semibold text-muted">
+                    <i class="fas fa-globe me-1"></i>Pays
+                </label>
+                <select name="pays_id" class="form-select" onchange="this.form.submit()">
+                    <option value="">Tous les pays</option>
+                    {% for pays in pays_list %}
+                    <option value="{{ pays.id }}" {% if request.args.get('pays_id')|int == pays.id %}selected{% endif %}>
+                        {{ pays.drapeau }} {{ pays.nom }}
+                    </option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="col-md-3">
+                <label class="form-label small fw-semibold text-muted">
+                    <i class="fas fa-building me-1"></i>Pôle / Filiale
+                </label>
+                <select name="pole_id" class="form-select" onchange="this.form.submit()">
+                    <option value="">Tous les pôles</option>
+                    {% for pole in poles_list %}
+                    <option value="{{ pole.id }}" {% if request.args.get('pole_id')|int == pole.id %}selected{% endif %}>
+                        {{ pole.nom }}
+                    </option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="col-md-3">
+                <label class="form-label small fw-semibold text-muted">
+                    <i class="fas fa-sitemap me-1"></i>Direction
+                </label>
+                <select name="direction_id" class="form-select" onchange="this.form.submit()">
+                    <option value="">Toutes les directions</option>
+                    {% for direction in directions_list %}
+                    <option value="{{ direction.id }}" {% if request.args.get('direction_id')|int == direction.id %}selected{% endif %}>
+                        {{ direction.nom }}
+                    </option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="col-md-3">
+                <label class="form-label small fw-semibold text-muted">
+                    <i class="fas fa-chart-line me-1"></i>Métier
+                </label>
+                <select name="metier" class="form-select" onchange="this.form.submit()">
+                    <option value="">Tous les métiers</option>
+                    {% for metier in metiers_list %}
+                    <option value="{{ metier }}" {% if request.args.get('metier') == metier %}selected{% endif %}>
+                        {{ metier }}
+                    </option>
+                    {% endfor %}
+                </select>
+            </div>
+        </form>
+        
+        <!-- Filtres actifs -->
+        {% if request.args.get('pays_id') or request.args.get('pole_id') or request.args.get('direction_id') or request.args.get('metier') %}
+        <div class="mt-3 pt-2 border-top">
+            <div class="d-flex flex-wrap gap-2 align-items-center">
+                <span class="small text-muted">Filtres actifs :</span>
+                {% if request.args.get('pays_id') %}
+                <span class="filter-tag">
+                    <i class="fas fa-globe"></i> Pays sélectionné
+                    <a href="{{ url_for('c2n_dashboard', pole_id=request.args.get('pole_id'), direction_id=request.args.get('direction_id'), metier=request.args.get('metier')) }}" class="remove">✕</a>
+                </span>
+                {% endif %}
+                {% if request.args.get('pole_id') %}
+                <span class="filter-tag">
+                    <i class="fas fa-building"></i> Pôle sélectionné
+                    <a href="{{ url_for('c2n_dashboard', pays_id=request.args.get('pays_id'), direction_id=request.args.get('direction_id'), metier=request.args.get('metier')) }}" class="remove">✕</a>
+                </span>
+                {% endif %}
+                {% if request.args.get('direction_id') %}
+                <span class="filter-tag">
+                    <i class="fas fa-sitemap"></i> Direction sélectionnée
+                    <a href="{{ url_for('c2n_dashboard', pays_id=request.args.get('pays_id'), pole_id=request.args.get('pole_id'), metier=request.args.get('metier')) }}" class="remove">✕</a>
+                </span>
+                {% endif %}
+                {% if request.args.get('metier') %}
+                <span class="filter-tag">
+                    <i class="fas fa-chart-line"></i> Métier: {{ request.args.get('metier') }}
+                    <a href="{{ url_for('c2n_dashboard', pays_id=request.args.get('pays_id'), pole_id=request.args.get('pole_id'), direction_id=request.args.get('direction_id')) }}" class="remove">✕</a>
+                </span>
+                {% endif %}
+                <a href="{{ url_for('c2n_dashboard') }}" class="btn btn-sm btn-link text-danger p-0 ms-2">Effacer tous les filtres</a>
+            </div>
+        </div>
+        {% endif %}
+    </div>
+
+    <!-- ============================================ -->
+    <!-- 6 CARTES STATISTIQUES PREMIUM -->
+    <!-- ============================================ -->
+    <div class="row g-3 mb-4">
+        <div class="col-md-6 col-lg-2 animate-card">
+            <div class="card dashboard-stat h-100">
+                <div class="card-body">
+                    <div class="d-flex justify-content-between align-items-start">
+                        <div>
+                            <div class="stat-label">Contrôles planifiés</div>
+                            <div class="stat-value text-primary">{{ stats.planifies|default(0) }}</div>
+                            <small class="text-muted">pour l'année en cours</small>
+                        </div>
+                        <div class="stat-icon bg-primary bg-opacity-10 text-primary">
+                            <i class="fas fa-calendar-check"></i>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-6 col-lg-2 animate-card">
+            <div class="card dashboard-stat h-100">
+                <div class="card-body">
+                    <div class="d-flex justify-content-between align-items-start">
+                        <div>
+                            <div class="stat-label">Contrôles réalisés</div>
+                            <div class="stat-value text-success">{{ stats.realises|default(0) }}</div>
+                            {% set pourcentage = ((stats.realises|default(0) / stats.planifies|default(1) * 100)|round|int) if stats.planifies|default(0) > 0 else 0 %}
+                            <small class="text-muted">{{ pourcentage }}% du plan</small>
+                        </div>
+                        <div class="stat-icon bg-success bg-opacity-10 text-success">
+                            <i class="fas fa-check-circle"></i>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-6 col-lg-2 animate-card">
+            <div class="card dashboard-stat h-100">
+                <div class="card-body">
+                    <div class="d-flex justify-content-between align-items-start">
+                        <div>
+                            <div class="stat-label">En retard</div>
+                            <div class="stat-value text-danger">{{ stats.en_retard|default(0) }}</div>
+                            <small class="text-muted">contrôles non réalisés</small>
+                        </div>
+                        <div class="stat-icon bg-danger bg-opacity-10 text-danger">
+                            <i class="fas fa-exclamation-triangle"></i>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-6 col-lg-2 animate-card">
+            <div class="card dashboard-stat h-100">
+                <div class="card-body">
+                    <div class="d-flex justify-content-between align-items-start">
+                        <div>
+                            <div class="stat-label">Taux de conformité</div>
+                            <div class="stat-value {% if stats.taux_conformite_moyen|default(0) >= 80 %}text-success{% elif stats.taux_conformite_moyen|default(0) >= 60 %}text-warning{% else %}text-danger{% endif %}">
+                                {{ stats.taux_conformite_moyen|default(0) }}%
+                            </div>
+                            <small class="text-muted">moyen global</small>
+                        </div>
+                        <div class="stat-icon bg-info bg-opacity-10 text-info">
+                            <i class="fas fa-chart-line"></i>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-6 col-lg-2 animate-card">
+            <div class="card dashboard-stat h-100">
+                <div class="card-body">
+                    <div class="d-flex justify-content-between align-items-start">
+                        <div>
+                            <div class="stat-label">Actions ouvertes</div>
+                            <div class="stat-value text-warning">{{ stats.actions_ouvertes|default(0) }}</div>
+                            <small class="text-muted">à traiter</small>
+                        </div>
+                        <div class="stat-icon bg-warning bg-opacity-10 text-warning">
+                            <i class="fas fa-tasks"></i>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-6 col-lg-2 animate-card">
+            <div class="card dashboard-stat h-100">
+                <div class="card-body">
+                    <div class="d-flex justify-content-between align-items-start">
+                        <div>
+                            <div class="stat-label">Actions clôturées</div>
+                            <div class="stat-value text-success">{{ stats.actions_closes|default(0) }}</div>
+                            <small class="text-muted">terminées</small>
+                        </div>
+                        <div class="stat-icon bg-success bg-opacity-10 text-success">
+                            <i class="fas fa-check-double"></i>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    {# templates/c2n/dashboard.html - Ajouter ce widget #}
+
+    <!-- Dans dashboard.html, ajoutez ce widget -->
+    <div class="col-md-6 mt-4">
+        <div class="card">
+            <div class="card-header bg-white">
+                <h6 class="mb-0">
+                    <i class="fas fa-calendar-alt me-2 text-warning"></i>
+                    Échéancier des recommandations
+                    <span class="badge bg-danger ms-2">{{ stats.en_retard|default(0) }} en retard</span>
+                </h6>
+            </div>
+            <div class="card-body p-0">
+                <div class="list-group list-group-flush">
+                    {% for reco in echeances_recommandations %}
+                    <div class="list-group-item">
+                        <div class="d-flex justify-content-between align-items-center">
+                            <div>
+                                <span class="badge {% if reco.priorite == 'haute' %}bg-danger{% elif reco.priorite == 'moyenne' %}bg-warning{% else %}bg-success{% endif %} me-2">
+                                    {{ reco.priorite|upper }}
+                                </span>
+                                <span class="small">{{ reco.titre|truncate(40) }}</span>
+                            </div>
+                            <div class="text-end">
+                                {% if reco.date_echeance < now.date() %}
+                                <span class="badge bg-danger">En retard</span>
+                                {% elif reco.date_echeance <= now.date() + timedelta(days=7) %}
+                                <span class="badge bg-warning">J-{{ (reco.date_echeance - now.date()).days }}</span>
+                                {% else %}
+                                <span class="badge bg-success">{{ (reco.date_echeance - now.date()).days }}j</span>
+                                {% endif %}
+                            </div>
+                        </div>
+                        <div class="progress mt-2" style="height: 4px;">
+                            <div class="progress-bar bg-success" style="width: {{ reco.progression }}%"></div>
+                        </div>
+                    </div>
+                    {% else %}
+                    <div class="list-group-item text-center text-muted">
+                        <i class="fas fa-check-circle me-1"></i>Aucune échéance à venir
+                    </div>
+                    {% endfor %}
+                </div>
+            </div>
+            <div class="card-footer bg-white">
+                <a href="{{ url_for('c2n_recommandations_central') }}" class="text-decoration-none small">
+                    Voir toutes les recommandations <i class="fas fa-arrow-right ms-1"></i>
+                </a>
+            </div>
+        </div>
+    </div>
+    <!-- ============================================ -->
+    <!-- DEUXIÈME LIGNE : PROGRESSION & ALERTES -->
+    <!-- ============================================ -->
+    <div class="row g-3 mb-4">
+        <div class="col-md-7 animate-card">
+            <div class="card dashboard-stat h-100">
+                <div class="card-header bg-white border-0 pt-3 pb-0">
+                    <h6 class="mb-0 fw-semibold">
+                        <i class="fas fa-chart-simple me-2 text-primary"></i>
+                        Avancement global du plan de contrôle
+                    </h6>
+                </div>
+                <div class="card-body">
+                    {% set avancement = ((stats.realises|default(0) / stats.planifies|default(1) * 100)|round|int) if stats.planifies|default(0) > 0 else 0 %}
+                    <div class="d-flex justify-content-between align-items-center mb-2">
+                        <span class="small text-muted">Progression</span>
+                        <span class="fw-bold {% if avancement >= 80 %}text-success{% elif avancement >= 50 %}text-warning{% else %}text-danger{% endif %}">
+                            {{ avancement }}%
+                        </span>
+                    </div>
+                    <div class="progress-custom mb-4">
+                        <div class="progress-custom-bar {% if avancement >= 80 %}bg-success{% elif avancement >= 50 %}bg-warning{% else %}bg-danger{% endif %}" 
+                             style="width: {{ avancement }}%">
+                        </div>
+                    </div>
+                    
+                    <div class="row text-center mt-3">
+                        <div class="col-4">
+                            <div class="border-end">
+                                <div class="h5 mb-0 text-primary">{{ stats.planifies|default(0) }}</div>
+                                <small class="text-muted">Planifiés</small>
+                            </div>
+                        </div>
+                        <div class="col-4">
+                            <div class="border-end">
+                                <div class="h5 mb-0 text-success">{{ stats.realises|default(0) }}</div>
+                                <small class="text-muted">Réalisés</small>
+                            </div>
+                        </div>
+                        <div class="col-4">
+                            <div class="h5 mb-0 text-danger">{{ stats.en_retard|default(0) }}</div>
+                            <small class="text-muted">En retard</small>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-5 animate-card">
+            <div class="card dashboard-stat h-100">
+                <div class="card-header bg-white border-0 pt-3 pb-0">
+                    <h6 class="mb-0 fw-semibold">
+                        <i class="fas fa-bell me-2 text-warning"></i>
+                        Alertes et notifications
+                    </h6>
+                </div>
+                <div class="card-body">
+                    {% if stats.en_retard|default(0) > 0 %}
+                    <div class="alert-card critical p-3 mb-2" onclick="window.location.href='{{ url_for('c2n_liste_planifications') }}?statut=en_retard'">
+                        <div class="d-flex align-items-center">
+                            <div class="me-3">
+                                <i class="fas fa-clock fa-2x text-danger"></i>
+                            </div>
+                            <div>
+                                <strong class="text-danger">{{ stats.en_retard }} contrôle(s) en retard</strong>
+                                <div class="small text-muted">Ces contrôles dépassent leur date prévue</div>
+                            </div>
+                        </div>
+                    </div>
+                    {% endif %}
+                    
+                    {% if stats.actions_ouvertes|default(0) > 0 %}
+                    <div class="alert-card warning p-3 mb-2" onclick="window.location.href='{{ url_for('c2n_liste_plans_action') }}?statut=en_cours'">
+                        <div class="d-flex align-items-center">
+                            <div class="me-3">
+                                <i class="fas fa-tasks fa-2x text-warning"></i>
+                            </div>
+                            <div>
+                                <strong class="text-warning">{{ stats.actions_ouvertes }} action(s) en cours</strong>
+                                <div class="small text-muted">Planifiées à traiter</div>
+                            </div>
+                        </div>
+                    </div>
+                    {% endif %}
+                    
+                    {% if stats.a_valider|default(0) > 0 %}
+                    <div class="alert-card info p-3 mb-2" onclick="window.location.href='{{ url_for('c2n_a_valider') }}'">
+                        <div class="d-flex align-items-center">
+                            <div class="me-3">
+                                <i class="fas fa-stamp fa-2x text-primary"></i>
+                            </div>
+                            <div>
+                                <strong class="text-primary">{{ stats.a_valider }} contrôle(s) à valider</strong>
+                                <div class="small text-muted">En attente de votre validation</div>
+                            </div>
+                        </div>
+                    </div>
+                    {% endif %}
+                    
+                    {% if stats.non_conformites_ouvertes|default(0) > 0 %}
+                    <div class="alert-card critical p-3 mb-2" onclick="window.location.href='{{ url_for('c2n_liste_non_conformites') }}?statut=ouvert'">
+                        <div class="d-flex align-items-center">
+                            <div class="me-3">
+                                <i class="fas fa-exclamation-triangle fa-2x text-danger"></i>
+                            </div>
+                            <div>
+                                <strong class="text-danger">{{ stats.non_conformites_ouvertes }} non-conformité(s) ouvertes</strong>
+                                <div class="small text-muted">À traiter en priorité</div>
+                            </div>
+                        </div>
+                    </div>
+                    {% endif %}
+                    
+                    {% if stats.en_retard|default(0) == 0 and stats.actions_ouvertes|default(0) == 0 and stats.a_valider|default(0) == 0 and stats.non_conformites_ouvertes|default(0) == 0 %}
+                    <div class="text-center py-4">
+                        <i class="fas fa-check-circle fa-3x text-success mb-3"></i>
+                        <p class="text-muted mb-0">Aucune alerte à signaler</p>
+                        <small class="text-muted">Tout est conforme aux attentes</small>
+                    </div>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- ============================================ -->
+    <!-- GRAPHIQUES -->
+    <!-- ============================================ -->
+    <div class="row g-3 mb-4">
+        <div class="col-md-6 animate-card">
+            <div class="card dashboard-stat">
+                <div class="card-header bg-white">
+                    <h6 class="mb-0 fw-semibold">
+                        <i class="fas fa-chart-pie me-2 text-primary"></i>
+                        Répartition par métier
+                    </h6>
+                </div>
+                <div class="card-body">
+                    <div class="chart-container">
+                        <canvas id="metierChart"></canvas>
+                    </div>
+                    <div class="mt-3" id="metierLegend"></div>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-6 animate-card">
+            <div class="card dashboard-stat">
+                <div class="card-header bg-white">
+                    <h6 class="mb-0 fw-semibold">
+                        <i class="fas fa-exclamation-triangle me-2 text-primary"></i>
+                        Répartition par niveau de criticité
+                    </h6>
+                </div>
+                <div class="card-body">
+                    <div class="chart-container">
+                        <canvas id="criticiteChart"></canvas>
+                    </div>
+                    <div class="mt-3 text-center">
+                        {% set total_risques = stats.repartition_risque.mineur|default(0) + stats.repartition_risque.majeur|default(0) + stats.repartition_risque.critique|default(0) %}
+                        {% if total_risques > 0 %}
+                        <div class="row">
+                            <div class="col-4">
+                                <span class="badge-criticite mineur">
+                                    <i class="fas fa-circle me-1" style="font-size: 0.5rem;"></i>
+                                    Mineur: {{ stats.repartition_risque.mineur|default(0) }}
+                                </span>
+                            </div>
+                            <div class="col-4">
+                                <span class="badge-criticite majeur">
+                                    <i class="fas fa-circle me-1" style="font-size: 0.5rem;"></i>
+                                    Majeur: {{ stats.repartition_risque.majeur|default(0) }}
+                                </span>
+                            </div>
+                            <div class="col-4">
+                                <span class="badge-criticite critique">
+                                    <i class="fas fa-circle me-1" style="font-size: 0.5rem;"></i>
+                                    Critique: {{ stats.repartition_risque.critique|default(0) }}
+                                </span>
+                            </div>
+                        </div>
+                        {% else %}
+                        <p class="text-muted small mb-0">Aucune non-conformité enregistrée</p>
+                        {% endif %}
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- ============================================ -->
+    <!-- TROISIÈME LIGNE : ÉVOLUTION & ACTIONS RÉCENTES -->
+    <!-- ============================================ -->
+    <div class="row g-3">
+        <div class="col-md-7 animate-card">
+            <div class="card dashboard-stat">
+                <div class="card-header bg-white">
+                    <h6 class="mb-0 fw-semibold">
+                        <i class="fas fa-chart-line me-2 text-primary"></i>
+                        Évolution des contrôles (6 derniers mois)
+                    </h6>
+                </div>
+                <div class="card-body">
+                    <div class="chart-container">
+                        <canvas id="evolutionChart"></canvas>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-5 animate-card">
+            <div class="card dashboard-stat">
+                <div class="card-header bg-white">
+                    <h6 class="mb-0 fw-semibold">
+                        <i class="fas fa-history me-2 text-primary"></i>
+                        Dernières actions
+                    </h6>
+                </div>
+                <div class="card-body p-0">
+                    <div class="list-group list-group-flush">
+                        <div class="list-group-item bg-transparent">
+                            <div class="d-flex align-items-center">
+                                <div class="me-3">
+                                    <i class="fas fa-check-circle text-success"></i>
+                                </div>
+                                <div>
+                                    <span class="small fw-semibold">Taux de conformité moyen</span>
+                                    <div class="small text-muted">{{ stats.taux_conformite_moyen|default(0) }}% global</div>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="list-group-item bg-transparent">
+                            <div class="d-flex align-items-center">
+                                <div class="me-3">
+                                    <i class="fas fa-tasks text-warning"></i>
+                                </div>
+                                <div>
+                                    <span class="small fw-semibold">Actions en cours</span>
+                                    <div class="small text-muted">{{ stats.actions_ouvertes|default(0) }} action(s) à traiter</div>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="list-group-item bg-transparent">
+                            <div class="d-flex align-items-center">
+                                <div class="me-3">
+                                    <i class="fas fa-calendar-check text-primary"></i>
+                                </div>
+                                <div>
+                                    <span class="small fw-semibold">Progression du plan</span>
+                                    {% set progression = ((stats.realises|default(0) / stats.planifies|default(1) * 100)|round|int) if stats.planifies|default(0) > 0 else 0 %}
+                                    <div class="small text-muted">{{ progression }}% réalisé</div>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="list-group-item bg-transparent">
+                            <div class="d-flex align-items-center">
+                                <div class="me-3">
+                                    <i class="fas fa-stamp text-primary"></i>
+                                </div>
+                                <div>
+                                    <span class="small fw-semibold">À valider</span>
+                                    <div class="small text-muted">{{ stats.a_valider|default(0) }} contrôle(s) en attente</div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    
+    // ============================================
+    // GRAPHIQUE 1: RÉPARTITION PAR MÉTIER
+    // ============================================
+    const metierCtx = document.getElementById('metierChart').getContext('2d');
+    const metierData = {{ stats.repartition_metier|tojson|safe }};
+    
+    const metierLabels = Object.keys(metierData);
+    const metierValues = Object.values(metierData);
+    const metierColors = ['#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#06b6d4', '#ec4899'];
+    
+    if (metierLabels.length > 0) {
+        new Chart(metierCtx, {
+            type: 'doughnut',
+            data: {
+                labels: metierLabels,
+                datasets: [{
+                    data: metierValues,
+                    backgroundColor: metierColors.slice(0, metierLabels.length),
+                    borderWidth: 0,
+                    hoverOffset: 8
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: true,
+                cutout: '60%',
+                plugins: {
+                    legend: {
+                        position: 'bottom',
+                        labels: {
+                            font: { size: 11 },
+                            boxWidth: 10,
+                            padding: 10
+                        }
+                    },
+                    tooltip: {
+                        callbacks: {
+                            label: function(context) {
+                                const label = context.label || '';
+                                const value = context.raw || 0;
+                                const total = context.dataset.data.reduce((a, b) => a + b, 0);
+                                const percentage = total > 0 ? Math.round((value / total) * 100) : 0;
+                                return `${label}: ${value} (${percentage}%)`;
+                            }
+                        }
+                    }
+                }
+            }
+        });
+    } else {
+        metierCtx.canvas.parentElement.innerHTML = '<div class="text-center py-5"><i class="fas fa-chart-pie fa-3x text-muted mb-3"></i><p class="text-muted">Aucune donnée disponible</p></div>';
+    }
+    
+    // ============================================
+    // GRAPHIQUE 2: RÉPARTITION PAR CRITICITÉ
+    // ============================================
+    const criticiteCtx = document.getElementById('criticiteChart').getContext('2d');
+    const criticiteData = {{ stats.repartition_risque|tojson|safe }};
+    
+    new Chart(criticiteCtx, {
+        type: 'bar',
+        data: {
+            labels: ['Mineur', 'Majeur', 'Critique'],
+            datasets: [{
+                label: 'Nombre de non-conformités',
+                data: [
+                    criticiteData.mineur || 0,
+                    criticiteData.majeur || 0,
+                    criticiteData.critique || 0
+                ],
+                backgroundColor: ['#fef3c7', '#fed7aa', '#fee2e2'],
+                borderColor: ['#d97706', '#ea580c', '#dc2626'],
+                borderWidth: 1,
+                borderRadius: 8
+            }]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: true,
+            plugins: {
+                legend: { display: false },
+                tooltip: {
+                    callbacks: {
+                        label: function(context) {
+                            return `${context.raw} non-conformité(s)`;
+                        }
+                    }
+                }
+            },
+            scales: {
+                y: {
+                    beginAtZero: true,
+                    title: { display: true, text: 'Nombre', font: { size: 11 } },
+                    grid: { color: 'rgba(0,0,0,0.05)' }
+                },
+                x: {
+                    title: { display: true, text: 'Niveau de criticité', font: { size: 11 } }
+                }
+            }
+        }
+    });
+    
+    // ============================================
+    // GRAPHIQUE 3: ÉVOLUTION
+    // ============================================
+    const evolutionCtx = document.getElementById('evolutionChart').getContext('2d');
+    
+    // Données d'évolution
+    const evolutionLabels = {{ evolution_labels|tojson|safe }};
+    const evolutionPlanifies = {{ evolution_planifies|tojson|safe }};
+    const evolutionRealises = {{ evolution_realises|tojson|safe }};
+    
+    if (evolutionLabels.length > 0) {
+        new Chart(evolutionCtx, {
+            type: 'line',
+            data: {
+                labels: evolutionLabels,
+                datasets: [
+                    {
+                        label: 'Contrôles planifiés',
+                        data: evolutionPlanifies,
+                        borderColor: '#3b82f6',
+                        backgroundColor: 'rgba(59, 130, 246, 0.1)',
+                        borderWidth: 2,
+                        tension: 0.3,
+                        fill: true,
+                        pointRadius: 4,
+                        pointHoverRadius: 6
+                    },
+                    {
+                        label: 'Contrôles réalisés',
+                        data: evolutionRealises,
+                        borderColor: '#10b981',
+                        backgroundColor: 'rgba(16, 185, 129, 0.1)',
+                        borderWidth: 2,
+                        tension: 0.3,
+                        fill: true,
+                        pointRadius: 4,
+                        pointHoverRadius: 6
+                    }
+                ]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: true,
+                plugins: {
+                    tooltip: {
+                        mode: 'index',
+                        intersect: false
+                    },
+                    legend: {
+                        position: 'bottom',
+                        labels: { font: { size: 11 } }
+                    }
+                },
+                scales: {
+                    y: {
+                        beginAtZero: true,
+                        title: { display: true, text: 'Nombre de contrôles', font: { size: 11 } },
+                        grid: { color: 'rgba(0,0,0,0.05)' }
+                    },
+                    x: {
+                        title: { display: true, text: 'Mois', font: { size: 11 } }
+                    }
+                }
+            }
+        });
+    } else {
+        evolutionCtx.canvas.parentElement.innerHTML = '<div class="text-center py-5"><i class="fas fa-chart-line fa-3x text-muted mb-3"></i><p class="text-muted">Aucune donnée d\'évolution disponible</p></div>';
+    }
+});
+
+// ============================================
+// FONCTIONS D'EXPORT
+// ============================================
+
+function exportDashboard(format) {
+    const params = new URLSearchParams();
+    params.append('format', format);
+    
+    // Ajouter les filtres actuels à l'export
+    const urlParams = new URLSearchParams(window.location.search);
+    for (const [key, value] of urlParams) {
+        params.append(key, value);
+    }
+    
+    window.location.href = `/c2n/dashboard/export?${params.toString()}`;
+}
+</script>
+{% endblock %}
