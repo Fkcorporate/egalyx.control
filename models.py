@@ -986,6 +986,9 @@ class Pole(db.Model):
     responsable_nom_manuel = db.Column(db.String(200), nullable=True)
     responsable_type = db.Column(db.String(20), default='utilisateur')
     
+    # 🔴 NOUVEAU: Rattachement à un pays
+    pays_id = db.Column(db.Integer, db.ForeignKey('pays.id'), nullable=True)
+    
     # Couleur personnalisée pour ce pôle (optionnel)
     couleur = db.Column(db.String(20), default='#3b82f6')
     
@@ -1006,6 +1009,7 @@ class Pole(db.Model):
     # Relations
     responsable = db.relationship('User', foreign_keys=[responsable_id],
                                   back_populates='poles_geres')
+    pays = db.relationship('Pays', back_populates='poles')  # 🔴 NOUVEAU
     directions = db.relationship('Direction', back_populates='pole', lazy=True)
     createur = db.relationship('User', foreign_keys=[created_by])
     archive_user = db.relationship('User', foreign_keys=[archived_by])
@@ -1034,6 +1038,54 @@ class Pole(db.Model):
                 total += len([s for s in direction.services 
                              if not s.is_archived and s.is_active])
         return total
+    
+    @property
+    def pays_nom(self):
+        """Retourne le nom du pays associé"""
+        return self.pays.nom if self.pays else "Non rattaché"
+    
+    @property
+    def pays_drapeau(self):
+        """Retourne le drapeau du pays associé"""
+        return self.pays.drapeau if self.pays else "🌍"
+
+
+class Pays(db.Model):
+    """Pays pour l'organisation géographique"""
+    __tablename__ = 'pays'
+    
+    id = db.Column(db.Integer, primary_key=True)
+    nom = db.Column(db.String(100), nullable=False)
+    code = db.Column(db.String(3), nullable=False, unique=True)  # Code ISO: FRA, USA, etc.
+    code_telephone = db.Column(db.String(5), nullable=True)  # +33, +1, etc.
+    drapeau = db.Column(db.String(10), nullable=True)  # Emoji ou code du drapeau
+    description = db.Column(db.Text)
+    
+    # Multi-tenant
+    client_id = db.Column(db.Integer, db.ForeignKey('clients.id'), nullable=True)
+    
+    # Métadonnées
+    ordre = db.Column(db.Integer, default=0)
+    created_by = db.Column(db.Integer, db.ForeignKey('user.id'))
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    is_archived = db.Column(db.Boolean, default=False)
+    
+    # Relation avec les pôles (un pays peut avoir plusieurs pôles/filiales)
+    poles = db.relationship('Pole', back_populates='pays')
+    
+    @property
+    def nb_poles(self):
+        return len([p for p in self.poles if not p.is_archived])
+    
+    @property
+    def nb_directions(self):
+        total = 0
+        for pole in self.poles:
+            if not pole.is_archived:
+                total += len([d for d in pole.directions if not d.is_archived and d.is_active])
+        return total
+
 
 
 # -------------------- CONFIGURATION ORGANIGRAMME --------------------
