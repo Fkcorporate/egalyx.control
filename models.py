@@ -14213,7 +14213,10 @@ class RecommandationC2N(db.Model):
     date_debut = db.Column(db.Date, nullable=True)         # Date de début
     date_fin_reelle = db.Column(db.Date, nullable=True)    # Date de réalisation
     progression = db.Column(db.Integer, default=0)         # Progression (0-100)
-    responsable_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=True)  # Responsable
+    
+    # ✅ CORRECTION 1: Ajouter la colonne responsable_id
+    responsable_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=True)
+    
     commentaire_suivi = db.Column(db.Text)                  # Commentaire de suivi
     
     # Métadonnées
@@ -14223,18 +14226,32 @@ class RecommandationC2N(db.Model):
     client_id = db.Column(db.Integer, db.ForeignKey('clients.id'), nullable=False)
     metadonnees = db.Column(db.JSON, default={})
     
-    # Relations
-    planification = db.relationship('PlanificationControle', backref='recommandations_c2n', foreign_keys=[planification_id])
-    createur = db.relationship('User', foreign_keys=[created_by], backref='recommandations_c2n_crees')
-    responsable = db.relationship('User', foreign_keys=[responsable_id], backref='recommandations_responsable')
+    # ============================================
+    # RELATIONS - ✅ CORRIGÉES
+    # ============================================
     
-    # Relation SIMPLE avec backref
+    # Relation vers PlanificationControle
+    planification = db.relationship('PlanificationControle', 
+                                    backref='recommandations_c2n', 
+                                    foreign_keys=[planification_id])
+    
+    # Relation vers le créateur
+    createur = db.relationship('User', 
+                               foreign_keys=[created_by], 
+                               backref='recommandations_c2n_crees')
+    
+    # ✅ CORRECTION 2: Une seule relation responsable
+    responsable = db.relationship('User', 
+                                  foreign_keys=[responsable_id], 
+                                  backref='recommandations_c2n_responsable')  # ← Backref unique
+    
+    # Relation vers PlanActionC2N
     plan_action = db.relationship('PlanActionC2N', 
                                   foreign_keys=[plan_action_id],
                                   backref='recommandation_source')
     
     # ============================================
-    # MÉTHODES DE SUIVI
+    # MÉTHODES
     # ============================================
     
     def to_dict(self):
@@ -14293,7 +14310,6 @@ class RecommandationC2N(db.Model):
             self.commentaire_suivi = commentaire
         self.updated_at = datetime.utcnow()
         
-        # Si progression à 100%, marquer comme réalisée
         if self.progression == 100 and self.statut not in ['realisee', 'rejetee']:
             self.statut = 'realisee'
             self.date_fin_reelle = datetime.utcnow().date()
@@ -14350,27 +14366,20 @@ class RecommandationC2N(db.Model):
         
         return plan
     
-    
     def rouvrir(self):
         """Rouvrir une recommandation (acceptée ou rejetée)"""
         if self.statut in ['acceptee', 'rejetee']:
             ancien_statut = self.statut
             self.statut = 'proposee'
             
-            # 🔥 Si c'était une acceptée, il faut gérer le plan d'action associé
             if ancien_statut == 'acceptee' and self.plan_action_id:
-                # Option 1: Archiver le plan d'action (soft delete)
                 plan_action = PlanActionC2N.query.get(self.plan_action_id)
                 if plan_action:
                     plan_action.is_archived = True
                     plan_action.archived_at = datetime.utcnow()
                     plan_action.archived_by = current_user.id
                     plan_action.archive_reason = "Recommandation rouverte"
-                
-                # Option 2: OU supprimer le lien (on garde le plan mais on le dissocie)
-                # self.plan_action_id = None
             
-            # Gestion des métadonnées
             if not self.metadonnees:
                 self.metadonnees = {}
             
@@ -14397,22 +14406,19 @@ class RecommandationC2N(db.Model):
         self.statut = 'rejetee'
         self.date_rejet = datetime.utcnow()
         
-        # 🔥 Gestion de l'historique des motifs
         if not self.metadonnees:
             self.metadonnees = {}
         
-        # Sauvegarder le motif actuel
         if raison:
             self.metadonnees['dernier_motif_rejet'] = raison
             
-            # Ajouter à l'historique
             if 'historique_rejets' not in self.metadonnees:
                 self.metadonnees['historique_rejets'] = []
             
             self.metadonnees['historique_rejets'].append({
                 'date': datetime.utcnow().isoformat(),
                 'motif': raison,
-                'rejete_par': User.query.get(user_id).username if user_id else current_user.username
+                'rejete_par': user_id
             })
         
         self.updated_at = datetime.utcnow()
@@ -14430,11 +14436,6 @@ class RecommandationC2N(db.Model):
             return self.metadonnees.get('historique_rejets', [])
         return []
     
-    def get_raison_rejet(self):
-        """Retourne la raison du rejet"""
-        if self.metadonnees and 'raison_rejet' in self.metadonnees:
-            return self.metadonnees['raison_rejet']
-        return None
     def get_historique_rouvertures(self):
         """Retourne l'historique des réouvertures"""
         if self.metadonnees:
