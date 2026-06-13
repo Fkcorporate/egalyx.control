@@ -13756,3 +13756,1247 @@ class ActualisationCartographie(db.Model):
     duree_ms = db.Column(db.Integer)
     statut = db.Column(db.String(20), default='success')  # success, partial, failed
     erreurs = db.Column(db.Text)  # JSON
+
+
+# ============================================
+# MODÈLES C2N CORRIGÉS
+# ============================================
+
+class ReferentielControle(db.Model):
+    """Référentiel des contrôles"""
+    __tablename__ = 'referentiel_controles'
+    
+    id = db.Column(db.Integer, primary_key=True)
+    code_controle = db.Column(db.String(50), unique=True, nullable=False)
+    nom = db.Column(db.String(200), nullable=False)
+    processus = db.Column(db.String(100))
+    metier = db.Column(db.String(100))
+    objectif = db.Column(db.Text)
+    risques_couverts = db.Column(db.Text)
+    frequence = db.Column(db.String(20))
+    
+    # Clés étrangères
+    responsable_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=True)
+    client_id = db.Column(db.Integer, db.ForeignKey('clients.id'), nullable=False)
+    created_by = db.Column(db.Integer, db.ForeignKey('user.id'))
+    
+    # Timestamps
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    is_archived = db.Column(db.Boolean, default=False)
+    
+    # Relations SIMPLES
+    responsable = db.relationship('User', foreign_keys=[responsable_id])
+    createur = db.relationship('User', foreign_keys=[created_by])
+    planifications = db.relationship('PlanificationControle', backref='referentiel', lazy='dynamic')
+
+
+class PlanificationControle(db.Model):
+    """Planification des contrôles"""
+    __tablename__ = 'planification_controles'
+    
+    id = db.Column(db.Integer, primary_key=True)
+    reference = db.Column(db.String(50), unique=True, nullable=False)
+    annee = db.Column(db.Integer, nullable=False)
+    mois = db.Column(db.Integer)
+    perimetre = db.Column(db.String(200))
+    date_prevue = db.Column(db.Date, nullable=False)
+    statut = db.Column(db.String(20), default='a_faire')
+    
+    # Clés étrangères
+    referentiel_id = db.Column(db.Integer, db.ForeignKey('referentiel_controles.id'), nullable=False)
+    execution_id = db.Column(db.Integer, db.ForeignKey('execution_controle.id'), nullable=True)
+    controleur_id = db.Column(db.Integer, db.ForeignKey('user.id'))
+    client_id = db.Column(db.Integer, db.ForeignKey('clients.id'), nullable=False)
+    created_by = db.Column(db.Integer, db.ForeignKey('user.id'))
+    
+    # ============================================
+    # 🔥 NOUVEAUX CHAMPS POUR L'ORGANISATION CIBLE
+    # ============================================
+    pays_id = db.Column(db.Integer, db.ForeignKey('pays.id'), nullable=True)
+    pole_id = db.Column(db.Integer, db.ForeignKey('poles.id'), nullable=True)
+    direction_id = db.Column(db.Integer, db.ForeignKey('direction.id'), nullable=True)
+    service_id = db.Column(db.Integer, db.ForeignKey('service.id'), nullable=True)
+    organisation_manuel = db.Column(db.String(200), nullable=True)
+    
+    # Timestamps
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    is_archived = db.Column(db.Boolean, default=False)
+    archived_at = db.Column(db.DateTime, nullable=True)
+    archived_by = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=True)
+    archive_reason = db.Column(db.Text, nullable=True)
+    
+    # ============================================
+    # RELATIONS
+    # ============================================
+    controleur = db.relationship('User', foreign_keys=[controleur_id], backref='planifications_controleur')
+    createur = db.relationship('User', foreign_keys=[created_by], backref='planifications_creees')
+    execution = db.relationship('ExecutionControle', backref='planification', uselist=False)
+    archive_user = db.relationship('User', foreign_keys=[archived_by], backref='planifications_archivees')
+    
+    # 🔥 NOUVELLES RELATIONS ORGANISATION
+    pays = db.relationship('Pays', foreign_keys=[pays_id], backref='planifications')
+    pole = db.relationship('Pole', foreign_keys=[pole_id], backref='planifications')
+    direction = db.relationship('Direction', foreign_keys=[direction_id], backref='planifications')
+    service = db.relationship('Service', foreign_keys=[service_id], backref='planifications')
+    
+    # ============================================
+    # MÉTHODES DE STATUT
+    # ============================================
+    
+    def get_statut_label(self):
+        """Retourne le libellé du statut pour l'affichage"""
+        labels = {
+            'a_faire': '📋 À faire',
+            'en_cours': '▶️ En cours',
+            'soumis': '📤 Soumis',
+            'valide': '✅ Validé',
+            'rejete': '❌ Rejeté'
+        }
+        return labels.get(self.statut, self.statut)
+    
+    def get_statut_css(self):
+        """Retourne la classe CSS pour le statut"""
+        css = {
+            'a_faire': 'secondary',
+            'en_cours': 'primary',
+            'soumis': 'warning',
+            'valide': 'success',
+            'rejete': 'danger'
+        }
+        return css.get(self.statut, 'secondary')
+    
+    def get_statut_icone(self):
+        """Retourne l'icône pour le statut"""
+        icones = {
+            'a_faire': 'fa-circle',
+            'en_cours': 'fa-play-circle',
+            'soumis': 'fa-paper-plane',
+            'valide': 'fa-check-circle',
+            'rejete': 'fa-times-circle'
+        }
+        return icones.get(self.statut, 'fa-question-circle')
+    
+    # ============================================
+    # MÉTHODES DE TRANSITION D'ÉTAT
+    # ============================================
+    
+    def peut_passer_en_cours(self):
+        """Vérifie si la planification peut passer en 'en_cours'"""
+        return self.statut == 'a_faire'
+    
+    def passer_en_cours(self):
+        """Passe la planification en 'en_cours'"""
+        if self.peut_passer_en_cours():
+            self.statut = 'en_cours'
+            self.updated_at = datetime.utcnow()
+            return True
+        return False
+    
+    def peut_passer_en_soumis(self):
+        """Vérifie si la planification peut passer en 'soumis'"""
+        return self.statut == 'en_cours' and self.execution_id is not None
+    
+    def passer_en_soumis(self):
+        """Passe la planification en 'soumis'"""
+        if self.peut_passer_en_soumis():
+            self.statut = 'soumis'
+            self.updated_at = datetime.utcnow()
+            return True
+        return False
+    
+    def peut_passer_en_valide(self):
+        """Vérifie si la planification peut passer en 'valide'"""
+        return self.statut == 'soumis'
+    
+    def passer_en_valide(self):
+        """Passe la planification en 'valide'"""
+        if self.peut_passer_en_valide():
+            self.statut = 'valide'
+            self.updated_at = datetime.utcnow()
+            return True
+        return False
+    
+    def peut_passer_en_rejete(self):
+        """Vérifie si la planification peut passer en 'rejete'"""
+        return self.statut == 'soumis'
+    
+    def passer_en_rejete(self, commentaire=None):
+        """Passe la planification en 'rejete'"""
+        if self.peut_passer_en_rejete():
+            self.statut = 'rejete'
+            self.updated_at = datetime.utcnow()
+            if commentaire:
+                # Stocker le commentaire dans l'exécution si elle existe
+                if self.execution:
+                    self.execution.commentaires = commentaire
+            return True
+        return False
+    
+    # ============================================
+    # MÉTHODES D'ARCHIVAGE
+    # ============================================
+    
+    def archiver(self, user_id, raison=None):
+        """Archive la planification"""
+        self.is_archived = True
+        self.archived_at = datetime.utcnow()
+        self.archived_by = user_id
+        self.archive_reason = raison
+        self.updated_at = datetime.utcnow()
+    
+    def desarchiver(self):
+        """Désarchive la planification"""
+        self.is_archived = False
+        self.archived_at = None
+        self.archived_by = None
+        self.archive_reason = None
+        self.updated_at = datetime.utcnow()
+    
+    # ============================================
+    # PROPRIÉTÉS CALCULÉES
+    # ============================================
+    
+    @property
+    def est_en_retard(self):
+        """Vérifie si la planification est en retard"""
+        if self.date_prevue and self.statut not in ['valide', 'rejete']:
+            return datetime.now().date() > self.date_prevue
+        return False
+    
+    @property
+    def jours_restants(self):
+        """Retourne le nombre de jours restants avant la date prévue"""
+        if self.date_prevue and self.statut not in ['valide', 'rejete']:
+            delta = self.date_prevue - datetime.now().date()
+            return max(0, delta.days)
+        return 0
+    
+    @property
+    def referentiel(self):
+        """Retourne le référentiel associé (pour compatibilité avec les templates)"""
+        from models import ReferentielControle
+        return ReferentielControle.query.get(self.referentiel_id)
+    
+    @property
+    def organisation_complete(self):
+        """Retourne le nom complet de l'organisation cible"""
+        if self.organisation_manuel:
+            return self.organisation_manuel
+        elif self.service:
+            return f"{self.service.nom} ({self.direction.nom if self.direction else ''})"
+        elif self.direction:
+            return self.direction.nom
+        elif self.pole:
+            return self.pole.nom
+        elif self.pays:
+            return self.pays.nom
+        return "Non spécifiée"
+    
+    @property
+    def organisation_hierarchie(self):
+        """Retourne la hiérarchie complète de l'organisation"""
+        parties = []
+        if self.pays:
+            parties.append(self.pays.nom)
+        if self.pole:
+            parties.append(self.pole.nom)
+        if self.direction:
+            parties.append(self.direction.nom)
+        if self.service:
+            parties.append(self.service.nom)
+        if self.organisation_manuel:
+            parties.append(self.organisation_manuel)
+        return " > ".join(parties) if parties else "Non spécifiée"
+    
+    # ============================================
+    # MÉTHODES DE GÉNÉRATION
+    # ============================================
+    
+    def generer_reference(self):
+        """Génère une référence unique"""
+        return f"PLAN-{self.annee}-{self.id:04d}"
+    
+    # ============================================
+    # MÉTHODES DE SÉRIALISATION
+    # ============================================
+    
+    def to_dict(self):
+        """Convertit l'objet en dictionnaire pour l'API"""
+        return {
+            'id': self.id,
+            'reference': self.reference,
+            'annee': self.annee,
+            'mois': self.mois,
+            'perimetre': self.perimetre,
+            'date_prevue': self.date_prevue.isoformat() if self.date_prevue else None,
+            'statut': self.statut,
+            'statut_label': self.get_statut_label(),
+            'controleur': self.controleur.username if self.controleur else None,
+            'controleur_id': self.controleur_id,
+            'referentiel_id': self.referentiel_id,
+            'referentiel_nom': self.referentiel.nom if self.referentiel else None,
+            'execution_id': self.execution_id,
+            'organisation': {
+                'pays_id': self.pays_id,
+                'pays_nom': self.pays.nom if self.pays else None,
+                'pole_id': self.pole_id,
+                'pole_nom': self.pole.nom if self.pole else None,
+                'direction_id': self.direction_id,
+                'direction_nom': self.direction.nom if self.direction else None,
+                'service_id': self.service_id,
+                'service_nom': self.service.nom if self.service else None,
+                'manuel': self.organisation_manuel,
+                'complet': self.organisation_complete,
+                'hierarchie': self.organisation_hierarchie
+            },
+            'est_en_retard': self.est_en_retard,
+            'jours_restants': self.jours_restants,
+            'created_at': self.created_at.isoformat() if self.created_at else None,
+            'updated_at': self.updated_at.isoformat() if self.updated_at else None,
+            'is_archived': self.is_archived
+        }
+    
+    def __repr__(self):
+        return f'<PlanificationControle {self.reference}>'
+
+
+class ExecutionControle(db.Model):
+    """Exécution du contrôle - Entité 3"""
+    __tablename__ = 'execution_controle'
+    
+    id = db.Column(db.Integer, primary_key=True)
+    
+    volume_previsionnel = db.Column(db.Integer, default=0)
+    volume_controle = db.Column(db.Integer, default=0)
+    resultats = db.Column(db.Text)
+    commentaires = db.Column(db.Text)
+    conclusion = db.Column(db.Text)
+    taux_conformite = db.Column(db.Float, default=0)
+    pieces_justificatives = db.Column(db.Text)
+    
+    # ============================================
+    # 🔥 CHAMPS MANQUANTS (AJOUTER)
+    # ============================================
+    nb_conformes = db.Column(db.Integer, default=0)      # Nombre d'éléments conformes
+    nb_anomalies = db.Column(db.Integer, default=0)     # Nombre d'anomalies détectées
+    
+    date_execution = db.Column(db.DateTime, default=datetime.utcnow)
+    
+    # Clés étrangères
+    execute_par_id = db.Column(db.Integer, db.ForeignKey('user.id'))
+    client_id = db.Column(db.Integer, db.ForeignKey('clients.id'), nullable=False)
+    
+    # Timestamps
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    
+    # ============================================
+    # RELATIONS
+    # ============================================
+    
+    execute_par = db.relationship('User', foreign_keys=[execute_par_id])
+    validations = db.relationship('ValidationControle', backref='execution', lazy='dynamic')
+    
+    # Relation vers NonConformiteC2N
+    non_conformites_c2n = db.relationship('NonConformiteC2N', 
+                                          back_populates='execution',
+                                          lazy='dynamic',
+                                          cascade='all, delete-orphan')
+    
+    # ============================================
+    # MÉTHODES
+    # ============================================
+    
+    def calculer_taux(self):
+        """Calcule le taux de conformité"""
+        if self.volume_controle and self.volume_controle > 0:
+            # Utiliser nb_conformes si disponible, sinon calculer à partir du volume
+            if self.nb_conformes > 0:
+                self.taux_conformite = round((self.nb_conformes / self.volume_controle) * 100, 1)
+            else:
+                self.taux_conformite = round((self.volume_controle / self.volume_previsionnel) * 100, 1) if self.volume_previsionnel else 0
+        else:
+            self.taux_conformite = 0
+        return self.taux_conformite
+    
+    def calculer_anomalies(self):
+        """Calcule le nombre d'anomalies à partir de nb_conformes"""
+        if self.volume_controle and self.nb_conformes is not None:
+            self.nb_anomalies = self.volume_controle - self.nb_conformes
+        return self.nb_anomalies
+    
+    def mettre_a_jour(self, volume_controle=None, nb_conformes=None):
+        """Met à jour les valeurs et recalcule les indicateurs"""
+        if volume_controle is not None:
+            self.volume_controle = volume_controle
+        if nb_conformes is not None:
+            self.nb_conformes = nb_conformes
+            self.calculer_anomalies()
+        
+        self.calculer_taux()
+        self.updated_at = datetime.utcnow()
+        return True
+    
+    def to_dict(self):
+        """Convertit en dictionnaire pour l'API"""
+        return {
+            'id': self.id,
+            'volume_previsionnel': self.volume_previsionnel,
+            'volume_controle': self.volume_controle,
+            'nb_conformes': self.nb_conformes,
+            'nb_anomalies': self.nb_anomalies,
+            'resultats': self.resultats,
+            'commentaires': self.commentaires,
+            'conclusion': self.conclusion,
+            'taux_conformite': self.taux_conformite,
+            'pieces_justificatives': self.pieces_justificatives,
+            'date_execution': self.date_execution.isoformat() if self.date_execution else None,
+            'execute_par': self.execute_par.username if self.execute_par else None,
+            'execute_par_id': self.execute_par_id,
+            'created_at': self.created_at.isoformat() if self.created_at else None,
+            'updated_at': self.updated_at.isoformat() if self.updated_at else None
+        }
+    
+    def __repr__(self):
+        return f'<ExecutionControle {self.id}>'
+
+
+class ValidationControle(db.Model):
+    """Workflow de validation"""
+    __tablename__ = 'validation_controles'
+    
+    id = db.Column(db.Integer, primary_key=True)
+    execution_id = db.Column(db.Integer, db.ForeignKey('execution_controle.id'), nullable=False)
+    validateur_id = db.Column(db.Integer, db.ForeignKey('user.id'))
+    action = db.Column(db.String(20))
+    commentaire = db.Column(db.Text)
+    date_action = db.Column(db.DateTime, default=datetime.utcnow)
+    client_id = db.Column(db.Integer, db.ForeignKey('clients.id'), nullable=False)
+    
+    # Relation SIMPLE
+    validateur = db.relationship('User', foreign_keys=[validateur_id])
+
+
+# ============================================
+# RELATIONS CORRIGÉES - VERSION FINALE
+# ============================================
+class RecommandationC2N(db.Model):
+    """Recommandations (niveau stratégique) pouvant être transformées en plans d'action"""
+    __tablename__ = 'recommandations_c2n'
+    
+    id = db.Column(db.Integer, primary_key=True)
+    planification_id = db.Column(db.Integer, db.ForeignKey('planification_controles.id'), nullable=False)
+    
+    # Contenu
+    titre = db.Column(db.String(200), nullable=False)
+    description = db.Column(db.Text)
+    
+    # Classification
+    priorite = db.Column(db.String(20), default='moyenne')
+    source = db.Column(db.String(20), default='manuel')
+    categorie = db.Column(db.String(50))
+    
+    # Statut
+    statut = db.Column(db.String(20), default='proposee')
+    date_acceptation = db.Column(db.DateTime)
+    date_rejet = db.Column(db.DateTime)
+    
+    # Transformation en plan d'action
+    plan_action_id = db.Column(db.Integer, db.ForeignKey('plans_action_c2n.id'), nullable=True)
+    
+    # ============================================
+    # 🔥 NOUVEAUX CHAMPS POUR LE SUIVI
+    # ============================================
+    date_echeance = db.Column(db.Date, nullable=True)      # Date d'échéance
+    date_debut = db.Column(db.Date, nullable=True)         # Date de début
+    date_fin_reelle = db.Column(db.Date, nullable=True)    # Date de réalisation
+    progression = db.Column(db.Integer, default=0)         # Progression (0-100)
+    responsable_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=True)  # Responsable
+    commentaire_suivi = db.Column(db.Text)                  # Commentaire de suivi
+    
+    # Métadonnées
+    created_by = db.Column(db.Integer, db.ForeignKey('user.id'))
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    client_id = db.Column(db.Integer, db.ForeignKey('clients.id'), nullable=False)
+    metadonnees = db.Column(db.JSON, default={})
+    
+    # Relations
+    planification = db.relationship('PlanificationControle', backref='recommandations_c2n', foreign_keys=[planification_id])
+    createur = db.relationship('User', foreign_keys=[created_by], backref='recommandations_c2n_crees')
+    responsable = db.relationship('User', foreign_keys=[responsable_id], backref='recommandations_responsable')
+    
+    # Relation SIMPLE avec backref
+    plan_action = db.relationship('PlanActionC2N', 
+                                  foreign_keys=[plan_action_id],
+                                  backref='recommandation_source')
+    
+    # ============================================
+    # MÉTHODES DE SUIVI
+    # ============================================
+    
+    def to_dict(self):
+        """Convertit la recommandation en dictionnaire pour l'API"""
+        return {
+            'id': self.id,
+            'titre': self.titre,
+            'description': self.description,
+            'priorite': self.priorite,
+            'source': self.source,
+            'categorie': self.categorie,
+            'statut': self.statut,
+            'plan_action_id': self.plan_action_id,
+            'date_echeance': self.date_echeance.isoformat() if self.date_echeance else None,
+            'date_debut': self.date_debut.isoformat() if self.date_debut else None,
+            'date_fin_reelle': self.date_fin_reelle.isoformat() if self.date_fin_reelle else None,
+            'progression': self.progression,
+            'responsable_id': self.responsable_id,
+            'responsable_nom': self.responsable.username if self.responsable else None,
+            'commentaire_suivi': self.commentaire_suivi,
+            'created_at': self.created_at.isoformat() if self.created_at else None,
+            'created_by': self.createur.username if self.createur else None,
+            'planification_reference': self.planification.reference if self.planification else None,
+            'controle_nom': self.planification.referentiel.nom if self.planification and self.planification.referentiel else None
+        }
+    
+    def transformer_en_plan_action(self, user_id, date_echeance=None):
+        """Transforme une recommandation en plan d'action"""
+        from models import PlanActionC2N
+        from datetime import timedelta
+        
+        plan = PlanActionC2N(
+            recommandation_id=self.id,
+            action_corrective=self.titre,
+            description=self.description,
+            date_echeance=date_echeance or (datetime.utcnow().date() + timedelta(days=30)),
+            statut='a_faire',
+            taux_avancement=self.progression,
+            priorite=self.priorite,
+            client_id=self.client_id,
+            createur_id=user_id,
+            responsable_id=self.responsable_id
+        )
+        plan.reference = plan.generer_reference()
+        
+        self.plan_action_id = plan.id
+        self.statut = 'acceptee'
+        self.date_acceptation = datetime.utcnow()
+        
+        return plan
+    
+    def mettre_a_jour_progression(self, nouvelle_progression, commentaire=None):
+        """Met à jour la progression de la recommandation"""
+        self.progression = min(100, max(0, nouvelle_progression))
+        if commentaire:
+            self.commentaire_suivi = commentaire
+        self.updated_at = datetime.utcnow()
+        
+        # Si progression à 100%, marquer comme réalisée
+        if self.progression == 100 and self.statut not in ['realisee', 'rejetee']:
+            self.statut = 'realisee'
+            self.date_fin_reelle = datetime.utcnow().date()
+        
+        return True
+    
+    def assigner_responsable(self, responsable_id):
+        """Assigne un responsable à la recommandation"""
+        self.responsable_id = responsable_id
+        self.updated_at = datetime.utcnow()
+        return True
+    
+    def definir_echeance(self, date_echeance):
+        """Définit la date d'échéance"""
+        self.date_echeance = date_echeance
+        self.updated_at = datetime.utcnow()
+        return True
+    
+    @property
+    def est_en_retard(self):
+        """Vérifie si la recommandation est en retard"""
+        if self.date_echeance and self.statut not in ['realisee', 'rejetee']:
+            return datetime.utcnow().date() > self.date_echeance
+        return False
+    
+    @property
+    def jours_restants(self):
+        """Retourne le nombre de jours restants avant échéance"""
+        if self.date_echeance and self.statut not in ['realisee', 'rejetee']:
+            delta = self.date_echeance - datetime.utcnow().date()
+            return max(0, delta.days)
+        return None
+    
+    @property
+    def couleur_echeance(self):
+        """Retourne la couleur pour l'affichage de l'échéance"""
+        if self.est_en_retard:
+            return 'danger'
+        elif self.jours_restants and self.jours_restants <= 7:
+            return 'warning'
+        elif self.jours_restants and self.jours_restants <= 30:
+            return 'info'
+        return 'success'
+    
+    def accepter(self, user_id, date_echeance=None, responsable_id=None):
+        """Accepte la recommandation et crée un plan d'action"""
+        if self.statut != 'proposee':
+            return False
+        
+        plan = self.transformer_en_plan_action(user_id, date_echeance)
+        if responsable_id:
+            plan.responsable_id = responsable_id
+            self.responsable_id = responsable_id
+        
+        return plan
+    
+    
+    def rouvrir(self):
+        """Rouvrir une recommandation (acceptée ou rejetée)"""
+        if self.statut in ['acceptee', 'rejetee']:
+            ancien_statut = self.statut
+            self.statut = 'proposee'
+            
+            # 🔥 Si c'était une acceptée, il faut gérer le plan d'action associé
+            if ancien_statut == 'acceptee' and self.plan_action_id:
+                # Option 1: Archiver le plan d'action (soft delete)
+                plan_action = PlanActionC2N.query.get(self.plan_action_id)
+                if plan_action:
+                    plan_action.is_archived = True
+                    plan_action.archived_at = datetime.utcnow()
+                    plan_action.archived_by = current_user.id
+                    plan_action.archive_reason = "Recommandation rouverte"
+                
+                # Option 2: OU supprimer le lien (on garde le plan mais on le dissocie)
+                # self.plan_action_id = None
+            
+            # Gestion des métadonnées
+            if not self.metadonnees:
+                self.metadonnees = {}
+            
+            if 'historique_rouvertures' not in self.metadonnees:
+                self.metadonnees['historique_rouvertures'] = []
+            
+            self.metadonnees['historique_rouvertures'].append({
+                'date': datetime.utcnow().isoformat(),
+                'ancien_statut': ancien_statut,
+                'plan_action_concerne': self.plan_action_id
+            })
+            
+            self.date_rejet = None
+            self.date_acceptation = None
+            self.updated_at = datetime.utcnow()
+            return True
+        return False
+    
+    def rejeter(self, raison=None, user_id=None):
+        """Rejeter une recommandation (motif optionnel)"""
+        if self.statut != 'proposee':
+            return False
+        
+        self.statut = 'rejetee'
+        self.date_rejet = datetime.utcnow()
+        
+        # 🔥 Gestion de l'historique des motifs
+        if not self.metadonnees:
+            self.metadonnees = {}
+        
+        # Sauvegarder le motif actuel
+        if raison:
+            self.metadonnees['dernier_motif_rejet'] = raison
+            
+            # Ajouter à l'historique
+            if 'historique_rejets' not in self.metadonnees:
+                self.metadonnees['historique_rejets'] = []
+            
+            self.metadonnees['historique_rejets'].append({
+                'date': datetime.utcnow().isoformat(),
+                'motif': raison,
+                'rejete_par': User.query.get(user_id).username if user_id else current_user.username
+            })
+        
+        self.updated_at = datetime.utcnow()
+        return True
+    
+    def get_dernier_motif_rejet(self):
+        """Retourne le dernier motif de rejet"""
+        if self.metadonnees:
+            return self.metadonnees.get('dernier_motif_rejet')
+        return None
+    
+    def get_historique_rejets(self):
+        """Retourne l'historique complet des rejets"""
+        if self.metadonnees:
+            return self.metadonnees.get('historique_rejets', [])
+        return []
+    
+    def get_raison_rejet(self):
+        """Retourne la raison du rejet"""
+        if self.metadonnees and 'raison_rejet' in self.metadonnees:
+            return self.metadonnees['raison_rejet']
+        return None
+    def get_historique_rouvertures(self):
+        """Retourne l'historique des réouvertures"""
+        if self.metadonnees:
+            return self.metadonnees.get('historique_rouvertures', [])
+        return []
+    
+    def a_deja_ete_rejetee(self):
+        """Vérifie si la recommandation a déjà été rejetée au moins une fois"""
+        historique = self.get_historique_rejets()
+        return len(historique) > 0
+    
+    def nb_rejets(self):
+        """Retourne le nombre de rejets"""
+        return len(self.get_historique_rejets())
+    
+    def __repr__(self):
+        return f'<RecommandationC2N {self.titre[:50]}>'
+
+
+# models.py - Version corrigée
+
+class PlanActionC2N(db.Model):
+    """Plans d'action (niveau opérationnel)"""
+    __tablename__ = 'plans_action_c2n'
+    
+    id = db.Column(db.Integer, primary_key=True)
+    reference = db.Column(db.String(50), unique=True, nullable=False)
+    
+    # Liens
+    non_conformite_id = db.Column(db.Integer, db.ForeignKey('non_conformites_c2n.id'), nullable=True)
+    recommandation_id = db.Column(db.Integer, db.ForeignKey('recommandations_c2n.id'), nullable=True)
+    
+    # Contenu
+    action_corrective = db.Column(db.Text, nullable=False)
+    description = db.Column(db.Text)
+    
+    # Planification
+    date_echeance = db.Column(db.Date, nullable=False)
+    date_debut = db.Column(db.Date)
+    date_fin_reelle = db.Column(db.Date)
+    
+    # Suivi
+    statut = db.Column(db.String(20), default='a_faire')
+    taux_avancement = db.Column(db.Integer, default=0)
+    priorite = db.Column(db.String(20), default='moyenne')
+    
+    # Commentaires et preuves
+    commentaire_realisation = db.Column(db.Text)
+    justificatif = db.Column(db.Text)
+    pieces_jointes = db.Column(db.Text)
+    url_preuve = db.Column(db.String(500))
+    
+    # Responsables
+    responsable_id = db.Column(db.Integer, db.ForeignKey('user.id'))
+    createur_id = db.Column(db.Integer, db.ForeignKey('user.id'))
+    
+    # Timestamps
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    client_id = db.Column(db.Integer, db.ForeignKey('clients.id'), nullable=False)
+    
+    # Archivage
+    is_archived = db.Column(db.Boolean, default=False)
+    archived_at = db.Column(db.DateTime, nullable=True)
+    archived_by = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=True)
+    archive_reason = db.Column(db.Text, nullable=True)
+    
+    # Relations - ✅ CORRIGÉ : PAS de relation directe pour sous_actions et commentaires
+    non_conformite = db.relationship('NonConformiteC2N', back_populates='plans_action', foreign_keys=[non_conformite_id])
+    responsable = db.relationship('User', foreign_keys=[responsable_id], backref='plans_action_c2n_responsable')
+    createur = db.relationship('User', foreign_keys=[createur_id], backref='plans_action_c2n_crees')
+    archiveur = db.relationship('User', foreign_keys=[archived_by], backref='plans_action_c2n_archives')
+    
+    # ⚠️ NE PAS METTRE de relationship pour sous_actions et commentaires ici !
+    # Elles seront créées automatiquement par les backref dans les classes enfants
+    
+    # ============================================
+    # MÉTHODES
+    # ============================================
+    
+    def generer_reference(self):
+        count = PlanActionC2N.query.filter_by(client_id=self.client_id).count()
+        return f"PA-{count + 1:05d}"
+    
+    def get_statut_label(self):
+        labels = {
+            'a_faire': '📋 À faire',
+            'en_cours': '▶️ En cours',
+            'terminee': '✅ Terminée',
+            'bloquee': '⚠️ Bloquée',
+            'annulee': '❌ Annulée'
+        }
+        return labels.get(self.statut, self.statut)
+    
+    def get_statut_css(self):
+        css = {
+            'a_faire': 'secondary',
+            'en_cours': 'warning',
+            'terminee': 'success',
+            'bloquee': 'danger',
+            'annulee': 'dark'
+        }
+        return css.get(self.statut, 'secondary')
+    
+    def get_priorite_label(self):
+        labels = {
+            'haute': '🔴 Haute',
+            'moyenne': '🟡 Moyenne',
+            'basse': '🟢 Basse'
+        }
+        return labels.get(self.priorite, self.priorite)
+    
+    def get_priorite_css(self):
+        css = {
+            'haute': 'danger',
+            'moyenne': 'warning',
+            'basse': 'success'
+        }
+        return css.get(self.priorite, 'secondary')
+    
+    @property
+    def est_en_retard(self):
+        if self.date_echeance and self.statut != 'terminee' and not self.is_archived:
+            return datetime.utcnow().date() > self.date_echeance
+        return False
+    
+    @property
+    def jours_restants(self):
+        if self.date_echeance and self.statut != 'terminee' and not self.is_archived:
+            delta = self.date_echeance - datetime.utcnow().date()
+            return max(0, delta.days)
+        return 0
+    
+    def get_pieces_jointes_list(self):
+        if not self.pieces_jointes:
+            return []
+        try:
+            import json
+            return json.loads(self.pieces_jointes)
+        except:
+            return [p.strip() for p in self.pieces_jointes.split(',') if p.strip()]
+    
+    def ajouter_piece_jointe(self, filename, metadata=None):
+        pieces = self.get_pieces_jointes_list()
+        if filename not in pieces:
+            pieces.append(filename)
+            import json
+            self.pieces_jointes = json.dumps(pieces)
+        self.updated_at = datetime.utcnow()
+    
+    def supprimer_piece_jointe(self, filename):
+        pieces = self.get_pieces_jointes_list()
+        if filename in pieces:
+            pieces.remove(filename)
+            import json
+            self.pieces_jointes = json.dumps(pieces) if pieces else None
+        self.updated_at = datetime.utcnow()
+    
+    def avancer(self, nouveau_taux, commentaire=None):
+        if self.is_archived:
+            return False
+        
+        self.taux_avancement = min(100, max(0, nouveau_taux))
+        if commentaire:
+            self.commentaire_realisation = commentaire
+        
+        if self.taux_avancement == 100 and self.statut != 'terminee':
+            self.statut = 'terminee'
+            self.date_fin_reelle = datetime.utcnow().date()
+        elif self.taux_avancement > 0 and self.statut == 'a_faire':
+            self.statut = 'en_cours'
+        elif self.taux_avancement == 0 and self.statut == 'en_cours':
+            self.statut = 'a_faire'
+        
+        self.updated_at = datetime.utcnow()
+        return True
+    
+    def terminer(self, commentaire=None):
+        if self.is_archived:
+            return False
+        
+        self.statut = 'terminee'
+        self.taux_avancement = 100
+        self.date_fin_reelle = datetime.utcnow().date()
+        if commentaire:
+            self.commentaire_realisation = commentaire
+        self.updated_at = datetime.utcnow()
+        return True
+    
+    def bloquer(self, raison):
+        if self.is_archived:
+            return False
+        
+        self.statut = 'bloquee'
+        self.commentaire_realisation = raison
+        self.updated_at = datetime.utcnow()
+        return True
+    
+    def annuler(self, raison):
+        if self.is_archived:
+            return False
+        
+        self.statut = 'annulee'
+        self.commentaire_realisation = raison
+        self.updated_at = datetime.utcnow()
+        return True
+    
+    def archiver(self, user_id, raison=None):
+        self.is_archived = True
+        self.archived_at = datetime.utcnow()
+        self.archived_by = user_id
+        self.archive_reason = raison
+        self.updated_at = datetime.utcnow()
+        return True
+    
+    def restaurer(self):
+        if not self.is_archived:
+            return False
+        
+        self.is_archived = False
+        self.archived_at = None
+        self.archived_by = None
+        self.archive_reason = None
+        self.updated_at = datetime.utcnow()
+        return True
+    
+    def supprimer_definitivement(self):
+        if not self.is_archived:
+            return False
+        
+        if self.recommandation_id:
+            from models import RecommandationC2N
+            reco = RecommandationC2N.query.get(self.recommandation_id)
+            if reco and reco.plan_action_id == self.id:
+                reco.plan_action_id = None
+                reco.statut = 'proposee'
+                reco.updated_at = datetime.utcnow()
+        
+        db.session.delete(self)
+        return True
+    
+    def recalculer_avancement(self):
+        """Recalcule l'avancement global basé sur les sous-actions"""
+        # ✅ CORRECTION : self.sous_actions_c2n est déjà une liste (InstrumentedList)
+        sous_actions = self.sous_actions_c2n if hasattr(self, 'sous_actions_c2n') else []
+        
+        if not sous_actions:
+            return
+        
+        total_avancement = sum(sa.taux_avancement for sa in sous_actions)
+        self.taux_avancement = total_avancement // len(sous_actions)
+        
+        if self.taux_avancement == 100 and self.statut != 'terminee':
+            self.statut = 'terminee'
+            self.date_fin_reelle = datetime.utcnow().date()
+        elif self.taux_avancement > 0 and self.statut == 'a_faire':
+            self.statut = 'en_cours'
+        elif self.taux_avancement == 0 and self.statut == 'en_cours':
+            self.statut = 'a_faire'
+        
+        self.updated_at = datetime.utcnow()
+        db.session.commit()
+    
+    @property
+    def recommandation_source(self):
+        if self.recommandation_id:
+            from models import RecommandationC2N
+            return RecommandationC2N.query.get(self.recommandation_id)
+        return None
+    
+    def to_dict(self):
+        reco_source = self.recommandation_source
+        return {
+            'id': self.id,
+            'reference': self.reference,
+            'action_corrective': self.action_corrective,
+            'description': self.description,
+            'date_echeance': self.date_echeance.isoformat() if self.date_echeance else None,
+            'date_debut': self.date_debut.isoformat() if self.date_debut else None,
+            'date_fin_reelle': self.date_fin_reelle.isoformat() if self.date_fin_reelle else None,
+            'statut': self.statut,
+            'statut_label': self.get_statut_label(),
+            'statut_css': self.get_statut_css(),
+            'taux_avancement': self.taux_avancement,
+            'priorite': self.priorite,
+            'priorite_label': self.get_priorite_label(),
+            'priorite_css': self.get_priorite_css(),
+            'commentaire_realisation': self.commentaire_realisation,
+            'justificatif': self.justificatif,
+            'pieces_jointes': self.get_pieces_jointes_list(),
+            'url_preuve': self.url_preuve,
+            'est_en_retard': self.est_en_retard,
+            'jours_restants': self.jours_restants,
+            'responsable': self.responsable.username if self.responsable else None,
+            'responsable_id': self.responsable_id,
+            'createur': self.createur.username if self.createur else None,
+            'non_conformite_id': self.non_conformite_id,
+            'recommandation_id': self.recommandation_id,
+            'recommandation_source': reco_source.to_dict() if reco_source else None,
+            'is_archived': self.is_archived,
+            'archived_at': self.archived_at.isoformat() if self.archived_at else None,
+            'archived_by': self.archived_by,
+            'archive_reason': self.archive_reason,
+            'created_at': self.created_at.isoformat() if self.created_at else None,
+            'updated_at': self.updated_at.isoformat() if self.updated_at else None
+        }
+    
+    def __repr__(self):
+        return f'<PlanActionC2N {self.reference}>'
+
+
+class SousActionPlanC2N(db.Model):
+    """Sous-actions / tâches d'un plan d'action C2N"""
+    __tablename__ = 'sous_actions_plan_c2n'
+    
+    id = db.Column(db.Integer, primary_key=True)
+    plan_action_id = db.Column(db.Integer, db.ForeignKey('plans_action_c2n.id'), nullable=False)
+    
+    titre = db.Column(db.String(200), nullable=False)
+    description = db.Column(db.Text)
+    
+    taux_avancement = db.Column(db.Integer, default=0)
+    statut = db.Column(db.String(20), default='a_faire')
+    
+    date_echeance = db.Column(db.Date)
+    date_debut = db.Column(db.Date)
+    date_fin_reelle = db.Column(db.Date)
+    
+    responsable_id = db.Column(db.Integer, db.ForeignKey('user.id'))
+    
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    
+    # ✅ UNIQUE RELATION - le backref crée plan.sous_actions_c2n
+    plan_action = db.relationship('PlanActionC2N', 
+                                  foreign_keys=[plan_action_id], 
+                                  backref='sous_actions_c2n')
+    responsable = db.relationship('User', foreign_keys=[responsable_id])
+    
+    def get_statut_label(self):
+        labels = {
+            'a_faire': '📋 À faire',
+            'en_cours': '▶️ En cours',
+            'terminee': '✅ Terminée',
+            'bloquee': '⚠️ Bloquée'
+        }
+        return labels.get(self.statut, self.statut)
+    
+    def mettre_a_jour(self, nouveau_taux=None, nouveau_statut=None):
+        if nouveau_taux is not None:
+            self.taux_avancement = min(100, max(0, nouveau_taux))
+        
+        if nouveau_statut:
+            self.statut = nouveau_statut
+        
+        if self.taux_avancement == 100 and self.statut != 'terminee':
+            self.statut = 'terminee'
+            self.date_fin_reelle = datetime.utcnow().date()
+        elif self.taux_avancement > 0 and self.statut == 'a_faire':
+            self.statut = 'en_cours'
+        elif self.taux_avancement == 0 and self.statut == 'en_cours':
+            self.statut = 'a_faire'
+        
+        self.updated_at = datetime.utcnow()
+        
+        if self.plan_action:
+            self.plan_action.recalculer_avancement()
+        
+        return True
+
+class CommentairePlanActionC2N(db.Model):
+    """Commentaires généraux sur le plan d'action C2N"""
+    __tablename__ = 'commentaires_plan_action_c2n'
+    
+    id = db.Column(db.Integer, primary_key=True)
+    plan_action_id = db.Column(db.Integer, db.ForeignKey('plans_action_c2n.id'), nullable=False)
+    
+    contenu = db.Column(db.Text, nullable=False)
+    auteur_id = db.Column(db.Integer, db.ForeignKey('user.id'))
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    
+    # ✅ UNIQUE RELATION - le backref crée plan.commentaires_c2n
+    plan_action = db.relationship('PlanActionC2N', 
+                                  foreign_keys=[plan_action_id], 
+                                  backref='commentaires_c2n')
+    auteur = db.relationship('User')
+    
+    def to_dict(self):
+        return {
+            'id': self.id,
+            'contenu': self.contenu,
+            'auteur': self.auteur.username if self.auteur else 'Anonyme',
+            'created_at': self.created_at.strftime('%d/%m/%Y %H:%M')
+        }
+
+class CommentaireSousActionC2N(db.Model):
+    """Commentaires sur les sous-actions C2N"""
+    __tablename__ = 'commentaires_sous_action_c2n'
+    
+    id = db.Column(db.Integer, primary_key=True)
+    sous_action_id = db.Column(db.Integer, db.ForeignKey('sous_actions_plan_c2n.id'), nullable=False)
+    
+    contenu = db.Column(db.Text, nullable=False)
+    auteur_id = db.Column(db.Integer, db.ForeignKey('user.id'))
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    
+    # Relations
+    auteur = db.relationship('User')
+    sous_action = db.relationship('SousActionPlanC2N', 
+                                  foreign_keys=[sous_action_id], 
+                                  backref='commentaires_sous_action_c2n')
+    
+    def to_dict(self):
+        return {
+            'id': self.id,
+            'contenu': self.contenu,
+            'auteur': self.auteur.username if self.auteur else 'Anonyme',
+            'created_at': self.created_at.strftime('%d/%m/%Y %H:%M')
+        }
+# ============================================
+# CLASSE NONCONFORMITEC2N - VERSION UNIQUE ET CORRECTE
+# ============================================
+
+class NonConformiteC2N(db.Model):
+    """Gestion des non-conformités"""
+    __tablename__ = 'non_conformites_c2n'
+    
+    id = db.Column(db.Integer, primary_key=True)
+    reference = db.Column(db.String(50), unique=True, nullable=False)
+    execution_id = db.Column(db.Integer, db.ForeignKey('execution_controle.id'), nullable=False)
+    
+    description = db.Column(db.Text, nullable=False)
+    nombre_ecarts = db.Column(db.Integer, default=0)
+    niveau_criticite = db.Column(db.String(20))
+    impact = db.Column(db.Text)
+    cause_racine = db.Column(db.Text)
+    
+    statut = db.Column(db.String(20), default='ouvert')
+    
+    # Clés étrangères
+    client_id = db.Column(db.Integer, db.ForeignKey('clients.id'), nullable=False)
+    created_by = db.Column(db.Integer, db.ForeignKey('user.id'))
+    
+    # Timestamps
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    
+    # ============================================
+    # RELATIONS CORRIGÉES (UNE SEULE FOIS)
+    # ============================================
+    
+    # Relation one-to-one vers ExecutionControle
+    execution = db.relationship('ExecutionControle', 
+                                foreign_keys=[execution_id], 
+                                back_populates='non_conformites_c2n',
+                                uselist=False)
+    
+    # Relation vers l'utilisateur créateur
+    createur = db.relationship('User', foreign_keys=[created_by], backref='non_conformites_c2n_crees')
+    
+    # Relation vers les plans d'action
+    plans_action = db.relationship('PlanActionC2N', 
+                                   back_populates='non_conformite',
+                                   lazy='dynamic',
+                                   cascade='all, delete-orphan')
+    
+    # ============================================
+    # MÉTHODES
+    # ============================================
+    
+    def generer_reference(self):
+        """Génère une référence unique"""
+        return f"NC-{self.id:05d}"
+    
+    def get_criticite_label(self):
+        """Retourne le libellé de la criticité"""
+        labels = {
+            'mineur': '🟡 Mineur',
+            'majeur': '🟠 Majeur',
+            'critique': '🔴 Critique'
+        }
+        return labels.get(self.niveau_criticite, self.niveau_criticite)
+    
+    def get_criticite_css(self):
+        """Retourne la classe CSS pour la criticité"""
+        css = {
+            'mineur': 'warning',
+            'majeur': 'orange',
+            'critique': 'danger'
+        }
+        return css.get(self.niveau_criticite, 'secondary')
+    
+    def get_statut_label(self):
+        """Retourne le libellé du statut"""
+        labels = {
+            'ouvert': 'Ouvert',
+            'en_cours': 'En cours',
+            'ferme': 'Fermé'
+        }
+        return labels.get(self.statut, self.statut)
+    
+    def get_statut_css(self):
+        """Retourne la classe CSS pour le statut"""
+        css = {
+            'ouvert': 'danger',
+            'en_cours': 'warning',
+            'ferme': 'success'
+        }
+        return css.get(self.statut, 'secondary')
+    
+    def fermer(self):
+        """Ferme la non-conformité"""
+        self.statut = 'ferme'
+        self.updated_at = datetime.utcnow()
+    
+    def rouvrir(self):
+        """Rouvre une non-conformité fermée"""
+        self.statut = 'ouvert'
+        self.updated_at = datetime.utcnow()
+    
+    @property
+    def controle_nom(self):
+        """Retourne le nom du contrôle associé"""
+        if self.execution and self.execution.planification:
+            return self.execution.planification.referentiel.nom
+        return "-"
+    
+    @property
+    def controle_reference(self):
+        """Retourne la référence du contrôle associé"""
+        if self.execution and self.execution.planification:
+            return self.execution.planification.reference
+        return "-"
+    
+    @property
+    def jours_ouverts(self):
+        """Retourne le nombre de jours depuis l'ouverture"""
+        if self.created_at:
+            delta = datetime.utcnow() - self.created_at
+            return delta.days
+        return 0
+    
+    def to_dict(self):
+        return {
+            'id': self.id,
+            'reference': self.reference,
+            'description': self.description,
+            'nombre_ecarts': self.nombre_ecarts,
+            'niveau_criticite': self.niveau_criticite,
+            'niveau_criticite_label': self.get_criticite_label(),
+            'impact': self.impact,
+            'cause_racine': self.cause_racine,
+            'statut': self.statut,
+            'statut_label': self.get_statut_label(),
+            'execution_id': self.execution_id,
+            'controle_nom': self.controle_nom,
+            'controle_reference': self.controle_reference,
+            'created_at': self.created_at.isoformat() if self.created_at else None,
+            'updated_at': self.updated_at.isoformat() if self.updated_at else None,
+            'jours_ouverts': self.jours_ouverts,
+            'nb_plans_action': self.plans_action.count()
+        }
+    
+    def __repr__(self):
+        return f'<NonConformiteC2N {self.reference}>'
