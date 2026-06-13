@@ -178,6 +178,14 @@ class PoleForm(FlaskForm):
     nom = StringField('Nom du pôle / filiale', validators=[DataRequired()])
     description = TextAreaField('Description', validators=[Optional()])
     couleur = StringField('Couleur', validators=[Optional()], default='#3b82f6')
+    
+    # 🔴 NOUVEAU : Sélection du pays
+    pays_id = SelectField(
+        'Pays / Région',
+        coerce=coerce_int_or_none,
+        validators=[Optional()],
+        default=0
+    )
 
     # Type de responsable (utilisateur ou manuel)
     type_responsable = RadioField(
@@ -206,9 +214,9 @@ class PoleForm(FlaskForm):
 
     def __init__(self, *args, **kwargs):
         super(PoleForm, self).__init__(*args, **kwargs)
-        self.responsable_id.choices = [
-            (0, '--- Aucun responsable ---')
-        ]
+        self.responsable_id.choices = [(0, '--- Aucun responsable ---')]
+        # 🔴 NOUVEAU : Initialiser les choix du pays (sera rempli dans la route)
+        self.pays_id.choices = [(0, '--- Aucun pays ---')]
 
     def validate(self, extra_validators=None):
         if not super(PoleForm, self).validate(extra_validators):
@@ -228,6 +236,18 @@ class PoleForm(FlaskForm):
             return False
 
         return True
+
+class PaysForm(FlaskForm):
+    """Formulaire pour la gestion des pays"""
+    nom = StringField('Nom du pays', validators=[DataRequired(), Length(max=100)])
+    code = StringField('Code ISO', validators=[DataRequired(), Length(min=2, max=3)])
+    code_telephone = StringField('Indicatif téléphone', validators=[Optional(), Length(max=5)])
+    drapeau = StringField('Drapeau (emoji)', validators=[Optional(), Length(max=10)])
+    description = TextAreaField('Description', validators=[Optional()])
+    ordre = IntegerField("Ordre d'affichage", default=0, validators=[Optional()])
+    submit = SubmitField('Enregistrer')
+    
+
 
 
 class DirectionForm(FlaskForm):
