@@ -7991,87 +7991,108 @@ class FichierPlanAction(db.Model):
 # ==================== MODÈLES PROGRAMME AUDIT CORRIGÉS ====================
 
 class ProgrammeAudit(db.Model):
+    """Programme d'audit stratégique - Version complète"""
     __tablename__ = 'programmes_audit'
     
-    # ===== IDENTIFICATION =====
+    # ============================================
+    # IDENTIFICATION DE BASE
+    # ============================================
     id = db.Column(db.Integer, primary_key=True)
-    reference = db.Column(db.String(50), nullable=False)  # unique=True ENLEVÉ
+    reference = db.Column(db.String(50), unique=True, nullable=False)
     nom = db.Column(db.String(200), nullable=False)
     description = db.Column(db.Text)
     
-    # ===== PÉRIODE =====
+    # ============================================
+    # PÉRIODE ET PLANIFICATION
+    # ============================================
     periode = db.Column(db.String(20), nullable=False)  # annuel, triennal
     annee_debut = db.Column(db.Integer, nullable=False)
     annee_fin = db.Column(db.Integer, nullable=False)
     
-    # ===== STATUT =====
-    statut = db.Column(db.String(20), default='en_elaboration')
+    # ============================================
+    # STATUT ET WORKFLOW
+    # ============================================
+    statut = db.Column(db.String(20), default='en_elaboration')  # en_elaboration, actif, archive
     
-    # ===== MÉTHODE DE GÉNÉRATION =====
+    # ============================================
+    # MÉTHODE DE GÉNÉRATION
+    # ============================================
     methode_generation = db.Column(db.String(50), nullable=False)  # manuel, auto_risques, hybride
     
-    # ===== CRITÈRES DE GÉNÉRATION (JSON) =====
+    # ============================================
+    # CRITÈRES DE GÉNÉRATION (JSON)
+    # ============================================
     criteres_generation = db.Column(db.JSON)
     
-    # ===== CONFIGURATION RESSOURCES =====
+    # ============================================
+    # CONFIGURATION DES RESSOURCES
+    # ============================================
     frequence_audit = db.Column(db.String(20))  # annuelle, semestrielle, trimestrielle
-    duree_moyenne_mission = db.Column(db.Integer)  # en jours
-    ressources_disponibles = db.Column(db.Integer)  # Jours/homme disponibles par an
+    duree_moyenne_mission = db.Column(db.Integer, default=5)  # en jours (max 90)
+    ressources_disponibles = db.Column(db.Integer, default=100)  # Jours/homme disponibles par an
     
-    # ===== CONFIGURATION AVANCÉE =====
+    # ============================================
+    # CONFIGURATION AVANCÉE
+    # ============================================
     capacite_max_trimestre = db.Column(db.Integer, default=30)
     alerte_depassement = db.Column(db.Boolean, default=True)
     auto_repartition = db.Column(db.Boolean, default=True)
     
-    # ===== DATES CLÉS =====
+    # ============================================
+    # DATES CLÉS DU WORKFLOW
+    # ============================================
     date_approbation = db.Column(db.Date)
     date_mise_en_oeuvre = db.Column(db.Date)
     date_cloture = db.Column(db.Date)
     
-    # ===== MÉTADONNÉES =====
+    # ============================================
+    # ORGANISATION CIBLE (FILTRES)
+    # ============================================
+    pays_id = db.Column(db.Integer, db.ForeignKey('pays.id'), nullable=True)
+    pole_id = db.Column(db.Integer, db.ForeignKey('poles.id'), nullable=True)
+    direction_id = db.Column(db.Integer, db.ForeignKey('direction.id'), nullable=True)
+    
+    # ============================================
+    # MÉTADONNÉES
+    # ============================================
     client_id = db.Column(db.Integer, db.ForeignKey('clients.id'), nullable=True)
     created_by = db.Column(db.Integer, db.ForeignKey('user.id'))
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
     
-    # ===== ARCHIVAGE =====
+    # ============================================
+    # ARCHIVAGE (SOFT DELETE)
+    # ============================================
     is_archived = db.Column(db.Boolean, default=False)
     archived_at = db.Column(db.DateTime)
     archived_by = db.Column(db.Integer, db.ForeignKey('user.id'))
     archive_reason = db.Column(db.Text)
     
-    # ===== RELATIONS =====
+    # ============================================
+    # RELATIONS
+    # ============================================
+    
+    # Relations principales
     createur = db.relationship('User', foreign_keys=[created_by], backref='programmes_crees')
     archiveur = db.relationship('User', foreign_keys=[archived_by], backref='programmes_archives')
+    client = db.relationship('Client', backref='programmes_audit')
+    
+    # Relations organisationnelles
+    pays = db.relationship('Pays', foreign_keys=[pays_id], backref='programmes_audit')
+    pole = db.relationship('Pole', foreign_keys=[pole_id], backref='programmes_audit')
+    direction = db.relationship('Direction', foreign_keys=[direction_id], backref='programmes_audit')
+    
+    # Missions associées
     missions = db.relationship(
         'MissionAudit', 
         back_populates='programme', 
         cascade='all, delete-orphan',
         lazy='dynamic'
     )
-    client = db.relationship('Client', backref='programmes_audit')
     
-    # ===== CONTRAINTE UNIQUE COMPOSITE (AJOUT OBLIGATOIRE) =====
-    __table_args__ = (
-        db.UniqueConstraint('reference', 'client_id', name='uix_programme_reference_client'),
-    )
-    
-    # ===== MÉTHODE STATIQUE DE GÉNÉRATION (DOIT ÊTRE AVANT LES PROPRIÉTÉS) =====
-    @staticmethod
-    def generer_reference(client_id):
-        """Génère une référence unique PAR CLIENT"""
-        from datetime import datetime
-        annee = datetime.now().year
-        prefixe = f"PROGAUD-{annee}-"
-        
-        count = ProgrammeAudit.query.filter(
-            ProgrammeAudit.reference.like(f'{prefixe}%'),
-            ProgrammeAudit.client_id == client_id
-        ).count()
-        
-        return f"{prefixe}{(count + 1):04d}"
-    
-    # ===== PROPRIÉTÉS CALCULÉES =====
+    # ============================================
+    # PROPRIÉTÉS CALCULÉES - MISSIONS
+    # ============================================
     
     @property
     def nb_missions(self):
@@ -8117,6 +8138,10 @@ class ProgrammeAudit(db.Model):
         if total == 0:
             return 0
         return int((self.nb_missions_realisees / total) * 100)
+    
+    # ============================================
+    # PROPRIÉTÉS CALCULÉES - RESSOURCES
+    # ============================================
     
     @property
     def jours_audit_planifies(self):
@@ -8172,6 +8197,10 @@ class ProgrammeAudit(db.Model):
                 charge[key] = charge.get(key, 0) + (mission.duree_estimee or 0)
         return charge
     
+    # ============================================
+    # PROPRIÉTÉS CALCULÉES - DÉPASSEMENTS
+    # ============================================
+    
     @property
     def depassement_capacite(self):
         """Liste des années où la capacité est dépassée"""
@@ -8210,6 +8239,10 @@ class ProgrammeAudit(db.Model):
                 })
         return depassements
     
+    # ============================================
+    # PROPRIÉTÉS CALCULÉES - STATISTIQUES AVANCÉES
+    # ============================================
+    
     @property
     def missions_par_priorite(self):
         """Dictionnaire {priorite: count}"""
@@ -8233,7 +8266,7 @@ class ProgrammeAudit(db.Model):
     
     @property
     def missions_liste(self):
-        """Liste de toutes les missions non archivées (utile pour les templates)"""
+        """Liste de toutes les missions non archivées"""
         return self.missions.filter_by(is_archived=False).all()
     
     @property
@@ -8248,6 +8281,10 @@ class ProgrammeAudit(db.Model):
         if total == 0:
             return 0
         return int((len(self.missions_avec_retard) / total) * 100)
+    
+    # ============================================
+    # PROPRIÉTÉS CALCULÉES - BUDGET
+    # ============================================
     
     @property
     def budget_total_estime(self):
@@ -8265,6 +8302,10 @@ class ProgrammeAudit(db.Model):
     def ecart_budget(self):
         """Écart entre budget réel et estimé"""
         return self.budget_total_reel - self.budget_total_estime
+    
+    # ============================================
+    # PROPRIÉTÉS CALCULÉES - PROGRESSION DÉTAILLÉE
+    # ============================================
     
     @property
     def peut_etre_approuve(self):
@@ -8303,7 +8344,40 @@ class ProgrammeAudit(db.Model):
                 progression[annee] = 0
         return progression
     
-    # ===== MÉTHODES D'INSTANCE =====
+    # ============================================
+    # PROPRIÉTÉS D'ORGANISATION (FILTRES)
+    # ============================================
+    
+    @property
+    def organisation_complete(self):
+        """Retourne la hiérarchie complète de l'organisation cible"""
+        parties = []
+        if self.pays:
+            parties.append(self.pays.nom)
+        if self.pole:
+            parties.append(self.pole.nom)
+        if self.direction:
+            parties.append(self.direction.nom)
+        return " > ".join(parties) if parties else "Non spécifiée"
+    
+    @property
+    def pays_nom(self):
+        """Nom du pays associé"""
+        return self.pays.nom if self.pays else None
+    
+    @property
+    def pole_nom(self):
+        """Nom du pôle associé"""
+        return self.pole.nom if self.pole else None
+    
+    @property
+    def direction_nom(self):
+        """Nom de la direction associée"""
+        return self.direction.nom if self.direction else None
+    
+    # ============================================
+    # MÉTHODES D'INSTANCE - WORKFLOW
+    # ============================================
     
     def approuver(self, date_approbation=None, commentaire=None):
         """Approuve le programme"""
@@ -8320,8 +8394,12 @@ class ProgrammeAudit(db.Model):
         self.archive_reason = raison
         self.updated_at = datetime.now()
     
+    # ============================================
+    # MÉTHODES D'INSTANCE - ARCHIVAGE
+    # ============================================
+    
     def archiver(self, raison=None, user_id=None):
-        """Archive le programme"""
+        """Archive le programme (soft delete)"""
         self.is_archived = True
         self.statut = 'archive'
         self.archived_at = datetime.now()
@@ -8338,13 +8416,17 @@ class ProgrammeAudit(db.Model):
         self.archive_reason = None
         self.updated_at = datetime.now()
     
+    # ============================================
+    # MÉTHODES D'INSTANCE - CONFIGURATION
+    # ============================================
+    
     def mettre_a_jour_criteres(self, criteres):
         """Met à jour les critères de génération"""
         self.criteres_generation = criteres
         self.updated_at = datetime.now()
     
     def dupliquer(self, nouveau_nom=None, nouvel_utilisateur_id=None):
-        """Crée une copie du programme"""
+        """Crée une copie du programme avec décallage des années"""
         from copy import deepcopy
         
         nouveau_programme = ProgrammeAudit(
@@ -8362,12 +8444,19 @@ class ProgrammeAudit(db.Model):
             capacite_max_trimestre=self.capacite_max_trimestre,
             alerte_depassement=self.alerte_depassement,
             auto_repartition=self.auto_repartition,
+            pays_id=self.pays_id,
+            pole_id=self.pole_id,
+            direction_id=self.direction_id,
             statut='en_elaboration',
             client_id=self.client_id,
             created_by=nouvel_utilisateur_id or self.created_by
         )
         
         return nouveau_programme
+    
+    # ============================================
+    # MÉTHODES D'INSTANCE - ANALYSE
+    # ============================================
     
     def obtenir_charge_maximale(self):
         """Retourne la charge maximale sur une période"""
@@ -8380,16 +8469,25 @@ class ProgrammeAudit(db.Model):
             return None
         return max(self.charge_par_annee, key=self.charge_par_annee.get)
     
+    # ============================================
+    # MÉTHODES D'INSTANCE - STATISTIQUES COMPLÈTES
+    # ============================================
+    
     def obtenir_statistiques_completes(self):
-        """Retourne un dictionnaire avec toutes les statistiques"""
+        """Retourne un dictionnaire avec toutes les statistiques du programme"""
         return {
             'general': {
+                'id': self.id,
                 'reference': self.reference,
                 'nom': self.nom,
                 'statut': self.statut,
                 'periode': self.periode,
                 'annees': f"{self.annee_debut}-{self.annee_fin}",
-                'methode': self.methode_generation
+                'methode': self.methode_generation,
+                'organisation': self.organisation_complete,
+                'pays': self.pays_nom,
+                'pole': self.pole_nom,
+                'direction': self.direction_nom
             },
             'missions': {
                 'total': self.nb_missions,
@@ -8415,7 +8513,74 @@ class ProgrammeAudit(db.Model):
                 'estime': self.budget_total_estime,
                 'reel': self.budget_total_reel,
                 'ecart': self.ecart_budget
+            },
+            'chronologie': {
+                'creation': self.created_at.isoformat() if self.created_at else None,
+                'approbation': self.date_approbation.isoformat() if self.date_approbation else None,
+                'mise_en_oeuvre': self.date_mise_en_oeuvre.isoformat() if self.date_mise_en_oeuvre else None,
+                'cloture': self.date_cloture.isoformat() if self.date_cloture else None
             }
+        }
+    
+    # ============================================
+    # MÉTHODES DE SÉRIALISATION
+    # ============================================
+    
+    def to_dict(self):
+        """Convertit l'objet en dictionnaire pour l'API"""
+        return {
+            'id': self.id,
+            'reference': self.reference,
+            'nom': self.nom,
+            'description': self.description,
+            'periode': self.periode,
+            'annee_debut': self.annee_debut,
+            'annee_fin': self.annee_fin,
+            'statut': self.statut,
+            'methode_generation': self.methode_generation,
+            'frequence_audit': self.frequence_audit,
+            'duree_moyenne_mission': self.duree_moyenne_mission,
+            'ressources_disponibles': self.ressources_disponibles,
+            'organisation': {
+                'pays_id': self.pays_id,
+                'pays_nom': self.pays_nom,
+                'pole_id': self.pole_id,
+                'pole_nom': self.pole_nom,
+                'direction_id': self.direction_id,
+                'direction_nom': self.direction_nom,
+                'complet': self.organisation_complete
+            },
+            'statistiques': {
+                'nb_missions': self.nb_missions,
+                'progression': self.progression,
+                'missions_terminees': self.nb_missions_realisees,
+                'taux_realisation': round((self.nb_missions_realisees / max(1, self.nb_missions)) * 100, 1)
+            },
+            'dates': {
+                'approbation': self.date_approbation.isoformat() if self.date_approbation else None,
+                'mise_en_oeuvre': self.date_mise_en_oeuvre.isoformat() if self.date_mise_en_oeuvre else None,
+                'created_at': self.created_at.isoformat() if self.created_at else None,
+                'updated_at': self.updated_at.isoformat() if self.updated_at else None
+            },
+            'is_archived': self.is_archived,
+            'archived_at': self.archived_at.isoformat() if self.archived_at else None,
+            'archive_reason': self.archive_reason
+        }
+    
+    def to_dict_simple(self):
+        """Version simplifiée pour les listes"""
+        return {
+            'id': self.id,
+            'reference': self.reference,
+            'nom': self.nom,
+            'periode': self.periode,
+            'annee_debut': self.annee_debut,
+            'annee_fin': self.annee_fin,
+            'statut': self.statut,
+            'progression': self.progression,
+            'nb_missions': self.nb_missions,
+            'nb_missions_realisees': self.nb_missions_realisees,
+            'organisation': self.organisation_complete
         }
     
     def __repr__(self):
