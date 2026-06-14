@@ -8586,6 +8586,7 @@ class ProgrammeAudit(db.Model):
     def __repr__(self):
         return f'<ProgrammeAudit {self.reference}: {self.nom} [{self.annee_debut}-{self.annee_fin}]>'
 
+
 class MissionAudit(db.Model):
     __tablename__ = 'missions_audit'
     
