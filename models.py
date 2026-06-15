@@ -15522,7 +15522,13 @@ class NonConformiteC2N(db.Model):
             return 0
         except Exception:
             return 0
-    
+    def rouvrir(self):
+        """Rouvre une non-conformité fermée"""
+        if self.statut == 'ferme':
+            self.statut = 'ouvert'
+            self.updated_at = datetime.utcnow()
+            return True
+        return False
     @property
     def jours_ouverts(self):
         """Retourne le nombre de jours depuis l'ouverture"""
