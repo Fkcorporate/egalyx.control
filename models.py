@@ -14010,18 +14010,23 @@ class ReferentielControle(db.Model):
 
 
 class PlanificationControle(db.Model):
-    """Planification des contrôles"""
+    """Planification des contrôles - Version complète avec workflow"""
     __tablename__ = 'planification_controles'
     
+    # ============================================
+    # IDENTIFICATION DE BASE
+    # ============================================
     id = db.Column(db.Integer, primary_key=True)
     reference = db.Column(db.String(50), unique=True, nullable=False)
     annee = db.Column(db.Integer, nullable=False)
     mois = db.Column(db.Integer)
-    perimetre = db.Column(db.String(200))
+    perimetre = db.Column(db.String(500))
     date_prevue = db.Column(db.Date, nullable=False)
-    statut = db.Column(db.String(20), default='a_faire')
+    statut = db.Column(db.String(20), default='a_faire', index=True)
     
-    # Clés étrangères
+    # ============================================
+    # CLÉS ÉTRANGÈRES
+    # ============================================
     referentiel_id = db.Column(db.Integer, db.ForeignKey('referentiel_controles.id'), nullable=False)
     execution_id = db.Column(db.Integer, db.ForeignKey('execution_controle.id'), nullable=True)
     controleur_id = db.Column(db.Integer, db.ForeignKey('user.id'))
@@ -14029,7 +14034,7 @@ class PlanificationControle(db.Model):
     created_by = db.Column(db.Integer, db.ForeignKey('user.id'))
     
     # ============================================
-    # 🔥 NOUVEAUX CHAMPS POUR L'ORGANISATION CIBLE
+    # ORGANISATION CIBLE
     # ============================================
     pays_id = db.Column(db.Integer, db.ForeignKey('pays.id'), nullable=True)
     pole_id = db.Column(db.Integer, db.ForeignKey('poles.id'), nullable=True)
@@ -14037,9 +14042,44 @@ class PlanificationControle(db.Model):
     service_id = db.Column(db.Integer, db.ForeignKey('service.id'), nullable=True)
     organisation_manuel = db.Column(db.String(200), nullable=True)
     
-    # Timestamps
+    # ============================================
+    # WORKFLOW DE VALIDATION
+    # ============================================
+    # Soumission
+    soumis_par_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=True)
+    date_soumission = db.Column(db.DateTime, nullable=True)
+    commentaire_soumission = db.Column(db.Text, nullable=True)
+    
+    # Validation
+    validateur_requis_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=True)
+    valide_par_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=True)
+    date_validation = db.Column(db.DateTime, nullable=True)
+    commentaire_validation = db.Column(db.Text, nullable=True)
+    
+    # Rejet
+    rejete_par_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=True)
+    date_rejet = db.Column(db.DateTime, nullable=True)
+    raison_rejet = db.Column(db.Text, nullable=True)
+    
+    # Réouverture
+    rouvert_par_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=True)
+    date_rouverture = db.Column(db.DateTime, nullable=True)
+    raison_rouverture = db.Column(db.Text, nullable=True)
+    
+    # ============================================
+    # AUDIT TRAIL (HISTORIQUE JSON)
+    # ============================================
+    historique_actions = db.Column(db.JSON, default=[])
+    
+    # ============================================
+    # TIMESTAMPS
+    # ============================================
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    
+    # ============================================
+    # ARCHIVAGE
+    # ============================================
     is_archived = db.Column(db.Boolean, default=False)
     archived_at = db.Column(db.DateTime, nullable=True)
     archived_by = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=True)
@@ -14048,19 +14088,27 @@ class PlanificationControle(db.Model):
     # ============================================
     # RELATIONS
     # ============================================
+    # Relations existantes
     controleur = db.relationship('User', foreign_keys=[controleur_id], backref='planifications_controleur')
     createur = db.relationship('User', foreign_keys=[created_by], backref='planifications_creees')
     execution = db.relationship('ExecutionControle', backref='planification', uselist=False)
     archive_user = db.relationship('User', foreign_keys=[archived_by], backref='planifications_archivees')
     
-    # 🔥 NOUVELLES RELATIONS ORGANISATION
+    # Relations organisationnelles
     pays = db.relationship('Pays', foreign_keys=[pays_id], backref='planifications')
     pole = db.relationship('Pole', foreign_keys=[pole_id], backref='planifications')
     direction = db.relationship('Direction', foreign_keys=[direction_id], backref='planifications')
     service = db.relationship('Service', foreign_keys=[service_id], backref='planifications')
     
+    # Relations workflow
+    soumis_par = db.relationship('User', foreign_keys=[soumis_par_id], backref='planifications_soumises')
+    validateur_requis = db.relationship('User', foreign_keys=[validateur_requis_id], backref='planifications_a_valider')
+    valide_par = db.relationship('User', foreign_keys=[valide_par_id], backref='planifications_validees')
+    rejete_par = db.relationship('User', foreign_keys=[rejete_par_id], backref='planifications_rejetees')
+    rouvert_par = db.relationship('User', foreign_keys=[rouvert_par_id], backref='planifications_rouvertes')
+    
     # ============================================
-    # MÉTHODES DE STATUT
+    # MÉTHODES D'AFFICHAGE
     # ============================================
     
     def get_statut_label(self):
@@ -14097,103 +14145,238 @@ class PlanificationControle(db.Model):
         return icones.get(self.statut, 'fa-question-circle')
     
     # ============================================
-    # MÉTHODES DE TRANSITION D'ÉTAT
+    # MÉTHODES DE TRANSITION (AVEC PERMISSIONS)
     # ============================================
     
-    def peut_passer_en_cours(self):
-        """Vérifie si la planification peut passer en 'en_cours'"""
-        return self.statut == 'a_faire'
+    def _ajouter_historique(self, action, user_id, details, ancien_statut=None, nouveau_statut=None):
+        """Ajoute une entrée dans l'historique des actions"""
+        if not self.historique_actions:
+            self.historique_actions = []
+        
+        # Récupérer le nom de l'utilisateur
+        user = User.query.get(user_id)
+        utilisateur_nom = user.username if user else 'Système'
+        
+        entry = {
+            'date': datetime.utcnow().isoformat(),
+            'action': action,
+            'utilisateur_id': user_id,
+            'utilisateur_nom': utilisateur_nom,
+            'details': details,
+            'ancien_statut': ancien_statut,
+            'nouveau_statut': nouveau_statut
+        }
+        self.historique_actions.append(entry)
+        
+        # Garder seulement les 100 derniers
+        if len(self.historique_actions) > 100:
+            self.historique_actions = self.historique_actions[-100:]
     
-    def passer_en_cours(self):
-        """Passe la planification en 'en_cours'"""
-        if self.peut_passer_en_cours():
-            self.statut = 'en_cours'
-            self.updated_at = datetime.utcnow()
+    def _is_admin_or_manager(self, user):
+        """Vérifie si l'utilisateur est admin ou manager"""
+        return user.role in ['super_admin', 'admin'] or user.has_permission('can_manage_audit')
+    
+    def _is_validateur(self, user):
+        """Vérifie si l'utilisateur est le validateur désigné ou a un rôle de validateur"""
+        if self.validateur_requis_id and self.validateur_requis_id == user.id:
             return True
-        return False
-    
-    def peut_passer_en_soumis(self):
-        """Vérifie si la planification peut passer en 'soumis'"""
-        return self.statut == 'en_cours' and self.execution_id is not None
-    
-    def passer_en_soumis(self):
-        """Passe la planification en 'soumis'"""
-        if self.peut_passer_en_soumis():
-            self.statut = 'soumis'
-            self.updated_at = datetime.utcnow()
+        if user.role in ['responsable_qualite', 'manager']:
             return True
-        return False
+        return self._is_admin_or_manager(user)
     
-    def peut_passer_en_valide(self):
-        """Vérifie si la planification peut passer en 'valide'"""
-        return self.statut == 'soumis'
-    
-    def passer_en_valide(self):
-        """Passe la planification en 'valide'"""
-        if self.peut_passer_en_valide():
-            self.statut = 'valide'
-            self.updated_at = datetime.utcnow()
-            return True
-        return False
-    
-    def peut_passer_en_rejete(self):
-        """Vérifie si la planification peut passer en 'rejete'"""
-        return self.statut == 'soumis'
-    
-    def passer_en_rejete(self, commentaire=None):
-        """Passe la planification en 'rejete'"""
-        if self.peut_passer_en_rejete():
-            self.statut = 'rejete'
-            self.updated_at = datetime.utcnow()
-            if commentaire:
-                # Stocker le commentaire dans l'exécution si elle existe
-                if self.execution:
-                    self.execution.commentaires = commentaire
-            return True
-        return False
+    def _is_controleur(self, user):
+        """Vérifie si l'utilisateur est le contrôleur assigné"""
+        return self.controleur_id == user.id
     
     # ============================================
-    # MÉTHODES D'ARCHIVAGE
+    # TRANSITIONS D'ÉTAT
     # ============================================
     
-    def archiver(self, user_id, raison=None):
-        """Archive la planification"""
-        self.is_archived = True
-        self.archived_at = datetime.utcnow()
-        self.archived_by = user_id
-        self.archive_reason = raison
+    def demarrer(self, user):
+        """Démarrer la planification (a_faire -> en_cours)"""
+        if self.statut != 'a_faire':
+            return False, "Seules les planifications 'À faire' peuvent être démarrées"
+        
+        if not self._is_controleur(user) and not self._is_admin_or_manager(user):
+            return False, "Seul le contrôleur assigné peut démarrer la planification"
+        
+        ancien = self.statut
+        self.statut = 'en_cours'
+        self._ajouter_historique('demarrage', user.id, "Planification démarrée", ancien, self.statut)
         self.updated_at = datetime.utcnow()
+        
+        return True, "Planification démarrée avec succès"
     
-    def desarchiver(self):
-        """Désarchive la planification"""
-        self.is_archived = False
-        self.archived_at = None
-        self.archived_by = None
-        self.archive_reason = None
+    def soumettre(self, user, commentaire=None):
+        """Soumettre la planification à validation (en_cours -> soumis)"""
+        if self.statut != 'en_cours':
+            return False, "Seules les planifications 'En cours' peuvent être soumises"
+        
+        if not self._is_controleur(user):
+            return False, "Seul le contrôleur assigné peut soumettre la planification"
+        
+        if self.execution_id is None:
+            return False, "Veuillez d'abord créer une exécution de contrôle"
+        
+        ancien = self.statut
+        self.statut = 'soumis'
+        self.soumis_par_id = user.id
+        self.date_soumission = datetime.utcnow()
+        self.commentaire_soumission = commentaire
+        self._ajouter_historique('soumission', user.id, commentaire or "Planification soumise", ancien, self.statut)
         self.updated_at = datetime.utcnow()
+        
+        return True, "Planification soumise à validation"
+    
+    def valider(self, user, commentaire=None):
+        """Valider la planification (soumis -> valide)"""
+        if self.statut != 'soumis':
+            return False, "Seules les planifications soumises peuvent être validées"
+        
+        if self._is_controleur(user):
+            return False, "Le contrôleur ne peut pas valider sa propre planification"
+        
+        if not self._is_validateur(user):
+            return False, "Vous n'avez pas les droits pour valider cette planification"
+        
+        ancien = self.statut
+        self.statut = 'valide'
+        self.valide_par_id = user.id
+        self.date_validation = datetime.utcnow()
+        self.commentaire_validation = commentaire
+        self._ajouter_historique('validation', user.id, commentaire or "Planification validée", ancien, self.statut)
+        self.updated_at = datetime.utcnow()
+        
+        return True, "Planification validée avec succès"
+    
+    def rejeter(self, user, raison):
+        """Rejeter la planification (soumis -> rejete)"""
+        if self.statut != 'soumis':
+            return False, "Seules les planifications soumises peuvent être rejetées"
+        
+        if self._is_controleur(user):
+            return False, "Le contrôleur ne peut pas rejeter sa propre planification"
+        
+        if not self._is_validateur(user):
+            return False, "Vous n'avez pas les droits pour rejeter cette planification"
+        
+        if not raison or len(raison.strip()) < 5:
+            return False, "Veuillez fournir une raison détaillée du rejet (minimum 5 caractères)"
+        
+        ancien = self.statut
+        self.statut = 'rejete'
+        self.rejete_par_id = user.id
+        self.date_rejet = datetime.utcnow()
+        self.raison_rejet = raison
+        self._ajouter_historique('rejet', user.id, raison, ancien, self.statut)
+        self.updated_at = datetime.utcnow()
+        
+        return True, "Planification rejetée"
+    
+    def rouvrir(self, user, raison=None):
+        """Rouvrir une planification validée ou rejetée (admin uniquement)"""
+        if self.statut not in ['valide', 'rejete']:
+            return False, "Seules les planifications validées ou rejetées peuvent être rouvertes"
+        
+        if not self._is_admin_or_manager(user):
+            return False, "Seul un administrateur ou manager peut rouvrir une planification"
+        
+        ancien = self.statut
+        self.statut = 'a_faire'
+        self.rouvert_par_id = user.id
+        self.date_rouverture = datetime.utcnow()
+        self.raison_rouverture = raison
+        
+        # Réinitialiser les champs de validation
+        self.soumis_par_id = None
+        self.date_soumission = None
+        self.commentaire_soumission = None
+        self.valide_par_id = None
+        self.date_validation = None
+        self.commentaire_validation = None
+        self.rejete_par_id = None
+        self.date_rejet = None
+        self.raison_rejet = None
+        
+        self._ajouter_historique('reouverture', user.id, raison or "Planification rouverte", ancien, self.statut)
+        self.updated_at = datetime.utcnow()
+        
+        return True, "Planification rouverte avec succès"
+    
+    # ============================================
+    # MÉTHODES DE PERMISSIONS (POUR LES TEMPLATES)
+    # ============================================
+    
+    def peut_etre_demarre(self, user):
+        """Vérifie si l'utilisateur peut démarrer"""
+        if self.statut != 'a_faire':
+            return False
+        return self._is_controleur(user) or self._is_admin_or_manager(user)
+    
+    def peut_etre_soumis(self, user):
+        """Vérifie si l'utilisateur peut soumettre"""
+        if self.statut != 'en_cours':
+            return False
+        if self.execution_id is None:
+            return False
+        return self._is_controleur(user)
+    
+    def peut_etre_valide(self, user):
+        """Vérifie si l'utilisateur peut valider"""
+        if self.statut != 'soumis':
+            return False
+        if self._is_controleur(user):
+            return False
+        return self._is_validateur(user)
+    
+    def peut_etre_rejete(self, user):
+        """Vérifie si l'utilisateur peut rejeter"""
+        if self.statut != 'soumis':
+            return False
+        if self._is_controleur(user):
+            return False
+        return self._is_validateur(user)
+    
+    def peut_etre_rouvert(self, user):
+        """Vérifie si l'utilisateur peut rouvrir"""
+        if self.statut not in ['valide', 'rejete']:
+            return False
+        return self._is_admin_or_manager(user)
     
     # ============================================
     # PROPRIÉTÉS CALCULÉES
     # ============================================
     
     @property
+    def progression(self):
+        """Calcule la progression du workflow (0-100%)"""
+        progression_map = {
+            'a_faire': 0,
+            'en_cours': 25,
+            'soumis': 50,
+            'valide': 100,
+            'rejete': 0
+        }
+        return progression_map.get(self.statut, 0)
+    
+    @property
     def est_en_retard(self):
         """Vérifie si la planification est en retard"""
-        if self.date_prevue and self.statut not in ['valide', 'rejete']:
+        if self.date_prevue and self.statut not in ['valide', 'rejete', 'archive']:
             return datetime.now().date() > self.date_prevue
         return False
     
     @property
     def jours_restants(self):
         """Retourne le nombre de jours restants avant la date prévue"""
-        if self.date_prevue and self.statut not in ['valide', 'rejete']:
+        if self.date_prevue and self.statut not in ['valide', 'rejete', 'archive']:
             delta = self.date_prevue - datetime.now().date()
             return max(0, delta.days)
         return 0
     
     @property
     def referentiel(self):
-        """Retourne le référentiel associé (pour compatibilité avec les templates)"""
+        """Retourne le référentiel associé"""
         from models import ReferentielControle
         return ReferentielControle.query.get(self.referentiel_id)
     
@@ -14229,20 +14412,81 @@ class PlanificationControle(db.Model):
         return " > ".join(parties) if parties else "Non spécifiée"
     
     # ============================================
-    # MÉTHODES DE GÉNÉRATION
+    # MÉTHODES D'ARCHIVAGE
     # ============================================
     
-    def generer_reference(self):
+    def archiver(self, user_id, raison=None):
+        """Archive la planification"""
+        self.is_archived = True
+        self.archived_at = datetime.utcnow()
+        self.archived_by = user_id
+        self.archive_reason = raison
+        self.updated_at = datetime.utcnow()
+        return True
+    
+    def restaurer(self):
+        """Restaure une planification archivée"""
+        self.is_archived = False
+        self.archived_at = None
+        self.archived_by = None
+        self.archive_reason = None
+        self.updated_at = datetime.utcnow()
+        return True
+    
+    # ============================================
+    # MÉTHODES STATIQUES
+    # ============================================
+    
+    @staticmethod
+    def generer_reference(client_id, annee):
         """Génère une référence unique"""
-        return f"PLAN-{self.annee}-{self.id:04d}"
+        prefix = f"PLAN-{annee}-"
+        
+        count = PlanificationControle.query.filter(
+            PlanificationControle.client_id == client_id,
+            PlanificationControle.annee == annee,
+            PlanificationControle.reference.like(f'{prefix}%')
+        ).count()
+        
+        numero = count + 1
+        reference = f"{prefix}{numero:04d}"
+        
+        while PlanificationControle.query.filter_by(reference=reference).first():
+            numero += 1
+            reference = f"{prefix}{numero:04d}"
+        
+        return reference
+    
+    @staticmethod
+    def get_validateur_par_defaut(client_id, exclude_user_id=None):
+        """Récupère le validateur par défaut pour un client"""
+        from models import User
+        
+        query = User.query.filter(
+            User.client_id == client_id,
+            User.is_active == True,
+            User.role.in_(['responsable_qualite', 'manager', 'admin'])
+        )
+        
+        if exclude_user_id:
+            query = query.filter(User.id != exclude_user_id)
+        
+        return query.order_by(
+            db.case(
+                (User.role == 'responsable_qualite', 1),
+                (User.role == 'manager', 2),
+                (User.role == 'admin', 3),
+                else_=4
+            )
+        ).first()
     
     # ============================================
-    # MÉTHODES DE SÉRIALISATION
+    # SÉRIALISATION
     # ============================================
     
-    def to_dict(self):
+    def to_dict(self, include_workflow=True):
         """Convertit l'objet en dictionnaire pour l'API"""
-        return {
+        base_dict = {
             'id': self.id,
             'reference': self.reference,
             'annee': self.annee,
@@ -14251,6 +14495,10 @@ class PlanificationControle(db.Model):
             'date_prevue': self.date_prevue.isoformat() if self.date_prevue else None,
             'statut': self.statut,
             'statut_label': self.get_statut_label(),
+            'statut_css': self.get_statut_css(),
+            'progression': self.progression,
+            'est_en_retard': self.est_en_retard,
+            'jours_restants': self.jours_restants,
             'controleur': self.controleur.username if self.controleur else None,
             'controleur_id': self.controleur_id,
             'referentiel_id': self.referentiel_id,
@@ -14269,15 +14517,34 @@ class PlanificationControle(db.Model):
                 'complet': self.organisation_complete,
                 'hierarchie': self.organisation_hierarchie
             },
-            'est_en_retard': self.est_en_retard,
-            'jours_restants': self.jours_restants,
             'created_at': self.created_at.isoformat() if self.created_at else None,
             'updated_at': self.updated_at.isoformat() if self.updated_at else None,
             'is_archived': self.is_archived
         }
+        
+        if include_workflow:
+            base_dict.update({
+                'workflow': {
+                    'soumis_par': self.soumis_par.username if self.soumis_par else None,
+                    'date_soumission': self.date_soumission.isoformat() if self.date_soumission else None,
+                    'validateur_requis': self.validateur_requis.username if self.validateur_requis else None,
+                    'valide_par': self.valide_par.username if self.valide_par else None,
+                    'date_validation': self.date_validation.isoformat() if self.date_validation else None,
+                    'commentaire_validation': self.commentaire_validation,
+                    'rejete_par': self.rejete_par.username if self.rejete_par else None,
+                    'date_rejet': self.date_rejet.isoformat() if self.date_rejet else None,
+                    'raison_rejet': self.raison_rejet,
+                    'rouvert_par': self.rouvert_par.username if self.rouvert_par else None,
+                    'date_rouverture': self.date_rouverture.isoformat() if self.date_rouverture else None,
+                    'historique': self.historique_actions[-20:] if self.historique_actions else []
+                }
+            })
+        
+        return base_dict
     
     def __repr__(self):
         return f'<PlanificationControle {self.reference}>'
+
 
 
 class ExecutionControle(db.Model):
