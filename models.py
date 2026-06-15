@@ -15391,6 +15391,7 @@ class CommentaireSousActionC2N(db.Model):
 # CLASSE NONCONFORMITEC2N - VERSION UNIQUE ET CORRECTE
 # ============================================
 
+
 class NonConformiteC2N(db.Model):
     """Gestion des non-conformités"""
     __tablename__ = 'non_conformites_c2n'
@@ -15419,11 +15420,11 @@ class NonConformiteC2N(db.Model):
     # RELATIONS CORRIGÉES (UNE SEULE FOIS)
     # ============================================
     
-    # Relation one-to-one vers ExecutionControle
+    # ✅ CORRECTION: Relation one-to-one vers ExecutionControle
     execution = db.relationship('ExecutionControle', 
                                 foreign_keys=[execution_id], 
                                 back_populates='non_conformites_c2n',
-                                uselist=False)
+                                uselist=False)  # ← TRÈS IMPORTANT
     
     # Relation vers l'utilisateur créateur
     createur = db.relationship('User', foreign_keys=[created_by], backref='non_conformites_c2n_crees')
@@ -15468,22 +15469,7 @@ class NonConformiteC2N(db.Model):
             'ferme': 'Fermé'
         }
         return labels.get(self.statut, self.statut)
-    @property
-    def controle_nom(self):
-        """Retourne le nom du contrôle associé"""
-        if hasattr(self, 'execution') and self.execution:
-            if hasattr(self.execution, 'planification') and self.execution.planification:
-                if hasattr(self.execution.planification, 'referentiel') and self.execution.planification.referentiel:
-                    return self.execution.planification.referentiel.nom
-        return "-"
     
-    @property
-    def controle_reference(self):
-        """Retourne la référence du contrôle associé"""
-        if hasattr(self, 'execution') and self.execution:
-            if hasattr(self.execution, 'planification') and self.execution.planification:
-                return self.execution.planification.reference
-        return "-"
     def get_statut_css(self):
         """Retourne la classe CSS pour le statut"""
         css = {
@@ -15503,19 +15489,39 @@ class NonConformiteC2N(db.Model):
         self.statut = 'ouvert'
         self.updated_at = datetime.utcnow()
     
+    # ✅ CORRECTION : Supprimer la duplication de la propriété controle_nom
     @property
     def controle_nom(self):
         """Retourne le nom du contrôle associé"""
-        if self.execution and self.execution.planification:
-            return self.execution.planification.referentiel.nom
-        return "-"
+        try:
+            if self.execution and self.execution.planification:
+                if self.execution.planification.referentiel:
+                    return self.execution.planification.referentiel.nom
+            return "-"
+        except Exception as e:
+            print(f"⚠️ Erreur accès controle_nom: {e}")
+            return "-"
     
     @property
     def controle_reference(self):
         """Retourne la référence du contrôle associé"""
-        if self.execution and self.execution.planification:
-            return self.execution.planification.reference
-        return "-"
+        try:
+            if self.execution and self.execution.planification:
+                return self.execution.planification.reference
+            return "-"
+        except Exception as e:
+            print(f"⚠️ Erreur accès controle_reference: {e}")
+            return "-"
+    
+    @property
+    def taux_conformite(self):
+        """Retourne le taux de conformité du contrôle associé"""
+        try:
+            if self.execution and hasattr(self.execution, 'taux_conformite'):
+                return self.execution.taux_conformite or 0
+            return 0
+        except Exception:
+            return 0
     
     @property
     def jours_ouverts(self):
@@ -15540,10 +15546,11 @@ class NonConformiteC2N(db.Model):
             'execution_id': self.execution_id,
             'controle_nom': self.controle_nom,
             'controle_reference': self.controle_reference,
+            'taux_conformite': self.taux_conformite,
             'created_at': self.created_at.isoformat() if self.created_at else None,
             'updated_at': self.updated_at.isoformat() if self.updated_at else None,
             'jours_ouverts': self.jours_ouverts,
-            'nb_plans_action': self.plans_action.count()
+            'nb_plans_action': self.plans_action.count() if self.plans_action else 0
         }
     
     def __repr__(self):
