@@ -11147,6 +11147,22 @@ class CampagneControle(db.Model):
     actions_correctives = db.Column(db.Text)
     
     # ============================================
+    # 🔥 NOUVEAUX CHAMPS POUR INTÉGRATION C2N
+    # ============================================
+    
+    # Lien vers une planification C2N (optionnel)
+    planification_c2n_id = db.Column(db.Integer, db.ForeignKey('planification_controles.id'), nullable=True)
+    
+    # Lien vers une exécution C2N (optionnel)
+    execution_c2n_id = db.Column(db.Integer, db.ForeignKey('execution_controle.id'), nullable=True)
+    
+    # Indicateurs de synchronisation C2N
+    a_ete_planifiee_c2n = db.Column(db.Boolean, default=False)
+    a_ete_executee_c2n = db.Column(db.Boolean, default=False)
+    date_synchronisation_c2n = db.Column(db.DateTime, nullable=True)
+    
+    # ⚠️ CORRECTION DE LA LIGNE CI-DESSOUS (supprimer 'en_preparation' en trop)
+    # ============================================
     # ARCHIVAGE
     # ============================================
     is_archived = db.Column(db.Boolean, default=False)
@@ -11173,6 +11189,10 @@ class CampagneControle(db.Model):
     archive_user = db.relationship('User', foreign_keys=[archived_by])
     
     fichiers = db.relationship('FichierCampagneControle', back_populates='campagne', lazy=True, cascade='all, delete-orphan')
+    
+    # 🔥 NOUVELLES RELATIONS C2N
+    planification_c2n = db.relationship('PlanificationControle', foreign_keys=[planification_c2n_id])
+    execution_c2n = db.relationship('ExecutionControle', foreign_keys=[execution_c2n_id])
     
     def __repr__(self):
         return f'<CampagneControle {self.reference}: {self.nom}>'
@@ -11228,6 +11248,38 @@ class CampagneControle(db.Model):
         self.archived_by = None
         self.archive_reason = None
         self.statut = 'en_preparation'
+    
+    # ============================================
+    # 🔥 NOUVELLES MÉTHODES D'INTÉGRATION C2N
+    # ============================================
+    
+    def est_liee_a_c2n(self):
+        """Vérifie si la campagne est liée à C2N"""
+        return self.planification_c2n_id is not None or self.execution_c2n_id is not None
+    
+    def get_lien_c2n_type(self):
+        """Retourne le type de lien C2N"""
+        if self.planification_c2n_id and self.execution_c2n_id:
+            return 'complet'
+        elif self.planification_c2n_id:
+            return 'planification'
+        elif self.execution_c2n_id:
+            return 'execution'
+        return 'aucun'
+    
+    def get_infos_c2n(self):
+        """Retourne les informations d'intégration C2N"""
+        return {
+            'est_liee': self.est_liee_a_c2n(),
+            'type_lien': self.get_lien_c2n_type(),
+            'planification_id': self.planification_c2n_id,
+            'execution_id': self.execution_c2n_id,
+            'a_ete_planifiee': self.a_ete_planifiee_c2n,
+            'a_ete_executee': self.a_ete_executee_c2n,
+            'date_synchronisation': self.date_synchronisation_c2n.isoformat() if self.date_synchronisation_c2n else None
+        }
+
+
 
 
 class FichierCampagneControle(db.Model):
