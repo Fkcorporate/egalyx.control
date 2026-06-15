@@ -15078,6 +15078,53 @@ class PlanActionC2N(db.Model):
             import json
             self.pieces_jointes = json.dumps(pieces) if pieces else None
         self.updated_at = datetime.utcnow()
+
+    def generer_reference_unique_plan_action(client_id, max_attempts=10):
+        """Génère une référence unique pour un plan d'action"""
+        from models import PlanActionC2N
+        
+        # Compter les plans existants pour ce client
+        count = PlanActionC2N.query.filter_by(client_id=client_id).count()
+        
+        for attempt in range(max_attempts):
+            # Format: PA-XXXXX (avec padding à 5 chiffres)
+            tentative_num = count + attempt + 1
+            reference = f"PA-{tentative_num:05d}"
+            
+            # Vérifier si la référence existe déjà
+            existing = PlanActionC2N.query.filter_by(reference=reference).first()
+            if not existing:
+                return reference
+            
+            # Si elle existe, on continue avec le prochain numéro
+            continue
+        
+        # Si on arrive ici, quelque chose ne va pas
+        raise Exception("Impossible de générer une référence unique après plusieurs tentatives")
+    def generer_reference_plan_action(client_id):
+        """Génère une référence unique basée sur un compteur client"""
+        from models import PlanActionC2N, ClientReferenceCounter
+        
+        # Récupérer ou créer le compteur pour ce client
+        counter = ClientReferenceCounter.query.filter_by(
+            client_id=client_id,
+            type_reference='plan_action'
+        ).first()
+        
+        if not counter:
+            counter = ClientReferenceCounter(
+                client_id=client_id,
+                type_reference='plan_action',
+                derniere_valeur=0
+            )
+            db.session.add(counter)
+        
+        # Incrémenter et sauvegarder
+        counter.derniere_valeur += 1
+        db.session.commit()
+        
+        # Générer la référence
+        return f"PA-{counter.derniere_valeur:05d}"
     
     def avancer(self, nouveau_taux, commentaire=None):
         if self.is_archived:
