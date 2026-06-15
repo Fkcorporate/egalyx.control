@@ -796,13 +796,20 @@
                         </a>
                         
                         {% if not plan.is_archived %}
-                            {% if plan.statut != 'terminee' %}
-                            <button type="button" class="btn btn-primary action-btn" data-bs-toggle="modal" data-bs-target="#updateProgressModal">
-                                <i class="fas fa-chart-line me-2"></i>Mettre à jour le statut
+                            <!-- Bouton de changement de statut (TOUJOURS visible, y compris pour les plans terminés) -->
+                            <button type="button" class="btn btn-primary action-btn" data-bs-toggle="modal" data-bs-target="#updateStatusModal">
+                                <i class="fas fa-exchange-alt me-2"></i>Changer le statut
+                            </button>
+                            
+                            <!-- Bouton de réouverture (visible UNIQUEMENT si le plan est terminé) -->
+                            {% if plan.statut == 'terminee' %}
+                            <button type="button" class="btn btn-warning action-btn" onclick="rouvrirPlanAction({{ plan.id }})">
+                                <i class="fas fa-undo-alt me-2"></i>Rouvrir le plan
                             </button>
                             {% endif %}
                             
-                            <button type="button" class="btn btn-warning action-btn" data-bs-toggle="modal" data-bs-target="#archiveModal">
+                            <!-- Bouton d'archivage -->
+                            <button type="button" class="btn btn-outline-secondary action-btn" data-bs-toggle="modal" data-bs-target="#archiveModal">
                                 <i class="fas fa-archive me-2"></i>Archiver
                             </button>
                             
@@ -1128,6 +1135,61 @@
             <div class="modal-footer">
                 <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Annuler</button>
                 <button type="button" class="btn btn-primary" onclick="saveSousActionEdit()">Enregistrer</button>
+            </div>
+        </div>
+    </div>
+</div>
+<!-- Modal Changement de Statut (AJOUTER CETTE SECTION) -->
+<div class="modal fade" id="updateStatusModal" tabindex="-1">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">
+                    <i class="fas fa-exchange-alt me-2 text-primary"></i>
+                    Changer le statut
+                </h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <div class="mb-3">
+                    <label class="form-label fw-semibold">Nouveau statut</label>
+                    <select id="newStatut" class="form-select">
+                        <option value="a_faire" {% if plan.statut == 'a_faire' %}selected{% endif %}>
+                            📋 À faire
+                        </option>
+                        <option value="en_cours" {% if plan.statut == 'en_cours' %}selected{% endif %}>
+                            ▶️ En cours
+                        </option>
+                        <option value="terminee" {% if plan.statut == 'terminee' %}selected{% endif %}>
+                            ✅ Terminée
+                        </option>
+                        <option value="bloquee" {% if plan.statut == 'bloquee' %}selected{% endif %}>
+                            ⚠️ Bloquée
+                        </option>
+                        <option value="annulee" {% if plan.statut == 'annulee' %}selected{% endif %}>
+                            ❌ Annulée
+                        </option>
+                    </select>
+                </div>
+                <div class="mb-3">
+                    <label class="form-label fw-semibold">Commentaire (optionnel)</label>
+                    <textarea id="statusCommentaire" class="form-control" rows="3" 
+                              placeholder="Raison du changement de statut..."></textarea>
+                </div>
+                {% if plan.statut == 'terminee' %}
+                <div class="alert alert-warning">
+                    <i class="fas fa-exclamation-triangle me-2"></i>
+                    Si vous repassez ce plan en "En cours", il sera automatiquement réouvert.
+                </div>
+                {% endif %}
+                <div class="alert alert-info small">
+                    <i class="fas fa-info-circle me-2"></i>
+                    Le changement de statut sera enregistré dans l'historique.
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Annuler</button>
+                <button type="button" class="btn btn-primary" onclick="changerStatutPlan()">Appliquer</button>
             </div>
         </div>
     </div>
@@ -1580,5 +1642,92 @@ async function saveSousActionEdit() {
 document.getElementById('edit_taux_avancement')?.addEventListener('input', function() {
     document.getElementById('edit_progress_value').textContent = this.value + '%';
 });
+// Changer le statut du plan d'action
+async function changerStatutPlan() {
+    const nouveauStatut = document.getElementById('newStatut').value;
+    const commentaire = document.getElementById('statusCommentaire').value;
+    
+    try {
+        const response = await fetch(`/c2n/plan-action/{{ plan.id }}/update-status-ajax`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRFToken': document.querySelector('input[name="csrf_token"]').value
+            },
+            body: JSON.stringify({
+                statut: nouveauStatut,
+                commentaire: commentaire
+            })
+        });
+        
+        const data = await response.json();
+        if (data.success) {
+            showToast(data.message, 'success');
+            setTimeout(() => location.reload(), 1000);
+        } else {
+            showToast('Erreur: ' + data.error, 'danger');
+        }
+    } catch (error) {
+        console.error('Erreur:', error);
+        showToast('Erreur lors du changement de statut', 'danger');
+    }
+}
+
+// Rouvrir un plan d'action terminé (réouverture rapide)
+async function rouvrirPlanAction(planId) {
+    if (!confirm('⚠️ Attention : Rouvrir ce plan d\'action va le remettre en statut "En cours" avec 50% de progression minimum.\n\nContinuer ?')) {
+        return;
+    }
+    
+    try {
+        const response = await fetch(`/c2n/plan-action/${planId}/rouvrir`, {
+            method: 'POST',
+            headers: {
+                'X-CSRFToken': document.querySelector('input[name="csrf_token"]').value
+            }
+        });
+        
+        const data = await response.json();
+        if (data.success) {
+            showToast(data.message, 'success');
+            setTimeout(() => location.reload(), 1000);
+        } else {
+            showToast('Erreur: ' + data.error, 'danger');
+        }
+    } catch (error) {
+        console.error('Erreur:', error);
+        showToast('Erreur lors de la réouverture', 'danger');
+    }
+}
+
+// Fonction showToast si pas déjà présente
+function showToast(message, type = 'info') {
+    const toastContainer = document.getElementById('toast-container') || (() => {
+        const container = document.createElement('div');
+        container.id = 'toast-container';
+        container.className = 'toast-container position-fixed bottom-0 end-0 p-3';
+        container.style.zIndex = '1100';
+        document.body.appendChild(container);
+        return container;
+    })();
+    
+    const toast = document.createElement('div');
+    toast.className = `toast align-items-center text-bg-${type === 'success' ? 'success' : type === 'danger' ? 'danger' : 'warning'} border-0 mb-2`;
+    toast.setAttribute('role', 'alert');
+    toast.innerHTML = `
+        <div class="d-flex">
+            <div class="toast-body">
+                <i class="fas fa-${type === 'success' ? 'check-circle' : type === 'danger' ? 'exclamation-circle' : 'info-circle'} me-2"></i>
+                ${message}
+            </div>
+            <button type="button" class="btn-close btn-close-white me-2 m-auto" data-bs-dismiss="toast"></button>
+        </div>
+    `;
+    
+    toastContainer.appendChild(toast);
+    const bsToast = new bootstrap.Toast(toast, { delay: 3000 });
+    bsToast.show();
+    toast.addEventListener('hidden.bs.toast', () => toast.remove());
+}
 </script>
 {% endblock %}
