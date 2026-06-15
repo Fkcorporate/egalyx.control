@@ -1,1122 +1,860 @@
 {% extends "base.html" %}
 
-{% block title %}Détail planification - {{ planification.reference }}{% endblock %}
+{% block title %}{{ campagne.reference }} - {{ campagne.nom }}{% endblock %}
 
 {% block styles %}
 {{ super() }}
 <style>
-    .detail-card {
-        border-radius: 20px;
-        transition: all 0.3s ease;
-        border: none;
-        overflow: hidden;
-    }
-    .status-badge {
-        padding: 8px 20px;
-        border-radius: 40px;
-        font-weight: 600;
-        font-size: 14px;
-        display: inline-flex;
-        align-items: center;
-        gap: 8px;
-    }
-    .status-a_faire { background: #6c757d; color: white; }
-    .status-en_cours { background: #0ea5e9; color: white; }
-    .status-soumis { background: #f59e0b; color: white; }
-    .status-valide { background: #10b981; color: white; }
-    .status-rejete { background: #dc2626; color: white; }
-    
+    /* Styles spécifiques à la page campagne */
     .stat-card {
         background: white;
-        border-radius: 16px;
-        padding: 1rem;
-        transition: all 0.2s ease;
+        border-radius: var(--radius-lg);
+        padding: 1.25rem;
+        transition: var(--transition-smooth);
         border: 1px solid rgba(0,0,0,0.05);
-        text-align: center;
+        position: relative;
+        overflow: hidden;
     }
-    [data-bs-theme="dark"] .stat-card { background: #1e293b; }
-    .stat-value { font-size: 32px; font-weight: 800; line-height: 1.2; }
-    .stat-label { font-size: 0.7rem; text-transform: uppercase; color: #6c757d; letter-spacing: 0.5px; }
-    .progress-custom { height: 8px; border-radius: 10px; background: #e2e8f0; overflow: hidden; }
-    .progress-custom-bar { height: 100%; border-radius: 10px; transition: width 0.6s ease; }
     
-    .info-row { display: flex; padding: 10px 0; border-bottom: 1px solid #e2e8f0; }
-    .info-row:last-child { border-bottom: none; }
-    .info-label { width: 180px; font-weight: 600; color: #475569; }
-    .info-value { flex: 1; color: #1e293b; }
-    [data-bs-theme="dark"] .info-row { border-bottom-color: #334155; }
-    [data-bs-theme="dark"] .info-label { color: #94a3b8; }
-    [data-bs-theme="dark"] .info-value { color: #e2e8f0; }
+    .stat-card::before {
+        content: '';
+        position: absolute;
+        top: 0;
+        left: 0;
+        right: 0;
+        height: 3px;
+        background: var(--accent-gradient);
+    }
     
-    .section-card { background: #f8fafc; border-radius: 16px; padding: 20px; margin-bottom: 20px; }
-    [data-bs-theme="dark"] .section-card { background: #1e293b; }
-    .section-title { font-size: 1rem; font-weight: 600; margin-bottom: 1rem; padding-bottom: 0.5rem; border-bottom: 2px solid var(--fk-accent); display: inline-block; }
+    .stat-card:hover {
+        transform: translateY(-3px);
+        box-shadow: var(--shadow-medium);
+    }
     
-    .timeline-step { display: flex; align-items: center; gap: 12px; padding: 12px; border-radius: 12px; margin-bottom: 8px; transition: all 0.2s ease; }
-    .timeline-step.completed { background: #d1fae5; }
-    .timeline-step.active { background: #e0f2fe; border-left: 3px solid var(--fk-accent); }
-    .timeline-step.pending { background: #f1f5f9; opacity: 0.7; }
-    [data-bs-theme="dark"] .timeline-step.completed { background: #064e3b; }
-    [data-bs-theme="dark"] .timeline-step.active { background: #0c4a6e; }
-    [data-bs-theme="dark"] .timeline-step.pending { background: #1e293b; }
+    .stat-value {
+        font-size: 2rem;
+        font-weight: 700;
+        line-height: 1.2;
+        margin-bottom: 0.25rem;
+    }
     
-    .step-icon { width: 40px; height: 40px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 18px; }
-    .step-icon.completed { background: #10b981; color: white; }
-    .step-icon.active { background: var(--fk-accent); color: white; }
-    .step-icon.pending { background: #cbd5e1; color: #64748b; }
+    .stat-label {
+        font-size: 0.75rem;
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+        color: var(--fk-steel);
+        font-weight: 500;
+    }
     
-    .validation-card { border-left: 4px solid; margin-bottom: 12px; padding: 12px; border-radius: 8px; }
-    .validation-card.approuve { border-left-color: #10b981; background: #f0fdf4; }
-    .validation-card.rejete { border-left-color: #dc2626; background: #fef2f2; }
-    [data-bs-theme="dark"] .validation-card.approuve { background: #064e3b; }
-    [data-bs-theme="dark"] .validation-card.rejete { background: #7f1d1d; }
+    .info-row {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        padding: 0.75rem 0;
+        border-bottom: 1px solid rgba(0,0,0,0.05);
+    }
     
-    .action-buttons { display: flex; flex-direction: column; gap: 10px; }
-    .action-btn { transition: all 0.2s ease; }
-    .action-btn:hover { transform: translateX(4px); }
+    .info-row:last-child {
+        border-bottom: none;
+    }
     
-    .org-card { background: linear-gradient(135deg, #f8fafc 0%, #f1f5f9 100%); border-left: 4px solid var(--fk-accent); }
-    [data-bs-theme="dark"] .org-card { background: linear-gradient(135deg, #1e293b 0%, #0f172a 100%); }
+    .info-label {
+        font-size: 0.8rem;
+        font-weight: 500;
+        color: var(--fk-steel);
+    }
     
-    .badge-criticite { padding: 4px 10px; border-radius: 20px; font-size: 0.7rem; font-weight: 500; }
-    .badge-criticite.critique { background: #fee2e2; color: #dc2626; }
-    .badge-criticite.majeur { background: #fed7aa; color: #ea580c; }
-    .badge-criticite.mineur { background: #fef3c7; color: #d97706; }
+    .info-value {
+        font-size: 0.9rem;
+        font-weight: 600;
+        color: #1E293B;
+    }
     
-    .campagne-link { text-decoration: none; transition: all 0.2s ease; }
-    .campagne-link:hover { text-decoration: underline; color: var(--fk-accent); }
+    [data-bs-theme="dark"] .info-value {
+        color: #E2E8F0;
+    }
     
-    .recommendation-item { background: #f1f5f9; border-radius: 12px; padding: 15px; margin-bottom: 12px; border-left: 4px solid; transition: all 0.2s ease; }
-    [data-bs-theme="dark"] .recommendation-item { background: #1e293b; }
-    .recommendation-item.haute { border-left-color: #dc2626; }
-    .recommendation-item.moyenne { border-left-color: #f59e0b; }
-    .recommendation-item.basse { border-left-color: #10b981; }
-    .recommendation-item.realisee { opacity: 0.7; background: #e2e8f0; }
-    .recommendation-item.rejetee { opacity: 0.6; background: #fef2f2; border-left-color: #6c757d; cursor: help; }
+    .progress-custom {
+        height: 8px;
+        border-radius: 4px;
+        background: #e2e8f0;
+        overflow: hidden;
+    }
     
-    .recommendation-actions { display: flex; gap: 8px; flex-wrap: wrap; }
-    .btn-reco-sm { padding: 4px 8px; font-size: 0.7rem; border-radius: 20px; }
+    .progress-custom-bar {
+        height: 100%;
+        border-radius: 4px;
+        transition: width 0.6s ease;
+    }
     
-    .rejet-raison { background: #fef2f2; border-left: 3px solid #dc2626; padding: 8px 12px; border-radius: 8px; margin-top: 8px; font-size: 0.75rem; }
-    .rejet-raison i { color: #dc2626; margin-right: 6px; }
+    .fk-table-custom {
+        margin-bottom: 0;
+    }
+    
+    .fk-table-custom th {
+        font-size: 0.75rem;
+        font-weight: 600;
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+        padding: 1rem 0.75rem;
+    }
+    
+    .fk-table-custom td {
+        padding: 0.875rem 0.75rem;
+        vertical-align: middle;
+    }
+    
+    .file-item {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        padding: 0.75rem;
+        border-radius: var(--radius-md);
+        background: var(--fk-platinum);
+        margin-bottom: 0.5rem;
+        transition: var(--transition-smooth);
+    }
+    
+    .file-item:hover {
+        background: rgba(59, 130, 246, 0.05);
+        transform: translateX(4px);
+    }
+    
+    .file-info {
+        display: flex;
+        align-items: center;
+        gap: 0.75rem;
+        flex: 1;
+    }
+    
+    .file-icon {
+        width: 36px;
+        height: 36px;
+        border-radius: 10px;
+        background: rgba(59, 130, 246, 0.1);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        color: var(--fk-accent);
+    }
+    
+    .file-details {
+        flex: 1;
+    }
+    
+    .file-name {
+        font-weight: 500;
+        font-size: 0.85rem;
+        margin-bottom: 0.25rem;
+    }
+    
+    .file-meta {
+        font-size: 0.7rem;
+        color: var(--fk-steel);
+    }
+    
+    .breadcrumb-modern {
+        background: transparent;
+        padding: 0;
+        margin-bottom: 1.5rem;
+    }
+    
+    .breadcrumb-modern .breadcrumb-item a {
+        color: var(--fk-accent);
+        text-decoration: none;
+        font-weight: 500;
+    }
+    
+    .breadcrumb-modern .breadcrumb-item.active {
+        color: var(--fk-steel);
+    }
+    
+    .page-header {
+        margin-bottom: 1.5rem;
+    }
+    
+    .page-title {
+        font-size: 1.75rem;
+        font-weight: 700;
+        margin-bottom: 0.5rem;
+        background: linear-gradient(135deg, #1E293B, var(--fk-accent));
+        -webkit-background-clip: text;
+        -webkit-text-fill-color: transparent;
+        background-clip: text;
+    }
+    
+    [data-bs-theme="dark"] .page-title {
+        background: linear-gradient(135deg, #E2E8F0, var(--fk-light-blue));
+        -webkit-background-clip: text;
+        -webkit-text-fill-color: transparent;
+    }
+    
+    .badge-modern {
+        padding: 0.35rem 0.85rem;
+        border-radius: 20px;
+        font-size: 0.7rem;
+        font-weight: 500;
+    }
+    
+    .action-buttons {
+        display: flex;
+        gap: 0.5rem;
+    }
+    
+    .fk-btn-icon {
+        width: 36px;
+        height: 36px;
+        padding: 0;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        border-radius: 10px;
+    }
+    
+    .comment-section {
+        background: var(--fk-platinum);
+        border-radius: var(--radius-md);
+        padding: 1rem;
+    }
+    
+    .comment-label {
+        font-size: 0.7rem;
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+        font-weight: 600;
+        color: var(--fk-accent);
+        margin-bottom: 0.5rem;
+    }
+    
+    .comment-text {
+        font-size: 0.85rem;
+        line-height: 1.5;
+        margin-bottom: 0;
+    }
+    
+    /* Styles pour l'intégration C2N */
+    .integration-card {
+        background: linear-gradient(135deg, #f0f9ff 0%, #e0f2fe 100%);
+        border-left: 4px solid var(--fk-accent);
+    }
+    [data-bs-theme="dark"] .integration-card {
+        background: linear-gradient(135deg, #0c4a6e 0%, #082f49 100%);
+    }
+    .integration-btn {
+        transition: all 0.2s ease;
+    }
+    .integration-btn:hover {
+        transform: translateX(4px);
+    }
+    .c2n-status-badge {
+        padding: 4px 12px;
+        border-radius: 20px;
+        font-size: 0.7rem;
+        font-weight: 500;
+    }
+    .c2n-status-lie { background: #10b981; color: white; }
+    .c2n-status-non_lie { background: #6c757d; color: white; }
+    .c2n-status-planifie { background: #3b82f6; color: white; }
+    .c2n-status-synchronise { background: #8b5cf6; color: white; }
+    
+    .motif-item {
+        background: #fef3c7;
+        border-left: 3px solid #f59e0b;
+        padding: 8px 12px;
+        margin-bottom: 8px;
+        border-radius: 8px;
+        font-size: 0.85rem;
+    }
+    [data-bs-theme="dark"] .motif-item {
+        background: #2d2a1a;
+        border-left-color: #f59e0b;
+    }
+    
+    @keyframes fadeInUp {
+        from {
+            opacity: 0;
+            transform: translateY(20px);
+        }
+        to {
+            opacity: 1;
+            transform: translateY(0);
+        }
+    }
+    
+    .animate-in {
+        animation: fadeInUp 0.4s ease-out forwards;
+    }
+    
+    .section-card {
+        animation: fadeInUp 0.4s ease-out forwards;
+        opacity: 0;
+    }
+    
+    .section-card:nth-child(1) { animation-delay: 0.05s; }
+    .section-card:nth-child(2) { animation-delay: 0.1s; }
+    .section-card:nth-child(3) { animation-delay: 0.15s; }
+    .section-card:nth-child(4) { animation-delay: 0.2s; }
 </style>
 {% endblock %}
 
 {% block content %}
-<div class="container-fluid">
-    <div class="row mb-4">
-        <div class="col">
-            <nav aria-label="breadcrumb">
-                <ol class="breadcrumb">
-                    <li class="breadcrumb-item"><a href="{{ url_for('c2n_liste_planifications') }}">Planification</a></li>
-                    <li class="breadcrumb-item active">{{ planification.reference }}</li>
-                </ol>
-            </nav>
+<div class="container-fluid px-4">
+    <!-- Fil d'Ariane Moderne -->
+    <nav aria-label="breadcrumb" class="breadcrumb-modern">
+        <ol class="breadcrumb">
+            <li class="breadcrumb-item">
+                <a href="{{ url_for('liste_campagnes_controle') }}">
+                    <i class="fas fa-clipboard-list me-1"></i>Campagnes de contrôle
+                </a>
+            </li>
+            <li class="breadcrumb-item active" aria-current="page">{{ campagne.reference }}</li>
+        </ol>
+    </nav>
+
+    <!-- En-tête de page -->
+    <div class="page-header d-flex flex-wrap justify-content-between align-items-start gap-3">
+        <div>
+            <h1 class="page-title">
+                <i class="fas fa-shield-alt me-2" style="background: none; -webkit-text-fill-color: var(--fk-accent);"></i>
+                {{ campagne.nom }}
+            </h1>
+            <div class="d-flex flex-wrap gap-2 mt-2">
+                <span class="badge-modern bg-light text-dark border">
+                    <i class="fas fa-tag me-1"></i>{{ campagne.reference }}
+                </span>
+                <span class="badge-modern bg-light text-dark border">
+                    <i class="fas fa-user me-1"></i>{{ campagne.createur.username }}
+                </span>
+                <span class="badge-modern bg-light text-dark border">
+                    <i class="far fa-calendar-alt me-1"></i>{{ campagne.created_at.strftime('%d/%m/%Y') }}
+                </span>
+                <span class="badge-modern bg-{{ campagne.get_statut_css() }} text-white">
+                    <i class="fas fa-circle me-1" style="font-size: 0.5rem;"></i>{{ campagne.get_statut_label() }}
+                </span>
+                {% if campagne.est_liee_a_c2n and campagne.est_liee_a_c2n() %}
+                <span class="c2n-status-badge c2n-status-lie">
+                    <i class="fas fa-shield-alt me-1"></i>Liée à C2N
+                </span>
+                {% endif %}
+            </div>
+        </div>
+        <div class="action-buttons">
+            <a href="{{ url_for('modifier_campagne_controle', campagne_id=campagne.id) }}" 
+               class="btn btn-outline-primary rounded-pill px-3">
+                <i class="fas fa-edit me-1"></i>Modifier
+            </a>
+            <a href="{{ url_for('statistiques_campagne_controle', campagne_id=campagne.id) }}" 
+               class="btn btn-outline-info rounded-pill px-3">
+                <i class="fas fa-chart-bar me-1"></i>Statistiques
+            </a>
+            <a href="{{ url_for('export_campagne_controle_pdf', campagne_id=campagne.id) }}" class="btn btn-outline-danger rounded-pill px-3" target="_blank">
+                <i class="fas fa-file-pdf me-1"></i> Exporter PDF
+            </a>
+            {% if not campagne.is_archived %}
+            <button type="button" class="btn btn-outline-danger rounded-pill px-3" data-bs-toggle="modal" data-bs-target="#archiveModal">
+                <i class="fas fa-archive me-1"></i>Archiver
+            </button>
+            {% else %}
+            <form method="POST" action="{{ url_for('restaurer_campagne_controle', campagne_id=campagne.id) }}" style="display: inline;">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                <button type="submit" class="btn btn-outline-success rounded-pill px-3" onclick="return confirm('Restaurer cette campagne ?')">
+                    <i class="fas fa-undo-alt me-1"></i>Restaurer
+                </button>
+            </form>
+            {% endif %}
         </div>
     </div>
 
-    <div class="row">
-        <div class="col-md-8">
-            <!-- En-tête -->
-            <div class="d-flex justify-content-between align-items-start mb-4 flex-wrap gap-2">
-                <div>
-                    <h1 class="h2 mb-2">
-                        <i class="fas fa-calendar-alt me-2 text-primary"></i>
-                        {{ planification.reference }}
-                    </h1>
-                    <div class="d-flex gap-2 flex-wrap">
-                        <span class="status-badge status-{{ planification.statut }}">
-                            <i class="fas {% if planification.statut == 'a_faire' %}fa-circle{% elif planification.statut == 'en_cours' %}fa-play-circle{% elif planification.statut == 'soumis' %}fa-paper-plane{% elif planification.statut == 'valide' %}fa-check-circle{% else %}fa-times-circle{% endif %} me-1"></i>
-                            {{ planification.get_statut_label() }}
-                        </span>
-                        {% if planification.date_prevue < now.date() and planification.statut not in ['valide', 'rejete'] %}
-                        <span class="badge bg-danger">
-                            <i class="fas fa-clock me-1"></i>En retard
-                        </span>
-                        {% endif %}
-                        {% if campagne_liee %}
-                        <a href="{{ url_for('detail_campagne_controle', campagne_id=campagne_liee.id) }}" class="badge bg-info text-decoration-none">
-                            <i class="fas fa-link me-1"></i>Lié à: {{ campagne_liee.reference }}
-                        </a>
-                        {% endif %}
-                    </div>
-                </div>
-            </div>
-
-            <!-- Cartes statistiques -->
+    <div class="row g-4">
+        <!-- Colonne gauche - Informations & Volumes -->
+        <div class="col-lg-5">
+            <!-- Cartes Statistiques Rapides -->
             <div class="row g-3 mb-4">
                 <div class="col-6">
-                    <div class="stat-card">
-                        {% set taux = planification.execution.taux_conformite if planification.execution and planification.execution.taux_conformite is not none else 0 %}
-                        <div class="stat-value {% if taux >= 80 %}text-success{% elif taux >= 60 %}text-warning{% else %}text-danger{% endif %}">
-                            {{ "%.1f"|format(taux) }}%
-                        </div>
-                        <div class="stat-label">Taux de conformité</div>
+                    <div class="stat-card section-card">
+                        <div class="stat-value">{{ campagne.get_avancement() }}%</div>
+                        <div class="stat-label">Avancement</div>
                         <div class="progress-custom mt-2">
-                            <div class="progress-custom-bar {% if taux >= 80 %}bg-success{% elif taux >= 60 %}bg-warning{% else %}bg-danger{% endif %}" style="width: {{ taux }}%"></div>
+                            <div class="progress-custom-bar bg-info" style="width: {{ campagne.get_avancement() }}%"></div>
                         </div>
-                        {% if planification.execution %}
-                        <div class="small text-muted mt-2">
-                            {{ planification.execution.nb_conformes or 0 }} / {{ planification.execution.volume_controle or 0 }} conformes
-                        </div>
-                        {% endif %}
                     </div>
                 </div>
                 <div class="col-6">
-                    <div class="stat-card">
-                        {% if planification.execution and planification.execution.volume_previsionnel and planification.execution.volume_previsionnel > 0 %}
-                            {% set avancement = ((planification.execution.volume_controle or 0) / planification.execution.volume_previsionnel * 100)|round|int %}
-                        {% else %}
-                            {% set avancement = 0 %}
-                        {% endif %}
-                        <div class="stat-value text-primary">{{ avancement }}%</div>
-                        <div class="stat-label">Avancement</div>
+                    <div class="stat-card section-card">
+                        <div class="stat-value">{{ campagne.taux_conformite }}%</div>
+                        <div class="stat-label">Taux de conformité</div>
                         <div class="progress-custom mt-2">
-                            <div class="progress-custom-bar bg-info" style="width: {{ avancement }}%"></div>
+                            <div class="progress-custom-bar {% if campagne.taux_conformite >= 80 %}bg-success{% elif campagne.taux_conformite >= 60 %}bg-warning{% else %}bg-danger{% endif %}" 
+                                 style="width: {{ campagne.taux_conformite }}%"></div>
                         </div>
-                        {% if planification.execution %}
-                        <div class="small text-muted mt-2">
-                            {{ planification.execution.volume_controle or 0 }} / {{ planification.execution.volume_previsionnel or 0 }} éléments
-                        </div>
-                        {% endif %}
                     </div>
                 </div>
             </div>
 
-            <!-- Workflow de validation -->
-            <div class="section-card">
-                <h6 class="section-title">
-                    <i class="fas fa-timeline me-2 text-primary"></i>
-                    Workflow de validation
-                </h6>
-                
-                {% set steps = [
-                    {'name': 'Planification', 'key': 'a_faire', 'icon': 'fa-calendar-plus'},
-                    {'name': 'Exécution', 'key': 'en_cours', 'icon': 'fa-play-circle'},
-                    {'name': 'Soumission', 'key': 'soumis', 'icon': 'fa-paper-plane'},
-                    {'name': 'Validation', 'key': 'valide', 'icon': 'fa-check-circle'}
-                ] %}
-                
-                {% set status_order = ['a_faire', 'en_cours', 'soumis', 'valide'] %}
-                {% set current_index = status_order.index(planification.statut) if planification.statut in status_order else 0 %}
-                
-                {% for step in steps %}
-                {% set step_index = loop.index0 %}
-                {% set is_completed = step_index < current_index %}
-                {% set is_active = step_index == current_index %}
-                {% set is_pending = step_index > current_index %}
-                
-                <div class="timeline-step {% if is_completed %}completed{% elif is_active %}active{% else %}pending{% endif %}">
-                    <div class="step-icon {% if is_completed %}completed{% elif is_active %}active{% else %}pending{% endif %}">
-                        <i class="fas {{ step.icon }}"></i>
-                    </div>
-                    <div class="flex-grow-1">
-                        <div class="fw-semibold">{{ step.name }}</div>
-                        <div class="small text-muted">
-                            {% if is_completed %}
-                            <i class="fas fa-check-circle text-success me-1"></i>Terminé
-                            {% elif is_active %}
-                            <i class="fas fa-spinner fa-pulse me-1"></i>En cours
+            <!-- Carte Informations Générales -->
+            <div class="fk-card section-card mb-4">
+                <div class="fk-card-header">
+                    <h5 class="mb-0">
+                        <i class="fas fa-info-circle me-2"></i>Informations générales
+                    </h5>
+                </div>
+                <div class="fk-card-body">
+                    <div class="info-row">
+                        <span class="info-label">Organisation</span>
+                        <span class="info-value">
+                            {% if organisation %}
+                                <i class="fas {% if campagne.pole %}fa-building{% elif campagne.direction %}fa-sitemap{% else %}fa-users{% endif %} me-1"></i>
+                                {{ organisation.nom }}
                             {% else %}
-                            <i class="fas fa-clock me-1"></i>En attente
-                            {% endif %}
-                        </div>
-                    </div>
-                    {% if is_active %}
-                    <div class="badge bg-primary rounded-pill">Étape actuelle</div>
-                    {% endif %}
-                </div>
-                {% endfor %}
-            </div>
-
-            <!-- Historique des validations -->
-            {% if planification.execution and planification.execution.validations %}
-            <div class="section-card">
-                <h6 class="section-title">
-                    <i class="fas fa-stamp me-2 text-info"></i>
-                    Historique des validations
-                </h6>
-                {% for validation in planification.execution.validations %}
-                <div class="validation-card {{ validation.action }} p-3 mb-3 rounded">
-                    <div class="d-flex justify-content-between align-items-center">
-                        <div>
-                            <span class="badge {% if validation.action == 'approuve' %}bg-success{% else %}bg-danger{% endif %}">
-                                {{ validation.action|upper }}
-                            </span>
-                            <span class="ms-2">par {{ validation.validateur.username }}</span>
-                        </div>
-                        <small class="text-muted">{{ validation.date_action.strftime('%d/%m/%Y %H:%M') }}</small>
-                    </div>
-                    {% if validation.commentaire %}
-                    <div class="mt-2 small">{{ validation.commentaire }}</div>
-                    {% endif %}
-                </div>
-                {% endfor %}
-            </div>
-            {% endif %}
-
-            <!-- Informations générales -->
-            <div class="section-card">
-                <h6 class="section-title">
-                    <i class="fas fa-info-circle me-2 text-primary"></i>
-                    Informations générales
-                </h6>
-                <div class="info-row">
-                    <div class="info-label">Contrôle</div>
-                    <div class="info-value">
-                        <strong>{{ planification.referentiel.nom }}</strong><br>
-                        <code class="small">{{ planification.referentiel.code_controle }}</code>
-                        {% if planification.referentiel.objectif %}
-                        <div class="small text-muted mt-1">{{ planification.referentiel.objectif|truncate(100) }}</div>
-                        {% endif %}
-                    </div>
-                </div>
-                <div class="info-row">
-                    <div class="info-label">Période</div>
-                    <div class="info-value">
-                        {{ planification.date_prevue.strftime('%d/%m/%Y') }}
-                        {% if planification.mois %}
-                        ({{ mois_noms[planification.mois] }} {{ planification.annee }})
-                        {% else %}
-                        (Annuel - {{ planification.annee }})
-                        {% endif %}
-                    </div>
-                </div>
-                <div class="info-row">
-                    <div class="info-label">Contrôleur assigné</div>
-                    <div class="info-value">
-                        <i class="fas fa-user-circle me-1"></i>
-                        {{ planification.controleur.username if planification.controleur else 'Non assigné' }}
-                    </div>
-                </div>
-                <div class="info-row">
-                    <div class="info-label">Dates clés</div>
-                    <div class="info-value">
-                        <div>Création: {{ planification.created_at.strftime('%d/%m/%Y %H:%M') }}</div>
-                        <div>Dernière modif: {{ planification.updated_at.strftime('%d/%m/%Y %H:%M') }}</div>
-                    </div>
-                </div>
-                {% if campagne_liee %}
-                <div class="info-row">
-                    <div class="info-label">Campagne associée</div>
-                    <div class="info-value">
-                        <a href="{{ url_for('detail_campagne_controle', campagne_id=campagne_liee.id) }}" class="campagne-link">
-                            <i class="fas fa-link me-1 text-primary"></i>
-                            <strong>{{ campagne_liee.reference }}</strong> - {{ campagne_liee.nom }}
-                        </a>
-                        <div class="small text-muted mt-1">
-                            Période: {{ campagne_liee.date_debut.strftime('%d/%m/%Y') }} → {{ campagne_liee.date_fin.strftime('%d/%m/%Y') }}
-                        </div>
-                    </div>
-                </div>
-                {% endif %}
-            </div>
-
-            <!-- Organisation cible -->
-            <div class="section-card org-card">
-                <h6 class="section-title">
-                    <i class="fas fa-building me-2 text-primary"></i>
-                    Organisation cible
-                </h6>
-                <div class="row">
-                    <div class="col-md-6">
-                        <div class="mb-2">
-                            <span class="text-muted small">Pays</span>
-                            <div class="fw-semibold">
-                                {% if planification.pays %}
-                                <i class="fas fa-globe me-1"></i> {{ planification.pays.drapeau }} {{ planification.pays.nom }}
-                                {% else %}
-                                <span class="text-muted">Non spécifié</span>
-                                {% endif %}
-                            </div>
-                        </div>
-                        <div class="mb-2">
-                            <span class="text-muted small">Pôle / Filiale</span>
-                            <div class="fw-semibold">
-                                {% if planification.pole %}
-                                <i class="fas fa-building me-1"></i> {{ planification.pole.nom }}
-                                {% else %}
-                                <span class="text-muted">Non spécifié</span>
-                                {% endif %}
-                            </div>
-                        </div>
-                    </div>
-                    <div class="col-md-6">
-                        <div class="mb-2">
-                            <span class="text-muted small">Direction</span>
-                            <div class="fw-semibold">
-                                {% if planification.direction %}
-                                <i class="fas fa-sitemap me-1"></i> {{ planification.direction.nom }}
-                                {% else %}
                                 <span class="text-muted">Non spécifiée</span>
-                                {% endif %}
-                            </div>
-                        </div>
-                        <div class="mb-2">
-                            <span class="text-muted small">Service</span>
-                            <div class="fw-semibold">
-                                {% if planification.service %}
-                                <i class="fas fa-users me-1"></i> {{ planification.service.nom }}
-                                {% else %}
-                                <span class="text-muted">Non spécifié</span>
-                                {% endif %}
-                            </div>
-                        </div>
-                    </div>
-                </div>
-                {% if planification.perimetre %}
-                <div class="mt-2 pt-2 border-top">
-                    <span class="text-muted small">Périmètre</span>
-                    <div><i class="fas fa-chart-line me-1"></i> {{ planification.perimetre }}</div>
-                </div>
-                {% endif %}
-            </div>
-
-            <!-- Résultats d'exécution -->
-            {% if planification.execution %}
-            <div class="section-card">
-                <h6 class="section-title">
-                    <i class="fas fa-chart-line me-2 text-success"></i>
-                    Volumes et résultats
-                </h6>
-                <div class="row text-center g-3 mb-4">
-                    <div class="col-4">
-                        <div class="border rounded-3 p-3">
-                            <div class="text-muted small">Volume prévisionnel</div>
-                            <div class="h3 mb-0">{{ planification.execution.volume_previsionnel or 0 }}</div>
-                        </div>
-                    </div>
-                    <div class="col-4">
-                        <div class="border rounded-3 p-3">
-                            <div class="text-muted small">Volume contrôlé</div>
-                            <div class="h3 mb-0 fw-bold text-primary">{{ planification.execution.volume_controle or 0 }}</div>
-                        </div>
-                    </div>
-                    <div class="col-4">
-                        <div class="border rounded-3 p-3">
-                            <div class="text-muted small">Taux conformité</div>
-                            <div class="h3 mb-0 {% if planification.execution.taux_conformite >= 80 %}text-success{% elif planification.execution.taux_conformite >= 60 %}text-warning{% else %}text-danger{% endif %}">
-                                {{ planification.execution.taux_conformite }}%
-                            </div>
-                        </div>
-                    </div>
-                </div>
-                
-                <div class="row text-center g-3 mb-4">
-                    <div class="col-6">
-                        <div class="border rounded-3 p-3 bg-success bg-opacity-10">
-                            <div class="text-muted small">Conformes</div>
-                            <div class="h3 mb-0 text-success">{{ planification.execution.nb_conformes or 0 }}</div>
-                        </div>
-                    </div>
-                    <div class="col-6">
-                        <div class="border rounded-3 p-3 bg-danger bg-opacity-10">
-                            <div class="text-muted small">Anomalies</div>
-                            <div class="h3 mb-0 text-danger">{{ planification.execution.nb_anomalies or 0 }}</div>
-                        </div>
-                    </div>
-                </div>
-                
-                {% if planification.execution.resultats %}
-                <div class="mt-3">
-                    <div class="text-muted small">Résultats détaillés</div>
-                    <div class="bg-light p-3 rounded">{{ planification.execution.resultats }}</div>
-                </div>
-                {% endif %}
-                
-                {% if planification.execution.commentaires %}
-                <div class="mt-3">
-                    <div class="text-muted small">Commentaires</div>
-                    <div class="bg-light p-3 rounded">{{ planification.execution.commentaires }}</div>
-                </div>
-                {% endif %}
-                
-                {% if planification.execution.conclusion %}
-                <div class="mt-3">
-                    <div class="text-muted small">Conclusion</div>
-                    <div class="bg-light p-3 rounded">{{ planification.execution.conclusion }}</div>
-                </div>
-                {% endif %}
-            </div>
-            {% endif %}
-
-            <!-- Non-conformités associées -->
-            {% if planification.execution and planification.execution.non_conformites_c2n and planification.execution.non_conformites_c2n.count() > 0 %}
-            <div class="section-card">
-                <h6 class="section-title">
-                    <i class="fas fa-exclamation-triangle me-2 text-warning"></i>
-                    Non-conformités associées
-                </h6>
-                {% for nc in planification.execution.non_conformites_c2n %}
-                <div class="border rounded-3 p-3 mb-3">
-                    <div class="d-flex justify-content-between align-items-start">
-                        <div>
-                            <strong>{{ nc.reference }}</strong>
-                            <span class="badge-criticite {{ nc.niveau_criticite }} ms-2">
-                                {{ nc.get_criticite_label() }}
-                            </span>
-                        </div>
-                        <a href="{{ url_for('c2n_detail_non_conformite', id=nc.id) }}" class="btn btn-sm btn-outline-primary">
-                            <i class="fas fa-arrow-right me-1"></i>Voir
-                        </a>
-                    </div>
-                    <div class="mt-2 small">{{ nc.description|truncate(150) }}</div>
-                </div>
-                {% endfor %}
-            </div>
-            {% endif %}
-
-            <!-- Recommandations -->
-            <div class="section-card">
-                <div class="d-flex justify-content-between align-items-center mb-3">
-                    <h6 class="section-title mb-0">
-                        <i class="fas fa-lightbulb me-2 text-warning"></i>
-                        Recommandations
-                        <span class="badge bg-warning ms-2" id="recommandationsCount">0</span>
-                    </h6>
-                    <div>
-                        <button type="button" class="btn btn-sm btn-outline-primary rounded-pill me-2" data-bs-toggle="modal" data-bs-target="#addRecommendationModal">
-                            <i class="fas fa-plus me-1"></i>Manuelle
-                        </button>
-                        <button type="button" class="btn btn-sm btn-outline-info rounded-pill" onclick="genererRecommandationsIA()">
-                            <i class="fas fa-magic me-1"></i>IA
-                        </button>
-                    </div>
-                </div>
-                <div id="recommendationsList">
-                    <div class="text-center py-4">
-                        <div class="spinner-border text-primary" role="status"></div>
-                    </div>
-                </div>
-            </div>
-        </div>
-
-        <div class="col-md-4">
-            <!-- Actions -->
-            <div class="card shadow-sm mb-4">
-                <div class="card-header bg-white">
-                    <h6 class="mb-0 fw-semibold">
-                        <i class="fas fa-cogs me-2 text-primary"></i>
-                        Actions
-                    </h6>
-                </div>
-                <div class="card-body">
-                    <div class="action-buttons">
-                        <a href="{{ url_for('c2n_liste_planifications') }}" class="btn btn-outline-secondary action-btn">
-                            <i class="fas fa-arrow-left me-2"></i>Retour à la liste
-                        </a>
-                        
-                        <!-- DÉMARRER -->
-                        {% if planification.statut == 'a_faire' and planification.controleur_id == current_user.id %}
-                        <form method="POST" action="{{ url_for('c2n_demarrer_planification', id=planification.id) }}">
-                            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                            <button type="submit" class="btn btn-success action-btn w-100">
-                                <i class="fas fa-play me-2"></i>Démarrer le contrôle
-                            </button>
-                        </form>
-                        {% endif %}
-                        
-                        <!-- SOUMETTRE -->
-                        {% if planification.statut == 'en_cours' and planification.controleur_id == current_user.id %}
-                        <button type="button" class="btn btn-warning action-btn" data-bs-toggle="modal" data-bs-target="#soumettreModal">
-                            <i class="fas fa-paper-plane me-2"></i>Soumettre à validation
-                        </button>
-                        {% endif %}
-                        
-                        <!-- VALIDER / REJETER -->
-                        {% if planification.statut == 'soumis' %}
-                            {% if (planification.validateur_requis_id == current_user.id or current_user.has_permission('can_manage_audit')) and planification.controleur_id != current_user.id %}
-                            <button type="button" class="btn btn-primary action-btn" data-bs-toggle="modal" data-bs-target="#validationModal">
-                                <i class="fas fa-stamp me-2"></i>Valider / Rejeter
-                            </button>
-                            {% else %}
-                            <div class="alert alert-warning small mb-0">
-                                <i class="fas fa-clock me-2"></i>
-                                En attente de validation par le responsable qualité
-                            </div>
                             {% endif %}
-                        {% endif %}
-                        
-                        <!-- ROUVRIR -->
-                        <!-- ROUVRIR - Pour admin sur planification validée OU rejetée -->
-                        {% if (planification.statut == 'valide' or planification.statut == 'rejete') and current_user.has_permission('can_manage_audit') %}
-                        <button type="button" class="btn btn-warning action-btn" data-bs-toggle="modal" data-bs-target="#rouvrirModal">
-                            <i class="fas fa-undo-alt me-2"></i>Rouvrir la planification
-                        </button>
-                        {% endif %}
-                        
-                        <!-- MODIFIER -->
-                        {% if planification.statut in ['a_faire', 'en_cours', 'rejete'] %}
-                        <a href="{{ url_for('c2n_modifier_planification', id=planification.id) }}" class="btn btn-outline-primary action-btn">
-                            <i class="fas fa-edit me-2"></i>Modifier la planification
-                        </a>
-                        {% endif %}
-                        
-                        <!-- SYNCHRONISER -->
-                        {% if campagne_liee %}
-                        <button type="button" class="btn btn-outline-info action-btn" onclick="synchroniserCampagne()">
-                            <i class="fas fa-sync-alt me-2"></i>Synchroniser depuis campagne
-                        </button>
-                        {% endif %}
+                        </span>
                     </div>
-                </div>
-            </div>
-            
-            <!-- Référentiel associé -->
-            <div class="card shadow-sm mb-4">
-                <div class="card-header bg-white">
-                    <h6 class="mb-0 fw-semibold">
-                        <i class="fas fa-book me-2 text-primary"></i>
-                        Référentiel associé
-                    </h6>
-                </div>
-                <div class="card-body">
-                    <div class="mb-2">
-                        <div class="text-muted small">Code</div>
-                        <div><code>{{ planification.referentiel.code_controle }}</code></div>
-                    </div>
-                    <!-- Dans la carte "Informations générales" -->
                     <div class="info-row">
-                        <div class="info-label">Objectif</div>
-                        <div class="info-value">
-                            <div id="objectifComplet">
-                                {{ planification.referentiel.objectif or '-' }}
-                            </div>
-                            {% if planification.referentiel.objectif and planification.referentiel.objectif|length > 200 %}
-                            <button type="button" class="btn btn-sm btn-link p-0 mt-1" onclick="voirObjectifComplet()">
-                                <i class="fas fa-expand me-1"></i>Voir tout
-                            </button>
-                            {% endif %}
-                        </div>
+                        <span class="info-label">Période</span>
+                        <span class="info-value">{{ campagne.date_debut.strftime('%d/%m/%Y') }} - {{ campagne.date_fin.strftime('%d/%m/%Y') }}</span>
                     </div>
-
-                    <!-- Dans la section "Risques couverts" -->
                     <div class="info-row">
-                        <div class="info-label">Risques couverts</div>
-                        <div class="info-value">
-                            {% if planification.referentiel.risques_couverts %}
-                                {% set risques = planification.referentiel.risques_couverts.split('\n') %}
-                                <div id="risquesCouverts">
-                                    {% for risque in risques %}
-                                        <div class="small mb-1">• {{ risque }}</div>
-                                    {% endfor %}
-                                </div>
-                                {% if risques|length > 5 %}
-                                <button type="button" class="btn btn-sm btn-link p-0 mt-1" onclick="voirTousLesRisques()">
-                                    <i class="fas fa-expand me-1"></i>Voir tous les risques ({{ risques|length }})
-                                </button>
-                                {% endif %}
-                            {% else %}
-                                -
-                            {% endif %}
-                        </div>
+                        <span class="info-label">Valideur</span>
+                        <span class="info-value">{{ campagne.valideur.username if campagne.valideur else 'Non assigné' }}</span>
                     </div>
-
-                    <!-- Script pour afficher les modals -->
-                    <script>
-                    function voirObjectifComplet() {
-                        const objectif = document.getElementById('objectifComplet').innerHTML;
-                        alert(objectif.replace(/<br>/g, '\n'));
-                    }
-
-                    function voirTousLesRisques() {
-                        const risquesDiv = document.getElementById('risquesCouverts');
-                        if (risquesDiv) {
-                            // Ouvrir un modal ou une alerte
-                            const risques = risquesDiv.innerText;
-                            alert(risques);
-                        }
-                    }
-                    </script>
-                    <div>
-                        <div class="text-muted small">Fréquence</div>
-                        <div>
-                            {% if planification.referentiel.frequence == 'mensuel' %}
-                            <span class="badge bg-primary">Mensuel</span>
-                            {% elif planification.referentiel.frequence == 'trimestriel' %}
-                            <span class="badge bg-warning">Trimestriel</span>
-                            {% else %}
-                            <span class="badge bg-success">Annuel</span>
-                            {% endif %}
-                        </div>
+                    <div class="info-row">
+                        <span class="info-label">Évaluateur</span>
+                        <span class="info-value">{{ campagne.evaluateur.username if campagne.evaluateur else 'Non assigné' }}</span>
                     </div>
+                    {% if campagne.description %}
+                    <div class="mt-3 pt-2">
+                        <div class="comment-label">Description</div>
+                        <p class="comment-text">{{ campagne.description }}</p>
+                    </div>
+                    {% endif %}
                 </div>
             </div>
-            
-            <!-- Métadonnées -->
-            <div class="card shadow-sm">
-                <div class="card-header bg-white">
-                    <h6 class="mb-0 fw-semibold">
-                        <i class="fas fa-chart-simple me-2 text-primary"></i>
-                        Métadonnées
-                    </h6>
-                </div>
-                <div class="card-body">
-                    <div class="small">
-                        <div class="d-flex justify-content-between mb-2">
-                            <span class="text-muted">Créé par :</span>
-                            <span>{{ planification.createur.username if planification.createur else 'Système' }}</span>
-                        </div>
-                        <div class="d-flex justify-content-between mb-2">
-                            <span class="text-muted">Créé le :</span>
-                            <span>{{ planification.created_at.strftime('%d/%m/%Y %H:%M') }}</span>
-                        </div>
-                        <div class="d-flex justify-content-between">
-                            <span class="text-muted">Dernière modif :</span>
-                            <span>{{ planification.updated_at.strftime('%d/%m/%Y %H:%M') }}</span>
-                        </div>
-                        {% if planification.valide_par %}
-                        <hr>
-                        <div class="d-flex justify-content-between">
-                            <span class="text-muted">Validé par :</span>
-                            <span>{{ planification.valide_par.username }}</span>
-                        </div>
-                        <div class="d-flex justify-content-between">
-                            <span class="text-muted">Validé le :</span>
-                            <span>{{ planification.date_validation.strftime('%d/%m/%Y %H:%M') }}</span>
-                        </div>
-                        {% endif %}
-                        {% if planification.rejete_par %}
-                        <hr>
-                        <div class="d-flex justify-content-between">
-                            <span class="text-muted">Rejeté par :</span>
-                            <span>{{ planification.rejete_par.username }}</span>
-                        </div>
-                        <div class="d-flex justify-content-between">
-                            <span class="text-muted">Rejeté le :</span>
-                            <span>{{ planification.date_rejet.strftime('%d/%m/%Y %H:%M') }}</span>
-                        </div>
-                        {% endif %}
-                        {% if planification.rouvert_par %}
-                        <hr>
-                        <div class="d-flex justify-content-between">
-                            <span class="text-muted">Rouvert par :</span>
-                            <span>{{ planification.rouvert_par.username }}</span>
-                        </div>
-                        <div class="d-flex justify-content-between">
-                            <span class="text-muted">Rouvert le :</span>
-                            <span>{{ planification.date_rouverture.strftime('%d/%m/%Y %H:%M') }}</span>
-                        </div>
-                        {% endif %}
-                    </div>
-                </div>
-            </div>
-        </div>
-    </div>
-</div>
 
-<!-- ============================================ -->
-<!-- MODALS -->
-<!-- ============================================ -->
-
-<!-- Modal Soumission -->
-<div class="modal fade" id="soumettreModal" tabindex="-1">
-    <div class="modal-dialog modal-dialog-centered">
-        <div class="modal-content">
-            <form method="POST" action="{{ url_for('c2n_soumettre_planification', id=planification.id) }}">
-                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                <div class="modal-header">
-                    <h5 class="modal-title text-warning">
-                        <i class="fas fa-paper-plane me-2"></i>Soumettre à validation
+            <!-- Carte Volumes Prévisionnels -->
+            <div class="fk-card section-card mb-4">
+                <div class="fk-card-header">
+                    <h5 class="mb-0">
+                        <i class="fas fa-chart-line me-2"></i>Volumes prévisionnels
                     </h5>
-                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
                 </div>
-                <div class="modal-body">
-                    <div class="alert alert-info">
-                        <i class="fas fa-info-circle me-2"></i>
-                        Le validateur désigné sera notifié par email.
+                <div class="fk-card-body">
+                    <div class="row text-center g-3">
+                        <div class="col-4">
+                            <div class="border rounded-3 p-2">
+                                <div class="stat-label">Volume total</div>
+                                <div class="h3 mb-0 fw-bold">{{ campagne.volume_previsionnel }}</div>
+                            </div>
+                        </div>
+                        <div class="col-4">
+                            <div class="border rounded-3 p-2">
+                                <div class="stat-label">Dossiers prévus</div>
+                                <div class="h3 mb-0 fw-bold">{{ campagne.nb_dossiers_prevus }}</div>
+                            </div>
+                        </div>
+                        <div class="col-4">
+                            <div class="border rounded-3 p-2">
+                                <div class="stat-label">À contrôler</div>
+                                <div class="h3 mb-0 fw-bold">{{ campagne.nb_dossiers_reglement }}</div>
+                            </div>
+                        </div>
                     </div>
-                    <div class="mb-3">
-                        <label class="form-label fw-semibold">Commentaire (optionnel)</label>
-                        <textarea name="commentaire" class="form-control" rows="3" placeholder="Ajoutez un commentaire pour le validateur..."></textarea>
-                    </div>
                 </div>
-                <div class="modal-footer">
-                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Annuler</button>
-                    <button type="submit" class="btn btn-warning">Soumettre</button>
-                </div>
-            </form>
-        </div>
-    </div>
-</div>
+            </div>
 
-<!-- Modal Validation -->
-<div class="modal fade" id="validationModal" tabindex="-1">
-    <div class="modal-dialog modal-dialog-centered">
-        <div class="modal-content">
-            <form method="POST" action="{{ url_for('c2n_valider_planification', id=planification.id) }}">
-                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                <div class="modal-header">
-                    <h5 class="modal-title">
-                        <i class="fas fa-stamp me-2 text-primary"></i>
-                        Validation du contrôle
+            <!-- Carte Résultats du contrôle AVEC motifs d'anomalies intégrés -->
+            <div class="fk-card section-card">
+                <div class="fk-card-header">
+                    <h5 class="mb-0">
+                        <i class="fas fa-chart-simple me-2"></i>Résultats du contrôle
                     </h5>
-                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
                 </div>
-                <div class="modal-body">
-                    <div class="mb-3">
-                        <label class="form-label fw-semibold">Décision</label>
-                        <select name="action" class="form-select" required>
-                            <option value="approuve">✅ Approuver</option>
-                            <option value="rejete">❌ Rejeter</option>
-                        </select>
-                    </div>
-                    <div class="mb-3">
-                        <label class="form-label fw-semibold">Commentaire</label>
-                        <textarea name="commentaire" class="form-control" rows="3" required></textarea>
-                    </div>
-                </div>
-                <div class="modal-footer">
-                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Annuler</button>
-                    <button type="submit" class="btn btn-primary">Valider</button>
-                </div>
-            </form>
-        </div>
-    </div>
-</div>
-
-<!-- Modal Réouverture -->
-<div class="modal fade" id="rouvrirModal" tabindex="-1">
-    <div class="modal-dialog modal-dialog-centered">
-        <div class="modal-content">
-            <form method="POST" action="{{ url_for('c2n_rouvrir_planification', id=planification.id) }}">
-                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                <div class="modal-header">
-                    <h5 class="modal-title text-warning">
-                        <i class="fas fa-undo-alt me-2"></i>Rouvrir la planification
-                    </h5>
-                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
-                </div>
-                <div class="modal-body">
-                    <div class="alert alert-info">
-                        <i class="fas fa-info-circle me-2"></i>
-                        La planification repassera en statut "À faire".
-                    </div>
-                    <div class="mb-3">
-                        <label class="form-label fw-semibold">Raison de la réouverture</label>
-                        <textarea name="raison" class="form-control" rows="3" placeholder="Pourquoi cette réouverture ?"></textarea>
-                    </div>
-                </div>
-                <div class="modal-footer">
-                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Annuler</button>
-                    <button type="submit" class="btn btn-warning">Rouvrir</button>
-                </div>
-            </form>
-        </div>
-    </div>
-</div>
-<!-- Modal Réouverture -->
-<div class="modal fade" id="rouvrirModal" tabindex="-1">
-    <div class="modal-dialog modal-dialog-centered">
-        <div class="modal-content">
-            <form method="POST" action="{{ url_for('c2n_rouvrir_planification', id=planification.id) }}">
-                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                <div class="modal-header">
-                    <h5 class="modal-title text-warning">
-                        <i class="fas fa-undo-alt me-2"></i>Rouvrir la planification
-                    </h5>
-                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
-                </div>
-                <div class="modal-body">
-                    <div class="alert alert-warning">
-                        <i class="fas fa-exclamation-triangle me-2"></i>
-                        <strong>Attention !</strong> Cette action va :
-                        <ul class="mt-2 mb-0">
-                            <li>✅ Remettre la planification en statut "À faire"</li>
-                            <li>✅ Réinitialiser toutes les validations</li>
-                            <li>⚠️ Les données d'exécution seront conservées</li>
-                        </ul>
-                    </div>
-                    <div class="mb-3">
-                        <label class="form-label fw-semibold">Raison de la réouverture *</label>
-                        <textarea name="raison" class="form-control" rows="3" required placeholder="Pourquoi cette planification doit être rouverte ?"></textarea>
-                    </div>
-                </div>
-                <div class="modal-footer">
-                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Annuler</button>
-                    <button type="submit" class="btn btn-warning">Confirmer la réouverture</button>
-                </div>
-            </form>
-        </div>
-    </div>
-</div>
-<!-- Modal Ajouter Recommandation -->
-<div class="modal fade" id="addRecommendationModal" tabindex="-1">
-    <div class="modal-dialog modal-dialog-centered">
-        <div class="modal-content">
-            <div class="modal-header">
-                <h5 class="modal-title">
-                    <i class="fas fa-plus-circle me-2 text-primary"></i>Ajouter une recommandation
-                </h5>
-                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
-            </div>
-            <form id="addRecommendationForm">
-                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                <div class="modal-body">
-                    <div class="mb-3">
-                        <label class="form-label fw-semibold">Titre *</label>
-                        <input type="text" name="titre" class="form-control" required>
-                    </div>
-                    <div class="mb-3">
-                        <label class="form-label fw-semibold">Description</label>
-                        <textarea name="description" class="form-control" rows="3"></textarea>
-                    </div>
-                    <div class="row">
-                        <div class="col-md-6 mb-3">
-                            <label class="form-label fw-semibold">Priorité</label>
-                            <select name="priorite" class="form-select">
-                                <option value="basse">🟢 Basse</option>
-                                <option value="moyenne" selected>🟡 Moyenne</option>
-                                <option value="haute">🔴 Haute</option>
-                            </select>
+                <div class="fk-card-body">
+                    <!-- Statistiques en 3 colonnes -->
+                    <div class="row text-center g-3 mb-4">
+                        <div class="col-4">
+                            <div class="border rounded-3 p-2">
+                                <div class="stat-label">Contrôlés</div>
+                                <div class="h3 mb-0 fw-bold text-primary">{{ campagne.nb_dossiers_controles }}</div>
+                            </div>
                         </div>
-                        <div class="col-md-6 mb-3">
-                            <label class="form-label fw-semibold">Catégorie</label>
-                            <select name="categorie" class="form-select">
-                                <option value="processus">📊 Processus</option>
-                                <option value="technique">💻 Technique</option>
-                                <option value="formation">👥 Formation</option>
-                                <option value="organisationnel">🏢 Organisationnel</option>
-                            </select>
+                        <div class="col-4">
+                            <div class="border rounded-3 p-2">
+                                <div class="stat-label">Conformes</div>
+                                <div class="h3 mb-0 fw-bold text-success">{{ campagne.nb_conformes }}</div>
+                            </div>
+                        </div>
+                        <div class="col-4">
+                            <div class="border rounded-3 p-2">
+                                <div class="stat-label">Anomalies</div>
+                                <div class="h3 mb-0 fw-bold text-danger">{{ campagne.nb_anomalies }}</div>
+                            </div>
                         </div>
                     </div>
-                </div>
-                <div class="modal-footer">
-                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Annuler</button>
-                    <button type="submit" class="btn btn-primary">Ajouter</button>
-                </div>
-            </form>
-        </div>
-    </div>
-</div>
-
-<!-- Modal Accepter Recommandation -->
-<div class="modal fade" id="acceptRecommendationModal" tabindex="-1">
-    <div class="modal-dialog modal-dialog-centered">
-        <div class="modal-content">
-            <div class="modal-header">
-                <h5 class="modal-title text-success">
-                    <i class="fas fa-tasks me-2"></i>Transformer en plan d'action
-                </h5>
-                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
-            </div>
-            <div class="modal-body">
-                <input type="hidden" id="acceptRecoId" value="">
-                <div class="mb-3">
-                    <label class="form-label fw-semibold">Date d'échéance *</label>
-                    <input type="date" id="acceptDateEcheance" class="form-control" required>
-                </div>
-                <div class="mb-3">
-                    <label class="form-label fw-semibold">Responsable</label>
-                    <select id="acceptResponsableId" class="form-select">
-                        <option value="">-- Sélectionner --</option>
-                        {% for user in users_list %}
-                        <option value="{{ user.id }}">{{ user.username }}</option>
-                        {% endfor %}
-                    </select>
-                </div>
-                <div class="alert alert-info small">
-                    <i class="fas fa-info-circle me-2"></i>
-                    Un plan d'action sera créé automatiquement.
-                </div>
-            </div>
-            <div class="modal-footer">
-                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Annuler</button>
-                <button type="button" class="btn btn-success" onclick="confirmAccepter()">Accepter & créer plan</button>
-            </div>
-        </div>
-    </div>
-</div>
-
-<!-- Modal Modifier Recommandation -->
-<div class="modal fade" id="editRecommendationModal" tabindex="-1">
-    <div class="modal-dialog modal-dialog-centered">
-        <div class="modal-content">
-            <div class="modal-header">
-                <h5 class="modal-title">
-                    <i class="fas fa-edit me-2 text-primary"></i>Modifier la recommandation
-                </h5>
-                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
-            </div>
-            <form id="editRecommendationForm">
-                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                <input type="hidden" name="reco_id" id="editRecoId" value="">
-                <div class="modal-body">
-                    <div class="mb-3">
-                        <label class="form-label fw-semibold">Titre</label>
-                        <input type="text" name="titre" id="editTitre" class="form-control" required>
-                    </div>
-                    <div class="mb-3">
-                        <label class="form-label fw-semibold">Description</label>
-                        <textarea name="description" id="editDescription" class="form-control" rows="3"></textarea>
-                    </div>
-                    <div class="row">
-                        <div class="col-md-6 mb-3">
-                            <label class="form-label fw-semibold">Priorité</label>
-                            <select name="priorite" id="editPriorite" class="form-select">
-                                <option value="basse">🟢 Basse</option>
-                                <option value="moyenne">🟡 Moyenne</option>
-                                <option value="haute">🔴 Haute</option>
-                            </select>
+                    
+                    <!-- 🔥 MOTIFS DES ANOMALIES (intégré directement sous les stats) -->
+                    {% if campagne.motifs_anomalie and campagne.motifs_anomalie|length > 0 %}
+                    <div class="mt-3 pt-2 border-top">
+                        <div class="d-flex justify-content-between align-items-center mb-2">
+                            <div class="comment-label">
+                                <i class="fas fa-list me-1 text-warning"></i>
+                                Motifs des anomalies
+                            </div>
+                            <span class="badge bg-warning text-dark">{{ campagne.motifs_anomalie|length }} anomalie(s)</span>
                         </div>
-                        <div class="col-md-6 mb-3">
-                            <label class="form-label fw-semibold">Catégorie</label>
-                            <select name="categorie" id="editCategorie" class="form-select">
-                                <option value="processus">📊 Processus</option>
-                                <option value="technique">💻 Technique</option>
-                                <option value="formation">👥 Formation</option>
-                                <option value="organisationnel">🏢 Organisationnel</option>
-                            </select>
-                        </div>
-                    </div>
-                    <div class="mb-3">
-                        <label class="form-label fw-semibold">Date d'échéance</label>
-                        <input type="date" name="date_echeance" id="editDateEcheance" class="form-control">
-                    </div>
-                    <div class="mb-3">
-                        <label class="form-label fw-semibold">Responsable</label>
-                        <select name="responsable_id" id="editResponsableId" class="form-select">
-                            <option value="">-- Sélectionner --</option>
-                            {% for user in users_list %}
-                            <option value="{{ user.id }}">{{ user.username }}</option>
+                        <div class="small">
+                            {% for motif in campagne.motifs_anomalie %}
+                            <div class="motif-item d-flex align-items-start gap-2 mb-2 p-2 rounded" 
+                                style="background: #fef3c7; border-left: 3px solid #f59e0b;">
+                                <i class="fas fa-exclamation-circle text-warning mt-1"></i>
+                                <span>{{ motif }}</span>
+                            </div>
                             {% endfor %}
-                        </select>
+                        </div>
+                        <div class="alert alert-info small mt-2 mb-0">
+                            <i class="fas fa-info-circle me-2"></i>
+                            Ces motifs seront exportés vers C2N lors de l'export des anomalies.
+                        </div>
                     </div>
-                    <div class="mb-3">
-                        <label class="form-label fw-semibold">Progression (%)</label>
-                        <input type="range" name="progression" id="editProgression" class="form-range" min="0" max="100" step="5" value="0">
-                        <div class="text-center mt-1" id="editProgressionValue">0%</div>
+                    {% elif campagne.nb_anomalies > 0 %}
+                    <div class="mt-3 pt-2 border-top">
+                        <div class="alert alert-warning small mb-0">
+                            <i class="fas fa-exclamation-triangle me-2"></i>
+                            <strong>{{ campagne.nb_anomalies }} anomalie(s)</strong> détectée(s) mais aucun motif renseigné.
+                            <a href="{{ url_for('modifier_campagne_controle', campagne_id=campagne.id) }}" class="alert-link">
+                                Ajouter des motifs
+                            </a>
+                        </div>
+                    </div>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+
+        <!-- Colonne droite - Commentaires, Fichiers & Intégration C2N -->
+        <div class="col-lg-7">
+            
+            <!-- 🔥 CARTE : INTÉGRATION C2N -->
+            <div class="card mb-4 section-card integration-card">
+                <div class="card-header bg-transparent">
+                    <h5 class="mb-0">
+                        <i class="fas fa-shield-alt me-2 text-primary"></i>
+                        Intégration C2N (Contrôle Interne Niveau 2)
+                    </h5>
+                </div>
+                <div class="card-body">
+                    <div class="row">
+                        <div class="col-md-6">
+                            <div class="mb-3">
+                                <span class="text-muted small">Statut d'intégration</span>
+                                <div>
+                                    {% if campagne.est_liee_a_c2n and campagne.est_liee_a_c2n() %}
+                                    <span class="c2n-status-badge c2n-status-lie">
+                                        <i class="fas fa-check-circle me-1"></i>Liée à C2N
+                                    </span>
+                                    {% else %}
+                                    <span class="c2n-status-badge c2n-status-non_lie">
+                                        <i class="fas fa-times-circle me-1"></i>Non liée à C2N
+                                    </span>
+                                    {% endif %}
+                                </div>
+                            </div>
+                            
+                            {% if campagne.planification_c2n_id %}
+                            <div class="mb-3">
+                                <span class="text-muted small">Planification C2N liée</span>
+                                <div class="mt-1">
+                                    <a href="{{ url_for('c2n_detail_planification', id=campagne.planification_c2n_id) }}" 
+                                       class="btn btn-sm btn-outline-primary">
+                                        <i class="fas fa-calendar-alt me-1"></i>
+                                        Voir la planification C2N
+                                    </a>
+                                </div>
+                            </div>
+                            {% endif %}
+                            
+                            {% if campagne.execution_c2n_id %}
+                            <div class="mb-3">
+                                <span class="text-muted small">Exécution C2N liée</span>
+                                <div class="mt-1">
+                                    <span class="badge bg-info">
+                                        <i class="fas fa-play-circle me-1"></i>
+                                        ID: {{ campagne.execution_c2n_id }}
+                                    </span>
+                                </div>
+                            </div>
+                            {% endif %}
+                            
+                            {% if campagne.date_synchronisation_c2n %}
+                            <div class="mb-3">
+                                <span class="text-muted small">Dernière synchronisation</span>
+                                <div>{{ campagne.date_synchronisation_c2n.strftime('%d/%m/%Y %H:%M') }}</div>
+                            </div>
+                            {% endif %}
+                        </div>
+                        
+                        <div class="col-md-6">
+                            {% if not campagne.planification_c2n_id %}
+                            <a href="{{ url_for('lier_campagne_c2n', campagne_id=campagne.id) }}" 
+                               class="btn btn-outline-primary w-100 mb-2 integration-btn">
+                                <i class="fas fa-link me-2"></i>Lier à une planification C2N
+                            </a>
+                            {% endif %}
+                            
+                            {% if campagne.planification_c2n_id and not campagne.a_ete_executee_c2n %}
+                            <button type="button" class="btn btn-outline-success w-100 mb-2 integration-btn" 
+                                    onclick="synchroniserVersC2N({{ campagne.id }})">
+                                <i class="fas fa-sync-alt me-2"></i>Synchroniser vers C2N
+                            </button>
+                            {% endif %}
+                            
+                            {% if campagne.a_ete_executee_c2n and campagne.nb_anomalies > 0 %}
+                            <button type="button" class="btn btn-outline-warning w-100 integration-btn" 
+                                    onclick="exporterNonConformites({{ campagne.id }})">
+                                <i class="fas fa-exclamation-triangle me-2"></i>Exporter anomalies vers C2N
+                            </button>
+                            {% endif %}
+                        </div>
+                    </div>
+                    
+                    {% if campagne.get_infos_c2n and campagne.get_infos_c2n().type_lien != 'aucun' %}
+                    <hr>
+                    <div class="small text-muted text-center">
+                        <i class="fas fa-info-circle me-1"></i>
+                        Type d'intégration: <strong>{{ campagne.get_infos_c2n().type_lien|title }}</strong>
+                    </div>
+                    {% endif %}
+                </div>
+            </div>
+
+            <!-- 🔥 NOUVELLE CARTE : MOTIFS DES ANOMALIES -->
+            {% if campagne.motifs_anomalie and campagne.motifs_anomalie|length > 0 %}
+            <div class="fk-card section-card mb-4">
+                <div class="fk-card-header">
+                    <h5 class="mb-0">
+                        <i class="fas fa-list me-2 text-warning"></i>
+                        Motifs des anomalies
+                        <span class="badge bg-warning ms-2">{{ campagne.motifs_anomalie|length }}</span>
+                    </h5>
+                </div>
+                <div class="fk-card-body">
+                    {% for motif in campagne.motifs_anomalie %}
+                    <div class="motif-item">
+                        <i class="fas fa-exclamation-circle me-2 text-warning"></i>
+                        {{ motif }}
+                    </div>
+                    {% endfor %}
+                    <div class="alert alert-info small mt-3 mb-0">
+                        <i class="fas fa-info-circle me-2"></i>
+                        Ces motifs seront exportés vers C2N lors de l'export des anomalies.
                     </div>
                 </div>
-                <div class="modal-footer">
-                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Annuler</button>
-                    <button type="submit" class="btn btn-primary">Enregistrer</button>
+            </div>
+            {% endif %}
+
+            <!-- Carte Commentaires -->
+            <div class="fk-card section-card mb-4">
+                <div class="fk-card-header">
+                    <h5 class="mb-0">
+                        <i class="fas fa-comment-dots me-2"></i>Commentaires et conclusions
+                    </h5>
+                </div>
+                <div class="fk-card-body">
+                    {% if campagne.commentaire_general or campagne.conclusion or campagne.actions_correctives %}
+                        {% if campagne.commentaire_general %}
+                        <div class="comment-section mb-3">
+                            <div class="comment-label">Commentaire général</div>
+                            <p class="comment-text">{{ campagne.commentaire_general }}</p>
+                        </div>
+                        {% endif %}
+                        
+                        {% if campagne.conclusion %}
+                        <div class="comment-section mb-3">
+                            <div class="comment-label">Conclusion</div>
+                            <p class="comment-text">{{ campagne.conclusion }}</p>
+                        </div>
+                        {% endif %}
+                        
+                        {% if campagne.actions_correctives %}
+                        <div class="comment-section">
+                            <div class="comment-label">Actions correctives</div>
+                            <p class="comment-text">{{ campagne.actions_correctives }}</p>
+                        </div>
+                        {% endif %}
+                    {% else %}
+                        <div class="text-center py-4">
+                            <i class="fas fa-comment-slash fa-2x text-muted mb-2"></i>
+                            <p class="text-muted mb-0">Aucun commentaire ou conclusion</p>
+                        </div>
+                    {% endif %}
+                </div>
+            </div>
+
+            <!-- Carte Fichiers -->
+            <div class="fk-card section-card">
+                <div class="fk-card-header d-flex justify-content-between align-items-center">
+                    <h5 class="mb-0">
+                        <i class="fas fa-paperclip me-2"></i>Documents et fichiers
+                    </h5>
+                    <button type="button" class="btn btn-sm btn-primary rounded-pill px-3" data-bs-toggle="modal" data-bs-target="#uploadModal">
+                        <i class="fas fa-upload me-1"></i>Ajouter
+                    </button>
+                </div>
+                <div class="fk-card-body">
+                    <div id="fichiersList">
+                        <div class="text-center py-4">
+                            <div class="fk-loader mx-auto mb-3"></div>
+                            <p class="text-muted small mb-0">Chargement des fichiers...</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Modal Archivage -->
+<div class="modal fade" id="archiveModal" tabindex="-1" data-bs-backdrop="static">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content">
+            <form method="POST" action="{{ url_for('archiver_campagne_controle', campagne_id=campagne.id) }}">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                <div class="modal-header border-0 pb-0">
+                    <h5 class="modal-title">
+                        <i class="fas fa-archive text-danger me-2"></i>Archiver la campagne
+                    </h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <p>Archiver la campagne <strong>{{ campagne.reference }} - {{ campagne.nom }}</strong> ?</p>
+                    <div class="mb-3">
+                        <label class="form-label fw-semibold">Raison de l'archivage</label>
+                        <textarea name="raison" class="fk-form-control" rows="3" placeholder="Optionnel..."></textarea>
+                    </div>
+                </div>
+                <div class="modal-footer border-0 pt-0">
+                    <button type="button" class="btn btn-light rounded-pill px-4" data-bs-dismiss="modal">Annuler</button>
+                    <button type="submit" class="btn btn-danger rounded-pill px-4">
+                        <i class="fas fa-archive me-1"></i>Archiver
+                    </button>
                 </div>
             </form>
         </div>
     </div>
 </div>
 
-<!-- Modal Mise à jour progression -->
-<div class="modal fade" id="updateProgressModal" tabindex="-1">
+<!-- Modal Upload -->
+<div class="modal fade" id="uploadModal" tabindex="-1" data-bs-backdrop="static">
     <div class="modal-dialog modal-dialog-centered">
         <div class="modal-content">
-            <div class="modal-header">
-                <h5 class="modal-title">
-                    <i class="fas fa-chart-line me-2 text-primary"></i>Mettre à jour la progression
-                </h5>
-                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
-            </div>
-            <div class="modal-body">
-                <input type="hidden" id="updateRecoId" value="">
-                <div class="mb-3">
-                    <label class="form-label fw-semibold">Progression (%)</label>
-                    <input type="range" id="updateProgressSlider" class="form-range" min="0" max="100" step="5" value="0">
-                    <div class="text-center mt-2">
-                        <span class="badge bg-primary" id="updateProgressValue">0%</span>
+            <form method="POST" action="{{ url_for('upload_fichier_campagne_controle', campagne_id=campagne.id) }}" 
+                  enctype="multipart/form-data" id="uploadForm">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                <div class="modal-header border-0 pb-0">
+                    <h5 class="modal-title">
+                        <i class="fas fa-cloud-upload-alt text-primary me-2"></i>Ajouter un document
+                    </h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="mb-3">
+                        <label class="form-label fw-semibold">Fichier</label>
+                        <input type="file" class="fk-form-control" name="fichier" required 
+                               accept=".pdf,.doc,.docx,.xls,.xlsx,.jpg,.jpeg,.png,.txt">
+                        <small class="text-muted mt-1 d-block">
+                            <i class="fas fa-info-circle me-1"></i>PDF, Word, Excel, Images, TXT (Max 10 Mo)
+                        </small>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label fw-semibold">Catégorie</label>
+                        <select name="categorie" class="fk-form-control">
+                            <option value="document">📄 Document</option>
+                            <option value="rapport">📊 Rapport</option>
+                            <option value="preuve">✅ Preuve de contrôle</option>
+                            <option value="autre">📎 Autre</option>
+                        </select>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label fw-semibold">Description</label>
+                        <textarea name="description" class="fk-form-control" rows="2" placeholder="Description optionnelle..."></textarea>
                     </div>
                 </div>
-                <div class="mb-3">
-                    <label class="form-label fw-semibold">Commentaire</label>
-                    <textarea id="updateProgressComment" class="form-control" rows="2" placeholder="Ajoutez un commentaire..."></textarea>
+                <div class="modal-footer border-0 pt-0">
+                    <button type="button" class="btn btn-light rounded-pill px-4" data-bs-dismiss="modal">Annuler</button>
+                    <button type="submit" class="btn btn-primary rounded-pill px-4" id="uploadSubmitBtn">
+                        <i class="fas fa-upload me-1"></i>Uploader
+                    </button>
                 </div>
-            </div>
-            <div class="modal-footer">
-                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Annuler</button>
-                <button type="button" class="btn btn-primary" onclick="confirmUpdateProgression()">Mettre à jour</button>
-            </div>
+            </form>
         </div>
     </div>
 </div>
 
 <script>
-// Variables globales
-const moisNoms = ['', 'Janvier', 'Février', 'Mars', 'Avril', 'Mai', 'Juin', 'Juillet', 'Août', 'Septembre', 'Octobre', 'Novembre', 'Décembre'];
-let currentRecoId = null;
-let currentUpdateRecoId = null;
-
-// ============================================
-// RECOMMANDATIONS
-// ============================================
-
-async function chargerRecommandations() {
-    const planificationId = {{ planification.id }};
-    try {
-        const response = await fetch(`/c2n/recommandations/liste?planification_id=${planificationId}&_=${Date.now()}`);
-        const data = await response.json();
-        if (data.success) {
-            afficherRecommandations(data.recommandations);
-            document.getElementById('recommandationsCount').textContent = data.recommandations.length;
-        }
-    } catch (error) {
-        console.error('Erreur:', error);
-        document.getElementById('recommendationsList').innerHTML = '<div class="alert alert-danger">Erreur lors du chargement</div>';
-    }
+function chargerFichiers() {
+    fetch('/controle/campagne/{{ campagne.id }}/fichiers')
+        .then(response => response.json())
+        .then(data => {
+            const container = document.getElementById('fichiersList');
+            if (data.success && data.fichiers.length > 0) {
+                let html = '';
+                data.fichiers.forEach(f => {
+                    html += `
+                        <div class="file-item">
+                            <div class="file-info">
+                                <div class="file-icon">
+                                    <i class="fas fa-file-${getFileIcon(f.type_fichier)} fa-lg"></i>
+                                </div>
+                                <div class="file-details">
+                                    <div class="file-name">${escapeHtml(f.nom_fichier)}</div>
+                                    <div class="file-meta">
+                                        <span class="badge bg-secondary bg-opacity-25 text-dark me-2">${f.categorie}</span>
+                                        ${f.taille_formatee} • ${f.uploader} • ${f.uploaded_at}
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="btn-group btn-group-sm">
+                                <a href="/controle/fichier/${f.id}/telecharger" class="btn btn-outline-primary rounded-pill px-3">
+                                    <i class="fas fa-download"></i>
+                                </a>
+                                <button type="button" class="btn btn-outline-danger rounded-pill px-3" onclick="supprimerFichier(${f.id})">
+                                    <i class="fas fa-trash"></i>
+                                </button>
+                            </div>
+                        </div>
+                    `;
+                });
+                container.innerHTML = html;
+            } else {
+                container.innerHTML = `
+                    <div class="text-center py-4">
+                        <i class="fas fa-folder-open fa-3x text-muted mb-3"></i>
+                        <p class="text-muted mb-0">Aucun fichier attaché à cette campagne</p>
+                        <button type="button" class="btn btn-primary mt-3 rounded-pill px-4" data-bs-toggle="modal" data-bs-target="#uploadModal">
+                            <i class="fas fa-plus me-1"></i>Ajouter un fichier
+                        </button>
+                    </div>
+                `;
+            }
+        })
+        .catch(error => {
+            console.error('Erreur:', error);
+            container.innerHTML = `
+                <div class="text-center py-4">
+                    <i class="fas fa-exclamation-triangle fa-3x text-warning mb-3"></i>
+                    <p class="text-muted mb-0">Erreur lors du chargement des fichiers</p>
+                </div>
+            `;
+        });
 }
 
-function afficherRecommandations(recommandations) {
-    const container = document.getElementById('recommendationsList');
-    
-    if (!recommandations || recommandations.length === 0) {
-        container.innerHTML = `
-            <div class="text-center py-4">
-                <i class="fas fa-lightbulb fa-3x text-muted mb-3"></i>
-                <p class="text-muted mb-2">Aucune recommandation pour le moment</p>
-                <small class="text-muted">Ajoutez des recommandations manuellement ou générez-les avec l'IA</small>
-            </div>
-        `;
-        return;
-    }
-    
-    container.innerHTML = recommandations.map(reco => {
-        let actionsHtml = '';
-        let raisonRejetHtml = '';
-        
-        if (reco.statut === 'proposee') {
-            actionsHtml = `
-                <button class="btn btn-sm btn-outline-success btn-reco-sm" onclick="ouvrirModalAccepter(${reco.id})"><i class="fas fa-check"></i> Plan</button>
-                <button class="btn btn-sm btn-outline-danger btn-reco-sm" onclick="rejeterRecommandation(${reco.id})"><i class="fas fa-times"></i> Rejeter</button>
-            `;
-        } else if (reco.statut === 'acceptee') {
-            actionsHtml = `
-                <button class="btn btn-sm btn-outline-primary btn-reco-sm" onclick="updateProgression(${reco.id}, ${reco.progression || 0})"><i class="fas fa-chart-line"></i> Avancement</button>
-                <button class="btn btn-sm btn-outline-warning btn-reco-sm" onclick="rouvrirRecommandation(${reco.id})"><i class="fas fa-undo-alt"></i> Rouvrir</button>
-            `;
-        } else if (reco.statut === 'rejetee') {
-            actionsHtml = `<button class="btn btn-sm btn-outline-warning btn-reco-sm" onclick="rouvrirRecommandation(${reco.id})"><i class="fas fa-undo-alt"></i> Rouvrir</button>`;
-        }
-        
-        return `
-        <div class="recommendation-item ${reco.priorite} ${reco.statut === 'realisee' ? 'realisee' : ''}" id="reco-${reco.id}">
-            <div class="d-flex justify-content-between align-items-start">
-                <div class="flex-grow-1">
-                    <div class="d-flex gap-2 mb-2 flex-wrap">
-                        <span class="badge ${reco.priorite === 'haute' ? 'bg-danger' : reco.priorite === 'moyenne' ? 'bg-warning' : 'bg-success'}">
-                            ${reco.priorite === 'haute' ? '🔴 Haute' : reco.priorite === 'moyenne' ? '🟡 Moyenne' : '🟢 Basse'}
-                        </span>
-                        <span class="badge ${reco.source === 'ia' ? 'bg-info' : 'bg-secondary'}">
-                            <i class="fas ${reco.source === 'ia' ? 'fa-robot' : 'fa-user'} me-1"></i>
-                            ${reco.source === 'ia' ? 'IA' : 'Manuelle'}
-                        </span>
-                        ${reco.statut === 'acceptee' ? '<span class="badge bg-success"><i class="fas fa-check-circle me-1"></i>Acceptée</span>' : ''}
-                        ${reco.statut === 'rejetee' ? '<span class="badge bg-danger"><i class="fas fa-times-circle me-1"></i>Rejetée</span>' : ''}
-                    </div>
-                    <div class="fw-semibold mb-1">${escapeHtml(reco.titre)}</div>
-                    <div class="small text-muted mb-2">${escapeHtml(reco.description || '')}</div>
-                    <div class="small text-muted">
-                        <i class="fas fa-calendar me-1"></i>
-                        Créée le ${new Date(reco.created_at).toLocaleDateString('fr-FR')}
-                        ${reco.created_by ? ` par ${reco.created_by}` : ''}
-                    </div>
-                </div>
-                <div class="recommendation-actions">${actionsHtml}
-                    <button class="btn btn-sm btn-outline-primary btn-reco-sm" onclick="modifierRecommandation(${reco.id})"><i class="fas fa-edit"></i></button>
-                    <button class="btn btn-sm btn-outline-secondary btn-reco-sm" onclick="supprimerRecommandation(${reco.id})"><i class="fas fa-trash"></i></button>
-                </div>
-            </div>
-            ${reco.plan_action_id ? `<div class="mt-2 pt-2 border-top small"><i class="fas fa-tasks text-success me-1"></i>Plan d'action associé: <a href="/c2n/plan-action/${reco.plan_action_id}">Voir le plan</a></div>` : ''}
-        </div>`;
-    }).join('');
+function getFileIcon(mimeType) {
+    if (!mimeType) return 'paperclip';
+    if (mimeType.includes('pdf')) return 'pdf';
+    if (mimeType.includes('word') || mimeType.includes('doc')) return 'word';
+    if (mimeType.includes('excel') || mimeType.includes('xls')) return 'excel';
+    if (mimeType.includes('image')) return 'image';
+    return 'paperclip';
 }
 
 function escapeHtml(text) {
@@ -1126,164 +864,138 @@ function escapeHtml(text) {
     return div.innerHTML;
 }
 
-// Ajout recommandation
-document.getElementById('addRecommendationForm')?.addEventListener('submit', async function(e) {
-    e.preventDefault();
-    const formData = new FormData(this);
-    formData.append('planification_id', {{ planification.id }});
-    const response = await fetch('/c2n/recommandation/ajouter', { method: 'POST', body: formData, headers: { 'X-CSRFToken': document.querySelector('input[name="csrf_token"]').value } });
-    const data = await response.json();
-    if (data.success) {
-        bootstrap.Modal.getInstance(document.getElementById('addRecommendationModal')).hide();
-        this.reset();
-        chargerRecommandations();
-        showToast('Recommandation ajoutée', 'success');
-    } else {
-        showToast('Erreur: ' + data.error, 'danger');
-    }
-});
-
-function ouvrirModalAccepter(recoId) {
-    currentRecoId = recoId;
-    document.getElementById('acceptRecoId').value = recoId;
-    const defaultDate = new Date();
-    defaultDate.setDate(defaultDate.getDate() + 30);
-    document.getElementById('acceptDateEcheance').value = defaultDate.toISOString().split('T')[0];
-    new bootstrap.Modal(document.getElementById('acceptRecommendationModal')).show();
-}
-
-async function confirmAccepter() {
-    const recoId = currentRecoId;
-    const dateEcheance = document.getElementById('acceptDateEcheance').value;
-    const responsableId = document.getElementById('acceptResponsableId').value;
-    if (!dateEcheance) { showToast('Veuillez sélectionner une date', 'warning'); return; }
-    const response = await fetch(`/c2n/recommandation/${recoId}/accepter`, {
-        method: 'POST', headers: { 'Content-Type': 'application/json', 'X-CSRFToken': document.querySelector('input[name="csrf_token"]').value },
-        body: JSON.stringify({ date_echeance: dateEcheance, responsable_id: responsableId || null })
-    });
-    const data = await response.json();
-    if (data.success) {
-        bootstrap.Modal.getInstance(document.getElementById('acceptRecommendationModal')).hide();
-        chargerRecommandations();
-        showToast(data.message, 'success');
-        if (data.plan_action && confirm(`Plan d'action ${data.plan_action.reference} créé. Voir le plan ?`)) {
-            window.location.href = `/c2n/plan-action/${data.plan_action.id}`;
-        }
-    } else {
-        showToast('Erreur: ' + data.error, 'danger');
-    }
-}
-
-async function rejeterRecommandation(recoId) {
-    const raison = prompt("Raison du rejet (optionnelle):", "");
-    const response = await fetch(`/c2n/recommandation/${recoId}/rejeter`, {
-        method: 'POST', headers: { 'Content-Type': 'application/json', 'X-CSRFToken': document.querySelector('input[name="csrf_token"]').value },
-        body: JSON.stringify({ raison: raison || "" })
-    });
-    const data = await response.json();
-    if (data.success) {
-        await chargerRecommandations();
-        showToast(data.message, 'info');
-    } else {
-        showToast('Erreur: ' + data.error, 'danger');
-    }
-}
-
-async function rouvrirRecommandation(recoId) {
-    if (!confirm('Rouvrir cette recommandation ?')) return;
-    const response = await fetch(`/c2n/recommandation/${recoId}/rouvrir`, { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-CSRFToken': document.querySelector('input[name="csrf_token"]').value } });
-    const data = await response.json();
-    if (data.success) { chargerRecommandations(); showToast(data.message, 'success'); } 
-    else { showToast('Erreur: ' + data.error, 'danger'); }
-}
-
-async function supprimerRecommandation(recoId) {
-    if (!confirm('Supprimer cette recommandation ?')) return;
-    const response = await fetch(`/c2n/recommandation/${recoId}/supprimer`, { method: 'DELETE', headers: { 'X-CSRFToken': document.querySelector('input[name="csrf_token"]').value } });
-    const data = await response.json();
-    if (data.success) { chargerRecommandations(); showToast('Recommandation supprimée', 'success'); } 
-    else { showToast('Erreur: ' + data.error, 'danger'); }
-}
-
-async function genererRecommandationsIA() {
-    const btn = event.target;
-    const originalText = btn.innerHTML;
-    btn.innerHTML = '<i class="fas fa-spinner fa-spin me-1"></i>Génération...';
+function supprimerFichier(fichierId) {
+    if (!confirm('⚠️ Supprimer définitivement ce fichier ? Cette action est irréversible.')) return;
+    
+    const btn = event.target.closest('button');
+    const originalHtml = btn.innerHTML;
+    btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i>';
     btn.disabled = true;
-    const response = await fetch('/c2n/recommandations/generer-ia', { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-CSRFToken': document.querySelector('input[name="csrf_token"]').value }, body: JSON.stringify({ planification_id: {{ planification.id }} }) });
-    const data = await response.json();
-    btn.innerHTML = originalText;
-    btn.disabled = false;
-    if (data.success) { chargerRecommandations(); showToast(data.message, 'success'); } 
-    else { showToast('Erreur: ' + data.error, 'danger'); }
+    
+    fetch(`/controle/fichier/${fichierId}/supprimer`, {
+        method: 'POST',
+        headers: { 
+            'X-CSRFToken': '{{ csrf_token() }}',
+            'Content-Type': 'application/json'
+        }
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            chargerFichiers();
+            showToast('Fichier supprimé avec succès', 'success');
+        } else {
+            showToast('Erreur lors de la suppression', 'error');
+        }
+    })
+    .catch(() => showToast('Erreur lors de la suppression', 'error'))
+    .finally(() => {
+        btn.innerHTML = originalHtml;
+        btn.disabled = false;
+    });
 }
 
-async function modifierRecommandation(recoId) {
-    const response = await fetch(`/c2n/recommandation/${recoId}/detail`);
-    const data = await response.json();
-    if (data.success) {
-        const reco = data.recommandation;
-        document.getElementById('editRecoId').value = reco.id;
-        document.getElementById('editTitre').value = reco.titre;
-        document.getElementById('editDescription').value = reco.description || '';
-        document.getElementById('editPriorite').value = reco.priorite;
-        document.getElementById('editCategorie').value = reco.categorie;
-        document.getElementById('editDateEcheance').value = reco.date_echeance || '';
-        document.getElementById('editResponsableId').value = reco.responsable_id || '';
-        const slider = document.getElementById('editProgression');
-        if (slider) { slider.value = reco.progression || 0; document.getElementById('editProgressionValue').textContent = (reco.progression || 0) + '%'; }
-        new bootstrap.Modal(document.getElementById('editRecommendationModal')).show();
-    } else { showToast('Erreur lors du chargement', 'danger'); }
+// 🔥 FONCTIONS D'INTÉGRATION C2N
+function synchroniserVersC2N(campagneId) {
+    if (!confirm('Synchroniser cette campagne vers C2N ? Les données de contrôle seront transférées.')) return;
+    
+    const btn = event.target;
+    const originalHtml = btn.innerHTML;
+    btn.innerHTML = '<i class="fas fa-spinner fa-spin me-2"></i>Synchronisation...';
+    btn.disabled = true;
+    
+    fetch(`/campagne/${campagneId}/synchroniser-c2n`, {
+        method: 'POST',
+        headers: { 
+            'X-CSRFToken': '{{ csrf_token() }}',
+            'Content-Type': 'application/json'
+        }
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            showToast('✅ ' + data.message, 'success');
+            setTimeout(() => location.reload(), 1500);
+        } else {
+            showToast('❌ Erreur: ' + data.error, 'error');
+            btn.innerHTML = originalHtml;
+            btn.disabled = false;
+        }
+    })
+    .catch(error => {
+        showToast('❌ Erreur de communication', 'error');
+        btn.innerHTML = originalHtml;
+        btn.disabled = false;
+    });
 }
 
-document.getElementById('editRecommendationForm')?.addEventListener('submit', async function(e) {
-    e.preventDefault();
-    const recoId = document.getElementById('editRecoId').value;
-    const response = await fetch(`/c2n/recommandation/${recoId}/modifier`, { method: 'PUT', body: new FormData(this), headers: { 'X-CSRFToken': document.querySelector('input[name="csrf_token"]').value } });
-    const data = await response.json();
-    if (data.success) {
-        bootstrap.Modal.getInstance(document.getElementById('editRecommendationModal')).hide();
-        chargerRecommandations();
-        showToast('Recommandation modifiée', 'success');
-    } else { showToast('Erreur: ' + data.error, 'danger'); }
+function exporterNonConformites(campagneId) {
+    if (!confirm('Exporter les anomalies de cette campagne vers C2N ? Des non-conformités seront créées.')) return;
+    
+    const btn = event.target;
+    const originalHtml = btn.innerHTML;
+    btn.innerHTML = '<i class="fas fa-spinner fa-spin me-2"></i>Export...';
+    btn.disabled = true;
+    
+    fetch(`/campagne/${campagneId}/exporter-non-conformites-c2n`, {
+        method: 'POST',
+        headers: { 
+            'X-CSRFToken': '{{ csrf_token() }}',
+            'Content-Type': 'application/json'
+        }
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            showToast('✅ ' + data.message, 'success');
+            if (data.non_conformites_crees > 0) {
+                setTimeout(() => location.reload(), 1500);
+            }
+        } else {
+            showToast('❌ Erreur: ' + data.error, 'error');
+        }
+        btn.innerHTML = originalHtml;
+        btn.disabled = false;
+    })
+    .catch(error => {
+        showToast('❌ Erreur de communication', 'error');
+        btn.innerHTML = originalHtml;
+        btn.disabled = false;
+    });
+}
+
+// Gestionnaire d'upload avec feedback
+document.getElementById('uploadForm')?.addEventListener('submit', function(e) {
+    const submitBtn = document.getElementById('uploadSubmitBtn');
+    submitBtn.innerHTML = '<i class="fas fa-spinner fa-spin me-1"></i>Upload en cours...';
+    submitBtn.disabled = true;
+    
+    setTimeout(() => {
+        submitBtn.innerHTML = '<i class="fas fa-upload me-1"></i>Uploader';
+        submitBtn.disabled = false;
+    }, 3000);
 });
 
-document.getElementById('editProgression')?.addEventListener('input', function() { document.getElementById('editProgressionValue').textContent = this.value + '%'; });
+// Rafraîchir la liste quand le modal se ferme
+document.getElementById('uploadModal')?.addEventListener('hidden.bs.modal', function() {
+    chargerFichiers();
+});
 
-function updateProgression(recoId, currentProgress) {
-    currentUpdateRecoId = recoId;
-    document.getElementById('updateRecoId').value = recoId;
-    document.getElementById('updateProgressSlider').value = currentProgress;
-    document.getElementById('updateProgressValue').textContent = currentProgress + '%';
-    document.getElementById('updateProgressComment').value = '';
-    new bootstrap.Modal(document.getElementById('updateProgressModal')).show();
-}
+// Initialisation
+document.addEventListener('DOMContentLoaded', function() {
+    chargerFichiers();
+    
+    // Ajouter les animations aux cartes
+    document.querySelectorAll('.section-card').forEach((card, index) => {
+        card.style.opacity = '0';
+        setTimeout(() => {
+            card.style.opacity = '1';
+        }, index * 50);
+    });
+});
 
-document.getElementById('updateProgressSlider')?.addEventListener('input', function() { document.getElementById('updateProgressValue').textContent = this.value + '%'; });
-
-async function confirmUpdateProgression() {
-    const recoId = currentUpdateRecoId;
-    const progression = document.getElementById('updateProgressSlider').value;
-    const commentaire = document.getElementById('updateProgressComment').value;
-    const response = await fetch(`/c2n/recommandation/${recoId}/progression`, { method: 'PUT', headers: { 'Content-Type': 'application/json', 'X-CSRFToken': document.querySelector('input[name="csrf_token"]').value }, body: JSON.stringify({ progression: parseInt(progression), commentaire: commentaire }) });
-    const data = await response.json();
-    if (data.success) {
-        bootstrap.Modal.getInstance(document.getElementById('updateProgressModal')).hide();
-        chargerRecommandations();
-        showToast('Progression mise à jour', 'success');
-    } else { showToast('Erreur: ' + data.error, 'danger'); }
-}
-
-// Synchronisation campagne
-async function synchroniserCampagne() {
-    if (!confirm('Synchroniser les données depuis la campagne associée ?')) return;
-    const response = await fetch(`/c2n/planification/{{ planification.id }}/synchroniser-campagne`, { method: 'POST', headers: { 'X-CSRFToken': document.querySelector('input[name="csrf_token"]').value } });
-    const data = await response.json();
-    if (data.success) { location.reload(); showToast('Données synchronisées', 'success'); } 
-    else { showToast('Erreur: ' + data.error, 'danger'); }
-}
-
-function showToast(message, type) {
+// Fonction toast globale
+function showToast(message, type = 'info') {
     const toastContainer = document.getElementById('toast-container') || (() => {
         const container = document.createElement('div');
         container.id = 'toast-container';
@@ -1292,31 +1004,25 @@ function showToast(message, type) {
         document.body.appendChild(container);
         return container;
     })();
+    
     const toast = document.createElement('div');
-    toast.className = `toast align-items-center text-bg-${type === 'success' ? 'success' : type === 'danger' ? 'danger' : 'info'} border-0 mb-2`;
-    toast.innerHTML = `<div class="d-flex"><div class="toast-body"><i class="fas fa-${type === 'success' ? 'check-circle' : type === 'danger' ? 'exclamation-circle' : 'info-circle'} me-2"></i>${message}</div><button type="button" class="btn-close btn-close-white me-2 m-auto" data-bs-dismiss="toast"></button></div>`;
+    toast.className = `toast align-items-center text-bg-${type === 'success' ? 'success' : type === 'error' ? 'danger' : 'info'} border-0 mb-2`;
+    toast.setAttribute('role', 'alert');
+    toast.innerHTML = `
+        <div class="d-flex">
+            <div class="toast-body">
+                <i class="fas fa-${type === 'success' ? 'check-circle' : type === 'error' ? 'exclamation-circle' : 'info-circle'} me-2"></i>
+                ${message}
+            </div>
+            <button type="button" class="btn-close btn-close-white me-2 m-auto" data-bs-dismiss="toast"></button>
+        </div>
+    `;
+    
     toastContainer.appendChild(toast);
-    new bootstrap.Toast(toast, { delay: 3000 }).show();
+    const bsToast = new bootstrap.Toast(toast, { delay: 3000 });
+    bsToast.show();
+    
     toast.addEventListener('hidden.bs.toast', () => toast.remove());
 }
-
-// Initialisation
-document.addEventListener('DOMContentLoaded', function() {
-    chargerRecommandations();
-    document.querySelectorAll('[title]').forEach(el => new bootstrap.Tooltip(el));
-});
-// Dans votre script, ajoutez une confirmation supplémentaire
-document.getElementById('rouvrirModal')?.addEventListener('submit', function(e) {
-    const raison = this.querySelector('textarea[name="raison"]').value.trim();
-    if (!raison) {
-        e.preventDefault();
-        showToast('Veuillez indiquer une raison pour la réouverture', 'warning');
-        return false;
-    }
-    if (!confirm('⚠️ Attention : Cette action va réinitialiser la validation. Continuer ?')) {
-        e.preventDefault();
-        return false;
-    }
-});
 </script>
 {% endblock %}
