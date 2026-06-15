@@ -1,4 +1,3 @@
-{# templates/c2n/planification_form.html #}
 {% extends "base.html" %}
 
 {% block title %}{{ action }} une planification - C2N{% endblock %}
@@ -54,6 +53,14 @@
         color: #6c757d;
         margin-top: 4px;
     }
+    .validateur-badge {
+        background: #dbeafe;
+        color: #1e40af;
+        padding: 2px 8px;
+        border-radius: 12px;
+        font-size: 0.7rem;
+        margin-left: 8px;
+    }
 </style>
 {% endblock %}
 
@@ -99,13 +106,19 @@
                             
                             <div id="referentielPreview" class="preview-card d-none">
                                 <div class="d-flex justify-content-between align-items-start">
-                                    <div>
+                                    <div style="flex:1">
                                         <div class="small text-muted">Code</div>
                                         <div><strong id="previewCode">-</strong></div>
+                                        <!-- Dans le preview-card, remplacez la section objectif par : -->
                                         <div class="small text-muted mt-2">Objectif</div>
-                                        <div class="small" id="previewObjectif">-</div>
+                                        <div class="small" id="previewObjectif">
+                                            <span id="previewObjectifText">-</span>
+                                            <button type="button" class="btn btn-sm btn-link p-0 ms-2" id="voirObjectifBtn" style="display: none; font-size: 0.7rem;">
+                                                <i class="fas fa-eye"></i> Voir plus
+                                            </button>
+                                        </div>
                                     </div>
-                                    <div>
+                                    <div class="text-end">
                                         <div class="small text-muted">Fréquence</div>
                                         <div><span id="previewFrequence" class="badge bg-secondary">-</span></div>
                                     </div>
@@ -117,7 +130,7 @@
                         <div class="form-section">
                             <h6 class="section-title">
                                 <i class="fas fa-calendar-alt me-2 text-primary"></i>
-                                Période de planificación
+                                Période de planification
                             </h6>
                             <div class="row">
                                 <div class="col-md-4 mb-3">
@@ -145,7 +158,7 @@
                             </div>
                         </div>
                         
-                        <!-- 🔥 ORGANISATION CIBLE - TOUS CHAMPS OUVERTS -->
+                        <!-- Organisation cible -->
                         <div class="form-section">
                             <h6 class="section-title">
                                 <i class="fas fa-building me-2 text-primary"></i>
@@ -237,15 +250,43 @@
                             </div>
                         </div>
                         
-                        <!-- Contrôleur -->
+                        <!-- ============================================ -->
+                        <!-- 🔥 SECTION VALIDATION - NOUVEAU -->
+                        <!-- ============================================ -->
+                        <div class="form-section">
+                            <h6 class="section-title">
+                                <i class="fas fa-user-shield me-2 text-primary"></i>
+                                Validation
+                            </h6>
+                            <div class="mb-3">
+                                {{ form.validateur_requis_id.label(class="form-label fw-semibold") }}
+                                <div class="d-flex align-items-center">
+                                    {{ form.validateur_requis_id(class="form-select" + (" is-invalid" if form.validateur_requis_id.errors else ""), id="validateurSelect") }}
+                                </div>
+                                {% for error in form.validateur_requis_id.errors %}
+                                    <div class="invalid-feedback">{{ error }}</div>
+                                {% endfor %}
+                                <small class="text-muted">
+                                    <i class="fas fa-info-circle me-1"></i>
+                                    Personne responsable de la validation du contrôle.
+                                    Seuls les responsables qualité, managers et admins peuvent être sélectionnés.
+                                </small>
+                            </div>
+                            <div class="alert alert-light small" id="validateurInfo" style="display: none;">
+                                <i class="fas fa-shield-alt me-1 text-success"></i>
+                                <span id="validateurNom"></span> sera notifié lors de la soumission.
+                            </div>
+                        </div>
+                        
+                        <!-- Assignation du contrôleur -->
                         <div class="form-section">
                             <h6 class="section-title">
                                 <i class="fas fa-user-check me-2 text-primary"></i>
-                                Assignation
+                                Exécution
                             </h6>
                             <div class="mb-3">
                                 {{ form.controleur_id.label(class="form-label fw-semibold") }}
-                                {{ form.controleur_id(class="form-select" + (" is-invalid" if form.controleur_id.errors else "")) }}
+                                {{ form.controleur_id(class="form-select" + (" is-invalid" if form.controleur_id.errors else ""), id="controleurSelect") }}
                                 {% for error in form.controleur_id.errors %}
                                     <div class="invalid-feedback">{{ error }}</div>
                                 {% endfor %}
@@ -315,18 +356,41 @@
 
 <script>
 document.addEventListener('DOMContentLoaded', function() {
-    // Données des référentiels
-    const referentielsData = {};
-    {% for ref in form.referentiel_id.choices %}
-        {% if ref[0] != 0 %}
-        referentielsData[{{ ref[0] }}] = {
-            code: "{{ ref[1].split(' - ')[0] }}",
-            nom: "{{ ref[1].split(' - ')[1] if ref[1].split(' - ')|length > 1 else ref[1] }}"
+    // ============================================
+    // DONNÉES DES RÉFÉRENTIELS DEPUIS LE SERVEUR
+    // ============================================
+// Dans la section des données des référentiels, remplacez par :
+
+    {% if referentiels_data %}
+        console.log("✅ referentiels_data reçu du serveur");
+        {% for ref_id, ref_data in referentiels_data.items() %}
+        referentielsData[{{ ref_id }}] = {
+            code: "{{ ref_data.code|replace('"', '\\"') }}",
+            nom: "{{ ref_data.nom|replace('"', '\\"') }}",
+            objectif: "{{ ref_data.objectif|replace('"', '\\"')|replace('\n', ' ') }}",
+            frequence: "{{ ref_data.frequence|replace('"', '\\"') }}"
         };
-        {% endif %}
-    {% endfor %}
-    
-    // Mise à jour de l'aperçu du référentiel
+        {% endfor %}
+    {% else %}
+        console.warn("⚠️ referentiels_data NON reçu du serveur");
+        {% for ref in form.referentiel_id.choices %}
+            {% if ref[0] != 0 %}
+            // Essayer de récupérer depuis la base ou afficher un message
+            referentielsData[{{ ref[0] }}] = {
+                code: "{{ ref[1].split(' - ')[0]|replace('"', '\\"') }}",
+                nom: "{{ ref[1].split(' - ')[1] if ref[1].split(' - ')|length > 1 else ref[1]|replace('"', '\\"') }}",
+                objectif: "Chargement...",
+                frequence: "Chargement..."
+            };
+            {% endif %}
+        {% endfor %}
+    {% endif %}
+
+    // Ajouter un log pour debug
+    console.log("📊 Données des référentiels chargées:", referentielsData);
+    // ============================================
+    // ÉLÉMENTS DOM
+    // ============================================
     const referentielSelect = document.getElementById('referentielSelect');
     const previewDiv = document.getElementById('referentielPreview');
     const previewCode = document.getElementById('previewCode');
@@ -334,22 +398,74 @@ document.addEventListener('DOMContentLoaded', function() {
     const previewFrequence = document.getElementById('previewFrequence');
     const recapContent = document.getElementById('recapContent');
     
+    // ============================================
+    // VALIDATEUR INFO
+    // ============================================
+    const validateurSelect = document.getElementById('validateurSelect');
+    const validateurInfo = document.getElementById('validateurInfo');
+    const validateurNom = document.getElementById('validateurNom');
+    
+    function updateValidateurInfo() {
+        const selectedOption = validateurSelect.options[validateurSelect.selectedIndex];
+        if (selectedOption && selectedOption.value && selectedOption.value !== '0') {
+            const texte = selectedOption.text;
+            validateurNom.textContent = texte;
+            validateurInfo.style.display = 'block';
+        } else {
+            validateurInfo.style.display = 'none';
+        }
+    }
+    
+    if (validateurSelect) {
+        validateurSelect.addEventListener('change', updateValidateurInfo);
+        updateValidateurInfo();
+    }
+    
+    // ============================================
+    // FONCTION ESCAPE HTML
+    // ============================================
+    function escapeHtml(text) {
+        if (!text) return '';
+        const div = document.createElement('div');
+        div.textContent = text;
+        return div.innerHTML;
+    }
+    
+    // ============================================
+    // FONCTION DE MISE À JOUR DE L'APERÇU
+    // ============================================
     function updatePreview() {
         const selectedId = referentielSelect.value;
         if (selectedId && referentielsData[selectedId]) {
             const data = referentielsData[selectedId];
             previewCode.textContent = data.code;
             previewObjectif.textContent = data.objectif || 'Non spécifié';
-            previewFrequence.className = "badge bg-secondary";
-            previewFrequence.textContent = "Fréquence";
+            previewFrequence.textContent = data.frequence || 'Non spécifiée';
+            
+            let badgeClass = 'bg-secondary';
+            const freqLower = (data.frequence || '').toLowerCase();
+            if (freqLower === 'mensuel') badgeClass = 'bg-primary';
+            else if (freqLower === 'trimestriel') badgeClass = 'bg-warning';
+            else if (freqLower === 'annuel') badgeClass = 'bg-success';
+            previewFrequence.className = `badge ${badgeClass}`;
+            
             previewDiv.classList.remove('d-none');
             
             recapContent.innerHTML = `
                 <div class="small">
                     <div class="mb-2">
                         <span class="text-muted">Contrôle:</span>
-                        <div class="fw-semibold">${data.code} - ${data.nom}</div>
+                        <div class="fw-semibold">${escapeHtml(data.code)} - ${escapeHtml(data.nom)}</div>
                     </div>
+                    <div class="mb-2">
+                        <span class="text-muted">Objectif:</span>
+                        <div class="small">${escapeHtml(data.objectif || 'Non spécifié')}</div>
+                    </div>
+                    <div class="mb-2">
+                        <span class="text-muted">Fréquence:</span>
+                        <div><span class="badge ${badgeClass}">${escapeHtml(data.frequence || 'Non spécifiée')}</span></div>
+                    </div>
+                    <hr class="my-2">
                     <div class="mb-2">
                         <span class="text-muted">Pays:</span>
                         <div id="recapPays">Non sélectionné</div>
@@ -370,30 +486,52 @@ document.addEventListener('DOMContentLoaded', function() {
                         <span class="text-muted">Contrôleur:</span>
                         <div id="recapControleur">Non sélectionné</div>
                     </div>
+                    <div class="mb-2">
+                        <span class="text-muted">Validateur:</span>
+                        <div id="recapValidateur">Non sélectionné</div>
+                    </div>
                     <div>
                         <span class="text-muted">Date prévue:</span>
                         <div id="recapDate">Non définie</div>
                     </div>
                 </div>
             `;
+            
+            // Mettre à jour le validateur dans le récapitulatif
+            const validateurRecap = document.getElementById('recapValidateur');
+            if (validateurRecap && validateurSelect) {
+                const selectedValidateur = validateurSelect.options[validateurSelect.selectedIndex];
+                if (selectedValidateur && selectedValidateur.value && selectedValidateur.value !== '0') {
+                    validateurRecap.textContent = selectedValidateur.text;
+                    validateurRecap.style.color = '#1e40af';
+                    validateurRecap.style.fontWeight = '500';
+                } else {
+                    validateurRecap.textContent = 'Non sélectionné';
+                    validateurRecap.style.color = '';
+                }
+            }
         } else {
             previewDiv.classList.add('d-none');
             recapContent.innerHTML = `<p class="text-muted small text-center mb-0">Sélectionnez un référentiel pour voir le récapitulatif</p>`;
         }
     }
     
+    // Écouter les changements du référentiel
     referentielSelect.addEventListener('change', updatePreview);
-    updatePreview();
+    
+    // Écouter les changements du validateur pour le récapitulatif
+    if (validateurSelect) {
+        validateurSelect.addEventListener('change', updatePreview);
+    }
     
     // ============================================
     // FILTRES CASCADANTS INDÉPENDANTS
     // ============================================
-    
     const paysSelect = document.getElementById('paysSelect');
     const poleSelect = document.getElementById('poleSelect');
     const directionSelect = document.getElementById('directionSelect');
     const serviceSelect = document.getElementById('serviceSelect');
-    const controleurSelect = document.querySelector('select[name="controleur_id"]');
+    const controleurSelect = document.getElementById('controleurSelect');
     const datePrevue = document.getElementById('datePrevue');
     
     // Stocker les options originales
@@ -401,14 +539,10 @@ document.addEventListener('DOMContentLoaded', function() {
     const originalDirectionOptions = Array.from(directionSelect.options);
     const originalServiceOptions = Array.from(serviceSelect.options);
     
-    // Fonction pour filtrer les pôles par pays
     function filterPoles() {
         const selectedPaysId = paysSelect.value;
-        
-        // Sauvegarder la valeur sélectionnée actuelle
         const currentPoleId = poleSelect.value;
         
-        // Vider et reconstruire
         poleSelect.innerHTML = '<option value="">-- Aucun --</option>';
         
         originalPoleOptions.forEach(option => {
@@ -424,23 +558,17 @@ document.addEventListener('DOMContentLoaded', function() {
             }
         });
         
-        // Restaurer la sélection si possible
         if (currentPoleId && Array.from(poleSelect.options).some(opt => opt.value == currentPoleId)) {
             poleSelect.value = currentPoleId;
         }
         
-        // Mettre à jour les directions après filtrage des pôles
         filterDirections();
     }
     
-    // Fonction pour filtrer les directions par pôle
     function filterDirections() {
         const selectedPoleId = poleSelect.value;
-        
-        // Sauvegarder la valeur sélectionnée actuelle
         const currentDirectionId = directionSelect.value;
         
-        // Vider et reconstruire
         directionSelect.innerHTML = '<option value="">-- Aucune --</option>';
         
         originalDirectionOptions.forEach(option => {
@@ -456,23 +584,17 @@ document.addEventListener('DOMContentLoaded', function() {
             }
         });
         
-        // Restaurer la sélection si possible
         if (currentDirectionId && Array.from(directionSelect.options).some(opt => opt.value == currentDirectionId)) {
             directionSelect.value = currentDirectionId;
         }
         
-        // Mettre à jour les services après filtrage des directions
         filterServices();
     }
     
-    // Fonction pour filtrer les services par direction
     function filterServices() {
         const selectedDirectionId = directionSelect.value;
-        
-        // Sauvegarder la valeur sélectionnée actuelle
         const currentServiceId = serviceSelect.value;
         
-        // Vider et reconstruire
         serviceSelect.innerHTML = '<option value="">-- Aucun --</option>';
         
         originalServiceOptions.forEach(option => {
@@ -488,13 +610,11 @@ document.addEventListener('DOMContentLoaded', function() {
             }
         });
         
-        // Restaurer la sélection si possible
         if (currentServiceId && Array.from(serviceSelect.options).some(opt => opt.value == currentServiceId)) {
             serviceSelect.value = currentServiceId;
         }
     }
     
-    // Mise à jour du récapitulatif
     function updateRecapDetails() {
         if (previewDiv.classList.contains('d-none')) return;
         
@@ -532,7 +652,6 @@ document.addEventListener('DOMContentLoaded', function() {
         }
     }
     
-    // Écouteurs d'événements pour les filtres cascadants
     paysSelect.addEventListener('change', function() {
         filterPoles();
         updateRecapDetails();
@@ -552,7 +671,7 @@ document.addEventListener('DOMContentLoaded', function() {
     controleurSelect.addEventListener('change', updateRecapDetails);
     datePrevue.addEventListener('change', updateRecapDetails);
     
-    // Synchronisation date_prevue
+    // Synchronisation date_prevue avec année et mois
     const anneeSelect = document.getElementById('anneeSelect');
     const moisSelect = document.getElementById('moisSelect');
     
@@ -568,9 +687,24 @@ document.addEventListener('DOMContentLoaded', function() {
     anneeSelect.addEventListener('change', syncDatePrevue);
     moisSelect.addEventListener('change', syncDatePrevue);
     
-    // Initialisation des filtres
+    // Initialisation
     filterPoles();
-    updateRecapDetails();
+    updatePreview();
 });
+// Dans la fonction updatePreview(), ajoutez :
+const objectifText = data.objectif || 'Non spécifié';
+const objectifElement = document.getElementById('previewObjectifText');
+const voirBtn = document.getElementById('voirObjectifBtn');
+
+if (objectifText.length > 100) {
+    objectifElement.textContent = objectifText.substring(0, 100) + '...';
+    voirBtn.style.display = 'inline-block';
+    voirBtn.onclick = function() {
+        alert(objectifText);
+    };
+} else {
+    objectifElement.textContent = objectifText;
+    voirBtn.style.display = 'none';
+}
 </script>
 {% endblock %}
