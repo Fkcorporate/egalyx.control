@@ -15468,7 +15468,22 @@ class NonConformiteC2N(db.Model):
             'ferme': 'Fermé'
         }
         return labels.get(self.statut, self.statut)
+    @property
+    def controle_nom(self):
+        """Retourne le nom du contrôle associé"""
+        if hasattr(self, 'execution') and self.execution:
+            if hasattr(self.execution, 'planification') and self.execution.planification:
+                if hasattr(self.execution.planification, 'referentiel') and self.execution.planification.referentiel:
+                    return self.execution.planification.referentiel.nom
+        return "-"
     
+    @property
+    def controle_reference(self):
+        """Retourne la référence du contrôle associé"""
+        if hasattr(self, 'execution') and self.execution:
+            if hasattr(self.execution, 'planification') and self.execution.planification:
+                return self.execution.planification.reference
+        return "-"
     def get_statut_css(self):
         """Retourne la classe CSS pour le statut"""
         css = {
