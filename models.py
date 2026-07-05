@@ -11,7 +11,7 @@ class User(UserMixin, db.Model):
     __tablename__ = 'user'
     
     # ============================================
-    # CHAMPS EXISTANTS (conservés)
+    # COLONNES
     # ============================================
     id = db.Column(db.Integer, primary_key=True)
     username = db.Column(db.String(80), unique=True, nullable=False)
@@ -37,169 +37,22 @@ class User(UserMixin, db.Model):
     can_view_users_list = db.Column(db.Boolean, default=False)
     
     # Relation client
-    client = db.relationship('Client', back_populates='utilisateurs')
+    client = db.relationship('Client', back_populates='users')
     
     # ============================================
-    # RELATIONS - AVEC overlaps POUR ÉVITER LES CONFLITS
+    # SÉCURITÉ DES MOTS DE PASSE
     # ============================================
-    
-    # Pôles
-    poles_geres = db.relationship('Pole', 
-                                  back_populates='responsable', 
-                                  foreign_keys='Pole.responsable_id',
-                                  lazy=True)
-    
-    # Directions
-    directions_managees = db.relationship('Direction', 
-                                         back_populates='responsable', 
-                                         foreign_keys='Direction.responsable_id',
-                                         lazy=True)
-    
-    directions_archivees = db.relationship('Direction', 
-                                         back_populates='archived_by_user', 
-                                         foreign_keys='Direction.archived_by',
-                                         lazy=True)
-    
-    # Services
-    services_managees = db.relationship('Service', 
-                                       back_populates='responsable', 
-                                       foreign_keys='Service.responsable_id',
-                                       lazy=True)
-    
-    services_archivees = db.relationship('Service', 
-                                       back_populates='archived_by_user', 
-                                       foreign_keys='Service.archived_by',
-                                       lazy=True)
-    
-    # Processus
-    processus_geres = db.relationship('Processus', 
-                                     back_populates='responsable', 
-                                     foreign_keys='Processus.responsable_id',
-                                     lazy=True)
-    
-    # Évaluations
-    evaluations_faites = db.relationship('EvaluationRisque', 
-                                        back_populates='evaluateur_final',
-                                        foreign_keys='EvaluationRisque.evaluateur_final_id', 
-                                        lazy=True)
-    
-    validations_faites = db.relationship('EvaluationRisque', 
-                                        back_populates='validateur',
-                                        foreign_keys='EvaluationRisque.validateur_id', 
-                                        lazy=True)
-    
-    pre_evaluations_faites = db.relationship('EvaluationRisque', 
-                                            back_populates='referent_pre_evaluation',
-                                            foreign_keys='EvaluationRisque.referent_pre_evaluation_id', 
-                                            lazy=True)
-    
-    # Cartographies
-    cartographies_crees = db.relationship('Cartographie', 
-                                         back_populates='createur',
-                                         foreign_keys='Cartographie.created_by', 
-                                         lazy=True)
-    
-    # Risques
-    risques_crees = db.relationship('Risque', 
-                                   back_populates='createur',
-                                   foreign_keys='Risque.created_by', 
-                                   lazy=True)
-    
-    risques_archives = db.relationship('Risque', 
-                                      back_populates='archive_user',
-                                      foreign_keys='Risque.archived_by', 
-                                      lazy=True)
-    
-    # KRI
-    kris_geres = db.relationship('KRI', 
-                                back_populates='responsable_mesure', 
-                                foreign_keys='KRI.responsable_mesure_id', 
-                                lazy=True)
-    
-    kris_crees = db.relationship('KRI', 
-                                back_populates='createur',
-                                foreign_keys='KRI.created_by', 
-                                lazy=True)
-    
-    kris_archives = db.relationship('KRI', 
-                                   back_populates='archive_par',
-                                   foreign_keys='KRI.archived_by', 
-                                   lazy=True)
-    
-    # ============================================
-    # 🔥 RELATIONS AVEC overlaps - AUDITS
-    # ============================================
-    
-    audits_realises = db.relationship('Audit', 
-                                     back_populates='responsable',
-                                     foreign_keys='Audit.responsable_id', 
-                                     lazy=True,
-                                     overlaps='audits_dont_je_suis_responsable')
-    
-    audits_dont_je_suis_responsable = db.relationship('Audit', 
-                                                     back_populates='responsable',
-                                                     foreign_keys='Audit.responsable_id', 
-                                                     lazy=True,
-                                                     overlaps='audits_realises')
-    
-    audits_crees = db.relationship('Audit', 
-                                  back_populates='createur',
-                                  foreign_keys='Audit.created_by', 
-                                  lazy=True)
-    
-    # Mesures KRI
-    mesures_prises = db.relationship('MesureKRI', 
-                                    back_populates='createur', 
-                                    lazy=True)
-    
-    # Veille
-    veilles_crees = db.relationship('VeilleReglementaire', 
-                                   back_populates='createur', 
-                                   lazy=True)
-    
-    actions_conformite = db.relationship('ActionConformite', 
-                                        back_populates='responsable', 
-                                        lazy=True)
-    
-    documents_veille = db.relationship('VeilleDocument', 
-                                      back_populates='uploader', 
-                                      foreign_keys='VeilleDocument.uploaded_by', 
-                                      lazy=True)
-    
-    # ============================================
-    # 🔥 RELATIONS AVEC overlaps - LOGIGRAMMES
-    # ============================================
-    
-    logigrammes_crees = db.relationship('ProcessusActivite', 
-                                       back_populates='createur',
-                                       foreign_keys='ProcessusActivite.created_by', 
-                                       lazy=True,
-                                       overlaps='processus_activites_crees')
-    
-    processus_activites_crees = db.relationship('ProcessusActivite', 
-                                               back_populates='createur',
-                                               foreign_keys='ProcessusActivite.created_by', 
-                                               lazy=True,
-                                               overlaps='logigrammes_crees')
-    
-    # Journal d'activité
-    activites = db.relationship('JournalActivite', 
-                               back_populates='utilisateur',
-                               foreign_keys='JournalActivite.utilisateur_id', 
-                               lazy=True)
-    
-    # Plans d'action
-    plans_action = db.relationship('PlanAction', 
-                                  back_populates='responsable',
-                                  foreign_keys='PlanAction.responsable_id', 
-                                  lazy=True)
-    
-    # Notifications
-    notifications_recues = db.relationship('Notification', 
-                                          back_populates='destinataire',
-                                          foreign_keys='Notification.destinataire_id',
-                                          lazy=True,
-                                          order_by='Notification.created_at.desc()')
+    password_history = db.Column(db.JSON, default=[])
+    password_changed_at = db.Column(db.DateTime, nullable=True)
+    failed_login_attempts = db.Column(db.Integer, default=0)
+    last_failed_login = db.Column(db.DateTime, nullable=True)
+    password_expires_at = db.Column(db.DateTime, nullable=True)
+    reset_password_token = db.Column(db.String(100), nullable=True, unique=True)
+    reset_password_expires = db.Column(db.DateTime, nullable=True)
+    force_password_change = db.Column(db.Boolean, default=False)
+    locked_until = db.Column(db.DateTime, nullable=True)
+    lock_reason = db.Column(db.String(255), nullable=True)
+    session_token = db.Column(db.String(100), nullable=True)
     
     # ============================================
     # PERMISSIONS (JSON)
@@ -303,66 +156,285 @@ class User(UserMixin, db.Model):
     })
     
     # ============================================
-    # MÉTHODES DE GESTION DES MOTS DE PASSE (conservées)
+    # 🔥 RELATIONS AVEC back_populates UNIQUES
+    # ============================================
+    
+    # Pôles
+    poles_geres = db.relationship('Pole', 
+                                  back_populates='responsable', 
+                                  foreign_keys='Pole.responsable_id',
+                                  lazy=True)
+    
+    # Directions
+    directions_managees = db.relationship('Direction', 
+                                         back_populates='responsable', 
+                                         foreign_keys='Direction.responsable_id',
+                                         lazy=True)
+    
+    directions_archivees = db.relationship('Direction', 
+                                         back_populates='archived_by_user', 
+                                         foreign_keys='Direction.archived_by',
+                                         lazy=True)
+    
+    # Services
+    services_managees = db.relationship('Service', 
+                                       back_populates='responsable', 
+                                       foreign_keys='Service.responsable_id',
+                                       lazy=True)
+    
+    services_archivees = db.relationship('Service', 
+                                       back_populates='archived_by_user', 
+                                       foreign_keys='Service.archived_by',
+                                       lazy=True)
+    
+    # Processus
+    processus_geres = db.relationship('Processus', 
+                                     back_populates='responsable', 
+                                     foreign_keys='Processus.responsable_id',
+                                     lazy=True)
+    
+    # Évaluations
+    evaluations_faites = db.relationship('EvaluationRisque', 
+                                        back_populates='evaluateur_final',
+                                        foreign_keys='EvaluationRisque.evaluateur_final_id', 
+                                        lazy=True)
+    
+    validations_faites = db.relationship('EvaluationRisque', 
+                                        back_populates='validateur',
+                                        foreign_keys='EvaluationRisque.validateur_id', 
+                                        lazy=True)
+    
+    pre_evaluations_faites = db.relationship('EvaluationRisque', 
+                                            back_populates='referent_pre_evaluation',
+                                            foreign_keys='EvaluationRisque.referent_pre_evaluation_id', 
+                                            lazy=True)
+    
+    # Cartographies
+    cartographies_crees = db.relationship('Cartographie', 
+                                         back_populates='createur',
+                                         foreign_keys='Cartographie.created_by', 
+                                         lazy=True)
+    
+    # Risques
+    risques_crees = db.relationship('Risque', 
+                                   back_populates='createur',
+                                   foreign_keys='Risque.created_by', 
+                                   lazy=True)
+    
+    risques_archives = db.relationship('Risque', 
+                                      back_populates='archive_user',
+                                      foreign_keys='Risque.archived_by', 
+                                      lazy=True)
+    
+    # KRI
+    kris_geres = db.relationship('KRI', 
+                                back_populates='responsable_mesure', 
+                                foreign_keys='KRI.responsable_mesure_id', 
+                                lazy=True)
+    
+    kris_crees = db.relationship('KRI', 
+                                back_populates='createur',
+                                foreign_keys='KRI.created_by', 
+                                lazy=True)
+    
+    kris_archives = db.relationship('KRI', 
+                                   back_populates='archive_par',
+                                   foreign_keys='KRI.archived_by', 
+                                   lazy=True)
+    
+    # ============================================
+    # 🔥 RELATIONS POUR AUDIT (back_populates UNIQUES)
+    # ============================================
+    
+    audits_createur = db.relationship(
+        'Audit', 
+        foreign_keys='Audit.created_by',
+        lazy=True,
+        back_populates='createur'
+    )
+    
+    audits_responsable = db.relationship(
+        'Audit', 
+        foreign_keys='Audit.responsable_id',
+        lazy=True,
+        back_populates='responsable'
+    )
+    
+    audits_archiveur = db.relationship(
+        'Audit', 
+        foreign_keys='Audit.archived_by',
+        lazy=True,
+        back_populates='archiveur'
+    )
+    
+    # Mesures KRI
+    mesures_prises = db.relationship('MesureKRI', 
+                                    back_populates='createur', 
+                                    lazy=True)
+    
+    # Veille
+    veilles_crees = db.relationship('VeilleReglementaire', 
+                                   back_populates='createur', 
+                                   lazy=True)
+    
+    actions_conformite = db.relationship('ActionConformite', 
+                                        back_populates='responsable', 
+                                        lazy=True)
+    
+    documents_veille = db.relationship('VeilleDocument', 
+                                      back_populates='uploader', 
+                                      foreign_keys='VeilleDocument.uploaded_by', 
+                                      lazy=True)
+    
+    # ============================================
+    # 🔥 RELATIONS POUR LOGIGRAMMES (back_populates UNIQUES)
+    # ============================================
+    
+    logigrammes_crees = db.relationship(
+        'ProcessusActivite', 
+        foreign_keys='ProcessusActivite.created_by',
+        lazy=True,
+        back_populates='createur'
+    )
+    
+    # Journal d'activité
+    activites = db.relationship('JournalActivite', 
+                               back_populates='utilisateur',
+                               foreign_keys='JournalActivite.utilisateur_id', 
+                               lazy=True)
+    
+    # Plans d'action
+    plans_action = db.relationship('PlanAction', 
+                                  back_populates='responsable',
+                                  foreign_keys='PlanAction.responsable_id', 
+                                  lazy=True)
+    
+    # Notifications
+    notifications_recues = db.relationship('Notification', 
+                                          back_populates='destinataire',
+                                          foreign_keys='Notification.destinataire_id',
+                                          lazy=True,
+                                          order_by='Notification.created_at.desc()')
+    
+    # ============================================
+    # MÉTHODES DE GESTION DES MOTS DE PASSE
     # ============================================
     
     def set_password(self, password, check_history=True):
+        """
+        Définit le mot de passe avec validation de force et historique
+        
+        Args:
+            password: Le nouveau mot de passe
+            check_history: Vérifier l'historique (True pour changement)
+        
+        Raises:
+            ValueError: Si le mot de passe ne respecte pas les critères
+        """
         import re
         from datetime import datetime, timedelta
         from werkzeug.security import generate_password_hash
         
+        # ============================================
+        # 1. VALIDATION DE LA FORCE DU MOT DE PASSE
+        # ============================================
+        
+        # Minimum 12 caractères (recommandation ANSSI)
         if len(password) < 12:
             raise ValueError("Le mot de passe doit contenir au moins 12 caractères")
+        
+        # Au moins une majuscule
         if not re.search(r"[A-Z]", password):
             raise ValueError("Le mot de passe doit contenir au moins une majuscule")
+        
+        # Au moins une minuscule
         if not re.search(r"[a-z]", password):
             raise ValueError("Le mot de passe doit contenir au moins une minuscule")
+        
+        # Au moins un chiffre
         if not re.search(r"[0-9]", password):
             raise ValueError("Le mot de passe doit contenir au moins un chiffre")
+        
+        # Au moins un caractère spécial
         if not re.search(r"[!@#$%^&*(),.?\":{}|<>]", password):
             raise ValueError("Le mot de passe doit contenir au moins un caractère spécial")
+        
+        # Pas d'espaces
         if " " in password:
             raise ValueError("Le mot de passe ne doit pas contenir d'espaces")
         
-        common_patterns = [r"123456", r"password", r"motdepasse", r"azerty", r"qwerty", r"admin", r"root", r"test"]
+        # Pas de séquences évidentes
+        common_patterns = [
+            r"123456", r"password", r"motdepasse", r"azerty", r"qwerty",
+            r"admin", r"root", r"test", r"123456789", r"0123456789"
+        ]
         password_lower = password.lower()
         for pattern in common_patterns:
             if pattern in password_lower:
                 raise ValueError(f"Le mot de passe contient une séquence trop simple: '{pattern}'")
         
+        # Pas de répétitions (aaaa, 1111, etc.)
         if re.search(r"(.)\1{3,}", password):
             raise ValueError("Le mot de passe contient trop de caractères répétés")
         
+        # ============================================
+        # 2. VÉRIFICATION DE L'HISTORIQUE
+        # ============================================
+        
         if check_history and self.password_history:
             from werkzeug.security import check_password_hash
+            # Vérifier les 5 derniers mots de passe
             for old_hash in self.password_history[-5:]:
                 if check_password_hash(old_hash, password):
                     raise ValueError("Vous ne pouvez pas réutiliser un des 5 derniers mots de passe")
         
-        if self.password_hash and self.id:
+        # ============================================
+        # 3. SAUVEGARDE DE L'ANCIEN MOT DE PASSE
+        # ============================================
+        
+        if self.password_hash and self.id:  # Si c'est une modification
             if not self.password_history:
                 self.password_history = []
+            
+            # Ajouter l'ancien hash à l'historique
             self.password_history.append(self.password_hash)
+            
+            # Garder seulement les 10 derniers
             if len(self.password_history) > 10:
                 self.password_history = self.password_history[-10:]
         
+        # ============================================
+        # 4. HASHAGE DU NOUVEAU MOT DE PASSE
+        # ============================================
+        
         self.password_hash = generate_password_hash(password)
         self.password_changed_at = datetime.utcnow()
-        self.failed_login_attempts = 0
-        self.force_password_change = False
+        self.failed_login_attempts = 0  # Réinitialiser les tentatives
+        self.force_password_change = False  # Désactiver le flag
+        
+        # Date d'expiration (90 jours)
         self.password_expires_at = datetime.utcnow() + timedelta(days=90)
         
+        # Nouveau token de session (invalide les anciennes sessions)
         import secrets
         self.session_token = secrets.token_urlsafe(32)
 
     def check_password(self, password):
+        """
+        Vérifie le mot de passe avec gestion des tentatives échouées
+        
+        Returns:
+            tuple: (success, message) - success est un booléen, message est un string
+        """
         from datetime import datetime
         from werkzeug.security import check_password_hash
         
+        # 1. VÉRIFIER SI LE COMPTE EST BLOQUÉ
         if self.is_blocked:
             if self.locked_until and self.locked_until > datetime.utcnow():
                 return False, f"Compte temporairement bloqué jusqu'au {self.locked_until.strftime('%d/%m/%Y %H:%M')}"
             elif self.locked_until and self.locked_until <= datetime.utcnow():
+                # Débloquer automatiquement
                 self.is_blocked = False
                 self.locked_until = None
                 self.failed_login_attempts = 0
@@ -370,6 +442,7 @@ class User(UserMixin, db.Model):
             else:
                 return False, "Ce compte est bloqué. Contactez l'administrateur."
         
+        # 2. VÉRIFIER LE MOT DE PASSE
         is_valid = check_password_hash(self.password_hash, password)
         
         if is_valid:
@@ -377,30 +450,45 @@ class User(UserMixin, db.Model):
             self.last_failed_login = None
             return True, "Connexion réussie"
         
+        # Échec : incrémenter le compteur
         self.failed_login_attempts += 1
         self.last_failed_login = datetime.utcnow()
         
+        # 3. POLITIQUE DE BLOCAGE PROGRESSIVE
         if self.failed_login_attempts >= 10:
             self.is_blocked = True
             self.blocked_at = datetime.utcnow()
             self.blocked_reason = "Trop de tentatives de connexion échouées (10+)"
             return False, "Compte bloqué pour sécurité. Contactez l'administrateur."
+        
         elif self.failed_login_attempts >= 5:
             self.locked_until = datetime.utcnow() + timedelta(minutes=30)
             self.lock_reason = f"Trop de tentatives échouées ({self.failed_login_attempts})"
             return False, f"Trop de tentatives. Compte bloqué 30 minutes."
+        
         elif self.failed_login_attempts >= 3:
             return False, f"Mot de passe incorrect. Tentative {self.failed_login_attempts}/5"
+        
         else:
             return False, "Nom d'utilisateur ou mot de passe incorrect"
     
     def is_password_expired(self):
+        """Vérifie si le mot de passe a expiré"""
         from datetime import datetime
         if not self.password_expires_at:
             return False
         return datetime.utcnow() > self.password_expires_at
     
     def generate_reset_token(self, expires_in=3600):
+        """
+        Génère un token de réinitialisation de mot de passe
+        
+        Args:
+            expires_in: Durée de validité en secondes (défaut: 1 heure)
+        
+        Returns:
+            str: Le token de réinitialisation
+        """
         import secrets
         from datetime import datetime, timedelta
         
@@ -410,37 +498,55 @@ class User(UserMixin, db.Model):
         return self.reset_password_token
     
     def verify_reset_token(self, token):
+        """
+        Vérifie si un token de réinitialisation est valide
+        
+        Args:
+            token: Le token à vérifier
+        
+        Returns:
+            bool: True si le token est valide
+        """
         from datetime import datetime
         
         if not self.reset_password_token or not self.reset_password_expires:
             return False
+        
         if self.reset_password_token != token:
             return False
+        
         if datetime.utcnow() > self.reset_password_expires:
             return False
+        
         return True
     
     def invalidate_sessions(self):
+        """Invalide toutes les sessions de l'utilisateur"""
         import secrets
         self.session_token = secrets.token_urlsafe(32)
         db.session.commit()
 
     # ============================================
-    # MÉTHODES DE PERMISSIONS (conservées)
+    # MÉTHODES DE PERMISSIONS
     # ============================================
 
     def has_permission(self, permission):
+        """Vérifie si l'utilisateur a une permission spécifique"""
+        
         print(f"🔐 [DEBUG] Vérification permission '{permission}' pour {self.username} (rôle: {self.role})")
         
+        # 1. SUPER ADMIN : TOUJOURS AUTORISÉ
         if self.role == 'super_admin':
             print(f"   ✅ Super admin - accès immédiat")
             return True
         
+        # 2. Vérifier d'abord les permissions EXPLICITES dans la base (PRIORITÉ ABSOLUE)
         if self.permissions and permission in self.permissions:
             value = bool(self.permissions[permission])
             print(f"   📋 Permission explicite dans DB: {permission} = {value}")
             return value
         
+        # 3. ADMIN CLIENT
         is_admin_client = (self.role == 'admin') or (getattr(self, 'is_client_admin', False))
         
         if is_admin_client:
@@ -474,6 +580,7 @@ class User(UserMixin, db.Model):
                 'can_provision_servers': False,
             }
             
+            # Ajouter les permissions conditionnelles selon la formule
             if self.client and self.client.formule:
                 permissions_admin_obligatoires['can_manage_regulatory'] = self.client.formule.modules.get('veille_reglementaire', False)
                 permissions_admin_obligatoires['can_manage_logigram'] = self.client.formule.modules.get('gestion_processus', False)
@@ -481,9 +588,11 @@ class User(UserMixin, db.Model):
             if permission in permissions_admin_obligatoires:
                 return permissions_admin_obligatoires[permission]
         
+        # 4. GESTIONNAIRE (manager)
         if self.role == 'manager':
             print(f"   👤 Utilisateur est un GESTIONNAIRE")
             
+            # Permissions de base pour manager
             manager_base_permissions = {
                 'can_view_dashboard': True,
                 'can_view_reports': True,
@@ -493,15 +602,14 @@ class User(UserMixin, db.Model):
                 'can_export_data': True,
             }
             
+            # Vérifier si la permission est dans les permissions de base du manager
             if permission in manager_base_permissions:
                 return manager_base_permissions[permission]
             
             print(f"   ❌ Permission '{permission}' non définie pour manager, REFUSÉE")
             return False
         
-        if self.permissions and permission in self.permissions:
-            return bool(self.permissions[permission])
-        
+        # 5. PERMISSIONS PAR DÉFAUT SELON LE RÔLE
         role_defaults = {
             'auditeur': {
                 'can_view_dashboard': True,
@@ -543,50 +651,83 @@ class User(UserMixin, db.Model):
     # ============================================
     
     def can_manage_user(self, target_user):
+        """Vérifie si l'utilisateur peut gérer un autre utilisateur"""
+        
+        # On ne peut pas gérer soi-même
         if self.id == target_user.id:
             return False
+        
+        # Même client
         if self.client_id != target_user.client_id:
             return False
+        
+        # SUPER ADMIN
         if self.role == 'super_admin':
             return True
+        
+        # ADMIN CLIENT
         if self.is_client_admin:
             return not target_user.is_client_admin
+        
+        # GESTIONNAIRE
         if self.can_manage_users:
             return (not target_user.is_client_admin and 
                     not target_user.can_manage_users)
+        
         return False
     
     def can_edit_plan(self, plan):
+        """Vérifie si l'utilisateur peut modifier un plan d'action"""
+        
+        # SUPER ADMIN
         if self.role == 'super_admin':
             return True
+        
+        # Même client
         plan_client_id = getattr(plan, 'client_id', None)
         if plan_client_id and self.client_id != plan_client_id:
             return False
+        
+        # ADMIN CLIENT
         if self.is_client_admin:
             return True
+        
+        # Créateur du plan
         if hasattr(plan, 'created_by') and self.id == plan.created_by:
             return True
+        
+        # Responsable du plan
         if hasattr(plan, 'responsable_id') and self.id == plan.responsable_id:
             return True
+        
+        # Permission spécifique
         return self.has_permission('can_manage_action_plans')
     
     def can_archive_audit(self, audit):
+        """Vérifie si l'utilisateur peut archiver un audit"""
+        
         if self.role == 'super_admin':
             return True
+        
         audit_client_id = getattr(audit, 'client_id', None)
+        
         if audit_client_id is None:
             if hasattr(audit, 'created_by') and self.id == audit.created_by:
                 return True
             if hasattr(audit, 'responsable_id') and self.id == audit.responsable_id:
                 return True
             return False
+        
         if audit_client_id != self.client_id:
             return False
+        
         if self.is_client_admin:
             return True
+        
         if self.id == getattr(audit, 'created_by', None) or \
            self.id == getattr(audit, 'responsable_id', None):
             return True
+        
         return self.has_permission('can_manage_audit')
     
     # ============================================
@@ -594,6 +735,7 @@ class User(UserMixin, db.Model):
     # ============================================
     
     def get_notification_preference(self, channel, event):
+        """Obtenir la préférence de notification"""
         if not self.preferences_notifications:
             return True
         if channel not in self.preferences_notifications:
@@ -601,6 +743,9 @@ class User(UserMixin, db.Model):
         return self.preferences_notifications[channel].get(event, True)
     
     def should_receive_notification(self, notification_type, channel='web'):
+        """Vérifie si l'utilisateur devrait recevoir une notification"""
+        
+        # Vérifier pause
         if self.preferences_notifications and self.preferences_notifications.get('pause_until'):
             try:
                 from datetime import datetime
@@ -609,13 +754,16 @@ class User(UserMixin, db.Model):
                     pause_date = datetime.strptime(pause_date, '%Y-%m-%d').date()
                 elif isinstance(pause_date, datetime):
                     pause_date = pause_date.date()
+                
                 if pause_date and pause_date >= datetime.utcnow().date():
                     return False
             except Exception:
                 pass
+        
         return self.get_notification_preference(channel, notification_type)
     
     def get_notifications_non_lues_count(self):
+        """Compter les notifications non lues"""
         from models import Notification
         return Notification.query.filter_by(
             destinataire_id=self.id,
@@ -623,6 +771,7 @@ class User(UserMixin, db.Model):
         ).count()
     
     def get_notifications_recentes(self, limit=10):
+        """Obtenir les notifications récentes"""
         from models import Notification
         return Notification.query.filter_by(
             destinataire_id=self.id
@@ -635,6 +784,7 @@ class User(UserMixin, db.Model):
     # ============================================
     
     def get_role_display_name(self):
+        """Retourne le nom d'affichage du rôle"""
         role_names = {
             'admin': 'Administrateur',
             'manager': 'Manager',
@@ -647,11 +797,13 @@ class User(UserMixin, db.Model):
         return role_names.get(self.role, self.role.title())
     
     def update_last_login(self):
+        """Met à jour la date de dernière connexion"""
         from datetime import datetime
         self.last_login = datetime.utcnow()
         db.session.commit()
     
     def get_allowed_sections(self):
+        """Retourne les sections accessibles"""
         sections = []
         if self.has_permission('can_view_dashboard'):
             sections.append('dashboard')
@@ -673,6 +825,25 @@ class User(UserMixin, db.Model):
     
     def __repr__(self):
         return f'<User {self.username} ({self.role})>'
+    
+    def to_dict(self):
+        """Convertit l'utilisateur en dictionnaire"""
+        return {
+            'id': self.id,
+            'username': self.username,
+            'email': self.email,
+            'role': self.role,
+            'role_display': self.get_role_display_name(),
+            'department': self.department,
+            'is_active': self.is_active,
+            'is_blocked': self.is_blocked,
+            'is_client_admin': self.is_client_admin,
+            'client_id': self.client_id,
+            'last_login': self.last_login.isoformat() if self.last_login else None,
+            'created_at': self.created_at.isoformat() if self.created_at else None,
+            'permissions': self.permissions,
+            'allowed_sections': self.get_allowed_sections()
+        }
 
 
 # -------------------- DIRECTION --------------------
@@ -1780,6 +1951,9 @@ class VeilleDocument(db.Model):  # Nouveau
 class Audit(db.Model):
     __tablename__ = 'audits'
     
+    # ============================================
+    # COLONNES
+    # ============================================
     id = db.Column(db.Integer, primary_key=True)
     reference = db.Column(db.String(50), nullable=False)
     titre = db.Column(db.String(200), nullable=False)
@@ -1819,7 +1993,7 @@ class Audit(db.Model):
     membres_externes = db.Column(db.JSON, nullable=True, default=list)
     
     # ============================================
-    # 🔥 RELATIONS AVEC backrefs UNIQUES
+    # 🔥 RELATIONS AVEC back_populates UNIQUES
     # ============================================
     
     # Mission associée
@@ -1830,25 +2004,26 @@ class Audit(db.Model):
         foreign_keys='MissionAudit.audit_id'
     )
     
-    # Relations principales
+    # Relations utilisateurs avec back_populates uniques
     createur = db.relationship(
         'User', 
         foreign_keys=[created_by],
-        backref='audits_que_jai_crees'
+        back_populates='audits_createur'  # ← UNIQUE dans User
     )
     
     responsable = db.relationship(
         'User', 
         foreign_keys=[responsable_id],
-        backref='audits_dont_je_suis_responsable'
+        back_populates='audits_responsable'  # ← UNIQUE dans User
     )
     
     archiveur = db.relationship(
         'User', 
         foreign_keys=[archived_by],
-        backref='audits_que_jai_archives'
+        back_populates='audits_archiveur'  # ← UNIQUE dans User
     )
     
+    # Processus
     processus = db.relationship(
         'ProcessusActivite', 
         backref='audits_associes',
@@ -1884,118 +2059,24 @@ class Audit(db.Model):
         cascade='all, delete-orphan'
     )
     
-    # ===== CONTRAINTE UNIQUE COMPOSITE =====
+    # ============================================
+    # CONTRAINTES
+    # ============================================
     __table_args__ = (
         db.UniqueConstraint('reference', 'client_id', name='uix_audit_reference_client'),
     )
     
-    # ===== MÉTHODE STATIQUE DE GÉNÉRATION =====
-    @staticmethod
-    def generer_reference(client_id):
-        """Génère une référence unique PAR CLIENT"""
-        from datetime import datetime
-        annee = datetime.now().year
-        prefixe = f"AUD-{annee}-"
-        
-        count = Audit.query.filter(
-            Audit.reference.like(f'{prefixe}%'),
-            Audit.client_id == client_id
-        ).count()
-        
-        return f"{prefixe}{(count + 1):04d}"
+    # ============================================
+    # PROPRIÉTÉS CALCULÉES
+    # ============================================
     
-    # ===== MÉTHODES EXISTANTES =====
-    
-    def get_equipe_audit(self):
-        """Retourne la liste des utilisateurs de l'équipe d'audit"""
-        if self.equipe_audit_ids:
-            try:
-                ids = [int(id.strip()) for id in self.equipe_audit_ids.split(',') if id.strip()]
-                if ids:
-                    return User.query.filter(User.id.in_(ids)).all()
-            except (ValueError, AttributeError):
-                return []
-        return []
-    
-    def get_equipe_complete(self):
-        """Retourne l'équipe complète"""
-        equipe = []
-        
-        # Utilisateurs avec compte
-        users = self.get_equipe_audit()
-        for user in users:
-            equipe.append({
-                'id': user.id,
-                'nom': user.nom or '',
-                'prenom': user.prenom or '',
-                'username': user.username,
-                'email': user.email,
-                'role': user.role,
-                'department': user.department,
-                'type': 'utilisateur'
-            })
-        
-        # Membres externes
-        if self.membres_externes:
-            for membre in self.membres_externes:
-                equipe.append({
-                    'id': f"ext_{len(equipe)}",
-                    'nom': membre.get('nom', ''),
-                    'prenom': membre.get('prenom', ''),
-                    'email': membre.get('email', ''),
-                    'fonction': membre.get('fonction', ''),
-                    'organisation': membre.get('organisation', ''),
-                    'type': 'externe'
-                })
-        
-        return equipe
-
     @property
     def programme_associe(self):
+        """Retourne le programme d'audit associé via la mission"""
         if self.mission_associee:
             return self.mission_associee.programme
         return None
     
-    def ajouter_membre_externe(self, nom, prenom, email, fonction='', organisation=''):
-        """Ajoute un membre externe"""
-        if not self.membres_externes:
-            self.membres_externes = []
-        
-        nouveau_membre = {
-            'nom': nom,
-            'prenom': prenom,
-            'email': email,
-            'fonction': fonction,
-            'organisation': organisation
-        }
-        
-        self.membres_externes.append(nouveau_membre)
-        return nouveau_membre
-    
-    def supprimer_membre_externe(self, index):
-        """Supprime un membre externe"""
-        if self.membres_externes and 0 <= index < len(self.membres_externes):
-            return self.membres_externes.pop(index)
-        return None
-    
-    def supprimer_utilisateur_equipe(self, user_id):
-        """Supprime un utilisateur de l'équipe"""
-        if self.equipe_audit_ids:
-            try:
-                ids = [int(id.strip()) for id in self.equipe_audit_ids.split(',') if id.strip()]
-                if user_id in ids:
-                    ids.remove(user_id)
-                    
-                    if ids:
-                        self.equipe_audit_ids = ','.join(str(id) for id in ids)
-                    else:
-                        self.equipe_audit_ids = ''
-                    
-                    return True
-            except (ValueError, AttributeError):
-                pass
-        return False
-
     @property
     def processus_audite_display(self):
         """Retourne le nom du processus audité pour l'affichage"""
@@ -2080,15 +2161,6 @@ class Audit(db.Model):
         else:
             return 'danger'
     
-    def set_processus(self, processus_id=None, nom_manuel=None):
-        """Définit le processus audité soit par ID soit par nom manuel"""
-        if processus_id:
-            self.processus_id = processus_id
-            self.processus_concerne = None
-        elif nom_manuel:
-            self.processus_concerne = nom_manuel
-            self.processus_id = None
-    
     @property
     def pourcentage_completion(self):
         """Pourcentage de completion basé sur les dates"""
@@ -2115,6 +2187,121 @@ class Audit(db.Model):
         pourcentage = (duree_ecoulee / duree_totale) * 100
         return min(round(pourcentage, 2), 100)
     
+    @property
+    def progression(self):
+        """Alias pour progression_globale (compatibilité)"""
+        return self.progression_globale
+    
+    # ============================================
+    # MÉTHODES STATIQUES
+    # ============================================
+    
+    @staticmethod
+    def generer_reference(client_id):
+        """Génère une référence unique PAR CLIENT"""
+        from datetime import datetime
+        annee = datetime.now().year
+        prefixe = f"AUD-{annee}-"
+        
+        count = Audit.query.filter(
+            Audit.reference.like(f'{prefixe}%'),
+            Audit.client_id == client_id
+        ).count()
+        
+        return f"{prefixe}{(count + 1):04d}"
+    
+    # ============================================
+    # MÉTHODES DE GESTION D'ÉQUIPE
+    # ============================================
+    
+    def get_equipe_audit(self):
+        """Retourne la liste des utilisateurs de l'équipe d'audit"""
+        if self.equipe_audit_ids:
+            try:
+                ids = [int(id.strip()) for id in self.equipe_audit_ids.split(',') if id.strip()]
+                if ids:
+                    return User.query.filter(User.id.in_(ids)).all()
+            except (ValueError, AttributeError):
+                return []
+        return []
+    
+    def get_equipe_complete(self):
+        """Retourne l'équipe complète (internes + externes)"""
+        equipe = []
+        
+        # Utilisateurs avec compte
+        users = self.get_equipe_audit()
+        for user in users:
+            equipe.append({
+                'id': user.id,
+                'nom': user.nom or '',
+                'prenom': user.prenom or '',
+                'username': user.username,
+                'email': user.email,
+                'role': user.role,
+                'department': user.department,
+                'type': 'utilisateur'
+            })
+        
+        # Membres externes
+        if self.membres_externes:
+            for membre in self.membres_externes:
+                equipe.append({
+                    'id': f"ext_{len(equipe)}",
+                    'nom': membre.get('nom', ''),
+                    'prenom': membre.get('prenom', ''),
+                    'email': membre.get('email', ''),
+                    'fonction': membre.get('fonction', ''),
+                    'organisation': membre.get('organisation', ''),
+                    'type': 'externe'
+                })
+        
+        return equipe
+    
+    def ajouter_membre_externe(self, nom, prenom, email, fonction='', organisation=''):
+        """Ajoute un membre externe à l'équipe"""
+        if not self.membres_externes:
+            self.membres_externes = []
+        
+        nouveau_membre = {
+            'nom': nom,
+            'prenom': prenom,
+            'email': email,
+            'fonction': fonction,
+            'organisation': organisation
+        }
+        
+        self.membres_externes.append(nouveau_membre)
+        return nouveau_membre
+    
+    def supprimer_membre_externe(self, index):
+        """Supprime un membre externe de l'équipe"""
+        if self.membres_externes and 0 <= index < len(self.membres_externes):
+            return self.membres_externes.pop(index)
+        return None
+    
+    def supprimer_utilisateur_equipe(self, user_id):
+        """Supprime un utilisateur de l'équipe"""
+        if self.equipe_audit_ids:
+            try:
+                ids = [int(id.strip()) for id in self.equipe_audit_ids.split(',') if id.strip()]
+                if user_id in ids:
+                    ids.remove(user_id)
+                    
+                    if ids:
+                        self.equipe_audit_ids = ','.join(str(id) for id in ids)
+                    else:
+                        self.equipe_audit_ids = ''
+                    
+                    return True
+            except (ValueError, AttributeError):
+                pass
+        return False
+    
+    # ============================================
+    # MÉTHODES DE GESTION DES PARTICIPANTS
+    # ============================================
+    
     def get_participants(self):
         """Retourne la liste des participants"""
         if self.participants_ids:
@@ -2136,6 +2323,10 @@ class Audit(db.Model):
             except (ValueError, AttributeError):
                 return []
         return []
+    
+    # ============================================
+    # MÉTHODES DE GESTION DES RISQUES
+    # ============================================
     
     def get_risques_lies(self):
         """Retourne tous les risques liés à cet audit"""
@@ -2167,6 +2358,19 @@ class Audit(db.Model):
                     risques_ids.add(audit_risque.risque_id)
         
         return risques
+    
+    # ============================================
+    # MÉTHODES DE GESTION DES STATUTS
+    # ============================================
+    
+    def set_processus(self, processus_id=None, nom_manuel=None):
+        """Définit le processus audité soit par ID soit par nom manuel"""
+        if processus_id:
+            self.processus_id = processus_id
+            self.processus_concerne = None
+        elif nom_manuel:
+            self.processus_concerne = nom_manuel
+            self.processus_id = None
     
     def get_statut_display(self):
         """Retourne le statut formaté pour l'affichage"""
@@ -2213,8 +2417,42 @@ class Audit(db.Model):
         else:
             self.sous_statut = 'planification'
     
+    # ============================================
+    # MÉTHODE DE REPRÉSENTATION
+    # ============================================
+    
     def __repr__(self):
         return f'<Audit {self.reference}: {self.titre}>'
+    
+    def to_dict(self):
+        """Convertit l'audit en dictionnaire"""
+        return {
+            'id': self.id,
+            'reference': self.reference,
+            'titre': self.titre,
+            'description': self.description,
+            'type_audit': self.type_audit,
+            'statut': self.statut,
+            'sous_statut': self.sous_statut,
+            'statut_display': self.get_statut_display(),
+            'sous_statut_display': self.get_sous_statut_display(),
+            'date_debut_prevue': self.date_debut_prevue.isoformat() if self.date_debut_prevue else None,
+            'date_fin_prevue': self.date_fin_prevue.isoformat() if self.date_fin_prevue else None,
+            'date_debut_reelle': self.date_debut_reelle.isoformat() if self.date_debut_reelle else None,
+            'date_fin_reelle': self.date_fin_reelle.isoformat() if self.date_fin_reelle else None,
+            'processus_audite': self.processus_audite_display,
+            'responsable': self.responsable.username if self.responsable else None,
+            'score_global': self.score_global,
+            'progression_globale': self.progression_globale,
+            'taux_realisation_recommandations': self.taux_realisation_recommandations,
+            'taux_realisation_plans': self.taux_realisation_plans,
+            'nb_constatations': len(self.constatations) if self.constatations else 0,
+            'nb_recommandations': len(self.recommandations) if self.recommandations else 0,
+            'nb_plans_action': len(self.plans_action) if self.plans_action else 0,
+            'is_archived': self.is_archived,
+            'created_at': self.created_at.isoformat() if self.created_at else None,
+            'updated_at': self.updated_at.isoformat() if self.updated_at else None
+        }
 # -------------------- AUDIT RISQUE - CORRIGÉ --------------------
 class AuditRisque(db.Model):
     __tablename__ = 'audit_risques'
@@ -13861,25 +14099,27 @@ class ActualisationCartographie(db.Model):
     
     id = db.Column(db.Integer, primary_key=True)
     cartographie_id = db.Column(db.Integer, db.ForeignKey('cartographie.id'))
-    campagne_id = db.Column(db.Integer, db.ForeignKey('campagne_evaluation.id'))
+    
+    # 🔥 CORRECTION : avec 's'
+    campagne_id = db.Column(db.Integer, db.ForeignKey('campagnes_evaluation.id'))
+    
     utilisateur_id = db.Column(db.Integer, db.ForeignKey('user.id'))
     date_actualisation = db.Column(db.DateTime, default=datetime.utcnow)
     
-    # Statistiques
     nb_risques_total = db.Column(db.Integer)
     nb_risques_mis_a_jour = db.Column(db.Integer)
     nb_dispositifs_impactes = db.Column(db.Integer)
     nb_incidents_integres = db.Column(db.Integer)
-    
-    # Résultats
     nouveaux_critiques = db.Column(db.Integer)
     reduction_moyenne = db.Column(db.Float)
-    
-    # Métadonnées
     duree_ms = db.Column(db.Integer)
-    statut = db.Column(db.String(20), default='success')  # success, partial, failed
-    erreurs = db.Column(db.Text)  # JSON
-
+    statut = db.Column(db.String(20), default='success')
+    erreurs = db.Column(db.Text)
+    
+    # Relations
+    cartographie = db.relationship('Cartographie', backref='actualisations')
+    campagne = db.relationship('CampagneEvaluation', backref='actualisations')
+    utilisateur = db.relationship('User', backref='actualisations')
 
 # ============================================
 # MODÈLES C2N CORRIGÉS
