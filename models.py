@@ -40,161 +40,7 @@ class User(UserMixin, db.Model):
     client = db.relationship('Client', back_populates='utilisateurs')
     
     # ============================================
-    # NOUVEAUX CHAMPS POUR LA SÉCURITÉ DES MOTS DE PASSE
-    # ============================================
-    
-    # Historique des mots de passe (pour éviter la réutilisation)
-    password_history = db.Column(db.JSON, default=[])
-    
-    # Date du dernier changement de mot de passe
-    password_changed_at = db.Column(db.DateTime, nullable=True)
-    
-    # Tentatives de connexion échouées
-    failed_login_attempts = db.Column(db.Integer, default=0)
-    
-    # Date du dernier échec de connexion
-    last_failed_login = db.Column(db.DateTime, nullable=True)
-    
-    # Date d'expiration du mot de passe (90 jours par défaut)
-    password_expires_at = db.Column(db.DateTime, nullable=True)
-    
-    # Token de réinitialisation de mot de passe
-    reset_password_token = db.Column(db.String(100), nullable=True, unique=True)
-    
-    # Date d'expiration du token
-    reset_password_expires = db.Column(db.DateTime, nullable=True)
-    
-    # Forcer le changement de mot de passe à la prochaine connexion
-    force_password_change = db.Column(db.Boolean, default=False)
-    
-    # Verrouillage temporaire du compte
-    locked_until = db.Column(db.DateTime, nullable=True)
-    lock_reason = db.Column(db.String(255), nullable=True)
-    
-    # Token de session pour invalider toutes les sessions
-    session_token = db.Column(db.String(100), nullable=True)
-    
-    # ============================================
-    # PERMISSIONS (JSON)
-    # ============================================
-    permissions = db.Column(db.JSON, default={
-        # ==================== PERMISSIONS EXISTANTES ====================
-        'can_view_dashboard': True,
-        'can_manage_risks': False,
-        'can_manage_kri': False,
-        'can_manage_audit': False,
-        'can_manage_regulatory': False,
-        'can_manage_logigram': False,
-        'can_manage_settings': False,
-        'can_export_data': False,
-        'can_view_reports': True,
-        'can_delete_data': False,
-        'can_access_all_departments': False,
-        'can_archive_data': False,
-        'can_validate_risks': False,
-        'can_confirm_evaluations': False,
-        'can_view_departments': False,
-        'can_manage_departments': False,
-        'can_view_users_list': False,
-        'can_edit_users': False,
-        'can_create_users': False,
-        'can_deactivate_users': False,
-        'can_delete_users': False,
-        'can_block_users': False,
-        'can_manage_permissions': False,
-        'can_manage_action_plans': False,
-        'can_view_action_plans': False,
-        
-        # ==================== NOUVELLES PERMISSIONS ====================
-        # Qualité
-        'can_manage_quality': False,
-        'can_manage_quality_plans': False,
-        'can_manage_quality_audits': False,
-        
-        # Campagnes de contrôle
-        'can_manage_campaigns': False,
-        'can_view_campaigns': False,
-        'can_conduct_campaigns': False,
-        
-        # Plans de continuité (PCA/BCP)
-        'can_manage_bcp': False,
-        'can_view_bcp': False,
-        'can_test_bcp': False,
-        
-        # Incidents
-        'can_manage_incidents': False,
-        'can_view_incidents': False,
-        'can_escalate_incidents': False,
-        'can_resolve_incidents': False,
-        
-        # Programme d'audit
-        'can_manage_audit_program': False,
-        'can_view_audit_program': False,
-        'can_plan_audits': False,
-        
-        # Questionnaires
-        'can_manage_questionnaires': False,
-        'can_create_questionnaires': False,
-        'can_view_responses': False,
-        'can_export_responses': False,
-        
-        # Support
-        'can_view_tickets': False,
-        'can_manage_tickets': False,
-        'can_resolve_tickets': False,
-        
-        # Modules
-        'module_cartographie': True,
-        'module_kri': True,
-        'module_audit': True,
-        'module_veille': False,
-        'module_processus': False,
-        'module_questionnaires': False,
-        'module_plans_action': True,
-        'module_analyse_ia': False,
-        'module_qualite': False,
-        'module_campagnes': False,
-        'module_pca': False,
-        'module_incidents': False,
-        'module_programme_audit': False
-    })
-    
-    # ============================================
-    # PRÉFÉRENCES NOTIFICATIONS
-    # ============================================
-    preferences_notifications = db.Column(db.JSON, default={
-        'web': {
-            'nouvelle_constatation': True,
-            'nouvelle_recommandation': True,
-            'nouveau_plan': True,
-            'echeance_7j': True,
-            'echeance_3j': True,
-            'echeance_1j': True,
-            'retard': True,
-            'validation_requise': True,
-            'kri_alerte': True,
-            'veille_nouvelle': True,
-            'audit_demarre': True,
-            'audit_termine': True
-        },
-        'email': {
-            'nouvelle_constatation': False,
-            'nouvelle_recommandation': False,
-            'nouveau_plan': False,
-            'echeance_7j': False,
-            'echeance_3j': True,
-            'echeance_1j': True,
-            'retard': True,
-            'validation_requise': True,
-            'kri_alerte': True,
-            'veille_nouvelle': False
-        },
-        'frequence_email': 'quotidien',
-        'pause_until': None
-    })
-    
-    # ============================================
-    # RELATIONS
+    # RELATIONS - AVEC overlaps POUR ÉVITER LES CONFLITS
     # ============================================
     
     # Pôles
@@ -280,11 +126,21 @@ class User(UserMixin, db.Model):
                                    foreign_keys='KRI.archived_by', 
                                    lazy=True)
     
-    # Audits
+    # ============================================
+    # 🔥 RELATIONS AVEC overlaps - AUDITS
+    # ============================================
+    
     audits_realises = db.relationship('Audit', 
                                      back_populates='responsable',
                                      foreign_keys='Audit.responsable_id', 
-                                     lazy=True)
+                                     lazy=True,
+                                     overlaps='audits_dont_je_suis_responsable')
+    
+    audits_dont_je_suis_responsable = db.relationship('Audit', 
+                                                     back_populates='responsable',
+                                                     foreign_keys='Audit.responsable_id', 
+                                                     lazy=True,
+                                                     overlaps='audits_realises')
     
     audits_crees = db.relationship('Audit', 
                                   back_populates='createur',
@@ -310,11 +166,21 @@ class User(UserMixin, db.Model):
                                       foreign_keys='VeilleDocument.uploaded_by', 
                                       lazy=True)
     
-    # Logigrammes
+    # ============================================
+    # 🔥 RELATIONS AVEC overlaps - LOGIGRAMMES
+    # ============================================
+    
     logigrammes_crees = db.relationship('ProcessusActivite', 
                                        back_populates='createur',
                                        foreign_keys='ProcessusActivite.created_by', 
-                                       lazy=True)
+                                       lazy=True,
+                                       overlaps='processus_activites_crees')
+    
+    processus_activites_crees = db.relationship('ProcessusActivite', 
+                                               back_populates='createur',
+                                               foreign_keys='ProcessusActivite.created_by', 
+                                               lazy=True,
+                                               overlaps='logigrammes_crees')
     
     # Journal d'activité
     activites = db.relationship('JournalActivite', 
@@ -334,125 +200,169 @@ class User(UserMixin, db.Model):
                                           foreign_keys='Notification.destinataire_id',
                                           lazy=True,
                                           order_by='Notification.created_at.desc()')
-
+    
     # ============================================
-    # MÉTHODES DE GESTION DES MOTS DE PASSE
+    # PERMISSIONS (JSON)
+    # ============================================
+    permissions = db.Column(db.JSON, default={
+        'can_view_dashboard': True,
+        'can_manage_risks': False,
+        'can_manage_kri': False,
+        'can_manage_audit': False,
+        'can_manage_regulatory': False,
+        'can_manage_logigram': False,
+        'can_manage_settings': False,
+        'can_export_data': False,
+        'can_view_reports': True,
+        'can_delete_data': False,
+        'can_access_all_departments': False,
+        'can_archive_data': False,
+        'can_validate_risks': False,
+        'can_confirm_evaluations': False,
+        'can_view_departments': False,
+        'can_manage_departments': False,
+        'can_view_users_list': False,
+        'can_edit_users': False,
+        'can_create_users': False,
+        'can_deactivate_users': False,
+        'can_delete_users': False,
+        'can_block_users': False,
+        'can_manage_permissions': False,
+        'can_manage_action_plans': False,
+        'can_view_action_plans': False,
+        'can_manage_quality': False,
+        'can_manage_quality_plans': False,
+        'can_manage_quality_audits': False,
+        'can_manage_campaigns': False,
+        'can_view_campaigns': False,
+        'can_conduct_campaigns': False,
+        'can_manage_bcp': False,
+        'can_view_bcp': False,
+        'can_test_bcp': False,
+        'can_manage_incidents': False,
+        'can_view_incidents': False,
+        'can_escalate_incidents': False,
+        'can_resolve_incidents': False,
+        'can_manage_audit_program': False,
+        'can_view_audit_program': False,
+        'can_plan_audits': False,
+        'can_manage_questionnaires': False,
+        'can_create_questionnaires': False,
+        'can_view_responses': False,
+        'can_export_responses': False,
+        'can_view_tickets': False,
+        'can_manage_tickets': False,
+        'can_resolve_tickets': False,
+        'module_cartographie': True,
+        'module_kri': True,
+        'module_audit': True,
+        'module_veille': False,
+        'module_processus': False,
+        'module_questionnaires': False,
+        'module_plans_action': True,
+        'module_analyse_ia': False,
+        'module_qualite': False,
+        'module_campagnes': False,
+        'module_pca': False,
+        'module_incidents': False,
+        'module_programme_audit': False
+    })
+    
+    # ============================================
+    # PRÉFÉRENCES NOTIFICATIONS
+    # ============================================
+    preferences_notifications = db.Column(db.JSON, default={
+        'web': {
+            'nouvelle_constatation': True,
+            'nouvelle_recommandation': True,
+            'nouveau_plan': True,
+            'echeance_7j': True,
+            'echeance_3j': True,
+            'echeance_1j': True,
+            'retard': True,
+            'validation_requise': True,
+            'kri_alerte': True,
+            'veille_nouvelle': True,
+            'audit_demarre': True,
+            'audit_termine': True
+        },
+        'email': {
+            'nouvelle_constatation': False,
+            'nouvelle_recommandation': False,
+            'nouveau_plan': False,
+            'echeance_7j': False,
+            'echeance_3j': True,
+            'echeance_1j': True,
+            'retard': True,
+            'validation_requise': True,
+            'kri_alerte': True,
+            'veille_nouvelle': False
+        },
+        'frequence_email': 'quotidien',
+        'pause_until': None
+    })
+    
+    # ============================================
+    # MÉTHODES DE GESTION DES MOTS DE PASSE (conservées)
     # ============================================
     
     def set_password(self, password, check_history=True):
-        """
-        Définit le mot de passe avec validation de force et historique
-        
-        Args:
-            password: Le nouveau mot de passe
-            check_history: Vérifier l'historique (True pour changement)
-        
-        Raises:
-            ValueError: Si le mot de passe ne respecte pas les critères
-        """
         import re
         from datetime import datetime, timedelta
         from werkzeug.security import generate_password_hash
         
-        # ============================================
-        # 1. VALIDATION DE LA FORCE DU MOT DE PASSE
-        # ============================================
-        
-        # Minimum 12 caractères (recommandation ANSSI)
         if len(password) < 12:
             raise ValueError("Le mot de passe doit contenir au moins 12 caractères")
-        
-        # Au moins une majuscule
         if not re.search(r"[A-Z]", password):
             raise ValueError("Le mot de passe doit contenir au moins une majuscule")
-        
-        # Au moins une minuscule
         if not re.search(r"[a-z]", password):
             raise ValueError("Le mot de passe doit contenir au moins une minuscule")
-        
-        # Au moins un chiffre
         if not re.search(r"[0-9]", password):
             raise ValueError("Le mot de passe doit contenir au moins un chiffre")
-        
-        # Au moins un caractère spécial
         if not re.search(r"[!@#$%^&*(),.?\":{}|<>]", password):
             raise ValueError("Le mot de passe doit contenir au moins un caractère spécial")
-        
-        # Pas d'espaces
         if " " in password:
             raise ValueError("Le mot de passe ne doit pas contenir d'espaces")
         
-        # Pas de séquences évidentes
-        common_patterns = [
-            r"123456", r"password", r"motdepasse", r"azerty", r"qwerty",
-            r"admin", r"root", r"test", r"123456789", r"0123456789"
-        ]
+        common_patterns = [r"123456", r"password", r"motdepasse", r"azerty", r"qwerty", r"admin", r"root", r"test"]
         password_lower = password.lower()
         for pattern in common_patterns:
             if pattern in password_lower:
                 raise ValueError(f"Le mot de passe contient une séquence trop simple: '{pattern}'")
         
-        # Pas de répétitions (aaaa, 1111, etc.)
         if re.search(r"(.)\1{3,}", password):
             raise ValueError("Le mot de passe contient trop de caractères répétés")
         
-        # ============================================
-        # 2. VÉRIFICATION DE L'HISTORIQUE
-        # ============================================
-        
         if check_history and self.password_history:
-            # Vérifier les 5 derniers mots de passe
+            from werkzeug.security import check_password_hash
             for old_hash in self.password_history[-5:]:
                 if check_password_hash(old_hash, password):
                     raise ValueError("Vous ne pouvez pas réutiliser un des 5 derniers mots de passe")
         
-        # ============================================
-        # 3. SAUVEGARDE DE L'ANCIEN MOT DE PASSE
-        # ============================================
-        
-        if self.password_hash and self.id:  # Si c'est une modification
+        if self.password_hash and self.id:
             if not self.password_history:
                 self.password_history = []
-            
-            # Ajouter l'ancien hash à l'historique
             self.password_history.append(self.password_hash)
-            
-            # Garder seulement les 10 derniers
             if len(self.password_history) > 10:
                 self.password_history = self.password_history[-10:]
         
-        # ============================================
-        # 4. HASHAGE DU NOUVEAU MOT DE PASSE
-        # ============================================
-        
         self.password_hash = generate_password_hash(password)
         self.password_changed_at = datetime.utcnow()
-        self.failed_login_attempts = 0  # Réinitialiser les tentatives
-        self.force_password_change = False  # Désactiver le flag
-        
-        # Date d'expiration (90 jours)
+        self.failed_login_attempts = 0
+        self.force_password_change = False
         self.password_expires_at = datetime.utcnow() + timedelta(days=90)
         
-        # Nouveau token de session (invalide les anciennes sessions)
         import secrets
         self.session_token = secrets.token_urlsafe(32)
 
     def check_password(self, password):
-        """
-        Vérifie le mot de passe avec gestion des tentatives échouées
-        
-        Returns:
-            tuple: (success, message) - success est un booléen, message est un string
-        """
         from datetime import datetime
         from werkzeug.security import check_password_hash
         
-        # 1. VÉRIFIER SI LE COMPTE EST BLOQUÉ
         if self.is_blocked:
             if self.locked_until and self.locked_until > datetime.utcnow():
                 return False, f"Compte temporairement bloqué jusqu'au {self.locked_until.strftime('%d/%m/%Y %H:%M')}"
             elif self.locked_until and self.locked_until <= datetime.utcnow():
-                # Débloquer automatiquement
                 self.is_blocked = False
                 self.locked_until = None
                 self.failed_login_attempts = 0
@@ -460,7 +370,6 @@ class User(UserMixin, db.Model):
             else:
                 return False, "Ce compte est bloqué. Contactez l'administrateur."
         
-        # 2. VÉRIFIER LE MOT DE PASSE
         is_valid = check_password_hash(self.password_hash, password)
         
         if is_valid:
@@ -468,45 +377,30 @@ class User(UserMixin, db.Model):
             self.last_failed_login = None
             return True, "Connexion réussie"
         
-        # Échec : incrémenter le compteur
         self.failed_login_attempts += 1
         self.last_failed_login = datetime.utcnow()
         
-        # 3. POLITIQUE DE BLOCAGE PROGRESSIVE
         if self.failed_login_attempts >= 10:
             self.is_blocked = True
             self.blocked_at = datetime.utcnow()
             self.blocked_reason = "Trop de tentatives de connexion échouées (10+)"
             return False, "Compte bloqué pour sécurité. Contactez l'administrateur."
-        
         elif self.failed_login_attempts >= 5:
             self.locked_until = datetime.utcnow() + timedelta(minutes=30)
             self.lock_reason = f"Trop de tentatives échouées ({self.failed_login_attempts})"
             return False, f"Trop de tentatives. Compte bloqué 30 minutes."
-        
         elif self.failed_login_attempts >= 3:
             return False, f"Mot de passe incorrect. Tentative {self.failed_login_attempts}/5"
-        
         else:
             return False, "Nom d'utilisateur ou mot de passe incorrect"
     
     def is_password_expired(self):
-        """Vérifie si le mot de passe a expiré"""
         from datetime import datetime
         if not self.password_expires_at:
             return False
         return datetime.utcnow() > self.password_expires_at
     
     def generate_reset_token(self, expires_in=3600):
-        """
-        Génère un token de réinitialisation de mot de passe
-        
-        Args:
-            expires_in: Durée de validité en secondes (défaut: 1 heure)
-        
-        Returns:
-            str: Le token de réinitialisation
-        """
         import secrets
         from datetime import datetime, timedelta
         
@@ -516,55 +410,37 @@ class User(UserMixin, db.Model):
         return self.reset_password_token
     
     def verify_reset_token(self, token):
-        """
-        Vérifie si un token de réinitialisation est valide
-        
-        Args:
-            token: Le token à vérifier
-        
-        Returns:
-            bool: True si le token est valide
-        """
         from datetime import datetime
         
         if not self.reset_password_token or not self.reset_password_expires:
             return False
-        
         if self.reset_password_token != token:
             return False
-        
         if datetime.utcnow() > self.reset_password_expires:
             return False
-        
         return True
     
     def invalidate_sessions(self):
-        """Invalide toutes les sessions de l'utilisateur"""
         import secrets
         self.session_token = secrets.token_urlsafe(32)
         db.session.commit()
 
     # ============================================
-    # MÉTHODES DE PERMISSIONS
+    # MÉTHODES DE PERMISSIONS (conservées)
     # ============================================
 
     def has_permission(self, permission):
-        """Vérifie si l'utilisateur a une permission spécifique"""
-        
         print(f"🔐 [DEBUG] Vérification permission '{permission}' pour {self.username} (rôle: {self.role})")
         
-        # 1. SUPER ADMIN : TOUJOURS AUTORISÉ
         if self.role == 'super_admin':
             print(f"   ✅ Super admin - accès immédiat")
             return True
         
-        # 2. Vérifier d'abord les permissions EXPLICITES dans la base (PRIORITÉ ABSOLUE)
         if self.permissions and permission in self.permissions:
             value = bool(self.permissions[permission])
             print(f"   📋 Permission explicite dans DB: {permission} = {value}")
             return value
         
-        # 3. ADMIN CLIENT
         is_admin_client = (self.role == 'admin') or (getattr(self, 'is_client_admin', False))
         
         if is_admin_client:
@@ -598,7 +474,6 @@ class User(UserMixin, db.Model):
                 'can_provision_servers': False,
             }
             
-            # Ajouter les permissions conditionnelles selon la formule
             if self.client and self.client.formule:
                 permissions_admin_obligatoires['can_manage_regulatory'] = self.client.formule.modules.get('veille_reglementaire', False)
                 permissions_admin_obligatoires['can_manage_logigram'] = self.client.formule.modules.get('gestion_processus', False)
@@ -606,11 +481,9 @@ class User(UserMixin, db.Model):
             if permission in permissions_admin_obligatoires:
                 return permissions_admin_obligatoires[permission]
         
-        # 4. GESTIONNAIRE (manager) - RESPECTER LES PERMISSIONS DE LA BASE
         if self.role == 'manager':
             print(f"   👤 Utilisateur est un GESTIONNAIRE")
             
-            # Permissions de base pour manager (uniquement si non définies en base)
             manager_base_permissions = {
                 'can_view_dashboard': True,
                 'can_view_reports': True,
@@ -620,20 +493,15 @@ class User(UserMixin, db.Model):
                 'can_export_data': True,
             }
             
-            # Vérifier si la permission est dans les permissions de base du manager
             if permission in manager_base_permissions:
                 return manager_base_permissions[permission]
             
-            # Pour les autres permissions (can_manage_risks, can_manage_kri, etc.)
-            # RETOURNER FALSE si non défini dans la base
             print(f"   ❌ Permission '{permission}' non définie pour manager, REFUSÉE")
             return False
         
-        # 5. PERMISSIONS EXPLICITES DANS LA BASE (déjà vérifié au début)
         if self.permissions and permission in self.permissions:
             return bool(self.permissions[permission])
         
-        # 6. PERMISSIONS PAR DÉFAUT SELON LE RÔLE
         role_defaults = {
             'auditeur': {
                 'can_view_dashboard': True,
@@ -675,83 +543,50 @@ class User(UserMixin, db.Model):
     # ============================================
     
     def can_manage_user(self, target_user):
-        """Vérifie si l'utilisateur peut gérer un autre utilisateur"""
-        
-        # On ne peut pas gérer soi-même
         if self.id == target_user.id:
             return False
-        
-        # Même client
         if self.client_id != target_user.client_id:
             return False
-        
-        # SUPER ADMIN
         if self.role == 'super_admin':
             return True
-        
-        # ADMIN CLIENT
         if self.is_client_admin:
             return not target_user.is_client_admin
-        
-        # GESTIONNAIRE
         if self.can_manage_users:
             return (not target_user.is_client_admin and 
                     not target_user.can_manage_users)
-        
         return False
     
     def can_edit_plan(self, plan):
-        """Vérifie si l'utilisateur peut modifier un plan d'action"""
-        
-        # SUPER ADMIN
         if self.role == 'super_admin':
             return True
-        
-        # Même client
         plan_client_id = getattr(plan, 'client_id', None)
         if plan_client_id and self.client_id != plan_client_id:
             return False
-        
-        # ADMIN CLIENT
         if self.is_client_admin:
             return True
-        
-        # Créateur du plan
         if hasattr(plan, 'created_by') and self.id == plan.created_by:
             return True
-        
-        # Responsable du plan
         if hasattr(plan, 'responsable_id') and self.id == plan.responsable_id:
             return True
-        
-        # Permission spécifique
         return self.has_permission('can_manage_action_plans')
     
     def can_archive_audit(self, audit):
-        """Vérifie si l'utilisateur peut archiver un audit"""
-        
         if self.role == 'super_admin':
             return True
-        
         audit_client_id = getattr(audit, 'client_id', None)
-        
         if audit_client_id is None:
             if hasattr(audit, 'created_by') and self.id == audit.created_by:
                 return True
             if hasattr(audit, 'responsable_id') and self.id == audit.responsable_id:
                 return True
             return False
-        
         if audit_client_id != self.client_id:
             return False
-        
         if self.is_client_admin:
             return True
-        
         if self.id == getattr(audit, 'created_by', None) or \
            self.id == getattr(audit, 'responsable_id', None):
             return True
-        
         return self.has_permission('can_manage_audit')
     
     # ============================================
@@ -759,7 +594,6 @@ class User(UserMixin, db.Model):
     # ============================================
     
     def get_notification_preference(self, channel, event):
-        """Obtenir la préférence de notification"""
         if not self.preferences_notifications:
             return True
         if channel not in self.preferences_notifications:
@@ -767,9 +601,6 @@ class User(UserMixin, db.Model):
         return self.preferences_notifications[channel].get(event, True)
     
     def should_receive_notification(self, notification_type, channel='web'):
-        """Vérifie si l'utilisateur devrait recevoir une notification"""
-        
-        # Vérifier pause
         if self.preferences_notifications and self.preferences_notifications.get('pause_until'):
             try:
                 from datetime import datetime
@@ -778,16 +609,13 @@ class User(UserMixin, db.Model):
                     pause_date = datetime.strptime(pause_date, '%Y-%m-%d').date()
                 elif isinstance(pause_date, datetime):
                     pause_date = pause_date.date()
-                
                 if pause_date and pause_date >= datetime.utcnow().date():
                     return False
             except Exception:
                 pass
-        
         return self.get_notification_preference(channel, notification_type)
     
     def get_notifications_non_lues_count(self):
-        """Compter les notifications non lues"""
         from models import Notification
         return Notification.query.filter_by(
             destinataire_id=self.id,
@@ -795,7 +623,6 @@ class User(UserMixin, db.Model):
         ).count()
     
     def get_notifications_recentes(self, limit=10):
-        """Obtenir les notifications récentes"""
         from models import Notification
         return Notification.query.filter_by(
             destinataire_id=self.id
@@ -808,7 +635,6 @@ class User(UserMixin, db.Model):
     # ============================================
     
     def get_role_display_name(self):
-        """Retourne le nom d'affichage du rôle"""
         role_names = {
             'admin': 'Administrateur',
             'manager': 'Manager',
@@ -821,13 +647,11 @@ class User(UserMixin, db.Model):
         return role_names.get(self.role, self.role.title())
     
     def update_last_login(self):
-        """Met à jour la date de dernière connexion"""
         from datetime import datetime
         self.last_login = datetime.utcnow()
         db.session.commit()
     
     def get_allowed_sections(self):
-        """Retourne les sections accessibles"""
         sections = []
         if self.has_permission('can_view_dashboard'):
             sections.append('dashboard')
