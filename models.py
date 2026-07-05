@@ -1781,7 +1781,7 @@ class Audit(db.Model):
     __tablename__ = 'audits'
     
     id = db.Column(db.Integer, primary_key=True)
-    reference = db.Column(db.String(50), nullable=False)  # unique=True ENLEVÉ
+    reference = db.Column(db.String(50), nullable=False)
     titre = db.Column(db.String(200), nullable=False)
     description = db.Column(db.Text)
     type_audit = db.Column(db.String(50), nullable=False)
@@ -1814,39 +1814,75 @@ class Audit(db.Model):
     archived_by = db.Column(db.Integer, db.ForeignKey('user.id'))
     processus_concerne = db.Column(db.String(500))
     client_id = db.Column(db.Integer, db.ForeignKey('clients.id'), nullable=True)
-    mission_associee = db.relationship('MissionAudit', backref='audit_lie', uselist=False)
-
+    
     # Membres externes
     membres_externes = db.Column(db.JSON, nullable=True, default=list)
     
-    # Relations
-    createur = db.relationship('User', foreign_keys=[created_by])
-    responsable = db.relationship('User', foreign_keys=[responsable_id], 
-                                  backref='audits_dont_je_suis_responsable')
-    archiveur = db.relationship('User', foreign_keys=[archived_by], 
-                               backref='audits_que_jai_archives')
-    processus = db.relationship('ProcessusActivite', backref='audits')
+    # ============================================
+    # 🔥 RELATIONS AVEC backrefs UNIQUES
+    # ============================================
+    
+    # Mission associée
+    mission_associee = db.relationship(
+        'MissionAudit', 
+        backref='audit_lie', 
+        uselist=False,
+        foreign_keys='MissionAudit.audit_id'
+    )
+    
+    # Relations principales
+    createur = db.relationship(
+        'User', 
+        foreign_keys=[created_by],
+        backref='audits_que_jai_crees'
+    )
+    
+    responsable = db.relationship(
+        'User', 
+        foreign_keys=[responsable_id],
+        backref='audits_dont_je_suis_responsable'
+    )
+    
+    archiveur = db.relationship(
+        'User', 
+        foreign_keys=[archived_by],
+        backref='audits_que_jai_archives'
+    )
+    
+    processus = db.relationship(
+        'ProcessusActivite', 
+        backref='audits_associes',
+        foreign_keys=[processus_id]
+    )
     
     # Relations avec les autres modèles
-    constatations = db.relationship('Constatation', 
-                                    back_populates='audit', 
-                                    lazy=True, 
-                                    cascade='all, delete-orphan')
+    constatations = db.relationship(
+        'Constatation', 
+        back_populates='audit', 
+        lazy=True, 
+        cascade='all, delete-orphan'
+    )
     
-    recommandations = db.relationship('Recommandation', 
-                                      back_populates='audit', 
-                                      lazy=True, 
-                                      cascade='all, delete-orphan')
+    recommandations = db.relationship(
+        'Recommandation', 
+        back_populates='audit', 
+        lazy=True, 
+        cascade='all, delete-orphan'
+    )
     
-    plans_action = db.relationship('PlanAction', 
-                                   back_populates='audit', 
-                                   lazy=True, 
-                                   cascade='all, delete-orphan')
+    plans_action = db.relationship(
+        'PlanAction', 
+        back_populates='audit', 
+        lazy=True, 
+        cascade='all, delete-orphan'
+    )
     
-    audit_risques = db.relationship('AuditRisque', 
-                                    back_populates='audit', 
-                                    lazy=True, 
-                                    cascade='all, delete-orphan')
+    audit_risques = db.relationship(
+        'AuditRisque', 
+        back_populates='audit', 
+        lazy=True, 
+        cascade='all, delete-orphan'
+    )
     
     # ===== CONTRAINTE UNIQUE COMPOSITE =====
     __table_args__ = (
@@ -1868,7 +1904,7 @@ class Audit(db.Model):
         
         return f"{prefixe}{(count + 1):04d}"
     
-    # ===== MÉTHODES EXISTANTES (à conserver) =====
+    # ===== MÉTHODES EXISTANTES =====
     
     def get_equipe_audit(self):
         """Retourne la liste des utilisateurs de l'équipe d'audit"""
@@ -2179,7 +2215,6 @@ class Audit(db.Model):
     
     def __repr__(self):
         return f'<Audit {self.reference}: {self.titre}>'
-    
 # -------------------- AUDIT RISQUE - CORRIGÉ --------------------
 class AuditRisque(db.Model):
     __tablename__ = 'audit_risques'
