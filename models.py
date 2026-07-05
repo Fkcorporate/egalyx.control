@@ -5377,14 +5377,14 @@ class Client(db.Model):
 
     # Configuration
     domaine = db.Column(db.String(200), unique=True)
-    sous_domaine = db.Column(db.String(200), unique=True)  # ← AJOUTÉ : sous-domaine pour multi-tenant
+    sous_domaine = db.Column(db.String(200), unique=True)
     logo = db.Column(db.String(500))
     theme_couleur = db.Column(db.String(50), default='#1A3C6B')
     langue = db.Column(db.String(10), default='fr')
     fuseau_horaire = db.Column(db.String(50), default='Europe/Paris')
     
     # Plan et limitations
-    plan = db.Column(db.String(50), default='standard')  # standard, premium, enterprise
+    plan = db.Column(db.String(50), default='standard')
     max_utilisateurs = db.Column(db.Integer, default=10)
     max_risques = db.Column(db.Integer, default=1000)
     max_audits = db.Column(db.Integer, default=100)
@@ -5411,10 +5411,22 @@ class Client(db.Model):
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
     
-    # ========== RELATIONS ==========
-    # Relation avec User (propriétaire de la relation)
-    users = db.relationship('User', back_populates='client', lazy='dynamic')
-    utilisateurs = db.relationship('User', back_populates='client', lazy=True)
+    # ========== RELATIONS AVEC overlaps ==========
+    
+    # 🔥 Relation avec User (propriétaire de la relation)
+    users = db.relationship(
+        'User', 
+        back_populates='client', 
+        lazy='dynamic',
+        overlaps='utilisateurs'  # ← AJOUTÉ
+    )
+    
+    utilisateurs = db.relationship(
+        'User', 
+        back_populates='client', 
+        lazy=True,
+        overlaps='users'  # ← AJOUTÉ
+    )
     
     # Relation avec FormuleAbonnement
     formule = db.relationship('FormuleAbonnement', back_populates='clients', foreign_keys=[formule_id])
