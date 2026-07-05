@@ -156,7 +156,7 @@ class User(UserMixin, db.Model):
     })
     
     # ============================================
-    # 🔥 RELATIONS AVEC back_populates UNIQUES
+    # 🔥 RELATIONS - UNE SEULE PAR TYPE
     # ============================================
     
     # Pôles
@@ -243,7 +243,7 @@ class User(UserMixin, db.Model):
                                    lazy=True)
     
     # ============================================
-    # 🔥 RELATIONS POUR AUDIT (back_populates UNIQUES)
+    # 🔥 RELATIONS POUR AUDIT (UNIQUES)
     # ============================================
     
     audits_createur = db.relationship(
@@ -287,7 +287,7 @@ class User(UserMixin, db.Model):
                                       lazy=True)
     
     # ============================================
-    # 🔥 RELATIONS POUR LOGIGRAMMES (back_populates UNIQUES)
+    # 🔥 RELATIONS POUR LOGIGRAMMES (UNE SEULE)
     # ============================================
     
     logigrammes_crees = db.relationship(
@@ -296,6 +296,9 @@ class User(UserMixin, db.Model):
         lazy=True,
         back_populates='createur'
     )
+    
+    # ❌ SUPPRIMER cette relation si elle existe :
+    # processus_activites_crees = db.relationship(...)
     
     # Journal d'activité
     activites = db.relationship('JournalActivite', 
@@ -317,124 +320,68 @@ class User(UserMixin, db.Model):
                                           order_by='Notification.created_at.desc()')
     
     # ============================================
-    # MÉTHODES DE GESTION DES MOTS DE PASSE
+    # MÉTHODES (conservées)
     # ============================================
     
     def set_password(self, password, check_history=True):
-        """
-        Définit le mot de passe avec validation de force et historique
-        
-        Args:
-            password: Le nouveau mot de passe
-            check_history: Vérifier l'historique (True pour changement)
-        
-        Raises:
-            ValueError: Si le mot de passe ne respecte pas les critères
-        """
+        """Définit le mot de passe avec validation"""
         import re
         from datetime import datetime, timedelta
         from werkzeug.security import generate_password_hash
         
-        # ============================================
-        # 1. VALIDATION DE LA FORCE DU MOT DE PASSE
-        # ============================================
-        
-        # Minimum 12 caractères (recommandation ANSSI)
         if len(password) < 12:
             raise ValueError("Le mot de passe doit contenir au moins 12 caractères")
-        
-        # Au moins une majuscule
         if not re.search(r"[A-Z]", password):
             raise ValueError("Le mot de passe doit contenir au moins une majuscule")
-        
-        # Au moins une minuscule
         if not re.search(r"[a-z]", password):
             raise ValueError("Le mot de passe doit contenir au moins une minuscule")
-        
-        # Au moins un chiffre
         if not re.search(r"[0-9]", password):
             raise ValueError("Le mot de passe doit contenir au moins un chiffre")
-        
-        # Au moins un caractère spécial
         if not re.search(r"[!@#$%^&*(),.?\":{}|<>]", password):
             raise ValueError("Le mot de passe doit contenir au moins un caractère spécial")
-        
-        # Pas d'espaces
         if " " in password:
             raise ValueError("Le mot de passe ne doit pas contenir d'espaces")
         
-        # Pas de séquences évidentes
-        common_patterns = [
-            r"123456", r"password", r"motdepasse", r"azerty", r"qwerty",
-            r"admin", r"root", r"test", r"123456789", r"0123456789"
-        ]
+        common_patterns = [r"123456", r"password", r"motdepasse", r"azerty", r"qwerty", r"admin", r"root", r"test"]
         password_lower = password.lower()
         for pattern in common_patterns:
             if pattern in password_lower:
                 raise ValueError(f"Le mot de passe contient une séquence trop simple: '{pattern}'")
         
-        # Pas de répétitions (aaaa, 1111, etc.)
         if re.search(r"(.)\1{3,}", password):
             raise ValueError("Le mot de passe contient trop de caractères répétés")
         
-        # ============================================
-        # 2. VÉRIFICATION DE L'HISTORIQUE
-        # ============================================
-        
         if check_history and self.password_history:
             from werkzeug.security import check_password_hash
-            # Vérifier les 5 derniers mots de passe
             for old_hash in self.password_history[-5:]:
                 if check_password_hash(old_hash, password):
                     raise ValueError("Vous ne pouvez pas réutiliser un des 5 derniers mots de passe")
         
-        # ============================================
-        # 3. SAUVEGARDE DE L'ANCIEN MOT DE PASSE
-        # ============================================
-        
-        if self.password_hash and self.id:  # Si c'est une modification
+        if self.password_hash and self.id:
             if not self.password_history:
                 self.password_history = []
-            
-            # Ajouter l'ancien hash à l'historique
             self.password_history.append(self.password_hash)
-            
-            # Garder seulement les 10 derniers
             if len(self.password_history) > 10:
                 self.password_history = self.password_history[-10:]
         
-        # ============================================
-        # 4. HASHAGE DU NOUVEAU MOT DE PASSE
-        # ============================================
-        
         self.password_hash = generate_password_hash(password)
         self.password_changed_at = datetime.utcnow()
-        self.failed_login_attempts = 0  # Réinitialiser les tentatives
-        self.force_password_change = False  # Désactiver le flag
-        
-        # Date d'expiration (90 jours)
+        self.failed_login_attempts = 0
+        self.force_password_change = False
         self.password_expires_at = datetime.utcnow() + timedelta(days=90)
         
-        # Nouveau token de session (invalide les anciennes sessions)
         import secrets
         self.session_token = secrets.token_urlsafe(32)
 
     def check_password(self, password):
-        """
-        Vérifie le mot de passe avec gestion des tentatives échouées
-        
-        Returns:
-            tuple: (success, message) - success est un booléen, message est un string
-        """
+        """Vérifie le mot de passe avec gestion des tentatives"""
         from datetime import datetime
         from werkzeug.security import check_password_hash
         
-        # 1. VÉRIFIER SI LE COMPTE EST BLOQUÉ
         if self.is_blocked:
             if self.locked_until and self.locked_until > datetime.utcnow():
                 return False, f"Compte temporairement bloqué jusqu'au {self.locked_until.strftime('%d/%m/%Y %H:%M')}"
             elif self.locked_until and self.locked_until <= datetime.utcnow():
-                # Débloquer automatiquement
                 self.is_blocked = False
                 self.locked_until = None
                 self.failed_login_attempts = 0
@@ -442,7 +389,6 @@ class User(UserMixin, db.Model):
             else:
                 return False, "Ce compte est bloqué. Contactez l'administrateur."
         
-        # 2. VÉRIFIER LE MOT DE PASSE
         is_valid = check_password_hash(self.password_hash, password)
         
         if is_valid:
@@ -450,45 +396,30 @@ class User(UserMixin, db.Model):
             self.last_failed_login = None
             return True, "Connexion réussie"
         
-        # Échec : incrémenter le compteur
         self.failed_login_attempts += 1
         self.last_failed_login = datetime.utcnow()
         
-        # 3. POLITIQUE DE BLOCAGE PROGRESSIVE
         if self.failed_login_attempts >= 10:
             self.is_blocked = True
             self.blocked_at = datetime.utcnow()
             self.blocked_reason = "Trop de tentatives de connexion échouées (10+)"
             return False, "Compte bloqué pour sécurité. Contactez l'administrateur."
-        
         elif self.failed_login_attempts >= 5:
             self.locked_until = datetime.utcnow() + timedelta(minutes=30)
             self.lock_reason = f"Trop de tentatives échouées ({self.failed_login_attempts})"
             return False, f"Trop de tentatives. Compte bloqué 30 minutes."
-        
         elif self.failed_login_attempts >= 3:
             return False, f"Mot de passe incorrect. Tentative {self.failed_login_attempts}/5"
-        
         else:
             return False, "Nom d'utilisateur ou mot de passe incorrect"
     
     def is_password_expired(self):
-        """Vérifie si le mot de passe a expiré"""
         from datetime import datetime
         if not self.password_expires_at:
             return False
         return datetime.utcnow() > self.password_expires_at
     
     def generate_reset_token(self, expires_in=3600):
-        """
-        Génère un token de réinitialisation de mot de passe
-        
-        Args:
-            expires_in: Durée de validité en secondes (défaut: 1 heure)
-        
-        Returns:
-            str: Le token de réinitialisation
-        """
         import secrets
         from datetime import datetime, timedelta
         
@@ -498,60 +429,32 @@ class User(UserMixin, db.Model):
         return self.reset_password_token
     
     def verify_reset_token(self, token):
-        """
-        Vérifie si un token de réinitialisation est valide
-        
-        Args:
-            token: Le token à vérifier
-        
-        Returns:
-            bool: True si le token est valide
-        """
         from datetime import datetime
         
         if not self.reset_password_token or not self.reset_password_expires:
             return False
-        
         if self.reset_password_token != token:
             return False
-        
         if datetime.utcnow() > self.reset_password_expires:
             return False
-        
         return True
     
     def invalidate_sessions(self):
-        """Invalide toutes les sessions de l'utilisateur"""
         import secrets
         self.session_token = secrets.token_urlsafe(32)
         db.session.commit()
 
-    # ============================================
-    # MÉTHODES DE PERMISSIONS
-    # ============================================
-
     def has_permission(self, permission):
         """Vérifie si l'utilisateur a une permission spécifique"""
-        
-        print(f"🔐 [DEBUG] Vérification permission '{permission}' pour {self.username} (rôle: {self.role})")
-        
-        # 1. SUPER ADMIN : TOUJOURS AUTORISÉ
         if self.role == 'super_admin':
-            print(f"   ✅ Super admin - accès immédiat")
             return True
         
-        # 2. Vérifier d'abord les permissions EXPLICITES dans la base (PRIORITÉ ABSOLUE)
         if self.permissions and permission in self.permissions:
-            value = bool(self.permissions[permission])
-            print(f"   📋 Permission explicite dans DB: {permission} = {value}")
-            return value
+            return bool(self.permissions[permission])
         
-        # 3. ADMIN CLIENT
         is_admin_client = (self.role == 'admin') or (getattr(self, 'is_client_admin', False))
         
         if is_admin_client:
-            print(f"   👑 Utilisateur est un ADMIN CLIENT")
-            
             permissions_admin_obligatoires = {
                 'can_view_dashboard': True,
                 'can_view_reports': True,
@@ -580,7 +483,6 @@ class User(UserMixin, db.Model):
                 'can_provision_servers': False,
             }
             
-            # Ajouter les permissions conditionnelles selon la formule
             if self.client and self.client.formule:
                 permissions_admin_obligatoires['can_manage_regulatory'] = self.client.formule.modules.get('veille_reglementaire', False)
                 permissions_admin_obligatoires['can_manage_logigram'] = self.client.formule.modules.get('gestion_processus', False)
@@ -588,11 +490,7 @@ class User(UserMixin, db.Model):
             if permission in permissions_admin_obligatoires:
                 return permissions_admin_obligatoires[permission]
         
-        # 4. GESTIONNAIRE (manager)
         if self.role == 'manager':
-            print(f"   👤 Utilisateur est un GESTIONNAIRE")
-            
-            # Permissions de base pour manager
             manager_base_permissions = {
                 'can_view_dashboard': True,
                 'can_view_reports': True,
@@ -601,15 +499,10 @@ class User(UserMixin, db.Model):
                 'can_view_action_plans': True,
                 'can_export_data': True,
             }
-            
-            # Vérifier si la permission est dans les permissions de base du manager
             if permission in manager_base_permissions:
                 return manager_base_permissions[permission]
-            
-            print(f"   ❌ Permission '{permission}' non définie pour manager, REFUSÉE")
             return False
         
-        # 5. PERMISSIONS PAR DÉFAUT SELON LE RÔLE
         role_defaults = {
             'auditeur': {
                 'can_view_dashboard': True,
@@ -643,99 +536,56 @@ class User(UserMixin, db.Model):
         if self.role in role_defaults and permission in role_defaults[self.role]:
             return role_defaults[self.role][permission]
         
-        print(f"   ❌ Permission '{permission}' REFUSÉE")
         return False
     
-    # ============================================
-    # MÉTHODES DE GESTION DES UTILISATEURS
-    # ============================================
-    
     def can_manage_user(self, target_user):
-        """Vérifie si l'utilisateur peut gérer un autre utilisateur"""
-        
-        # On ne peut pas gérer soi-même
         if self.id == target_user.id:
             return False
-        
-        # Même client
         if self.client_id != target_user.client_id:
             return False
-        
-        # SUPER ADMIN
         if self.role == 'super_admin':
             return True
-        
-        # ADMIN CLIENT
         if self.is_client_admin:
             return not target_user.is_client_admin
-        
-        # GESTIONNAIRE
         if self.can_manage_users:
             return (not target_user.is_client_admin and 
                     not target_user.can_manage_users)
-        
         return False
     
     def can_edit_plan(self, plan):
-        """Vérifie si l'utilisateur peut modifier un plan d'action"""
-        
-        # SUPER ADMIN
         if self.role == 'super_admin':
             return True
-        
-        # Même client
         plan_client_id = getattr(plan, 'client_id', None)
         if plan_client_id and self.client_id != plan_client_id:
             return False
-        
-        # ADMIN CLIENT
         if self.is_client_admin:
             return True
-        
-        # Créateur du plan
         if hasattr(plan, 'created_by') and self.id == plan.created_by:
             return True
-        
-        # Responsable du plan
         if hasattr(plan, 'responsable_id') and self.id == plan.responsable_id:
             return True
-        
-        # Permission spécifique
         return self.has_permission('can_manage_action_plans')
     
     def can_archive_audit(self, audit):
-        """Vérifie si l'utilisateur peut archiver un audit"""
-        
         if self.role == 'super_admin':
             return True
-        
         audit_client_id = getattr(audit, 'client_id', None)
-        
         if audit_client_id is None:
             if hasattr(audit, 'created_by') and self.id == audit.created_by:
                 return True
             if hasattr(audit, 'responsable_id') and self.id == audit.responsable_id:
                 return True
             return False
-        
         if audit_client_id != self.client_id:
             return False
-        
         if self.is_client_admin:
             return True
-        
         if self.id == getattr(audit, 'created_by', None) or \
            self.id == getattr(audit, 'responsable_id', None):
             return True
-        
         return self.has_permission('can_manage_audit')
     
-    # ============================================
-    # MÉTHODES DE NOTIFICATIONS
-    # ============================================
-    
     def get_notification_preference(self, channel, event):
-        """Obtenir la préférence de notification"""
         if not self.preferences_notifications:
             return True
         if channel not in self.preferences_notifications:
@@ -743,9 +593,6 @@ class User(UserMixin, db.Model):
         return self.preferences_notifications[channel].get(event, True)
     
     def should_receive_notification(self, notification_type, channel='web'):
-        """Vérifie si l'utilisateur devrait recevoir une notification"""
-        
-        # Vérifier pause
         if self.preferences_notifications and self.preferences_notifications.get('pause_until'):
             try:
                 from datetime import datetime
@@ -754,16 +601,13 @@ class User(UserMixin, db.Model):
                     pause_date = datetime.strptime(pause_date, '%Y-%m-%d').date()
                 elif isinstance(pause_date, datetime):
                     pause_date = pause_date.date()
-                
                 if pause_date and pause_date >= datetime.utcnow().date():
                     return False
             except Exception:
                 pass
-        
         return self.get_notification_preference(channel, notification_type)
     
     def get_notifications_non_lues_count(self):
-        """Compter les notifications non lues"""
         from models import Notification
         return Notification.query.filter_by(
             destinataire_id=self.id,
@@ -771,7 +615,6 @@ class User(UserMixin, db.Model):
         ).count()
     
     def get_notifications_recentes(self, limit=10):
-        """Obtenir les notifications récentes"""
         from models import Notification
         return Notification.query.filter_by(
             destinataire_id=self.id
@@ -779,12 +622,7 @@ class User(UserMixin, db.Model):
             Notification.created_at.desc()
         ).limit(limit).all()
     
-    # ============================================
-    # MÉTHODES UTILITAIRES
-    # ============================================
-    
     def get_role_display_name(self):
-        """Retourne le nom d'affichage du rôle"""
         role_names = {
             'admin': 'Administrateur',
             'manager': 'Manager',
@@ -797,13 +635,11 @@ class User(UserMixin, db.Model):
         return role_names.get(self.role, self.role.title())
     
     def update_last_login(self):
-        """Met à jour la date de dernière connexion"""
         from datetime import datetime
         self.last_login = datetime.utcnow()
         db.session.commit()
     
     def get_allowed_sections(self):
-        """Retourne les sections accessibles"""
         sections = []
         if self.has_permission('can_view_dashboard'):
             sections.append('dashboard')
@@ -827,7 +663,6 @@ class User(UserMixin, db.Model):
         return f'<User {self.username} ({self.role})>'
     
     def to_dict(self):
-        """Convertit l'utilisateur en dictionnaire"""
         return {
             'id': self.id,
             'username': self.username,
