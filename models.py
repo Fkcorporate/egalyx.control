@@ -3642,7 +3642,11 @@ class FeedbackAuditeur(db.Model):
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     periode = db.Column(db.String(20))  # trimestre1, semestre1, annuel
     
-    client_id = db.Column(db.Integer, db.ForeignKey('client.id'), nullable=False)
+    # 🔥 CORRECTION : Utiliser 'clients.id' au lieu de 'client.id'
+    client_id = db.Column(db.Integer, db.ForeignKey('clients.id'), nullable=False)
+    
+    # Relation
+    client = db.relationship('Client', foreign_keys=[client_id])
     
     def __repr__(self):
         return f'<Feedback {self.auditeur_id} par {self.evaluateur_id}>'
