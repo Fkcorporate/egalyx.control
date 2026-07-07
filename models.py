@@ -13154,24 +13154,26 @@ class AlerteApprobation(db.Model):
 # ============================================
 # SERVICE D'ENVOI D'ALERTES
 # ============================================
+
 class ServiceAlerteApprobation:
-    """Service pour gérer les alertes d'approbation - Version avec contexte Flask"""
+    """Service pour gérer les alertes d'approbation"""
     
     @staticmethod
     def verifier_et_envoyer_alertes():
         """
         Vérifie tous les audits et envoie les alertes nécessaires.
-        Cette méthode est appelée par APScheduler - DOIT avoir le contexte Flask.
+        Cette méthode est appelée par APScheduler.
         """
-        from flask import current_app
+        # ⚠️ NE PAS utiliser current_app ici - il n'est pas disponible
+        # Utiliser l'import de l'application et le contexte
+        from app import app
         
-        # ✅ CORRECTION : Utiliser le contexte d'application Flask
-        with current_app.app_context():
+        with app.app_context():
             return ServiceAlerteApprobation._verifier_et_envoyer_alertes_interne()
     
     @staticmethod
     def _verifier_et_envoyer_alertes_interne():
-        """Méthode interne avec contexte d'application - Contient toute la logique"""
+        """Méthode interne avec contexte d'application"""
         from datetime import datetime, timedelta
         from models import (
             Audit, WorkflowApprobation, User, Recommandation, 
@@ -13292,24 +13294,6 @@ class ServiceAlerteApprobation:
             import traceback
             traceback.print_exc()
             return 0
-    
-    @staticmethod
-    def _get_approbateurs_niveau1(client_id):
-        """Récupère les approbateurs niveau 1 (responsables qualité)"""
-        return User.query.filter(
-            User.client_id == client_id,
-            User.is_active == True,
-            User.role.in_(['admin', 'manager', 'responsable_qualite'])
-        ).all()
-    
-    @staticmethod
-    def _get_approbateurs_niveau2(client_id):
-        """Récupère les approbateurs niveau 2 (direction)"""
-        return User.query.filter(
-            User.client_id == client_id,
-            User.is_active == True,
-            User.role.in_(['admin', 'directeur', 'direction', 'dg'])
-        ).all()
     
     @staticmethod
     def _creer_alerte_approbation(audit, destinataire, type_alerte, titre, message, workflow=None, date_echeance=None, jours_retard=None):
