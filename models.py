@@ -13297,11 +13297,25 @@ class ServiceAlerteApprobation:
     
     @staticmethod
     def _creer_alerte_approbation(audit, destinataire, type_alerte, titre, message, workflow=None, date_echeance=None, jours_retard=None):
-        """Crée une alerte d'approbation et une notification associée"""
+        """Crée une alerte UNIQUEMENT si elle n'existe pas déjà"""
         from models import AlerteApprobation, Notification, db
+        from datetime import datetime, timedelta
         
         try:
-            # 1. Créer l'alerte dans la base de données
+            # ✅ ÉTAPE 1 : Vérifier si l'alerte existe déjà
+            alerte_existante = AlerteApprobation.query.filter(
+                AlerteApprobation.audit_id == audit.id,
+                AlerteApprobation.destinataire_id == destinataire.id,
+                AlerteApprobation.type_alerte == type_alerte,
+                AlerteApprobation.est_lue == False
+            ).first()
+            
+            # ✅ ÉTAPE 2 : Si l'alerte existe déjà, on ne fait RIEN
+            if alerte_existante:
+                print(f"⏭️ Alerte déjà existante pour {audit.reference} - {destinataire.username}")
+                return alerte_existante  # On retourne l'alerte existante
+            
+            # ✅ ÉTAPE 3 : Si l'alerte n'existe pas, on la crée
             alerte = AlerteApprobation(
                 audit_id=audit.id,
                 destinataire_id=destinataire.id,
@@ -13313,36 +13327,21 @@ class ServiceAlerteApprobation:
             )
             db.session.add(alerte)
             
-            # 2. Créer une notification dans le système principal
-            niveau_urgence = 'urgent' if type_alerte in ['retard', 'approbation_niveau2'] else 'important' if type_alerte == 'approbation_niveau1' else 'normal'
-            
+            # Créer la notification associée
             notification = Notification(
                 destinataire_id=destinataire.id,
                 type_notification='alerte_approbation',
                 titre=titre,
                 message=message,
-                urgence=niveau_urgence,
+                urgence='important',
                 entite_type='audit',
                 entite_id=audit.id,
                 client_id=audit.client_id
             )
             db.session.add(notification)
             
-            # 3. Ajouter des métadonnées supplémentaires pour l'affichage
-            if workflow:
-                notification.donnees_supplementaires = {
-                    'workflow_etape': workflow.etape_actuelle,
-                    'audit_reference': audit.reference,
-                    'audit_titre': audit.titre,
-                    'type_alerte': type_alerte
-                }
-                
-                if date_echeance:
-                    notification.donnees_supplementaires['date_echeance'] = date_echeance.isoformat()
-                if jours_retard:
-                    notification.donnees_supplementaires['jours_retard'] = jours_retard
-            
             db.session.commit()
+            print(f"✅ Nouvelle alerte créée pour {audit.reference}")
             return alerte
             
         except Exception as e:
