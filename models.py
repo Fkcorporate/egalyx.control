@@ -990,19 +990,41 @@ class Cartographie(db.Model):
         return " > ".join(parts)
     
 # -------------------- RISQUE --------------------
+# ============================================
+# TABLE D'ASSOCIATION TESTS ↔ RISQUES
+# ============================================
+
+test_risques = db.Table('test_risques',
+    db.Column('test_id', db.Integer, db.ForeignKey('tests_controle_feuille.id'), primary_key=True),
+    db.Column('risque_id', db.Integer, db.ForeignKey('risques.id'), primary_key=True),
+    db.Column('created_at', db.DateTime, default=datetime.utcnow),
+    db.Column('created_by', db.Integer, db.ForeignKey('user.id'))
+)
+
+# ============================================
+# MODÈLE RISQUE (VERSION COMPLÈTE)
+# ============================================
+
 class Risque(db.Model):
     __tablename__ = 'risques'
     
     id = db.Column(db.Integer, primary_key=True)
-    reference = db.Column(db.String(50), nullable=False)  # ← unique=True ENLEVÉ
+    cartographie_id = db.Column(db.Integer, db.ForeignKey('cartographie.id'))
+    reference = db.Column(db.String(50), unique=True, nullable=False)
     intitule = db.Column(db.String(300), nullable=False)
     description = db.Column(db.Text)
-    cartographie_id = db.Column(db.Integer, db.ForeignKey('cartographie.id'))
     processus_concerne = db.Column(db.String(200))
     categorie = db.Column(db.String(100))
     type_risque = db.Column(db.String(100))
     cause_racine = db.Column(db.Text)
     consequences = db.Column(db.Text)
+    
+    # 🔥 CHAMPS DE CRITICITÉ
+    niveau_criticite = db.Column(db.String(20), default='moyen')
+    impact = db.Column(db.String(20), default='modere')
+    probabilite = db.Column(db.String(20), default='possible')
+    score_risque = db.Column(db.Integer)
+    
     created_by = db.Column(db.Integer, db.ForeignKey('user.id'))
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     is_archived = db.Column(db.Boolean, default=False)
@@ -1010,47 +1032,168 @@ class Risque(db.Model):
     archived_by = db.Column(db.Integer, db.ForeignKey('user.id'))
     archive_reason = db.Column(db.Text)
     client_id = db.Column(db.Integer, db.ForeignKey('clients.id'), nullable=True)
+    
+    processus_metier_associe_id = db.Column(db.Integer, db.ForeignKey('processus_metier.id'), nullable=True)
 
     # Relations
     cartographie = db.relationship('Cartographie', back_populates='risques')
-    createur = db.relationship('User', foreign_keys=[created_by], back_populates='risques_crees')
-    archive_user = db.relationship('User', foreign_keys=[archived_by], back_populates='risques_archives')
+    createur = db.relationship('User', foreign_keys=[created_by])
+    archive_user = db.relationship('User', foreign_keys=[archived_by])
     evaluations = db.relationship('EvaluationRisque', back_populates='risque', lazy=True)
-    kri = db.relationship('KRI', back_populates='risque', uselist=False, lazy=True,
-                         primaryjoin='Risque.id == KRI.risque_id')
-    dispositifs_maitrise = db.relationship('DispositifMaitrise', 
-                                          back_populates='risque',
-                                          cascade='all, delete-orphan',
-                                          lazy=True)
+    kri = db.relationship('KRI', back_populates='risque', uselist=False, lazy=True)
+    dispositifs_maitrise = db.relationship('DispositifMaitrise', back_populates='risque', cascade='all, delete-orphan', lazy=True)
+    processus_metier = db.relationship('ProcessusMetier', foreign_keys=[processus_metier_associe_id], backref=db.backref('risques_du_processus', lazy='dynamic'), lazy='joined')
     
-    # ⭐ CONTRAINTE UNIQUE COMPOSITE
-    __table_args__ = (
-        db.UniqueConstraint('reference', 'client_id', name='uix_risque_reference_client'),
+    # 🔥 RELATION MANY-TO-MANY AVEC LES TESTS
+    tests_associes = db.relationship(
+        'TestControleFeuille',
+        secondary=test_risques,
+        back_populates='risques_associes',
+        lazy='dynamic'
     )
+
+    # ============================================
+    # PROPRIÉTÉS
+    # ============================================
     
-    # ⭐ MÉTHODE DE GÉNÉRATION
-    @staticmethod
-    def generer_reference(client_id):
-        from datetime import datetime
-        annee = datetime.now().year
-        prefixe = f"RISQ-{annee}-"
-        
-        count = Risque.query.filter(
-            Risque.reference.like(f'{prefixe}%'),
-            Risque.client_id == client_id
-        ).count()
-        
-        return f"{prefixe}{(count + 1):04d}"
+    @property
+    def a_processus_associe(self):
+        return self.processus_metier_associe_id is not None
     
-    # ⭐ MÉTHODE UTILITAIRE (optionnelle)
-    def get_derniere_evaluation_niveau(self):
-        if self.evaluations:
-            derniere = sorted(self.evaluations, key=lambda x: x.created_at)[-1]
-            return derniere.niveau_risque
+    @property
+    def nom_processus_associe(self):
+        if self.processus_metier:
+            return self.processus_metier.nom
         return None
     
+    @property
+    def reference_processus_associe(self):
+        if self.processus_metier:
+            return self.processus_metier.reference
+        return None
+    
+    @property
+    def nb_tests_associes(self):
+        return self.tests_associes.count()
+    
+    @property
+    def derniere_evaluation(self):
+        if self.evaluations:
+            return max(self.evaluations, key=lambda x: x.created_at)
+        return None
+    
+    @property
+    def niveau_risque_label(self):
+        labels = {
+            'faible': '🟢 Faible',
+            'moyen': '🟡 Moyen',
+            'eleve': '🟠 Élevé',
+            'critique': '🔴 Critique'
+        }
+        return labels.get(self.niveau_criticite, '🟡 Moyen')
+    
+    @property
+    def impact_label(self):
+        labels = {
+            'mineur': '🟢 Mineur',
+            'modere': '🟡 Modéré',
+            'severe': '🟠 Sévère',
+            'critique': '🔴 Critique'
+        }
+        return labels.get(self.impact, '🟡 Modéré')
+    
+    @property
+    def probabilite_label(self):
+        labels = {
+            'rare': '🟢 Rare',
+            'possible': '🟡 Possible',
+            'probable': '🟠 Probable',
+            'frequente': '🔴 Fréquente'
+        }
+        return labels.get(self.probabilite, '🟡 Possible')
+
+    # ============================================
+    # MÉTHODES
+    # ============================================
+    
+    def calculer_score_risque(self):
+        """Calcule le score de risque (Impact × Probabilité)"""
+        matrice_impact = {'mineur': 1, 'modere': 2, 'severe': 3, 'critique': 4}
+        matrice_probabilite = {'rare': 1, 'possible': 2, 'probable': 3, 'frequente': 4}
+        
+        impact_score = matrice_impact.get(self.impact, 2)
+        proba_score = matrice_probabilite.get(self.probabilite, 2)
+        
+        self.score_risque = impact_score * proba_score
+        return self.score_risque
+    
+    def calculer_niveau_criticite(self):
+        """Calcule le niveau de criticité à partir du score"""
+        if self.score_risque is None:
+            self.calculer_score_risque()
+        
+        if self.score_risque >= 16:
+            self.niveau_criticite = 'critique'
+        elif self.score_risque >= 11:
+            self.niveau_criticite = 'eleve'
+        elif self.score_risque >= 6:
+            self.niveau_criticite = 'moyen'
+        else:
+            self.niveau_criticite = 'faible'
+        
+        return self.niveau_criticite
+    
+    def mettre_a_jour_criticite(self):
+        """Met à jour la criticité"""
+        self.calculer_score_risque()
+        self.calculer_niveau_criticite()
+        return self.niveau_criticite
+    
+    def get_couleur_criticite(self):
+        """Retourne la couleur CSS pour le niveau de criticité"""
+        couleurs = {
+            'faible': '#10b981',
+            'moyen': '#f59e0b',
+            'eleve': '#ef4444',
+            'critique': '#dc2626'
+        }
+        return couleurs.get(self.niveau_criticite, '#6b7280')
+    
+    def to_dict(self):
+        result = {
+            'id': self.id,
+            'reference': self.reference,
+            'intitule': self.intitule,
+            'description': self.description,
+            'categorie': self.categorie,
+            'type_risque': self.type_risque,
+            'processus_concerne': self.processus_concerne,
+            'niveau_criticite': self.niveau_criticite,
+            'niveau_label': self.niveau_risque_label,
+            'impact': self.impact,
+            'impact_label': self.impact_label,
+            'probabilite': self.probabilite,
+            'probabilite_label': self.probabilite_label,
+            'score_risque': self.score_risque,
+            'couleur': self.get_couleur_criticite(),
+            'nb_tests_associes': self.nb_tests_associes,
+            'created_at': self.created_at.isoformat() if self.created_at else None,
+            'is_archived': self.is_archived,
+            'client_id': self.client_id
+        }
+        
+        if self.derniere_evaluation:
+            result['derniere_evaluation'] = {
+                'id': self.derniere_evaluation.id,
+                'niveau': self.derniere_evaluation.niveau_risque,
+                'score': self.derniere_evaluation.score_risque,
+                'date': self.derniere_evaluation.created_at.isoformat() if self.derniere_evaluation.created_at else None
+            }
+        
+        return result
+    
     def __repr__(self):
-        return f'<Risque {self.reference}: {self.intitule[:50]}>'
+        return f"<Risque {self.reference}: {self.intitule[:50]}>"
 
 # -------------------- EVALUATION RISQUE (CORRIGÉ) --------------------
 class EvaluationRisque(db.Model):
@@ -3144,95 +3287,100 @@ class FeuilleTravail(db.Model):
 
 
 
+# ============================================
+# MODÈLE TEST CONTROLE FEUILLE (AVEC MULTIPLES RISQUES)
+# ============================================
+
 class TestControleFeuille(db.Model):
-    """Ligne de test de contrôle dans une feuille de travail - Version Ultra Complète"""
+    """Ligne de test de contrôle dans une feuille de travail"""
     __tablename__ = 'tests_controle_feuille'
     
+    # ============================================
+    # IDENTIFIANTS
+    # ============================================
     id = db.Column(db.Integer, primary_key=True)
     feuille_travail_id = db.Column(db.Integer, db.ForeignKey('feuilles_travail.id'), nullable=False)
     
     # ============================================
-    # 1. INFORMATIONS GÉNÉRALES
+    # INFORMATIONS GÉNÉRALES
     # ============================================
     objet_test = db.Column(db.String(200), nullable=False)
-    objectif_controle = db.Column(db.Text)  # Objectif spécifique du contrôle
-    reference_norme = db.Column(db.String(100))  # Référence à une norme (ISO, COSO, etc.)
+    objectif_controle = db.Column(db.Text)
+    reference_norme = db.Column(db.String(100))
     
     # ============================================
-    # 2. PROCÉDURE DÉTAILLÉE
+    # PROCÉDURE
     # ============================================
     procedure = db.Column(db.Text)
-    criteres_acceptation = db.Column(db.Text)  # Critères pour considérer le test conforme
-    etapes_cles = db.Column(db.Text)  # Étapes clés séparées par des sauts de ligne
+    criteres_acceptation = db.Column(db.Text)
+    etapes_cles = db.Column(db.Text)
     
     # ============================================
-    # 3. ÉCHANTILLONNAGE
+    # ÉCHANTILLONNAGE
     # ============================================
     echantillon = db.Column(db.Text)
-    methode_echantillonnage = db.Column(db.String(50))  # aléatoire, ciblé, statistique, exhaustif, stratifié
+    methode_echantillonnage = db.Column(db.String(50))
     taille_echantillon = db.Column(db.Integer)
     population_totale = db.Column(db.Integer)
     periode_couverte = db.Column(db.String(200))
-    taux_confiance = db.Column(db.Float)  # Pourcentage (ex: 95)
-    marge_erreur = db.Column(db.Float)  # Pourcentage
+    taux_confiance = db.Column(db.Float)
+    marge_erreur = db.Column(db.Float)
     
     # ============================================
-    # 4. RÉSULTATS DU TEST
+    # RÉSULTATS
     # ============================================
-    resultat = db.Column(db.String(50), default='non_testé')  # non_testé, conforme, non_conforme, na, partiellement_conforme
+    resultat = db.Column(db.String(50), default='non_testé')
     observations = db.Column(db.Text)
     ecart_constate = db.Column(db.Text)
-    
-    # Classification des anomalies
-    classification_anomalie = db.Column(db.String(50))  # mineure, majeure, critique, information
+    classification_anomalie = db.Column(db.String(50))
     impact_financier = db.Column(db.Float)
     impact_fonctionnel = db.Column(db.Text)
-    cause_racine = db.Column(db.Text)  # Analyse de la cause racine
+    cause_racine = db.Column(db.Text)
     
     # ============================================
-    # 5. CORRECTIONS ET ACTIONS
+    # 🔥 LIEN MANY-TO-MANY AVEC LES RISQUES
+    # ============================================
+    # Les champs de criticité sont calculés à partir des risques associés
+    niveau_criticite = db.Column(db.String(20), default='moyen')
+    probabilite_occurrence = db.Column(db.String(20), default='possible')
+    gravite_impact = db.Column(db.String(20), default='modere')
+    
+    # ============================================
+    # CORRECTIONS
     # ============================================
     correction_effectuee = db.Column(db.Boolean, default=False)
     date_correction = db.Column(db.Date)
     correction_commentaire = db.Column(db.Text)
-    action_curative = db.Column(db.Text)  # Action immédiate
-    action_preventive = db.Column(db.Text)  # Action pour éviter récurrence
+    action_curative = db.Column(db.Text)
+    action_preventive = db.Column(db.Text)
     responsable_correction_id = db.Column(db.Integer, db.ForeignKey('user.id'))
     
     # ============================================
-    # 6. PREUVES ET DOCUMENTS
+    # PREUVES
     # ============================================
-    preuves = db.Column(db.Text)  # Noms des fichiers séparés par ;
-    url_preuves = db.Column(db.Text)  # Liens externes
-    lien_grille_controle = db.Column(db.String(500))  # Lien vers grille Excel
+    preuves = db.Column(db.Text)
+    url_preuves = db.Column(db.Text)
+    lien_grille_controle = db.Column(db.String(500))
     
     # ============================================
-    # 7. APPROBATION ET REVUE
+    # APPROBATION
     # ============================================
-    statut_revision = db.Column(db.String(50), default='brouillon')  # brouillon, en_revision, approuve, rejete
+    statut_revision = db.Column(db.String(50), default='brouillon')
     approuve_par_id = db.Column(db.Integer, db.ForeignKey('user.id'))
     approuve_le = db.Column(db.DateTime)
     commentaire_revision = db.Column(db.Text)
     
     # ============================================
-    # 8. MÉTRIQUES ET SUIVI
+    # MÉTRIQUES
     # ============================================
     nb_erreurs_trouvees = db.Column(db.Integer, default=0)
     nb_elements_testes = db.Column(db.Integer, default=0)
-    taux_reussite = db.Column(db.Float)  # Calculé automatiquement
-    temps_passe_minutes = db.Column(db.Integer)  # Temps passé sur ce test
-    difficulte = db.Column(db.String(20))  # facile, moyen, difficile
+    taux_reussite = db.Column(db.Float)
+    temps_passe_minutes = db.Column(db.Integer)
+    difficulte = db.Column(db.String(20))
     
     # ============================================
-    # 9. RISQUES ET CRITICITÉ
-    # ============================================
-    risque_associe_id = db.Column(db.Integer, db.ForeignKey('risques.id'))
-    niveau_criticite = db.Column(db.String(20))  # faible, moyen, eleve, critique
-    probabilite_occurrence = db.Column(db.String(20))  # rare, possible, probable, frequente
-    gravite_impact = db.Column(db.String(20))  # mineur, modere, severe, critique
-    
-    # ============================================
-    # 10. CHAMPS SYSTÈME
+    # CHAMPS SYSTÈME
     # ============================================
     ordre = db.Column(db.Integer, default=0)
     created_by = db.Column(db.Integer, db.ForeignKey('user.id'))
@@ -3245,23 +3393,185 @@ class TestControleFeuille(db.Model):
     # RELATIONS
     # ============================================
     feuille = db.relationship('FeuilleTravail', back_populates='tests')
-    risque = db.relationship('Risque', foreign_keys=[risque_associe_id])
+    
+    # 🔥 RELATION MANY-TO-MANY AVEC LES RISQUES
+    risques_associes = db.relationship(
+        'Risque',
+        secondary=test_risques,
+        back_populates='tests_associes',
+        lazy='joined'
+    )
+    
     createur = db.relationship('User', foreign_keys=[created_by], lazy='joined')
     moderateur = db.relationship('User', foreign_keys=[updated_by], lazy='joined')
     approbateur = db.relationship('User', foreign_keys=[approuve_par_id], lazy='joined')
     responsable_correction = db.relationship('User', foreign_keys=[responsable_correction_id], lazy='joined')
     
-    def __repr__(self):
-        return f'<TestControleFeuille {self.id}: {self.objet_test[:50]}>'
+    # Relation avec les erreurs
+    erreurs = db.relationship('ErreurTest', back_populates='test', cascade='all, delete-orphan', order_by='ErreurTest.ordre')
+    
+    # ============================================
+    # PROPRIÉTÉS
+    # ============================================
+    
+    @property
+    def a_risques_associes(self):
+        return len(self.risques_associes) > 0
+    
+    @property
+    def nb_risques_associes(self):
+        return len(self.risques_associes)
+    
+    @property
+    def niveau_label(self):
+        labels = {
+            'faible': '🟢 Faible',
+            'moyen': '🟡 Moyen',
+            'eleve': '🟠 Élevé',
+            'critique': '🔴 Critique'
+        }
+        return labels.get(self.niveau_criticite, '🟡 Moyen')
+    
+    @property
+    def resultat_label(self):
+        labels = {
+            'non_testé': '⏳ Non testé',
+            'conforme': '✅ Conforme',
+            'non_conforme': '❌ Non conforme',
+            'partiellement_conforme': '⚠️ Partiellement conforme',
+            'na': 'N/A'
+        }
+        return labels.get(self.resultat, '⏳ Non testé')
+    
+    @property
+    def resultat_couleur(self):
+        couleurs = {
+            'non_testé': '#6b7280',
+            'conforme': '#10b981',
+            'non_conforme': '#ef4444',
+            'partiellement_conforme': '#f59e0b',
+            'na': '#6b7280'
+        }
+        return couleurs.get(self.resultat, '#6b7280')
+    
+    @property
+    def niveau_criticite_max(self):
+        """Retourne le niveau de criticité le plus élevé parmi les risques associés"""
+        if not self.risques_associes:
+            return 'moyen'
+        
+        niveaux = {'faible': 0, 'moyen': 1, 'eleve': 2, 'critique': 3}
+        max_niveau = max(self.risques_associes, key=lambda r: niveaux.get(r.niveau_criticite, 0))
+        return max_niveau.niveau_criticite if max_niveau else 'moyen'
+    
+    @property
+    def risques_critiques(self):
+        """Retourne les risques critiques associés"""
+        return [r for r in self.risques_associes if r.niveau_criticite == 'critique']
+    
+    @property
+    def risques_eleves(self):
+        """Retourne les risques élevés associés"""
+        return [r for r in self.risques_associes if r.niveau_criticite == 'eleve']
+
+    # ============================================
+    # MÉTHODES
+    # ============================================
+    
+    def synchroniser_avec_risques(self):
+        """Synchronise les champs de criticité avec les risques associés"""
+        if self.risques_associes:
+            # Prendre le niveau de criticité le plus élevé
+            niveaux = {'faible': 0, 'moyen': 1, 'eleve': 2, 'critique': 3}
+            risque_max = max(self.risques_associes, key=lambda r: niveaux.get(r.niveau_criticite, 0))
+            if risque_max:
+                self.niveau_criticite = risque_max.niveau_criticite
+                self.probabilite_occurrence = risque_max.probabilite or 'possible'
+                self.gravite_impact = risque_max.impact or 'modere'
+        else:
+            self.niveau_criticite = 'moyen'
+            self.probabilite_occurrence = 'possible'
+            self.gravite_impact = 'modere'
+        
+        self.updated_at = datetime.utcnow()
+        return True
+
+    def enregistrer_historique_risque_test(test_id, action, risque_id=None, ancien=None, nouveau=None, commentaire=None):
+        """Enregistrer une modification dans l'historique"""
+        historique = HistoriqueRisqueTest(
+            test_id=test_id,
+            action=action,
+            risque_id=risque_id,
+            ancienne_valeur=ancien,
+            nouvelle_valeur=nouveau,
+            commentaire=commentaire,
+            created_by=current_user.id if hasattr(current_user, 'id') else None
+        )
+        db.session.add(historique)
+        db.session.commit()
+        return historique
+    
+    def ajouter_risque(self, risque_id):
+        """Ajoute un risque au test"""
+        risque = Risque.query.get(risque_id)
+        if risque and risque not in self.risques_associes:
+            self.risques_associes.append(risque)
+            self.synchroniser_avec_risques()
+            return True
+        return False
+    
+    def retirer_risque(self, risque_id):
+        """Retire un risque du test"""
+        risque = Risque.query.get(risque_id)
+        if risque and risque in self.risques_associes:
+            self.risques_associes.remove(risque)
+            self.synchroniser_avec_risques()
+            return True
+        return False
+    
+    def definir_risques(self, risque_ids):
+        """Définit la liste complète des risques associés"""
+        # Nettoyer les risques existants
+        self.risques_associes.clear()
+        
+        # Ajouter les nouveaux risques
+        for risque_id in risque_ids:
+            risque = Risque.query.get(risque_id)
+            if risque:
+                self.risques_associes.append(risque)
+        
+        self.synchroniser_avec_risques()
+        return True
+    
+    def calculer_taux_reussite(self):
+        """Calcule le taux de réussite"""
+        if self.nb_elements_testes and self.nb_elements_testes > 0:
+            taux = ((self.nb_elements_testes - (self.nb_erreurs_trouvees or 0)) / self.nb_elements_testes) * 100
+            self.taux_reussite = round(taux, 2)
+        else:
+            self.taux_reussite = None
+        return self.taux_reussite
+    
+    def get_statut_global(self):
+        """Détermine le statut global du test"""
+        if not self.erreurs:
+            return 'sans_erreur'
+        
+        if any(e.gravite == 'critique' for e in self.erreurs):
+            return 'critique'
+        if any(e.gravite == 'majeure' for e in self.erreurs):
+            return 'majeur'
+        return 'mineur'
     
     def to_dict(self, include_all=False):
-        """Convertir en dictionnaire"""
         base_dict = {
             'id': self.id,
             'objet_test': self.objet_test,
             'procedure': self.procedure,
             'echantillon': self.echantillon,
             'resultat': self.resultat,
+            'resultat_label': self.resultat_label,
+            'resultat_couleur': self.resultat_couleur,
             'observations': self.observations,
             'ecart_constate': self.ecart_constate,
             'preuves': self.preuves.split(';') if self.preuves else [],
@@ -3270,7 +3580,12 @@ class TestControleFeuille(db.Model):
             'updated_at': self.updated_at.isoformat() if self.updated_at else None,
             'statut_revision': self.statut_revision,
             'taux_reussite': self.taux_reussite,
-            'niveau_criticite': self.niveau_criticite
+            'niveau_criticite': self.niveau_criticite,
+            'niveau_label': self.niveau_label,
+            'nb_erreurs_trouvees': self.nb_erreurs_trouvees,
+            'nb_elements_testes': self.nb_elements_testes,
+            'nb_risques_associes': self.nb_risques_associes,
+            'risques_associes': [r.to_dict() for r in self.risques_associes]
         }
         
         if include_all:
@@ -3295,57 +3610,257 @@ class TestControleFeuille(db.Model):
                 'action_curative': self.action_curative,
                 'action_preventive': self.action_preventive,
                 'responsable_correction': self.responsable_correction.username if self.responsable_correction else None,
-                'url_preuves': self.url_preuves,
-                'lien_grille_controle': self.lien_grille_controle,
-                'approuve_par': self.approbateur.username if self.approbateur else None,
-                'approuve_le': self.approuve_le.isoformat() if self.approuve_le else None,
-                'commentaire_revision': self.commentaire_revision,
-                'nb_erreurs_trouvees': self.nb_erreurs_trouvees,
-                'nb_elements_testes': self.nb_elements_testes,
-                'temps_passe_minutes': self.temps_passe_minutes,
-                'difficulte': self.difficulte,
-                'risque_associe_id': self.risque_associe_id,
                 'probabilite_occurrence': self.probabilite_occurrence,
                 'gravite_impact': self.gravite_impact,
                 'created_by': self.createur.username if self.createur else None,
                 'updated_by': self.moderateur.username if self.moderateur else None,
-                'is_archived': self.is_archived
+                'is_archived': self.is_archived,
+                'erreurs': [e.to_dict() for e in self.erreurs]
             }
             base_dict.update(extra_dict)
         
         return base_dict
     
-    def calculer_taux_reussite(self):
-        """Calculer automatiquement le taux de réussite"""
-        if self.nb_elements_testes > 0:
-            taux = ((self.nb_elements_testes - self.nb_erreurs_trouvees) / self.nb_elements_testes) * 100
-            self.taux_reussite = round(taux, 2)
-        else:
-            self.taux_reussite = None
-        return self.taux_reussite
+    # ============================================
+    # LISTENERS SQLALCHEMY
+    # ============================================
     
     @staticmethod
-    def get_resultat_badge(resultat):
-        """Retourner le badge HTML pour un résultat"""
-        badges = {
-            'non_testé': '<span class="badge bg-secondary">⏳ Non testé</span>',
-            'conforme': '<span class="badge bg-success">✅ Conforme</span>',
-            'non_conforme': '<span class="badge bg-danger">❌ Non conforme</span>',
-            'partiellement_conforme': '<span class="badge bg-warning">⚠️ Partiellement conforme</span>',
-            'na': '<span class="badge bg-info">N/A</span>'
+    def before_update_listener(mapper, connection, target):
+        """Listener exécuté avant la mise à jour d'un test"""
+        target.calculer_taux_reussite()
+        target.synchroniser_avec_risques()
+    
+    @staticmethod
+    def before_insert_listener(mapper, connection, target):
+        """Listener exécuté avant l'insertion d'un test"""
+        target.calculer_taux_reussite()
+        target.synchroniser_avec_risques()
+        
+        if target.ordre is None or target.ordre == 0:
+            dernier = db.session.query(db.func.max(TestControleFeuille.ordre)).filter(
+                TestControleFeuille.feuille_travail_id == target.feuille_travail_id
+            ).scalar()
+            target.ordre = (dernier or 0) + 1
+
+class ErreurTest(db.Model):
+    """
+    Gestion des erreurs trouvées lors des tests de contrôle.
+    Permet un suivi détaillé et structuré des anomalies.
+    """
+    __tablename__ = 'erreurs_tests'
+    
+    # ============================================
+    # IDENTIFIANTS ET RELATIONS
+    # ============================================
+    id = db.Column(db.Integer, primary_key=True)
+    test_id = db.Column(db.Integer, db.ForeignKey('tests_controle_feuille.id'), nullable=False)
+    
+    # ============================================
+    # DESCRIPTION ET CLASSIFICATION
+    # ============================================
+    description = db.Column(db.Text, nullable=False)
+    categorie = db.Column(db.String(50), default='autre')
+    gravite = db.Column(db.String(20), default='moyenne')
+    
+    # ============================================
+    # IMPACTS
+    # ============================================
+    impact_financier = db.Column(db.Float, default=0.0)
+    impact_qualitatif = db.Column(db.Text)
+    
+    # ============================================
+    # ÉTAT ET SUIVI
+    # ============================================
+    etat = db.Column(db.String(20), default='ouverte')
+    
+    # ============================================
+    # CORRECTION
+    # ============================================
+    correction_proposee = db.Column(db.Text)
+    correction_effectuee = db.Column(db.Boolean, default=False)
+    date_correction = db.Column(db.Date)
+    responsable_correction_id = db.Column(db.Integer, db.ForeignKey('user.id'))
+    commentaire_correction = db.Column(db.Text)
+    
+    # ============================================
+    # PREUVES
+    # ============================================
+    preuves = db.Column(db.Text)
+    
+    # ============================================
+    # ANALYSE APPROFONDIE
+    # ============================================
+    cause_racine = db.Column(db.Text)
+    analyse_detaillee = db.Column(db.Text)
+    
+    # ============================================
+    # CHAMPS SYSTÈME
+    # ============================================
+    ordre = db.Column(db.Integer, default=0)
+    created_by = db.Column(db.Integer, db.ForeignKey('user.id'))
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    updated_by = db.Column(db.Integer, db.ForeignKey('user.id'))
+    
+    # ============================================
+    # RELATIONS
+    # ============================================
+    test = db.relationship('TestControleFeuille', back_populates='erreurs')
+    createur = db.relationship('User', foreign_keys=[created_by], lazy='joined')
+    moderateur = db.relationship('User', foreign_keys=[updated_by], lazy='joined')
+    responsable_correction = db.relationship('User', foreign_keys=[responsable_correction_id], lazy='joined')
+    
+    # ============================================
+    # MÉTHODES
+    # ============================================
+    
+    def __repr__(self):
+        return f'<ErreurTest {self.id}: {self.description[:50]}>'
+    
+    def to_dict(self):
+        """Convertir en dictionnaire"""
+        return {
+            'id': self.id,
+            'test_id': self.test_id,
+            'description': self.description,
+            'categorie': self.categorie,
+            'gravite': self.gravite,
+            'impact_financier': self.impact_financier,
+            'impact_qualitatif': self.impact_qualitatif,
+            'etat': self.etat,
+            'correction_proposee': self.correction_proposee,
+            'correction_effectuee': self.correction_effectuee,
+            'date_correction': self.date_correction.isoformat() if self.date_correction else None,
+            'responsable_correction': self.responsable_correction.username if self.responsable_correction else None,
+            'responsable_correction_id': self.responsable_correction_id,
+            'commentaire_correction': self.commentaire_correction,
+            'preuves': self.preuves.split(';') if self.preuves else [],
+            'cause_racine': self.cause_racine,
+            'analyse_detaillee': self.analyse_detaillee,
+            'ordre': self.ordre,
+            'created_by': self.createur.username if self.createur else None,
+            'created_at': self.created_at.isoformat() if self.created_at else None,
+            'updated_at': self.updated_at.isoformat() if self.updated_at else None,
+            'updated_by': self.moderateur.username if self.moderateur else None
         }
-        return badges.get(resultat, '<span class="badge bg-secondary">Inconnu</span>')
+    
+    def marquer_corrigee(self, responsable_id=None):
+        """Marquer l'erreur comme corrigée"""
+        self.etat = 'corrigee'
+        self.correction_effectuee = True
+        self.date_correction = datetime.utcnow().date()
+        if responsable_id:
+            self.responsable_correction_id = responsable_id
+        self.updated_at = datetime.utcnow()
+    
+    def marquer_fermee(self):
+        """Marquer l'erreur comme fermée (vérifiée et clôturée)"""
+        self.etat = 'fermee'
+        self.updated_at = datetime.utcnow()
+    
+    def get_niveau_risque(self):
+        """Calculer le niveau de risque en fonction de la gravité et de l'état"""
+        matrice_risque = {
+            'mineure': 1,
+            'moyenne': 2,
+            'majeure': 3,
+            'critique': 4
+        }
+        
+        facteur_etat = {
+            'ouverte': 1.0,
+            'en_cours': 0.8,
+            'corrigee': 0.5,
+            'verifiee': 0.3,
+            'fermee': 0.1
+        }
+        
+        base = matrice_risque.get(self.gravite, 2)
+        facteur = facteur_etat.get(self.etat, 1.0)
+        
+        return round(base * facteur, 1)
     
     @staticmethod
-    def get_criticite_badge(niveau):
-        """Retourner le badge HTML pour la criticité"""
+    def get_gravite_badge(gravite):
+        """Retourner le badge HTML pour la gravité"""
         badges = {
-            'faible': '<span class="badge bg-success">🟢 Faible</span>',
-            'moyen': '<span class="badge bg-warning">🟡 Moyen</span>',
-            'eleve': '<span class="badge bg-danger">🟠 Élevé</span>',
+            'mineure': '<span class="badge bg-info">🟢 Mineure</span>',
+            'moyenne': '<span class="badge bg-warning text-dark">🟡 Moyenne</span>',
+            'majeure': '<span class="badge bg-danger">🟠 Majeure</span>',
             'critique': '<span class="badge bg-dark">🔴 Critique</span>'
         }
-        return badges.get(niveau, '<span class="badge bg-secondary">Non défini</span>')
+        return badges.get(gravite, '<span class="badge bg-secondary">Non définie</span>')
+    
+    @staticmethod
+    def get_etat_badge(etat):
+        """Retourner le badge HTML pour l'état"""
+        badges = {
+            'ouverte': '<span class="badge bg-secondary">📌 Ouverte</span>',
+            'en_cours': '<span class="badge bg-primary">🔄 En cours</span>',
+            'corrigee': '<span class="badge bg-success">✅ Corrigée</span>',
+            'verifiee': '<span class="badge bg-info">🔍 Vérifiée</span>',
+            'fermee': '<span class="badge bg-dark">🔒 Fermée</span>'
+        }
+        return badges.get(etat, '<span class="badge bg-secondary">Inconnu</span>')
+    
+    @staticmethod
+    def get_categorie_label(categorie):
+        """Retourner le label lisible pour la catégorie"""
+        labels = {
+            'documentaire': '📄 Documentaire',
+            'calcul': '🧮 Calcul',
+            'procedure': '📋 Procédure',
+            'conformite': '⚖️ Conformité',
+            'systeme': '💻 Système',
+            'autre': '📌 Autre'
+        }
+        return labels.get(categorie, '📌 Autre')
+    
+    @staticmethod
+    def get_couleur_gravite(gravite):
+        """Retourner la couleur CSS pour une gravité"""
+        couleurs = {
+            'mineure': '#3b82f6',
+            'moyenne': '#f59e0b',
+            'majeure': '#ef4444',
+            'critique': '#dc2626'
+        }
+        return couleurs.get(gravite, '#6b7280')
+    
+    @staticmethod
+    def get_icone_etat(etat):
+        """Retourner l'icône FontAwesome pour un état"""
+        icones = {
+            'ouverte': 'fa-circle',
+            'en_cours': 'fa-spinner fa-spin',
+            'corrigee': 'fa-check-circle',
+            'verifiee': 'fa-search',
+            'fermee': 'fa-lock'
+        }
+        return icones.get(etat, 'fa-circle')
+
+class HistoriqueRisqueTest(db.Model):
+    """Historique des modifications des risques associés aux tests"""
+    __tablename__ = 'historique_risques_tests'
+    
+    id = db.Column(db.Integer, primary_key=True)
+    test_id = db.Column(db.Integer, db.ForeignKey('tests_controle_feuille.id'), nullable=False)
+    action = db.Column(db.String(20), nullable=False)  # 'ajout', 'retrait', 'modification'
+    risque_id = db.Column(db.Integer, db.ForeignKey('risques.id'), nullable=True)
+    ancienne_valeur = db.Column(db.JSON)  # Snapshot des anciennes valeurs
+    nouvelle_valeur = db.Column(db.JSON)  # Snapshot des nouvelles valeurs
+    commentaire = db.Column(db.Text)
+    created_by = db.Column(db.Integer, db.ForeignKey('user.id'))
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    
+    # Relations
+    test = db.relationship('TestControleFeuille', foreign_keys=[test_id])
+    risque = db.relationship('Risque', foreign_keys=[risque_id])
+    createur = db.relationship('User', foreign_keys=[created_by])
+    
+    def __repr__(self):
+        return f'<HistoriqueRisqueTest {self.id}: {self.action} - {self.risque_id}>'
 
 # ============================================
 # MODÈLES AVANCÉS POUR FEUILLES DE TRAVAIL
