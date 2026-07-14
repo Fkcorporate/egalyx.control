@@ -1033,21 +1033,22 @@ class Risque(db.Model):
     archive_reason = db.Column(db.Text)
     client_id = db.Column(db.Integer, db.ForeignKey('clients.id'), nullable=True)
     
-    processus_metier_associe_id = db.Column(db.Integer, db.ForeignKey('processus_metier.id'), nullable=True)
+    # 🔥 SUPPRIMER cette ligne
+    # processus_metier_associe_id = db.Column(db.Integer, db.ForeignKey('processus_metier.id'), nullable=True)
+    # processus_metier = db.relationship('ProcessusMetier', ...)
 
-    # Relations
+    # Relations existantes
     cartographie = db.relationship('Cartographie', back_populates='risques')
     createur = db.relationship('User', foreign_keys=[created_by])
     archive_user = db.relationship('User', foreign_keys=[archived_by])
     evaluations = db.relationship('EvaluationRisque', back_populates='risque', lazy=True)
     kri = db.relationship('KRI', back_populates='risque', uselist=False, lazy=True)
     dispositifs_maitrise = db.relationship('DispositifMaitrise', back_populates='risque', cascade='all, delete-orphan', lazy=True)
-    processus_metier = db.relationship('ProcessusMetier', foreign_keys=[processus_metier_associe_id], backref=db.backref('risques_du_processus', lazy='dynamic'), lazy='joined')
     
     # 🔥 RELATION MANY-TO-MANY AVEC LES TESTS
     tests_associes = db.relationship(
         'TestControleFeuille',
-        secondary=test_risques,
+        secondary='test_risques',
         back_populates='risques_associes',
         lazy='dynamic'
     )
@@ -1055,22 +1056,6 @@ class Risque(db.Model):
     # ============================================
     # PROPRIÉTÉS
     # ============================================
-    
-    @property
-    def a_processus_associe(self):
-        return self.processus_metier_associe_id is not None
-    
-    @property
-    def nom_processus_associe(self):
-        if self.processus_metier:
-            return self.processus_metier.nom
-        return None
-    
-    @property
-    def reference_processus_associe(self):
-        if self.processus_metier:
-            return self.processus_metier.reference
-        return None
     
     @property
     def nb_tests_associes(self):
