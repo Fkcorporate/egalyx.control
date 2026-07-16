@@ -1008,6 +1008,9 @@ test_risques = db.Table('test_risques',
 class Risque(db.Model):
     __tablename__ = 'risques'
     
+    # ============================================
+    # COLONNES DE BASE
+    # ============================================
     id = db.Column(db.Integer, primary_key=True)
     cartographie_id = db.Column(db.Integer, db.ForeignKey('cartographie.id'))
     reference = db.Column(db.String(50), unique=True, nullable=False)
@@ -1019,24 +1022,54 @@ class Risque(db.Model):
     cause_racine = db.Column(db.Text)
     consequences = db.Column(db.Text)
     
-    # 🔥 CHAMPS DE CRITICITÉ
+    # ============================================
+    # CRITICITÉ
+    # ============================================
     niveau_criticite = db.Column(db.String(20), default='moyen')
     impact = db.Column(db.String(20), default='modere')
     probabilite = db.Column(db.String(20), default='possible')
     score_risque = db.Column(db.Integer)
     
-    created_by = db.Column(db.Integer, db.ForeignKey('user.id'))
-    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    # ============================================
+    # STATUT
+    # ============================================
+    statut = db.Column(db.String(20), default='actif')
+    # valeurs: actif, en_validation, inactif, archive
+    
+    # ============================================
+    # ARCHIVAGE
+    # ============================================
     is_archived = db.Column(db.Boolean, default=False)
     archived_at = db.Column(db.DateTime)
     archived_by = db.Column(db.Integer, db.ForeignKey('user.id'))
     archive_reason = db.Column(db.Text)
+    
+    # ============================================
+    # MULTI-TENANT
+    # ============================================
     client_id = db.Column(db.Integer, db.ForeignKey('clients.id'), nullable=True)
     
-    # 🔥 SUPPRIMER cette ligne
-    # processus_metier_associe_id = db.Column(db.Integer, db.ForeignKey('processus_metier.id'), nullable=True)
-    # processus_metier = db.relationship('ProcessusMetier', ...)
-
+    # ============================================
+    # AUDIT
+    # ============================================
+    created_by = db.Column(db.Integer, db.ForeignKey('user.id'))
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    
+    # ============================================
+    # MÉTADONNÉES POUR LA TRACABILITÉ
+    # ============================================
+    metadonnees = db.Column(db.JSON, default={
+        'origine': None,           # 'manuel', 'audit', 'import'
+        'audit_reference': None,
+        'demande_reevaluation_id': None,
+        'date_proposition': None,
+        'statut_validation': None
+    })
+    
+    # ============================================
+    # RELATIONS
+    # ============================================
+    
     # Relations existantes
     cartographie = db.relationship('Cartographie', back_populates='risques')
     createur = db.relationship('User', foreign_keys=[created_by])
@@ -1045,27 +1078,40 @@ class Risque(db.Model):
     kri = db.relationship('KRI', back_populates='risque', uselist=False, lazy=True)
     dispositifs_maitrise = db.relationship('DispositifMaitrise', back_populates='risque', cascade='all, delete-orphan', lazy=True)
     
-    # 🔥 RELATION MANY-TO-MANY AVEC LES TESTS
+    # Relations avec constatations et plans
+    constatations = db.relationship('Constatation', backref='risque_principal', foreign_keys='Constatation.risque_id', lazy=True)
+    plans_action = db.relationship('PlanAction', backref='risque_principal', foreign_keys='PlanAction.risque_id', lazy=True)
+    demandes_reevaluation = db.relationship('DemandeReevaluation', backref='risque_principal', foreign_keys='DemandeReevaluation.risque_id', lazy=True)
+    
+    # Relation MANY-TO-MANY AVEC LES TESTS
     tests_associes = db.relationship(
         'TestControleFeuille',
         secondary='test_risques',
         back_populates='risques_associes',
         lazy='dynamic'
     )
-
+    
     # ============================================
     # PROPRIÉTÉS
     # ============================================
-    
-    @property
-    def nb_tests_associes(self):
-        return self.tests_associes.count()
     
     @property
     def derniere_evaluation(self):
         if self.evaluations:
             return max(self.evaluations, key=lambda x: x.created_at)
         return None
+    
+    @property
+    def nb_constats_ouverts(self):
+        return len([c for c in self.constatations if c.statut != 'clos'])
+    
+    @property
+    def nb_demandes_reevaluation_en_attente(self):
+        return len([d for d in self.demandes_reevaluation if d.statut == 'en_attente'])
+    
+    @property
+    def nb_tests_associes(self):
+        return self.tests_associes.count()
     
     @property
     def niveau_risque_label(self):
@@ -1078,27 +1124,27 @@ class Risque(db.Model):
         return labels.get(self.niveau_criticite, '🟡 Moyen')
     
     @property
-    def impact_label(self):
+    def statut_label(self):
         labels = {
-            'mineur': '🟢 Mineur',
-            'modere': '🟡 Modéré',
-            'severe': '🟠 Sévère',
-            'critique': '🔴 Critique'
+            'actif': '✅ Actif',
+            'en_validation': '🔄 En validation',
+            'inactif': '⛔ Inactif',
+            'archive': '📦 Archivé'
         }
-        return labels.get(self.impact, '🟡 Modéré')
+        return labels.get(self.statut, self.statut)
     
     @property
-    def probabilite_label(self):
-        labels = {
-            'rare': '🟢 Rare',
-            'possible': '🟡 Possible',
-            'probable': '🟠 Probable',
-            'frequente': '🔴 Fréquente'
+    def statut_css(self):
+        css = {
+            'actif': 'success',
+            'en_validation': 'warning',
+            'inactif': 'secondary',
+            'archive': 'dark'
         }
-        return labels.get(self.probabilite, '🟡 Possible')
-
+        return css.get(self.statut, 'secondary')
+    
     # ============================================
-    # MÉTHODES
+    # MÉTHODES DE CALCUL
     # ============================================
     
     def calculer_score_risque(self):
@@ -1128,11 +1174,20 @@ class Risque(db.Model):
         
         return self.niveau_criticite
     
-    def mettre_a_jour_criticite(self):
-        """Met à jour la criticité"""
-        self.calculer_score_risque()
-        self.calculer_niveau_criticite()
-        return self.niveau_criticite
+    @staticmethod
+    def calculer_niveau_criticite_from_score(score):
+        """
+        Calcule le niveau de criticité à partir d'un score donné.
+        Méthode statique utilisable sans instance.
+        """
+        if score >= 16:
+            return 'critique'
+        elif score >= 11:
+            return 'eleve'
+        elif score >= 6:
+            return 'moyen'
+        else:
+            return 'faible'
     
     def get_couleur_criticite(self):
         """Retourne la couleur CSS pour le niveau de criticité"""
@@ -1144,8 +1199,45 @@ class Risque(db.Model):
         }
         return couleurs.get(self.niveau_criticite, '#6b7280')
     
+    # ============================================
+    # MÉTHODES DE GESTION DES ORIGINES
+    # ============================================
+    
+    def marquer_origine_audit(self, audit_id, demande_id=None):
+        """Marque le risque comme issu d'un audit"""
+        self.metadonnees['origine'] = 'audit'
+        self.metadonnees['audit_reference'] = audit_id
+        if demande_id:
+            self.metadonnees['demande_reevaluation_id'] = demande_id
+        self.metadonnees['date_proposition'] = datetime.utcnow().isoformat()
+    
+    # ============================================
+    # MÉTHODES D'ARCHIVAGE
+    # ============================================
+    
+    def archiver(self, user_id, reason=None):
+        """Archive le risque"""
+        self.is_archived = True
+        self.archived_at = datetime.utcnow()
+        self.archived_by = user_id
+        self.archive_reason = reason
+        self.statut = 'archive'
+    
+    def restaurer(self):
+        """Restaure un risque archivé"""
+        self.is_archived = False
+        self.archived_at = None
+        self.archived_by = None
+        self.archive_reason = None
+        self.statut = 'actif'
+    
+    # ============================================
+    # MÉTHODE DE CONVERSION
+    # ============================================
+    
     def to_dict(self):
-        result = {
+        """Convertit en dictionnaire pour l'API"""
+        return {
             'id': self.id,
             'reference': self.reference,
             'intitule': self.intitule,
@@ -1156,29 +1248,24 @@ class Risque(db.Model):
             'niveau_criticite': self.niveau_criticite,
             'niveau_label': self.niveau_risque_label,
             'impact': self.impact,
-            'impact_label': self.impact_label,
             'probabilite': self.probabilite,
-            'probabilite_label': self.probabilite_label,
             'score_risque': self.score_risque,
+            'statut': self.statut,
+            'statut_label': self.statut_label,
             'couleur': self.get_couleur_criticite(),
+            'nb_constats_ouverts': self.nb_constats_ouverts,
+            'nb_demandes_reevaluation': self.nb_demandes_reevaluation_en_attente,
             'nb_tests_associes': self.nb_tests_associes,
+            'cartographie_id': self.cartographie_id,
+            'cartographie_nom': self.cartographie.nom if self.cartographie else None,
             'created_at': self.created_at.isoformat() if self.created_at else None,
             'is_archived': self.is_archived,
-            'client_id': self.client_id
+            'origine': self.metadonnees.get('origine') if self.metadonnees else None,
+            'audit_reference': self.metadonnees.get('audit_reference') if self.metadonnees else None
         }
-        
-        if self.derniere_evaluation:
-            result['derniere_evaluation'] = {
-                'id': self.derniere_evaluation.id,
-                'niveau': self.derniere_evaluation.niveau_risque,
-                'score': self.derniere_evaluation.score_risque,
-                'date': self.derniere_evaluation.created_at.isoformat() if self.derniere_evaluation.created_at else None
-            }
-        
-        return result
     
     def __repr__(self):
-        return f"<Risque {self.reference}: {self.intitule[:50]}>"
+        return f'<Risque {self.reference}: {self.intitule[:50]}>'
 
 # -------------------- EVALUATION RISQUE (CORRIGÉ) --------------------
 
