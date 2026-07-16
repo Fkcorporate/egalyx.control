@@ -2432,9 +2432,9 @@ class Audit(db.Model):
     
     # Processus
     processus = db.relationship(
-        'ProcessusActivite', 
-        back_populates='audits_associes',  # ← back_populates unique
-        foreign_keys=[processus_id]
+        'ProcessusActivite',
+        foreign_keys=[processus_id],
+        back_populates='audits'  # ← Utiliser 'audits' qui existe dans ProcessusActivite
     )
     
     # ============================================
