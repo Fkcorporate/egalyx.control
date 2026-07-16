@@ -5912,21 +5912,28 @@ class ProcessusActivite(db.Model):
     created_by = db.Column(db.Integer, db.ForeignKey('user.id'))
     is_archived = db.Column(db.Boolean, default=False)
     archived_at = db.Column(db.DateTime)
-    # ⚠️ TEMPORAIREMENT: COMMENTEZ CETTE LIGNE ⚠️
-    # archived_by = db.Column(db.Integer, db.ForeignKey('user.id'))
+    # archived_by = db.Column(db.Integer, db.ForeignKey('user.id'))  # Temporairement commenté
     client_id = db.Column(db.Integer, db.ForeignKey('clients.id'), nullable=True)
     
     # Relations
     direction = db.relationship('Direction', backref='processus_activites')
     service = db.relationship('Service', backref='processus_activites')
     createur = db.relationship('User', foreign_keys=[created_by], backref='processus_activites_crees')
-    # ⚠️ TEMPORAIREMENT: COMMENTEZ CETTE LIGNE AUSSI ⚠️
     # archiveur = db.relationship('User', foreign_keys=[archived_by], backref='processus_activites_archives')
     
-    # CORRECTION: Utilisez les bons noms de classe
+    # ============================================
+    # 🔥 AJOUTER CETTE RELATION VERS AUDIT
+    # ============================================
+    audits = db.relationship(
+        'Audit',
+        foreign_keys='Audit.processus_id',  # La clé étrangère dans Audit
+        back_populates='processus',  # Correspond à Audit.processus
+        lazy=True
+    )
+    
     elements = db.relationship('ElementLogigramme', back_populates='processus_activite', lazy=True, cascade='all, delete-orphan')
     liens = db.relationship('LienLogigramme', back_populates='processus_activite', lazy=True, cascade='all, delete-orphan')
-
+    
     def archiver(self, user_id):
         self.is_archived = True
         self.archived_at = datetime.utcnow()
@@ -5934,7 +5941,6 @@ class ProcessusActivite(db.Model):
         self.updated_at = datetime.utcnow()
     
     def restaurer(self):
-        """Méthode pour restaurer un logigramme archivé"""
         self.is_archived = False
         self.archived_at = None
         # self.archived_by = None  # Commenté temporairement
@@ -5952,10 +5958,10 @@ class ProcessusActivite(db.Model):
             'created_by': self.created_by,
             'is_archived': self.is_archived,
             'archived_at': self.archived_at.isoformat() if self.archived_at else None,
-            # ⚠️ TEMPORAIREMENT: COMMENTEZ CETTE LIGNE ⚠️
-            # 'archived_by': self.archived_by,
+            # 'archived_by': self.archived_by,  # Commenté temporairement
             'direction': self.direction.nom if self.direction else None,
-            'service': self.service.nom if self.service else None
+            'service': self.service.nom if self.service else None,
+            'nb_audits': len(self.audits) if hasattr(self, 'audits') else 0
         }
     
 class ParametreEvaluation(db.Model):
