@@ -9931,7 +9931,11 @@ class MissionAudit(db.Model):
     risque_id = db.Column(db.Integer, db.ForeignKey('risques.id'), nullable=True)
     cartographie_id = db.Column(db.Integer, db.ForeignKey('cartographie.id'), nullable=True)
     programme_id = db.Column(db.Integer, db.ForeignKey('programmes_audit.id'), nullable=False)
-    audit_id = db.Column(db.Integer, db.ForeignKey('audits.id'), nullable=True)  # ← AJOUTER
+    
+    # ============================================
+    # 🔥 AUDIT_ID - COLONNE DE CLÉ ÉTRANGÈRE
+    # ============================================
+    audit_id = db.Column(db.Integer, db.ForeignKey('audits.id'), nullable=True)
     
     # Priorité et risque
     priorite = db.Column(db.String(20))
@@ -9987,7 +9991,7 @@ class MissionAudit(db.Model):
     )
     
     # ============================================
-    # RELATIONS
+    # 🔥 RELATIONS - TOUTES CORRIGÉES
     # ============================================
     
     # Relations principales
@@ -9996,13 +10000,14 @@ class MissionAudit(db.Model):
     cartographie = db.relationship('Cartographie', backref='missions_audit_simple')
     
     # ============================================
-    # 🔥 RELATION VERS AUDIT - CORRIGÉE
+    # 🔥 RELATION VERS AUDIT - AVEC audit_lie
     # ============================================
-    audit = db.relationship(
+    audit_lie = db.relationship(
         'Audit',
         foreign_keys=[audit_id],
         back_populates='mission_associee',  # ← Correspond à Audit.mission_associee
-        lazy=True
+        lazy=True,
+        uselist=False
     )
     
     # Relations utilisateurs
@@ -10031,26 +10036,19 @@ class MissionAudit(db.Model):
     )
     
     # ============================================
-    # MÉTHODE STATIQUE DE GÉNÉRATION
+    # MÉTHODES
     # ============================================
     
     @staticmethod
     def generer_reference(client_id):
-        """Génère une référence unique PAR CLIENT"""
         from datetime import datetime
         annee = datetime.now().year
         prefixe = f"MISS-{annee}-"
-        
         count = MissionAudit.query.filter(
             MissionAudit.reference.like(f'{prefixe}%'),
             MissionAudit.client_id == client_id
         ).count()
-        
         return f"{prefixe}{(count + 1):04d}"
-    
-    # ============================================
-    # PROPRIÉTÉS CALCULÉES
-    # ============================================
     
     @property
     def est_en_retard(self):
@@ -10082,14 +10080,6 @@ class MissionAudit(db.Model):
             'reporte': 'fa-calendar-times',
             'annule': 'fa-ban'
         }.get(self.statut, 'fa-question-circle')
-    
-    @property
-    def plan_repli_actif(self):
-        """Retourne le plan de repli actif si existant"""
-        return self.plans_repli_principaux.filter_by(
-            statut='actif',
-            is_archived=False
-        ).first()
     
     @property
     def get_statut_label(self):
@@ -10130,18 +10120,6 @@ class MissionAudit(db.Model):
             duree_ecoulee = (today - self.date_debut_reelle).days
             return min(100, int((duree_ecoulee / total_duree) * 100))
         return self.progression or 0
-    
-    @property
-    def duree_ecart_jours(self):
-        if self.duree_reelle and self.duree_estimee:
-            return self.duree_reelle - self.duree_estimee
-        return None
-    
-    @property
-    def budget_ecart(self):
-        if self.budget_reel and self.budget_estime:
-            return self.budget_reel - self.budget_estime
-        return None
     
     # ============================================
     # MÉTHODES D'INSTANCE
@@ -10246,7 +10224,7 @@ class MissionAudit(db.Model):
             'programme_id': self.programme_id,
             'programme_reference': self.programme.reference if self.programme else None,
             'audit_id': self.audit_id,
-            'audit_reference': self.audit.reference if self.audit else None,
+            'audit_reference': self.audit_lie.reference if self.audit_lie else None,
             'risque_id': self.risque_id,
             'responsable_id': self.responsable_id,
             'responsable_nom': self.responsable.username if self.responsable else None,
