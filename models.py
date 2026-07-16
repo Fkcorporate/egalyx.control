@@ -2204,6 +2204,7 @@ class ControleProcessus(db.Model):
         return f'<ControleProcessus {self.nom}>'
 
 # -------------------- ETAPE PROCESSUS --------------------
+# -------------------- ETAPE PROCESSUS (CORRIGÉ) --------------------
 class EtapeProcessus(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     processus_id = db.Column(db.Integer, db.ForeignKey('processus.id'))
@@ -2228,11 +2229,32 @@ class EtapeProcessus(db.Model):
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
+    # ============================================
+    # 🔥 RELATIONS CORRIGÉES
+    # ============================================
+    
+    # Relation avec Processus
     processus = db.relationship('Processus', back_populates='etapes')
+    
+    # Relation avec User (responsable)
     responsable = db.relationship('User', backref='etapes_gerees')
-    sous_etapes = db.relationship('SousEtapeProcessus', back_populates='etape', lazy=True)
-    controles = db.relationship('ControleProcessus', back_populates='etape', lazy=True)
-
+    
+    # Relation avec SousEtapeProcessus
+    sous_etapes = db.relationship('SousEtapeProcessus', back_populates='etape', lazy=True, cascade='all, delete-orphan')
+    
+    # ============================================
+    # 🔥 RELATION CORRIGÉE POUR CONTROLE_PROCESSUS
+    # ============================================
+    
+    # ✅ Utiliser foreign_keys explicitement pour SQLAlchemy
+    # La relation pointe vers ControleProcessus.etape_id
+    controles = db.relationship(
+        'ControleProcessus',
+        foreign_keys='ControleProcessus.etape_id',  # ← SPÉCIFIER EXPLICITEMENT LA CLÉ ÉTRANGÈRE
+        back_populates='etape',  # ← Correspond au back_populates dans ControleProcessus
+        lazy=True,
+        cascade='all, delete-orphan'
+    )
 # -------------------- PROCESSUS --------------------
 class Processus(db.Model):
     id = db.Column(db.Integer, primary_key=True)
