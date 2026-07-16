@@ -2403,12 +2403,13 @@ class Audit(db.Model):
     # ============================================
     
     # Mission associée
-    mission_associee = db.relationship(
+    mission = db.relationship(
         'MissionAudit', 
-        back_populates='audit_lie',  # ← back_populates unique
+        back_populates='audit',  # ← CHANGÉ : 'audit_lie' → 'audit'
         uselist=False,
         foreign_keys='MissionAudit.audit_id'
     )
+
     
     # Relations utilisateurs avec back_populates UNIQUES
     createur = db.relationship(
@@ -9991,7 +9992,7 @@ class MissionAudit(db.Model):
     )
     
     # ============================================
-    # 🔥 RELATIONS - TOUTES CORRIGÉES
+    # RELATIONS
     # ============================================
     
     # Relations principales
@@ -10000,12 +10001,12 @@ class MissionAudit(db.Model):
     cartographie = db.relationship('Cartographie', backref='missions_audit_simple')
     
     # ============================================
-    # 🔥 RELATION VERS AUDIT - AVEC audit_lie
+    # 🔥 RELATION VERS AUDIT - CORRIGÉE
     # ============================================
-    audit_lie = db.relationship(
+    audit = db.relationship(
         'Audit',
         foreign_keys=[audit_id],
-        back_populates='mission_associee',  # ← Correspond à Audit.mission_associee
+        back_populates='mission',  # ← Correspond à Audit.mission
         lazy=True,
         uselist=False
     )
@@ -10224,7 +10225,7 @@ class MissionAudit(db.Model):
             'programme_id': self.programme_id,
             'programme_reference': self.programme.reference if self.programme else None,
             'audit_id': self.audit_id,
-            'audit_reference': self.audit_lie.reference if self.audit_lie else None,
+            'audit_reference': self.audit.reference if self.audit else None,
             'risque_id': self.risque_id,
             'responsable_id': self.responsable_id,
             'responsable_nom': self.responsable.username if self.responsable else None,
