@@ -2292,7 +2292,8 @@ class EtapeProcessus(db.Model):
     reference = db.Column(db.String(50), nullable=False)
     ordre = db.Column(db.Integer, default=1)
     
-    # Liens
+    # 🔥 NE PAS UTILISER backref='etapes' car cela crée un conflit
+    # Garder seulement la colonne foreign key sans relation
     processus_id = db.Column(db.Integer, db.ForeignKey('processus.id'), nullable=False)
     
     # Durée estimée
@@ -2317,18 +2318,13 @@ class EtapeProcessus(db.Model):
     )
     
     # ============================================
-    # RELATIONS - AVEC NOMS UNIQUES
+    # RELATIONS - SUPPRIMER LA RELATION PROCESSUS
     # ============================================
     
-    # 🔥 RELATION AVEC PROCESSUS - UTILISER backref AVEC UN NOM UNIQUE
-    processus = db.relationship(
-        'Processus',
-        foreign_keys=[processus_id],
-        backref='etapes_associees',  # ← NOM UNIQUE au lieu de 'etapes'
-        lazy=True
-    )
+    # 🔥 SUPPRIMEZ CETTE RELATION
+    # processus = db.relationship('Processus', backref='etapes_associees', lazy=True)
     
-    # 🔥 RELATION AVEC SOUS_ETAPES
+    # 🔥 GARDER SEULEMENT LA RELATION AVEC SOUS_ETAPES
     sous_etapes = db.relationship(
         'SousEtapeProcessus',
         back_populates='etape_parente',
@@ -2336,88 +2332,6 @@ class EtapeProcessus(db.Model):
         lazy=True,
         cascade='all, delete-orphan'
     )
-    
-    # ============================================
-    # MÉTHODES
-    # ============================================
-    
-    @staticmethod
-    def generer_reference(client_id):
-        from datetime import datetime
-        annee = datetime.now().year
-        prefixe = f"ETAPE-{annee}-"
-        
-        count = EtapeProcessus.query.filter(
-            EtapeProcessus.reference.like(f'{prefixe}%'),
-            EtapeProcessus.client_id == client_id
-        ).count()
-        
-        return f"{prefixe}{(count + 1):04d}"
-    
-    def __init__(self, **kwargs):
-        if 'reference' not in kwargs and 'client_id' in kwargs and kwargs['client_id']:
-            kwargs['reference'] = self.generer_reference(kwargs['client_id'])
-        
-        super().__init__(**kwargs)
-    
-    def get_statut_label(self):
-        labels = {
-            'actif': '✅ Actif',
-            'inactif': '⛔ Inactif',
-            'en_cours': '🔄 En cours',
-            'termine': '✅ Terminé'
-        }
-        return labels.get(self.statut, self.statut)
-    
-    def get_statut_css(self):
-        css = {
-            'actif': 'success',
-            'inactif': 'secondary',
-            'en_cours': 'warning',
-            'termine': 'info'
-        }
-        return css.get(self.statut, 'secondary')
-    
-    def get_progression(self):
-        """Calcule la progression de l'étape basée sur les sous-étapes"""
-        if hasattr(self, 'sous_etapes') and self.sous_etapes:
-            total = len(self.sous_etapes)
-            if total == 0:
-                return 0
-            termines = len([se for se in self.sous_etapes if se.statut == 'termine'])
-            return int((termines / total) * 100)
-        return 0
-    
-    def get_nb_sous_etapes(self):
-        """Retourne le nombre de sous-étapes"""
-        return len(self.sous_etapes) if hasattr(self, 'sous_etapes') else 0
-    
-    def get_nb_sous_etapes_terminees(self):
-        """Retourne le nombre de sous-étapes terminées"""
-        if hasattr(self, 'sous_etapes'):
-            return len([se for se in self.sous_etapes if se.statut == 'termine'])
-        return 0
-    
-    def to_dict(self):
-        return {
-            'id': self.id,
-            'reference': self.reference,
-            'nom': self.nom,
-            'description': self.description,
-            'ordre': self.ordre,
-            'statut': self.statut,
-            'statut_label': self.get_statut_label(),
-            'duree_estimee_jours': self.duree_estimee_jours,
-            'progression': self.get_progression(),
-            'nb_sous_etapes': self.get_nb_sous_etapes(),
-            'nb_sous_etapes_terminees': self.get_nb_sous_etapes_terminees(),
-            'processus_id': self.processus_id,
-            'processus_nom': self.processus.nom if self.processus else None,
-            'created_at': self.created_at.isoformat() if self.created_at else None
-        }
-    
-    def __repr__(self):
-        return f'<EtapeProcessus {self.reference}: {self.nom}>'
 # -------------------- PROCESSUS --------------------
 class Processus(db.Model):
     id = db.Column(db.Integer, primary_key=True)
