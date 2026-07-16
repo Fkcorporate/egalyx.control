@@ -2478,10 +2478,10 @@ class Audit(db.Model):
     # ============================================
     
     # Relation avec les demandes de réévaluation
-    demandes_reevaluation = db.relationship(
-        'DemandeReevaluation', 
+    audit_source = db.relationship(
+        'DemandeReevaluation',
         foreign_keys='DemandeReevaluation.audit_id',
-        back_populates='audit_source',  # ← back_populates unique (à définir dans DemandeReevaluation)
+        back_populates='audit',  # ← Correspond à DemandeReevaluation.audit
         lazy=True
     )
     
@@ -3336,38 +3336,50 @@ class DemandeReevaluation(db.Model):
     updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
     
     # ============================================
-    # RELATIONS - CORRIGÉES AVEC DES NOMS UNIQUES
+    # 🔥 RELATIONS CORRIGÉES - AVEC back_populates UNIQUES
     # ============================================
     
-    # audit_id - backref unique
-    audit = db.relationship('Audit', 
-                           foreign_keys=[audit_id], 
-                           backref='demandes_reevaluation_issues_de_audit')
+    # ✅ audit_id - back_populates 'audit_source' doit exister dans Audit
+    audit = db.relationship(
+        'Audit',
+        foreign_keys=[audit_id],
+        back_populates='audit_source'  # ← Correspond à Audit.audit_source
+    )
     
     # constat_id - backref unique
-    constat = db.relationship('Constatation', 
-                             foreign_keys=[constat_id], 
-                             backref='demandes_reevaluation_issues_de_constat')
+    constat = db.relationship(
+        'Constatation',
+        foreign_keys=[constat_id],
+        backref='demandes_reevaluation_issues_de_constat'
+    )
     
     # risque_id - backref unique
-    risque = db.relationship('Risque', 
-                            foreign_keys=[risque_id], 
-                            backref='demandes_reevaluation_issues_de_risque')
+    risque = db.relationship(
+        'Risque',
+        foreign_keys=[risque_id],
+        backref='demandes_reevaluation_issues_de_risque'
+    )
     
     # demandeur_id - backref unique
-    demandeur = db.relationship('User', 
-                               foreign_keys=[demandeur_id], 
-                               backref='demandes_reevaluation_demandees')
+    demandeur = db.relationship(
+        'User',
+        foreign_keys=[demandeur_id],
+        backref='demandes_reevaluation_demandees'
+    )
     
     # validateur_id - backref unique
-    validateur = db.relationship('User', 
-                                foreign_keys=[validateur_id], 
-                                backref='demandes_reevaluation_validees')
+    validateur = db.relationship(
+        'User',
+        foreign_keys=[validateur_id],
+        backref='demandes_reevaluation_validees'
+    )
     
     # nouvelle_evaluation_id - backref unique
-    nouvelle_evaluation = db.relationship('EvaluationRisque', 
-                                          foreign_keys=[nouvelle_evaluation_id], 
-                                          backref='demande_reevaluation_source')
+    nouvelle_evaluation = db.relationship(
+        'EvaluationRisque',
+        foreign_keys=[nouvelle_evaluation_id],
+        backref='demande_reevaluation_source'
+    )
     
     # ============================================
     # MÉTHODES
@@ -3558,12 +3570,17 @@ class DemandeReevaluation(db.Model):
             },
             'audit': {
                 'id': self.audit_id,
-                'reference': self.audit.reference if self.audit else None
+                'reference': self.audit.reference if self.audit else None,
+                'titre': self.audit.titre if self.audit else None
             },
             'risque': {
                 'id': self.risque_id,
                 'reference': self.risque.reference if self.risque else None,
                 'intitule': self.risque.intitule if self.risque else None
+            },
+            'constat': {
+                'id': self.constat_id,
+                'reference': self.constat.reference if self.constat else None
             },
             'demandeur': self.demandeur.username if self.demandeur else None,
             'validateur': self.validateur.username if self.validateur else None,
@@ -3572,7 +3589,8 @@ class DemandeReevaluation(db.Model):
             'recommandations': self.recommandations_generees,
             'nouvelle_evaluation_id': self.nouvelle_evaluation_id,
             'historique': self.historique_actions,
-            'created_at': self.created_at.isoformat() if self.created_at else None
+            'created_at': self.created_at.isoformat() if self.created_at else None,
+            'updated_at': self.updated_at.isoformat() if self.updated_at else None
         }
     
     def __repr__(self):
