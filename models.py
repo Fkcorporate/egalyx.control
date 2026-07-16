@@ -1181,6 +1181,7 @@ class Risque(db.Model):
         return f"<Risque {self.reference}: {self.intitule[:50]}>"
 
 # -------------------- EVALUATION RISQUE (CORRIGÉ) --------------------
+
 class EvaluationRisque(db.Model):
     __tablename__ = 'evaluations_risque'
     
@@ -1213,7 +1214,7 @@ class EvaluationRisque(db.Model):
     niveau_maitrise_conf = db.Column(db.Integer)
     commentaire_confirmation = db.Column(db.Text)
     
-    # Informations de campagne (pour compatibilité ascendante)
+    # Informations de campagne
     campagne_nom = db.Column(db.String(200))
     campagne_date_debut = db.Column(db.Date)
     campagne_date_fin = db.Column(db.Date)
@@ -1225,19 +1226,71 @@ class EvaluationRisque(db.Model):
     type_evaluation = db.Column(db.String(50), default='pre_evaluation')
     client_id = db.Column(db.Integer, db.ForeignKey('clients.id'), nullable=True)
     
+    # ============================================
+    # 🔥 CHAMPS POUR LA TRACABILITÉ COMPLÈTE
+    # ============================================
+    
+    origine = db.Column(db.String(50), default='manuel')
+    audit_id = db.Column(db.Integer, db.ForeignKey('audits.id'), nullable=True)
+    constat_id = db.Column(db.Integer, db.ForeignKey('constatations.id'), nullable=True)
+    demande_reevaluation_id = db.Column(db.Integer, db.ForeignKey('demandes_reevaluation.id'), nullable=True)
+    cartographie_id = db.Column(db.Integer, db.ForeignKey('cartographie.id'), nullable=True)
+    
+    metadonnees = db.Column(db.JSON, default={
+        'source': None,
+        'campagne_origine': None,
+        'audit_reference': None,
+        'constat_reference': None,
+        'justification': None,
+        'reevaluation_demande_id': None,
+        'historique_modifications': [],
+        'versions_anterieures': [],
+        'date_creation_originale': None
+    })
+    
     # Audit
     created_by = db.Column(db.Integer, db.ForeignKey('user.id'))
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
     
-    # Relations
+    # ============================================
+    # RELATIONS - CORRIGÉES SANS CONFLIT
+    # ============================================
+    
+    # Relations existantes (inchangées)
     risque = db.relationship('Risque', back_populates='evaluations')
     campagne = db.relationship('CampagneEvaluation', back_populates='evaluations')
     referent_pre_evaluation = db.relationship('User', foreign_keys=[referent_pre_evaluation_id])
     validateur = db.relationship('User', foreign_keys=[validateur_id])
     evaluateur_final = db.relationship('User', foreign_keys=[evaluateur_final_id])
     createur = db.relationship('User', foreign_keys=[created_by])
+    
+    # 🔥 RELATIONS CORRIGÉES - AVEC DES NOMS UNIQUES
+    
+    # Pour audit_id - backref unique
+    audit_source = db.relationship('Audit', 
+                                   foreign_keys=[audit_id], 
+                                   backref='evaluations_issues_de_audit')
+    
+    # Pour constat_id - backref unique
+    constat_source = db.relationship('Constatation', 
+                                     foreign_keys=[constat_id], 
+                                     backref='evaluations_issues_de_constat')
+    
+    # Pour demande_reevaluation_id - backref unique
+    demande_reevaluation = db.relationship('DemandeReevaluation', 
+                                           foreign_keys=[demande_reevaluation_id], 
+                                           backref='evaluation_issue_de_la_demande')
+    
+    # Pour cartographie_id - backref unique
+    cartographie = db.relationship('Cartographie', 
+                                   foreign_keys=[cartographie_id], 
+                                   backref='evaluations_risque_issues')
 
+    # ============================================
+    # MÉTHODES
+    # ============================================
+    
     def get_valeurs_finales(self):
         """Retourne les valeurs finales selon la hiérarchie triphasée"""
         return {
@@ -1254,6 +1307,125 @@ class EvaluationRisque(db.Model):
     def est_complete(self):
         """Vérifie si l'évaluation est complète (toutes les phases)"""
         return bool(self.date_confirmation)
+
+    def marquer_origine_audit(self, audit_id, constat_id=None, justification=None):
+        """Marque l'évaluation comme issue d'un audit"""
+        self.origine = 'audit'
+        self.audit_id = audit_id
+        self.constat_id = constat_id
+        self.metadonnees['source'] = 'audit'
+        self.metadonnees['audit_reference'] = Audit.query.get(audit_id).reference if audit_id else None
+        self.metadonnees['justification'] = justification
+        self.updated_at = datetime.utcnow()
+        
+        if constat_id:
+            constat = Constatation.query.get(constat_id)
+            if constat:
+                self.metadonnees['constat_reference'] = constat.reference
+        
+        self.ajouter_historique_modification(
+            'creation_audit',
+            f"Évaluation créée depuis l'audit {self.metadonnees.get('audit_reference', 'N/A')}",
+            current_user.id if hasattr(current_user, 'id') else None
+        )
+    
+    def marquer_origine_campagne(self, campagne_id, campagne_nom):
+        """Marque l'évaluation comme issue d'une campagne"""
+        self.origine = 'campagne'
+        self.metadonnees['source'] = 'campagne'
+        self.metadonnees['campagne_origine'] = campagne_nom
+        self.updated_at = datetime.utcnow()
+    
+    def ajouter_historique_modification(self, action, details, user_id):
+        """Ajoute une entrée dans l'historique des modifications"""
+        if not self.metadonnees:
+            self.metadonnees = {}
+        
+        if 'historique_modifications' not in self.metadonnees:
+            self.metadonnees['historique_modifications'] = []
+        
+        user_nom = 'Système'
+        if user_id:
+            user = User.query.get(user_id)
+            if user:
+                user_nom = user.username
+        
+        self.metadonnees['historique_modifications'].append({
+            'date': datetime.utcnow().isoformat(),
+            'action': action,
+            'details': details,
+            'utilisateur_id': user_id,
+            'utilisateur_nom': user_nom
+        })
+        
+        self.updated_at = datetime.utcnow()
+    
+    def get_origine_label(self):
+        """Retourne le libellé de l'origine"""
+        labels = {
+            'manuel': '📝 Manuel',
+            'audit': '🔍 Audit',
+            'reevaluation': '🔄 Réévaluation',
+            'campagne': '📊 Campagne'
+        }
+        return labels.get(self.origine, self.origine)
+    
+    def get_origine_css(self):
+        """Retourne la classe CSS pour l'origine"""
+        css = {
+            'manuel': 'secondary',
+            'audit': 'info',
+            'reevaluation': 'warning',
+            'campagne': 'success'
+        }
+        return css.get(self.origine, 'secondary')
+    
+    def get_historique_complet(self):
+        """Retourne l'historique complet formaté"""
+        historique = []
+        
+        if self.created_at:
+            historique.append({
+                'date': self.created_at,
+                'action': 'creation',
+                'details': f"Évaluation créée",
+                'type': 'creation'
+            })
+        
+        if self.date_pre_evaluation:
+            historique.append({
+                'date': self.date_pre_evaluation,
+                'action': 'pre_evaluation',
+                'details': f"Pré-évaluation réalisée",
+                'type': 'phase1'
+            })
+        
+        if self.date_validation:
+            historique.append({
+                'date': self.date_validation,
+                'action': 'validation',
+                'details': f"Validation par {self.validateur.username if self.validateur else 'N/A'}",
+                'type': 'phase2'
+            })
+        
+        if self.date_confirmation:
+            historique.append({
+                'date': self.date_confirmation,
+                'action': 'confirmation',
+                'details': f"Confirmation finale par {self.evaluateur_final.username if self.evaluateur_final else 'N/A'}",
+                'type': 'phase3'
+            })
+        
+        for mod in self.metadonnees.get('historique_modifications', []):
+            historique.append({
+                'date': datetime.fromisoformat(mod['date']) if isinstance(mod['date'], str) else mod['date'],
+                'action': mod['action'],
+                'details': mod['details'],
+                'type': 'modification'
+            })
+        
+        historique.sort(key=lambda x: x['date'])
+        return historique
 
     def __repr__(self):
         return f'<EvaluationRisque {self.id} pour risque {self.risque_id}>'
@@ -1911,6 +2083,10 @@ class VeilleDocument(db.Model):  # Nouveau
 
 # -------------------- AUDIT --------------------
 # -------------------- AUDIT --------------------
+# ============================================
+# MODÈLE AUDIT - CORRIGÉ ET COMPLET
+# ============================================
+
 class Audit(db.Model):
     __tablename__ = 'audits'
     
@@ -1971,19 +2147,19 @@ class Audit(db.Model):
     createur = db.relationship(
         'User', 
         foreign_keys=[created_by],
-        back_populates='audits_createur'  # ← UNIQUE dans User
+        back_populates='audits_createur'
     )
     
     responsable = db.relationship(
         'User', 
         foreign_keys=[responsable_id],
-        back_populates='audits_responsable'  # ← UNIQUE dans User
+        back_populates='audits_responsable'
     )
     
     archiveur = db.relationship(
         'User', 
         foreign_keys=[archived_by],
-        back_populates='audits_archiveur'  # ← UNIQUE dans User
+        back_populates='audits_archiveur'
     )
     
     # Processus
@@ -2020,6 +2196,14 @@ class Audit(db.Model):
         back_populates='audit', 
         lazy=True, 
         cascade='all, delete-orphan'
+    )
+    
+    # 🔥 RELATION VERS DEMANDE REEVALUATION - AVEC NOM UNIQUE
+    demandes_reevaluation = db.relationship(
+        'DemandeReevaluation', 
+        foreign_keys='DemandeReevaluation.audit_id',
+        backref='audit_source_audit',
+        lazy=True
     )
     
     # ============================================
@@ -2059,7 +2243,7 @@ class Audit(db.Model):
         for constat in self.constatations:
             if constat.statut == 'clos':
                 points_obtenus += 100
-            elif constat.statut == 'en_cours':
+            elif constat.statut == 'en_action':
                 points_obtenus += 50
             elif constat.statut == 'a_valider':
                 points_obtenus += 25
@@ -2288,7 +2472,7 @@ class Audit(db.Model):
         return []
     
     # ============================================
-    # MÉTHODES DE GESTION DES RISQUES
+    # 🔥 MÉTHODES POUR L'INTÉGRATION GRC
     # ============================================
     
     def get_risques_lies(self):
@@ -2296,19 +2480,27 @@ class Audit(db.Model):
         risques = []
         risques_ids = set()
         
-        # Via les recommandations
-        for recommandation in self.recommandations:
-            if recommandation.risque_id and recommandation.risque_id not in risques_ids:
-                risque = Risque.query.get(recommandation.risque_id)
-                if risque:
+        # Via les constatations
+        for constat in self.constatations:
+            if constat.risque_id and constat.risque_id not in risques_ids:
+                risque = Risque.query.get(constat.risque_id)
+                if risque and not risque.is_archived:
                     risques.append(risque)
-                    risques_ids.add(recommandation.risque_id)
+                    risques_ids.add(constat.risque_id)
+        
+        # Via les recommandations
+        for reco in self.recommandations:
+            if reco.risque_id and reco.risque_id not in risques_ids:
+                risque = Risque.query.get(reco.risque_id)
+                if risque and not risque.is_archived:
+                    risques.append(risque)
+                    risques_ids.add(reco.risque_id)
         
         # Via les plans d'action
         for plan in self.plans_action:
             if plan.risque_id and plan.risque_id not in risques_ids:
                 risque = Risque.query.get(plan.risque_id)
-                if risque:
+                if risque and not risque.is_archived:
                     risques.append(risque)
                     risques_ids.add(plan.risque_id)
         
@@ -2316,11 +2508,59 @@ class Audit(db.Model):
         for audit_risque in self.audit_risques:
             if audit_risque.risque_id and audit_risque.risque_id not in risques_ids:
                 risque = Risque.query.get(audit_risque.risque_id)
-                if risque:
+                if risque and not risque.is_archived:
                     risques.append(risque)
                     risques_ids.add(audit_risque.risque_id)
         
         return risques
+    
+    def get_demandes_reevaluation(self):
+        """Retourne toutes les demandes de réévaluation liées à cet audit"""
+        return DemandeReevaluation.query.filter_by(
+            audit_id=self.id,
+            client_id=self.client_id
+        ).order_by(DemandeReevaluation.date_demande.desc()).all()
+    
+    def get_nb_demandes_reevaluation_en_attente(self):
+        """Retourne le nombre de demandes de réévaluation en attente"""
+        return DemandeReevaluation.query.filter_by(
+            audit_id=self.id,
+            statut='en_attente',
+            client_id=self.client_id
+        ).count()
+    
+    def get_risques_avec_contexte_grc(self):
+        """Retourne les risques avec leur contexte GRC complet"""
+        result = []
+        for risque in self.get_risques_lies():
+            # Récupérer les DMR
+            dispositifs = DispositifMaitrise.query.filter_by(
+                risque_id=risque.id,
+                is_archived=False
+            ).all()
+            
+            # Récupérer les contrôles
+            controles = ControleProcessus.query.filter_by(
+                risque_id=risque.id,
+                statut='actif'
+            ).all()
+            
+            # Récupérer les constats de cet audit pour ce risque
+            constats = [c for c in self.constatations if c.risque_id == risque.id]
+            
+            result.append({
+                'risque': risque,
+                'derniere_evaluation': risque.derniere_evaluation,
+                'dispositifs': dispositifs,
+                'nb_dispositifs': len(dispositifs),
+                'controles': controles,
+                'nb_controles': len(controles),
+                'constats': constats,
+                'nb_constats': len(constats),
+                'nb_constats_ouverts': len([c for c in constats if c.statut != 'clos'])
+            })
+        
+        return result
     
     # ============================================
     # MÉTHODES DE GESTION DES STATUTS
@@ -2416,72 +2656,113 @@ class Audit(db.Model):
             'created_at': self.created_at.isoformat() if self.created_at else None,
             'updated_at': self.updated_at.isoformat() if self.updated_at else None
         }
-# -------------------- AUDIT RISQUE - CORRIGÉ --------------------
+
+
+# ============================================
+# MODÈLE AUDIT RISQUE - CORRIGÉ
+# ============================================
+
 class AuditRisque(db.Model):
     __tablename__ = 'audit_risques'
     
     id = db.Column(db.Integer, primary_key=True)
-    audit_id = db.Column(db.Integer, db.ForeignKey('audits.id'), nullable=False)  # 'audits.id' au lieu de 'audit.id'
+    audit_id = db.Column(db.Integer, db.ForeignKey('audits.id'), nullable=False)
     risque_id = db.Column(db.Integer, db.ForeignKey('risques.id'), nullable=False)
-    impact_audit = db.Column(db.String(50))  # aggravé, réduit, neutre
+    impact_audit = db.Column(db.String(50))
     commentaire = db.Column(db.Text)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     
     # Relations corrigées
     audit = db.relationship('Audit', back_populates='audit_risques')
     risque = db.relationship('Risque', backref='audit_associations')
+    
+    def __repr__(self):
+        return f'<AuditRisque audit={self.audit_id} risque={self.risque_id}>'
 
-# -------------------- CONSTATATION - CORRIGÉ ET COMPLET --------------------
+
+# ============================================
+# MODÈLE CONSTATATION - CORRIGÉ ET COMPLET
+# ============================================
+
 class Constatation(db.Model):
     __tablename__ = 'constatations'
     
     id = db.Column(db.Integer, primary_key=True)
-    reference = db.Column(db.String(50), nullable=False)  # ← unique=True ENLEVÉ
+    reference = db.Column(db.String(50), nullable=False)
     description = db.Column(db.Text, nullable=False)
     type_constatation = db.Column(db.String(50), nullable=False)
     gravite = db.Column(db.String(50))
-    
-    # Nouveaux champs
-    criticite = db.Column(db.String(50))  # mineure, majeure, critique
-    processus_concerne = db.Column(db.String(500))  # Augmenter la longueur
-    cause_racine = db.Column(db.Text)  # Méthode 5 Why
+    criticite = db.Column(db.String(50))
+    processus_concerne = db.Column(db.String(500))
+    cause_racine = db.Column(db.Text)
     documents_justificatifs = db.Column(db.Text)
-    
-    # Workflow intelligent
-    statut = db.Column(db.String(50), default='a_analyser')  # a_analyser, a_valider, en_action, clos
-    
-    # Fichiers joints
-    fichiers_ids = db.Column(db.String(500))  # Références aux fichiers
+    statut = db.Column(db.String(50), default='a_analyser')
+    fichiers_ids = db.Column(db.String(500))
     preuves = db.Column(db.Text)
-    
-    # Liens
     audit_id = db.Column(db.Integer, db.ForeignKey('audits.id'), nullable=False)
     risque_id = db.Column(db.Integer, db.ForeignKey('risques.id'))
-    
-    # Conclusion et commentaires
-    conclusion = db.Column(db.Text)  # Pour le rapport définitif
-    commentaires = db.Column(db.Text)  # Commentaires internes
-    recommandations_immediates = db.Column(db.Text)  # Actions immédiates proposées
-    
-    # Audit
     created_by = db.Column(db.Integer, db.ForeignKey('user.id'))
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
     is_archived = db.Column(db.Boolean, default=False)
     client_id = db.Column(db.Integer, db.ForeignKey('clients.id'), nullable=True)
+    conclusion = db.Column(db.Text)
+    commentaires = db.Column(db.Text)
+    recommandations_immediates = db.Column(db.Text)
     
-    # ===== RELATIONS =====
+    # ============================================
+    # 🔥 CHAMPS POUR LA LIAISON AVEC DMR ET CONTRÔLES
+    # ============================================
+    dispositif_id = db.Column(db.Integer, db.ForeignKey('dispositifs_maitrise.id'), nullable=True)
+    controle_id = db.Column(db.Integer, db.ForeignKey('controle_processus.id'), nullable=True)
+    
+    # ============================================
+    # 🔥 CHAMPS POUR LA RÉÉVALUATION
+    # ============================================
+    demande_reevaluation_id = db.Column(db.Integer, db.ForeignKey('demandes_reevaluation.id'), nullable=True)
+    reevaluation_demandee = db.Column(db.Boolean, default=False)
+    reevaluation_statut = db.Column(db.String(50), default='non_demandee')
+    
+    # ============================================
+    # RELATIONS - CORRIGÉES AVEC back_populates
+    # ============================================
+    
+    # Relations existantes
     audit = db.relationship('Audit', back_populates='constatations')
-    risque = db.relationship('Risque', backref='constatations')
+    risque = db.relationship('Risque', backref='constatations_risque')
     createur = db.relationship('User', foreign_keys=[created_by])
     recommandations = db.relationship('Recommandation', back_populates='constatation', lazy=True)
     
-    # ===== CONTRAINTE UNIQUE COMPOSITE =====
+    # 🔥 RELATIONS CORRIGÉES - AVEC back_populates UNIQUES
+    dispositif = db.relationship(
+        'DispositifMaitrise', 
+        foreign_keys=[dispositif_id], 
+        back_populates='conteneur_constats_dispositif'
+    )
+    
+    controle = db.relationship(
+        'ControleProcessus', 
+        foreign_keys=[controle_id], 
+        back_populates='conteneur_constats_controle'
+    )
+    
+    demande_reevaluation = db.relationship(
+        'DemandeReevaluation', 
+        foreign_keys=[demande_reevaluation_id], 
+        backref='conteneur_constat_source'
+    )
+    
+    # ============================================
+    # CONTRAINTE UNIQUE COMPOSITE
+    # ============================================
     __table_args__ = (
         db.UniqueConstraint('reference', 'client_id', name='uix_constatation_reference_client'),
     )
     
-    # ===== MÉTHODE STATIQUE DE GÉNÉRATION =====
+    # ============================================
+    # MÉTHODE STATIQUE DE GÉNÉRATION
+    # ============================================
+    
     @staticmethod
     def generer_reference(client_id):
         """Génère une référence unique PAR CLIENT"""
@@ -2496,40 +2777,25 @@ class Constatation(db.Model):
         
         return f"{prefixe}{(count + 1):04d}"
     
-    # ===== INITIALISATION =====
+    # ============================================
+    # INITIALISATION
+    # ============================================
+    
     def __init__(self, **kwargs):
         """Initialise une constatation avec génération automatique de la référence"""
-        # Générer la référence si non fournie et si client_id est présent
         if 'reference' not in kwargs and 'client_id' in kwargs and kwargs['client_id']:
             kwargs['reference'] = self.generer_reference(kwargs['client_id'])
         
         super().__init__(**kwargs)
     
-    # ===== PROPRIÉTÉS CALCULÉES =====
-    
-    @property
-    def couleur_criticite(self):
-        return {
-            'mineure': 'info',
-            'moyenne': 'warning',
-            'majeure': 'danger',
-            'critique': 'dark'
-        }.get(self.criticite or 'mineure', 'secondary')
-    
-    @property
-    def processus_audite_display(self):
-        """Retourne le nom du processus concerné"""
-        if self.processus_concerne:
-            return self.processus_concerne
-        elif self.audit and self.audit.processus:
-            return self.audit.processus.nom
-        return None
+    # ============================================
+    # PROPRIÉTÉS CALCULÉES
+    # ============================================
     
     @property
     def get_preuves_list(self):
-        """Retourne la liste des preuves sous forme de liste Python"""
+        """Retourne la liste des preuves"""
         if self.preuves:
-            # Si les preuves sont stockées séparées par des virgules
             return [p.strip() for p in self.preuves.split(',') if p.strip()]
         return []
     
@@ -2545,6 +2811,27 @@ class Constatation(db.Model):
         return couleurs.get(self.statut, 'light')
     
     @property
+    def couleur_criticite(self):
+        """Couleur pour la criticité"""
+        return {
+            'mineure': 'info',
+            'moyenne': 'warning',
+            'majeure': 'danger',
+            'critique': 'dark'
+        }.get(self.criticite or 'mineure', 'secondary')
+    
+    @property
+    def get_gravite_label(self):
+        """Libellé de la gravité"""
+        labels = {
+            'faible': 'Faible',
+            'moyenne': 'Moyenne',
+            'elevee': 'Élevée',
+            'critique': 'Critique'
+        }
+        return labels.get(self.gravite, 'Non définie')
+    
+    @property
     def get_statut_label(self):
         """Libellé du statut en français"""
         labels = {
@@ -2556,47 +2843,32 @@ class Constatation(db.Model):
         return labels.get(self.statut, self.statut)
     
     @property
-    def get_criticite_label(self):
-        """Libellé de la criticité en français"""
+    def get_reevaluation_statut_label(self):
+        """Libellé du statut de réévaluation"""
         labels = {
-            'mineure': 'Mineure',
-            'moyenne': 'Moyenne',
-            'majeure': 'Majeure',
-            'critique': 'Critique'
+            'non_demandee': 'Non demandée',
+            'demandee': '📤 Demandée',
+            'en_cours': '🔄 En cours',
+            'validee': '✅ Validée',
+            'rejetee': '❌ Rejetée'
         }
-        return labels.get(self.criticite, 'Non définie')
+        return labels.get(self.reevaluation_statut, self.reevaluation_statut)
     
     @property
-    def get_gravite_label(self):
-        """Libellé de la gravité en français"""
-        labels = {
-            'faible': 'Faible',
-            'moyenne': 'Moyenne',
-            'elevee': 'Élevée',
-            'critique': 'Critique'
+    def get_reevaluation_statut_css(self):
+        """Couleur CSS pour le statut de réévaluation"""
+        css = {
+            'non_demandee': 'secondary',
+            'demandee': 'warning',
+            'en_cours': 'info',
+            'validee': 'success',
+            'rejetee': 'danger'
         }
-        return labels.get(self.gravite, 'Non définie')
+        return css.get(self.reevaluation_statut, 'secondary')
     
-    @property
-    def nb_preuves(self):
-        """Retourne le nombre de preuves"""
-        return len(self.get_preuves_list)
-    
-    @property
-    def nb_fichiers(self):
-        """Retourne le nombre de fichiers joints"""
-        return len(self.get_fichiers_list())
-    
-    # ===== MÉTHODES DE GESTION DES FICHIERS =====
-    
-    def get_fichiers_list(self):
-        """Retourne la liste des IDs de fichiers"""
-        if self.fichiers_ids:
-            try:
-                return [int(id.strip()) for id in self.fichiers_ids.split(',') if id.strip()]
-            except (ValueError, AttributeError):
-                return []
-        return []
+    # ============================================
+    # MÉTHODES DE GESTION DES PREUVES
+    # ============================================
     
     def ajouter_preuve(self, nom_fichier):
         """Ajoute une preuve à la constatation"""
@@ -2620,100 +2892,61 @@ class Constatation(db.Model):
                 return True
         return False
     
-    def ajouter_fichier(self, fichier_id):
-        """Ajoute un fichier à la constatation"""
-        if not self.fichiers_ids:
-            self.fichiers_ids = str(fichier_id)
-        else:
-            fichiers_list = self.get_fichiers_list()
-            if fichier_id not in fichiers_list:
-                fichiers_list.append(fichier_id)
-                self.fichiers_ids = ','.join(str(id) for id in fichiers_list)
-        self.updated_at = datetime.utcnow()
-    
-    def supprimer_fichier(self, fichier_id):
-        """Supprime un fichier de la constatation"""
-        if self.fichiers_ids:
-            fichiers_list = self.get_fichiers_list()
-            if fichier_id in fichiers_list:
-                fichiers_list.remove(fichier_id)
-                self.fichiers_ids = ','.join(str(id) for id in fichiers_list) if fichiers_list else None
-                self.updated_at = datetime.utcnow()
-                return True
-        return False
-    
-    # ===== MÉTHODES DE WORKFLOW =====
-    
-    def set_processus(self, processus_id=None, nom_manuel=None, from_audit=False):
-        """Définit le processus concerné"""
-        if from_audit and self.audit:
-            # Utiliser le processus de l'audit
-            self.processus_concerne = self.audit.processus_audite_display
-        elif nom_manuel:
-            self.processus_concerne = nom_manuel
-        elif processus_id:
-            # Récupérer le nom du processus
-            from models import Processus
-            processus = Processus.query.get(processus_id)
-            if processus:
-                self.processus_concerne = processus.nom
-    
-    def passer_a_analyser(self, utilisateur_id=None):
-        """Passe le statut à 'À analyser'"""
-        self.statut = 'a_analyser'
-        self.updated_at = datetime.utcnow()
-        self._log_changement_statut('a_analyser', utilisateur_id)
-    
-    def passer_a_valider(self, utilisateur_id=None):
-        """Passe le statut à 'À valider'"""
-        self.statut = 'a_valider'
-        self.updated_at = datetime.utcnow()
-        self._log_changement_statut('a_valider', utilisateur_id)
-    
-    def passer_en_action(self, utilisateur_id=None):
-        """Passe le statut à 'En action'"""
-        self.statut = 'en_action'
-        self.updated_at = datetime.utcnow()
-        self._log_changement_statut('en_action', utilisateur_id)
-    
-    def passer_clos(self, utilisateur_id=None, conclusion=None):
-        """Passe le statut à 'Clos'"""
-        self.statut = 'clos'
-        if conclusion:
-            self.conclusion = conclusion
-        if utilisateur_id:
-            self.updated_by = utilisateur_id
-        self.updated_at = datetime.utcnow()
-        self._log_changement_statut('clos', utilisateur_id)
-    
-    def _log_changement_statut(self, nouveau_statut, utilisateur_id=None):
-        """Log le changement de statut (à implémenter si vous avez un système de log)"""
-        # Optionnel : Ajouter une entrée dans un journal d'audit
-        # Vous pouvez implémenter cette méthode selon votre système de log
-        pass
-    
-    # ===== MÉTHODES D'ARCHIVAGE =====
+    # ============================================
+    # MÉTHODES D'ARCHIVAGE
+    # ============================================
     
     def archiver(self, utilisateur_id=None):
         """Archive la constatation"""
         self.is_archived = True
         self.updated_at = datetime.utcnow()
-        # Optionnel : enregistrer qui a archivé
-        if utilisateur_id:
-            self.archived_by = utilisateur_id
-        self.archived_at = datetime.utcnow()
+        return self
     
     def restaurer(self):
         """Restaurer une constatation archivée"""
         self.is_archived = False
         self.updated_at = datetime.utcnow()
-        self.archived_at = None
-        self.archived_by = None
+        return self
     
-    # ===== MÉTHODE DE CONVERSION =====
+    # ============================================
+    # 🔥 MÉTHODE DE DEMANDE DE RÉÉVALUATION
+    # ============================================
+    
+    def demander_reevaluation(self, impact, probabilite, justification, user_id):
+        """Demande une réévaluation du risque associé"""
+        from models import DemandeReevaluation
+        
+        if not self.risque_id:
+            return None
+        
+        demande = DemandeReevaluation(
+            audit_id=self.audit_id,
+            constat_id=self.id,
+            risque_id=self.risque_id,
+            titre=f"Réévaluation du risque {self.risque.reference}",
+            justification=justification,
+            impact_propose=impact,
+            probabilite_propose=probabilite,
+            demandeur_id=user_id,
+            client_id=self.client_id,
+            statut='en_attente'
+        )
+        demande.reference = demande.generer_reference()
+        demande.calculer_score_propose()
+        
+        self.demande_reevaluation_id = demande.id
+        self.reevaluation_demandee = True
+        self.reevaluation_statut = 'demandee'
+        self.updated_at = datetime.utcnow()
+        
+        return demande
+    
+    # ============================================
+    # MÉTHODE DE CONVERSION
+    # ============================================
     
     def to_dict(self):
-        """Convertit la constatation en dictionnaire pour API"""
+        """Convertit la constatation en dictionnaire"""
         return {
             'id': self.id,
             'reference': self.reference,
@@ -2722,33 +2955,342 @@ class Constatation(db.Model):
             'gravite': self.gravite,
             'gravite_label': self.get_gravite_label,
             'criticite': self.criticite,
-            'criticite_label': self.get_criticite_label,
-            'criticite_couleur': self.couleur_criticite,
-            'processus_concerne': self.processus_audite_display,
-            'cause_racine': self.cause_racine,
             'statut': self.statut,
             'statut_label': self.get_statut_label,
             'statut_couleur': self.get_couleur_statut,
-            'conclusion': self.conclusion,
-            'commentaires': self.commentaires,
-            'recommandations_immediates': self.recommandations_immediates,
-            'nb_preuves': self.nb_preuves,
-            'nb_fichiers': self.nb_fichiers,
-            'preuves': self.get_preuves_list,
-            'fichiers_ids': self.get_fichiers_list(),
-            'audit_id': self.audit_id,
-            'audit_reference': self.audit.reference if self.audit else None,
             'risque_id': self.risque_id,
-            'risque_reference': self.risque.reference if self.risque else None,
-            'created_by': self.created_by,
+            'dispositif_id': self.dispositif_id,
+            'controle_id': self.controle_id,
+            'reevaluation_demandee': self.reevaluation_demandee,
+            'reevaluation_statut': self.reevaluation_statut,
+            'reevaluation_statut_label': self.get_reevaluation_statut_label(),
             'created_at': self.created_at.isoformat() if self.created_at else None,
-            'updated_at': self.updated_at.isoformat() if self.updated_at else None,
-            'is_archived': self.is_archived
+            'updated_at': self.updated_at.isoformat() if self.updated_at else None
         }
     
     def __repr__(self):
         return f'<Constatation {self.reference}: {self.description[:50]}...>'
 
+
+class DemandeReevaluation(db.Model):
+    """Demande de réévaluation d'un risque issue d'un audit"""
+    __tablename__ = 'demandes_reevaluation'
+    
+    id = db.Column(db.Integer, primary_key=True)
+    reference = db.Column(db.String(50), unique=True, nullable=False)
+    
+    # ============================================
+    # LIENS AVEC LES OBJETS SOURCES
+    # ============================================
+    audit_id = db.Column(db.Integer, db.ForeignKey('audits.id'), nullable=False)
+    constat_id = db.Column(db.Integer, db.ForeignKey('constatations.id'), nullable=True)
+    risque_id = db.Column(db.Integer, db.ForeignKey('risques.id'), nullable=False)
+    
+    # ============================================
+    # INFORMATIONS DE LA DEMANDE
+    # ============================================
+    titre = db.Column(db.String(200), nullable=False)
+    description = db.Column(db.Text)
+    justification = db.Column(db.Text)
+    
+    # ============================================
+    # PROPOSITION DE RÉÉVALUATION
+    # ============================================
+    impact_propose = db.Column(db.Integer)
+    probabilite_propose = db.Column(db.Integer)
+    niveau_maitrise_propose = db.Column(db.Integer)
+    score_propose = db.Column(db.Integer)
+    niveau_risque_propose = db.Column(db.String(20))
+    
+    # ============================================
+    # STATUT DU WORKFLOW
+    # ============================================
+    statut = db.Column(db.String(50), default='en_attente')
+    # en_attente, en_cours, validee, rejetee, annulee
+    
+    # ============================================
+    # DATES CLÉS
+    # ============================================
+    date_demande = db.Column(db.DateTime, default=datetime.utcnow)
+    date_traitement = db.Column(db.DateTime)
+    date_validation = db.Column(db.DateTime)
+    
+    # ============================================
+    # ACTEURS
+    # ============================================
+    demandeur_id = db.Column(db.Integer, db.ForeignKey('user.id'))
+    validateur_id = db.Column(db.Integer, db.ForeignKey('user.id'))
+    
+    # ============================================
+    # RÉSULTAT
+    # ============================================
+    resultat = db.Column(db.Text)
+    commentaire_validation = db.Column(db.Text)
+    
+    # ============================================
+    # NOUVELLE ÉVALUATION CRÉÉE
+    # ============================================
+    nouvelle_evaluation_id = db.Column(db.Integer, db.ForeignKey('evaluations_risque.id'), nullable=True)
+    
+    # ============================================
+    # RECOMMANDATIONS GÉNÉRÉES
+    # ============================================
+    recommandations_generees = db.Column(db.JSON, default=[])
+    
+    # ============================================
+    # HISTORIQUE
+    # ============================================
+    historique_actions = db.Column(db.JSON, default=[])
+    
+    # ============================================
+    # MÉTADONNÉES
+    # ============================================
+    client_id = db.Column(db.Integer, db.ForeignKey('clients.id'), nullable=False)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    
+    # ============================================
+    # RELATIONS - CORRIGÉES AVEC DES NOMS UNIQUES
+    # ============================================
+    
+    # audit_id - backref unique
+    audit = db.relationship('Audit', 
+                           foreign_keys=[audit_id], 
+                           backref='demandes_reevaluation_issues_de_audit')
+    
+    # constat_id - backref unique
+    constat = db.relationship('Constatation', 
+                             foreign_keys=[constat_id], 
+                             backref='demandes_reevaluation_issues_de_constat')
+    
+    # risque_id - backref unique
+    risque = db.relationship('Risque', 
+                            foreign_keys=[risque_id], 
+                            backref='demandes_reevaluation_issues_de_risque')
+    
+    # demandeur_id - backref unique
+    demandeur = db.relationship('User', 
+                               foreign_keys=[demandeur_id], 
+                               backref='demandes_reevaluation_demandees')
+    
+    # validateur_id - backref unique
+    validateur = db.relationship('User', 
+                                foreign_keys=[validateur_id], 
+                                backref='demandes_reevaluation_validees')
+    
+    # nouvelle_evaluation_id - backref unique
+    nouvelle_evaluation = db.relationship('EvaluationRisque', 
+                                          foreign_keys=[nouvelle_evaluation_id], 
+                                          backref='demande_reevaluation_source')
+    
+    # ============================================
+    # MÉTHODES
+    # ============================================
+    
+    def generer_reference(self):
+        """Génère une référence unique"""
+        annee = datetime.now().year
+        count = DemandeReevaluation.query.filter(
+            DemandeReevaluation.reference.like(f'REEVAL-{annee}-%'),
+            DemandeReevaluation.client_id == self.client_id
+        ).count()
+        return f"REEVAL-{annee}-{count + 1:04d}"
+    
+    def calculer_score_propose(self):
+        """Calcule le score proposé"""
+        if self.impact_propose and self.probabilite_propose:
+            self.score_propose = self.impact_propose * self.probabilite_propose
+            self.niveau_risque_propose = self._get_niveau_risque(self.score_propose)
+        return self.score_propose
+    
+    def _get_niveau_risque(self, score):
+        if score <= 4: return 'Faible'
+        if score <= 10: return 'Moyen'
+        if score <= 16: return 'Élevé'
+        return 'Critique'
+    
+    def valider(self, user_id, commentaire=None):
+        """Valide la demande de réévaluation et crée l'évaluation"""
+        if self.statut != 'en_attente':
+            return False, "La demande n'est plus en attente"
+        
+        self.statut = 'validee'
+        self.date_validation = datetime.utcnow()
+        self.validateur_id = user_id
+        self.commentaire_validation = commentaire
+        
+        # Créer la nouvelle évaluation
+        nouvelle_eval = EvaluationRisque(
+            risque_id=self.risque_id,
+            impact_pre=self.impact_propose,
+            probabilite_pre=self.probabilite_propose,
+            niveau_maitrise_pre=self.niveau_maitrise_propose,
+            score_risque=self.score_propose,
+            niveau_risque=self.niveau_risque_propose,
+            commentaire_pre_evaluation=f"Réévaluation issue de la demande {self.reference}\nJustification: {self.justification}",
+            origine='audit',
+            audit_id=self.audit_id,
+            constat_id=self.constat_id,
+            demande_reevaluation_id=self.id,
+            created_by=user_id,
+            client_id=self.client_id,
+            statut_validation='en_attente'
+        )
+        db.session.add(nouvelle_eval)
+        db.session.flush()
+        
+        self.nouvelle_evaluation_id = nouvelle_eval.id
+        
+        # Générer des recommandations automatiques
+        self.recommandations_generees = self._generer_recommandations_auto()
+        
+        # Ajouter à l'historique
+        self._ajouter_historique('validation', user_id, f"Demande validée par {User.query.get(user_id).username}")
+        
+        return True, nouvelle_eval
+    
+    def _generer_recommandations_auto(self):
+        """Génère des recommandations automatiques"""
+        recommandations = []
+        
+        # 1. Changement de niveau
+        if self.risque and self.niveau_risque_propose:
+            niveau_actuel = self.risque.niveau_criticite
+            if niveau_actuel and self.niveau_risque_propose != niveau_actuel:
+                recommandations.append({
+                    'type': 'changement_niveau',
+                    'message': f"Le risque passe de {niveau_actuel} à {self.niveau_risque_propose}",
+                    'priorite': 'haute'
+                })
+        
+        # 2. DMR insuffisants
+        dmr_insuffisants = DispositifMaitrise.query.filter_by(
+            risque_id=self.risque_id,
+            is_archived=False
+        ).filter(
+            DispositifMaitrise.efficacite_reelle < 3
+        ).all()
+        
+        for dmr in dmr_insuffisants:
+            recommandations.append({
+                'type': 'renforcer_dmr',
+                'message': f"Renforcer le DMR {dmr.reference} - {dmr.nom}",
+                'priorite': 'haute',
+                'dmr_id': dmr.id
+            })
+        
+        # 3. Contrôles faibles
+        from models import ControleProcessus
+        controles_faibles = ControleProcessus.query.filter_by(
+            risque_id=self.risque_id,
+            statut='actif'
+        ).filter(
+            ControleProcessus.efficacite < 3
+        ).all()
+        
+        for controle in controles_faibles:
+            recommandations.append({
+                'type': 'renforcer_controle',
+                'message': f"Renforcer le contrôle {controle.nom}",
+                'priorite': 'moyenne',
+                'controle_id': controle.id
+            })
+        
+        return recommandations
+    
+    def rejeter(self, user_id, commentaire=None):
+        """Rejette la demande de réévaluation"""
+        if self.statut != 'en_attente':
+            return False
+        
+        self.statut = 'rejetee'
+        self.date_traitement = datetime.utcnow()
+        self.validateur_id = user_id
+        self.commentaire_validation = commentaire
+        self._ajouter_historique('rejet', user_id, f"Demande rejetée: {commentaire}")
+        return True
+    
+    def annuler(self, user_id, commentaire=None):
+        """Annule la demande de réévaluation"""
+        if self.statut not in ['en_attente', 'en_cours']:
+            return False
+        
+        self.statut = 'annulee'
+        self.date_traitement = datetime.utcnow()
+        self.commentaire_validation = commentaire
+        self._ajouter_historique('annulation', user_id, f"Demande annulée: {commentaire}")
+        return True
+    
+    def _ajouter_historique(self, action, user_id, details):
+        """Ajoute une entrée dans l'historique"""
+        user_nom = User.query.get(user_id).username if user_id else 'Système'
+        
+        self.historique_actions.append({
+            'date': datetime.utcnow().isoformat(),
+            'action': action,
+            'utilisateur_id': user_id,
+            'utilisateur_nom': user_nom,
+            'details': details
+        })
+    
+    def get_statut_label(self):
+        labels = {
+            'en_attente': '⏳ En attente',
+            'en_cours': '🔄 En cours',
+            'validee': '✅ Validée',
+            'rejetee': '❌ Rejetée',
+            'annulee': '⛔ Annulée'
+        }
+        return labels.get(self.statut, self.statut)
+    
+    def get_statut_css(self):
+        css = {
+            'en_attente': 'warning',
+            'en_cours': 'info',
+            'validee': 'success',
+            'rejetee': 'danger',
+            'annulee': 'dark'
+        }
+        return css.get(self.statut, 'secondary')
+    
+    def to_dict(self):
+        return {
+            'id': self.id,
+            'reference': self.reference,
+            'titre': self.titre,
+            'description': self.description,
+            'justification': self.justification,
+            'statut': self.statut,
+            'statut_label': self.get_statut_label(),
+            'statut_css': self.get_statut_css(),
+            'proposition': {
+                'impact': self.impact_propose,
+                'probabilite': self.probabilite_propose,
+                'niveau_maitrise': self.niveau_maitrise_propose,
+                'score': self.score_propose,
+                'niveau_risque': self.niveau_risque_propose
+            },
+            'audit': {
+                'id': self.audit_id,
+                'reference': self.audit.reference if self.audit else None
+            },
+            'risque': {
+                'id': self.risque_id,
+                'reference': self.risque.reference if self.risque else None,
+                'intitule': self.risque.intitule if self.risque else None
+            },
+            'demandeur': self.demandeur.username if self.demandeur else None,
+            'validateur': self.validateur.username if self.validateur else None,
+            'date_demande': self.date_demande.isoformat() if self.date_demande else None,
+            'date_validation': self.date_validation.isoformat() if self.date_validation else None,
+            'recommandations': self.recommandations_generees,
+            'nouvelle_evaluation_id': self.nouvelle_evaluation_id,
+            'historique': self.historique_actions,
+            'created_at': self.created_at.isoformat() if self.created_at else None
+        }
+    
+    def __repr__(self):
+        return f'<DemandeReevaluation {self.reference}>'
 
 
 # models.py - Version corrigée de DemandeContact
@@ -7384,9 +7926,6 @@ class DispositifMaitrise(db.Model):
     # Liens avec audit
     audit_id = db.Column(db.Integer, db.ForeignKey('audits.id'))
     
-    # SUPPRIMEZ cette ligne si vous passez à la nouvelle relation
-    # plan_action_id = db.Column(db.Integer, db.ForeignKey('plans_action.id'))
-    
     # Traçabilité
     created_by = db.Column(db.Integer, db.ForeignKey('user.id'))
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
@@ -7398,32 +7937,51 @@ class DispositifMaitrise(db.Model):
     # Multi-tenant
     client_id = db.Column(db.Integer, db.ForeignKey('clients.id'))
     
-    # Relations
+    # ============================================
+    # CONTRAINTE UNIQUE COMPOSITE
+    # ============================================
+    __table_args__ = (
+        db.UniqueConstraint('reference', 'client_id', name='uix_dispositif_reference_client'),
+    )
+    
+    # ============================================
+    # RELATIONS - AVEC back_populates UNIQUES
+    # ============================================
+    
     risque = db.relationship('Risque', back_populates='dispositifs_maitrise')
     responsable = db.relationship('User', foreign_keys=[responsable_id])
     direction = db.relationship('Direction')
     service = db.relationship('Service')
     audit = db.relationship('Audit')
     
-    # NOUVELLE RELATION plusieurs-à-plusieurs (seule)
+    # 🔥 RELATION plusieurs-à-plusieurs avec PlanAction
     plans_action = db.relationship('PlanAction',
                                    secondary='plan_dispositifs',
-                                   back_populates='dispositifs',  # Correspond à ce qui est dans PlanAction
+                                   back_populates='dispositifs',
                                    lazy='dynamic')
     
     createur = db.relationship('User', foreign_keys=[created_by])
     archive_user = db.relationship('User', foreign_keys=[archived_by])
     client = db.relationship('Client')
     
-    # Documentation
+    # 🔥 RELATION AVEC CONSTATATIONS - back_populates UNIQUE
+    conteneur_constats_dispositif = db.relationship(
+        'Constatation', 
+        foreign_keys='Constatation.dispositif_id',
+        back_populates='dispositif',
+        lazy=True
+    )
+    
     documents = db.relationship('DocumentDispositif', back_populates='dispositif', cascade='all, delete-orphan')
     verifications = db.relationship('VerificationDispositif', back_populates='dispositif', cascade='all, delete-orphan')
-     # ⭐ MÉTHODE DE GÉNÉRATION
-    __table_args__ = (
-        db.UniqueConstraint('reference', 'client_id', name='uix_dispositif_reference_client'),
-    )
+    
+    # ============================================
+    # MÉTHODE STATIQUE DE GÉNÉRATION
+    # ============================================
+    
     @staticmethod
     def generer_reference(client_id):
+        """Génère une référence unique PAR CLIENT"""
         from datetime import datetime
         annee = datetime.now().year
         prefixe = f"DISP-{annee}-"
@@ -7435,9 +7993,21 @@ class DispositifMaitrise(db.Model):
         
         return f"{prefixe}{(count + 1):04d}"
     
-    def __repr__(self):
-        return f'<DispositifMaitrise {self.reference}: {self.nom}>'
-
+    # ============================================
+    # INITIALISATION
+    # ============================================
+    
+    def __init__(self, **kwargs):
+        """Initialise avec génération automatique de la référence"""
+        if 'reference' not in kwargs and 'client_id' in kwargs and kwargs['client_id']:
+            kwargs['reference'] = self.generer_reference(kwargs['client_id'])
+        
+        super().__init__(**kwargs)
+    
+    # ============================================
+    # MÉTHODES DE CALCUL DE RÉDUCTION
+    # ============================================
+    
     def get_reduction_risque_conforme(self):
         """
         Calcul conforme ISO 31000 avec logique réaliste
@@ -7448,42 +8018,42 @@ class DispositifMaitrise(db.Model):
         
         # 1. RÉDUCTION MAX PAR TYPE (normes sectorielles)
         reduction_max_par_type = {
-            'Préventif': 75,   # Peut éviter la survenance jusqu'à 75%
-            'Détectif': 60,    # Bonne détection peut réduire impact jusqu'à 60%
-            'Correctif': 45,   # Correction rapide peut limiter jusqu'à 45%
-            'Dirigeant': 30    # Cadre de contrôle jusqu'à 30%
+            'Préventif': 75,
+            'Détectif': 60,
+            'Correctif': 45,
+            'Dirigeant': 30
         }
         
         # 2. SCORE DE BASE SUR 100 (efficacité 60%, couverture 40%)
-        efficacite_norm = self.efficacite_reelle / 5  # 0-1
-        couverture_norm = self.couverture / 5         # 0-1
-        score_base = (efficacite_norm * 60) + (couverture_norm * 40)  # /100
+        efficacite_norm = self.efficacite_reelle / 5
+        couverture_norm = self.couverture / 5
+        score_base = (efficacite_norm * 60) + (couverture_norm * 40)
         
         # 3. APPLIQUER LE SCORE À LA RÉDUCTION MAX
         type_dispositif = self.type_dispositif or 'Correctif'
         reduction_max = reduction_max_par_type.get(type_dispositif, 45)
         reduction_calcul = (score_base / 100) * reduction_max
         
-        # 4. FACTEURS MODÉRATEURS (beaucoup plus réalistes)
+        # 4. FACTEURS MODÉRATEURS
         facteurs = {
             'nature': {
-                'Automatique': 1.0,      # Pas de pénalité pour automatique
-                'Technique': 0.95,       # Légère réduction
-                'Procédurale': 0.85,     # Procédure bien appliquée
+                'Automatique': 1.0,
+                'Technique': 0.95,
+                'Procédurale': 0.85,
                 'Organisationnelle': 0.80,
                 'Humaine': 0.75,
                 None: 0.85
             },
             'frequence': {
-                'Permanente': 1.0,       # Surveillance permanente
-                'Continue': 0.95,        # Continue mais non permanente
-                'Temps réel': 0.95,      # Temps réel
-                'Quotidienne': 0.90,     # Quotidien
-                'Hebdomadaire': 0.85,    # Hebdomadaire
-                'Mensuelle': 0.75,       # Mensuel
-                'Trimestrielle': 0.65,   # Trimestriel
-                'Annuelle': 0.55,        # Annuel
-                'Exceptionnelle': 0.45,  # Exceptionnel
+                'Permanente': 1.0,
+                'Continue': 0.95,
+                'Temps réel': 0.95,
+                'Quotidienne': 0.90,
+                'Hebdomadaire': 0.85,
+                'Mensuelle': 0.75,
+                'Trimestrielle': 0.65,
+                'Annuelle': 0.55,
+                'Exceptionnelle': 0.45,
                 None: 0.75
             }
         }
@@ -7491,24 +8061,20 @@ class DispositifMaitrise(db.Model):
         facteur_nature = facteurs['nature'].get(self.nature or 'Procédurale', 0.85)
         facteur_frequence = facteurs['frequence'].get(self.frequence or 'Mensuelle', 0.75)
         
-        # 5. RÉDUCTION FINALE (facteurs moins pénalisants)
+        # 5. RÉDUCTION FINALE
         reduction_finale = reduction_calcul * facteur_nature * facteur_frequence
         
         # Garantir un minimum pour un dispositif parfait
         if self.efficacite_reelle == 5 and self.couverture == 5:
-            # Un dispositif parfait devrait donner au moins 80% de la réduction max
             reduction_finale = max(reduction_finale, reduction_max * 0.8)
         
         return round(min(reduction_finale, reduction_max), 1)
-
+    
     def get_reduction_risque_detaille(self):
-        """
-        Retourne le calcul détaillé avec explications
-        Version améliorée avec facteurs plus réalistes
-        """
+        """Retourne le calcul détaillé avec explications"""
         details = {}
         
-        # 1. RÉDUCTION MAX PAR TYPE (normes sectorielles)
+        # 1. RÉDUCTION MAX PAR TYPE
         reduction_max_par_type = {
             'Préventif': 75,
             'Détectif': 60,
@@ -7557,7 +8123,6 @@ class DispositifMaitrise(db.Model):
             'trimestriel': 'Trimestrielle', 'semestriel': 'Semestrielle', 'annuel': 'Annuelle'
         }
         
-        # Normalisation
         nature_normalisee = nature_map.get(str(self.nature).lower() if self.nature else '', 'Procédurale')
         frequence_normalisee = frequence_map.get(str(self.frequence).lower() if self.frequence else '', 'Mensuelle')
         
@@ -7571,14 +8136,13 @@ class DispositifMaitrise(db.Model):
         details['facteur_global'] = round(facteur_global, 3)
         details['reduction_finale'] = details['reduction_calcul'] * facteur_global
         
-        # 6. BONUS (BIEN INDENTÉ)
+        # 6. BONUS POUR DISPOSITIF PARFAIT
         if details['efficacite'] == 5 and details['couverture'] == 5:
             seuil_min = details['reduction_max_type'] * 0.85
             if details['reduction_finale'] < seuil_min:
                 details['reduction_finale'] = seuil_min
                 details['bonus_applique'] = True
             details['garantie_minimum'] = True
-            details['bonus_applique'] = False  # Initialisé
         elif details['efficacite'] >= 4 and details['couverture'] >= 4:
             if details['reduction_finale'] < details['reduction_max_type'] * 0.7:
                 details['reduction_finale'] = details['reduction_max_type'] * 0.7
@@ -7616,177 +8180,75 @@ class DispositifMaitrise(db.Model):
             details['icone_impact'] = 'fa-times-circle'
         
         return details
-
-    @classmethod
-    def get_benchmark_dispositifs(cls, client_id=None, type_dispositif=None):
-        """
-        Compare les dispositifs entre eux pour identifier les tendances
-        """
-        query = cls.query
-        
-        if client_id:
-            query = query.filter_by(client_id=client_id)
-        if type_dispositif:
-            query = query.filter_by(type_dispositif=type_dispositif)
-        
-        dispositifs = query.all()
-        
-        stats = {
-            'total': len(dispositifs),
-            'par_type': {},
-            'efficacite_moyenne': 0,
-            'couverture_moyenne': 0,
-            'reduction_moyenne': 0,
-            'top_performers': [],
-            'a_ameliorer': [],
-            'sans_evaluation': [],
-            'avec_plans': 0  # AJOUT
-        }
-        
-        total_efficacite = 0
-        total_couverture = 0
-        total_reduction = 0
-        count_evalue = 0
-        
-        for d in dispositifs:
-            # Stats par type
-            if d.type_dispositif not in stats['par_type']:
-                stats['par_type'][d.type_dispositif] = 0
-            stats['par_type'][d.type_dispositif] += 1
-            
-            # Compter les dispositifs avec plans
-            if hasattr(d, 'plans_action_lies') and d.plans_action_lies.count() > 0:
-                stats['avec_plans'] += 1
-            
-            # Moyennes
-            if d.efficacite_reelle:
-                total_efficacite += d.efficacite_reelle
-                total_couverture += (d.couverture or 0)
-                reduction = d.get_reduction_risque_detaille()['reduction_finale']
-                total_reduction += reduction
-                count_evalue += 1
-                
-                # Classification
-                if d.efficacite_reelle >= 4:
-                    stats['top_performers'].append({
-                        'id': d.id,
-                        'reference': d.reference,
-                        'nom': d.nom,
-                        'type': d.type_dispositif,
-                        'efficacite': d.efficacite_reelle,
-                        'reduction': reduction,
-                        'plans_count': d.plans_action_lies.count() if hasattr(d, 'plans_action_lies') else 0
-                    })
-                elif d.efficacite_reelle < 3:
-                    stats['a_ameliorer'].append({
-                        'id': d.id,
-                        'reference': d.reference,
-                        'nom': d.nom,
-                        'efficacite': d.efficacite_reelle,
-                        'ecart': (d.efficacite_attendue or 3) - d.efficacite_reelle,
-                        'plans_count': d.plans_action_lies.count() if hasattr(d, 'plans_action_lies') else 0
-                    })
-            else:
-                stats['sans_evaluation'].append({
-                    'id': d.id,
-                    'reference': d.reference,
-                    'nom': d.nom
-                })
-        
-        if count_evalue > 0:
-            stats['efficacite_moyenne'] = round(total_efficacite / count_evalue, 1)
-            stats['couverture_moyenne'] = round(total_couverture / count_evalue, 1)
-            stats['reduction_moyenne'] = round(total_reduction / count_evalue, 1)
-        
-        # Ajouter les statistiques manquantes pour le template
-        stats['non_evalues'] = len(stats['sans_evaluation'])
-        stats['non_efficaces'] = len([d for d in dispositifs if d.efficacite_reelle and d.efficacite_reelle < 4])
-        
-        return stats
+    
+    # ============================================
+    # MÉTHODES DE GESTION DES PLANS D'ACTION
+    # ============================================
     
     def get_plans_action(self):
-        """
-        Retourne tous les plans d'action liés à ce dispositif
-        """
-        if hasattr(self, 'plans_action_lies'):
-            return self.plans_action_lies.all()
+        """Retourne tous les plans d'action liés à ce dispositif"""
+        if hasattr(self, 'plans_action'):
+            return self.plans_action.all()
         return []
-
-    def get_matrice_criticite(self):
-        """
-        Analyse la criticité du dispositif selon plusieurs dimensions
-        Retourne une matrice de décision
-        """
-        details = self.get_reduction_risque_detaille()
-        impact = self.get_impact_coso()
-        
-        # Calcul du score de criticité (0-100)
-        score_efficacite = (self.efficacite_reelle or 0) * 20  # 0-100
-        score_couverture = (self.couverture or 0) * 20        # 0-100
-        score_urgence = 100 - ((score_efficacite + score_couverture) / 2)
-        
-        # CORRECTION: Remplacer get_niveau_brut() par une valeur par défaut
-        # Niveau de risque résiduel
-        if self.risque:
-            # Si votre modèle Risque a un champ 'niveau' ou 'criticite'
-            risque_initial = getattr(self.risque, 'niveau', 3)  # Valeur par défaut 3
-            # Ou si vous avez une méthode existante
-            if hasattr(self.risque, 'get_niveau'):
-                risque_initial = self.risque.get_niveau()
-            elif hasattr(self.risque, 'get_criticite'):
-                risque_initial = self.risque.get_criticite()
-        else:
-            risque_initial = 3
-        
-        reduction = details['reduction_finale'] / 100
-        risque_residuel = max(1, round(risque_initial * (1 - reduction)))
-        
-        # Facteurs aggravants
-        facteurs_aggravants = []
-        if self.date_derniere_verification:
-            jours_depuis = (datetime.now().date() - self.date_derniere_verification).days
-            if jours_depuis > 365:
-                facteurs_aggravants.append("Non vérifié depuis plus d'un an")
-        if self.statut != 'actif':
-            facteurs_aggravants.append(f"Statut: {self.statut}")
-        if not self.responsable:
-            facteurs_aggravants.append("Aucun responsable assigné")
-        
-        return {
-            'urgence': min(100, max(0, score_urgence)),
-            'criticite': 'CRITIQUE' if score_urgence > 70 else 'ÉLEVÉE' if score_urgence > 50 else 'MODÉRÉE' if score_urgence > 30 else 'FAIBLE',
-            'risque_initial': risque_initial,
-            'risque_residuel': risque_residuel,
-            'reduction_reelle': details['reduction_finale'],
-            'facteurs_aggravants': facteurs_aggravants,
-            'recommandation': self.get_recommandation_automatique()
-        }
-
-    def get_recommandation_automatique(self):
-        """Génère une recommandation automatique basée sur l'analyse"""
-        if not self.efficacite_reelle:
-            return "🔴 ÉVALUATION REQUISE - Évaluez ce dispositif d'urgence"
-        
-        if self.efficacite_reelle < self.efficacite_attendue:
-            if self.efficacite_attendue - self.efficacite_reelle >= 2:
-                return "🔴 ACTION IMMÉDIATE - Écart critique, plan d'action urgent"
+    
+    def get_plans_action_en_cours(self):
+        """Retourne les plans d'action en cours"""
+        return [p for p in self.get_plans_action() if p.statut == 'en_cours']
+    
+    def get_nb_plans_action(self):
+        """Retourne le nombre total de plans d'action"""
+        return len(self.get_plans_action())
+    
+    def get_nb_plans_action_en_cours(self):
+        """Retourne le nombre de plans d'action en cours"""
+        return len(self.get_plans_action_en_cours())
+    
+    # ============================================
+    # MÉTHODES DE GESTION DES CONSTATS
+    # ============================================
+    
+    def get_nb_constats_ouverts(self):
+        """Retourne le nombre de constats ouverts liés à ce dispositif"""
+        return len([c for c in self.conteneur_constats_dispositif if c.statut != 'clos'])
+    
+    def get_constats_ouverts(self):
+        """Retourne la liste des constats ouverts"""
+        return [c for c in self.conteneur_constats_dispositif if c.statut != 'clos']
+    
+    def get_nb_constats_total(self):
+        """Retourne le nombre total de constats"""
+        return len(self.conteneur_constats_dispositif)
+    
+    # ============================================
+    # MÉTHODES D'ÉVALUATION
+    # ============================================
+    
+    def get_niveau_efficacite(self):
+        """Retourne le niveau d'efficacité basé sur l'écart entre attendu et réel"""
+        if self.efficacite_attendue and self.efficacite_reelle:
+            ecart = self.efficacite_attendue - self.efficacite_reelle
+            if ecart <= 0:
+                return 'Satisfaisant'
+            elif ecart == 1:
+                return 'À améliorer'
             else:
-                return "🟠 AMÉLIORATION NÉCESSAIRE - Plan d'action à programmer"
+                return 'Insuffisant'
+        return 'Non évalué'
+    
+    def get_efficacite_status(self):
+        """Retourne le statut d'efficacité avec label et classe CSS"""
+        if not self.efficacite_reelle:
+            return {'label': 'Non évalué', 'class': 'secondary'}
         
-        if self.prochaine_verification:
-            jours_restants = (self.prochaine_verification - datetime.now().date()).days
-            if jours_restants < 0:
-                return f"🔴 VÉRIFICATION EN RETARD de {abs(jours_restants)} jours"
-            elif jours_restants < 30:
-                return f"🟠 VÉRIFICATION PROCHAINE dans {jours_restants} jours"
-        
-        return "🟢 CONFORME - Surveillance normale"
-
+        if self.efficacite_reelle >= 4:
+            return {'label': 'Efficace', 'class': 'success'}
+        elif self.efficacite_reelle >= 3:
+            return {'label': 'Partiellement efficace', 'class': 'warning'}
+        else:
+            return {'label': 'Insuffisant', 'class': 'danger'}
+    
     def get_impact_coso(self):
-        """
-        Retourne l'analyse d'impact selon les normes COSO
-        Basé sur l'échelle : 5/5=90-100%, 4/5=70-89%, 3/5=50-69%, 2/5=30-49%, 1/5=<30%
-        """
+        """Retourne l'analyse d'impact selon les normes COSO"""
         if not self.efficacite_reelle:
             return {
                 'niveau': 'Non évalué',
@@ -7796,16 +8258,14 @@ class DispositifMaitrise(db.Model):
                 'action': 'Évaluation requise'
             }
         
-        # Calculer le pourcentage d'efficacité
         efficacite_pct = (self.efficacite_reelle / 5) * 100
         
-        # Déterminer le niveau selon l'échelle COSO
         if efficacite_pct >= 90:
             return {
                 'niveau': '🔒 CONTRÔLE ROBUSTE',
                 'classe': 'success',
                 'icone': 'fa-check-circle',
-                'description': 'Automatisé ou formalisé, traçabilité complète, aucune défaillance constatée',
+                'description': 'Automatisé ou formalisé, traçabilité complète',
                 'action': 'Maintenir - Surveillance normale',
                 'score': efficacite_pct,
                 'etoiles': 5
@@ -7850,37 +8310,117 @@ class DispositifMaitrise(db.Model):
                 'score': efficacite_pct,
                 'etoiles': 1
             }
-
+    
+    def get_matrice_criticite(self):
+        """Analyse la criticité du dispositif selon plusieurs dimensions"""
+        details = self.get_reduction_risque_detaille()
+        
+        score_efficacite = (self.efficacite_reelle or 0) * 20
+        score_couverture = (self.couverture or 0) * 20
+        score_urgence = 100 - ((score_efficacite + score_couverture) / 2)
+        
+        if self.risque:
+            risque_initial = getattr(self.risque, 'niveau', 3)
+        else:
+            risque_initial = 3
+        
+        reduction = details['reduction_finale'] / 100
+        risque_residuel = max(1, round(risque_initial * (1 - reduction)))
+        
+        facteurs_aggravants = []
+        if self.date_derniere_verification:
+            jours_depuis = (datetime.now().date() - self.date_derniere_verification).days
+            if jours_depuis > 365:
+                facteurs_aggravants.append("Non vérifié depuis plus d'un an")
+        if self.statut != 'actif':
+            facteurs_aggravants.append(f"Statut: {self.statut}")
+        if not self.responsable:
+            facteurs_aggravants.append("Aucun responsable assigné")
+        
+        return {
+            'urgence': min(100, max(0, score_urgence)),
+            'criticite': 'CRITIQUE' if score_urgence > 70 else 'ÉLEVÉE' if score_urgence > 50 else 'MODÉRÉE' if score_urgence > 30 else 'FAIBLE',
+            'risque_initial': risque_initial,
+            'risque_residuel': risque_residuel,
+            'reduction_reelle': details['reduction_finale'],
+            'facteurs_aggravants': facteurs_aggravants,
+            'recommandation': self.get_recommandation_automatique()
+        }
+    
+    def get_recommandation_automatique(self):
+        """Génère une recommandation automatique basée sur l'analyse"""
+        if not self.efficacite_reelle:
+            return "🔴 ÉVALUATION REQUISE - Évaluez ce dispositif d'urgence"
+        
+        if self.efficacite_reelle < self.efficacite_attendue:
+            if self.efficacite_attendue - self.efficacite_reelle >= 2:
+                return "🔴 ACTION IMMÉDIATE - Écart critique, plan d'action urgent"
+            else:
+                return "🟠 AMÉLIORATION NÉCESSAIRE - Plan d'action à programmer"
+        
+        if self.prochaine_verification:
+            jours_restants = (self.prochaine_verification - datetime.now().date()).days
+            if jours_restants < 0:
+                return f"🔴 VÉRIFICATION EN RETARD de {abs(jours_restants)} jours"
+            elif jours_restants < 30:
+                return f"🟠 VÉRIFICATION PROCHAINE dans {jours_restants} jours"
+        
+        return "🟢 CONFORME - Surveillance normale"
+    
+    # ============================================
+    # MÉTHODES DE STATUT
+    # ============================================
+    
+    def get_statut_label(self):
+        """Retourne le libellé du statut"""
+        labels = {
+            'actif': '✅ Actif',
+            'inactif': '⛔ Inactif',
+            'en_cours': '🔄 En cours',
+            'obsolete': '📦 Obsolète'
+        }
+        return labels.get(self.statut, self.statut)
+    
+    def get_statut_css(self):
+        """Retourne la classe CSS pour le statut"""
+        css = {
+            'actif': 'success',
+            'inactif': 'secondary',
+            'en_cours': 'warning',
+            'obsolete': 'dark'
+        }
+        return css.get(self.statut, 'secondary')
+    
+    # ============================================
+    # STRESS TEST
+    # ============================================
+    
     def stress_test(self, scenario='severe'):
-        """
-        Simule l'efficacité du dispositif dans des conditions extrêmes
-        Scénarios: 'modere', 'severe', 'extreme'
-        """
+        """Simule l'efficacité du dispositif dans des conditions extrêmes"""
         if not self.efficacite_reelle:
             return {'error': 'Dispositif non évalué'}
         
         details = self.get_reduction_risque_detaille()
         
-        # Coefficients de stress par scénario
         scenarios = {
             'modere': {
                 'nom': '🌧️ Modéré',
-                'facteur_efficacite': 0.8,   # Perte de 20% d'efficacité
-                'facteur_couverture': 0.85,   # Perte de 15% de couverture
+                'facteur_efficacite': 0.8,
+                'facteur_couverture': 0.85,
                 'couleur': 'warning',
                 'description': 'Perturbation modérée (panne partielle, absence temporaire)'
             },
             'severe': {
                 'nom': '⚡ Sévère',
-                'facteur_efficacite': 0.5,    # Perte de 50% d'efficacité
-                'facteur_couverture': 0.6,     # Perte de 40% de couverture
+                'facteur_efficacite': 0.5,
+                'facteur_couverture': 0.6,
                 'couleur': 'danger',
                 'description': 'Perturbation sévère (panne majeure, absence prolongée)'
             },
             'extreme': {
                 'nom': '🔥 Extrême',
-                'facteur_efficacite': 0.2,    # Perte de 80% d'efficacité
-                'facteur_couverture': 0.3,     # Perte de 70% de couverture
+                'facteur_efficacite': 0.2,
+                'facteur_couverture': 0.3,
                 'couleur': 'dark',
                 'description': 'Situation catastrophique (sinistre, crise majeure)'
             }
@@ -7888,31 +8428,24 @@ class DispositifMaitrise(db.Model):
         
         config = scenarios.get(scenario, scenarios['severe'])
         
-        # Calcul sous stress
         efficacite_stressee = (self.efficacite_reelle or 0) * config['facteur_efficacite']
         couverture_stressee = (self.couverture or 0) * config['facteur_couverture']
         
-        # Sauvegarder les valeurs originales pour restauration
         efficacite_originale = self.efficacite_reelle
         couverture_originale = self.couverture
         
-        # Appliquer temporairement les valeurs stressées
         self.efficacite_reelle = efficacite_stressee
         self.couverture = couverture_stressee
         
-        # Calculer la réduction sous stress
         details_stress = self.get_reduction_risque_detaille()
         
-        # Restaurer les valeurs originales
         self.efficacite_reelle = efficacite_originale
         self.couverture = couverture_originale
         
-        # Calcul des impacts
         reduction_normale = details['reduction_finale']
         reduction_stress = details_stress['reduction_finale']
         perte = reduction_normale - reduction_stress
         
-        # Déterminer la résilience
         if perte < 10:
             resilience = "🛡️ EXCELLENTE"
             conseil = "Le dispositif résiste très bien au stress"
@@ -7940,9 +8473,9 @@ class DispositifMaitrise(db.Model):
             'perte_pourcentage': round((perte / reduction_normale * 100) if reduction_normale > 0 else 0, 1),
             'resilience': resilience,
             'conseil': conseil,
-            'risque_residuel': max(1, round(3 * (1 - reduction_stress/100)))  # Estimation
+            'risque_residuel': max(1, round(3 * (1 - reduction_stress/100)))
         }
-
+    
     def stress_test_avance(self):
         """Version complète avec 15 scénarios de stress"""
         
@@ -8143,7 +8676,7 @@ class DispositifMaitrise(db.Model):
             }
         
         return resultats
-
+    
     def get_score_resilience(self):
         """Calcule un score de résilience global"""
         try:
@@ -8169,18 +8702,38 @@ class DispositifMaitrise(db.Model):
         except Exception as e:
             print(f"Erreur calcul résilience: {e}")
             return "ERREUR", 0
-
-    def get_niveau_efficacite(self):
-        """Retourne le niveau d'efficacité basé sur l'écart entre attendu et réel"""
-        if self.efficacite_attendue and self.efficacite_reelle:
-            ecart = self.efficacite_attendue - self.efficacite_reelle
-            if ecart <= 0:
-                return 'Satisfaisant'
-            elif ecart == 1:
-                return 'À améliorer'
-            else:
-                return 'Insuffisant'
-        return 'Non évalué'
+    
+    # ============================================
+    # MÉTHODE DE CONVERSION
+    # ============================================
+    
+    def to_dict(self):
+        """Convertit le dispositif en dictionnaire"""
+        return {
+            'id': self.id,
+            'reference': self.reference,
+            'nom': self.nom,
+            'description': self.description,
+            'type_dispositif': self.type_dispositif,
+            'nature': self.nature,
+            'frequence': self.frequence,
+            'efficacite_attendue': self.efficacite_attendue,
+            'efficacite_reelle': self.efficacite_reelle,
+            'couverture': self.couverture,
+            'statut': self.statut,
+            'statut_label': self.get_statut_label(),
+            'niveau_efficacite': self.get_niveau_efficacite(),
+            'nb_constats_ouverts': self.get_nb_constats_ouverts(),
+            'nb_plans_action': self.get_nb_plans_action(),
+            'reduction_risque': self.reduction_risque_pourcentage,
+            'risque_id': self.risque_id,
+            'risque_reference': self.risque.reference if self.risque else None,
+            'responsable': self.responsable.username if self.responsable else None,
+            'created_at': self.created_at.isoformat() if self.created_at else None
+        }
+    
+    def __repr__(self):
+        return f'<DispositifMaitrise {self.reference}: {self.nom}>'
 
 
 
