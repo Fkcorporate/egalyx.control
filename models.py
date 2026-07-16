@@ -1971,20 +1971,100 @@ class MesureKRI(db.Model):
 
 # -------------------- SOUS-ETAPE PROCESSUS --------------------
 class SousEtapeProcessus(db.Model):
+    __tablename__ = 'sous_etape_processus'
+    
     id = db.Column(db.Integer, primary_key=True)
-    etape_id = db.Column(db.Integer, db.ForeignKey('etape_processus.id'))
-    ordre = db.Column(db.Integer, nullable=False)
     nom = db.Column(db.String(200), nullable=False)
     description = db.Column(db.Text)
-    responsable_id = db.Column(db.Integer, db.ForeignKey('user.id'))
-    duree_estimee = db.Column(db.String(50))
-    inputs = db.Column(db.Text)
-    outputs = db.Column(db.Text)
+    reference = db.Column(db.String(50), nullable=False)
+    ordre = db.Column(db.Integer, default=1)
+    
+    # 🔥 CLÉ ÉTRANGÈRE VERS ETAPE
+    etape_id = db.Column(db.Integer, db.ForeignKey('etape_processus.id'), nullable=False)
+    
+    # Durée estimée
+    duree_estimee_jours = db.Column(db.Integer, default=1)
+    
+    # Statut
+    statut = db.Column(db.String(50), default='actif')
+    
+    # Traçabilité
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
-
-    etape = db.relationship('EtapeProcessus', back_populates='sous_etapes')
-    responsable = db.relationship('User', backref='sous_etapes_gerees')
+    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    is_archived = db.Column(db.Boolean, default=False)
+    
+    # Multi-tenant
     client_id = db.Column(db.Integer, db.ForeignKey('clients.id'), nullable=True)
+    
+    # ============================================
+    # RELATION
+    # ============================================
+    
+    # 🔥 RELATION VERS ETAPE PARENTE
+    etape_parente = db.relationship(
+        'EtapeProcessus',
+        back_populates='sous_etapes',
+        foreign_keys=[etape_id]
+    )
+    
+    # ============================================
+    # MÉTHODES
+    # ============================================
+    
+    @staticmethod
+    def generer_reference(client_id):
+        from datetime import datetime
+        annee = datetime.now().year
+        prefixe = f"SE-{annee}-"
+        
+        count = SousEtapeProcessus.query.filter(
+            SousEtapeProcessus.reference.like(f'{prefixe}%'),
+            SousEtapeProcessus.client_id == client_id
+        ).count()
+        
+        return f"{prefixe}{(count + 1):04d}"
+    
+    def __init__(self, **kwargs):
+        if 'reference' not in kwargs and 'client_id' in kwargs and kwargs['client_id']:
+            kwargs['reference'] = self.generer_reference(kwargs['client_id'])
+        
+        super().__init__(**kwargs)
+    
+    def get_statut_label(self):
+        labels = {
+            'actif': '✅ Actif',
+            'inactif': '⛔ Inactif',
+            'en_cours': '🔄 En cours',
+            'termine': '✅ Terminé'
+        }
+        return labels.get(self.statut, self.statut)
+    
+    def get_statut_css(self):
+        css = {
+            'actif': 'success',
+            'inactif': 'secondary',
+            'en_cours': 'warning',
+            'termine': 'info'
+        }
+        return css.get(self.statut, 'secondary')
+    
+    def to_dict(self):
+        return {
+            'id': self.id,
+            'reference': self.reference,
+            'nom': self.nom,
+            'description': self.description,
+            'ordre': self.ordre,
+            'statut': self.statut,
+            'statut_label': self.get_statut_label(),
+            'duree_estimee_jours': self.duree_estimee_jours,
+            'etape_id': self.etape_id,
+            'etape_nom': self.etape_parente.nom if self.etape_parente else None,
+            'created_at': self.created_at.isoformat() if self.created_at else None
+        }
+    
+    def __repr__(self):
+        return f'<SousEtapeProcessus {self.reference}: {self.nom}>'
 
 # -------------------- LIEN PROCESSUS --------------------
 class LienProcessus(db.Model):
@@ -2237,14 +2317,20 @@ class EtapeProcessus(db.Model):
     )
     
     # ============================================
-    # RELATIONS - CORRIGÉES
+    # RELATIONS - CORRIGÉES AVEC AJOUT
     # ============================================
     
     # Relation avec Processus
     processus = db.relationship('Processus', backref='etapes', lazy=True)
     
-    # 🔥 RELATION AVEC CONTROLES - SUPPRIMÉE (causait l'erreur)
-    # Si vous avez besoin de cette relation, utilisez une des solutions ci-dessus
+    # 🔥 AJOUTER CETTE RELATION POUR SOUS_ETAPES
+    sous_etapes = db.relationship(
+        'SousEtapeProcessus',
+        back_populates='etape_parente',
+        foreign_keys='SousEtapeProcessus.etape_id',
+        lazy=True,
+        cascade='all, delete-orphan'
+    )
     
     # ============================================
     # MÉTHODES
@@ -2288,14 +2374,23 @@ class EtapeProcessus(db.Model):
         return css.get(self.statut, 'secondary')
     
     def get_progression(self):
-        """Calcule la progression de l'étape basée sur les contrôles (si la relation existe)"""
-        # Si vous avez gardé la relation, vous pouvez calculer la progression
-        if hasattr(self, 'controles'):
-            total = self.controles.count()
+        """Calcule la progression de l'étape basée sur les sous-étapes"""
+        if hasattr(self, 'sous_etapes') and self.sous_etapes:
+            total = len(self.sous_etapes)
             if total == 0:
                 return 0
-            termines = self.controles.filter_by(statut='termine').count()
+            termines = len([se for se in self.sous_etapes if se.statut == 'termine'])
             return int((termines / total) * 100)
+        return 0
+    
+    def get_nb_sous_etapes(self):
+        """Retourne le nombre de sous-étapes"""
+        return len(self.sous_etapes) if hasattr(self, 'sous_etapes') else 0
+    
+    def get_nb_sous_etapes_terminees(self):
+        """Retourne le nombre de sous-étapes terminées"""
+        if hasattr(self, 'sous_etapes'):
+            return len([se for se in self.sous_etapes if se.statut == 'termine'])
         return 0
     
     def to_dict(self):
@@ -2309,6 +2404,8 @@ class EtapeProcessus(db.Model):
             'statut_label': self.get_statut_label(),
             'duree_estimee_jours': self.duree_estimee_jours,
             'progression': self.get_progression(),
+            'nb_sous_etapes': self.get_nb_sous_etapes(),
+            'nb_sous_etapes_terminees': self.get_nb_sous_etapes_terminees(),
             'processus_id': self.processus_id,
             'processus_nom': self.processus.nom if self.processus else None,
             'created_at': self.created_at.isoformat() if self.created_at else None
