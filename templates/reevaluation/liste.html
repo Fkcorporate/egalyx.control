@@ -1,0 +1,256 @@
+<!-- templates/reevaluation/liste.html -->
+
+{% extends "base.html" %}
+
+{% block content %}
+<div class="container-fluid">
+    <div class="row">
+        <div class="col-12">
+            <div class="page-header">
+                <h1><i class="fas fa-sync-alt me-2"></i>Demandes de réévaluation</h1>
+                <p class="text-muted">Gestion des demandes de réévaluation des risques issues des audits</p>
+            </div>
+        </div>
+    </div>
+
+    <!-- Statistiques -->
+    <div class="row mb-4">
+        <div class="col-md-2">
+            <div class="stat-card">
+                <div class="stat-value">{{ stats.total }}</div>
+                <div class="stat-label">Total</div>
+            </div>
+        </div>
+        <div class="col-md-2">
+            <div class="stat-card bg-warning bg-opacity-10">
+                <div class="stat-value text-warning">{{ stats.en_attente }}</div>
+                <div class="stat-label">⏳ En attente</div>
+            </div>
+        </div>
+        <div class="col-md-2">
+            <div class="stat-card bg-success bg-opacity-10">
+                <div class="stat-value text-success">{{ stats.validees }}</div>
+                <div class="stat-label">✅ Validées</div>
+            </div>
+        </div>
+        <div class="col-md-2">
+            <div class="stat-card bg-danger bg-opacity-10">
+                <div class="stat-value text-danger">{{ stats.rejetees }}</div>
+                <div class="stat-label">❌ Rejetées</div>
+            </div>
+        </div>
+        <div class="col-md-2">
+            <div class="stat-card bg-secondary bg-opacity-10">
+                <div class="stat-value text-secondary">{{ stats.annulees }}</div>
+                <div class="stat-label">⛔ Annulées</div>
+            </div>
+        </div>
+        <div class="col-md-2">
+            <div class="stat-card bg-info bg-opacity-10">
+                <div class="stat-value text-info">{{ temps_moyen }}</div>
+                <div class="stat-label">⏱️ Temps moyen (h)</div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Filtres -->
+    <div class="card mb-4">
+        <div class="card-body">
+            <form method="GET" class="row g-3">
+                <div class="col-md-4">
+                    <label class="form-label">Statut</label>
+                    <select name="statut" class="form-select" onchange="this.form.submit()">
+                        <option value="">Tous les statuts</option>
+                        <option value="en_attente" {% if statut == 'en_attente' %}selected{% endif %}>⏳ En attente</option>
+                        <option value="en_cours" {% if statut == 'en_cours' %}selected{% endif %}>🔄 En cours</option>
+                        <option value="validee" {% if statut == 'validee' %}selected{% endif %}>✅ Validée</option>
+                        <option value="rejetee" {% if statut == 'rejetee' %}selected{% endif %}>❌ Rejetée</option>
+                        <option value="annulee" {% if statut == 'annulee' %}selected{% endif %}>⛔ Annulée</option>
+                    </select>
+                </div>
+                <div class="col-md-6">
+                    <label class="form-label">Recherche</label>
+                    <input type="text" name="recherche" class="form-control" placeholder="Référence, titre, justification..." value="{{ recherche }}">
+                </div>
+                <div class="col-md-2 d-flex align-items-end">
+                    <button type="submit" class="btn btn-primary w-100">
+                        <i class="fas fa-search me-1"></i> Filtrer
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Liste des demandes -->
+    <div class="card">
+        <div class="card-body">
+            {% if demandes %}
+            <div class="table-responsive">
+                <table class="table table-hover">
+                    <thead>
+                        <tr>
+                            <th>Référence</th>
+                            <th>Titre</th>
+                            <th>Risque</th>
+                            <th>Statut</th>
+                            <th>Proposition</th>
+                            <th>Demandeur</th>
+                            <th>Date</th>
+                            <th>Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for demande in demandes %}
+                        <tr>
+                            <td><strong>{{ demande.reference }}</strong></td>
+                            <td>{{ demande.titre|truncate(40) }}</td>
+                            <td>
+                                <span class="badge bg-info">
+                                    {{ demande.risque.reference if demande.risque else 'N/A' }}
+                                </span>
+                            </td>
+                            <td>
+                                <span class="badge bg-{{ demande.get_statut_css() }}">
+                                    {{ demande.get_statut_label() }}
+                                </span>
+                            </td>
+                            <td>
+                                <small>
+                                    I: {{ demande.impact_propose }}/5
+                                    P: {{ demande.probabilite_propose }}/5
+                                    <br>
+                                    <span class="fw-bold">Score: {{ demande.score_propose }}</span>
+                                    <span class="badge 
+                                        {% if demande.niveau_risque_propose == 'Critique' %}bg-danger
+                                        {% elif demande.niveau_risque_propose == 'Élevé' %}bg-warning
+                                        {% elif demande.niveau_risque_propose == 'Moyen' %}bg-info
+                                        {% else %}bg-success{% endif %}">
+                                        {{ demande.niveau_risque_propose }}
+                                    </span>
+                                </small>
+                            </td>
+                            <td>{{ demande.demandeur.username if demande.demandeur else 'N/A' }}</td>
+                            <td>
+                                <small>{{ demande.date_demande.strftime('%d/%m/%Y %H:%M') }}</small>
+                            </td>
+                            <td>
+                                <div class="btn-group btn-group-sm">
+                                    <a href="{{ url_for('detail_demande_reevaluation', demande_id=demande.id) }}" 
+                                       class="btn btn-outline-primary">
+                                        <i class="fas fa-eye"></i>
+                                    </a>
+                                    {% if demande.statut == 'en_attente' and current_user.role in ['admin', 'responsable_risques', 'manager'] %}
+                                    <button class="btn btn-outline-success" onclick="validerDemande({{ demande.id }})">
+                                        <i class="fas fa-check"></i>
+                                    </button>
+                                    <button class="btn btn-outline-danger" onclick="rejeterDemande({{ demande.id }})">
+                                        <i class="fas fa-times"></i>
+                                    </button>
+                                    {% endif %}
+                                </div>
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+            {% else %}
+            <div class="text-center py-5">
+                <i class="fas fa-inbox fa-3x text-muted mb-3"></i>
+                <h5>Aucune demande de réévaluation</h5>
+                <p class="text-muted">Les demandes de réévaluation issues des audits apparaîtront ici.</p>
+            </div>
+            {% endif %}
+        </div>
+    </div>
+</div>
+
+<!-- Modal de validation -->
+<div class="modal fade" id="modalValiderDemande" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <form method="POST" id="formValiderDemande">
+                <div class="modal-header bg-success text-white">
+                    <h5 class="modal-title"><i class="fas fa-check me-2"></i>Valider la demande</h5>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <input type="hidden" name="demande_id" id="validerDemandeId">
+                    <div class="mb-3">
+                        <label class="form-label fw-bold">Commentaire de validation</label>
+                        <textarea class="form-control" name="commentaire" rows="3" 
+                                  placeholder="Ajoutez un commentaire (optionnel)..."></textarea>
+                    </div>
+                    <div class="alert alert-info">
+                        <i class="fas fa-info-circle me-2"></i>
+                        La validation créera automatiquement une nouvelle évaluation du risque.
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Annuler</button>
+                    <button type="submit" class="btn btn-success">Valider</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<!-- Modal de rejet -->
+<div class="modal fade" id="modalRejeterDemande" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <form method="POST" id="formRejeterDemande">
+                <div class="modal-header bg-danger text-white">
+                    <h5 class="modal-title"><i class="fas fa-times me-2"></i>Rejeter la demande</h5>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <input type="hidden" name="demande_id" id="rejeterDemandeId">
+                    <div class="mb-3">
+                        <label class="form-label fw-bold">Motif du rejet *</label>
+                        <textarea class="form-control" name="commentaire" rows="3" required
+                                  placeholder="Expliquez pourquoi cette demande est rejetée..."></textarea>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Annuler</button>
+                    <button type="submit" class="btn btn-danger">Rejeter</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<script>
+function validerDemande(demandeId) {
+    document.getElementById('validerDemandeId').value = demandeId;
+    document.getElementById('formValiderDemande').action = `/demande-reevaluation/${demandeId}/valider`;
+    new bootstrap.Modal(document.getElementById('modalValiderDemande')).show();
+}
+
+function rejeterDemande(demandeId) {
+    document.getElementById('rejeterDemandeId').value = demandeId;
+    document.getElementById('formRejeterDemande').action = `/demande-reevaluation/${demandeId}/rejeter`;
+    new bootstrap.Modal(document.getElementById('modalRejeterDemande')).show();
+}
+</script>
+
+<style>
+.stat-card {
+    background: white;
+    border-radius: 12px;
+    padding: 1rem;
+    text-align: center;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.06);
+}
+.stat-value {
+    font-size: 1.8rem;
+    font-weight: 700;
+    font-family: 'Georgia', serif;
+}
+.stat-label {
+    font-size: 0.8rem;
+    color: var(--gray);
+}
+</style>
+{% endblock %}

@@ -1,0 +1,574 @@
+<!-- templates/reevaluation/detail.html -->
+
+{% extends "base.html" %}
+
+{% block content %}
+<div class="container-fluid">
+    <div class="row">
+        <div class="col-12">
+            <nav aria-label="breadcrumb">
+                <ol class="breadcrumb">
+                    <li class="breadcrumb-item"><a href="{{ url_for('dashboard') }}">Dashboard</a></li>
+                    <li class="breadcrumb-item"><a href="{{ url_for('liste_demandes_reevaluation') }}">Demandes de réévaluation</a></li>
+                    <li class="breadcrumb-item active">{{ demande.reference }}</li>
+                </ol>
+            </nav>
+        </div>
+    </div>
+
+    <div class="row">
+        <!-- En-tête -->
+        <div class="col-12">
+            <div class="card mb-4">
+                <div class="card-header d-flex justify-content-between align-items-center">
+                    <div>
+                        <h4 class="mb-0">
+                            <i class="fas fa-sync-alt me-2"></i>
+                            {{ demande.reference }}
+                            <span class="badge bg-{{ demande.get_statut_css() }} ms-2">
+                                {{ demande.get_statut_label() }}
+                            </span>
+                        </h4>
+                        <small class="text-muted">{{ demande.titre }}</small>
+                    </div>
+                    <div>
+                        <a href="{{ url_for('detail_audit', id=demande.audit_id) }}" class="btn btn-outline-primary btn-sm">
+                            <i class="fas fa-clipboard-check me-1"></i> Voir l'audit
+                        </a>
+                        
+                        {% if demande.statut == 'en_attente' and current_user.role in ['admin', 'responsable_risques', 'manager'] %}
+                        <button class="btn btn-success btn-sm" onclick="validerDemande({{ demande.id }})">
+                            <i class="fas fa-check me-1"></i> Valider
+                        </button>
+                        <button class="btn btn-danger btn-sm" onclick="rejeterDemande({{ demande.id }})">
+                            <i class="fas fa-times me-1"></i> Rejeter
+                        </button>
+                        {% endif %}
+                        
+                        {% if demande.statut in ['validee', 'rejetee'] and current_user.role in ['admin', 'responsable_risques', 'manager'] %}
+                        <button class="btn btn-warning btn-sm" onclick="annulerValidation({{ demande.id }})">
+                            <i class="fas fa-undo me-1"></i> Annuler la validation
+                        </button>
+                        {% endif %}
+                        
+                        <a href="{{ url_for('liste_demandes_reevaluation') }}" class="btn btn-secondary btn-sm">
+                            <i class="fas fa-arrow-left me-1"></i> Retour
+                        </a>
+                    </div>
+                </div>
+                <div class="card-body">
+                    <div class="row">
+                        <div class="col-md-6">
+                            <h6 class="fw-bold">Informations générales</h6>
+                            <table class="table table-borderless table-sm">
+                                <tr>
+                                    <td width="30%"><strong>Référence</strong></td>
+                                    <td>{{ demande.reference }}</td>
+                                </tr>
+                                <tr>
+                                    <td><strong>Statut</strong></td>
+                                    <td><span class="badge bg-{{ demande.get_statut_css() }}">{{ demande.get_statut_label() }}</span></td>
+                                </tr>
+                                <tr>
+                                    <td><strong>Demandeur</strong></td>
+                                    <td>{{ demande.demandeur.username if demande.demandeur else 'N/A' }}</td>
+                                </tr>
+                                <tr>
+                                    <td><strong>Date de demande</strong></td>
+                                    <td>{{ demande.date_demande.strftime('%d/%m/%Y %H:%M') }}</td>
+                                </tr>
+                                {% if demande.date_validation %}
+                                <tr>
+                                    <td><strong>Date de validation</strong></td>
+                                    <td>{{ demande.date_validation.strftime('%d/%m/%Y %H:%M') }}</td>
+                                </tr>
+                                <tr>
+                                    <td><strong>Validateur</strong></td>
+                                    <td>{{ demande.validateur.username if demande.validateur else 'N/A' }}</td>
+                                </tr>
+                                {% endif %}
+                                {% if demande.date_traitement and demande.statut == 'rejetee' %}
+                                <tr>
+                                    <td><strong>Date de rejet</strong></td>
+                                    <td>{{ demande.date_traitement.strftime('%d/%m/%Y %H:%M') }}</td>
+                                </tr>
+                                <tr>
+                                    <td><strong>Rejeté par</strong></td>
+                                    <td>{{ demande.validateur.username if demande.validateur else 'N/A' }}</td>
+                                </tr>
+                                {% endif %}
+                            </table>
+                        </div>
+                        <div class="col-md-6">
+                            <h6 class="fw-bold">Risque concerné</h6>
+                            <table class="table table-borderless table-sm">
+                                <tr>
+                                    <td width="30%"><strong>Référence</strong></td>
+                                    <td><a href="{{ url_for('detail_risque', id=demande.risque_id) }}">{{ demande.risque.reference if demande.risque else 'N/A' }}</a></td>
+                                </tr>
+                                <tr>
+                                    <td><strong>Intitulé</strong></td>
+                                    <td>{{ demande.risque.intitule if demande.risque else 'N/A' }}</td>
+                                </tr>
+                                <tr>
+                                    <td><strong>Niveau actuel</strong></td>
+                                    <td>
+                                        {% if demande.risque %}
+                                        <span class="badge 
+                                            {% if demande.risque.niveau_criticite == 'Critique' %}bg-danger
+                                            {% elif demande.risque.niveau_criticite == 'Élevé' %}bg-warning
+                                            {% elif demande.risque.niveau_criticite == 'Moyen' %}bg-info
+                                            {% else %}bg-success{% endif %}">
+                                            {{ demande.risque.niveau_criticite or 'Non défini' }}
+                                        </span>
+                                        {% else %}
+                                        <span class="text-muted">N/A</span>
+                                        {% endif %}
+                                    </td>
+                                </tr>
+                                <tr>
+                                    <td><strong>Score actuel</strong></td>
+                                    <td>{{ demande.risque.score_risque if demande.risque else 'N/A' }}</td>
+                                </tr>
+                            </table>
+                        </div>
+                    </div>
+
+                    <div class="row mt-3">
+                        <div class="col-12">
+                            <h6 class="fw-bold">Justification</h6>
+                            <div class="p-3 bg-light rounded">
+                                {{ demande.justification|nl2br|safe }}
+                            </div>
+                        </div>
+                    </div>
+
+                    {% if demande.commentaire_validation and demande.statut in ['validee', 'rejetee'] %}
+                    <div class="row mt-3">
+                        <div class="col-12">
+                            <h6 class="fw-bold">Commentaire de validation</h6>
+                            <div class="p-3 bg-{{ 'success' if demande.statut == 'validee' else 'danger' }} bg-opacity-10 rounded">
+                                {{ demande.commentaire_validation|nl2br|safe }}
+                            </div>
+                        </div>
+                    </div>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Proposition de réévaluation -->
+    <div class="row">
+        <div class="col-md-6">
+            <div class="card mb-4">
+                <div class="card-header bg-warning text-dark">
+                    <h5 class="mb-0"><i class="fas fa-chart-bar me-2"></i>Proposition de réévaluation</h5>
+                </div>
+                <div class="card-body">
+                    <div class="row text-center">
+                        <div class="col-4">
+                            <div class="score-card">
+                                <div class="score-value">{{ demande.impact_propose }}/5</div>
+                                <div class="score-label">Impact</div>
+                            </div>
+                        </div>
+                        <div class="col-4">
+                            <div class="score-card">
+                                <div class="score-value">{{ demande.probabilite_propose }}/5</div>
+                                <div class="score-label">Probabilité</div>
+                            </div>
+                        </div>
+                        <div class="col-4">
+                            <div class="score-card">
+                                <div class="score-value">{{ demande.niveau_maitrise_propose }}/5</div>
+                                <div class="score-label">Maîtrise</div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="text-center mt-3">
+                        <span class="h4">Score: {{ demande.score_propose }}</span>
+                        <span class="badge 
+                            {% if demande.niveau_risque_propose == 'Critique' %}bg-danger
+                            {% elif demande.niveau_risque_propose == 'Élevé' %}bg-warning
+                            {% elif demande.niveau_risque_propose == 'Moyen' %}bg-info
+                            {% else %}bg-success{% endif %} ms-2 fs-6">
+                            {{ demande.niveau_risque_propose }}
+                        </span>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Constat source -->
+        <div class="col-md-6">
+            <div class="card mb-4">
+                <div class="card-header bg-info text-white">
+                    <h5 class="mb-0"><i class="fas fa-exclamation-triangle me-2"></i>Constat source</h5>
+                </div>
+                <div class="card-body">
+                    {% if constat %}
+                    <table class="table table-borderless table-sm">
+                        <tr>
+                            <td width="30%"><strong>Référence</strong></td>
+                            <td>{{ constat.reference }}</td>
+                        </tr>
+                        <tr>
+                            <td><strong>Description</strong></td>
+                            <td>{{ constat.description|truncate(200) }}</td>
+                        </tr>
+                        <tr>
+                            <td><strong>Gravité</strong></td>
+                            <td><span class="badge bg-{{ 'danger' if constat.gravite == 'critique' else 'warning' if constat.gravite == 'majeure' else 'info' }}">{{ constat.gravite }}</span></td>
+                        </tr>
+                        <tr>
+                            <td><strong>Statut</strong></td>
+                            <td><span class="badge bg-{{ constat.get_couleur_statut }}">{{ constat.statut }}</span></td>
+                        </tr>
+                        <tr>
+                            <td><strong>Risque associé</strong></td>
+                            <td>
+                                {% if constat.risque %}
+                                <a href="{{ url_for('detail_risque', id=constat.risque_id) }}">{{ constat.risque.reference }}</a>
+                                {% else %}
+                                <span class="text-muted">Aucun</span>
+                                {% endif %}
+                            </td>
+                        </tr>
+                    </table>
+                    <a href="{{ url_for('detail_audit', id=constat.audit_id) }}#constatation-{{ constat.id }}" class="btn btn-outline-primary btn-sm">
+                        <i class="fas fa-eye me-1"></i> Voir le constat
+                    </a>
+                    {% else %}
+                    <div class="text-center py-4">
+                        <i class="fas fa-exclamation-triangle fa-2x text-muted mb-2"></i>
+                        <p>Aucun constat associé</p>
+                    </div>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Recommandations générées -->
+    {% if demande.recommandations_generees %}
+    <div class="row">
+        <div class="col-12">
+            <div class="card mb-4">
+                <div class="card-header bg-light">
+                    <h5 class="mb-0"><i class="fas fa-lightbulb me-2"></i>Recommandations automatiques</h5>
+                </div>
+                <div class="card-body">
+                    <div class="list-group">
+                        {% for reco in demande.recommandations_generees %}
+                        <div class="list-group-item d-flex justify-content-between align-items-center">
+                            <div>
+                                <span class="badge 
+                                    {% if reco.priorite == 'haute' %}bg-danger
+                                    {% elif reco.priorite == 'moyenne' %}bg-warning
+                                    {% else %}bg-info{% endif %} me-2">
+                                    {{ reco.priorite }}
+                                </span>
+                                <i class="fas fa-{% if reco.type == 'changement_niveau' %}arrow-up{% elif reco.type == 'renforcer_dmr' %}shield-alt{% else %}check{% endif %} me-2"></i>
+                                {{ reco.message }}
+                            </div>
+                            {% if reco.dmr_id %}
+                            <a href="{{ url_for('detail_dispositif', dispositif_id=reco.dmr_id) }}" class="btn btn-sm btn-outline-primary">
+                                <i class="fas fa-external-link-alt me-1"></i> Voir
+                            </a>
+                            {% endif %}
+                        </div>
+                        {% endfor %}
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    {% endif %}
+
+    <!-- Plans d'action générés -->
+    {% if plans_action %}
+    <div class="row">
+        <div class="col-12">
+            <div class="card mb-4">
+                <div class="card-header bg-success text-white">
+                    <h5 class="mb-0"><i class="fas fa-tasks me-2"></i>Plans d'action générés</h5>
+                </div>
+                <div class="card-body">
+                    <div class="table-responsive">
+                        <table class="table table-hover">
+                            <thead>
+                                <tr>
+                                    <th>Référence</th>
+                                    <th>Nom</th>
+                                    <th>Statut</th>
+                                    <th>Progression</th>
+                                    <th>Date échéance</th>
+                                    <th>Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for plan in plans_action %}
+                                <tr>
+                                    <td><strong>{{ plan.reference }}</strong></td>
+                                    <td>{{ plan.nom|truncate(40) }}</td>
+                                    <td>
+                                        <span class="badge bg-{{ plan.couleur_statut }}">
+                                            {{ plan.statut }}
+                                        </span>
+                                    </td>
+                                    <td>
+                                        <div class="progress" style="height: 20px; width: 100px;">
+                                            <div class="progress-bar" style="width: {{ plan.pourcentage_realisation }}%">
+                                                {{ plan.pourcentage_realisation }}%
+                                            </div>
+                                        </div>
+                                    </td>
+                                    <td>{{ plan.date_fin_prevue.strftime('%d/%m/%Y') if plan.date_fin_prevue else '-' }}</td>
+                                    <td>
+                                        <a href="{{ url_for('detail_plan_action_risque', plan_id=plan.id) }}" class="btn btn-sm btn-outline-primary">
+                                            <i class="fas fa-eye"></i>
+                                        </a>
+                                    </td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    {% endif %}
+
+    <!-- Historique -->
+    <div class="row">
+        <div class="col-12">
+            <div class="card">
+                <div class="card-header bg-light">
+                    <h5 class="mb-0"><i class="fas fa-history me-2"></i>Historique</h5>
+                </div>
+                <div class="card-body">
+                    <div class="timeline">
+                        <div class="timeline-item">
+                            <div class="d-flex justify-content-between">
+                                <div>
+                                    <span class="badge bg-primary">Création</span>
+                                    <span class="ms-2">Demande créée par {{ demande.demandeur.username if demande.demandeur else 'Système' }}</span>
+                                </div>
+                                <small class="text-muted">{{ demande.date_demande.strftime('%d/%m/%Y %H:%M') }}</small>
+                            </div>
+                        </div>
+                        {% if demande.date_validation %}
+                        <div class="timeline-item">
+                            <div class="d-flex justify-content-between">
+                                <div>
+                                    <span class="badge bg-success">Validation</span>
+                                    <span class="ms-2">Demande validée par {{ demande.validateur.username if demande.validateur else 'Système' }}</span>
+                                    {% if demande.commentaire_validation %}
+                                    <br><small class="text-muted">{{ demande.commentaire_validation }}</small>
+                                    {% endif %}
+                                </div>
+                                <small class="text-muted">{{ demande.date_validation.strftime('%d/%m/%Y %H:%M') }}</small>
+                            </div>
+                        </div>
+                        {% endif %}
+                        {% if demande.date_traitement and demande.statut == 'rejetee' %}
+                        <div class="timeline-item">
+                            <div class="d-flex justify-content-between">
+                                <div>
+                                    <span class="badge bg-danger">Rejet</span>
+                                    <span class="ms-2">Demande rejetée par {{ demande.validateur.username if demande.validateur else 'Système' }}</span>
+                                    <br><small class="text-muted">Motif: {{ demande.commentaire_validation }}</small>
+                                </div>
+                                <small class="text-muted">{{ demande.date_traitement.strftime('%d/%m/%Y %H:%M') }}</small>
+                            </div>
+                        </div>
+                        {% endif %}
+                        {% if demande.annulation_date %}
+                        <div class="timeline-item">
+                            <div class="d-flex justify-content-between">
+                                <div>
+                                    <span class="badge bg-warning">Annulation</span>
+                                    <span class="ms-2">Validation annulée par {{ demande.annulation_par.username if demande.annulation_par else 'Système' }}</span>
+                                    {% if demande.annulation_motif %}
+                                    <br><small class="text-muted">Motif: {{ demande.annulation_motif }}</small>
+                                    {% endif %}
+                                </div>
+                                <small class="text-muted">{{ demande.annulation_date.strftime('%d/%m/%Y %H:%M') }}</small>
+                            </div>
+                        </div>
+                        {% endif %}
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Modal Valider la demande -->
+<div class="modal fade" id="modalValiderDemande" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <form method="POST" id="formValiderDemande">
+                <div class="modal-header bg-success text-white">
+                    <h5 class="modal-title"><i class="fas fa-check me-2"></i>Valider la demande</h5>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="mb-3">
+                        <label class="form-label fw-bold">Commentaire de validation</label>
+                        <textarea class="form-control" name="commentaire" rows="3" 
+                                  placeholder="Ajoutez un commentaire (optionnel)..."></textarea>
+                    </div>
+                    <div class="alert alert-info">
+                        <i class="fas fa-info-circle me-2"></i>
+                        La validation créera automatiquement une nouvelle évaluation du risque.
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Annuler</button>
+                    <button type="submit" class="btn btn-success">Valider</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<!-- Modal Rejeter la demande -->
+<div class="modal fade" id="modalRejeterDemande" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <form method="POST" id="formRejeterDemande">
+                <div class="modal-header bg-danger text-white">
+                    <h5 class="modal-title"><i class="fas fa-times me-2"></i>Rejeter la demande</h5>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="mb-3">
+                        <label class="form-label fw-bold">Motif du rejet *</label>
+                        <textarea class="form-control" name="commentaire" rows="3" required
+                                  placeholder="Expliquez pourquoi cette demande est rejetée..."></textarea>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Annuler</button>
+                    <button type="submit" class="btn btn-danger">Rejeter</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<!-- Modal Annuler la validation -->
+<div class="modal fade" id="modalAnnulerValidation" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <form method="POST" id="formAnnulerValidation">
+                <div class="modal-header bg-warning text-dark">
+                    <h5 class="modal-title"><i class="fas fa-undo me-2"></i>Annuler la validation</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="alert alert-warning">
+                        <i class="fas fa-exclamation-triangle me-2"></i>
+                        <strong>Attention :</strong> Cette action annulera la validation et la demande reviendra à l'état "En attente".
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label fw-bold">Motif de l'annulation</label>
+                        <textarea class="form-control" name="commentaire" rows="3" 
+                                  placeholder="Expliquez pourquoi vous annulez cette validation..."></textarea>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Annuler</button>
+                    <button type="submit" class="btn btn-warning">Confirmer l'annulation</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<script>
+function validerDemande(demandeId) {
+    document.getElementById('formValiderDemande').action = `/demande-reevaluation/${demandeId}/valider`;
+    new bootstrap.Modal(document.getElementById('modalValiderDemande')).show();
+}
+
+function rejeterDemande(demandeId) {
+    document.getElementById('formRejeterDemande').action = `/demande-reevaluation/${demandeId}/rejeter`;
+    new bootstrap.Modal(document.getElementById('modalRejeterDemande')).show();
+}
+
+function annulerValidation(demandeId) {
+    if (!confirm('Êtes-vous sûr de vouloir annuler cette validation ?')) {
+        return;
+    }
+    document.getElementById('formAnnulerValidation').action = `/demande-reevaluation/${demandeId}/annuler-validation`;
+    new bootstrap.Modal(document.getElementById('modalAnnulerValidation')).show();
+}
+
+// Initialisation des tooltips
+document.addEventListener('DOMContentLoaded', function() {
+    var tooltipTriggerList = [].slice.call(document.querySelectorAll('[data-bs-toggle="tooltip"]'));
+    tooltipTriggerList.map(function (tooltipTriggerEl) {
+        return new bootstrap.Tooltip(tooltipTriggerEl);
+    });
+});
+</script>
+
+{% block styles %}
+<style>
+.score-card {
+    background: var(--light);
+    border-radius: 12px;
+    padding: 1rem;
+    text-align: center;
+}
+.score-value {
+    font-size: 1.8rem;
+    font-weight: 700;
+    font-family: 'Georgia', serif;
+}
+.score-label {
+    font-size: 0.8rem;
+    color: var(--gray);
+}
+.timeline {
+    position: relative;
+    padding-left: 30px;
+}
+.timeline::before {
+    content: '';
+    position: absolute;
+    left: 10px;
+    top: 0;
+    bottom: 0;
+    width: 2px;
+    background: var(--border);
+}
+.timeline-item {
+    position: relative;
+    margin-bottom: 20px;
+    padding: 10px 15px;
+    background: var(--light);
+    border-radius: 10px;
+}
+.timeline-item::before {
+    content: '';
+    position: absolute;
+    left: -24px;
+    top: 15px;
+    width: 12px;
+    height: 12px;
+    border-radius: 50%;
+    background: var(--primary);
+    border: 2px solid white;
+    box-shadow: 0 0 0 2px var(--primary);
+}
+.timeline-item:last-child {
+    margin-bottom: 0;
+}
+</style>
+{% endblock %}
+{% endblock %}
