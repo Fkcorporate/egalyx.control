@@ -2248,10 +2248,9 @@ class EtapeProcessus(db.Model):
     # La relation pointe vers ControleProcessus.etape_id
     controles = db.relationship(
         'ControleProcessus',
-        foreign_keys='ControleProcessus.etape_id',  # ← SPÉCIFIER EXPLICITEMENT LA CLÉ ÉTRANGÈRE
-        back_populates='etape',  # ← Correspond au back_populates dans ControleProcessus
-        lazy=True,
-        cascade='all, delete-orphan'
+        secondary='etape_controle',
+        backref='etapes_associees',  # Nom unique
+        lazy='dynamic'
     )
 # -------------------- PROCESSUS --------------------
 class Processus(db.Model):
