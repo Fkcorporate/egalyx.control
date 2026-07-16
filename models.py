@@ -2029,7 +2029,11 @@ class ZoneRisqueProcessus(db.Model):
     responsable = db.relationship('User', backref='zones_risque_geres')
 
 # -------------------- CONTROLE PROCESSUS --------------------
+# models.py - Classe ControleProcessus (CORRIGÉE)
+
 class ControleProcessus(db.Model):
+    __tablename__ = 'controle_processus'
+    
     id = db.Column(db.Integer, primary_key=True)
     processus_id = db.Column(db.Integer, db.ForeignKey('processus.id'))
     etape_id = db.Column(db.Integer, db.ForeignKey('etape_processus.id'))
@@ -2040,10 +2044,150 @@ class ControleProcessus(db.Model):
     responsable_id = db.Column(db.Integer, db.ForeignKey('user.id'))
     statut = db.Column(db.String(20), default='actif')
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
-
+    client_id = db.Column(db.Integer, db.ForeignKey('clients.id'), nullable=True)
+    
+    # ============================================
+    # 🔥 NOUVEAUX CHAMPS
+    # ============================================
+    risque_id = db.Column(db.Integer, db.ForeignKey('risques.id'), nullable=True)
+    efficacite = db.Column(db.Integer, default=3)
+    
+    # ============================================
+    # RELATIONS - CORRIGÉES AVEC back_populates
+    # ============================================
+    
     processus = db.relationship('Processus', back_populates='controles')
     etape = db.relationship('EtapeProcessus', back_populates='controles')
     responsable = db.relationship('User', backref='controles_geres')
+    
+    risque = db.relationship('Risque', backref='controles_associes', foreign_keys=[risque_id])
+    
+    # 🔥 RELATIONS CORRIGÉES - AVEC back_populates UNIQUES
+    conteneur_constats_controle = db.relationship('Constatation', 
+                                                 foreign_keys='Constatation.controle_id',
+                                                 back_populates='controle',
+                                                 lazy=True)
+    
+    conteneur_plans_action_controle = db.relationship('PlanAction', 
+                                                     foreign_keys='PlanAction.controle_id',
+                                                     backref='controle_source_plan',
+                                                     lazy=True)
+    
+    conteneur_campagnes_controle = db.relationship('CampagneControle',
+                                                  foreign_keys='CampagneControle.controle_id',
+                                                  backref='controle_associe',
+                                                  lazy=True)
+    
+    # ============================================
+    # MÉTHODES
+    # ============================================
+    
+    def get_derniere_campagne(self, type_campagne='CN1'):
+        from models import CampagneControle
+        
+        campagne = CampagneControle.query.filter_by(
+            controle_id=self.id,
+            type_campagne=type_campagne
+        ).order_by(CampagneControle.date_debut.desc()).first()
+        
+        return campagne
+    
+    def get_dernier_resultat_cn1(self):
+        campagne = self.get_derniere_campagne('CN1')
+        if campagne:
+            return {
+                'taux_conformite': campagne.taux_conformite,
+                'date_execution': campagne.date_debut,
+                'nb_controles': campagne.nb_dossiers_controles,
+                'nb_anomalies': campagne.nb_anomalies
+            }
+        return None
+    
+    def get_dernier_resultat_cn2(self):
+        campagne = self.get_derniere_campagne('CN2')
+        if campagne:
+            return {
+                'taux_conformite': campagne.taux_conformite,
+                'date_execution': campagne.date_debut,
+                'nb_controles': campagne.nb_dossiers_controles,
+                'nb_anomalies': campagne.nb_anomalies
+            }
+        return None
+    
+    def get_nb_constats_ouverts(self):
+        return len([c for c in self.conteneur_constats_controle if c.statut != 'clos'])
+    
+    def get_constats_ouverts(self):
+        return [c for c in self.conteneur_constats_controle if c.statut != 'clos']
+    
+    def get_efficacite_label(self):
+        if not self.efficacite:
+            return 'Non évalué'
+        
+        labels = {
+            5: 'Excellent',
+            4: 'Bon',
+            3: 'Moyen',
+            2: 'Faible',
+            1: 'Très faible'
+        }
+        return labels.get(self.efficacite, 'Non évalué')
+    
+    def get_efficacite_css(self):
+        if not self.efficacite:
+            return 'secondary'
+        
+        css = {
+            5: 'success',
+            4: 'success',
+            3: 'warning',
+            2: 'danger',
+            1: 'danger'
+        }
+        return css.get(self.efficacite, 'secondary')
+    
+    def get_statut_label(self):
+        labels = {
+            'actif': '✅ Actif',
+            'inactif': '⛔ Inactif',
+            'en_cours': '🔄 En cours',
+            'obsolete': '📦 Obsolète'
+        }
+        return labels.get(self.statut, self.statut)
+    
+    def get_statut_css(self):
+        css = {
+            'actif': 'success',
+            'inactif': 'secondary',
+            'en_cours': 'warning',
+            'obsolete': 'dark'
+        }
+        return css.get(self.statut, 'secondary')
+    
+    def to_dict(self):
+        cn1 = self.get_dernier_resultat_cn1()
+        cn2 = self.get_dernier_resultat_cn2()
+        
+        return {
+            'id': self.id,
+            'nom': self.nom,
+            'description': self.description,
+            'type_controle': self.type_controle,
+            'frequence': self.frequence,
+            'efficacite': self.efficacite,
+            'efficacite_label': self.get_efficacite_label(),
+            'statut': self.statut,
+            'statut_label': self.get_statut_label(),
+            'risque_id': self.risque_id,
+            'nb_constats_ouverts': self.get_nb_constats_ouverts(),
+            'dernier_cn1': cn1,
+            'dernier_cn2': cn2,
+            'responsable': self.responsable.username if self.responsable else None,
+            'created_at': self.created_at.isoformat() if self.created_at else None
+        }
+    
+    def __repr__(self):
+        return f'<ControleProcessus {self.nom}>'
 
 # -------------------- ETAPE PROCESSUS --------------------
 class EtapeProcessus(db.Model):
