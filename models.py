@@ -9921,15 +9921,17 @@ class MissionAudit(db.Model):
     __tablename__ = 'missions_audit'
     
     id = db.Column(db.Integer, primary_key=True)
-    reference = db.Column(db.String(50), nullable=False)  # ← unique=True ENLEVÉ
+    reference = db.Column(db.String(50), nullable=False)
     titre = db.Column(db.String(200), nullable=False)
     description = db.Column(db.Text)
     
-    # Liens
+    # ============================================
+    # LIENS AVEC AUTRES ENTITÉS
+    # ============================================
     risque_id = db.Column(db.Integer, db.ForeignKey('risques.id'), nullable=True)
     cartographie_id = db.Column(db.Integer, db.ForeignKey('cartographie.id'), nullable=True)
     programme_id = db.Column(db.Integer, db.ForeignKey('programmes_audit.id'), nullable=False)
-    audit_id = db.Column(db.Integer, db.ForeignKey('audits.id'), nullable=True)
+    audit_id = db.Column(db.Integer, db.ForeignKey('audits.id'), nullable=True)  # ← AJOUTER
     
     # Priorité et risque
     priorite = db.Column(db.String(20))
@@ -9977,12 +9979,31 @@ class MissionAudit(db.Model):
     updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
     client_id = db.Column(db.Integer, db.ForeignKey('clients.id'), nullable=True)
     
-    # ========== RELATIONS ==========
+    # ============================================
+    # CONTRAINTE UNIQUE COMPOSITE
+    # ============================================
+    __table_args__ = (
+        db.UniqueConstraint('reference', 'client_id', name='uix_mission_reference_client'),
+    )
+    
+    # ============================================
+    # RELATIONS
+    # ============================================
+    
     # Relations principales
     programme = db.relationship('ProgrammeAudit', back_populates='missions')
     risque = db.relationship('Risque', backref='missions_audit_simple')
     cartographie = db.relationship('Cartographie', backref='missions_audit_simple')
-    audit = db.relationship('Audit', backref='mission_origine_simple', foreign_keys=[audit_id])
+    
+    # ============================================
+    # 🔥 RELATION VERS AUDIT - CORRIGÉE
+    # ============================================
+    audit = db.relationship(
+        'Audit',
+        foreign_keys=[audit_id],
+        back_populates='mission_associee',  # ← Correspond à Audit.mission_associee
+        lazy=True
+    )
     
     # Relations utilisateurs
     responsable = db.relationship('User', foreign_keys=[responsable_id], 
@@ -10009,12 +10030,10 @@ class MissionAudit(db.Model):
         lazy='dynamic'
     )
     
-    # ========== CONTRAINTE UNIQUE COMPOSITE ==========
-    __table_args__ = (
-        db.UniqueConstraint('reference', 'client_id', name='uix_mission_reference_client'),
-    )
+    # ============================================
+    # MÉTHODE STATIQUE DE GÉNÉRATION
+    # ============================================
     
-    # ========== MÉTHODE STATIQUE DE GÉNÉRATION ==========
     @staticmethod
     def generer_reference(client_id):
         """Génère une référence unique PAR CLIENT"""
@@ -10029,7 +10048,10 @@ class MissionAudit(db.Model):
         
         return f"{prefixe}{(count + 1):04d}"
     
-    # ========== PROPRIÉTÉS CALCULÉES ==========
+    # ============================================
+    # PROPRIÉTÉS CALCULÉES
+    # ============================================
+    
     @property
     def est_en_retard(self):
         if self.date_fin_prevue and self.statut not in ['termine', 'annule', 'reporte']:
@@ -10071,7 +10093,6 @@ class MissionAudit(db.Model):
     
     @property
     def get_statut_label(self):
-        """Libellé du statut en français"""
         labels = {
             'planifie': 'Planifié',
             'en_cours': 'En cours',
@@ -10083,7 +10104,6 @@ class MissionAudit(db.Model):
     
     @property
     def get_priorite_label(self):
-        """Libellé de la priorité en français"""
         labels = {
             'critique': 'Critique',
             'elevee': 'Élevée',
@@ -10094,7 +10114,6 @@ class MissionAudit(db.Model):
     
     @property
     def taux_progression(self):
-        """Calcule le taux de progression basé sur les dates"""
         if self.statut == 'termine':
             return 100
         if self.statut == 'planifie':
@@ -10114,21 +10133,21 @@ class MissionAudit(db.Model):
     
     @property
     def duree_ecart_jours(self):
-        """Écart entre durée réelle et estimée (en jours)"""
         if self.duree_reelle and self.duree_estimee:
             return self.duree_reelle - self.duree_estimee
         return None
     
     @property
     def budget_ecart(self):
-        """Écart entre budget réel et estimé"""
         if self.budget_reel and self.budget_estime:
             return self.budget_reel - self.budget_estime
         return None
     
-    # ========== MÉTHODES D'INSTANCE ==========
+    # ============================================
+    # MÉTHODES D'INSTANCE
+    # ============================================
+    
     def demarrer(self, date_debut=None):
-        """Démarre la mission"""
         if self.statut == 'planifie':
             self.statut = 'en_cours'
             self.date_debut_reelle = date_debut or datetime.now().date()
@@ -10137,7 +10156,6 @@ class MissionAudit(db.Model):
         return False
     
     def terminer(self, date_fin=None):
-        """Termine la mission"""
         if self.statut in ['planifie', 'en_cours']:
             self.statut = 'termine'
             self.date_fin_reelle = date_fin or datetime.now().date()
@@ -10149,7 +10167,6 @@ class MissionAudit(db.Model):
         return False
     
     def reporter(self, nouvelle_date_debut=None, nouvelle_date_fin=None, raison=None):
-        """Reporte la mission"""
         if nouvelle_date_debut:
             self.date_debut_prevue = nouvelle_date_debut
         if nouvelle_date_fin:
@@ -10160,14 +10177,12 @@ class MissionAudit(db.Model):
         self.updated_at = datetime.utcnow()
     
     def annuler(self, raison=None):
-        """Annule la mission"""
         self.statut = 'annule'
         if raison:
             self.archive_reason = raison
         self.updated_at = datetime.utcnow()
     
     def archiver(self, user_id=None, raison=None):
-        """Archive la mission"""
         self.is_archived = True
         self.archived_at = datetime.utcnow()
         self.archived_by = user_id
@@ -10176,7 +10191,6 @@ class MissionAudit(db.Model):
         self.updated_at = datetime.utcnow()
     
     def restaurer(self):
-        """Restaure une mission archivée"""
         self.is_archived = False
         self.archived_at = None
         self.archived_by = None
@@ -10184,13 +10198,11 @@ class MissionAudit(db.Model):
         self.updated_at = datetime.utcnow()
     
     def get_equipe_list(self):
-        """Retourne la liste des IDs d'équipe"""
         if self.equipe_ids:
             return [int(id.strip()) for id in self.equipe_ids.split(',') if id.strip()]
         return []
     
     def ajouter_membre_equipe(self, user_id):
-        """Ajoute un membre à l'équipe"""
         membres = self.get_equipe_list()
         if user_id not in membres:
             membres.append(user_id)
@@ -10198,16 +10210,17 @@ class MissionAudit(db.Model):
             self.updated_at = datetime.utcnow()
     
     def retirer_membre_equipe(self, user_id):
-        """Retire un membre de l'équipe"""
         membres = self.get_equipe_list()
         if user_id in membres:
             membres.remove(user_id)
             self.equipe_ids = ','.join(str(id) for id in membres) if membres else None
             self.updated_at = datetime.utcnow()
     
-    # ========== MÉTHODE DE CONVERSION ==========
+    # ============================================
+    # MÉTHODE DE CONVERSION
+    # ============================================
+    
     def to_dict(self):
-        """Convertit la mission en dictionnaire pour API"""
         return {
             'id': self.id,
             'reference': self.reference,
@@ -10233,6 +10246,7 @@ class MissionAudit(db.Model):
             'programme_id': self.programme_id,
             'programme_reference': self.programme.reference if self.programme else None,
             'audit_id': self.audit_id,
+            'audit_reference': self.audit.reference if self.audit else None,
             'risque_id': self.risque_id,
             'responsable_id': self.responsable_id,
             'responsable_nom': self.responsable.username if self.responsable else None,
