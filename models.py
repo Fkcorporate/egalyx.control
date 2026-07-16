@@ -12434,6 +12434,11 @@ class CampagneControle(db.Model):
     service_id = db.Column(db.Integer, db.ForeignKey('service.id'), nullable=True)
     
     # ============================================
+    # 🔥 COLONNE MANQUANTE AJOUTÉE
+    # ============================================
+    controle_id = db.Column(db.Integer, db.ForeignKey('controle_processus.id'), nullable=True)
+    
+    # ============================================
     # DATES ET STATUT
     # ============================================
     date_debut = db.Column(db.Date, nullable=False)
@@ -12491,7 +12496,6 @@ class CampagneControle(db.Model):
     a_ete_executee_c2n = db.Column(db.Boolean, default=False)
     date_synchronisation_c2n = db.Column(db.DateTime, nullable=True)
     
-    # ⚠️ CORRECTION DE LA LIGNE CI-DESSOUS (supprimer 'en_preparation' en trop)
     # ============================================
     # ARCHIVAGE
     # ============================================
@@ -12510,19 +12514,38 @@ class CampagneControle(db.Model):
     # ============================================
     # RELATIONS
     # ============================================
+    
+    # Relations organisationnelles
     pole = db.relationship('Pole', foreign_keys=[pole_id])
     direction = db.relationship('Direction', foreign_keys=[direction_id])
     service = db.relationship('Service', foreign_keys=[service_id])
+    
+    # Relations utilisateurs
     createur = db.relationship('User', foreign_keys=[createur_id])
     valideur = db.relationship('User', foreign_keys=[valideur_id])
     evaluateur = db.relationship('User', foreign_keys=[evaluateur_id])
     archive_user = db.relationship('User', foreign_keys=[archived_by])
     
+    # ============================================
+    # 🔥 RELATION CORRIGÉE VERS CONTROLE_PROCESSUS
+    # ============================================
+    controle = db.relationship(
+        'ControleProcessus',
+        foreign_keys=[controle_id],
+        back_populates='campagnes_controle',  # ← Correspond au back_populates dans ControleProcessus
+        lazy=True
+    )
+    
+    # Relations fichiers
     fichiers = db.relationship('FichierCampagneControle', back_populates='campagne', lazy=True, cascade='all, delete-orphan')
     
     # 🔥 NOUVELLES RELATIONS C2N
     planification_c2n = db.relationship('PlanificationControle', foreign_keys=[planification_c2n_id])
     execution_c2n = db.relationship('ExecutionControle', foreign_keys=[execution_c2n_id])
+    
+    # ============================================
+    # MÉTHODES
+    # ============================================
     
     def __repr__(self):
         return f'<CampagneControle {self.reference}: {self.nom}>'
@@ -12570,6 +12593,7 @@ class CampagneControle(db.Model):
         self.archived_by = user_id
         self.archive_reason = raison
         self.statut = 'termine'
+        self.updated_at = datetime.utcnow()
     
     def desarchiver(self):
         """Désarchive la campagne"""
@@ -12578,6 +12602,7 @@ class CampagneControle(db.Model):
         self.archived_by = None
         self.archive_reason = None
         self.statut = 'en_preparation'
+        self.updated_at = datetime.utcnow()
     
     # ============================================
     # 🔥 NOUVELLES MÉTHODES D'INTÉGRATION C2N
@@ -12608,7 +12633,38 @@ class CampagneControle(db.Model):
             'a_ete_executee': self.a_ete_executee_c2n,
             'date_synchronisation': self.date_synchronisation_c2n.isoformat() if self.date_synchronisation_c2n else None
         }
-
+    
+    def to_dict(self):
+        """Convertit la campagne en dictionnaire"""
+        return {
+            'id': self.id,
+            'reference': self.reference,
+            'nom': self.nom,
+            'description': self.description,
+            'date_debut': self.date_debut.isoformat() if self.date_debut else None,
+            'date_fin': self.date_fin.isoformat() if self.date_fin else None,
+            'statut': self.statut,
+            'statut_label': self.get_statut_label(),
+            'statut_css': self.get_statut_css(),
+            'avancement': self.get_avancement(),
+            'taux_conformite': float(self.taux_conformite) if self.taux_conformite else 0,
+            'nb_dossiers_prevus': self.nb_dossiers_prevus,
+            'nb_dossiers_controles': self.nb_dossiers_controles,
+            'nb_conformes': self.nb_conformes,
+            'nb_anomalies': self.nb_anomalies,
+            'controle_id': self.controle_id,
+            'controle_nom': self.controle.nom if self.controle else None,
+            'pole_id': self.pole_id,
+            'direction_id': self.direction_id,
+            'service_id': self.service_id,
+            'createur': self.createur.username if self.createur else None,
+            'valideur': self.valideur.username if self.valideur else None,
+            'evaluateur': self.evaluateur.username if self.evaluateur else None,
+            'is_archived': self.is_archived,
+            'created_at': self.created_at.isoformat() if self.created_at else None,
+            'updated_at': self.updated_at.isoformat() if self.updated_at else None,
+            'integrations_c2n': self.get_infos_c2n()
+        }
 
 
 
