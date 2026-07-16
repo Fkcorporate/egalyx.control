@@ -2292,39 +2292,33 @@ class EtapeProcessus(db.Model):
     reference = db.Column(db.String(50), nullable=False)
     ordre = db.Column(db.Integer, default=1)
     
-    # 🔥 NE PAS UTILISER backref='etapes' car cela crée un conflit
-    # Garder seulement la colonne foreign key sans relation
     processus_id = db.Column(db.Integer, db.ForeignKey('processus.id'), nullable=False)
     
-    # Durée estimée
     duree_estimee_jours = db.Column(db.Integer, default=1)
-    
-    # Statut
     statut = db.Column(db.String(50), default='actif')
     
-    # Traçabilité
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
     is_archived = db.Column(db.Boolean, default=False)
-    
-    # Multi-tenant
     client_id = db.Column(db.Integer, db.ForeignKey('clients.id'), nullable=True)
     
-    # ============================================
-    # CONTRAINTE UNIQUE COMPOSITE
-    # ============================================
     __table_args__ = (
         db.UniqueConstraint('reference', 'client_id', name='uix_etape_reference_client'),
     )
     
     # ============================================
-    # RELATIONS - SUPPRIMER LA RELATION PROCESSUS
+    # RELATIONS - VERSION SIMPLE ET SANS CONFLIT
     # ============================================
     
-    # 🔥 SUPPRIMEZ CETTE RELATION
-    # processus = db.relationship('Processus', backref='etapes_associees', lazy=True)
+    # 🔥 RELATION VERS PROCESSUS (uniquement pour accéder au processus parent)
+    processus_parent = db.relationship(
+        'Processus',
+        foreign_keys=[processus_id],
+        backref='etapes_de_ce_processus',  # ← Nom unique
+        lazy=True
+    )
     
-    # 🔥 GARDER SEULEMENT LA RELATION AVEC SOUS_ETAPES
+    # RELATION AVEC SOUS_ETAPES
     sous_etapes = db.relationship(
         'SousEtapeProcessus',
         back_populates='etape_parente',
@@ -2332,39 +2326,458 @@ class EtapeProcessus(db.Model):
         lazy=True,
         cascade='all, delete-orphan'
     )
+    
+    # ============================================
+    # MÉTHODES
+    # ============================================
+    
+    @staticmethod
+    def generer_reference(client_id):
+        from datetime import datetime
+        annee = datetime.now().year
+        prefixe = f"ETAPE-{annee}-"
+        
+        count = EtapeProcessus.query.filter(
+            EtapeProcessus.reference.like(f'{prefixe}%'),
+            EtapeProcessus.client_id == client_id
+        ).count()
+        
+        return f"{prefixe}{(count + 1):04d}"
+    
+    def __init__(self, **kwargs):
+        if 'reference' not in kwargs and 'client_id' in kwargs and kwargs['client_id']:
+            kwargs['reference'] = self.generer_reference(kwargs['client_id'])
+        
+        super().__init__(**kwargs)
+    
+    def get_statut_label(self):
+        labels = {
+            'actif': '✅ Actif',
+            'inactif': '⛔ Inactif',
+            'en_cours': '🔄 En cours',
+            'termine': '✅ Terminé'
+        }
+        return labels.get(self.statut, self.statut)
+    
+    def get_statut_css(self):
+        css = {
+            'actif': 'success',
+            'inactif': 'secondary',
+            'en_cours': 'warning',
+            'termine': 'info'
+        }
+        return css.get(self.statut, 'secondary')
+    
+    def get_progression(self):
+        if hasattr(self, 'sous_etapes') and self.sous_etapes:
+            total = len(self.sous_etapes)
+            if total == 0:
+                return 0
+            termines = len([se for se in self.sous_etapes if se.statut == 'termine'])
+            return int((termines / total) * 100)
+        return 0
+    
+    def get_nb_sous_etapes(self):
+        return len(self.sous_etapes) if hasattr(self, 'sous_etapes') else 0
+    
+    def get_nb_sous_etapes_terminees(self):
+        if hasattr(self, 'sous_etapes'):
+            return len([se for se in self.sous_etapes if se.statut == 'termine'])
+        return 0
+    
+    def get_processus_nom(self):
+        return self.processus_parent.nom if self.processus_parent else None
+    
+    def to_dict(self):
+        return {
+            'id': self.id,
+            'reference': self.reference,
+            'nom': self.nom,
+            'description': self.description,
+            'ordre': self.ordre,
+            'statut': self.statut,
+            'statut_label': self.get_statut_label(),
+            'duree_estimee_jours': self.duree_estimee_jours,
+            'progression': self.get_progression(),
+            'nb_sous_etapes': self.get_nb_sous_etapes(),
+            'nb_sous_etapes_terminees': self.get_nb_sous_etapes_terminees(),
+            'processus_id': self.processus_id,
+            'processus_nom': self.get_processus_nom(),
+            'created_at': self.created_at.isoformat() if self.created_at else None
+        }
+    
+    def __repr__(self):
+        return f'<EtapeProcessus {self.reference}: {self.nom}>'
 # -------------------- PROCESSUS --------------------
 class Processus(db.Model):
+    __tablename__ = 'processus'
+    
+    # ============================================
+    # COLONNES
+    # ============================================
     id = db.Column(db.Integer, primary_key=True)
+    reference = db.Column(db.String(50), nullable=False)
     nom = db.Column(db.String(200), nullable=False)
     description = db.Column(db.Text)
-    direction_id = db.Column(db.Integer, db.ForeignKey('direction.id'))
-    service_id = db.Column(db.Integer, db.ForeignKey('service.id'))
-    responsable_id = db.Column(db.Integer, db.ForeignKey('user.id'))
-    version = db.Column(db.String(20))
-    statut = db.Column(db.String(20), default='actif')
-    client_id = db.Column(db.Integer, db.ForeignKey('clients.id'), nullable=True)
+    code = db.Column(db.String(50), nullable=False)
     
-    # NOUVEAUX CHAMPS POUR SYNCHRONISATION
-    a_besoin_sync = db.Column(db.Boolean, default=True)
-    derniere_sync_organigramme = db.Column(db.DateTime)
-    nb_etapes = db.Column(db.Integer, default=0)
-    nb_liens = db.Column(db.Integer, default=0)
-
-    # CHAMPS POUR ORGANIGRAMME FLUIDE
-    largeur_canvas = db.Column(db.Integer, default=2000)
-    hauteur_canvas = db.Column(db.Integer, default=1500)
-    zoom_par_defaut = db.Column(db.Float, default=1.0)
+    # Hiérarchie
+    processus_parent_id = db.Column(db.Integer, db.ForeignKey('processus.id'), nullable=True)
     
+    # Organisation
+    direction_id = db.Column(db.Integer, db.ForeignKey('direction.id'), nullable=True)
+    service_id = db.Column(db.Integer, db.ForeignKey('service.id'), nullable=True)
+    responsable_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=True)
+    
+    # Objectifs et statut
+    objectif = db.Column(db.Text)
+    statut = db.Column(db.String(50), default='actif')
+    niveau_priorite = db.Column(db.String(20), default='moyen')
+    
+    # Dates
+    date_creation = db.Column(db.DateTime, default=datetime.utcnow)
+    date_derniere_revision = db.Column(db.DateTime)
+    date_prochaine_revision = db.Column(db.DateTime)
+    
+    # Traçabilité
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
-
-    direction = db.relationship('Direction', back_populates='processus')
-    service = db.relationship('Service', back_populates='processus')
-    responsable = db.relationship('User', back_populates='processus_geres')
-    etapes = db.relationship('EtapeProcessus', back_populates='processus', lazy=True, cascade='all, delete-orphan')
-    zones_risque = db.relationship('ZoneRisqueProcessus', back_populates='processus', lazy=True)
-    controles = db.relationship('ControleProcessus', back_populates='processus', lazy=True)
-    liens = db.relationship('LienProcessus', back_populates='processus', lazy=True, cascade='all, delete-orphan')
+    created_by = db.Column(db.Integer, db.ForeignKey('user.id'))
+    
+    # Archivage
+    is_archived = db.Column(db.Boolean, default=False)
+    archived_at = db.Column(db.DateTime)
+    archived_by = db.Column(db.Integer, db.ForeignKey('user.id'))
+    archive_reason = db.Column(db.Text)
+    
+    # Multi-tenant
+    client_id = db.Column(db.Integer, db.ForeignKey('clients.id'), nullable=True)
+    
+    # Métadonnées
+    metadonnees = db.Column(db.JSON, default={})
+    
+    # ============================================
+    # CONTRAINTES UNIQUES
+    # ============================================
+    __table_args__ = (
+        db.UniqueConstraint('reference', 'client_id', name='uix_processus_reference_client'),
+        db.UniqueConstraint('code', 'client_id', name='uix_processus_code_client'),
+    )
+    
+    # ============================================
+    # RELATIONS
+    # ============================================
+    
+    # Hiérarchie
+    processus_parent = db.relationship(
+        'Processus',
+        remote_side=[id],
+        backref='sous_processus',
+        lazy=True
+    )
+    
+    # Organisation
+    direction = db.relationship('Direction', backref='processus', lazy=True)
+    service = db.relationship('Service', backref='processus', lazy=True)
+    responsable = db.relationship('User', foreign_keys=[responsable_id])
+    createur = db.relationship('User', foreign_keys=[created_by])
+    archive_par = db.relationship('User', foreign_keys=[archived_by])
+    
+    # 🔥 RELATION AVEC ETAPES - CORRIGÉE
+    etapes = db.relationship(
+        'EtapeProcessus',
+        foreign_keys='EtapeProcessus.processus_id',
+        back_populates='processus_parent',
+        lazy=True,
+        cascade='all, delete-orphan'
+    )
+    
+    # Risques associés
+    risques = db.relationship(
+        'Risque',
+        backref='processus_associe',
+        foreign_keys='Risque.processus_metier_associe_id',
+        lazy=True
+    )
+    
+    # ============================================
+    # PROPRIÉTÉS CALCULÉES
+    # ============================================
+    
+    @property
+    def nb_etapes(self):
+        """Nombre d'étapes dans le processus"""
+        return len(self.etapes) if self.etapes else 0
+    
+    @property
+    def nb_sous_processus(self):
+        """Nombre de sous-processus"""
+        return len(self.sous_processus) if self.sous_processus else 0
+    
+    @property
+    def nb_risques_associes(self):
+        """Nombre de risques associés"""
+        return len([r for r in self.risques if not r.is_archived]) if self.risques else 0
+    
+    @property
+    def progression_globale(self):
+        """Progression globale du processus basée sur les étapes"""
+        if not self.etapes:
+            return 0
+        
+        total_etapes = len(self.etapes)
+        if total_etapes == 0:
+            return 0
+        
+        etapes_terminees = len([e for e in self.etapes if e.statut == 'termine'])
+        return int((etapes_terminees / total_etapes) * 100)
+    
+    @property
+    def statut_label(self):
+        """Libellé du statut"""
+        labels = {
+            'actif': '✅ Actif',
+            'inactif': '⛔ Inactif',
+            'en_construction': '🔄 En construction',
+            'obsolete': '📦 Obsolète'
+        }
+        return labels.get(self.statut, self.statut)
+    
+    @property
+    def statut_css(self):
+        """Classe CSS pour le statut"""
+        css = {
+            'actif': 'success',
+            'inactif': 'secondary',
+            'en_construction': 'warning',
+            'obsolete': 'dark'
+        }
+        return css.get(self.statut, 'secondary')
+    
+    @property
+    def niveau_priorite_label(self):
+        """Libellé du niveau de priorité"""
+        labels = {
+            'faible': '🟢 Faible',
+            'moyen': '🟡 Moyen',
+            'eleve': '🟠 Élevé',
+            'critique': '🔴 Critique'
+        }
+        return labels.get(self.niveau_priorite, self.niveau_priorite)
+    
+    @property
+    def niveau_priorite_css(self):
+        """Classe CSS pour le niveau de priorité"""
+        css = {
+            'faible': 'success',
+            'moyen': 'warning',
+            'eleve': 'danger',
+            'critique': 'dark'
+        }
+        return css.get(self.niveau_priorite, 'secondary')
+    
+    @property
+    def nom_complet(self):
+        """Nom complet du processus avec sa hiérarchie"""
+        if self.processus_parent:
+            return f"{self.processus_parent.nom} > {self.nom}"
+        return self.nom
+    
+    @property
+    def reference_complete(self):
+        """Référence complète avec code hiérarchique"""
+        if self.processus_parent:
+            return f"{self.processus_parent.code}-{self.code}"
+        return self.code
+    
+    @property
+    def duree_totale_estimee(self):
+        """Durée totale estimée du processus en jours"""
+        if not self.etapes:
+            return 0
+        return sum(e.duree_estimee_jours for e in self.etapes)
+    
+    @property
+    def a_des_sous_processus(self):
+        """Vérifie si le processus a des sous-processus"""
+        return self.nb_sous_processus > 0
+    
+    @property
+    def a_des_etapes(self):
+        """Vérifie si le processus a des étapes"""
+        return self.nb_etapes > 0
+    
+    @property
+    def est_termine(self):
+        """Vérifie si le processus est terminé"""
+        return self.progression_globale >= 100
+    
+    # ============================================
+    # MÉTHODES STATIQUES
+    # ============================================
+    
+    @staticmethod
+    def generer_reference(client_id):
+        """Génère une référence unique PAR CLIENT"""
+        from datetime import datetime
+        annee = datetime.now().year
+        prefixe = f"PROC-{annee}-"
+        
+        count = Processus.query.filter(
+            Processus.reference.like(f'{prefixe}%'),
+            Processus.client_id == client_id
+        ).count()
+        
+        return f"{prefixe}{(count + 1):04d}"
+    
+    @staticmethod
+    def generer_code(client_id):
+        """Génère un code unique PAR CLIENT"""
+        count = Processus.query.filter_by(client_id=client_id).count()
+        return f"P{count + 1:04d}"
+    
+    # ============================================
+    # MÉTHODES D'INITIALISATION
+    # ============================================
+    
+    def __init__(self, **kwargs):
+        """Initialise avec génération automatique de la référence et du code"""
+        if 'reference' not in kwargs and 'client_id' in kwargs and kwargs['client_id']:
+            kwargs['reference'] = self.generer_reference(kwargs['client_id'])
+        if 'code' not in kwargs and 'client_id' in kwargs and kwargs['client_id']:
+            kwargs['code'] = self.generer_code(kwargs['client_id'])
+        
+        super().__init__(**kwargs)
+    
+    # ============================================
+    # MÉTHODES DE GESTION
+    # ============================================
+    
+    def get_chemin_complet(self):
+        """Retourne le chemin complet du processus"""
+        chemin = [self.nom]
+        parent = self.processus_parent
+        while parent:
+            chemin.insert(0, parent.nom)
+            parent = parent.processus_parent
+        return " > ".join(chemin)
+    
+    def get_etapes_ordonnees(self):
+        """Retourne les étapes triées par ordre"""
+        if self.etapes:
+            return sorted(self.etapes, key=lambda e: e.ordre)
+        return []
+    
+    def get_etapes_actives(self):
+        """Retourne les étapes actives"""
+        return [e for e in self.etapes if e.statut == 'actif'] if self.etapes else []
+    
+    def get_etapes_terminees(self):
+        """Retourne les étapes terminées"""
+        return [e for e in self.etapes if e.statut == 'termine'] if self.etapes else []
+    
+    def archiver(self, user_id=None, reason=None):
+        """Archive le processus"""
+        self.is_archived = True
+        self.archived_at = datetime.utcnow()
+        self.archived_by = user_id
+        self.archive_reason = reason
+        self.statut = 'obsolete'
+        
+        # Archiver également les étapes
+        for etape in self.etapes:
+            etape.is_archived = True
+            etape.updated_at = datetime.utcnow()
+    
+    def restaurer(self):
+        """Restaure un processus archivé"""
+        self.is_archived = False
+        self.archived_at = None
+        self.archived_by = None
+        self.archive_reason = None
+        self.statut = 'actif'
+        
+        # Restaurer les étapes
+        for etape in self.etapes:
+            etape.is_archived = False
+            etape.updated_at = datetime.utcnow()
+    
+    def ajouter_etape(self, nom, description=None, ordre=None, duree=1):
+        """Ajoute une étape au processus"""
+        from models import EtapeProcessus
+        
+        if ordre is None:
+            ordre = len(self.etapes) + 1
+        
+        etape = EtapeProcessus(
+            nom=nom,
+            description=description,
+            ordre=ordre,
+            duree_estimee_jours=duree,
+            processus_id=self.id,
+            client_id=self.client_id
+        )
+        
+        self.etapes.append(etape)
+        return etape
+    
+    # ============================================
+    # MÉTHODE DE CONVERSION
+    # ============================================
+    
+    def to_dict(self, include_etapes=False):
+        """Convertit le processus en dictionnaire"""
+        data = {
+            'id': self.id,
+            'reference': self.reference,
+            'code': self.code,
+            'nom': self.nom,
+            'description': self.description,
+            'nom_complet': self.nom_complet,
+            'reference_complete': self.reference_complete,
+            'chemin_complet': self.get_chemin_complet(),
+            'statut': self.statut,
+            'statut_label': self.statut_label,
+            'statut_css': self.statut_css,
+            'niveau_priorite': self.niveau_priorite,
+            'niveau_priorite_label': self.niveau_priorite_label,
+            'niveau_priorite_css': self.niveau_priorite_css,
+            'progression_globale': self.progression_globale,
+            'nb_etapes': self.nb_etapes,
+            'nb_sous_processus': self.nb_sous_processus,
+            'nb_risques_associes': self.nb_risques_associes,
+            'duree_totale_estimee': self.duree_totale_estimee,
+            'a_des_sous_processus': self.a_des_sous_processus,
+            'a_des_etapes': self.a_des_etapes,
+            'est_termine': self.est_termine,
+            'processus_parent_id': self.processus_parent_id,
+            'processus_parent_nom': self.processus_parent.nom if self.processus_parent else None,
+            'direction_id': self.direction_id,
+            'direction_nom': self.direction.nom if self.direction else None,
+            'service_id': self.service_id,
+            'service_nom': self.service.nom if self.service else None,
+            'responsable_id': self.responsable_id,
+            'responsable_nom': self.responsable.username if self.responsable else None,
+            'date_creation': self.date_creation.isoformat() if self.date_creation else None,
+            'date_derniere_revision': self.date_derniere_revision.isoformat() if self.date_derniere_revision else None,
+            'date_prochaine_revision': self.date_prochaine_revision.isoformat() if self.date_prochaine_revision else None,
+            'created_at': self.created_at.isoformat() if self.created_at else None,
+            'updated_at': self.updated_at.isoformat() if self.updated_at else None,
+            'is_archived': self.is_archived,
+            'client_id': self.client_id
+        }
+        
+        if include_etapes and self.etapes:
+            data['etapes'] = [e.to_dict() for e in self.get_etapes_ordonnees()]
+        
+        return data
+    
+    # ============================================
+    # REPRÉSENTATION
+    # ============================================
+    
+    def __repr__(self):
+        return f'<Processus {self.reference}: {self.nom}>'
 
 # -------------------- VEILLE REGLEMENTAIRE --------------------
 class VeilleReglementaire(db.Model):
