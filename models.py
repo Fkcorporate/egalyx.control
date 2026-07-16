@@ -5046,7 +5046,7 @@ class PlanAction(db.Model):
     # COLONNES DE BASE
     # ============================================
     id = db.Column(db.Integer, primary_key=True)
-    reference = db.Column(db.String(50), nullable=False)  # ← Enlevé unique=True
+    reference = db.Column(db.String(50), nullable=False)
     nom = db.Column(db.String(200), nullable=False)
     description = db.Column(db.Text)
     date_debut = db.Column(db.Date)
@@ -5099,6 +5099,23 @@ class PlanAction(db.Model):
                                    lazy=True, 
                                    cascade='all, delete-orphan',
                                    order_by='SousAction.created_at')
+    
+    # ============================================
+    # 🔥 NOUVEAUX CHAMPS (CORRECTION DE L'ERREUR)
+    # ============================================
+    
+    # RELATION AVEC CONTROLE_PROCESSUS
+    # Le champ 'controle_id' était manquant - IL EST MAINTENANT AJOUTÉ
+    controle_id = db.Column(db.Integer, db.ForeignKey('controle_processus.id'), nullable=True)
+    controle = db.relationship('ControleProcessus', foreign_keys=[controle_id], backref='plans_action')
+    
+    # RELATION AVEC DEMANDE_REEVALUATION
+    demande_reevaluation_id = db.Column(db.Integer, db.ForeignKey('demandes_reevaluation.id'), nullable=True)
+    demande_reevaluation = db.relationship('DemandeReevaluation', foreign_keys=[demande_reevaluation_id], backref='plans_action_genere')
+    
+    # RELATION AVEC RECOMMANDATION_C2N
+    recommandation_c2n_id = db.Column(db.Integer, db.ForeignKey('recommandations_c2n.id'), nullable=True)
+    recommandation_c2n = db.relationship('RecommandationC2N', foreign_keys=[recommandation_c2n_id], backref='plan_action_genere')
     
     # ============================================
     # COLONNES D'ARCHIVAGE
@@ -5235,6 +5252,15 @@ class PlanAction(db.Model):
                 'url': url_for('detail_dispositif', dispositif_id=dispositif.id)
             })
         
+        # Contrôle
+        if self.controle:
+            sources.append({
+                'type': 'controle',
+                'reference': self.controle.reference,
+                'intitule': self.controle.nom,
+                'url': url_for('detail_controle', controle_id=self.controle.id) if hasattr(url_for, 'detail_controle') else '#'
+            })
+        
         return sources
     
     @property
@@ -5297,13 +5323,19 @@ class PlanAction(db.Model):
     
     @property
     def type_plan(self):
-        """Détermine le type de plan (risque, dispositif, audit)"""
+        """Détermine le type de plan (risque, dispositif, audit, controle, reevaluation)"""
         if self.dispositifs.count() > 0:
             return 'dispositif'
         elif self.risque_id:
             return 'risque'
         elif self.audit_id:
             return 'audit'
+        elif self.controle_id:
+            return 'controle'
+        elif self.demande_reevaluation_id:
+            return 'reevaluation'
+        elif self.recommandation_c2n_id:
+            return 'recommandation_c2n'
         else:
             return 'autre'
     
@@ -5325,6 +5357,13 @@ class PlanAction(db.Model):
                 'reference': self.audit.reference,
                 'titre': self.audit.titre,
                 'url': url_for('detail_audit', id=self.audit_id)
+            }
+        elif self.controle_id and self.controle:
+            return {
+                'type': 'controle',
+                'reference': self.controle.reference,
+                'intitule': self.controle.nom,
+                'url': url_for('detail_controle', controle_id=self.controle_id) if hasattr(url_for, 'detail_controle') else '#'
             }
         elif self.dispositifs.count() > 0:
             dispositif = self.dispositifs.first()
@@ -5427,7 +5466,11 @@ class PlanAction(db.Model):
                 'id': r.id,
                 'reference': r.reference,
                 'intitule': r.intitule
-            } for r in self.risques_concernes]
+            } for r in self.risques_concernes],
+            # Nouveaux champs
+            'controle_id': self.controle_id,
+            'demande_reevaluation_id': self.demande_reevaluation_id,
+            'recommandation_c2n_id': self.recommandation_c2n_id
         }
     
     def to_dict_simple(self):
@@ -5441,7 +5484,8 @@ class PlanAction(db.Model):
             'priorite': self.priorite,
             'date_fin_prevue': self.date_fin_prevue.isoformat() if self.date_fin_prevue else None,
             'est_en_retard': self.est_en_retard,
-            'dispositifs_count': self.dispositifs.count()
+            'dispositifs_count': self.dispositifs.count(),
+            'type_plan': self.type_plan
         }
     
     def __repr__(self):
