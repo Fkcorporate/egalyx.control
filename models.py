@@ -2317,13 +2317,18 @@ class EtapeProcessus(db.Model):
     )
     
     # ============================================
-    # RELATIONS - CORRIGÉES AVEC AJOUT
+    # RELATIONS - AVEC NOMS UNIQUES
     # ============================================
     
-    # Relation avec Processus
-    processus = db.relationship('Processus', backref='etapes', lazy=True)
+    # 🔥 RELATION AVEC PROCESSUS - UTILISER backref AVEC UN NOM UNIQUE
+    processus = db.relationship(
+        'Processus',
+        foreign_keys=[processus_id],
+        backref='etapes_associees',  # ← NOM UNIQUE au lieu de 'etapes'
+        lazy=True
+    )
     
-    # 🔥 AJOUTER CETTE RELATION POUR SOUS_ETAPES
+    # 🔥 RELATION AVEC SOUS_ETAPES
     sous_etapes = db.relationship(
         'SousEtapeProcessus',
         back_populates='etape_parente',
