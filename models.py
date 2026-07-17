@@ -2542,7 +2542,7 @@ class Processus(db.Model):
     )
     
     # ============================================
-    # RELATIONS - CORRIGÉES
+    # RELATIONS - CORRIGÉES (SANS RISQUE)
     # ============================================
     
     # Hiérarchie
@@ -2616,9 +2616,8 @@ class Processus(db.Model):
         cascade='all, delete-orphan'
     )
     
-    # 🔥 RELATION AVEC RISQUE - SUPPRIMÉE
-    # La relation avec Risque est supprimée car Risque n'a pas de colonne 'processus_metier_associe_id'
-    # Si vous avez besoin de cette relation, ajoutez la colonne dans Risque
+    # 🔥 RELATION AVEC RISQUE - COMPLÈTEMENT SUPPRIMÉE
+    # La colonne 'processus_metier_associe_id' n'existe pas dans Risque
     
     # ============================================
     # PROPRIÉTÉS CALCULÉES
