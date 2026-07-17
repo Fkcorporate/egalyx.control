@@ -2465,7 +2465,7 @@ class Processus(db.Model):
     )
     
     # ============================================
-    # RELATIONS
+    # RELATIONS - COMPLÈTES
     # ============================================
     
     # Hiérarchie
@@ -2492,7 +2492,7 @@ class Processus(db.Model):
         cascade='all, delete-orphan'
     )
     
-    # 🔥 RELATIONS AVEC LIENS - AJOUTÉES
+    # Liens
     liens = db.relationship(
         'LienProcessus',
         foreign_keys='LienProcessus.processus_source_id',
@@ -2505,6 +2505,15 @@ class Processus(db.Model):
         'LienProcessus',
         foreign_keys='LienProcessus.processus_cible_id',
         back_populates='processus_cible',
+        lazy=True,
+        cascade='all, delete-orphan'
+    )
+    
+    # 🔥 ZONES RISQUE - AJOUTÉE
+    zones_risque = db.relationship(
+        'ZoneRisqueProcessus',
+        foreign_keys='ZoneRisqueProcessus.processus_id',
+        back_populates='processus',
         lazy=True,
         cascade='all, delete-orphan'
     )
@@ -2540,6 +2549,10 @@ class Processus(db.Model):
     @property
     def nb_liens_entrants(self):
         return len(self.liens_entrants) if self.liens_entrants else 0
+    
+    @property
+    def nb_zones_risque(self):
+        return len(self.zones_risque) if self.zones_risque else 0
     
     @property
     def progression_globale(self):
@@ -2626,6 +2639,10 @@ class Processus(db.Model):
     @property
     def a_des_liens(self):
         return self.nb_liens > 0
+    
+    @property
+    def a_des_zones_risque(self):
+        return self.nb_zones_risque > 0
     
     # ============================================
     # MÉTHODES STATIQUES
@@ -2725,7 +2742,6 @@ class Processus(db.Model):
         return etape
     
     def ajouter_lien(self, processus_cible, type_lien='dependance', description=None):
-        """Ajoute un lien vers un autre processus"""
         from models import LienProcessus
         
         lien = LienProcessus(
@@ -2739,19 +2755,31 @@ class Processus(db.Model):
         self.liens.append(lien)
         return lien
     
+    def ajouter_zone_risque(self, nom, description=None, niveau_risque='moyen'):
+        from models import ZoneRisqueProcessus
+        
+        zone = ZoneRisqueProcessus(
+            nom=nom,
+            description=description,
+            niveau_risque=niveau_risque,
+            processus_id=self.id,
+            client_id=self.client_id
+        )
+        
+        self.zones_risque.append(zone)
+        return zone
+    
     def get_liens_sortants(self):
-        """Retourne les liens sortants"""
         return self.liens if self.liens else []
     
     def get_liens_entrants(self):
-        """Retourne les liens entrants"""
         return self.liens_entrants if self.liens_entrants else []
     
     # ============================================
     # MÉTHODE DE CONVERSION
     # ============================================
     
-    def to_dict(self, include_etapes=False, include_liens=False):
+    def to_dict(self, include_etapes=False, include_liens=False, include_zones=False):
         data = {
             'id': self.id,
             'reference': self.reference,
@@ -2773,10 +2801,12 @@ class Processus(db.Model):
             'nb_risques_associes': self.nb_risques_associes,
             'nb_liens': self.nb_liens,
             'nb_liens_entrants': self.nb_liens_entrants,
+            'nb_zones_risque': self.nb_zones_risque,
             'duree_totale_estimee': self.duree_totale_estimee,
             'a_des_sous_processus': self.a_des_sous_processus,
             'a_des_etapes': self.a_des_etapes,
             'a_des_liens': self.a_des_liens,
+            'a_des_zones_risque': self.a_des_zones_risque,
             'est_termine': self.est_termine,
             'processus_parent_id': self.processus_parent_id,
             'processus_parent_nom': self.processus_parent.nom if self.processus_parent else None,
@@ -2800,6 +2830,9 @@ class Processus(db.Model):
         
         if include_liens and self.liens:
             data['liens'] = [l.to_dict() for l in self.liens]
+        
+        if include_zones and self.zones_risque:
+            data['zones_risque'] = [z.to_dict() for z in self.zones_risque]
         
         return data
     
