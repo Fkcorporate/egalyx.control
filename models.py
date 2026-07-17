@@ -2072,8 +2072,10 @@ class LienProcessus(db.Model):
     
     id = db.Column(db.Integer, primary_key=True)
     
-    # 🔥 Colonnes de liaison
+    # 🔥 Une seule colonne pour lier à Processus (simplifié)
     processus_id = db.Column(db.Integer, db.ForeignKey('processus.id'), nullable=True)
+    
+    # Liens vers les étapes
     etape_source_id = db.Column(db.Integer, db.ForeignKey('etape_processus.id'), nullable=True)
     etape_cible_id = db.Column(db.Integer, db.ForeignKey('etape_processus.id'), nullable=True)
     
@@ -2096,7 +2098,7 @@ class LienProcessus(db.Model):
     processus = db.relationship(
         'Processus',
         foreign_keys=[processus_id],
-        back_populates='liens',  # ← Correspond à liens dans Processus
+        back_populates='liens',
         lazy=True
     )
     
@@ -2157,7 +2159,7 @@ class LienProcessus(db.Model):
         }
     
     def __repr__(self):
-        return f'<LienProcessus {self.id}: {self.type_lien} ({self.processus_id})>'
+        return f'<LienProcessus {self.id}: {self.type_lien}>'
 
 # -------------------- ZONE RISQUE PROCESSUS --------------------
 class ZoneRisqueProcessus(db.Model):
@@ -2601,14 +2603,6 @@ class Processus(db.Model):
         'LienProcessus',
         foreign_keys='LienProcessus.processus_id',  # ← Utiliser processus_id
         back_populates='processus',
-        lazy=True,
-        cascade='all, delete-orphan'
-    )
-    
-    liens_entrants = db.relationship(
-        'LienProcessus',
-        foreign_keys='LienProcessus.processus_cible_id',
-        back_populates='processus_cible',
         lazy=True,
         cascade='all, delete-orphan'
     )
