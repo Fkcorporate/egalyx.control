@@ -2465,7 +2465,7 @@ class Processus(db.Model):
     )
     
     # ============================================
-    # RELATIONS - COMPLÈTES
+    # RELATIONS - AVEC NOMS UNIQUES
     # ============================================
     
     # Hiérarchie
@@ -2476,12 +2476,41 @@ class Processus(db.Model):
         lazy=True
     )
     
-    # Organisation
-    direction = db.relationship('Direction', backref='processus', lazy=True)
-    service = db.relationship('Service', backref='processus', lazy=True)
-    responsable = db.relationship('User', foreign_keys=[responsable_id])
-    createur = db.relationship('User', foreign_keys=[created_by])
-    archive_par = db.relationship('User', foreign_keys=[archived_by])
+    # Organisation - AVEC NOMS UNIQUES
+    direction = db.relationship(
+        'Direction',
+        foreign_keys=[direction_id],
+        backref='processus_associes',  # ← UNIQUE
+        lazy=True
+    )
+    
+    service = db.relationship(
+        'Service',
+        foreign_keys=[service_id],
+        backref='processus_associes',  # ← UNIQUE
+        lazy=True
+    )
+    
+    responsable = db.relationship(
+        'User',
+        foreign_keys=[responsable_id],
+        backref='processus_responsables',  # ← UNIQUE
+        lazy=True
+    )
+    
+    createur = db.relationship(
+        'User',
+        foreign_keys=[created_by],
+        backref='processus_crees',  # ← UNIQUE
+        lazy=True
+    )
+    
+    archive_par = db.relationship(
+        'User',
+        foreign_keys=[archived_by],
+        backref='processus_archives',  # ← UNIQUE
+        lazy=True
+    )
     
     # Étapes
     etapes = db.relationship(
@@ -2509,7 +2538,7 @@ class Processus(db.Model):
         cascade='all, delete-orphan'
     )
     
-    # 🔥 ZONES RISQUE - AJOUTÉE
+    # Zones risque
     zones_risque = db.relationship(
         'ZoneRisqueProcessus',
         foreign_keys='ZoneRisqueProcessus.processus_id',
