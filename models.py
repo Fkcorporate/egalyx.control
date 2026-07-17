@@ -2483,11 +2483,28 @@ class Processus(db.Model):
     createur = db.relationship('User', foreign_keys=[created_by])
     archive_par = db.relationship('User', foreign_keys=[archived_by])
     
-    # 🔥 RELATION AVEC ETAPES - CORRIGÉE
+    # Étapes
     etapes = db.relationship(
         'EtapeProcessus',
         foreign_keys='EtapeProcessus.processus_id',
         back_populates='processus_parent',
+        lazy=True,
+        cascade='all, delete-orphan'
+    )
+    
+    # 🔥 RELATIONS AVEC LIENS - AJOUTÉES
+    liens = db.relationship(
+        'LienProcessus',
+        foreign_keys='LienProcessus.processus_source_id',
+        back_populates='processus_source',
+        lazy=True,
+        cascade='all, delete-orphan'
+    )
+    
+    liens_entrants = db.relationship(
+        'LienProcessus',
+        foreign_keys='LienProcessus.processus_cible_id',
+        back_populates='processus_cible',
         lazy=True,
         cascade='all, delete-orphan'
     )
@@ -2506,22 +2523,26 @@ class Processus(db.Model):
     
     @property
     def nb_etapes(self):
-        """Nombre d'étapes dans le processus"""
         return len(self.etapes) if self.etapes else 0
     
     @property
     def nb_sous_processus(self):
-        """Nombre de sous-processus"""
         return len(self.sous_processus) if self.sous_processus else 0
     
     @property
     def nb_risques_associes(self):
-        """Nombre de risques associés"""
         return len([r for r in self.risques if not r.is_archived]) if self.risques else 0
     
     @property
+    def nb_liens(self):
+        return len(self.liens) if self.liens else 0
+    
+    @property
+    def nb_liens_entrants(self):
+        return len(self.liens_entrants) if self.liens_entrants else 0
+    
+    @property
     def progression_globale(self):
-        """Progression globale du processus basée sur les étapes"""
         if not self.etapes:
             return 0
         
@@ -2534,7 +2555,6 @@ class Processus(db.Model):
     
     @property
     def statut_label(self):
-        """Libellé du statut"""
         labels = {
             'actif': '✅ Actif',
             'inactif': '⛔ Inactif',
@@ -2545,7 +2565,6 @@ class Processus(db.Model):
     
     @property
     def statut_css(self):
-        """Classe CSS pour le statut"""
         css = {
             'actif': 'success',
             'inactif': 'secondary',
@@ -2556,7 +2575,6 @@ class Processus(db.Model):
     
     @property
     def niveau_priorite_label(self):
-        """Libellé du niveau de priorité"""
         labels = {
             'faible': '🟢 Faible',
             'moyen': '🟡 Moyen',
@@ -2567,7 +2585,6 @@ class Processus(db.Model):
     
     @property
     def niveau_priorite_css(self):
-        """Classe CSS pour le niveau de priorité"""
         css = {
             'faible': 'success',
             'moyen': 'warning',
@@ -2578,39 +2595,37 @@ class Processus(db.Model):
     
     @property
     def nom_complet(self):
-        """Nom complet du processus avec sa hiérarchie"""
         if self.processus_parent:
             return f"{self.processus_parent.nom} > {self.nom}"
         return self.nom
     
     @property
     def reference_complete(self):
-        """Référence complète avec code hiérarchique"""
         if self.processus_parent:
             return f"{self.processus_parent.code}-{self.code}"
         return self.code
     
     @property
     def duree_totale_estimee(self):
-        """Durée totale estimée du processus en jours"""
         if not self.etapes:
             return 0
         return sum(e.duree_estimee_jours for e in self.etapes)
     
     @property
     def a_des_sous_processus(self):
-        """Vérifie si le processus a des sous-processus"""
         return self.nb_sous_processus > 0
     
     @property
     def a_des_etapes(self):
-        """Vérifie si le processus a des étapes"""
         return self.nb_etapes > 0
     
     @property
     def est_termine(self):
-        """Vérifie si le processus est terminé"""
         return self.progression_globale >= 100
+    
+    @property
+    def a_des_liens(self):
+        return self.nb_liens > 0
     
     # ============================================
     # MÉTHODES STATIQUES
@@ -2618,7 +2633,6 @@ class Processus(db.Model):
     
     @staticmethod
     def generer_reference(client_id):
-        """Génère une référence unique PAR CLIENT"""
         from datetime import datetime
         annee = datetime.now().year
         prefixe = f"PROC-{annee}-"
@@ -2632,7 +2646,6 @@ class Processus(db.Model):
     
     @staticmethod
     def generer_code(client_id):
-        """Génère un code unique PAR CLIENT"""
         count = Processus.query.filter_by(client_id=client_id).count()
         return f"P{count + 1:04d}"
     
@@ -2641,7 +2654,6 @@ class Processus(db.Model):
     # ============================================
     
     def __init__(self, **kwargs):
-        """Initialise avec génération automatique de la référence et du code"""
         if 'reference' not in kwargs and 'client_id' in kwargs and kwargs['client_id']:
             kwargs['reference'] = self.generer_reference(kwargs['client_id'])
         if 'code' not in kwargs and 'client_id' in kwargs and kwargs['client_id']:
@@ -2654,7 +2666,6 @@ class Processus(db.Model):
     # ============================================
     
     def get_chemin_complet(self):
-        """Retourne le chemin complet du processus"""
         chemin = [self.nom]
         parent = self.processus_parent
         while parent:
@@ -2663,47 +2674,39 @@ class Processus(db.Model):
         return " > ".join(chemin)
     
     def get_etapes_ordonnees(self):
-        """Retourne les étapes triées par ordre"""
         if self.etapes:
             return sorted(self.etapes, key=lambda e: e.ordre)
         return []
     
     def get_etapes_actives(self):
-        """Retourne les étapes actives"""
         return [e for e in self.etapes if e.statut == 'actif'] if self.etapes else []
     
     def get_etapes_terminees(self):
-        """Retourne les étapes terminées"""
         return [e for e in self.etapes if e.statut == 'termine'] if self.etapes else []
     
     def archiver(self, user_id=None, reason=None):
-        """Archive le processus"""
         self.is_archived = True
         self.archived_at = datetime.utcnow()
         self.archived_by = user_id
         self.archive_reason = reason
         self.statut = 'obsolete'
         
-        # Archiver également les étapes
         for etape in self.etapes:
             etape.is_archived = True
             etape.updated_at = datetime.utcnow()
     
     def restaurer(self):
-        """Restaure un processus archivé"""
         self.is_archived = False
         self.archived_at = None
         self.archived_by = None
         self.archive_reason = None
         self.statut = 'actif'
         
-        # Restaurer les étapes
         for etape in self.etapes:
             etape.is_archived = False
             etape.updated_at = datetime.utcnow()
     
     def ajouter_etape(self, nom, description=None, ordre=None, duree=1):
-        """Ajoute une étape au processus"""
         from models import EtapeProcessus
         
         if ordre is None:
@@ -2721,12 +2724,34 @@ class Processus(db.Model):
         self.etapes.append(etape)
         return etape
     
+    def ajouter_lien(self, processus_cible, type_lien='dependance', description=None):
+        """Ajoute un lien vers un autre processus"""
+        from models import LienProcessus
+        
+        lien = LienProcessus(
+            processus_source_id=self.id,
+            processus_cible_id=processus_cible.id,
+            type_lien=type_lien,
+            description=description,
+            client_id=self.client_id
+        )
+        
+        self.liens.append(lien)
+        return lien
+    
+    def get_liens_sortants(self):
+        """Retourne les liens sortants"""
+        return self.liens if self.liens else []
+    
+    def get_liens_entrants(self):
+        """Retourne les liens entrants"""
+        return self.liens_entrants if self.liens_entrants else []
+    
     # ============================================
     # MÉTHODE DE CONVERSION
     # ============================================
     
-    def to_dict(self, include_etapes=False):
-        """Convertit le processus en dictionnaire"""
+    def to_dict(self, include_etapes=False, include_liens=False):
         data = {
             'id': self.id,
             'reference': self.reference,
@@ -2746,9 +2771,12 @@ class Processus(db.Model):
             'nb_etapes': self.nb_etapes,
             'nb_sous_processus': self.nb_sous_processus,
             'nb_risques_associes': self.nb_risques_associes,
+            'nb_liens': self.nb_liens,
+            'nb_liens_entrants': self.nb_liens_entrants,
             'duree_totale_estimee': self.duree_totale_estimee,
             'a_des_sous_processus': self.a_des_sous_processus,
             'a_des_etapes': self.a_des_etapes,
+            'a_des_liens': self.a_des_liens,
             'est_termine': self.est_termine,
             'processus_parent_id': self.processus_parent_id,
             'processus_parent_nom': self.processus_parent.nom if self.processus_parent else None,
@@ -2770,11 +2798,10 @@ class Processus(db.Model):
         if include_etapes and self.etapes:
             data['etapes'] = [e.to_dict() for e in self.get_etapes_ordonnees()]
         
+        if include_liens and self.liens:
+            data['liens'] = [l.to_dict() for l in self.liens]
+        
         return data
-    
-    # ============================================
-    # REPRÉSENTATION
-    # ============================================
     
     def __repr__(self):
         return f'<Processus {self.reference}: {self.nom}>'
