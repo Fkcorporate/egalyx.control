@@ -2068,21 +2068,96 @@ class SousEtapeProcessus(db.Model):
 
 # -------------------- LIEN PROCESSUS --------------------
 class LienProcessus(db.Model):
+    __tablename__ = 'lien_processus'
+    
     id = db.Column(db.Integer, primary_key=True)
-    processus_id = db.Column(db.Integer, db.ForeignKey('processus.id'))
-    etape_source_id = db.Column(db.Integer, db.ForeignKey('etape_processus.id'))
-    etape_cible_id = db.Column(db.Integer, db.ForeignKey('etape_processus.id'))
+    
+    # 🔥 Colonnes de liaison
+    processus_id = db.Column(db.Integer, db.ForeignKey('processus.id'), nullable=True)
+    etape_source_id = db.Column(db.Integer, db.ForeignKey('etape_processus.id'), nullable=True)
+    etape_cible_id = db.Column(db.Integer, db.ForeignKey('etape_processus.id'), nullable=True)
+    
+    # Informations du lien
     type_lien = db.Column(db.String(50), default='sequence')
     label = db.Column(db.String(100))
     position_x = db.Column(db.Float)
     position_y = db.Column(db.Float)
     direction = db.Column(db.String(50))
+    
+    # Traçabilité
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     client_id = db.Column(db.Integer, db.ForeignKey('clients.id'), nullable=True)
-
-    processus = db.relationship('Processus', back_populates='liens')
-    etape_source = db.relationship('EtapeProcessus', foreign_keys=[etape_source_id], backref='liens_sortants')
-    etape_cible = db.relationship('EtapeProcessus', foreign_keys=[etape_cible_id], backref='liens_entrants')
+    
+    # ============================================
+    # RELATIONS
+    # ============================================
+    
+    # Relation vers Processus
+    processus = db.relationship(
+        'Processus',
+        foreign_keys=[processus_id],
+        back_populates='liens',  # ← Correspond à liens dans Processus
+        lazy=True
+    )
+    
+    # Relations vers EtapeProcessus
+    etape_source = db.relationship(
+        'EtapeProcessus',
+        foreign_keys=[etape_source_id],
+        backref='liens_sortants',
+        lazy=True
+    )
+    
+    etape_cible = db.relationship(
+        'EtapeProcessus',
+        foreign_keys=[etape_cible_id],
+        backref='liens_entrants',
+        lazy=True
+    )
+    
+    # ============================================
+    # MÉTHODES
+    # ============================================
+    
+    def get_type_label(self):
+        labels = {
+            'sequence': '🔗 Séquence',
+            'dependance': '📌 Dépendance',
+            'flux': '➡️ Flux',
+            'decision': '⚖️ Décision'
+        }
+        return labels.get(self.type_lien, self.type_lien)
+    
+    def get_type_css(self):
+        css = {
+            'sequence': 'primary',
+            'dependance': 'warning',
+            'flux': 'success',
+            'decision': 'danger'
+        }
+        return css.get(self.type_lien, 'secondary')
+    
+    def to_dict(self):
+        return {
+            'id': self.id,
+            'processus_id': self.processus_id,
+            'etape_source_id': self.etape_source_id,
+            'etape_cible_id': self.etape_cible_id,
+            'type_lien': self.type_lien,
+            'type_label': self.get_type_label(),
+            'type_css': self.get_type_css(),
+            'label': self.label,
+            'position_x': self.position_x,
+            'position_y': self.position_y,
+            'direction': self.direction,
+            'created_at': self.created_at.isoformat() if self.created_at else None,
+            'processus_nom': self.processus.nom if self.processus else None,
+            'etape_source_nom': self.etape_source.nom if self.etape_source else None,
+            'etape_cible_nom': self.etape_cible.nom if self.etape_cible else None
+        }
+    
+    def __repr__(self):
+        return f'<LienProcessus {self.id}: {self.type_lien} ({self.processus_id})>'
 
 # -------------------- ZONE RISQUE PROCESSUS --------------------
 class ZoneRisqueProcessus(db.Model):
@@ -2524,8 +2599,8 @@ class Processus(db.Model):
     # Liens
     liens = db.relationship(
         'LienProcessus',
-        foreign_keys='LienProcessus.processus_source_id',
-        back_populates='processus_source',
+        foreign_keys='LienProcessus.processus_id',  # ← Utiliser processus_id
+        back_populates='processus',
         lazy=True,
         cascade='all, delete-orphan'
     )
