@@ -2189,6 +2189,9 @@ class ZoneRisqueProcessus(db.Model):
 class ControleProcessus(db.Model):
     __tablename__ = 'controle_processus'
     
+    # ============================================
+    # COLONNES
+    # ============================================
     id = db.Column(db.Integer, primary_key=True)
     nom = db.Column(db.String(200), nullable=False)
     description = db.Column(db.Text)
@@ -2229,7 +2232,7 @@ class ControleProcessus(db.Model):
     )
     
     # ============================================
-    # RELATIONS
+    # RELATIONS - COMPLÈTES
     # ============================================
     
     risque = db.relationship('Risque', backref='controles_du_risque', lazy=True)
@@ -2237,12 +2240,21 @@ class ControleProcessus(db.Model):
     createur = db.relationship('User', foreign_keys=[createur_id])
     archive_par = db.relationship('User', foreign_keys=[archived_by])
     
-    # 🔥 RELATION AVEC CONSTATATIONS - CORRIGÉE
+    # Relation avec Constatations
     conteneur_constats_controle = db.relationship(
         'Constatation', 
         foreign_keys='Constatation.controle_id',
         back_populates='controle',
         lazy=True
+    )
+    
+    # 🔥 RELATION AVEC CAMPAGNECONTROLE - AJOUTÉE
+    campagnes_controle = db.relationship(
+        'CampagneControle',
+        foreign_keys='CampagneControle.controle_id',
+        back_populates='controle',
+        lazy=True,
+        cascade='all, delete-orphan'
     )
     
     # ============================================
@@ -2251,7 +2263,6 @@ class ControleProcessus(db.Model):
     
     @staticmethod
     def generer_reference(client_id):
-        """Génère une référence unique PAR CLIENT"""
         from datetime import datetime
         annee = datetime.now().year
         prefixe = f"CTRL-{annee}-"
@@ -2288,16 +2299,18 @@ class ControleProcessus(db.Model):
         return css.get(self.statut, 'secondary')
     
     def get_nb_constats_ouverts(self):
-        """Retourne le nombre de constats ouverts liés à ce contrôle"""
         return len([c for c in self.conteneur_constats_controle if c.statut != 'clos'])
     
     def get_constats_ouverts(self):
-        """Retourne la liste des constats ouverts"""
         return [c for c in self.conteneur_constats_controle if c.statut != 'clos']
     
-    def get_nb_constats_total(self):
-        """Retourne le nombre total de constats"""
-        return len(self.conteneur_constats_controle)
+    def get_nb_campagnes(self):
+        return len(self.campagnes_controle) if self.campagnes_controle else 0
+    
+    def get_campagnes_actives(self):
+        if self.campagnes_controle:
+            return [c for c in self.campagnes_controle if c.statut == 'en_cours']
+        return []
     
     def get_efficacite_label(self):
         if not self.efficacite:
@@ -2320,14 +2333,12 @@ class ControleProcessus(db.Model):
             return 'danger'
     
     def archiver(self, user_id=None, reason=None):
-        """Archive le contrôle"""
         self.is_archived = True
         self.archived_at = datetime.utcnow()
         self.archived_by = user_id
         self.statut = 'obsolete'
     
     def restaurer(self):
-        """Restaure un contrôle archivé"""
         self.is_archived = False
         self.archived_at = None
         self.archived_by = None
@@ -2346,13 +2357,15 @@ class ControleProcessus(db.Model):
             'efficacite': self.efficacite,
             'efficacite_label': self.get_efficacite_label(),
             'nb_constats_ouverts': self.get_nb_constats_ouverts(),
-            'nb_constats_total': self.get_nb_constats_total(),
+            'nb_campagnes': self.get_nb_campagnes(),
             'risque_id': self.risque_id,
             'risque_reference': self.risque.reference if self.risque else None,
             'responsable': self.responsable.username if self.responsable else None,
             'date_derniere_execution': self.date_derniere_execution.isoformat() if self.date_derniere_execution else None,
             'date_prochaine_execution': self.date_prochaine_execution.isoformat() if self.date_prochaine_execution else None,
-            'created_at': self.created_at.isoformat() if self.created_at else None
+            'created_at': self.created_at.isoformat() if self.created_at else None,
+            'updated_at': self.updated_at.isoformat() if self.updated_at else None,
+            'is_archived': self.is_archived
         }
     
     def __repr__(self):
@@ -13080,7 +13093,7 @@ class CampagneControle(db.Model):
     service_id = db.Column(db.Integer, db.ForeignKey('service.id'), nullable=True)
     
     # ============================================
-    # 🔥 COLONNE MANQUANTE AJOUTÉE
+    # LIEN VERS CONTROLE_PROCESSUS
     # ============================================
     controle_id = db.Column(db.Integer, db.ForeignKey('controle_processus.id'), nullable=True)
     
@@ -13089,7 +13102,7 @@ class CampagneControle(db.Model):
     # ============================================
     date_debut = db.Column(db.Date, nullable=False)
     date_fin = db.Column(db.Date, nullable=False)
-    statut = db.Column(db.String(30), default='en_preparation')  # en_preparation, en_cours, termine, suspendu, annule
+    statut = db.Column(db.String(30), default='en_preparation')
     
     # ============================================
     # ACTEURS
@@ -13101,24 +13114,24 @@ class CampagneControle(db.Model):
     # ============================================
     # VOLUMES PRÉVISIONNELS
     # ============================================
-    volume_previsionnel = db.Column(db.Integer, default=0)  # Nombre total de dossiers à contrôler
-    nb_dossiers_prevus = db.Column(db.Integer, default=0)   # Nombre de dossiers prévus
-    nb_dossiers_reglement = db.Column(db.Integer, default=0) # Nombre de dossiers règlement à contrôler
+    volume_previsionnel = db.Column(db.Integer, default=0)
+    nb_dossiers_prevus = db.Column(db.Integer, default=0)
+    nb_dossiers_reglement = db.Column(db.Integer, default=0)
     
     # ============================================
     # RÉSULTATS DU CONTRÔLE
     # ============================================
-    nb_dossiers_controles = db.Column(db.Integer, default=0)  # Nombre de dossiers réellement contrôlés
-    nb_anomalies = db.Column(db.Integer, default=0)           # Nombre de dossiers en anomalie
-    nb_conformes = db.Column(db.Integer, default=0)           # Nombre de dossiers conformes
-    taux_conformite = db.Column(db.Numeric(5, 2), default=0)  # Taux de conformité (%)
+    nb_dossiers_controles = db.Column(db.Integer, default=0)
+    nb_anomalies = db.Column(db.Integer, default=0)
+    nb_conformes = db.Column(db.Integer, default=0)
+    taux_conformite = db.Column(db.Numeric(5, 2), default=0)
     
     # ============================================
     # LISTES (stockées en JSON)
     # ============================================
-    dossiers_reglement_controles = db.Column(db.JSON, default=[])  # Liste des dossiers règlement contrôlés
-    motifs_anomalie = db.Column(db.JSON, default=[])               # Liste des motifs d'anomalie
-    recommandations = db.Column(db.JSON, default=[])               # Liste des recommandations
+    dossiers_reglement_controles = db.Column(db.JSON, default=list)
+    motifs_anomalie = db.Column(db.JSON, default=list)
+    recommandations = db.Column(db.JSON, default=list)
     
     # ============================================
     # COMMENTAIRES ET CONCLUSIONS
@@ -13128,16 +13141,10 @@ class CampagneControle(db.Model):
     actions_correctives = db.Column(db.Text)
     
     # ============================================
-    # 🔥 NOUVEAUX CHAMPS POUR INTÉGRATION C2N
+    # INTÉGRATION C2N
     # ============================================
-    
-    # Lien vers une planification C2N (optionnel)
     planification_c2n_id = db.Column(db.Integer, db.ForeignKey('planification_controles.id'), nullable=True)
-    
-    # Lien vers une exécution C2N (optionnel)
     execution_c2n_id = db.Column(db.Integer, db.ForeignKey('execution_controle.id'), nullable=True)
-    
-    # Indicateurs de synchronisation C2N
     a_ete_planifiee_c2n = db.Column(db.Boolean, default=False)
     a_ete_executee_c2n = db.Column(db.Boolean, default=False)
     date_synchronisation_c2n = db.Column(db.DateTime, nullable=True)
@@ -13172,43 +13179,59 @@ class CampagneControle(db.Model):
     evaluateur = db.relationship('User', foreign_keys=[evaluateur_id])
     archive_user = db.relationship('User', foreign_keys=[archived_by])
     
-    # ============================================
-    # 🔥 RELATION CORRIGÉE VERS CONTROLE_PROCESSUS
-    # ============================================
+    # 🔥 RELATION AVEC CONTROLE_PROCESSUS - CORRIGÉE
     controle = db.relationship(
         'ControleProcessus',
         foreign_keys=[controle_id],
-        back_populates='campagnes_controle',  # ← Correspond au back_populates dans ControleProcessus
+        back_populates='campagnes_controle',
         lazy=True
     )
     
     # Relations fichiers
     fichiers = db.relationship('FichierCampagneControle', back_populates='campagne', lazy=True, cascade='all, delete-orphan')
     
-    # 🔥 NOUVELLES RELATIONS C2N
+    # Relations C2N
     planification_c2n = db.relationship('PlanificationControle', foreign_keys=[planification_c2n_id])
     execution_c2n = db.relationship('ExecutionControle', foreign_keys=[execution_c2n_id])
     
     # ============================================
-    # MÉTHODES
+    # CONTRAINTE UNIQUE COMPOSITE
+    # ============================================
+    __table_args__ = (
+        db.UniqueConstraint('reference', 'client_id', name='uix_campagne_reference_client'),
+    )
+    
+    # ============================================
+    # MÉTHODES STATIQUES
     # ============================================
     
-    def __repr__(self):
-        return f'<CampagneControle {self.reference}: {self.nom}>'
+    @staticmethod
+    def generer_reference(client_id):
+        """Génère une référence unique PAR CLIENT"""
+        from datetime import datetime
+        annee = datetime.now().year
+        prefixe = f"CAMP-{annee}-"
+        
+        count = CampagneControle.query.filter(
+            CampagneControle.reference.like(f'{prefixe}%'),
+            CampagneControle.client_id == client_id
+        ).count()
+        
+        return f"{prefixe}{(count + 1):04d}"
     
-    def calculer_taux_conformite(self):
-        """Calcule le taux de conformité"""
-        if self.nb_dossiers_controles > 0:
-            self.taux_conformite = round((self.nb_conformes / self.nb_dossiers_controles) * 100, 2)
-        else:
-            self.taux_conformite = 0
-        return self.taux_conformite
+    # ============================================
+    # INITIALISATION
+    # ============================================
     
-    def get_avancement(self):
-        """Calcule l'avancement de la campagne en pourcentage"""
-        if self.nb_dossiers_prevus > 0:
-            return round((self.nb_dossiers_controles / self.nb_dossiers_prevus) * 100, 1)
-        return 0
+    def __init__(self, **kwargs):
+        if 'reference' not in kwargs and 'client_id' in kwargs and kwargs['client_id']:
+            kwargs['reference'] = self.generer_reference(kwargs['client_id'])
+        
+        super().__init__(**kwargs)
+    
+    # ============================================
+    # MÉTHODES DE STATUT
+    # ============================================
     
     def get_statut_css(self):
         """Retourne la classe CSS pour le statut"""
@@ -13232,6 +13255,59 @@ class CampagneControle(db.Model):
         }
         return labels.get(self.statut, self.statut)
     
+    def get_statut_icone(self):
+        """Retourne l'icône du statut"""
+        icones = {
+            'en_preparation': 'fa-clock',
+            'en_cours': 'fa-spinner',
+            'termine': 'fa-check-circle',
+            'suspendu': 'fa-pause-circle',
+            'annule': 'fa-times-circle'
+        }
+        return icones.get(self.statut, 'fa-question-circle')
+    
+    # ============================================
+    # MÉTHODES DE CALCUL
+    # ============================================
+    
+    def calculer_taux_conformite(self):
+        """Calcule le taux de conformité"""
+        if self.nb_dossiers_controles > 0:
+            self.taux_conformite = round((self.nb_conformes / self.nb_dossiers_controles) * 100, 2)
+        else:
+            self.taux_conformite = 0
+        return self.taux_conformite
+    
+    def get_avancement(self):
+        """Calcule l'avancement de la campagne en pourcentage"""
+        if self.nb_dossiers_prevus > 0:
+            return round((self.nb_dossiers_controles / self.nb_dossiers_prevus) * 100, 1)
+        return 0
+    
+    def get_avancement_css(self):
+        """Retourne la classe CSS pour l'avancement"""
+        avancement = self.get_avancement()
+        if avancement >= 80:
+            return 'success'
+        elif avancement >= 50:
+            return 'warning'
+        else:
+            return 'danger'
+    
+    def get_taux_conformite_css(self):
+        """Retourne la classe CSS pour le taux de conformité"""
+        taux = float(self.taux_conformite) if self.taux_conformite else 0
+        if taux >= 80:
+            return 'success'
+        elif taux >= 60:
+            return 'warning'
+        else:
+            return 'danger'
+    
+    # ============================================
+    # MÉTHODES DE GESTION
+    # ============================================
+    
     def archiver(self, user_id, raison=None):
         """Archive la campagne"""
         self.is_archived = True
@@ -13250,8 +13326,31 @@ class CampagneControle(db.Model):
         self.statut = 'en_preparation'
         self.updated_at = datetime.utcnow()
     
+    def ajouter_dossier_reglement_controle(self, dossier):
+        """Ajoute un dossier règlement à la liste des contrôlés"""
+        if not self.dossiers_reglement_controles:
+            self.dossiers_reglement_controles = []
+        if dossier not in self.dossiers_reglement_controles:
+            self.dossiers_reglement_controles.append(dossier)
+            self.updated_at = datetime.utcnow()
+    
+    def ajouter_motif_anomalie(self, motif):
+        """Ajoute un motif d'anomalie"""
+        if not self.motifs_anomalie:
+            self.motifs_anomalie = []
+        if motif not in self.motifs_anomalie:
+            self.motifs_anomalie.append(motif)
+            self.updated_at = datetime.utcnow()
+    
+    def ajouter_recommandation(self, recommandation):
+        """Ajoute une recommandation"""
+        if not self.recommandations:
+            self.recommandations = []
+        self.recommandations.append(recommandation)
+        self.updated_at = datetime.utcnow()
+    
     # ============================================
-    # 🔥 NOUVELLES MÉTHODES D'INTÉGRATION C2N
+    # MÉTHODES D'INTÉGRATION C2N
     # ============================================
     
     def est_liee_a_c2n(self):
@@ -13280,6 +13379,10 @@ class CampagneControle(db.Model):
             'date_synchronisation': self.date_synchronisation_c2n.isoformat() if self.date_synchronisation_c2n else None
         }
     
+    # ============================================
+    # MÉTHODE DE CONVERSION
+    # ============================================
+    
     def to_dict(self):
         """Convertit la campagne en dictionnaire"""
         return {
@@ -13292,12 +13395,17 @@ class CampagneControle(db.Model):
             'statut': self.statut,
             'statut_label': self.get_statut_label(),
             'statut_css': self.get_statut_css(),
+            'statut_icone': self.get_statut_icone(),
             'avancement': self.get_avancement(),
+            'avancement_css': self.get_avancement_css(),
             'taux_conformite': float(self.taux_conformite) if self.taux_conformite else 0,
+            'taux_conformite_css': self.get_taux_conformite_css(),
             'nb_dossiers_prevus': self.nb_dossiers_prevus,
             'nb_dossiers_controles': self.nb_dossiers_controles,
             'nb_conformes': self.nb_conformes,
             'nb_anomalies': self.nb_anomalies,
+            'nb_dossiers_reglement': self.nb_dossiers_reglement,
+            'volume_previsionnel': self.volume_previsionnel,
             'controle_id': self.controle_id,
             'controle_nom': self.controle.nom if self.controle else None,
             'pole_id': self.pole_id,
@@ -13306,11 +13414,20 @@ class CampagneControle(db.Model):
             'createur': self.createur.username if self.createur else None,
             'valideur': self.valideur.username if self.valideur else None,
             'evaluateur': self.evaluateur.username if self.evaluateur else None,
+            'commentaire_general': self.commentaire_general,
+            'conclusion': self.conclusion,
+            'actions_correctives': self.actions_correctives,
+            'motifs_anomalie': self.motifs_anomalie or [],
+            'recommandations': self.recommandations or [],
+            'dossiers_reglement_controles': self.dossiers_reglement_controles or [],
             'is_archived': self.is_archived,
             'created_at': self.created_at.isoformat() if self.created_at else None,
             'updated_at': self.updated_at.isoformat() if self.updated_at else None,
             'integrations_c2n': self.get_infos_c2n()
         }
+    
+    def __repr__(self):
+        return f'<CampagneControle {self.reference}: {self.nom}>'
 
 
 
