@@ -2542,7 +2542,7 @@ class Processus(db.Model):
     )
     
     # ============================================
-    # RELATIONS - AVEC NOMS UNIQUES
+    # RELATIONS - CORRIGÉES
     # ============================================
     
     # Hiérarchie
@@ -2553,39 +2553,39 @@ class Processus(db.Model):
         lazy=True
     )
     
-    # Organisation - AVEC NOMS UNIQUES
+    # Organisation
     direction = db.relationship(
         'Direction',
         foreign_keys=[direction_id],
-        backref='processus_associes',  # ← UNIQUE
+        backref='processus_associes',
         lazy=True
     )
     
     service = db.relationship(
         'Service',
         foreign_keys=[service_id],
-        backref='processus_associes',  # ← UNIQUE
+        backref='processus_associes',
         lazy=True
     )
     
     responsable = db.relationship(
         'User',
         foreign_keys=[responsable_id],
-        backref='processus_responsables',  # ← UNIQUE
+        backref='processus_responsables',
         lazy=True
     )
     
     createur = db.relationship(
         'User',
         foreign_keys=[created_by],
-        backref='processus_crees',  # ← UNIQUE
+        backref='processus_crees',
         lazy=True
     )
     
     archive_par = db.relationship(
         'User',
         foreign_keys=[archived_by],
-        backref='processus_archives',  # ← UNIQUE
+        backref='processus_archives',
         lazy=True
     )
     
@@ -2601,7 +2601,7 @@ class Processus(db.Model):
     # Liens
     liens = db.relationship(
         'LienProcessus',
-        foreign_keys='LienProcessus.processus_id',  # ← Utiliser processus_id
+        foreign_keys='LienProcessus.processus_id',
         back_populates='processus',
         lazy=True,
         cascade='all, delete-orphan'
@@ -2616,13 +2616,9 @@ class Processus(db.Model):
         cascade='all, delete-orphan'
     )
     
-    # Risques associés
-    risques = db.relationship(
-        'Risque',
-        backref='processus_associe',
-        foreign_keys='Risque.processus_metier_associe_id',
-        lazy=True
-    )
+    # 🔥 RELATION AVEC RISQUE - SUPPRIMÉE
+    # La relation avec Risque est supprimée car Risque n'a pas de colonne 'processus_metier_associe_id'
+    # Si vous avez besoin de cette relation, ajoutez la colonne dans Risque
     
     # ============================================
     # PROPRIÉTÉS CALCULÉES
@@ -2637,16 +2633,8 @@ class Processus(db.Model):
         return len(self.sous_processus) if self.sous_processus else 0
     
     @property
-    def nb_risques_associes(self):
-        return len([r for r in self.risques if not r.is_archived]) if self.risques else 0
-    
-    @property
     def nb_liens(self):
         return len(self.liens) if self.liens else 0
-    
-    @property
-    def nb_liens_entrants(self):
-        return len(self.liens_entrants) if self.liens_entrants else 0
     
     @property
     def nb_zones_risque(self):
@@ -2843,10 +2831,9 @@ class Processus(db.Model):
         from models import LienProcessus
         
         lien = LienProcessus(
-            processus_source_id=self.id,
-            processus_cible_id=processus_cible.id,
+            processus_id=self.id,
             type_lien=type_lien,
-            description=description,
+            label=description or f"Lien vers {processus_cible.nom}",
             client_id=self.client_id
         )
         
@@ -2867,11 +2854,8 @@ class Processus(db.Model):
         self.zones_risque.append(zone)
         return zone
     
-    def get_liens_sortants(self):
+    def get_liens(self):
         return self.liens if self.liens else []
-    
-    def get_liens_entrants(self):
-        return self.liens_entrants if self.liens_entrants else []
     
     # ============================================
     # MÉTHODE DE CONVERSION
@@ -2896,9 +2880,7 @@ class Processus(db.Model):
             'progression_globale': self.progression_globale,
             'nb_etapes': self.nb_etapes,
             'nb_sous_processus': self.nb_sous_processus,
-            'nb_risques_associes': self.nb_risques_associes,
             'nb_liens': self.nb_liens,
-            'nb_liens_entrants': self.nb_liens_entrants,
             'nb_zones_risque': self.nb_zones_risque,
             'duree_totale_estimee': self.duree_totale_estimee,
             'a_des_sous_processus': self.a_des_sous_processus,
