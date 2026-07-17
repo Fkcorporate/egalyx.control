@@ -1466,6 +1466,140 @@ class EvaluationRisque(db.Model):
             'campagne': 'success'
         }
         return css.get(self.origine, 'secondary')
+
+
+    # ============================================
+    # FONCTIONS D'ÉVALUATION TRIPHASE
+    # ============================================
+    
+    def get_impact_description(niveau):
+        """Retourne la description du niveau d'impact"""
+        descriptions = {
+            1: "Conséquences négligeables, sans impact significatif sur les objectifs",
+            2: "Conséquences mineures, impact limité et gérable",
+            3: "Conséquences modérées, impact notable nécessitant une attention",
+            4: "Conséquences importantes, impact significatif sur les objectifs",
+            5: "Conséquences critiques, menace grave pour l'organisation"
+        }
+        return descriptions.get(niveau, "Sélectionnez le niveau d'impact")
+    
+    def get_probabilite_description(niveau):
+        """Retourne la description du niveau de probabilité"""
+        descriptions = {
+            1: "Événement exceptionnel, quasiment impossible (moins de 1%)",
+            2: "Événement peu fréquent, peu probable (1-10%)",
+            3: "Événement possible, pourrait se produire (10-30%)",
+            4: "Événement probable, forte chance de se produire (30-60%)",
+            5: "Événement très probable, quasi certain (>60%)"
+        }
+        return descriptions.get(niveau, "Sélectionnez la probabilité")
+    
+    def get_maitrise_description(niveau):
+        """Retourne la description du niveau de maîtrise"""
+        descriptions = {
+            1: "Contrôle inexistant ou très insuffisant, risque non maîtrisé",
+            2: "Contrôle faible, efficacité limitée, nombreuses faiblesses",
+            3: "Contrôle modéré, partiellement efficace, quelques faiblesses",
+            4: "Contrôle bon, efficace, quelques améliorations possibles",
+            5: "Contrôle excellent, très efficace, robuste et documenté"
+        }
+        return descriptions.get(niveau, "Niveau de contrôle existant")
+    
+    def get_impact_color(niveau):
+        """Retourne la couleur du niveau d'impact"""
+        colors = {
+            1: '#28a745',
+            2: '#8bc34a',
+            3: '#ffc107',
+            4: '#ff9800',
+            5: '#dc3545'
+        }
+        return colors.get(niveau, '#6c757d')
+    
+    def get_probabilite_color(niveau):
+        """Retourne la couleur du niveau de probabilité"""
+        colors = {
+            1: '#28a745',
+            2: '#8bc34a',
+            3: '#ffc107',
+            4: '#ff9800',
+            5: '#dc3545'
+        }
+        return colors.get(niveau, '#6c757d')
+    
+    def get_maitrise_color(niveau):
+        """Retourne la couleur du niveau de maîtrise"""
+        colors = {
+            1: '#dc3545',
+            2: '#ff9800',
+            3: '#ffc107',
+            4: '#8bc34a',
+            5: '#28a745'
+        }
+        return colors.get(niveau, '#6c757d')
+    
+    def get_impact_label(niveau):
+        """Retourne le libellé du niveau d'impact"""
+        labels = {
+            1: 'Négligeable',
+            2: 'Mineur',
+            3: 'Modéré',
+            4: 'Important',
+            5: 'Critique'
+        }
+        return labels.get(niveau, 'Non défini')
+    
+    def get_probabilite_label(niveau):
+        """Retourne le libellé du niveau de probabilité"""
+        labels = {
+            1: 'Très rare',
+            2: 'Rare',
+            3: 'Possible',
+            4: 'Probable',
+            5: 'Très probable'
+        }
+        return labels.get(niveau, 'Non défini')
+    
+    def get_maitrise_label(niveau):
+        """Retourne le libellé du niveau de maîtrise"""
+        labels = {
+            1: 'Très faible',
+            2: 'Faible',
+            3: 'Moyenne',
+            4: 'Bonne',
+            5: 'Très bonne'
+        }
+        return labels.get(niveau, 'Non défini')
+    
+    def get_niveau_couleur(type_niveau, niveau):
+        """Retourne la couleur pour un type de niveau donné"""
+        if type_niveau == 'impact':
+            return get_impact_color(niveau)
+        elif type_niveau == 'probabilite':
+            return get_probabilite_color(niveau)
+        elif type_niveau == 'maitrise':
+            return get_maitrise_color(niveau)
+        return '#6c757d'
+    
+    def get_niveau_nom_court(type_niveau, niveau):
+        """Retourne le nom court pour un type de niveau donné"""
+        if type_niveau == 'impact':
+            return get_impact_label(niveau)
+        elif type_niveau == 'probabilite':
+            return get_probabilite_label(niveau)
+        elif type_niveau == 'maitrise':
+            return get_maitrise_label(niveau)
+        return 'Non défini'
+    
+    def get_niveau_description(type_niveau, niveau):
+        """Retourne la description pour un type de niveau donné"""
+        if type_niveau == 'impact':
+            return get_impact_description(niveau)
+        elif type_niveau == 'probabilite':
+            return get_probabilite_description(niveau)
+        elif type_niveau == 'maitrise':
+            return get_maitrise_description(niveau)
+        return 'Non défini'
     
     def get_historique_complet(self):
         """Retourne l'historique complet formaté"""
