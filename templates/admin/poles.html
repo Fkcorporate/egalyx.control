@@ -1,12 +1,714 @@
 {% extends "base.html" %}
 
 {% block content %}
-<div class="container-fluid">
-    <!-- ========== EN-TÊTE ========== -->
-    <div class="d-flex justify-content-between align-items-center mb-4">
+<style>
+    /* ============================================
+       STYLES - GESTION DES PÔLES ET FILIALES
+       STYLE ÉVALUATION TRIPHASE
+       COMPATIBLE MODE SOMBRE (data-bs-theme)
+       PAS DE ZOOM AUTOMATIQUE
+       ============================================ */
+    
+    :root {
+        --primary: #1a2a5e;
+        --primary-light: #2a4a8a;
+        --primary-dark: #0f1a3a;
+        --gold: #c9a84c;
+        --gold-light: #f0d080;
+        --success: #10b981;
+        --warning: #f59e0b;
+        --danger: #ef4444;
+        --info: #3b82f6;
+        --gray: #6b7280;
+        --light: #f8f9fd;
+        --border: #e8ebf2;
+        --dark: #0a1628;
+        --shadow: 0 2px 12px rgba(10, 22, 40, 0.06);
+        --shadow-hover: 0 8px 24px rgba(10, 22, 40, 0.10);
+        --radius: 16px;
+        --radius-sm: 10px;
+    }
+
+    /* ===== ANIMATIONS ===== */
+    .animate-fade-in {
+        animation: fadeIn 0.5s ease-out;
+    }
+    @keyframes fadeIn {
+        from { opacity: 0; transform: translateY(12px); }
+        to { opacity: 1; transform: translateY(0); }
+    }
+
+    /* ===== BOUTONS ===== */
+    .btn-primary-custom {
+        background: var(--primary);
+        color: white;
+        border: none;
+        border-radius: 30px;
+        padding: 0.5rem 1.5rem;
+        font-weight: 500;
+        transition: all 0.25s ease;
+    }
+    .btn-primary-custom:hover {
+        background: var(--primary-light);
+        transform: translateY(-2px);
+        box-shadow: 0 4px 16px rgba(26, 42, 94, 0.25);
+        color: white;
+    }
+
+    .btn-soft-primary {
+        background: rgba(26, 42, 94, 0.08);
+        color: var(--primary);
+        border: none;
+        border-radius: 30px;
+        padding: 0.4rem 1.2rem;
+        font-weight: 500;
+        transition: all 0.2s ease;
+    }
+    .btn-soft-primary:hover {
+        background: rgba(26, 42, 94, 0.15);
+        transform: translateY(-1px);
+        color: var(--primary);
+    }
+    .btn-soft-primary.btn-sm,
+    .btn-soft-success.btn-sm,
+    .btn-soft-danger.btn-sm,
+    .btn-soft-info.btn-sm {
+        padding: 0.25rem 0.7rem;
+        font-size: 0.8rem;
+    }
+
+    .btn-soft-success {
+        background: rgba(16, 185, 129, 0.08);
+        color: var(--success);
+        border: none;
+        border-radius: 30px;
+        padding: 0.4rem 1.2rem;
+        font-weight: 500;
+        transition: all 0.2s ease;
+    }
+    .btn-soft-success:hover {
+        background: rgba(16, 185, 129, 0.18);
+        transform: translateY(-1px);
+        color: var(--success);
+    }
+
+    .btn-soft-danger {
+        background: rgba(239, 68, 68, 0.08);
+        color: var(--danger);
+        border: none;
+        border-radius: 30px;
+        padding: 0.4rem 1.2rem;
+        font-weight: 500;
+        transition: all 0.2s ease;
+    }
+    .btn-soft-danger:hover {
+        background: rgba(239, 68, 68, 0.18);
+        transform: translateY(-1px);
+        color: var(--danger);
+    }
+
+    .btn-soft-info {
+        background: rgba(59, 130, 246, 0.08);
+        color: var(--info);
+        border: none;
+        border-radius: 30px;
+        padding: 0.4rem 1.2rem;
+        font-weight: 500;
+        transition: all 0.2s ease;
+    }
+    .btn-soft-info:hover {
+        background: rgba(59, 130, 246, 0.18);
+        transform: translateY(-1px);
+        color: var(--info);
+    }
+
+    .btn-mode {
+        border-radius: 30px;
+        padding: 0.4rem 1.2rem;
+        font-weight: 500;
+        border: 2px solid var(--border);
+        background: var(--card-bg);
+        color: var(--gray);
+        transition: all 0.2s ease;
+    }
+    .btn-mode:hover {
+        border-color: var(--primary);
+        color: var(--primary);
+    }
+    .btn-mode.active {
+        border-color: var(--gold);
+        background: rgba(201, 168, 76, 0.08);
+        color: var(--dark);
+    }
+
+    /* ===== STAT CARDS ===== */
+    .stat-card {
+        border-radius: var(--radius);
+        padding: 1rem 1.25rem;
+        color: white;
+        transition: all 0.3s ease;
+        position: relative;
+        overflow: hidden;
+        cursor: pointer;
+        border: none;
+    }
+    .stat-card:hover {
+        transform: translateY(-3px);
+        box-shadow: 0 8px 24px rgba(0,0,0,0.12);
+    }
+    .stat-card .stat-value {
+        font-size: 1.8rem;
+        font-weight: 700;
+        font-family: 'Georgia', serif;
+        line-height: 1.2;
+    }
+    .stat-card .stat-label {
+        font-size: 0.7rem;
+        opacity: 0.8;
+        text-transform: uppercase;
+        letter-spacing: 0.8px;
+        font-weight: 400;
+    }
+    .stat-card .stat-icon {
+        font-size: 2.5rem;
+        opacity: 0.15;
+    }
+    .stat-card-body {
+        position: relative;
+        z-index: 1;
+    }
+
+    .stat-card-primary { background: linear-gradient(135deg, #1a2a5e, #2a4a8a); }
+    .stat-card-success { background: linear-gradient(135deg, #0d9488, #065f46); }
+    .stat-card-warning { background: linear-gradient(135deg, #d97706, #92400e); }
+    .stat-card-danger { background: linear-gradient(135deg, #dc2626, #991b1b); }
+    .stat-card-info { background: linear-gradient(135deg, #2563eb, #1e3a8a); }
+
+    /* ===== FILTER BAR ===== */
+    .filter-bar {
+        background: var(--card-bg);
+        border-radius: var(--radius);
+        padding: 1rem 1.25rem;
+        border: 1px solid var(--border);
+        box-shadow: var(--shadow);
+    }
+
+    /* ===== PAYS CARD ===== */
+    .pays-card {
+        background: var(--card-bg);
+        border-radius: var(--radius);
+        border: 1px solid var(--border);
+        box-shadow: var(--shadow);
+        margin-bottom: 1.5rem;
+        overflow: hidden;
+        transition: all 0.3s ease;
+    }
+    .pays-card:hover {
+        box-shadow: var(--shadow-hover);
+    }
+    .pays-card-header {
+        padding: 1rem 1.25rem;
+        border-bottom: 1px solid var(--border);
+        background: var(--bg-secondary);
+    }
+    .pays-card .pays-name {
+        font-family: 'Georgia', serif;
+        font-weight: 600;
+        color: var(--text-primary);
+    }
+    .pays-card .pays-code {
+        background: var(--border);
+        color: var(--gray);
+        font-size: 0.65rem;
+        font-weight: 600;
+        padding: 0.15rem 0.6rem;
+        border-radius: 20px;
+        margin-left: 0.5rem;
+        letter-spacing: 0.5px;
+    }
+    .pays-body {
+        padding: 1rem 1.25rem;
+    }
+
+    /* ===== PÔLE CARD ===== */
+    .pole-card {
+        border-left: 4px solid var(--gold);
+        border-radius: var(--radius-sm);
+        background: var(--card-bg);
+        border: 1px solid var(--border);
+        margin-bottom: 1rem;
+        overflow: hidden;
+        transition: all 0.25s ease;
+        box-shadow: var(--shadow);
+    }
+    .pole-card:hover {
+        box-shadow: var(--shadow-hover);
+        transform: translateY(-2px);
+    }
+    .pole-card-header {
+        padding: 0.75rem 1rem;
+        background: var(--bg-secondary);
+        border-bottom: 1px solid var(--border);
+    }
+    .pole-card-body {
+        padding: 1rem;
+    }
+    .pole-card .pole-name {
+        font-weight: 600;
+        color: var(--text-primary);
+        font-size: 0.95rem;
+    }
+
+    /* ===== PÔLE CARD FULL ===== */
+    .pole-card-full {
+        background: var(--card-bg);
+        border-radius: var(--radius);
+        border: 1px solid var(--border);
+        box-shadow: var(--shadow);
+        overflow: hidden;
+        transition: all 0.3s ease;
+    }
+    .pole-card-full:hover {
+        box-shadow: var(--shadow-hover);
+    }
+    .pole-card-full-header {
+        padding: 1rem 1.25rem;
+        background: var(--bg-secondary);
+        border-bottom: 1px solid var(--border);
+    }
+    .pole-card-full-body {
+        padding: 1.25rem;
+    }
+    .pole-card-full-footer {
+        padding: 0.75rem 1.25rem;
+        background: var(--bg-secondary);
+        border-top: 1px solid var(--border);
+    }
+
+    /* ===== ALERT CARD ===== */
+    .alert-card {
+        border-radius: var(--radius);
+        border: 1px solid var(--border);
+        overflow: hidden;
+        background: var(--card-bg);
+        border-left: 4px solid var(--warning);
+        box-shadow: var(--shadow);
+    }
+    .alert-card-header {
+        padding: 0.75rem 1.25rem;
+        border-bottom: 1px solid var(--border);
+        background: rgba(245, 158, 11, 0.06);
+    }
+    .alert-card-body {
+        padding: 1.25rem;
+    }
+
+    /* ===== DIRECTION TABLE ===== */
+    .direction-table {
+        width: 100%;
+        border-collapse: collapse;
+        font-size: 0.85rem;
+    }
+    .direction-table th {
+        background: var(--bg-secondary);
+        font-weight: 600;
+        font-size: 0.7rem;
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+        color: var(--gray);
+        border-bottom: 2px solid var(--border);
+        padding: 0.6rem 0.5rem;
+    }
+    .direction-table td {
+        vertical-align: middle;
+        padding: 0.5rem;
+        border-bottom: 1px solid var(--border);
+        color: var(--text-primary);
+    }
+    .direction-table tr:hover {
+        background: var(--bg-secondary);
+    }
+    .direction-table .dir-name {
+        font-weight: 500;
+        color: var(--text-primary);
+    }
+
+    /* ===== EMPTY STATE ===== */
+    .empty-state {
+        background: var(--card-bg);
+        border-radius: var(--radius);
+        border: 1px solid var(--border);
+        padding: 3rem 2rem;
+        text-align: center;
+        box-shadow: var(--shadow);
+    }
+    .empty-state .empty-icon {
+        font-size: 3.5rem;
+        color: var(--border);
+        margin-bottom: 1rem;
+        display: block;
+    }
+    .empty-state .empty-title {
+        font-family: 'Georgia', serif;
+        color: var(--text-primary);
+        font-weight: 600;
+        margin-bottom: 0.25rem;
+    }
+    .empty-state .empty-text {
+        color: var(--gray);
+        margin-bottom: 1.5rem;
+    }
+
+    /* ===== BREADCRUMB ===== */
+    .breadcrumb-item a {
+        color: var(--primary);
+        text-decoration: none;
+        transition: color 0.2s;
+    }
+    .breadcrumb-item a:hover {
+        color: var(--gold);
+    }
+    .breadcrumb-item.active {
+        color: var(--gray);
+    }
+
+    /* ===== BADGES ===== */
+    .badge {
+        font-weight: 500;
+        padding: 0.25rem 0.65rem;
+        border-radius: 20px;
+    }
+
+    /* ===== FORM ===== */
+    .form-control {
+        border-radius: var(--radius-sm);
+        border: 2px solid var(--border);
+        font-size: 0.85rem;
+        background: var(--card-bg);
+        color: var(--text-primary);
+    }
+    .form-control:focus {
+        border-color: var(--gold);
+        box-shadow: 0 0 0 3px rgba(201, 168, 76, 0.12);
+    }
+    .form-select {
+        border-radius: var(--radius-sm);
+        border: 2px solid var(--border);
+        background: var(--card-bg);
+        color: var(--text-primary);
+    }
+    .form-select:focus {
+        border-color: var(--gold);
+        box-shadow: 0 0 0 3px rgba(201, 168, 76, 0.12);
+    }
+
+    /* ===== MODAL ===== */
+    .modal-content {
+        border-radius: var(--radius);
+        border: 1px solid var(--border);
+        box-shadow: var(--shadow-hover);
+        background: var(--card-bg);
+    }
+    .modal-header {
+        background: var(--primary);
+        color: white;
+        border-bottom: 3px solid var(--gold);
+        border-radius: var(--radius) var(--radius) 0 0;
+    }
+    .modal-header .btn-close {
+        filter: brightness(0) invert(1);
+        opacity: 0.7;
+    }
+    .modal-header .btn-close:hover {
+        opacity: 1;
+    }
+    .modal-footer {
+        background: var(--bg-secondary);
+        border-top: 1px solid var(--border);
+        border-radius: 0 0 var(--radius) var(--radius);
+    }
+    .modal-body {
+        background: var(--card-bg);
+        color: var(--text-primary);
+    }
+
+    /* ===== LIST GROUP ===== */
+    .list-group-item {
+        border-color: var(--border);
+        padding: 0.75rem 1rem;
+        border-radius: var(--radius-sm) !important;
+        margin-bottom: 4px;
+        border-left: 3px solid var(--gold);
+        background: var(--card-bg);
+        color: var(--text-primary);
+    }
+
+    /* ===== TOAST ===== */
+    .toast {
+        border-radius: var(--radius-sm);
+        border: none;
+        box-shadow: var(--shadow-hover);
+    }
+
+    /* ============================================
+       MODE SOMBRE - OVERRIDE COMPLET
+       ============================================ */
+    [data-bs-theme="dark"] {
+        --card-bg: #1e293b;
+        --bg-secondary: #334155;
+        --text-primary: #f8fafc;
+        --text-secondary: #cbd5e1;
+        --border: #334155;
+        --gray: #94a3b8;
+        --shadow: 0 2px 12px rgba(0, 0, 0, 0.3);
+        --shadow-hover: 0 8px 24px rgba(0, 0, 0, 0.4);
+        --light: #1e293b;
+        
+        /* Couleurs adaptées pour le mode sombre */
+        --primary: #4a7ab5;
+        --primary-light: #6a9ad5;
+        --primary-dark: #2a4a6a;
+        --gold: #d4af37;
+        --gold-light: #f0d080;
+        --info: #60a5fa;
+    }
+
+    [data-bs-theme="dark"] .stat-card-primary { background: linear-gradient(135deg, #0f172a, #1e293b); }
+    [data-bs-theme="dark"] .stat-card-success { background: linear-gradient(135deg, #065f46, #0d9488); }
+    [data-bs-theme="dark"] .stat-card-warning { background: linear-gradient(135deg, #78350f, #d97706); }
+    [data-bs-theme="dark"] .stat-card-info { background: linear-gradient(135deg, #1e3a8a, #2563eb); }
+    [data-bs-theme="dark"] .stat-card-danger { background: linear-gradient(135deg, #7f1d1d, #dc2626); }
+
+    [data-bs-theme="dark"] .btn-mode {
+        background: var(--card-bg);
+        color: var(--text-secondary);
+        border-color: var(--border);
+    }
+    [data-bs-theme="dark"] .btn-mode:hover {
+        border-color: var(--gold);
+        color: var(--gold-light);
+    }
+    [data-bs-theme="dark"] .btn-mode.active {
+        border-color: var(--gold);
+        background: rgba(201, 168, 76, 0.15);
+        color: var(--gold-light);
+    }
+
+    [data-bs-theme="dark"] .btn-soft-primary {
+        background: rgba(74, 122, 181, 0.15);
+        color: var(--primary-light);
+    }
+    [data-bs-theme="dark"] .btn-soft-primary:hover {
+        background: rgba(74, 122, 181, 0.25);
+        color: #7ab0e0;
+    }
+
+    [data-bs-theme="dark"] .btn-soft-success {
+        background: rgba(16, 185, 129, 0.15);
+        color: #34d399;
+    }
+    [data-bs-theme="dark"] .btn-soft-success:hover {
+        background: rgba(16, 185, 129, 0.25);
+        color: #6ee7b7;
+    }
+
+    [data-bs-theme="dark"] .btn-soft-danger {
+        background: rgba(239, 68, 68, 0.15);
+        color: #f87171;
+    }
+    [data-bs-theme="dark"] .btn-soft-danger:hover {
+        background: rgba(239, 68, 68, 0.25);
+        color: #fca5a5;
+    }
+
+    [data-bs-theme="dark"] .btn-soft-info {
+        background: rgba(96, 165, 250, 0.15);
+        color: #60a5fa;
+    }
+    [data-bs-theme="dark"] .btn-soft-info:hover {
+        background: rgba(96, 165, 250, 0.25);
+        color: #93bbfc;
+    }
+
+    [data-bs-theme="dark"] .btn-primary-custom {
+        background: var(--primary);
+        color: white;
+    }
+    [data-bs-theme="dark"] .btn-primary-custom:hover {
+        background: var(--primary-light);
+        color: white;
+    }
+
+    [data-bs-theme="dark"] .filter-bar {
+        background: var(--card-bg);
+    }
+
+    [data-bs-theme="dark"] .direction-table th {
+        background: var(--bg-secondary);
+        color: var(--text-secondary);
+    }
+    [data-bs-theme="dark"] .direction-table td {
+        color: var(--text-primary);
+    }
+    [data-bs-theme="dark"] .direction-table tr:hover {
+        background: var(--bg-secondary);
+    }
+
+    [data-bs-theme="dark"] .pays-card-header {
+        background: var(--bg-secondary);
+    }
+
+    [data-bs-theme="dark"] .pole-card-header {
+        background: var(--bg-secondary);
+    }
+
+    [data-bs-theme="dark"] .empty-state {
+        background: var(--card-bg);
+    }
+    [data-bs-theme="dark"] .empty-state .empty-title {
+        color: var(--text-primary);
+    }
+
+    [data-bs-theme="dark"] .alert-card {
+        background: var(--card-bg);
+    }
+    [data-bs-theme="dark"] .alert-card-header {
+        background: rgba(245, 158, 11, 0.08);
+    }
+
+    [data-bs-theme="dark"] .modal-footer {
+        background: var(--bg-secondary);
+    }
+
+    [data-bs-theme="dark"] .breadcrumb-item a {
+        color: var(--primary-light);
+    }
+    [data-bs-theme="dark"] .breadcrumb-item a:hover {
+        color: var(--gold-light);
+    }
+    [data-bs-theme="dark"] .breadcrumb-item.active {
+        color: var(--text-secondary);
+    }
+
+    [data-bs-theme="dark"] .text-muted {
+        color: var(--gray) !important;
+    }
+
+    [data-bs-theme="dark"] .badge {
+        color: var(--text-primary);
+    }
+    [data-bs-theme="dark"] .badge.bg-secondary {
+        background: #475569 !important;
+        color: var(--text-secondary);
+    }
+
+    /* Corrections des couleurs bleues invisibles en mode sombre */
+    [data-bs-theme="dark"] .pays-card .pays-code {
+        background: #475569;
+        color: var(--text-secondary);
+    }
+    
+    [data-bs-theme="dark"] .category-tag,
+    [data-bs-theme="dark"] .badge[style*="background: rgba(26, 42, 94, 0.10)"] {
+        background: rgba(74, 122, 181, 0.15) !important;
+        color: var(--primary-light) !important;
+    }
+    
+    [data-bs-theme="dark"] .badge[style*="background: rgba(59, 130, 246, 0.10)"] {
+        background: rgba(96, 165, 250, 0.15) !important;
+        color: #60a5fa !important;
+    }
+
+    [data-bs-theme="dark"] .badge[style*="background: rgba(16, 185, 129, 0.10)"] {
+        background: rgba(16, 185, 129, 0.15) !important;
+        color: #34d399 !important;
+    }
+
+    [data-bs-theme="dark"] .badge[style*="background: rgba(245, 158, 11, 0.10)"] {
+        background: rgba(245, 158, 11, 0.15) !important;
+        color: #fbbf24 !important;
+    }
+
+    /* ===== RESPONSIVE ===== */
+    @media (max-width: 768px) {
+        .stat-card .stat-value {
+            font-size: 1.4rem;
+        }
+        .stat-card .stat-icon {
+            font-size: 2rem;
+        }
+        .pays-card-header,
+        .pole-card-full-header,
+        .pole-card-full-body,
+        .pole-card-full-footer {
+            padding: 0.75rem 1rem;
+        }
+        .pays-body {
+            padding: 0.75rem 1rem;
+        }
+        .pole-card-header,
+        .pole-card-body {
+            padding: 0.5rem 0.75rem;
+        }
+        .direction-table {
+            font-size: 0.75rem;
+        }
+        .direction-table th,
+        .direction-table td {
+            padding: 0.3rem 0.3rem;
+        }
+        .btn-mode {
+            padding: 0.3rem 0.8rem;
+            font-size: 0.8rem;
+        }
+        .filter-bar .d-flex {
+            flex-direction: column;
+            align-items: stretch !important;
+        }
+        .filter-bar .btn-group {
+            width: 100%;
+        }
+        .filter-bar .btn-group .btn {
+            flex: 1;
+        }
+        .filter-bar .d-flex.gap-2 {
+            max-width: 100% !important;
+        }
+    }
+
+    @media (max-width: 576px) {
+        .stat-card .stat-value {
+            font-size: 1.2rem;
+        }
+        .stat-card .stat-icon {
+            font-size: 1.5rem;
+        }
+        .pays-card .pays-name {
+            font-size: 0.95rem;
+        }
+        .pole-card .pole-name {
+            font-size: 0.85rem;
+        }
+        .direction-table {
+            font-size: 0.7rem;
+        }
+        .empty-state {
+            padding: 2rem 1rem;
+        }
+        .empty-state .empty-icon {
+            font-size: 2.5rem;
+        }
+    }
+</style>
+
+<div class="container-fluid px-4 animate-fade-in">
+    <!-- ========================================== -->
+    <!-- ===== EN-TÊTE ===== -->
+    <!-- ========================================== -->
+    <div class="d-flex flex-wrap justify-content-between align-items-center mb-4">
         <div>
-            <h2 class="h4 mb-2">
-                <i class="fas fa-layer-group text-primary me-2"></i>
+            <h2 class="h3 fw-bold mb-1" style="font-family: 'Georgia', serif; color: var(--text-primary);">
+                <i class="fas fa-layer-group me-2" style="color: var(--gold);"></i>
                 Gestion des Pôles et Filiales
             </h2>
             <nav aria-label="breadcrumb">
@@ -17,153 +719,157 @@
                 </ol>
             </nav>
         </div>
-        <div class="d-flex gap-2">
-            <a href="{{ url_for('admin_pays') }}" class="fk-btn fk-btn-outline-info">
+        <div class="d-flex gap-2 mt-2 mt-sm-0 flex-wrap">
+            <a href="{{ url_for('admin_pays') }}" class="btn btn-soft-primary">
                 <i class="fas fa-globe me-2"></i>Gérer les pays
             </a>
-            <a href="{{ url_for('nouveau_pole') }}" class="fk-btn fk-btn-primary">
+            <a href="{{ url_for('nouveau_pole') }}" class="btn btn-primary-custom">
                 <i class="fas fa-plus me-2"></i>Nouveau Pôle
             </a>
         </div>
     </div>
 
-    <!-- ========== STATISTIQUES ========== -->
+    <!-- ========================================== -->
+    <!-- ===== STATISTIQUES ===== -->
+    <!-- ========================================== -->
     <div class="row g-3 mb-4">
         <div class="col-md-3">
-            <div class="fk-card bg-primary text-white">
-                <div class="fk-card-body">
+            <div class="stat-card stat-card-primary">
+                <div class="stat-card-body">
                     <div class="d-flex justify-content-between align-items-center">
                         <div>
-                            <small>Pôles actifs</small>
-                            <h2 class="mb-0">{{ stats.total_poles }}</h2>
+                            <div class="stat-label">Pôles actifs</div>
+                            <div class="stat-value">{{ stats.total_poles }}</div>
                         </div>
-                        <i class="fas fa-layer-group fa-2x opacity-50"></i>
+                        <i class="fas fa-layer-group stat-icon"></i>
                     </div>
                 </div>
             </div>
         </div>
         <div class="col-md-3">
-            <div class="fk-card bg-success text-white">
-                <div class="fk-card-body">
+            <div class="stat-card stat-card-success">
+                <div class="stat-card-body">
                     <div class="d-flex justify-content-between align-items-center">
                         <div>
-                            <small>Pays</small>
-                            <h2 class="mb-0">{{ stats.total_pays }}</h2>
+                            <div class="stat-label">Pays</div>
+                            <div class="stat-value">{{ stats.total_pays }}</div>
                         </div>
-                        <i class="fas fa-globe fa-2x opacity-50"></i>
+                        <i class="fas fa-globe stat-icon"></i>
                     </div>
                 </div>
             </div>
         </div>
         <div class="col-md-3">
-            <div class="fk-card bg-info text-white">
-                <div class="fk-card-body">
+            <div class="stat-card stat-card-info">
+                <div class="stat-card-body">
                     <div class="d-flex justify-content-between align-items-center">
                         <div>
-                            <small>Pôles rattachés</small>
-                            <h2 class="mb-0">{{ stats.poles_avec_pays }}</h2>
+                            <div class="stat-label">Pôles rattachés</div>
+                            <div class="stat-value">{{ stats.poles_avec_pays }}</div>
                         </div>
-                        <i class="fas fa-link fa-2x opacity-50"></i>
+                        <i class="fas fa-link stat-icon"></i>
                     </div>
                 </div>
             </div>
         </div>
         <div class="col-md-3">
-            <div class="fk-card bg-warning text-white">
-                <div class="fk-card-body">
+            <div class="stat-card stat-card-warning">
+                <div class="stat-card-body">
                     <div class="d-flex justify-content-between align-items-center">
                         <div>
-                            <small>Sans pays</small>
-                            <h2 class="mb-0">{{ stats.poles_sans_pays }}</h2>
+                            <div class="stat-label">Sans pays</div>
+                            <div class="stat-value">{{ stats.poles_sans_pays }}</div>
                         </div>
-                        <i class="fas fa-question-circle fa-2x opacity-50"></i>
+                        <i class="fas fa-question-circle stat-icon"></i>
                     </div>
                 </div>
             </div>
         </div>
     </div>
 
-    <!-- ========== SÉLECTEUR DE MODE ========== -->
-    <div class="fk-card mb-4">
-        <div class="fk-card-body">
-            <div class="d-flex justify-content-between align-items-center flex-wrap gap-3">
-                <div class="btn-group">
-                    <a href="{{ url_for('admin_poles', mode='poles') }}" 
-                       class="fk-btn fk-btn-outline-primary {{ 'active' if mode == 'poles' else '' }}">
-                        <i class="fas fa-layer-group me-2"></i>Vue par Pôles
-                    </a>
-                    <a href="{{ url_for('admin_poles', mode='pays') }}" 
-                       class="fk-btn fk-btn-outline-primary {{ 'active' if mode == 'pays' else '' }}">
-                        <i class="fas fa-globe me-2"></i>Vue par Pays
-                    </a>
-                </div>
-                
-                <div class="input-group" style="width: 300px;">
-                    <input type="text" class="form-control" id="searchInput" 
-                           placeholder="Rechercher..." value="{{ search_query }}">
-                    <button class="btn btn-outline-secondary" onclick="rechercher()">
-                        <i class="fas fa-search"></i>
-                    </button>
-                </div>
+    <!-- ========================================== -->
+    <!-- ===== SÉLECTEUR DE MODE ===== -->
+    <!-- ========================================== -->
+    <div class="filter-bar mb-4">
+        <div class="d-flex flex-wrap justify-content-between align-items-center gap-3">
+            <div class="btn-group">
+                <a href="{{ url_for('admin_poles', mode='poles') }}" 
+                   class="btn btn-mode {{ 'active' if mode == 'poles' else '' }}">
+                    <i class="fas fa-layer-group me-2"></i>Vue par Pôles
+                </a>
+                <a href="{{ url_for('admin_poles', mode='pays') }}" 
+                   class="btn btn-mode {{ 'active' if mode == 'pays' else '' }}">
+                    <i class="fas fa-globe me-2"></i>Vue par Pays
+                </a>
+            </div>
+            
+            <div class="d-flex gap-2" style="max-width: 320px; width: 100%;">
+                <input type="text" class="form-control form-control-sm" id="searchInput" 
+                       placeholder="Rechercher..." value="{{ search_query }}" style="border-radius: 30px;">
+                <button class="btn btn-soft-primary btn-sm" onclick="rechercher()" style="border-radius: 30px;">
+                    <i class="fas fa-search"></i>
+                </button>
             </div>
         </div>
     </div>
 
-    <!-- ========== VUE PAR PAYS ========== -->
+    <!-- ========================================== -->
+    <!-- ===== VUE PAR PAYS ===== -->
+    <!-- ========================================== -->
     {% if mode == 'pays' %}
     
     {% if pays_organisation %}
     {% for item in pays_organisation %}
-    <div class="fk-card mb-4">
-        <div class="fk-card-header bg-white">
-            <div class="d-flex justify-content-between align-items-center">
+    <div class="pays-card">
+        <div class="pays-card-header">
+            <div class="d-flex flex-wrap justify-content-between align-items-center gap-2">
                 <div>
                     <span style="font-size: 2rem;">{{ item.pays.drapeau or '🌍' }}</span>
-                    <strong class="h5 mb-0 ms-2">{{ item.pays.nom }}</strong>
-                    <span class="badge bg-secondary ms-2">{{ item.pays.code }}</span>
+                    <span class="pays-name">{{ item.pays.nom }}</span>
+                    <span class="pays-code">{{ item.pays.code }}</span>
                 </div>
                 <div class="d-flex gap-2">
-                    <span class="badge bg-primary">{{ item.nb_poles }} pôle(s)</span>
-                    <span class="badge bg-success">{{ item.nb_directions }} direction(s)</span>
+                    <span class="badge" style="background: rgba(26, 42, 94, 0.10); color: var(--primary);">{{ item.nb_poles }} pôle(s)</span>
+                    <span class="badge" style="background: rgba(16, 185, 129, 0.10); color: var(--success);">{{ item.nb_directions }} direction(s)</span>
                 </div>
             </div>
         </div>
-        <div class="fk-card-body">
+        <div class="pays-body">
             {% for pole in item.poles %}
-            <div class="fk-card mb-3" style="border-left: 4px solid {{ pole.couleur }};">
-                <div class="fk-card-header bg-light">
-                    <div class="d-flex justify-content-between align-items-center">
+            <div class="pole-card" style="border-left-color: {{ pole.couleur }};">
+                <div class="pole-card-header">
+                    <div class="d-flex flex-wrap justify-content-between align-items-center gap-2">
                         <div>
                             <i class="fas fa-layer-group me-2" style="color: {{ pole.couleur }};"></i>
-                            <strong>{{ pole.nom }}</strong>
+                            <span class="pole-name">{{ pole.nom }}</span>
                             {% if pole.a_responsable %}
-                            <span class="badge bg-success ms-2">
+                            <span class="badge" style="background: rgba(16, 185, 129, 0.10); color: var(--success);">
                                 <i class="fas fa-user-check me-1"></i>{{ pole.responsable_nom }}
                             </span>
                             {% endif %}
                         </div>
                         <div class="btn-group btn-group-sm">
-                            <button class="fk-btn fk-btn-outline-danger btn-sm" 
+                            <button class="btn btn-soft-danger btn-sm" 
                                     onclick="dissocierPole({{ pole.id }}, '{{ pole.nom }}', {{ item.pays.id }})">
                                 <i class="fas fa-unlink"></i> Dissocier
                             </button>
-                            <a href="{{ url_for('editer_pole', id=pole.id) }}" class="fk-btn fk-btn-outline-primary btn-sm">
+                            <a href="{{ url_for('editer_pole', id=pole.id) }}" class="btn btn-soft-primary btn-sm">
                                 <i class="fas fa-edit"></i>
                             </a>
                         </div>
                     </div>
                 </div>
-                <div class="fk-card-body">
-                    <h6 class="fw-bold mb-3">
-                        <i class="fas fa-building text-primary me-2"></i>
+                <div class="pole-card-body">
+                    <h6 class="fw-bold mb-3" style="font-size: 0.85rem; color: var(--text-primary);">
+                        <i class="fas fa-building me-2" style="color: var(--gold);"></i>
                         Directions rattachées ({{ pole.directions|selectattr('is_active')|list|length }})
                     </h6>
                     
                     {% set directions_actives = pole.directions|selectattr('is_active')|list %}
                     {% if directions_actives %}
                     <div class="table-responsive">
-                        <table class="table table-hover table-sm">
-                            <thead class="table-light">
+                        <table class="table direction-table">
+                            <thead>
                                 <tr>
                                     <th>Direction</th>
                                     <th>Responsable</th>
@@ -175,44 +881,44 @@
                                 {% for direction in directions_actives %}
                                 <tr>
                                     <td>
-                                        <strong>{{ direction.nom }}</strong>
+                                        <span class="dir-name">{{ direction.nom }}</span>
                                         {% if direction.description %}
                                         <br><small class="text-muted">{{ direction.description|truncate(50) }}</small>
                                         {% endif %}
-                                    </td
+                                    </td>
                                     <td>
                                         {% if direction.responsable %}
-                                            <span class="badge bg-primary">{{ direction.responsable.username }}</span>
+                                            <span class="badge" style="background: rgba(26, 42, 94, 0.10); color: var(--primary);">{{ direction.responsable.username }}</span>
                                         {% elif direction.responsable_nom_manuel %}
-                                            <span class="badge bg-info">{{ direction.responsable_nom_manuel }}</span>
+                                            <span class="badge" style="background: rgba(96, 165, 250, 0.15); color: #60a5fa;">{{ direction.responsable_nom_manuel }}</span>
                                         {% else %}
                                             <span class="badge bg-secondary">Non assigné</span>
                                         {% endif %}
-                                    </td
+                                    </td>
                                     <td>
-                                        <span class="badge bg-light text-dark">
+                                        <span class="badge" style="background: var(--bg-secondary); color: var(--gray);">
                                             {{ direction.services|selectattr('is_active')|list|length }}
                                         </span>
-                                    </td
+                                    </td>
                                     <td>
                                         <div class="btn-group btn-group-sm">
-                                            <a href="{{ url_for('modifier_direction', direction_id=direction.id) }}" class="btn btn-outline-primary" title="Modifier">
+                                            <a href="{{ url_for('modifier_direction', direction_id=direction.id) }}" class="btn btn-soft-primary btn-sm" title="Modifier">
                                                 <i class="fas fa-edit"></i>
                                             </a>
-                                            <a href="{{ url_for('nouveau_service') }}?direction_id={{ direction.id }}" class="btn btn-outline-success" title="Ajouter service">
+                                            <a href="{{ url_for('nouveau_service') }}?direction_id={{ direction.id }}" class="btn btn-soft-success btn-sm" title="Ajouter service">
                                                 <i class="fas fa-plus-circle"></i>
                                             </a>
                                         </div>
-                                    </td
+                                    </td>
                                 </tr>
                                 {% endfor %}
                             </tbody>
                         </table>
                     </div>
                     {% else %}
-                    <div class="text-center py-3 bg-light rounded">
+                    <div class="text-center py-3" style="background: var(--bg-secondary); border-radius: var(--radius-sm);">
                         <p class="text-muted mb-2">Aucune direction dans ce pôle</p>
-                        <a href="{{ url_for('nouvelle_direction') }}?pole_id={{ pole.id }}" class="fk-btn fk-btn-primary btn-sm">
+                        <a href="{{ url_for('nouvelle_direction') }}?pole_id={{ pole.id }}" class="btn btn-soft-primary btn-sm">
                             <i class="fas fa-plus-circle me-1"></i>Ajouter une direction
                         </a>
                     </div>
@@ -224,54 +930,52 @@
     </div>
     {% endfor %}
     {% else %}
-    <div class="fk-card">
-        <div class="fk-card-body text-center py-5">
-            <i class="fas fa-globe fa-4x text-muted mb-3"></i>
-            <h4>Aucun pays avec des pôles</h4>
-            <p class="text-muted">Créez des pays et rattachez-leur des pôles</p>
-            <div class="d-flex gap-3 justify-content-center">
-                <a href="{{ url_for('admin_pays') }}" class="fk-btn fk-btn-primary">
-                    <i class="fas fa-plus me-2"></i>Gérer les pays
-                </a>
-                <a href="{{ url_for('nouveau_pole') }}" class="fk-btn fk-btn-outline-secondary">
-                    <i class="fas fa-plus me-2"></i>Créer un pôle
-                </a>
-            </div>
+    <div class="empty-state">
+        <i class="fas fa-globe empty-icon"></i>
+        <h4 class="empty-title">Aucun pays avec des pôles</h4>
+        <p class="empty-text">Créez des pays et rattachez-leur des pôles</p>
+        <div class="d-flex gap-3 justify-content-center flex-wrap">
+            <a href="{{ url_for('admin_pays') }}" class="btn btn-primary-custom">
+                <i class="fas fa-plus me-2"></i>Gérer les pays
+            </a>
+            <a href="{{ url_for('nouveau_pole') }}" class="btn btn-soft-primary">
+                <i class="fas fa-plus me-2"></i>Créer un pôle
+            </a>
         </div>
     </div>
     {% endif %}
 
     <!-- Pôles sans pays -->
     {% if poles_sans_pays %}
-    <div class="fk-card mt-4 border-warning">
-        <div class="fk-card-header bg-warning bg-opacity-10">
-            <div class="d-flex justify-content-between align-items-center">
+    <div class="alert-card mt-4" style="border-left-color: var(--warning);">
+        <div class="alert-card-header">
+            <div class="d-flex flex-wrap justify-content-between align-items-center gap-2">
                 <div>
-                    <i class="fas fa-question-circle me-2"></i>
-                    <strong class="h5 mb-0">Pôles non rattachés</strong>
-                    <span class="badge bg-warning ms-2">{{ poles_sans_pays|length }}</span>
+                    <i class="fas fa-question-circle me-2" style="color: var(--warning);"></i>
+                    <strong style="color: var(--text-primary);">Pôles non rattachés</strong>
+                    <span class="badge ms-2" style="background: var(--warning); color: var(--dark);">{{ poles_sans_pays|length }}</span>
                 </div>
             </div>
         </div>
-        <div class="fk-card-body">
+        <div class="alert-card-body">
             <div class="row">
                 {% for pole in poles_sans_pays %}
                 <div class="col-md-4 col-lg-3 mb-3">
-                    <div class="fk-card border-warning">
-                        <div class="fk-card-body">
-                            <div class="d-flex justify-content-between align-items-start">
+                    <div class="pole-card" style="border-left-color: var(--warning); border-color: var(--warning);">
+                        <div class="pole-card-body">
+                            <div class="d-flex flex-wrap justify-content-between align-items-start gap-2">
                                 <div>
                                     <i class="fas fa-layer-group me-2" style="color: {{ pole.couleur }};"></i>
-                                    <strong>{{ pole.nom }}</strong>
+                                    <span class="pole-name">{{ pole.nom }}</span>
                                 </div>
-                                <button class="fk-btn fk-btn-outline-success btn-sm" 
+                                <button class="btn btn-soft-success btn-sm" 
                                         onclick="ouvrirModalRattachementUnPole({{ pole.id }}, '{{ pole.nom }}')">
                                     <i class="fas fa-link"></i> Rattacher
                                 </button>
                             </div>
                             <div class="mt-2">
                                 <span class="badge bg-secondary">Non rattaché</span>
-                                <span class="badge bg-info">{{ pole.directions|selectattr('is_active')|list|length }} dir.</span>
+                                <span class="badge" style="background: rgba(96, 165, 250, 0.15); color: #60a5fa;">{{ pole.directions|selectattr('is_active')|list|length }} dir.</span>
                             </div>
                         </div>
                     </div>
@@ -283,40 +987,42 @@
     {% endif %}
 
     {% else %}
-    <!-- ========== VUE PAR PÔLES (AVEC DIRECTIONS LISTÉES) ========== -->
+    <!-- ========================================== -->
+    <!-- ===== VUE PAR PÔLES ===== -->
+    <!-- ========================================== -->
     <div class="row">
         {% for pole in poles %}
         <div class="col-12 mb-4">
-            <div class="fk-card">
-                <div class="fk-card-header bg-white">
-                    <div class="d-flex justify-content-between align-items-center">
+            <div class="pole-card-full">
+                <div class="pole-card-full-header">
+                    <div class="d-flex flex-wrap justify-content-between align-items-center gap-2">
                         <div>
                             <i class="fas fa-layer-group me-2" style="color: {{ pole.couleur }};"></i>
-                            <strong class="h5 mb-0">{{ pole.nom }}</strong>
+                            <span class="pole-name" style="font-size: 1.1rem;">{{ pole.nom }}</span>
                             {% if pole.pays %}
-                            <span class="badge bg-info ms-2">
+                            <span class="badge" style="background: rgba(96, 165, 250, 0.15); color: #60a5fa;">
                                 <i class="fas fa-globe me-1"></i>{{ pole.pays.drapeau }} {{ pole.pays.nom }}
                             </span>
                             {% else %}
-                            <span class="badge bg-warning ms-2">
+                            <span class="badge" style="background: rgba(245, 158, 11, 0.15); color: #fbbf24;">
                                 <i class="fas fa-question-circle me-1"></i>Sans pays
                             </span>
                             {% endif %}
                             {% if pole.a_responsable %}
-                            <span class="badge bg-success ms-2">
+                            <span class="badge" style="background: rgba(16, 185, 129, 0.15); color: #34d399;">
                                 <i class="fas fa-user-check me-1"></i>{{ pole.responsable_nom }}
                             </span>
                             {% endif %}
                         </div>
-                        <div class="btn-group">
-                            <button class="fk-btn fk-btn-outline-info btn-sm" 
+                        <div class="btn-group btn-group-sm">
+                            <button class="btn btn-soft-primary btn-sm" 
                                     onclick="ouvrirModalRattachementUnPole({{ pole.id }}, '{{ pole.nom }}')">
                                 <i class="fas fa-link me-1"></i>Rattacher pays
                             </button>
-                            <a href="{{ url_for('editer_pole', id=pole.id) }}" class="fk-btn fk-btn-outline-primary btn-sm">
+                            <a href="{{ url_for('editer_pole', id=pole.id) }}" class="btn btn-soft-primary btn-sm">
                                 <i class="fas fa-edit"></i>
                             </a>
-                            <button class="fk-btn fk-btn-outline-danger btn-sm" onclick="supprimerPole({{ pole.id }}, '{{ pole.nom }}')">
+                            <button class="btn btn-soft-danger btn-sm" onclick="supprimerPole({{ pole.id }}, '{{ pole.nom }}')">
                                 <i class="fas fa-trash"></i>
                             </button>
                         </div>
@@ -327,17 +1033,17 @@
                     </div>
                     {% endif %}
                 </div>
-                <div class="fk-card-body">
-                    <h6 class="fw-bold mb-3">
-                        <i class="fas fa-building text-primary me-2"></i>
+                <div class="pole-card-full-body">
+                    <h6 class="fw-bold mb-3" style="font-size: 0.85rem; color: var(--text-primary);">
+                        <i class="fas fa-building me-2" style="color: var(--gold);"></i>
                         Directions rattachées ({{ pole.directions|selectattr('is_active')|list|length }})
                     </h6>
                     
                     {% set directions_actives = pole.directions|selectattr('is_active')|list %}
                     {% if directions_actives %}
                     <div class="table-responsive">
-                        <table class="table table-hover align-middle">
-                            <thead class="table-light">
+                        <table class="table direction-table">
+                            <thead>
                                 <tr>
                                     <th style="width: 35%">Direction</th>
                                     <th style="width: 25%">Responsable</th>
@@ -349,18 +1055,18 @@
                                 {% for direction in directions_actives %}
                                 <tr>
                                     <td>
-                                        <div class="fw-semibold">{{ direction.nom }}</div>
+                                        <div class="dir-name">{{ direction.nom }}</div>
                                         {% if direction.description %}
                                         <small class="text-muted">{{ direction.description|truncate(60) }}</small>
                                         {% endif %}
                                     </td>
                                     <td>
                                         {% if direction.responsable %}
-                                            <span class="badge bg-primary">
+                                            <span class="badge" style="background: rgba(26, 42, 94, 0.10); color: var(--primary);">
                                                 <i class="fas fa-user-circle me-1"></i>{{ direction.responsable.username }}
                                             </span>
                                         {% elif direction.responsable_nom_manuel %}
-                                            <span class="badge bg-info">
+                                            <span class="badge" style="background: rgba(96, 165, 250, 0.15); color: #60a5fa;">
                                                 <i class="fas fa-pen me-1"></i>{{ direction.responsable_nom_manuel }}
                                             </span>
                                         {% else %}
@@ -368,7 +1074,7 @@
                                         {% endif %}
                                     </td>
                                     <td>
-                                        <span class="badge bg-light text-dark">
+                                        <span class="badge" style="background: var(--bg-secondary); color: var(--gray);">
                                             <i class="fas fa-cubes me-1"></i>
                                             {{ direction.services|selectattr('is_active')|list|length }}
                                         </span>
@@ -376,14 +1082,14 @@
                                     <td>
                                         <div class="btn-group btn-group-sm">
                                             <a href="{{ url_for('modifier_direction', direction_id=direction.id) }}" 
-                                               class="btn btn-outline-primary" title="Modifier la direction">
+                                               class="btn btn-soft-primary btn-sm" title="Modifier la direction">
                                                 <i class="fas fa-edit"></i>
                                             </a>
                                             <a href="{{ url_for('nouveau_service') }}?direction_id={{ direction.id }}" 
-                                               class="btn btn-outline-success" title="Ajouter un service">
+                                               class="btn btn-soft-success btn-sm" title="Ajouter un service">
                                                 <i class="fas fa-plus-circle"></i>
                                             </a>
-                                            <button class="btn btn-outline-info" 
+                                            <button class="btn btn-soft-info btn-sm" 
                                                     onclick="voirServicesDirection({{ direction.id }}, '{{ direction.nom }}')"
                                                     title="Voir les services">
                                                 <i class="fas fa-cubes"></i>
@@ -396,21 +1102,21 @@
                         </table>
                     </div>
                     {% else %}
-                    <div class="text-center py-4 bg-light rounded-3">
-                        <i class="fas fa-folder-open fa-3x text-muted mb-3"></i>
+                    <div class="text-center py-4" style="background: var(--bg-secondary); border-radius: var(--radius-sm);">
+                        <i class="fas fa-folder-open fa-3x mb-3" style="color: var(--border);"></i>
                         <h6 class="text-muted">Aucune direction dans ce pôle</h6>
-                        <a href="{{ url_for('nouvelle_direction') }}?pole_id={{ pole.id }}" class="fk-btn fk-btn-primary btn-sm mt-2">
+                        <a href="{{ url_for('nouvelle_direction') }}?pole_id={{ pole.id }}" class="btn btn-soft-primary btn-sm mt-2">
                             <i class="fas fa-plus-circle me-1"></i>Ajouter une direction
                         </a>
                     </div>
                     {% endif %}
                 </div>
-                <div class="fk-card-footer bg-white border-top">
-                    <div class="d-flex gap-2">
-                        <a href="{{ url_for('nouvelle_direction') }}?pole_id={{ pole.id }}" class="fk-btn fk-btn-success btn-sm">
+                <div class="pole-card-full-footer">
+                    <div class="d-flex gap-2 flex-wrap">
+                        <a href="{{ url_for('nouvelle_direction') }}?pole_id={{ pole.id }}" class="btn btn-soft-success btn-sm">
                             <i class="fas fa-plus-circle me-1"></i>Nouvelle direction
                         </a>
-                        <a href="{{ url_for('admin_directions', pole=pole.id) }}" class="fk-btn fk-btn-outline-secondary btn-sm">
+                        <a href="{{ url_for('admin_directions', pole=pole.id) }}" class="btn btn-soft-primary btn-sm">
                             <i class="fas fa-eye me-1"></i>Voir toutes les directions
                         </a>
                     </div>
@@ -419,15 +1125,13 @@
         </div>
         {% else %}
         <div class="col-12">
-            <div class="fk-card">
-                <div class="fk-card-body text-center py-5">
-                    <i class="fas fa-layer-group fa-4x text-muted mb-3"></i>
-                    <h4>Aucun pôle créé</h4>
-                    <p class="text-muted">Commencez par créer votre premier pôle.</p>
-                    <a href="{{ url_for('nouveau_pole') }}" class="fk-btn fk-btn-primary">
-                        <i class="fas fa-plus me-2"></i>Créer mon premier pôle
-                    </a>
-                </div>
+            <div class="empty-state">
+                <i class="fas fa-layer-group empty-icon"></i>
+                <h4 class="empty-title">Aucun pôle créé</h4>
+                <p class="empty-text">Commencez par créer votre premier pôle.</p>
+                <a href="{{ url_for('nouveau_pole') }}" class="btn btn-primary-custom">
+                    <i class="fas fa-plus me-2"></i>Créer mon premier pôle
+                </a>
             </div>
         </div>
         {% endfor %}
@@ -435,22 +1139,26 @@
     {% endif %}
 </div>
 
+<!-- ========================================== -->
+<!-- ===== MODALS ===== -->
+<!-- ========================================== -->
+
 <!-- Modal Rattachement -->
 <div class="modal fade" id="rattachementPaysModal" tabindex="-1">
     <div class="modal-dialog">
         <div class="modal-content">
-            <div class="modal-header bg-primary text-white">
+            <div class="modal-header">
                 <h5 class="modal-title"><i class="fas fa-link me-2"></i>Rattacher un pôle à un pays</h5>
-                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
             </div>
             <div class="modal-body">
                 <input type="hidden" id="poleIdRattachement">
                 <div class="mb-3">
-                    <label class="form-label fw-bold">Pôle :</label>
-                    <p class="fw-semibold" id="poleNomRattachement"></p>
+                    <label class="form-label fw-bold" style="color: var(--text-primary);">Pôle :</label>
+                    <p class="fw-semibold" id="poleNomRattachement" style="color: var(--primary);"></p>
                 </div>
                 <div class="mb-3">
-                    <label class="form-label fw-bold">Pays :</label>
+                    <label class="form-label fw-bold" style="color: var(--text-primary);">Pays :</label>
                     <select class="form-select" id="paysSelectRattachement">
                         <option value="0">--- Aucun pays ---</option>
                         {% for pays in pays_list %}
@@ -460,20 +1168,20 @@
                 </div>
             </div>
             <div class="modal-footer">
-                <button type="button" class="fk-btn fk-btn-outline-secondary" data-bs-dismiss="modal">Annuler</button>
-                <button type="button" class="fk-btn fk-btn-primary" onclick="confirmerRattachementPole()">Rattacher</button>
+                <button type="button" class="btn btn-soft-primary" data-bs-dismiss="modal">Annuler</button>
+                <button type="button" class="btn btn-primary-custom" onclick="confirmerRattachementPole()">Rattacher</button>
             </div>
         </div>
     </div>
 </div>
 
-<!-- Modal Services par direction -->
+<!-- Modal Services -->
 <div class="modal fade" id="servicesDirectionModal" tabindex="-1">
     <div class="modal-dialog modal-lg">
         <div class="modal-content">
-            <div class="modal-header bg-info text-white">
+            <div class="modal-header">
                 <h5 class="modal-title"><i class="fas fa-cubes me-2"></i>Services de <span id="directionNomServices"></span></h5>
-                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
             </div>
             <div class="modal-body">
                 <div id="servicesList" class="list-group">
@@ -483,12 +1191,15 @@
                 </div>
             </div>
             <div class="modal-footer">
-                <button type="button" class="fk-btn fk-btn-outline-secondary" data-bs-dismiss="modal">Fermer</button>
+                <button type="button" class="btn btn-soft-primary" data-bs-dismiss="modal">Fermer</button>
             </div>
         </div>
     </div>
 </div>
 
+<!-- ========================================== -->
+<!-- ===== SCRIPTS ===== -->
+<!-- ========================================== -->
 <script>
 function rechercher() {
     const search = document.getElementById('searchInput').value;
@@ -517,14 +1228,14 @@ function voirServicesDirection(directionId, directionNom) {
                 data.services.forEach(service => {
                     html += `
                         <div class="list-group-item">
-                            <div class="d-flex justify-content-between align-items-center">
+                            <div class="d-flex flex-wrap justify-content-between align-items-center gap-2">
                                 <div>
-                                    <i class="fas fa-cubes text-info me-2"></i>
-                                    <strong>${service.nom}</strong>
+                                    <i class="fas fa-cubes me-2" style="color: var(--gold);"></i>
+                                    <strong style="color: var(--text-primary);">${service.nom}</strong>
                                     ${service.responsable ? `<br><small class="text-muted"><i class="fas fa-user-tie me-1"></i>Resp: ${service.responsable}</small>` : ''}
                                 </div>
                                 <div class="btn-group btn-group-sm">
-                                    <a href="/admin/service/${service.id}/modifier" class="btn btn-outline-primary">
+                                    <a href="/admin/service/${service.id}/modifier" class="btn btn-soft-primary btn-sm">
                                         <i class="fas fa-edit"></i>
                                     </a>
                                 </div>
@@ -535,7 +1246,7 @@ function voirServicesDirection(directionId, directionNom) {
                 html += '</div>';
                 servicesList.innerHTML = html;
             } else {
-                servicesList.innerHTML = '<div class="text-center py-4 text-muted"><i class="fas fa-cubes fa-3x mb-2"></i><br>Aucun service dans cette direction</div>';
+                servicesList.innerHTML = '<div class="text-center py-4 text-muted"><i class="fas fa-cubes fa-3x mb-2" style="color: var(--border);"></i><br>Aucun service dans cette direction</div>';
             }
         })
         .catch(error => {
@@ -624,66 +1335,4 @@ function showNotification(type, message) {
     setTimeout(() => toast.remove(), 3500);
 }
 </script>
-
-<style>
-.fk-card {
-    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-    border: 1px solid #e2e8f0;
-    border-radius: 12px;
-    overflow: hidden;
-    background: white;
-}
-
-.fk-card:hover {
-    transform: translateY(-3px);
-    box-shadow: 0 12px 24px rgba(0, 0, 0, 0.08);
-}
-
-.fk-card-header {
-    padding: 1rem 1.25rem;
-    background-color: #f8fafc;
-    border-bottom: 1px solid #e2e8f0;
-}
-
-.fk-card-body {
-    padding: 1.25rem;
-}
-
-.fk-card-footer {
-    padding: 0.75rem 1.25rem;
-    background-color: #f8fafc;
-    border-top: 1px solid #e2e8f0;
-}
-
-.fk-btn {
-    border-radius: 8px;
-    padding: 0.5rem 1rem;
-    font-weight: 500;
-    transition: all 0.2s;
-    display: inline-flex;
-    align-items: center;
-    gap: 0.5rem;
-    text-decoration: none;
-    border: 2px solid transparent;
-}
-
-.fk-btn-primary { background-color: #3498db; color: white; border-color: #3498db; }
-.fk-btn-primary:hover { background-color: #2980b9; }
-.fk-btn-outline-primary { border-color: #3498db; color: #3498db; background: transparent; }
-.fk-btn-outline-primary:hover { background-color: #3498db; color: white; }
-.fk-btn-outline-secondary { border-color: #95a5a6; color: #7f8c8d; background: transparent; }
-.fk-btn-outline-secondary:hover { background-color: #95a5a6; color: white; }
-.fk-btn-outline-success { border-color: #27ae60; color: #27ae60; background: transparent; }
-.fk-btn-outline-success:hover { background-color: #27ae60; color: white; }
-.fk-btn-outline-danger { border-color: #e74c3c; color: #e74c3c; background: transparent; }
-.fk-btn-outline-danger:hover { background-color: #e74c3c; color: white; }
-.fk-btn-outline-info { border-color: #3498db; color: #3498db; background: transparent; }
-.fk-btn-outline-info:hover { background-color: #3498db; color: white; }
-.fk-btn-success { background-color: #27ae60; color: white; }
-.fk-btn-success:hover { background-color: #229954; color: white; }
-.fk-btn.btn-sm { padding: 0.25rem 0.5rem; font-size: 0.75rem; }
-
-.badge { font-weight: 500; padding: 0.35rem 0.65rem; border-radius: 8px; }
-.table th, .table td { vertical-align: middle; padding: 0.75rem; }
-</style>
 {% endblock %}
