@@ -18,7 +18,16 @@
                 </ol>
             </nav>
         </div>
-        <div class="d-flex gap-2">
+        <div class="d-flex gap-2 align-items-center">
+            <!-- BOUTONS DE BASCULE VUE -->
+            <div class="btn-group me-2" role="group" aria-label="Options d'affichage">
+                <button type="button" class="btn btn-outline-primary active" id="btnGrille" onclick="changerVue('grille')" title="Vue en grille">
+                    <i class="fas fa-th"></i>
+                </button>
+                <button type="button" class="btn btn-outline-primary" id="btnListe" onclick="changerVue('liste')" title="Vue en liste">
+                    <i class="fas fa-list"></i>
+                </button>
+            </div>
             <a href="{{ url_for('cartographies_archives') }}" class="fk-btn fk-btn-outline-secondary">
                 <i class="fas fa-archive me-2"></i>Archives
             </a>
@@ -76,46 +85,54 @@
     </div>
 
     <!-- ORGANISATION PAR PÔLES -->
-    {% if poles %}
-        {% for pole in poles %}
-            {% set cartos_pole = cartographies|selectattr('cartographie.pole_id', 'equalto', pole.id)|list %}
-            {% if cartos_pole %}
-            <div class="mb-4">
-                <h5 class="mb-3" style="border-left: 4px solid {{ pole.couleur }}; padding-left: 10px;">
-                    <i class="fas fa-layer-group me-2" style="color: {{ pole.couleur }};"></i>
-                    {{ pole.nom }}
-                    <small class="text-muted">({{ cartos_pole|length }} cartographie(s))</small>
-                </h5>
-                <div class="row">
-                    {% for item in cartos_pole %}
-                    <div class="col-xl-4 col-lg-6 col-md-12 mb-4">
-                        {% include 'cartographie/_carte_original.html' %}
+    <div id="cartographieContainer">
+        {% if poles %}
+            {% for pole in poles %}
+                {% set cartos_pole = cartographies|selectattr('cartographie.pole_id', 'equalto', pole.id)|list %}
+                {% if cartos_pole %}
+                <div class="mb-4">
+                    <h5 class="mb-3" style="border-left: 4px solid {{ pole.couleur }}; padding-left: 10px;">
+                        <i class="fas fa-layer-group me-2" style="color: {{ pole.couleur }};"></i>
+                        {{ pole.nom }}
+                        <small class="text-muted">({{ cartos_pole|length }} cartographie(s))</small>
+                    </h5>
+                    <div class="row g-3">
+                        {% for item in cartos_pole %}
+                        <div class="col-xl-4 col-lg-6 col-md-12 mb-4 cartographie-col">
+                            {# ✅ Passer explicitement la variable cartographie #}
+                            {% with cartographie = item %}
+                                {% include 'cartographie/_carte_original.html' %}
+                            {% endwith %}
+                        </div>
+                        {% endfor %}
                     </div>
-                    {% endfor %}
                 </div>
-            </div>
-            {% endif %}
-        {% endfor %}
-    {% endif %}
-
-    <!-- CARTOGRAPHIES SANS PÔLE -->
-    {% set cartos_sans_pole = cartographies|rejectattr('cartographie.pole_id')|list %}
-    {% if cartos_sans_pole %}
-    <div class="mb-4">
-        <h5 class="mb-3" style="border-left: 4px solid #6c757d; padding-left: 10px;">
-            <i class="fas fa-globe me-2 text-secondary"></i>
-            Cartographies sans pôle
-            <small class="text-muted">({{ cartos_sans_pole|length }} cartographie(s))</small>
-        </h5>
-        <div class="row">
-            {% for item in cartos_sans_pole %}
-            <div class="col-xl-4 col-lg-6 col-md-12 mb-4">
-                {% include 'cartographie/_carte_original.html' %}
-            </div>
+                {% endif %}
             {% endfor %}
+        {% endif %}
+
+        <!-- CARTOGRAPHIES SANS PÔLE -->
+        {% set cartos_sans_pole = cartographies|rejectattr('cartographie.pole_id')|list %}
+        {% if cartos_sans_pole %}
+        <div class="mb-4">
+            <h5 class="mb-3" style="border-left: 4px solid #6c757d; padding-left: 10px;">
+                <i class="fas fa-globe me-2 text-secondary"></i>
+                Cartographies sans pôle
+                <small class="text-muted">({{ cartos_sans_pole|length }} cartographie(s))</small>
+            </h5>
+            <div class="row g-3">
+                {% for item in cartos_sans_pole %}
+                <div class="col-xl-4 col-lg-6 col-md-12 mb-4 cartographie-col">
+                    {# ✅ Passer explicitement la variable cartographie #}
+                    {% with cartographie = item %}
+                        {% include 'cartographie/_carte_original.html' %}
+                    {% endwith %}
+                </div>
+                {% endfor %}
+            </div>
         </div>
+        {% endif %}
     </div>
-    {% endif %}
 
     <!-- État vide -->
     {% if not cartographies %}
@@ -139,60 +156,118 @@
     {% endif %}
 </div>
 
-<!-- Script de recherche et filtres -->
 <script>
-document.addEventListener('DOMContentLoaded', function() {
-    const searchInput = document.getElementById('searchCartographie');
+// ============================================
+// BASCULE VUE GRILLE / VUE LISTE
+// ============================================
+function changerVue(vue) {
+    // Mettre à jour les boutons
+    document.getElementById('btnGrille').classList.toggle('active', vue === 'grille');
+    document.getElementById('btnListe').classList.toggle('active', vue === 'liste');
     
-    function filterCartographies() {
-        const searchTerm = searchInput ? searchInput.value.toLowerCase() : '';
-        const poleFilter = document.getElementById('filterPole').value;
-        const directionFilter = document.getElementById('filterDirection').value;
-        const cards = document.querySelectorAll('.cartographie-card');
-        
-        let visibleCount = 0;
-        
-        cards.forEach(card => {
-            const cardNom = card.dataset.nom || '';
-            const cardPole = card.dataset.pole || '';
-            const cardPoleId = card.dataset.poleId || '';
-            const cardDirection = card.dataset.direction || '';
-            const cardDirectionId = card.dataset.directionId || '';
-            
-            let show = cardNom.includes(searchTerm);
-            
-            if (show && poleFilter !== 'tous') {
-                show = cardPoleId === poleFilter;
+    // Sauvegarder la préférence
+    localStorage.setItem('vueCartographie', vue);
+    
+    // Appliquer la vue
+    const cols = document.querySelectorAll('.cartographie-col');
+    const container = document.querySelector('#cartographieContainer');
+    
+    if (vue === 'liste') {
+        container?.classList.add('vue-liste');
+        cols.forEach(col => {
+            col.className = 'col-12 mb-3 cartographie-col';
+            const card = col.querySelector('.fk-card');
+            if (card) {
+                card.style.flexDirection = 'row';
+                card.style.alignItems = 'center';
+                const body = card.querySelector('.fk-card-body');
+                if (body) body.style.flex = '1';
+                const header = card.querySelector('.fk-card-header');
+                if (header) header.style.flex = '0 0 200px';
+                const footer = card.querySelector('.fk-card-footer');
+                if (footer) footer.style.flex = '0 0 auto';
             }
-            
-            if (show && directionFilter !== 'toutes') {
-                show = cardDirectionId === directionFilter;
-            }
-            
-            card.closest('.col-xl-4').style.display = show ? '' : 'none';
-            if (show) visibleCount++;
         });
-        
-        document.getElementById('resultCount').textContent = `${visibleCount} cartographie(s) trouvée(s)`;
+    } else {
+        container?.classList.remove('vue-liste');
+        cols.forEach(col => {
+            col.className = 'col-xl-4 col-lg-6 col-md-12 mb-4 cartographie-col';
+            const card = col.querySelector('.fk-card');
+            if (card) {
+                card.style.flexDirection = '';
+                card.style.alignItems = '';
+                const body = card.querySelector('.fk-card-body');
+                if (body) body.style.flex = '';
+                const header = card.querySelector('.fk-card-header');
+                if (header) header.style.flex = '';
+                const footer = card.querySelector('.fk-card-footer');
+                if (footer) footer.style.flex = '';
+            }
+        });
     }
+}
+
+// ============================================
+// FILTRES
+// ============================================
+function filterCartographies() {
+    const searchTerm = document.getElementById('searchCartographie')?.value.toLowerCase() || '';
+    const poleFilter = document.getElementById('filterPole').value;
+    const directionFilter = document.getElementById('filterDirection').value;
+    const cards = document.querySelectorAll('.cartographie-card');
     
-    window.appliquerFiltres = function() {
-        const pole = document.getElementById('filterPole').value;
-        const direction = document.getElementById('filterDirection').value;
-        const search = document.getElementById('searchCartographie').value;
+    let visibleCount = 0;
+    
+    cards.forEach(card => {
+        const cardNom = card.dataset.nom || '';
+        const cardPoleId = card.dataset.poleId || '';
+        const cardDirectionId = card.dataset.directionId || '';
         
-        let url = new URL(window.location.href);
-        url.searchParams.set('pole', pole);
-        url.searchParams.set('direction', direction);
-        url.searchParams.set('search', search);
+        let show = cardNom.includes(searchTerm);
+        if (show && poleFilter !== 'tous') {
+            show = cardPoleId === poleFilter;
+        }
+        if (show && directionFilter !== 'toutes') {
+            show = cardDirectionId === directionFilter;
+        }
         
-        window.location.href = url.toString();
-    };
+        card.closest('.cartographie-col').style.display = show ? '' : 'none';
+        if (show) visibleCount++;
+    });
     
-    window.reinitialiserFiltres = function() {
-        window.location.href = "{{ url_for('liste_cartographies') }}";
-    };
+    document.getElementById('resultCount').textContent = `${visibleCount} cartographie(s) trouvée(s)`;
+}
+
+// ============================================
+// APPLIQUER FILTRES AVEC RECHARGEMENT
+// ============================================
+window.appliquerFiltres = function() {
+    const pole = document.getElementById('filterPole').value;
+    const direction = document.getElementById('filterDirection').value;
+    const search = document.getElementById('searchCartographie').value;
     
+    let url = new URL(window.location.href);
+    url.searchParams.set('pole', pole);
+    url.searchParams.set('direction', direction);
+    url.searchParams.set('search', search);
+    
+    window.location.href = url.toString();
+};
+
+window.reinitialiserFiltres = function() {
+    window.location.href = "{{ url_for('liste_cartographies') }}";
+};
+
+// ============================================
+// INITIALISATION
+// ============================================
+document.addEventListener('DOMContentLoaded', function() {
+    // Restaurer la préférence de vue
+    const vuePreferee = localStorage.getItem('vueCartographie') || 'grille';
+    changerVue(vuePreferee);
+    
+    // Recherche en temps réel
+    const searchInput = document.getElementById('searchCartographie');
     if (searchInput) {
         searchInput.addEventListener('keyup', function(e) {
             if (e.key === 'Enter') {
@@ -201,6 +276,7 @@ document.addEventListener('DOMContentLoaded', function() {
         });
     }
     
+    // Confirmation pour les actions sensibles
     document.querySelectorAll('form[action*="archiver"]').forEach(form => {
         form.addEventListener('submit', function(e) {
             if (!confirm('Archiver cette cartographie ?\n\nCette action archivera également tous les risques associés.')) {
@@ -249,65 +325,43 @@ document.addEventListener('DOMContentLoaded', function() {
     background-color: #f8fafc;
 }
 
-.fk-btn {
-    border-radius: 8px;
-    padding: 0.5rem 1rem;
-    font-weight: 500;
-    transition: all 0.2s;
-    display: inline-block;
-    text-decoration: none;
+/* Vue liste */
+.vue-liste .cartographie-col .fk-card {
+    flex-direction: row !important;
+    align-items: center !important;
 }
 
-.fk-btn-primary {
-    background-color: #3498db;
-    color: white;
-    border: 2px solid #3498db;
+.vue-liste .cartographie-col .fk-card .fk-card-header {
+    flex: 0 0 200px;
+    border-bottom: none;
+    border-right: 1px solid #e2e8f0;
+    margin-bottom: 0;
 }
 
-.fk-btn-primary:hover {
-    background-color: #2980b9;
-    border-color: #2980b9;
-    color: white;
+.vue-liste .cartographie-col .fk-card .fk-card-body {
+    flex: 1;
+    margin-bottom: 0;
 }
 
-.fk-btn-outline-primary {
-    border: 2px solid #3498db;
-    color: #3498db;
-    background: transparent;
+.vue-liste .cartographie-col .fk-card .fk-card-footer {
+    flex: 0 0 auto;
+    border-top: none;
+    border-left: 1px solid #e2e8f0;
 }
-
-.fk-btn-outline-primary:hover {
-    background-color: #3498db;
-    color: white;
-}
-
-.fk-btn-outline-secondary {
-    border: 2px solid #95a5a6;
-    color: #7f8c8d;
-    background: transparent;
-}
-
-.fk-btn-outline-secondary:hover {
-    background-color: #95a5a6;
-    color: white;
-}
-
-.risk-dot {
-    display: inline-block;
-    width: 10px;
-    height: 10px;
-    border-radius: 50%;
-    margin-right: 8px;
-}
-
-.risk-critique { background-color: #dc3545; }
-.risk-eleve { background-color: #fd7e14; }
-.risk-moyen { background-color: #ffc107; }
-.risk-faible { background-color: #198754; }
 
 @media (max-width: 768px) {
-    .fk-card-body {
-        padding: 1rem;
+    .vue-liste .cartographie-col .fk-card {
+        flex-direction: column !important;
+        align-items: stretch !important;
+    }
+    .vue-liste .cartographie-col .fk-card .fk-card-header {
+        flex: none;
+        border-right: none;
+        border-bottom: 1px solid #e2e8f0;
+    }
+    .vue-liste .cartographie-col .fk-card .fk-card-footer {
+        border-left: none;
+        border-top: 1px solid #e2e8f0;
     }
 }
 </style>
