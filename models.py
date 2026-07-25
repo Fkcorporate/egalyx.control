@@ -2012,9 +2012,8 @@ class CampagneEvaluation(db.Model):
     description = db.Column(db.Text)
     date_debut = db.Column(db.Date)
     date_fin = db.Column(db.Date)
-    statut = db.Column(db.String(20), default='en_cours')  # en_cours, terminee, archivee
+    statut = db.Column(db.String(20), default='en_cours')
     
-    # AJOUTEZ CES CHAMPS POUR L'ARCHIVAGE
     is_archived = db.Column(db.Boolean, default=False)
     archived_at = db.Column(db.DateTime)
     archived_by = db.Column(db.Integer, db.ForeignKey('user.id'))
@@ -2023,18 +2022,34 @@ class CampagneEvaluation(db.Model):
     created_by = db.Column(db.Integer, db.ForeignKey('user.id'))
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
-    
-    # Relations
-    cartographie = db.relationship('Cartographie', back_populates='campagnes')
-    createur = db.relationship('User', foreign_keys=[created_by])
-    evaluations = db.relationship('EvaluationRisque', back_populates='campagne', cascade='all, delete-orphan')
     client_id = db.Column(db.Integer, db.ForeignKey('clients.id'), nullable=True)
     
-    # AJOUTEZ CETTE RELATION
+    # ✅ RELATION VERS LA CARTOGRAPHIE
+    cartographie = db.relationship(
+        'Cartographie', 
+        foreign_keys=[cartographie_id],  # ✅ SPÉCIFIER LA CLÉ
+        back_populates='campagnes'
+    )
+    
+    # Autres relations
+    createur = db.relationship('User', foreign_keys=[created_by])
     archive_user = db.relationship('User', foreign_keys=[archived_by])
+    evaluations = db.relationship('EvaluationRisque', back_populates='campagne', cascade='all, delete-orphan')
     
     def __repr__(self):
         return f'<CampagneEvaluation {self.id}: {self.nom}>'
+    
+    def to_dict(self):
+        return {
+            'id': self.id,
+            'nom': self.nom,
+            'description': self.description,
+            'statut': self.statut,
+            'date_debut': self.date_debut.isoformat() if self.date_debut else None,
+            'date_fin': self.date_fin.isoformat() if self.date_fin else None,
+            'is_archived': self.is_archived,
+            'created_at': self.created_at.isoformat() if self.created_at else None
+        }
 
 # -------------------- KRI (CORRIGÉ) --------------------
 class KRI(db.Model):
