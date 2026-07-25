@@ -22,7 +22,8 @@ class User(UserMixin, db.Model):
     is_active = db.Column(db.Boolean, default=True)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     last_login = db.Column(db.DateTime)
-
+    is_operateur = db.Column(db.Boolean, default=False)
+    operateur_permissions_id = db.Column(db.Integer, db.ForeignKey('permissions_operateur.id'), nullable=True)
     is_blocked = db.Column(db.Boolean, default=False)
     blocked_at = db.Column(db.DateTime, nullable=True)
     blocked_by = db.Column(db.Integer, nullable=True)
@@ -38,7 +39,9 @@ class User(UserMixin, db.Model):
     
     # Relation client
     client = db.relationship('Client', back_populates='users')
-    
+    operateur_permissions = db.relationship('PermissionOperateur', 
+                                            foreign_keys=[operateur_permissions_id],
+                                            uselist=False)
     # ============================================
     # SÉCURITÉ DES MOTS DE PASSE
     # ============================================
@@ -535,6 +538,73 @@ class User(UserMixin, db.Model):
         
         if self.role in role_defaults and permission in role_defaults[self.role]:
             return role_defaults[self.role][permission]
+        
+        return False
+    @property
+    def est_operateur(self):
+        """Vérifie si l'utilisateur est un opérateur"""
+        return self.is_operateur and self.operateur_permissions is not None
+    
+    def peut_evaluer_risque(self, risque):
+        """Vérifie si l'utilisateur peut évaluer un risque spécifique"""
+        if not self.est_operateur:
+            return False
+        
+        perms = self.operateur_permissions
+        if not perms.peut_evaluer_risques:
+            return False
+        
+        # Vérifier les directions autorisées
+        if perms.directions_autorisees and risque.direction_id not in perms.directions_autorisees:
+            return False
+        
+        # Vérifier les services autorisés
+        if perms.services_autorises and risque.service_id not in perms.services_autorises:
+            return False
+        
+        # Vérifier les types de risques autorisés
+        if perms.types_risques_autorises and risque.type_risque not in perms.types_risques_autorises:
+            return False
+        
+        return True
+    
+    def peut_executer_campagne(self, campagne):
+        """Vérifie si l'utilisateur peut exécuter une campagne spécifique"""
+        if not self.est_operateur:
+            return False
+        
+        perms = self.operateur_permissions
+        if not perms.peut_executer_campagnes:
+            return False
+        
+        # Vérifier les directions autorisées
+        if perms.directions_autorisees and campagne.direction_id not in perms.directions_autorisees:
+            return False
+        
+        # Vérifier les services autorisés
+        if perms.services_autorises and campagne.service_id not in perms.services_autorises:
+            return False
+        
+        return True
+    
+    def peut_suivre_plan_action(self, plan):
+        """Vérifie si l'utilisateur peut suivre un plan d'action"""
+        if not self.est_operateur:
+            return False
+        
+        perms = self.operateur_permissions
+        if not perms.peut_creer_plans_action:
+            return False
+        
+        # L'utilisateur peut suivre ses propres plans
+        if plan.responsable_id == self.id or plan.createur_id == self.id:
+            return True
+        
+        # Ou ceux de ses directions/services
+        if perms.directions_autorisees and plan.direction_id in perms.directions_autorisees:
+            return True
+        if perms.services_autorises and plan.service_id in perms.services_autorises:
+            return True
         
         return False
     
@@ -17859,3 +17929,60 @@ class NonConformiteC2N(db.Model):
     
     def __repr__(self):
         return f'<NonConformiteC2N {self.reference}>'
+class PermissionOperateur(db.Model):
+    """Permissions spécifiques pour les opérateurs"""
+    __tablename__ = 'permissions_operateur'
+    
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
+    
+    # ÉVALUATION DES RISQUES
+    peut_evaluer_risques = db.Column(db.Boolean, default=False)
+    peut_voir_evaluations = db.Column(db.Boolean, default=False)
+    peut_modifier_evaluations = db.Column(db.Boolean, default=False)
+    
+    # CAMPAGNES DE CONTRÔLE
+    peut_executer_campagnes = db.Column(db.Boolean, default=False)
+    peut_voir_campagnes = db.Column(db.Boolean, default=False)
+    peut_valider_campagnes = db.Column(db.Boolean, default=False)
+    
+    # PLANS D'ACTION
+    peut_creer_plans_action = db.Column(db.Boolean, default=False)
+    peut_executer_plans_action = db.Column(db.Boolean, default=False)
+    peut_voir_plans_action = db.Column(db.Boolean, default=False)
+    
+    # DISPOSITIFS DE MAÎTRISE
+    peut_voir_dispositifs = db.Column(db.Boolean, default=False)
+    peut_evaluer_dispositifs = db.Column(db.Boolean, default=False)
+    
+    # RESTRICTIONS
+    directions_autorisees = db.Column(db.JSON, default=list)
+    services_autorises = db.Column(db.JSON, default=list)
+    types_risques_autorises = db.Column(db.JSON, default=list)
+    
+    client_id = db.Column(db.Integer, db.ForeignKey('clients.id'), nullable=False)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    created_by = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=True)
+    
+    # Relations
+    user = db.relationship('User', foreign_keys=[user_id], backref='permissions_operateur')
+    client = db.relationship('Client', foreign_keys=[client_id])
+    createur = db.relationship('User', foreign_keys=[created_by])
+    
+    @property
+    def a_acces_complet(self):
+        return all([
+            self.peut_evaluer_risques,
+            self.peut_executer_campagnes,
+            self.peut_creer_plans_action
+        ])
+    
+    def to_dict(self):
+        return {
+            'peut_evaluer_risques': self.peut_evaluer_risques,
+            'peut_executer_campagnes': self.peut_executer_campagnes,
+            'peut_creer_plans_action': self.peut_creer_plans_action,
+            'directions_autorisees': self.directions_autorisees,
+            'services_autorises': self.services_autorises
+        }
