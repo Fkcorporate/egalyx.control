@@ -2932,29 +2932,698 @@ class GestionnaireParametrage:
         # Logique de synchronisation à implémenter selon les besoins
 
 
-def log_activity(user_id, action_type, description, entity_type=None, entity_id=None):
+# ============================================
+# utils.py - VERSION FINALE log_activity
+# ============================================
+
+def log_activity(user_id, action, description, entite_type=None, entite_id=None):
     """
     Journalise une activité utilisateur
+    
+    Args:
+        user_id: ID de l'utilisateur
+        action: Type d'action (ex: 'evaluation_risque', 'execution_campagne')
+        description: Description de l'action
+        entite_type: Type d'entité (ex: 'risque', 'campagne')
+        entite_id: ID de l'entité
+    
+    Returns:
+        bool: True si succès, False sinon
     """
-    # ✅ SOLUTION : Importer À L'INTÉRIEUR de la fonction
     from flask import request
-    from models import ActivityLog  # Import ici, pas en haut
-    from app import db  # ou votre instance db
+    from models import JournalActivite
+    from app import db
+    from datetime import datetime
     
     try:
-        log = ActivityLog(
-            user_id=user_id,
-            action_type=action_type,
-            description=description,
-            entity_type=entity_type,
-            entity_id=entity_id,
+        journal = JournalActivite(
+            utilisateur_id=user_id,
+            action=action,
+            details=description,
+            entite_type=entite_type,
+            entite_id=entite_id,
             ip_address=request.remote_addr if request else None,
-            user_agent=request.user_agent.string if request and request.user_agent else None
+            user_agent=request.user_agent.string if request and request.user_agent else None,
+            date_creation=datetime.utcnow()
         )
-        db.session.add(log)
+        db.session.add(journal)
         db.session.commit()
         return True
     except Exception as e:
         print(f"❌ Erreur journalisation activité: {e}")
         db.session.rollback()
         return False
+
+# ============================================
+# FONCTIONS POUR LE DASHBOARD OPÉRATIONNEL
+# ============================================
+
+def calculer_taux_evaluation(risques_data):
+    """
+    Calcule le taux d'évaluation des risques pour le dashboard opérateur
+    
+    Args:
+        risques_data: Dict avec 'total' et 'evalues'
+    
+    Returns:
+        float: Taux d'évaluation en pourcentage
+    """
+    total = risques_data.get('total', 0)
+    evalues = len(risques_data.get('evalues', []))
+    return round((evalues / total * 100) if total > 0 else 0, 1)
+
+
+def calculer_taux_campagne(campagnes_data):
+    """
+    Calcule le taux de réalisation des campagnes pour le dashboard opérateur
+    
+    Args:
+        campagnes_data: Dict avec 'en_cours', 'a_realiser', 'terminees'
+    
+    Returns:
+        float: Taux de réalisation en pourcentage
+    """
+    total = (
+        len(campagnes_data.get('en_cours', [])) +
+        len(campagnes_data.get('a_realiser', [])) +
+        len(campagnes_data.get('terminees', []))
+    )
+    terminees = len(campagnes_data.get('terminees', []))
+    return round((terminees / total * 100) if total > 0 else 0, 1)
+
+
+def calculer_taux_plan_action(plans_data):
+    """
+    Calcule le taux de réalisation des plans d'action pour le dashboard opérateur
+    
+    Args:
+        plans_data: Dict avec 'en_cours', 'en_retard', 'termines'
+    
+    Returns:
+        float: Taux de réalisation en pourcentage
+    """
+    total = (
+        len(plans_data.get('en_cours', [])) +
+        len(plans_data.get('en_retard', [])) +
+        len(plans_data.get('termines', []))
+    )
+    termines = len(plans_data.get('termines', []))
+    return round((termines / total * 100) if total > 0 else 0, 1)
+
+
+def get_risques_operateur(user_id, directions_ids=None, services_ids=None, types_risques=None, client_id=None):
+    """
+    Récupère les risques accessibles à un opérateur avec filtrage
+    
+    Args:
+        user_id: ID de l'utilisateur
+        directions_ids: Liste des directions autorisées
+        services_ids: Liste des services autorisés
+        types_risques: Liste des types de risques autorisés
+        client_id: ID du client (si None, utilise current_user.client_id)
+    
+    Returns:
+        list: Liste des risques filtrés
+    """
+    from models import Risque
+    from flask_login import current_user
+    
+    if client_id is None:
+        client_id = current_user.client_id
+    
+    query = Risque.query.filter_by(
+        client_id=client_id,
+        is_archived=False
+    )
+    
+    if directions_ids:
+        query = query.filter(Risque.direction_id.in_(directions_ids))
+    if services_ids:
+        query = query.filter(Risque.service_id.in_(services_ids))
+    if types_risques:
+        query = query.filter(Risque.type_risque.in_(types_risques))
+    
+    return query.all()
+
+
+def get_campagnes_operateur(user_id, directions_ids=None, services_ids=None, client_id=None):
+    """
+    Récupère les campagnes accessibles à un opérateur avec filtrage
+    
+    Args:
+        user_id: ID de l'utilisateur
+        directions_ids: Liste des directions autorisées
+        services_ids: Liste des services autorisés
+        client_id: ID du client (si None, utilise current_user.client_id)
+    
+    Returns:
+        list: Liste des campagnes filtrées
+    """
+    from models import CampagneControle
+    from flask_login import current_user
+    from sqlalchemy import or_
+    
+    if client_id is None:
+        client_id = current_user.client_id
+    
+    query = CampagneControle.query.filter_by(
+        client_id=client_id,
+        is_archived=False
+    )
+    
+    if directions_ids:
+        query = query.filter(CampagneControle.direction_id.in_(directions_ids))
+    if services_ids:
+        query = query.filter(CampagneControle.service_id.in_(services_ids))
+    
+    query = query.filter(
+        or_(
+            CampagneControle.evaluateur_id == user_id,
+            CampagneControle.createur_id == user_id
+        )
+    )
+    
+    return query.all()
+
+
+def get_plans_action_operateur(user_id, directions_ids=None, services_ids=None, client_id=None):
+    """
+    Récupère les plans d'action accessibles à un opérateur avec filtrage
+    
+    Args:
+        user_id: ID de l'utilisateur
+        directions_ids: Liste des directions autorisées
+        services_ids: Liste des services autorisés
+        client_id: ID du client (si None, utilise current_user.client_id)
+    
+    Returns:
+        list: Liste des plans d'action filtrés
+    """
+    from models import PlanAction
+    from flask_login import current_user
+    from sqlalchemy import or_
+    
+    if client_id is None:
+        client_id = current_user.client_id
+    
+    query = PlanAction.query.filter_by(
+        client_id=client_id,
+        is_archived=False
+    )
+    
+    query = query.filter(
+        or_(
+            PlanAction.responsable_id == user_id,
+            PlanAction.createur_id == user_id
+        )
+    )
+    
+    if directions_ids:
+        query = query.filter(PlanAction.direction_id.in_(directions_ids))
+    if services_ids:
+        query = query.filter(PlanAction.service_id.in_(services_ids))
+    
+    return query.all()
+
+
+def synchroniser_dashboard_operateur(user_id):
+    """
+    Synchronise toutes les données du dashboard opérateur
+    
+    Args:
+        user_id: ID de l'utilisateur
+    
+    Returns:
+        dict: Données synchronisées pour le dashboard
+    """
+    from models import PermissionOperateur, CampagneEvaluation, EvaluationRisque, Notification
+    from flask_login import current_user
+    from datetime import datetime
+    
+    perms = PermissionOperateur.query.filter_by(user_id=user_id).first()
+    if not perms:
+        return None
+    
+    data = {
+        'risques': {'a_evaluer': [], 'evalues': [], 'total': 0},
+        'campagnes': {'en_cours': [], 'a_realiser': [], 'terminees': []},
+        'plans_action': {'en_cours': [], 'en_retard': [], 'termines': []},
+        'stats': {
+            'taux_evaluation': 0,
+            'taux_campagne': 0,
+            'taux_plan_action': 0
+        },
+        'notifications': []
+    }
+    
+    # 1. Risques à évaluer
+    if perms.peut_evaluer_risques:
+        directions_ids = perms.directions_autorisees or []
+        services_ids = perms.services_autorises or []
+        types_risques = perms.types_risques_autorises or []
+        
+        risques = get_risques_operateur(
+            user_id=user_id,
+            directions_ids=directions_ids,
+            services_ids=services_ids,
+            types_risques=types_risques,
+            client_id=perms.client_id
+        )
+        
+        campagne_active = CampagneEvaluation.query.filter_by(
+            statut='en_cours',
+            client_id=perms.client_id
+        ).first()
+        
+        for risque in risques:
+            if campagne_active:
+                eval_existante = EvaluationRisque.query.filter_by(
+                    risque_id=risque.id,
+                    campagne_id=campagne_active.id
+                ).first()
+                if eval_existante and eval_existante.date_confirmation:
+                    data['risques']['evalues'].append(risque)
+                else:
+                    data['risques']['a_evaluer'].append(risque)
+            else:
+                data['risques']['a_evaluer'].append(risque)
+        
+        data['risques']['total'] = len(risques)
+        data['stats']['taux_evaluation'] = calculer_taux_evaluation(data['risques'])
+    
+    # 2. Campagnes
+    if perms.peut_executer_campagnes:
+        directions_ids = perms.directions_autorisees or []
+        services_ids = perms.services_autorises or []
+        
+        campagnes = get_campagnes_operateur(
+            user_id=user_id,
+            directions_ids=directions_ids,
+            services_ids=services_ids,
+            client_id=perms.client_id
+        )
+        
+        for campagne in campagnes:
+            if campagne.statut == 'en_cours':
+                data['campagnes']['en_cours'].append(campagne)
+            elif campagne.statut in ['en_preparation', 'a_faire']:
+                data['campagnes']['a_realiser'].append(campagne)
+            else:
+                data['campagnes']['terminees'].append(campagne)
+        
+        data['stats']['taux_campagne'] = calculer_taux_campagne(data['campagnes'])
+    
+    # 3. Plans d'action
+    if perms.peut_creer_plans_action:
+        directions_ids = perms.directions_autorisees or []
+        services_ids = perms.services_autorises or []
+        
+        plans = get_plans_action_operateur(
+            user_id=user_id,
+            directions_ids=directions_ids,
+            services_ids=services_ids,
+            client_id=perms.client_id
+        )
+        
+        aujourdhui = datetime.now().date()
+        for plan in plans:
+            if plan.statut == 'termine':
+                data['plans_action']['termines'].append(plan)
+            elif plan.date_fin_prevue and plan.date_fin_prevue < aujourdhui:
+                data['plans_action']['en_retard'].append(plan)
+            else:
+                data['plans_action']['en_cours'].append(plan)
+        
+        data['stats']['taux_plan_action'] = calculer_taux_plan_action(data['plans_action'])
+    
+    # 4. Notifications
+    notifications = Notification.query.filter_by(
+        destinataire_id=user_id,
+        est_lue=False
+    ).order_by(Notification.created_at.desc()).limit(5).all()
+    data['notifications'] = notifications
+    
+    return data
+# ============================================
+# FONCTIONS POUR LES PLANS D'ACTION
+# ============================================
+
+def mettre_a_jour_progression_plan(plan_id, progression, user_id, commentaire=None):
+    """
+    Met à jour la progression d'un plan d'action
+    
+    Args:
+        plan_id: ID du plan
+        progression: Nouveau pourcentage (0-100)
+        user_id: ID de l'utilisateur
+        commentaire: Commentaire optionnel
+    
+    Returns:
+        PlanAction: Le plan mis à jour ou None
+    """
+    from models import PlanAction, SousAction
+    from datetime import datetime
+    from app import db
+    
+    try:
+        plan = PlanAction.query.get(plan_id)
+        if not plan:
+            return None
+        
+        plan.pourcentage_realisation = min(100, max(0, progression))
+        if commentaire:
+            plan.commentaire_evaluation = commentaire
+        
+        if plan.pourcentage_realisation == 100:
+            plan.statut = 'termine'
+            plan.date_fin_reelle = datetime.now().date()
+        elif plan.pourcentage_realisation > 0:
+            plan.statut = 'en_cours'
+        else:
+            plan.statut = 'en_attente'
+        
+        plan.updated_at = datetime.utcnow()
+        
+        # Mettre à jour les sous-actions proportionnellement
+        if plan.sous_actions:
+            total_sous_actions = len(plan.sous_actions)
+            if total_sous_actions > 0:
+                # Répartir la progression sur les sous-actions
+                progression_par_sous_action = plan.pourcentage_realisation / total_sous_actions
+                for sous_action in plan.sous_actions:
+                    if plan.pourcentage_realisation == 100:
+                        sous_action.statut = 'termine'
+                        sous_action.pourcentage_realisation = 100
+                        sous_action.date_fin_reelle = datetime.now().date()
+                    else:
+                        # Progresser proportionnellement
+                        if sous_action.pourcentage_realisation < progression_par_sous_action:
+                            sous_action.pourcentage_realisation = min(100, progression_par_sous_action)
+                        if sous_action.pourcentage_realisation > 0 and sous_action.pourcentage_realisation < 100:
+                            sous_action.statut = 'en_cours'
+                    db.session.add(sous_action)
+        
+        db.session.commit()
+        
+        # Journaliser
+        log_activity(
+            user_id,
+            'suivi_plan_action',
+            f"Progression du plan {plan.reference}: {plan.pourcentage_realisation}%",
+            'plan_action',
+            plan.id
+        )
+        
+        return plan
+        
+    except Exception as e:
+        db.session.rollback()
+        print(f"❌ Erreur mise à jour progression plan: {e}")
+        return None
+
+
+def ajouter_commentaire_plan_action(plan_id, user_id, contenu, fichiers=None):
+    """
+    Ajoute un commentaire à un plan d'action
+    
+    Args:
+        plan_id: ID du plan
+        user_id: ID de l'utilisateur
+        contenu: Contenu du commentaire
+        fichiers: Liste de fichiers (optionnel)
+    
+    Returns:
+        CommentairePlanAction: Le commentaire créé ou None
+    """
+    from models import CommentairePlanAction, FichierPlanAction
+    from datetime import datetime
+    from app import db
+    
+    try:
+        commentaire = CommentairePlanAction(
+            plan_action_id=plan_id,
+            utilisateur_id=user_id,
+            contenu=contenu,
+            created_at=datetime.utcnow()
+        )
+        db.session.add(commentaire)
+        db.session.flush()
+        
+        if fichiers:
+            for fichier in fichiers:
+                fichier_plan = FichierPlanAction(
+                    commentaire_id=commentaire.id,
+                    plan_action_id=plan_id,
+                    nom_fichier=fichier.filename,
+                    chemin=f"uploads/plans_action/{plan_id}/{fichier.filename}",
+                    type_fichier=fichier.content_type,
+                    taille=fichier.content_length,
+                    uploaded_by=user_id,
+                    client_id=current_user.client_id
+                )
+                db.session.add(fichier_plan)
+        
+        db.session.commit()
+        return commentaire
+        
+    except Exception as e:
+        db.session.rollback()
+        print(f"❌ Erreur ajout commentaire: {e}")
+        return None
+
+# ============================================
+# FONCTIONS DE NOTIFICATION
+# ============================================
+
+def notifier_campagne_terminee(campagne_id):
+    """
+    Notifie le validateur qu'une campagne est terminée
+    
+    Args:
+        campagne_id: ID de la campagne
+    """
+    from models import CampagneControle, Notification
+    from app import db
+    
+    try:
+        campagne = CampagneControle.query.get(campagne_id)
+        if not campagne or not campagne.valideur_id:
+            return
+        
+        notification = Notification(
+            destinataire_id=campagne.valideur_id,
+            type_notification='campagne_terminee',
+            titre=f"Campagne à valider - {campagne.reference}",
+            message=f"La campagne {campagne.reference} est terminée avec un taux de conformité de {campagne.taux_conformite}%.",
+            urgence='important',
+            entite_type='campagne',
+            entite_id=campagne.id,
+            client_id=campagne.client_id
+        )
+        db.session.add(notification)
+        db.session.commit()
+        
+    except Exception as e:
+        print(f"❌ Erreur notification campagne: {e}")
+        db.session.rollback()
+
+
+def notifier_validation_campagne(campagne_id, user_id, action, commentaire):
+    """
+    Notifie l'opérateur de la validation/rejet de sa campagne
+    
+    Args:
+        campagne_id: ID de la campagne
+        user_id: ID de l'utilisateur qui valide
+        action: 'valider' ou 'rejeter'
+        commentaire: Commentaire de validation
+    """
+    from models import CampagneControle, Notification, User
+    from app import db
+    
+    try:
+        campagne = CampagneControle.query.get(campagne_id)
+        if not campagne:
+            return
+        
+        validateur = User.query.get(user_id)
+        validateur_nom = validateur.username if validateur else 'Système'
+        
+        if action == 'valider':
+            titre = f"✅ Campagne validée - {campagne.reference}"
+            message = f"Votre campagne {campagne.reference} a été validée par {validateur_nom}."
+            type_notif = 'campagne_validee'
+        else:
+            titre = f"❌ Campagne rejetée - {campagne.reference}"
+            message = f"Votre campagne {campagne.reference} a été rejetée par {validateur_nom}. Motif: {commentaire}"
+            type_notif = 'campagne_rejetee'
+        
+        notification = Notification(
+            destinataire_id=campagne.createur_id,
+            type_notification=type_notif,
+            titre=titre,
+            message=message,
+            urgence='important' if action == 'rejeter' else 'normal',
+            entite_type='campagne',
+            entite_id=campagne.id,
+            client_id=campagne.client_id
+        )
+        db.session.add(notification)
+        db.session.commit()
+        
+    except Exception as e:
+        print(f"❌ Erreur notification validation: {e}")
+        db.session.rollback()
+
+
+def notifier_evaluation_risque(risque_id, user_id, score, niveau):
+    """
+    Notifie le validateur qu'un risque a été évalué
+    
+    Args:
+        risque_id: ID du risque
+        user_id: ID de l'utilisateur qui a évalué
+        score: Score du risque
+        niveau: Niveau du risque
+    """
+    from models import Risque, Notification, User
+    from app import db
+    
+    try:
+        risque = Risque.query.get(risque_id)
+        if not risque:
+            return
+        
+        evaluateur = User.query.get(user_id)
+        evaluateur_nom = evaluateur.username if evaluateur else 'Système'
+        
+        # Trouver le validateur (créateur de la campagne ou admin)
+        campagne_active = CampagneEvaluation.query.filter_by(
+            cartographie_id=risque.cartographie_id,
+            statut='en_cours',
+            client_id=risque.client_id
+        ).first()
+        
+        if campagne_active and campagne_active.createur:
+            validateur_id = campagne_active.createur.id
+        else:
+            # Sinon, notifier les admins du client
+            admins = User.query.filter_by(
+                client_id=risque.client_id,
+                is_client_admin=True
+            ).all()
+            if admins:
+                validateur_id = admins[0].id
+            else:
+                return
+        
+        notification = Notification(
+            destinataire_id=validateur_id,
+            type_notification='evaluation_risque',
+            titre=f"Risque évalué - {risque.reference}",
+            message=f"{evaluer_nom} a évalué le risque {risque.reference} avec un score de {score} ({niveau}).",
+            urgence='normal',
+            entite_type='risque',
+            entite_id=risque.id,
+            client_id=risque.client_id
+        )
+        db.session.add(notification)
+        db.session.commit()
+        
+    except Exception as e:
+        print(f"❌ Erreur notification évaluation: {e}")
+        db.session.rollback()
+
+# ============================================
+# FONCTIONS D'EXPORT
+# ============================================
+
+def exporter_campagne_excel(campagne_id):
+    """
+    Exporte une campagne en Excel
+    
+    Args:
+        campagne_id: ID de la campagne
+    
+    Returns:
+        BytesIO: Fichier Excel ou None
+    """
+    from models import CampagneControle
+    from datetime import datetime
+    import io
+    import openpyxl
+    from openpyxl.styles import Font, PatternFill, Alignment
+    
+    try:
+        campagne = CampagneControle.query.get(campagne_id)
+        if not campagne:
+            return None
+        
+        wb = openpyxl.Workbook()
+        
+        # ===== FEUILLE RÉSUMÉ =====
+        ws = wb.active
+        ws.title = "Résumé"
+        
+        # En-tête
+        ws['A1'] = "Campagne de contrôle"
+        ws['A1'].font = Font(size=16, bold=True)
+        ws.merge_cells('A1:F1')
+        
+        ws['A3'] = "Référence"
+        ws['B3'] = campagne.reference
+        ws['A4'] = "Nom"
+        ws['B4'] = campagne.nom
+        ws['A5'] = "Période"
+        ws['B5'] = f"{campagne.date_debut.strftime('%d/%m/%Y') if campagne.date_debut else 'N/A'} → {campagne.date_fin.strftime('%d/%m/%Y') if campagne.date_fin else 'N/A'}"
+        ws['A6'] = "Statut"
+        ws['B6'] = campagne.statut
+        ws['A7'] = "Taux de conformité"
+        ws['B7'] = f"{campagne.taux_conformite}%"
+        ws['A8'] = "Avancement"
+        ws['B8'] = f"{campagne.get_avancement()}%"
+        
+        # ===== FEUILLE STATISTIQUES =====
+        ws2 = wb.create_sheet("Statistiques")
+        ws2['A1'] = "Statistiques détaillées"
+        ws2['A1'].font = Font(size=14, bold=True)
+        
+        stats = [
+            ("Dossiers prévus", campagne.nb_dossiers_prevus),
+            ("Dossiers contrôlés", campagne.nb_dossiers_controles),
+            ("Dossiers conformes", campagne.nb_conformes),
+            ("Dossiers non conformes", campagne.nb_dossiers_controles - campagne.nb_conformes),
+            ("Anomalies", campagne.nb_anomalies),
+            ("Taux de conformité", f"{campagne.taux_conformite}%")
+        ]
+        
+        for i, (label, value) in enumerate(stats, start=3):
+            ws2[f'A{i}'] = label
+            ws2[f'B{i}'] = value
+            ws2[f'A{i}'].font = Font(bold=True)
+        
+        # ===== FEUILLE ANOMALIES =====
+        if campagne.motifs_anomalie:
+            ws3 = wb.create_sheet("Anomalies")
+            ws3['A1'] = "Liste des anomalies"
+            ws3['A1'].font = Font(size=14, bold=True)
+            
+            ws3['A3'] = "Motif"
+            ws3['B3'] = "Date"
+            ws3['C3'] = "Ajouté par"
+            
+            for i, anomalie in enumerate(campagne.motifs_anomalie, start=4):
+                ws3[f'A{i}'] = anomalie.get('motif', '')
+                ws3[f'B{i}'] = anomalie.get('date', '')
+                ws3[f'C{i}'] = anomalie.get('ajoute_par', '')
+        
+        # Sauvegarder
+        output = io.BytesIO()
+        wb.save(output)
+        output.seek(0)
+        
+        return output
+        
+    except Exception as e:
+        print(f"❌ Erreur export Excel: {e}")
+        return None
