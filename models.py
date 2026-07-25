@@ -540,72 +540,47 @@ class User(UserMixin, db.Model):
             return role_defaults[self.role][permission]
         
         return False
+
     @property
     def est_operateur(self):
-        """Vérifie si l'utilisateur est un opérateur"""
         return self.is_operateur and self.operateur_permissions is not None
     
     def peut_evaluer_risque(self, risque):
-        """Vérifie si l'utilisateur peut évaluer un risque spécifique"""
         if not self.est_operateur:
             return False
-        
         perms = self.operateur_permissions
         if not perms.peut_evaluer_risques:
             return False
-        
-        # Vérifier les directions autorisées
         if perms.directions_autorisees and risque.direction_id not in perms.directions_autorisees:
             return False
-        
-        # Vérifier les services autorisés
         if perms.services_autorises and risque.service_id not in perms.services_autorises:
             return False
-        
-        # Vérifier les types de risques autorisés
-        if perms.types_risques_autorises and risque.type_risque not in perms.types_risques_autorises:
-            return False
-        
         return True
     
     def peut_executer_campagne(self, campagne):
-        """Vérifie si l'utilisateur peut exécuter une campagne spécifique"""
         if not self.est_operateur:
             return False
-        
         perms = self.operateur_permissions
         if not perms.peut_executer_campagnes:
             return False
-        
-        # Vérifier les directions autorisées
         if perms.directions_autorisees and campagne.direction_id not in perms.directions_autorisees:
             return False
-        
-        # Vérifier les services autorisés
         if perms.services_autorises and campagne.service_id not in perms.services_autorises:
             return False
-        
         return True
     
     def peut_suivre_plan_action(self, plan):
-        """Vérifie si l'utilisateur peut suivre un plan d'action"""
         if not self.est_operateur:
             return False
-        
         perms = self.operateur_permissions
         if not perms.peut_creer_plans_action:
             return False
-        
-        # L'utilisateur peut suivre ses propres plans
         if plan.responsable_id == self.id or plan.createur_id == self.id:
             return True
-        
-        # Ou ceux de ses directions/services
         if perms.directions_autorisees and plan.direction_id in perms.directions_autorisees:
             return True
         if perms.services_autorises and plan.service_id in perms.services_autorises:
             return True
-        
         return False
     
     def can_manage_user(self, target_user):
