@@ -1,0 +1,612 @@
+{% extends "operateur/base_operateur.html" %}
+
+{% block title %}Suivi du plan - {{ plan.reference }}{% endblock %}
+
+{% block content %}
+<style>
+    /* Styles pour l'espace de travail */
+    .file-item {
+        background: var(--light);
+        border-radius: 8px;
+        padding: 0.75rem 1rem;
+        margin-bottom: 0.5rem;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        border: 1px solid var(--border);
+        transition: all 0.2s ease;
+    }
+    .file-item:hover {
+        border-color: #10b981;
+        transform: translateX(4px);
+    }
+    .file-icon {
+        font-size: 1.5rem;
+        width: 40px;
+        text-align: center;
+    }
+    .file-info {
+        flex: 1;
+        margin: 0 1rem;
+    }
+    .file-name {
+        font-weight: 600;
+        color: var(--text-primary);
+    }
+    .file-size {
+        font-size: 0.75rem;
+        color: var(--text-muted);
+    }
+    .file-actions {
+        display: flex;
+        gap: 0.5rem;
+    }
+    .comment-item {
+        background: var(--light);
+        border-radius: 8px;
+        padding: 0.75rem 1rem;
+        margin-bottom: 0.5rem;
+        border-left: 3px solid #3b82f6;
+    }
+    .comment-item .comment-author {
+        font-weight: 600;
+        color: var(--text-primary);
+    }
+    .comment-item .comment-date {
+        font-size: 0.7rem;
+        color: var(--text-muted);
+    }
+    .comment-item .comment-content {
+        margin-top: 0.25rem;
+        color: var(--text-primary);
+    }
+    .sous-action-item {
+        background: var(--light);
+        border-radius: 8px;
+        padding: 0.75rem 1rem;
+        margin-bottom: 0.5rem;
+        border-left: 3px solid #f59e0b;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        flex-wrap: wrap;
+    }
+    .sous-action-item.termine {
+        border-left-color: #10b981;
+        opacity: 0.7;
+    }
+    .sous-action-item .sa-info {
+        flex: 1;
+        min-width: 150px;
+    }
+    .sous-action-item .sa-progress {
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+    }
+    .sous-action-item .sa-progress .progress {
+        width: 100px;
+        height: 6px;
+    }
+    [data-bs-theme="dark"] .file-item,
+    [data-bs-theme="dark"] .comment-item,
+    [data-bs-theme="dark"] .sous-action-item {
+        background: #1e293b;
+        border-color: #334155;
+    }
+    [data-bs-theme="dark"] .file-item:hover {
+        border-color: #10b981;
+    }
+</style>
+
+<div class="container-fluid px-4">
+
+    <!-- ========== EN-TÊTE ========== -->
+    <div class="row mb-4 animate-in">
+        <div class="col-12">
+            <div class="fk-card">
+                <div class="fk-card-body">
+                    <div class="d-flex justify-content-between align-items-center flex-wrap">
+                        <div>
+                            <nav aria-label="breadcrumb">
+                                <ol class="breadcrumb bg-transparent mb-1">
+                                    <li class="breadcrumb-item"><a href="{{ url_for('operateur_dashboard') }}" class="text-decoration-none">Dashboard</a></li>
+                                    <li class="breadcrumb-item"><a href="{{ url_for('operateur_plans_action') }}" class="text-decoration-none">Mes plans</a></li>
+                                    <li class="breadcrumb-item active">{{ plan.reference }}</li>
+                                </ol>
+                            </nav>
+                            <h1 class="h3 mb-1" style="font-family: 'Georgia', serif; color: var(--text-primary);">
+                                <i class="fas fa-tasks me-2" style="color: #10b981;"></i>
+                                {{ plan.nom }}
+                            </h1>
+                            <p class="text-muted mb-0">{{ plan.reference }}</p>
+                        </div>
+                        <div>
+                            <span class="badge bg-{{ 
+                                'success' if plan.statut == 'termine' 
+                                else 'warning' if plan.statut == 'en_cours' 
+                                else 'secondary' 
+                            }} px-3 py-2">
+                                {{ {'en_attente': 'En attente', 'en_cours': 'En cours', 'termine': 'Terminé'}[plan.statut] }}
+                            </span>
+                            <a href="{{ url_for('operateur_plans_action') }}" class="btn btn-outline-secondary btn-sm ms-2">
+                                <i class="fas fa-arrow-left me-2"></i>Retour
+                            </a>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="row g-4">
+        
+        <!-- ========== COLONNE GAUCHE : INFOS ET PROGRESSION ========== -->
+        <div class="col-lg-4">
+            
+            <!-- Progression -->
+            <div class="fk-card animate-in">
+                <div class="fk-card-body text-center">
+                    <div class="display-4 fw-bold" style="color: #1A3C6B; font-family: 'Georgia', serif;">
+                        {{ plan.pourcentage_realisation }}%
+                    </div>
+                    <div class="text-muted">Progression globale</div>
+                    <div class="progress mt-2" style="height: 8px;">
+                        <div class="progress-bar bg-{{ 
+                            'success' if plan.pourcentage_realisation >= 80 
+                            else 'warning' if plan.pourcentage_realisation >= 50 
+                            else 'danger' 
+                        }}" style="width: {{ plan.pourcentage_realisation }}%;"></div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Informations -->
+            <div class="fk-card animate-in mt-3">
+                <div class="fk-card-header">
+                    <i class="fas fa-info-circle me-2"></i>Informations
+                </div>
+                <div class="fk-card-body">
+                    <div class="d-flex justify-content-between py-1 border-bottom">
+                        <span class="text-muted">Priorité</span>
+                        <span class="badge bg-{{ 
+                            'danger' if plan.priorite == 'haute' 
+                            else 'warning' if plan.priorite == 'moyenne' 
+                            else 'info' 
+                        }}">
+                            {{ plan.priorite|title }}
+                        </span>
+                    </div>
+                    <div class="d-flex justify-content-between py-1 border-bottom">
+                        <span class="text-muted">Responsable</span>
+                        <span>{{ plan.responsable.username if plan.responsable else 'Non assigné' }}</span>
+                    </div>
+                    <div class="d-flex justify-content-between py-1 border-bottom">
+                        <span class="text-muted">Date début</span>
+                        <span>{{ plan.date_debut.strftime('%d/%m/%Y') if plan.date_debut else '-' }}</span>
+                    </div>
+                    <div class="d-flex justify-content-between py-1 border-bottom">
+                        <span class="text-muted">Date échéance</span>
+                        <span>
+                            {{ plan.date_fin_prevue.strftime('%d/%m/%Y') if plan.date_fin_prevue else '-' }}
+                            {% if plan.est_en_retard %}
+                            <span class="badge bg-danger ms-1">Retard</span>
+                            {% endif %}
+                        </span>
+                    </div>
+                    <div class="d-flex justify-content-between py-1 border-bottom">
+                        <span class="text-muted">Créé par</span>
+                        <span>{{ plan.createur.username if plan.createur else 'Système' }}</span>
+                    </div>
+                    <div class="d-flex justify-content-between py-1">
+                        <span class="text-muted">Créé le</span>
+                        <span>{{ plan.created_at.strftime('%d/%m/%Y %H:%M') if plan.created_at else '-' }}</span>
+                    </div>
+                    {% if plan.description %}
+                    <div class="mt-3 pt-2 border-top">
+                        <span class="text-muted">Description</span>
+                        <p class="mb-0 small">{{ plan.description }}</p>
+                    </div>
+                    {% endif %}
+                </div>
+            </div>
+
+            <!-- Mise à jour progression (rapide) -->
+            <div class="fk-card animate-in mt-3">
+                <div class="fk-card-header">
+                    <i class="fas fa-sliders-h me-2"></i>Mettre à jour
+                </div>
+                <div class="fk-card-body">
+                    <form method="POST">
+                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                        <div class="mb-3">
+                            <label class="form-label fw-bold">Progression (%)</label>
+                            <input type="number" name="progression" class="form-control" 
+                                   value="{{ plan.pourcentage_realisation }}" min="0" max="100">
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label fw-bold">Commentaire</label>
+                            <input type="text" name="commentaire" class="form-control" 
+                                   placeholder="Avancement, blocages, etc.">
+                        </div>
+                        <div class="d-flex gap-2 flex-wrap mb-3">
+                            <button type="button" class="btn btn-sm btn-outline-secondary" onclick="document.querySelector('input[name=progression]').value=0">0%</button>
+                            <button type="button" class="btn btn-sm btn-outline-secondary" onclick="document.querySelector('input[name=progression]').value=25">25%</button>
+                            <button type="button" class="btn btn-sm btn-outline-secondary" onclick="document.querySelector('input[name=progression]').value=50">50%</button>
+                            <button type="button" class="btn btn-sm btn-outline-secondary" onclick="document.querySelector('input[name=progression]').value=75">75%</button>
+                            <button type="button" class="btn btn-sm btn-success" onclick="document.querySelector('input[name=progression]').value=100">100%</button>
+                        </div>
+                        <button type="submit" class="btn btn-primary-custom w-100">
+                            <i class="fas fa-save me-2"></i>Mettre à jour
+                        </button>
+                    </form>
+                </div>
+            </div>
+        </div>
+
+        <!-- ========== COLONNE DROITE : CONTENU PRINCIPAL ========== -->
+        <div class="col-lg-8">
+
+            <!-- ========== SOUS-ACTIONS ========== -->
+            <div class="fk-card animate-in">
+                <div class="fk-card-header d-flex justify-content-between align-items-center">
+                    <span><i class="fas fa-list-check me-2"></i>Sous-actions ({{ sous_actions|length }})</span>
+                    <button type="button" class="btn btn-sm btn-success" data-bs-toggle="modal" data-bs-target="#modalAjouterSousAction">
+                        <i class="fas fa-plus me-1"></i>Ajouter
+                    </button>
+                </div>
+                <div class="fk-card-body">
+                    {% if sous_actions %}
+                        {% for sa in sous_actions %}
+                        <div class="sous-action-item {% if sa.statut == 'termine' %}termine{% endif %}">
+                            <div class="sa-info">
+                                <div class="fw-semibold">{{ sa.reference if sa.reference else 'Tâche' }}</div>
+                                <div class="text-muted small">{{ sa.description|truncate(80) }}</div>
+                                {% if sa.responsable %}
+                                <div class="text-muted" style="font-size: 0.7rem;">
+                                    <i class="fas fa-user me-1"></i>{{ sa.responsable.username }}
+                                </div>
+                                {% endif %}
+                            </div>
+                            <div class="sa-progress">
+                                <div>
+                                    <span class="badge bg-{{ 
+                                        'success' if sa.statut == 'termine' 
+                                        else 'warning' if sa.statut == 'en_cours' 
+                                        else 'secondary' 
+                                    }}">
+                                        {{ {'a_faire': 'À faire', 'en_cours': 'En cours', 'termine': 'Terminé'}[sa.statut] }}
+                                    </span>
+                                </div>
+                                <div style="width: 80px;">
+                                    <div class="progress" style="height: 4px;">
+                                        <div class="progress-bar" style="width: {{ sa.pourcentage_realisation }}%; 
+                                            background: {{ 'success' if sa.pourcentage_realisation >= 80 else 'warning' if sa.pourcentage_realisation >= 50 else 'danger' }};"></div>
+                                    </div>
+                                    <span class="text-muted" style="font-size: 0.65rem;">{{ sa.pourcentage_realisation }}%</span>
+                                </div>
+                                <div>
+                                    <button class="btn btn-sm btn-outline-success" onclick="terminerSousAction({{ sa.id }})" 
+                                            {% if sa.statut == 'termine' %}disabled{% endif %}>
+                                        <i class="fas fa-check"></i>
+                                    </button>
+                                    <button class="btn btn-sm btn-outline-danger" onclick="supprimerSousAction({{ sa.id }})">
+                                        <i class="fas fa-trash"></i>
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                        {% endfor %}
+                    {% else %}
+                        <div class="text-center py-4">
+                            <i class="fas fa-list-check fa-2x text-muted mb-2"></i>
+                            <p class="text-muted mb-0">Aucune sous-action définie</p>
+                            <button type="button" class="btn btn-sm btn-success mt-2" data-bs-toggle="modal" data-bs-target="#modalAjouterSousAction">
+                                <i class="fas fa-plus me-1"></i>Ajouter une sous-action
+                            </button>
+                        </div>
+                    {% endif %}
+                </div>
+            </div>
+
+            <!-- ========== COMMENTAIRES ========== -->
+            <div class="fk-card animate-in mt-3">
+                <div class="fk-card-header d-flex justify-content-between align-items-center">
+                    <span><i class="fas fa-comments me-2"></i>Commentaires ({{ commentaires|length }})</span>
+                </div>
+                <div class="fk-card-body">
+                    <!-- Formulaire d'ajout -->
+                    <form method="POST" action="{{ url_for('operateur_commenter_plan_action', plan_id=plan.id) }}" class="mb-3">
+                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                        <div class="input-group">
+                            <input type="text" name="contenu" class="form-control" placeholder="Ajouter un commentaire..." required>
+                            <button type="submit" class="btn btn-primary-custom">
+                                <i class="fas fa-paper-plane"></i>
+                            </button>
+                        </div>
+                    </form>
+
+                    <!-- Liste des commentaires -->
+                    {% if commentaires %}
+                        {% for commentaire in commentaires %}
+                        <div class="comment-item">
+                            <div>
+                                <span class="comment-author">{{ commentaire.utilisateur.username if commentaire.utilisateur else 'Système' }}</span>
+                                <span class="comment-date ms-2">
+                                    <i class="far fa-clock me-1"></i>
+                                    {{ commentaire.created_at.strftime('%d/%m/%Y %H:%M') if commentaire.created_at else '' }}
+                                </span>
+                                {% if commentaire.utilisateur_id == current_user.id or current_user.is_client_admin %}
+                                <button class="btn btn-sm btn-outline-danger float-end" onclick="supprimerCommentaire({{ commentaire.id }})">
+                                    <i class="fas fa-times"></i>
+                                </button>
+                                {% endif %}
+                            </div>
+                            <div class="comment-content">{{ commentaire.contenu|nl2br }}</div>
+                        </div>
+                        {% endfor %}
+                        {% if commentaires|length > 10 %}
+                        <div class="text-center mt-2">
+                            <button class="btn btn-sm btn-outline-secondary" id="voirPlusCommentaires">Voir plus</button>
+                        </div>
+                        {% endif %}
+                    {% else %}
+                        <p class="text-muted text-center py-2">Aucun commentaire</p>
+                    {% endif %}
+                </div>
+            </div>
+
+            <!-- ========== FICHIERS ========== -->
+            <div class="fk-card animate-in mt-3">
+                <div class="fk-card-header d-flex justify-content-between align-items-center">
+                    <span><i class="fas fa-paperclip me-2"></i>Fichiers joints ({{ fichiers|length }})</span>
+                </div>
+                <div class="fk-card-body">
+                    <!-- Formulaire d'upload -->
+                    <form method="POST" action="{{ url_for('operateur_ajouter_fichier_plan', plan_id=plan.id) }}" 
+                          enctype="multipart/form-data" class="mb-3">
+                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                        <div class="input-group">
+                            <input type="file" name="fichier" class="form-control" id="fichierInput" required>
+                            <button type="submit" class="btn btn-primary-custom">
+                                <i class="fas fa-upload me-2"></i>Ajouter
+                            </button>
+                        </div>
+                        <small class="text-muted">Formats acceptés : PDF, DOC, DOCX, XLS, XLSX, JPG, PNG (max 10Mo)</small>
+                    </form>
+
+                    <!-- Liste des fichiers -->
+                    {% if fichiers %}
+                        <div class="files-list">
+                            {% for fichier in fichiers %}
+                            <div class="file-item">
+                                <div class="file-icon">
+                                    <i class="fas fa-file-{{ 
+                                        'pdf' if 'pdf' in fichier.type_fichier|lower 
+                                        else 'word' if 'word' in fichier.type_fichier|lower 
+                                        else 'excel' if 'excel' in fichier.type_fichier|lower or 'sheet' in fichier.type_fichier|lower 
+                                        else 'image' if 'image' in fichier.type_fichier|lower 
+                                        else 'alt' 
+                                    }}" style="color: 
+                                        {% if 'pdf' in fichier.type_fichier|lower %}#dc3545
+                                        {% elif 'word' in fichier.type_fichier|lower %}#0d6efd
+                                        {% elif 'excel' in fichier.type_fichier|lower %}#198754
+                                        {% elif 'image' in fichier.type_fichier|lower %}#6f42c1
+                                        {% else %}#6c757d{% endif %};"></i>
+                                </div>
+                                <div class="file-info">
+                                    <div class="file-name">{{ fichier.nom_fichier }}</div>
+                                    <div class="file-size">
+                                        {{ (fichier.taille / 1024)|round(1) if fichier.taille else 0 }} Ko
+                                        <span class="ms-2">
+                                            <i class="far fa-user me-1"></i>
+                                            {{ fichier.uploader.username if fichier.uploader else 'Système' }}
+                                        </span>
+                                        <span class="ms-2">
+                                            <i class="far fa-calendar-alt me-1"></i>
+                                            {{ fichier.created_at.strftime('%d/%m/%Y %H:%M') if fichier.created_at else '' }}
+                                        </span>
+                                    </div>
+                                </div>
+                                <div class="file-actions">
+                                    <a href="{{ url_for('operateur_telecharger_fichier_plan', fichier_id=fichier.id) }}" 
+                                       class="btn btn-sm btn-outline-primary" title="Télécharger">
+                                        <i class="fas fa-download"></i>
+                                    </a>
+                                    {% if fichier.uploaded_by == current_user.id or current_user.is_client_admin %}
+                                    <button type="button" class="btn btn-sm btn-outline-danger" 
+                                            onclick="supprimerFichier({{ fichier.id }})" title="Supprimer">
+                                        <i class="fas fa-trash"></i>
+                                    </button>
+                                    {% endif %}
+                                </div>
+                            </div>
+                            {% endfor %}
+                        </div>
+                    {% else %}
+                        <p class="text-muted text-center py-2">Aucun fichier joint</p>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- ========================================== -->
+<!-- MODAL AJOUTER SOUS-ACTION -->
+<!-- ========================================== -->
+<div class="modal fade" id="modalAjouterSousAction" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <form method="POST" action="{{ url_for('operateur_ajouter_sous_action', plan_id=plan.id) }}">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                
+                <div class="modal-header">
+                    <h5 class="modal-title">
+                        <i class="fas fa-plus-circle me-2" style="color: #10b981;"></i>
+                        Ajouter une sous-action
+                    </h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                
+                <div class="modal-body">
+                    <div class="mb-3">
+                        <label class="form-label fw-bold">Description *</label>
+                        <textarea name="description" class="form-control" rows="3" 
+                                  placeholder="Décrire la tâche à réaliser..." required></textarea>
+                    </div>
+                    
+                    <div class="mb-3">
+                        <label class="form-label fw-bold">Date d'échéance</label>
+                        <input type="date" name="date_echeance" class="form-control">
+                    </div>
+                    
+                    <div class="mb-3">
+                        <label class="form-label fw-bold">Responsable</label>
+                        <select name="responsable_id" class="form-select">
+                            <option value="">Moi-même</option>
+                            {% for user in users_disponibles %}
+                            <option value="{{ user.id }}">{{ user.username }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                </div>
+                
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Annuler</button>
+                    <button type="submit" class="btn btn-success-custom">
+                        <i class="fas fa-plus me-2"></i>Ajouter
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<script>
+// ============================================
+// TERMINER UNE SOUS-ACTION
+// ============================================
+function terminerSousAction(sousActionId) {
+    if (!confirm('Marquer cette sous-action comme terminée ?')) return;
+    
+    fetch(`/operateur/sous-action/${sousActionId}/terminer`, {
+        method: 'POST',
+        headers: {
+            'X-CSRFToken': '{{ csrf_token() }}',
+            'Content-Type': 'application/json'
+        }
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            location.reload();
+        } else {
+            alert('Erreur: ' + data.error);
+        }
+    })
+    .catch(error => {
+        console.error('Error:', error);
+        alert('Erreur réseau');
+    });
+}
+
+// ============================================
+// SUPPRIMER UNE SOUS-ACTION
+// ============================================
+function supprimerSousAction(sousActionId) {
+    if (!confirm('Supprimer cette sous-action ?')) return;
+    
+    fetch(`/operateur/sous-action/${sousActionId}/supprimer`, {
+        method: 'DELETE',
+        headers: {
+            'X-CSRFToken': '{{ csrf_token() }}',
+            'Content-Type': 'application/json'
+        }
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            location.reload();
+        } else {
+            alert('Erreur: ' + data.error);
+        }
+    })
+    .catch(error => {
+        console.error('Error:', error);
+        alert('Erreur réseau');
+    });
+}
+
+// ============================================
+// SUPPRIMER UN COMMENTAIRE
+// ============================================
+function supprimerCommentaire(commentaireId) {
+    if (!confirm('Supprimer ce commentaire ?')) return;
+    
+    fetch(`/operateur/commentaire/${commentaireId}/supprimer`, {
+        method: 'DELETE',
+        headers: {
+            'X-CSRFToken': '{{ csrf_token() }}',
+            'Content-Type': 'application/json'
+        }
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            location.reload();
+        } else {
+            alert('Erreur: ' + data.error);
+        }
+    })
+    .catch(error => {
+        console.error('Error:', error);
+        alert('Erreur réseau');
+    });
+}
+
+// ============================================
+// SUPPRIMER UN FICHIER
+// ============================================
+function supprimerFichier(fichierId) {
+    if (!confirm('Supprimer ce fichier ?')) return;
+    
+    fetch(`/operateur/plan-action/fichier/${fichierId}/supprimer`, {
+        method: 'DELETE',
+        headers: {
+            'X-CSRFToken': '{{ csrf_token() }}'
+        }
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            location.reload();
+        } else {
+            alert('Erreur: ' + data.error);
+        }
+    })
+    .catch(error => {
+        console.error('Error:', error);
+        alert('Erreur réseau');
+    });
+}
+
+// ============================================
+// AFFICHER LE NOM DU FICHIER SÉLECTIONNÉ
+// ============================================
+document.getElementById('fichierInput')?.addEventListener('change', function(e) {
+    const fileName = this.files[0]?.name || '';
+    const label = this.parentElement.querySelector('.file-label');
+    // Optionnel: afficher le nom
+});
+
+// ============================================
+// VOIR PLUS DE COMMENTAIRES
+// ============================================
+document.getElementById('voirPlusCommentaires')?.addEventListener('click', function() {
+    const hiddenComments = document.querySelectorAll('.comment-item.hidden');
+    hiddenComments.forEach(el => el.classList.remove('hidden'));
+    this.style.display = 'none';
+});
+</script>
+{% endblock %}

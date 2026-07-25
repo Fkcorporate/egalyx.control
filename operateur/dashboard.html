@@ -1,0 +1,226 @@
+{% extends "operateur/base_operateur.html" %}
+
+{% block title %}Dashboard Opérationnel{% endblock %}
+
+{% block content %}
+<div class="container-fluid px-4 pb-5">
+
+    <!-- En-tête -->
+    <div class="row mb-4 animate-in">
+        <div class="col-12">
+            <div class="fk-card">
+                <div class="fk-card-body">
+                    <div class="d-flex justify-content-between align-items-center flex-wrap">
+                        <div>
+                            <h1 class="h3 mb-1" style="font-family: 'Georgia', serif; color: #0f172a;">
+                                <i class="fas fa-chart-pie me-2" style="color: #10b981;"></i>
+                                Tableau de bord opérationnel
+                            </h1>
+                            <p class="text-muted mb-0">
+                                <i class="fas fa-user me-1"></i>
+                                {{ current_user.username }} · 
+                                {% if current_user.department %}
+                                {{ current_user.department }}
+                                {% else %}
+                                Aucun service
+                                {% endif %}
+                            </p>
+                        </div>
+                        <div>
+                            <span class="badge bg-success px-3 py-2">
+                                <i class="fas fa-check-circle me-1"></i>
+                                Mode Opérateur
+                            </span>
+                            <span class="badge bg-info px-3 py-2 ms-2">
+                                <i class="far fa-clock me-1"></i>
+                                {{ now.strftime('%d/%m/%Y %H:%M') }}
+                            </span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Statistiques -->
+    <div class="row g-4 mb-4">
+        <div class="col-md-3">
+            <div class="stat-card animate-in">
+                <div class="stat-number" style="color: #3b82f6;">{{ data.risques.a_evaluer|length }}</div>
+                <div class="stat-label">Risques à évaluer</div>
+                <div class="progress mt-2" style="height: 4px;">
+                    <div class="progress-bar bg-primary" style="width: {{ data.stats.taux_evaluation }}%;"></div>
+                </div>
+                <small class="text-muted">{{ data.stats.taux_evaluation }}% évalués</small>
+            </div>
+        </div>
+        
+        <div class="col-md-3">
+            <div class="stat-card animate-in">
+                <div class="stat-number" style="color: #f59e0b;">{{ data.campagnes.en_cours|length + data.campagnes.a_realiser|length }}</div>
+                <div class="stat-label">Campagnes à réaliser</div>
+                <div class="progress mt-2" style="height: 4px;">
+                    <div class="progress-bar bg-warning" style="width: {{ data.stats.taux_campagne }}%;"></div>
+                </div>
+                <small class="text-muted">{{ data.stats.taux_campagne }}% terminées</small>
+            </div>
+        </div>
+        
+        <div class="col-md-3">
+            <div class="stat-card animate-in">
+                <div class="stat-number" style="color: #10b981;">{{ data.plans_action.en_cours|length + data.plans_action.en_retard|length }}</div>
+                <div class="stat-label">Plans en cours</div>
+                <div class="progress mt-2" style="height: 4px;">
+                    <div class="progress-bar bg-success" style="width: {{ data.stats.taux_plan_action }}%;"></div>
+                </div>
+                <small class="text-muted">{{ data.stats.taux_plan_action }}% terminés</small>
+            </div>
+        </div>
+        
+        <div class="col-md-3">
+            <div class="stat-card animate-in" style="border-top: 3px solid #10b981;">
+                <div class="stat-number" style="color: #dc3545;">{{ data.notifications|length }}</div>
+                <div class="stat-label">Notifications</div>
+                <small class="text-muted">
+                    <i class="fas fa-arrow-right me-1"></i>
+                    <a href="{{ url_for('operateur_notifications') }}" class="text-decoration-none">Voir toutes</a>
+                </small>
+            </div>
+        </div>
+    </div>
+
+    <!-- Contenu principal -->
+    <div class="row g-4">
+
+        <!-- Colonne gauche -->
+        <div class="col-lg-6">
+
+            <!-- Risques à évaluer -->
+            <div class="fk-card animate-in">
+                <div class="fk-card-header d-flex justify-content-between align-items-center">
+                    <span><i class="fas fa-search me-2" style="color: #3b82f6;"></i>Risques à évaluer</span>
+                    <span class="badge bg-primary">{{ data.risques.a_evaluer|length }}</span>
+                </div>
+                <div class="fk-card-body">
+                    {% if data.risques.a_evaluer %}
+                        {% for risque in data.risques.a_evaluer[:5] %}
+                        <a href="{{ url_for('operateur_evaluer_risque', risque_id=risque.id) }}" class="list-item">
+                            <div class="flex-grow-1">
+                                <div class="fw-semibold">{{ risque.reference }}</div>
+                                <div class="text-muted small">{{ risque.intitule|truncate(50) }}</div>
+                            </div>
+                            <span class="badge bg-{{ 'danger' if risque.niveau_criticite == 'critique' else 'warning' if risque.niveau_criticite == 'eleve' else 'info' }}">
+                                {{ risque.niveau_criticite or 'Non évalué' }}
+                            </span>
+                        </a>
+                        {% endfor %}
+                        {% if data.risques.a_evaluer|length > 5 %}
+                        <div class="text-center mt-3">
+                            <a href="{{ url_for('operateur_tous_risques') }}" class="btn btn-sm btn-outline-primary">
+                                Voir les {{ data.risques.a_evaluer|length - 5 }} autres
+                            </a>
+                        </div>
+                        {% endif %}
+                    {% else %}
+                        <div class="text-center py-4">
+                            <i class="fas fa-check-circle fa-2x text-success mb-2"></i>
+                            <p class="text-muted mb-0">Tous les risques sont évalués !</p>
+                        </div>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+
+        <!-- Colonne droite -->
+        <div class="col-lg-6">
+
+            <!-- Plans d'action -->
+            <div class="fk-card animate-in">
+                <div class="fk-card-header d-flex justify-content-between align-items-center">
+                    <span><i class="fas fa-tasks me-2" style="color: #10b981;"></i>Plans d'action à suivre</span>
+                    <span class="badge bg-success">{{ data.plans_action.en_cours|length + data.plans_action.en_retard|length }}</span>
+                </div>
+                <div class="fk-card-body">
+                    {% set plans = data.plans_action.en_cours + data.plans_action.en_retard %}
+                    {% if plans %}
+                        {% for plan in plans[:5] %}
+                        <a href="{{ url_for('operateur_suivre_plan_action', plan_id=plan.id) }}" class="list-item">
+                            <div class="flex-grow-1">
+                                <div class="fw-semibold">
+                                    {{ plan.reference }}
+                                    {% if plan.est_en_retard %}
+                                    <span class="badge bg-danger ms-1" style="font-size: 0.6rem;">RETARD</span>
+                                    {% endif %}
+                                </div>
+                                <div class="text-muted small">{{ plan.nom|truncate(40) }}</div>
+                            </div>
+                            <div class="text-end">
+                                <span class="fw-bold">{{ plan.pourcentage_realisation }}%</span>
+                                <div class="progress" style="height: 4px; width: 60px;">
+                                    <div class="progress-bar bg-{{ 'success' if plan.pourcentage_realisation >= 80 else 'warning' if plan.pourcentage_realisation >= 50 else 'danger' }}" 
+                                         style="width: {{ plan.pourcentage_realisation }}%;"></div>
+                                </div>
+                            </div>
+                        </a>
+                        {% endfor %}
+                        {% if plans|length > 5 %}
+                        <div class="text-center mt-3">
+                            <a href="{{ url_for('operateur_plans_action') }}" class="btn btn-sm btn-outline-success">
+                                Voir tous les plans
+                            </a>
+                        </div>
+                        {% endif %}
+                    {% else %}
+                        <div class="text-center py-4">
+                            <i class="fas fa-clipboard-check fa-2x text-success mb-2"></i>
+                            <p class="text-muted mb-0">Aucun plan en cours</p>
+                        </div>
+                    {% endif %}
+                </div>
+            </div>
+
+            <!-- Notifications -->
+            <div class="fk-card animate-in mt-4">
+                <div class="fk-card-header d-flex justify-content-between align-items-center">
+                    <span><i class="fas fa-bell me-2" style="color: #dc3545;"></i>Notifications</span>
+                    <span class="badge bg-danger">{{ data.notifications|length }}</span>
+                </div>
+                <div class="fk-card-body">
+                    {% if data.notifications %}
+                        {% for notif in data.notifications[:5] %}
+                        <div class="d-flex align-items-start p-2 border-bottom">
+                            <div class="me-3">
+                                <i class="fas fa-{{ notif.get_icon() }} text-{{ notif.get_color() }}"></i>
+                            </div>
+                            <div class="flex-grow-1">
+                                <div class="fw-semibold" style="font-size: 0.9rem;">{{ notif.titre }}</div>
+                                <div class="text-muted small">{{ notif.message|truncate(60) }}</div>
+                                <div class="text-muted" style="font-size: 0.7rem;">
+                                    <i class="far fa-clock me-1"></i>
+                                    {{ notif.created_at.strftime('%H:%M') }}
+                                </div>
+                            </div>
+                            <span class="badge bg-{{ 'danger' if notif.urgence == 'urgent' else 'warning' if notif.urgence == 'important' else 'info' }}" style="font-size: 0.6rem;">
+                                {{ notif.urgence }}
+                            </span>
+                        </div>
+                        {% endfor %}
+                        {% if data.notifications|length > 5 %}
+                        <div class="text-center mt-3">
+                            <a href="{{ url_for('operateur_notifications') }}" class="btn btn-sm btn-outline-danger">
+                                Voir toutes les notifications
+                            </a>
+                        </div>
+                        {% endif %}
+                    {% else %}
+                        <div class="text-center py-4">
+                            <i class="fas fa-bell-slash fa-2x text-muted mb-2"></i>
+                            <p class="text-muted mb-0">Aucune notification</p>
+                        </div>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
