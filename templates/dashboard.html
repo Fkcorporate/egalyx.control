@@ -332,7 +332,103 @@
                 </div>
             </div>
         </div>
+        <!-- templates/dashboard.html - Ajouter une section Tableau de bord des processus -->
 
+<!-- Section Dashboard Processus -->
+<div class="row mb-4">
+    <div class="col-12">
+        <div class="d-flex justify-content-between align-items-center mb-3">
+            <h5 class="mb-0">
+                <i class="fas fa-sitemap text-primary me-2"></i>
+                Processus & Risques
+            </h5>
+            <a href="{{ url_for('vue_transversale') }}" class="fk-btn fk-btn-sm fk-btn-outline-primary">
+                Voir tout <i class="fas fa-arrow-right ms-1"></i>
+            </a>
+        </div>
+        <div class="row g-3" id="processusDashboard">
+            <!-- Chargement via AJAX -->
+            <div class="col-12 text-center py-4">
+                <div class="spinner-border text-primary" role="status">
+                    <span class="visually-hidden">Chargement...</span>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    chargerDashboardProcessus();
+});
+
+function chargerDashboardProcessus() {
+    fetch('/api/dashboard/processus')
+        .then(res => res.json())
+        .then(data => {
+            const container = document.getElementById('processusDashboard');
+            if (data.success && data.processus.length > 0) {
+                container.innerHTML = data.processus.map(p => `
+                    <div class="col-md-4">
+                        <div class="fk-card processus-card" onclick="window.location.href='/processus-metier/${p.id}'" style="cursor: pointer;">
+                            <div class="fk-card-body">
+                                <div class="d-flex justify-content-between align-items-start">
+                                    <div>
+                                        <span class="badge bg-${p.type_couleur}">${p.type_processus}</span>
+                                        <h6 class="mt-2 mb-1">${p.nom}</h6>
+                                        <span class="text-muted small">${p.reference}</span>
+                                    </div>
+                                    ${p.has_logigramme ? '<span class="badge bg-info text-white"><i class="fas fa-project-diagram"></i></span>' : ''}
+                                </div>
+                                <div class="row g-2 mt-3">
+                                    <div class="col-4 text-center">
+                                        <div class="border rounded p-1">
+                                            <div class="h5 mb-0 text-${p.risques_critiques > 0 ? 'danger' : 'primary'}">${p.nb_risques}</div>
+                                            <small class="text-muted">Risques</small>
+                                        </div>
+                                    </div>
+                                    <div class="col-4 text-center">
+                                        <div class="border rounded p-1">
+                                            <div class="h5 mb-0 text-success">${p.nb_controles}</div>
+                                            <small class="text-muted">Contrôles</small>
+                                        </div>
+                                    </div>
+                                    <div class="col-4 text-center">
+                                        <div class="border rounded p-1">
+                                            <div class="h5 mb-0 text-warning">${p.nb_etapes}</div>
+                                            <small class="text-muted">Étapes</small>
+                                        </div>
+                                    </div>
+                                </div>
+                                ${p.risques_critiques > 0 ? `
+                                <div class="mt-2">
+                                    <span class="badge bg-danger">
+                                        <i class="fas fa-exclamation-triangle me-1"></i>
+                                        ${p.risques_critiques} risque(s) critique(s)
+                                    </span>
+                                </div>
+                                ` : ''}
+                            </div>
+                        </div>
+                    </div>
+                `).join('');
+            } else {
+                container.innerHTML = `
+                    <div class="col-12 text-center py-4">
+                        <i class="fas fa-sitemap fa-3x text-muted opacity-25 mb-3"></i>
+                        <p class="text-muted">Aucun processus métier créé</p>
+                        <a href="{{ url_for('nouveau_processus_metier') }}" class="fk-btn fk-btn-primary">
+                            <i class="fas fa-plus me-2"></i>Créer un processus
+                        </a>
+                    </div>
+                `;
+            }
+        })
+        .catch(error => {
+            console.error('Erreur:', error);
+        });
+}
+</script>
 
     <div class="row">
         <!-- Section gauche : Graphiques et Alertes -->
@@ -600,13 +696,14 @@
                 <div class="fk-card-body">
                     {% if cartographies %}
                     <div class="cartographie-list">
-                        {% for cartographie in cartographies %}
+                        {% for item in cartographies %}
+                        {% set cartographie = item.cartographie %}
                         <div class="cartographie-item mb-3 p-3 border border-success rounded hover-light">
                             <div class="d-flex justify-content-between align-items-start mb-2">
                                 <h6 class="mb-0 fw-semibold" style="color: var(--fk-navy);">
                                     {{ cartographie.nom|truncate(25) }}
                                 </h6>
-                                <span class="badge fk-badge fk-badge-success">{{ cartographie.nb_risques_actifs }} risques</span>
+                                <span class="badge fk-badge fk-badge-success">{{ item.nb_risques_actifs }} risques</span>
                             </div>
                             <p class="text-muted small mb-2">
                                 {{ cartographie.description|truncate(60) if cartographie.description else 'Aucune description' }}
@@ -617,7 +714,7 @@
                                     {{ cartographie.direction.nom if cartographie.direction else 'Non assigné' }}
                                 </small>
                                 <a href="{{ url_for('detail_cartographie', id=cartographie.id) }}" 
-                                   class="btn btn-sm fk-btn-outline">
+                                class="btn btn-sm fk-btn-outline">
                                     <i class="fas fa-arrow-right"></i>
                                 </a>
                             </div>
