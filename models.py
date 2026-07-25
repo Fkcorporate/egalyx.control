@@ -985,37 +985,220 @@ class ConfigurationOrganigramme(db.Model):
 class Cartographie(db.Model):
     __tablename__ = 'cartographie'
     
+    # ============================================
+    # COLONNES EXISTANTES
+    # ============================================
     id = db.Column(db.Integer, primary_key=True)
     nom = db.Column(db.String(200), nullable=False)
     description = db.Column(db.Text)
     
-    # 🔴 AJOUTER CETTE LIGNE
     pole_id = db.Column(db.Integer, db.ForeignKey('poles.id'), nullable=True)
-    
-    direction_id = db.Column(db.Integer, db.ForeignKey('direction.id'))
-    service_id = db.Column(db.Integer, db.ForeignKey('service.id'))
+    direction_id = db.Column(db.Integer, db.ForeignKey('direction.id'), nullable=True)
+    service_id = db.Column(db.Integer, db.ForeignKey('service.id'), nullable=True)
     type_cartographie = db.Column(db.String(50), default='direction')
     created_by = db.Column(db.Integer, db.ForeignKey('user.id'))
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
-    processus_id = db.Column(db.Integer, db.ForeignKey('processus.id')) 
+    processus_id = db.Column(db.Integer, db.ForeignKey('processus.id'), nullable=True)
     
     is_archived = db.Column(db.Boolean, default=False)
     archived_at = db.Column(db.DateTime)
     archived_by = db.Column(db.Integer, db.ForeignKey('user.id'))
     archive_reason = db.Column(db.Text)
     
-    # Relations
-    # 🔴 AJOUTER CETTE RELATION
-    pole = db.relationship('Pole', backref='cartographies')
+    client_id = db.Column(db.Integer, db.ForeignKey('clients.id'), nullable=True)
     
+    # ============================================
+    # 🔥 NOUVEAU : CAMPAGNE ACTIVE
+    # ============================================
+    # ✅ Champ pour stocker l'ID de la campagne active
+    campagne_active_id = db.Column(db.Integer, db.ForeignKey('campagnes_evaluation.id'), nullable=True)
+    
+    # ============================================
+    # RELATIONS
+    # ============================================
+    pole = db.relationship('Pole', backref='cartographies')
     direction = db.relationship('Direction', back_populates='cartographies')
     service = db.relationship('Service', back_populates='cartographies')
     createur = db.relationship('User', foreign_keys=[created_by])
     archive_user = db.relationship('User', foreign_keys=[archived_by])
     risques = db.relationship('Risque', back_populates='cartographie')
-    campagnes = db.relationship('CampagneEvaluation', back_populates='cartographie', cascade='all, delete-orphan')
-    client_id = db.Column(db.Integer, db.ForeignKey('clients.id'), nullable=True)
     processus = db.relationship('Processus', backref='cartographies')
+    
+    # ✅ RELATION VERS LA CAMPAGNE ACTIVE (UNIQUE)
+    campagne_active = db.relationship(
+        'CampagneEvaluation', 
+        foreign_keys=[campagne_active_id],
+        backref='cartographie_active_ref'
+    )
+    
+    # ✅ RELATION VERS TOUTES LES CAMPAGNES
+    campagnes = db.relationship(
+        'CampagneEvaluation', 
+        back_populates='cartographie', 
+        cascade='all, delete-orphan',
+        foreign_keys='CampagneEvaluation.cartographie_id'
+    )
+    
+    # ============================================
+    # MÉTHODES DE GESTION DE LA CAMPAGNE ACTIVE
+    # ============================================
+    
+    def get_campagne_active(self):
+        """
+        Retourne la campagne active ou None.
+        Priorité : 1. campagne_active_id, 2. campagne en cours
+        """
+        # 1. Vérifier si une campagne active est définie
+        if self.campagne_active_id:
+            campagne = CampagneEvaluation.query.get(self.campagne_active_id)
+            if campagne and campagne.statut != 'archivee':
+                return campagne
+        
+        # 2. Fallback : chercher une campagne en cours
+        campagne = CampagneEvaluation.query.filter_by(
+            cartographie_id=self.id,
+            statut='en_cours'
+        ).first()
+        
+        # 3. Si aucune campagne en cours, chercher une campagne terminée
+        if not campagne:
+            campagne = CampagneEvaluation.query.filter_by(
+                cartographie_id=self.id,
+                statut='terminee'
+            ).order_by(CampagneEvaluation.created_at.desc()).first()
+        
+        return campagne
+    
+    def set_campagne_active(self, campagne_id):
+        """
+        Définit la campagne active pour cette cartographie.
+        Retourne True si réussi, False sinon.
+        """
+        try:
+            campagne = CampagneEvaluation.query.get(campagne_id)
+            if not campagne:
+                print(f"❌ Campagne {campagne_id} introuvable")
+                return False
+            
+            if campagne.cartographie_id != self.id:
+                print(f"❌ Campagne {campagne_id} n'appartient pas à la cartographie {self.id}")
+                return False
+            
+            # ✅ Définir la campagne active
+            self.campagne_active_id = campagne_id
+            
+            # ✅ S'assurer que la campagne est en cours
+            if campagne.statut != 'en_cours':
+                campagne.statut = 'en_cours'
+            
+            db.session.commit()
+            print(f"✅ Campagne active définie: {campagne.nom} (ID: {campagne_id})")
+            return True
+            
+        except Exception as e:
+            db.session.rollback()
+            print(f"❌ Erreur set_campagne_active: {e}")
+            return False
+    
+    def clear_campagne_active(self):
+        """Supprime la référence à la campagne active"""
+        self.campagne_active_id = None
+        db.session.commit()
+        print(f"✅ Campagne active supprimée pour cartographie {self.id}")
+    
+    def get_campagne_active_display(self):
+        """
+        Retourne un dictionnaire d'informations sur la campagne active
+        pour l'affichage dans les templates
+        """
+        campagne = self.get_campagne_active()
+        if not campagne:
+            return {
+                'id': None,
+                'nom': 'Aucune campagne active',
+                'statut': 'inactive',
+                'date_debut': None,
+                'date_fin': None,
+                'progression': 0,
+                'nb_risques': 0,
+                'nb_evalues': 0
+            }
+        
+        # Statistiques de la campagne
+        nb_risques = Risque.query.filter_by(
+            cartographie_id=self.id,
+            is_archived=False
+        ).count()
+        
+        nb_evalues = EvaluationRisque.query\
+            .join(Risque)\
+            .filter(
+                Risque.cartographie_id == self.id,
+                Risque.is_archived == False,
+                EvaluationRisque.campagne_id == campagne.id,
+                EvaluationRisque.date_confirmation.isnot(None)
+            ).count()
+        
+        progression = int((nb_evalues / nb_risques * 100) if nb_risques > 0 else 0)
+        
+        return {
+            'id': campagne.id,
+            'nom': campagne.nom,
+            'statut': campagne.statut,
+            'date_debut': campagne.date_debut,
+            'date_fin': campagne.date_fin,
+            'progression': progression,
+            'nb_risques': nb_risques,
+            'nb_evalues': nb_evalues,
+            'est_terminee': campagne.statut == 'terminee',
+            'est_archivee': campagne.statut == 'archivee'
+        }
+    
+    def get_campagnes_disponibles(self):
+        """
+        Retourne toutes les campagnes disponibles pour cette cartographie
+        avec leur statut et progression
+        """
+        campagnes = CampagneEvaluation.query.filter_by(
+            cartographie_id=self.id
+        ).order_by(CampagneEvaluation.created_at.desc()).all()
+        
+        result = []
+        for campagne in campagnes:
+            nb_risques = Risque.query.filter_by(
+                cartographie_id=self.id,
+                is_archived=False
+            ).count()
+            
+            nb_evalues = EvaluationRisque.query\
+                .join(Risque)\
+                .filter(
+                    Risque.cartographie_id == self.id,
+                    Risque.is_archived == False,
+                    EvaluationRisque.campagne_id == campagne.id,
+                    EvaluationRisque.date_confirmation.isnot(None)
+                ).count()
+            
+            progression = int((nb_evalues / nb_risques * 100) if nb_risques > 0 else 0)
+            
+            result.append({
+                'id': campagne.id,
+                'nom': campagne.nom,
+                'statut': campagne.statut,
+                'date_debut': campagne.date_debut,
+                'date_fin': campagne.date_fin,
+                'progression': progression,
+                'nb_risques': nb_risques,
+                'nb_evalues': nb_evalues,
+                'est_active': self.campagne_active_id == campagne.id,
+                'peut_etre_active': campagne.statut == 'en_cours' or campagne.statut == 'terminee'
+            })
+        
+        return result
+    
+    # ============================================
+    # PROPRIÉTÉS EXISTANTES
+    # ============================================
     
     @property
     def nom_complet(self):
@@ -1033,6 +1216,81 @@ class Cartographie(db.Model):
         if self.service:
             parts.append(self.service.nom)
         return " > ".join(parts)
+    
+    @property
+    def nb_risques_actifs(self):
+        return Risque.query.filter_by(
+            cartographie_id=self.id,
+            is_archived=False
+        ).count()
+    
+    @property
+    def nb_campagnes(self):
+        return CampagneEvaluation.query.filter_by(
+            cartographie_id=self.id
+        ).count()
+    
+    @property
+    def progression_globale(self):
+        """Progression globale de toutes les campagnes confondues"""
+        nb_risques = self.nb_risques_actifs
+        if nb_risques == 0:
+            return 0
+        
+        nb_evalues = EvaluationRisque.query\
+            .join(Risque)\
+            .filter(
+                Risque.cartographie_id == self.id,
+                Risque.is_archived == False,
+                EvaluationRisque.date_confirmation.isnot(None)
+            ).distinct(EvaluationRisque.risque_id).count()
+        
+        return int((nb_evalues / nb_risques) * 100)
+    
+    # ============================================
+    # MÉTHODES D'ARCHIVAGE
+    # ============================================
+    
+    def archiver(self, user_id, reason=None):
+        """Archive la cartographie"""
+        self.is_archived = True
+        self.archived_at = datetime.utcnow()
+        self.archived_by = user_id
+        self.archive_reason = reason
+    
+    def restaurer(self):
+        """Restaure une cartographie archivée"""
+        self.is_archived = False
+        self.archived_at = None
+        self.archived_by = None
+        self.archive_reason = None
+    
+    # ============================================
+    # REPRÉSENTATION
+    # ============================================
+    
+    def __repr__(self):
+        return f'<Cartographie {self.id}: {self.nom}>'
+    
+    def to_dict(self):
+        """Convertit en dictionnaire pour l'API"""
+        campagne_active = self.get_campagne_active()
+        return {
+            'id': self.id,
+            'nom': self.nom,
+            'description': self.description,
+            'type': self.type_cartographie,
+            'pole_id': self.pole_id,
+            'direction_id': self.direction_id,
+            'service_id': self.service_id,
+            'nb_risques': self.nb_risques_actifs,
+            'nb_campagnes': self.nb_campagnes,
+            'progression': self.progression_globale,
+            'campagne_active': campagne_active.to_dict() if campagne_active else None,
+            'campagne_active_id': self.campagne_active_id,
+            'is_archived': self.is_archived,
+            'created_at': self.created_at.isoformat() if self.created_at else None
+        }
     
 # -------------------- RISQUE --------------------
 # ============================================
@@ -1104,7 +1362,7 @@ class Risque(db.Model):
     # MÉTADONNÉES POUR LA TRACABILITÉ
     # ============================================
     metadonnees = db.Column(db.JSON, default={
-        'origine': None,           # 'manuel', 'audit', 'import'
+        'origine': None,
         'audit_reference': None,
         'demande_reevaluation_id': None,
         'date_proposition': None,
@@ -1115,7 +1373,6 @@ class Risque(db.Model):
     # RELATIONS
     # ============================================
     
-    # Relations existantes
     cartographie = db.relationship('Cartographie', back_populates='risques')
     createur = db.relationship('User', foreign_keys=[created_by])
     archive_user = db.relationship('User', foreign_keys=[archived_by])
@@ -1123,12 +1380,10 @@ class Risque(db.Model):
     kri = db.relationship('KRI', back_populates='risque', uselist=False, lazy=True)
     dispositifs_maitrise = db.relationship('DispositifMaitrise', back_populates='risque', cascade='all, delete-orphan', lazy=True)
     
-    # Relations avec constatations et plans
     constatations = db.relationship('Constatation', backref='risque_principal', foreign_keys='Constatation.risque_id', lazy=True)
     plans_action = db.relationship('PlanAction', backref='risque_principal', foreign_keys='PlanAction.risque_id', lazy=True)
     demandes_reevaluation = db.relationship('DemandeReevaluation', backref='risque_principal', foreign_keys='DemandeReevaluation.risque_id', lazy=True)
     
-    # Relation MANY-TO-MANY AVEC LES TESTS
     tests_associes = db.relationship(
         'TestControleFeuille',
         secondary='test_risques',
@@ -1137,7 +1392,59 @@ class Risque(db.Model):
     )
     
     # ============================================
-    # PROPRIÉTÉS
+    # 🔥 PROPRIÉTÉS POUR L'ACCÈS À DIRECTION_ID ET SERVICE_ID
+    # ============================================
+    
+    @property
+    def direction_id(self):
+        """
+        Retourne l'ID de la direction via la cartographie.
+        Utilisé pour le filtrage des opérateurs.
+        """
+        if self.cartographie:
+            return self.cartographie.direction_id
+        return None
+    
+    @property
+    def service_id(self):
+        """
+        Retourne l'ID du service via la cartographie.
+        Utilisé pour le filtrage des opérateurs.
+        """
+        if self.cartographie:
+            return self.cartographie.service_id
+        return None
+    
+    @property
+    def direction(self):
+        """Retourne l'objet Direction via la cartographie"""
+        if self.cartographie and self.cartographie.direction:
+            return self.cartographie.direction
+        return None
+    
+    @property
+    def service(self):
+        """Retourne l'objet Service via la cartographie"""
+        if self.cartographie and self.cartographie.service:
+            return self.cartographie.service
+        return None
+    
+    @property
+    def direction_nom(self):
+        """Retourne le nom de la direction"""
+        if self.direction:
+            return self.direction.nom
+        return None
+    
+    @property
+    def service_nom(self):
+        """Retourne le nom du service"""
+        if self.service:
+            return self.service.nom
+        return None
+    
+    # ============================================
+    # PROPRIÉTÉS EXISTANTES
     # ============================================
     
     @property
@@ -1221,10 +1528,7 @@ class Risque(db.Model):
     
     @staticmethod
     def calculer_niveau_criticite_from_score(score):
-        """
-        Calcule le niveau de criticité à partir d'un score donné.
-        Méthode statique utilisable sans instance.
-        """
+        """Calcule le niveau de criticité à partir d'un score donné"""
         if score >= 16:
             return 'critique'
         elif score >= 11:
@@ -1303,6 +1607,10 @@ class Risque(db.Model):
             'nb_tests_associes': self.nb_tests_associes,
             'cartographie_id': self.cartographie_id,
             'cartographie_nom': self.cartographie.nom if self.cartographie else None,
+            'direction_id': self.direction_id,
+            'direction_nom': self.direction_nom,
+            'service_id': self.service_id,
+            'service_nom': self.service_nom,
             'created_at': self.created_at.isoformat() if self.created_at else None,
             'is_archived': self.is_archived,
             'origine': self.metadonnees.get('origine') if self.metadonnees else None,
@@ -10163,7 +10471,7 @@ class FichierPlanAction(db.Model):
     def get_preview_url(self):
         if self.extension in ['jpg', 'jpeg', 'png', 'gif']:
             return f"/static/uploads/plans_action/{self.plan_action_id}/{self.nom_fichier}"
-        return None
+            
 # ==================== MODÈLES PROGRAMME AUDIT CORRIGÉS ====================
 
 class ProgrammeAudit(db.Model):
@@ -13444,6 +13752,17 @@ class CampagneControle(db.Model):
             'annule': 'fa-times-circle'
         }
         return icones.get(self.statut, 'fa-question-circle')
+
+    def get_statut_display(self):
+        """Retourne le libellé du statut pour l'affichage"""
+        statuts = {
+            'en_preparation': 'En préparation',
+            'en_cours': 'En cours',
+            'termine': 'Terminé',
+            'suspendu': 'Suspendu',
+            'annule': 'Annulé'
+        }
+        return statuts.get(self.statut, self.statut)
     
     # ============================================
     # MÉTHODES DE CALCUL
@@ -13623,7 +13942,7 @@ class FichierCampagneControle(db.Model):
     type_fichier = db.Column(db.String(100), nullable=False)
     taille = db.Column(db.Integer, nullable=False)
     
-    categorie = db.Column(db.String(50), default='document')  # document, rapport, preuve, autre
+    categorie = db.Column(db.String(50), default='document')
     description = db.Column(db.String(500), nullable=True)
     
     uploaded_at = db.Column(db.DateTime, default=datetime.utcnow)
@@ -13641,6 +13960,20 @@ class FichierCampagneControle(db.Model):
             return f"{self.taille / 1024:.1f} Ko"
         else:
             return f"{self.taille / (1024 * 1024):.1f} Mo"
+    
+    def to_dict(self):
+        return {
+            'id': self.id,
+            'nom_fichier': self.nom_fichier,
+            'type_fichier': self.type_fichier,
+            'taille': self.taille,
+            'taille_formatee': self.get_taille_formatee(),
+            'categorie': self.categorie,
+            'description': self.description,
+            'uploaded_at': self.uploaded_at.strftime('%d/%m/%Y %H:%M') if self.uploaded_at else None,
+            'uploader': self.uploader.username if self.uploader else None
+        }
+
 
 
 
