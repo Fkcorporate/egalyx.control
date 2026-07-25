@@ -1010,11 +1010,10 @@ class Cartographie(db.Model):
     # ============================================
     # 🔥 NOUVEAU : CAMPAGNE ACTIVE
     # ============================================
-    # ✅ Champ pour stocker l'ID de la campagne active
     campagne_active_id = db.Column(db.Integer, db.ForeignKey('campagnes_evaluation.id'), nullable=True)
     
     # ============================================
-    # RELATIONS
+    # RELATIONS - CORRIGÉES
     # ============================================
     pole = db.relationship('Pole', backref='cartographies')
     direction = db.relationship('Direction', back_populates='cartographies')
@@ -1031,12 +1030,12 @@ class Cartographie(db.Model):
         backref='cartographie_active_ref'
     )
     
-    # ✅ RELATION VERS TOUTES LES CAMPAGNES
+    # ✅ RELATION VERS TOUTES LES CAMPAGNES - AVEC foreign_keys EXPLICITE
     campagnes = db.relationship(
         'CampagneEvaluation', 
-        back_populates='cartographie', 
-        cascade='all, delete-orphan',
-        foreign_keys='CampagneEvaluation.cartographie_id'
+        foreign_keys='CampagneEvaluation.cartographie_id',  # 🔥 SPÉCIFIER LA CLÉ
+        back_populates='cartographie',
+        cascade='all, delete-orphan'
     )
     
     # ============================================
@@ -1286,7 +1285,7 @@ class Cartographie(db.Model):
             'nb_risques': self.nb_risques_actifs,
             'nb_campagnes': self.nb_campagnes,
             'progression': self.progression_globale,
-            'campagne_active': campagne_active.to_dict() if campagne_active else None,
+            'campagne_active': campagne_active.to_dict() if campagne_active and hasattr(campagne_active, 'to_dict') else None,
             'campagne_active_id': self.campagne_active_id,
             'is_archived': self.is_archived,
             'created_at': self.created_at.isoformat() if self.created_at else None
