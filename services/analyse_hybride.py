@@ -27,6 +27,10 @@ class AnalyseAlgorithmique:
         """
         suggestions = []
         alertes = []
+        risques_proposes = []
+        
+        # Variables pour les statistiques
+        total_risques = len(risques)
         
         # ============================================================
         # 1. ANALYSE DES RISQUES CRITIQUES SANS DISPOSITIF
@@ -70,7 +74,6 @@ class AnalyseAlgorithmique:
         # ============================================================
         # 2. ANALYSE DU TAUX D'ÉVALUATION
         # ============================================================
-        total_risques = len(risques)
         evaluees = len([e for e in evaluations if e.date_confirmation])
         taux_evaluation = int((evaluees / total_risques * 100) if total_risques > 0 else 0)
         
@@ -345,7 +348,145 @@ class AnalyseAlgorithmique:
                 })
         
         # ============================================================
-        # 11. ANALYSE DE LA MATURITÉ PAR CAMPAGNE
+        # 11. ANALYSE DES COMMENTAIRES PAR CAMPAGNE (AMÉLIORÉ)
+        # ============================================================
+        if evaluations:
+            commentaires_par_campagne = {}
+            qualite_par_campagne = {}
+            
+            for e in evaluations:
+                campagne = e.campagne_nom or 'Sans campagne'
+                
+                # Initialiser
+                if campagne not in commentaires_par_campagne:
+                    commentaires_par_campagne[campagne] = {
+                        'pre': [],
+                        'validation': [],
+                        'confirmation': [],
+                        'total': 0,
+                        'mots_cles': {},
+                        'qualite_moyenne': 0,
+                        'taux_commentaires': 0
+                    }
+                
+                # Récupérer les commentaires
+                if e.commentaire_pre_evaluation:
+                    commentaires_par_campagne[campagne]['pre'].append(e.commentaire_pre_evaluation)
+                    commentaires_par_campagne[campagne]['total'] += 1
+                    
+                    # Mots clés
+                    mots = e.commentaire_pre_evaluation.lower().split()
+                    for mot in mots:
+                        # Nettoyer le mot
+                        mot_propre = re.sub(r'[^a-zA-Zàâäéèêëîïôöùûüÿçæœ]', '', mot)
+                        if len(mot_propre) > 4:
+                            commentaires_par_campagne[campagne]['mots_cles'][mot_propre] = \
+                                commentaires_par_campagne[campagne]['mots_cles'].get(mot_propre, 0) + 1
+                
+                if e.commentaire_validation:
+                    commentaires_par_campagne[campagne]['validation'].append(e.commentaire_validation)
+                    commentaires_par_campagne[campagne]['total'] += 1
+                
+                if e.commentaire_confirmation:
+                    commentaires_par_campagne[campagne]['confirmation'].append(e.commentaire_confirmation)
+                    commentaires_par_campagne[campagne]['total'] += 1
+                
+                # Qualité des commentaires
+                qualite = 0
+                if e.commentaire_pre_evaluation and len(e.commentaire_pre_evaluation) > 20:
+                    qualite += 1
+                if e.commentaire_validation and len(e.commentaire_validation) > 20:
+                    qualite += 1
+                if e.commentaire_confirmation and len(e.commentaire_confirmation) > 20:
+                    qualite += 1
+                
+                if campagne not in qualite_par_campagne:
+                    qualite_par_campagne[campagne] = []
+                qualite_par_campagne[campagne].append(qualite)
+            
+            # Générer des suggestions basées sur les commentaires par campagne
+            for campagne, data in commentaires_par_campagne.items():
+                # Calculer la qualité moyenne
+                if campagne in qualite_par_campagne and qualite_par_campagne[campagne]:
+                    qualite_moyenne = (sum(qualite_par_campagne[campagne]) / 
+                                      len(qualite_par_campagne[campagne])) * 33.3
+                    commentaires_par_campagne[campagne]['qualite_moyenne'] = round(qualite_moyenne, 1)
+                
+                # Calculer le taux de commentaires
+                eval_campagne = len([e for e in evaluations if (e.campagne_nom or 'Sans campagne') == campagne])
+                if eval_campagne > 0:
+                    taux = (data['total'] / (eval_campagne * 3)) * 100
+                    commentaires_par_campagne[campagne]['taux_commentaires'] = round(taux, 1)
+                
+                # Suggestion si peu de commentaires
+                if data['total'] < 3:
+                    suggestions.append({
+                        'id': f'sug_commentaires_campagne_{campagne[:10].replace(" ", "_")}',
+                        'titre': f"📝 Peu de commentaires dans la campagne '{campagne}'",
+                        'description': f"Seulement {data['total']} commentaires pour cette campagne. Des commentaires détaillés améliorent la qualité des évaluations.",
+                        'priorite': 'low',
+                        'icone': 'fa-comment-dots',
+                        'categorie': 'campagne',
+                        'actions': [
+                            f'Encourager les commentaires dans la campagne {campagne}',
+                            'Former les évaluateurs',
+                            'Mettre en place des modèles de commentaires'
+                        ],
+                        'delai_suggere': '30 jours',
+                        'impact': 'Faible',
+                        'campagne': campagne,
+                        'metriques': {
+                            'total_commentaires': data['total'],
+                            'taux_commentaires': commentaires_par_campagne[campagne]['taux_commentaires'],
+                            'qualite_moyenne': commentaires_par_campagne[campagne]['qualite_moyenne']
+                        }
+                    })
+                
+                # Suggestion sur les mots clés récurrents
+                if data['mots_cles']:
+                    top_mots = sorted(data['mots_cles'].items(), key=lambda x: x[1], reverse=True)[:5]
+                    if top_mots and len(top_mots) >= 2:
+                        mots_cles_str = ', '.join([f"'{m[0]}'" for m in top_mots[:3]])
+                        suggestions.append({
+                            'id': f'sug_mots_cles_{campagne[:10].replace(" ", "_")}',
+                            'titre': f"🔑 Thèmes récurrents dans '{campagne}'",
+                            'description': f"Mots clés fréquents : {mots_cles_str}. Ces thèmes méritent une attention particulière.",
+                            'priorite': 'medium',
+                            'icone': 'fa-key',
+                            'categorie': 'campagne',
+                            'actions': [
+                                'Analyser ces thèmes en profondeur',
+                                'Créer des risques dédiés si nécessaire',
+                                'Documenter les tendances'
+                            ],
+                            'delai_suggere': '45 jours',
+                            'impact': 'Moyen',
+                            'campagne': campagne,
+                            'top_mots': top_mots[:5]
+                        })
+                
+                # Suggestion sur la qualité des commentaires
+                if commentaires_par_campagne[campagne]['qualite_moyenne'] < 40:
+                    suggestions.append({
+                        'id': f'sug_qualite_comments_{campagne[:10].replace(" ", "_")}',
+                        'titre': f"📋 Qualité des commentaires insuffisante - '{campagne}'",
+                        'description': f"La qualité moyenne des commentaires est de {commentaires_par_campagne[campagne]['qualite_moyenne']}%. Les commentaires sont trop courts.",
+                        'priorite': 'medium',
+                        'icone': 'fa-pen-fancy',
+                        'categorie': 'campagne',
+                        'actions': [
+                            f'Former les équipes de la campagne {campagne}',
+                            'Fournir des modèles de commentaires détaillés',
+                            'Organiser des ateliers d\'écriture'
+                        ],
+                        'delai_suggere': '30 jours',
+                        'impact': 'Moyen',
+                        'campagne': campagne,
+                        'qualite_actuelle': commentaires_par_campagne[campagne]['qualite_moyenne']
+                    })
+        
+        # ============================================================
+        # 12. ANALYSE DE LA MATURITÉ PAR CAMPAGNE
         # ============================================================
         campagnes_eval = {}
         for e in evaluations:
@@ -361,7 +502,7 @@ class AnalyseAlgorithmique:
                 taux = data['confirmees'] / data['total'] * 100
                 if taux < 50:
                     suggestions.append({
-                        'id': f'sug_campagne_{campagne[:10]}',
+                        'id': f'sug_campagne_{campagne[:10].replace(" ", "_")}',
                         'titre': f"📋 Campagne '{campagne}' - Taux de confirmation faible ({int(taux)}%)",
                         'description': f"Seulement {int(taux)}% des évaluations de cette campagne sont confirmées.",
                         'priorite': 'high' if taux < 30 else 'medium',
@@ -373,11 +514,13 @@ class AnalyseAlgorithmique:
                             'Organiser des sessions de validation'
                         ],
                         'delai_suggere': '30 jours',
-                        'impact': 'Élevé' if taux < 30 else 'Moyen'
+                        'impact': 'Élevé' if taux < 30 else 'Moyen',
+                        'campagne': campagne,
+                        'taux_actuel': round(taux, 1)
                     })
         
         # ============================================================
-        # 12. ANALYSE DES TENDANCES DE SCORES
+        # 13. ANALYSE DES TENDANCES DE SCORES
         # ============================================================
         if len(evaluations) >= 3:
             scores_par_risque = {}
@@ -410,7 +553,7 @@ class AnalyseAlgorithmique:
                         break
         
         # ============================================================
-        # 13. ANALYSE DE LA COUVERTURE PAR TYPE DE DISPOSITIF
+        # 14. ANALYSE DE LA COUVERTURE PAR TYPE DE DISPOSITIF
         # ============================================================
         types_dispositifs = {}
         for d in dispositifs:
@@ -440,7 +583,7 @@ class AnalyseAlgorithmique:
                 })
         
         # ============================================================
-        # 14. ANALYSE DES CONSTATS D'AUDIT
+        # 15. ANALYSE DES CONSTATS D'AUDIT
         # ============================================================
         if constats_audit:
             constats_ouverts = [c for c in constats_audit if c.statut != 'clos']
@@ -462,9 +605,88 @@ class AnalyseAlgorithmique:
                 })
         
         # ============================================================
-        # 15. SI CARTOGRAPHIE VIDE - PROPOSER DES RISQUES
+        # 16. SUGGESTION DE RISQUES SUPPLÉMENTAIRES
         # ============================================================
-        risques_proposes = []
+        # Même si la cartographie n'est pas vide, proposer des risques
+        # pour les catégories manquantes ou les types non couverts
+        
+        if total_risques > 0:
+            categories_existantes = set([r.categorie for r in risques if r.categorie])
+            types_existants = set([r.type_risque for r in risques if r.type_risque])
+
+            risques_supplementaires = []
+
+            # 1. Catégories manquantes
+            categories_importantes = ['Financier', 'Opérationnel', 'Réglementaire', 'Stratégique', 'Réputationnel', 'Informatique']
+            categories_manquantes = [c for c in categories_importantes if c.lower() not in [cat.lower() for cat in categories_existantes]]
+
+            if categories_manquantes:
+                for cat in categories_manquantes[:3]:
+                    risques_supplementaires.append({
+                        'reference': f'RISK-{cat[:3].upper()}-001',
+                        'intitule': f'Risque {cat}',
+                        'description': f'Risque lié à la catégorie {cat}. À définir selon le contexte métier.',
+                        'categorie': cat,
+                        'type_risque': 'residuel',
+                        'impact_propose': 3,
+                        'probabilite_propose': 3,
+                        'est_suggestion': True,
+                        'raison': f"Catégorie '{cat}' manquante"
+                    })
+
+            # 2. Types manquants
+            types_importants = ['Inherent', 'Residuel', 'Cible', 'Externe', 'Interne']
+            types_manquants = [t for t in types_importants if t.lower() not in [typ.lower() for typ in types_existants]]
+
+            if types_manquants:
+                for typ in types_manquants[:2]:
+                    risques_supplementaires.append({
+                        'reference': f'RISK-TYP-{typ[:3].upper()}-001',
+                        'intitule': f'Risque de type {typ}',
+                        'description': f'Risque de type {typ}. À définir selon le contexte.',
+                        'categorie': 'Général',
+                        'type_risque': typ,
+                        'impact_propose': 3,
+                        'probabilite_propose': 3,
+                        'est_suggestion': True,
+                        'raison': f"Type '{typ}' manquant"
+                    })
+
+            # 3. Si peu de risques (< 5), proposer des risques complémentaires
+            if total_risques < 5:
+                risques_complementaires = [
+                    {
+                        'reference': 'RISK-COMP-001',
+                        'intitule': 'Rupture d\'approvisionnement',
+                        'description': 'Dépendance à un fournisseur unique pour des matières critiques.',
+                        'categorie': 'Operationnel',
+                        'type_risque': 'Externe',
+                        'impact_propose': 4,
+                        'probabilite_propose': 3,
+                        'est_suggestion': True,
+                        'raison': "Risque complémentaire recommandé"
+                    },
+                    {
+                        'reference': 'RISK-COMP-002',
+                        'intitule': 'Cyberattaque',
+                        'description': 'Vulnérabilité aux attaques informatiques.',
+                        'categorie': 'Informatique',
+                        'type_risque': 'Externe',
+                        'impact_propose': 5,
+                        'probabilite_propose': 4,
+                        'est_suggestion': True,
+                        'raison': "Risque complémentaire recommandé"
+                    }
+                ]
+                risques_supplementaires.extend(risques_complementaires)
+
+            # Ajouter aux risques proposés
+            if risques_supplementaires:
+                risques_proposes = risques_supplementaires
+        
+        # ============================================================
+        # 17. SI CARTOGRAPHIE VIDE - PROPOSER DES RISQUES PAR DÉFAUT
+        # ============================================================
         if total_risques == 0:
             risques_proposes = AnalyseAlgorithmique._generer_risques_par_defaut()
             
@@ -492,7 +714,8 @@ class AnalyseAlgorithmique:
                 'total_risques': total_risques,
                 'taux_evaluation': taux_evaluation,
                 'taux_couverture': taux_couverture,
-                'incidents_recents': len(incidents_recents)
+                'incidents_recents': len(incidents_recents),
+                'commentaires_par_campagne': commentaires_par_campagne if evaluations else {}
             }
         }
     
