@@ -449,18 +449,28 @@ class User(UserMixin, db.Model):
 
     def has_permission(self, permission):
         """Vérifie si l'utilisateur a une permission spécifique"""
+        
+        print(f"🔐 [DEBUG] Vérification permission '{permission}' pour {self.username} (rôle: {self.role})")
+        
+        # 1. SUPER ADMIN : TOUJOURS AUTORISÉ
         if self.role == 'super_admin':
+            print(f"   ✅ Super admin - accès immédiat")
             return True
         
+        # 2. Vérifier d'abord les permissions EXPLICITES dans la base
         if self.permissions and permission in self.permissions:
-            return bool(self.permissions[permission])
+            value = bool(self.permissions[permission])
+            print(f"   📋 Permission explicite dans DB: {permission} = {value}")
+            return value
         
+        # 3. ADMIN CLIENT : Permissions automatiques
         is_admin_client = (self.role == 'admin') or (getattr(self, 'is_client_admin', False))
         
         if is_admin_client:
+            print(f"   👑 Utilisateur est un ADMIN CLIENT")
+            
             permissions_admin_obligatoires = {
                 'can_view_dashboard': True,
-                'can_view_reports': True,
                 'can_view_departments': True,
                 'can_view_notifications': True,
                 'can_manage_risks': True,
@@ -482,34 +492,44 @@ class User(UserMixin, db.Model):
                 'can_archive_data': True,
                 'can_export_data': True,
                 'can_manage_permissions': True,
+                # 🔥 NOUVEAUX MODULES
+                'can_view_tableau_bord_strategique': True,
+                'can_view_controle_interne_n2': True,
+                'can_manage_controle_interne_n2': True,
                 'can_manage_clients': False,
                 'can_provision_servers': False,
             }
             
-            if self.client and self.client.formule:
-                permissions_admin_obligatoires['can_manage_regulatory'] = self.client.formule.modules.get('veille_reglementaire', False)
-                permissions_admin_obligatoires['can_manage_logigram'] = self.client.formule.modules.get('gestion_processus', False)
-            
             if permission in permissions_admin_obligatoires:
                 return permissions_admin_obligatoires[permission]
         
+        # 4. GESTIONNAIRE (manager)
         if self.role == 'manager':
-            manager_base_permissions = {
+            print(f"   👤 Utilisateur est un GESTIONNAIRE")
+            
+            if self.permissions and permission in self.permissions:
+                return bool(self.permissions[permission])
+            
+            manager_defaults = {
                 'can_view_dashboard': True,
-                'can_view_reports': True,
                 'can_view_departments': True,
                 'can_view_notifications': True,
                 'can_view_action_plans': True,
                 'can_export_data': True,
+                'can_view_tableau_bord_strategique': False,  # Optionnel
+                'can_view_controle_interne_n2': False,       # Optionnel
+                'can_manage_controle_interne_n2': False,  
             }
-            if permission in manager_base_permissions:
-                return manager_base_permissions[permission]
+            
+            if permission in manager_defaults:
+                return manager_defaults[permission]
+            
             return False
         
+        # 5. PERMISSIONS PAR DÉFAUT SELON LE RÔLE
         role_defaults = {
             'auditeur': {
                 'can_view_dashboard': True,
-                'can_view_reports': True,
                 'can_view_departments': True,
                 'can_view_notifications': True,
                 'can_manage_audit': True,
@@ -517,21 +537,18 @@ class User(UserMixin, db.Model):
             },
             'utilisateur': {
                 'can_view_dashboard': True,
-                'can_view_reports': True,
                 'can_view_departments': True,
                 'can_view_notifications': True,
                 'can_view_action_plans': True,
             },
             'compliance': {
                 'can_view_dashboard': True,
-                'can_view_reports': True,
                 'can_view_departments': True,
                 'can_view_notifications': True,
                 'can_manage_regulatory': True,
             },
             'consultant': {
                 'can_view_dashboard': True,
-                'can_view_reports': True,
                 'can_view_departments': True,
             }
         }
@@ -539,6 +556,7 @@ class User(UserMixin, db.Model):
         if self.role in role_defaults and permission in role_defaults[self.role]:
             return role_defaults[self.role][permission]
         
+        print(f"   ❌ Permission '{permission}' REFUSÉE")
         return False
 
     @property
