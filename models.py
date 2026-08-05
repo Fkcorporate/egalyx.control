@@ -7970,24 +7970,81 @@ class Notification(db.Model):
         else:
             return "À l'instant"
     
+    # Dans models.py - Notification
+    
     def get_url(self):
-        """Retourne l'URL vers l'entité"""
+        """Retourne l'URL vers l'entité - Version COMPLÈTE avec toutes les routes"""
         if not self.entite_type or not self.entite_id:
-            return None
+            return '#'
         
+        # === MAPPING COMPLET DES ENTITÉS ===
         urls = {
+            # === RISQUES ===
+            'risque': f'/risque/{self.entite_id}',
+            'risque_evalue': f'/risque/{self.entite_id}',
+            
+            # === CARTOCRAPHIE ===
+            'cartographie': f'/cartographie/{self.entite_id}',
+            
+            # === PLANS D'ACTION ===
+            'plan_action': f'/audit/plan-action/{self.entite_id}',
+            
+            # === DEMANDES DE RÉÉVALUATION ===
+            'demande_reevaluation': f'/demande-reevaluation/{self.entite_id}',
+            'reevaluation_demandee': f'/demande-reevaluation/{self.entite_id}',
+            'reevaluation_validee': f'/demande-reevaluation/{self.entite_id}',
+            'reevalidation_annulee': f'/demande-reevaluation/{self.entite_id}',
+            'nouveau_risque_propose': f'/demande-reevaluation/{self.entite_id}',
+            
+            # === AUDIT ===
             'audit': f'/audit/{self.entite_id}',
             'constatation': f'/audit/constatation/{self.entite_id}',
             'recommandation': f'/audit/recommandation/{self.entite_id}',
-            'plan_action': f'/audit/plan-action/{self.entite_id}',
-            'risque': f'/risque/{self.entite_id}',
+            
+            # === KRI ===
             'kri': f'/kri/{self.entite_id}',
-            'cartographie': f'/cartographie/{self.entite_id}',
-            'processus': f'/processus/{self.entite_id}',
+            'mesure_kri': f'/kri/mesure/{self.entite_id}',
+            
+            # === INCIDENTS ===
+            'incident': f'/incident/{self.entite_id}',
+            'escalade_incident': f'/incident/{self.entite_id}',
+            
+            # === VEILLE ===
             'veille': f'/veille/{self.entite_id}',
+            'veille_reglementaire': f'/veille/{self.entite_id}',
+            
+            # === QUESTIONNAIRES ===
             'questionnaire': f'/questionnaire/{self.entite_id}',
+            'reponse_questionnaire': f'/questionnaire/reponse/{self.entite_id}',
+            
+            # === PROCESSUS ===
+            'processus': f'/processus/{self.entite_id}',
+            'logigramme': f'/logigramme/{self.entite_id}',
+            
+            # === C2N ===
+            'c2n': f'/c2n/{self.entite_id}',
+            'controle_interne_n2': f'/c2n/{self.entite_id}',
+            
+            # === TICKETS ===
+            'ticket': f'/support/ticket/{self.entite_id}',
+            'support': f'/support/ticket/{self.entite_id}',
+            
+            # === UTILISATEURS ===
+            'user': f'/profil/{self.entite_id}',
+            'utilisateur': f'/profil/{self.entite_id}',
+            
+            # === DISPOSITIFS ===
+            'dispositif': f'/dispositif/{self.entite_id}',
+            
+            # === AUTRES ===
+            'qualite': f'/qualite/{self.entite_id}',
+            'campagne': f'/campagne/{self.entite_id}',
+            'pca': f'/pca/{self.entite_id}',
+            'plan_continuite': f'/pca/plan/{self.entite_id}',
+            'tableau_bord': f'/tableau-bord/{self.entite_id}',
         }
-        return urls.get(self.entite_type)
+        
+        return urls.get(self.entite_type, '#')
     
     def marquer_comme_lue(self):
         """Marquer la notification comme lue"""
