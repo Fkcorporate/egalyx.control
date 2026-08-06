@@ -14376,7 +14376,9 @@ class Incident(db.Model):
     # ==================== CLASSIFICATION ====================
     gravite = db.Column(db.String(20), default='moyenne')
     type_incident = db.Column(db.String(50))
+    # ✅ AJOUT : 'en_attente_approbation' pour clarifier le flux
     statut = db.Column(db.String(20), default='ouvert', index=True)
+    # Valeurs possibles : 'ouvert', 'en_cours', 'en_attente_approbation', 'resolu', 'ferme', 'rejete'
     
     # ==================== REPORTING ====================
     direction_associee = db.Column(db.String(200))
@@ -14427,7 +14429,7 @@ class Incident(db.Model):
     # ==================== 🔥 LIENS MÉTIER (DOUBLE RATTACHEMENT) 🔥 ====================
     risque_id = db.Column(db.Integer, db.ForeignKey('risques.id'), nullable=False)
     dispositif_id = db.Column(db.Integer, db.ForeignKey('dispositifs_maitrise.id'), nullable=False)
-    plan_action_id = db.Column(db.Integer, db.ForeignKey('plans_action.id'))  # ← AJOUTÉ !
+    plan_action_id = db.Column(db.Integer, db.ForeignKey('plans_action.id'))
     
     # ==================== ACTEURS ====================
     declare_par_id = db.Column(db.Integer, db.ForeignKey('user.id'))
@@ -14590,6 +14592,7 @@ class Incident(db.Model):
         self.updated_at = datetime.utcnow()
     
     def supprimer_fichier(self, filename):
+        import json
         fichiers = self.get_fichiers_joints_list()
         if filename in fichiers:
             fichiers.remove(filename)
@@ -14656,6 +14659,7 @@ class Incident(db.Model):
     # ==================== MÉTHODES D'APPROBATION ====================
     
     def approuver(self, user_id, commentaire=None):
+        """Approuver l'incident -> Fermé définitivement"""
         self.approbation_statut = 'approuve'
         self.approbation_par_id = user_id
         self.approbation_date = datetime.utcnow()
@@ -14666,12 +14670,22 @@ class Incident(db.Model):
         self.updated_at = datetime.utcnow()
     
     def rejeter(self, user_id, commentaire):
+        """Rejeter l'incident -> Retour en cours pour corrections"""
         self.approbation_statut = 'rejete'
         self.approbation_par_id = user_id
         self.approbation_date = datetime.utcnow()
         self.commentaire_approbation = commentaire
         self.statut = 'en_cours'
         self.updated_at = datetime.utcnow()
+    
+    def soumettre_approbation(self):
+        """Soumettre l'incident à approbation"""
+        if self.approbation_requise and self.statut in ['en_cours', 'resolu']:
+            self.statut = 'en_attente_approbation'
+            self.approbation_statut = 'en_attente'
+            self.updated_at = datetime.utcnow()
+            return True
+        return False
     
     def peut_approuver(self, user):
         if not user.is_authenticated:
@@ -14739,6 +14753,20 @@ class Incident(db.Model):
             return True
         return False
     
+    def peut_reouvrir(self, user):
+        """Vérifier si l'utilisateur peut réouvrir l'incident"""
+        if not user.is_authenticated:
+            return False
+        if user.role == 'super_admin' or user.is_client_admin:
+            return True
+        if self.statut not in ['resolu', 'ferme']:
+            return False
+        if self.is_archived:
+            return False
+        if user.id == self.created_by or user.id == self.responsable_resolution_id:
+            return True
+        return False
+    
     # ==================== MÉTHODES DE CALCUL ====================
     
     def get_delai_resolution(self):
@@ -14779,17 +14807,55 @@ class Incident(db.Model):
         return colors.get(self.gravite, 'secondary')
     
     def get_type_label(self):
-        labels = {'securite': 'Sécurité', 'conformite': 'Conformité', 'operationnel': 'Opérationnel', 
-                  'technique': 'Technique', 'juridique': 'Juridique'}
+        labels = {
+            'securite': 'Sécurité', 
+            'conformite': 'Conformité', 
+            'operationnel': 'Opérationnel', 
+            'technique': 'Technique', 
+            'juridique': 'Juridique'
+        }
         return labels.get(self.type_incident, self.type_incident)
     
+    # ✅ MÉTHODES STATUT COMPLÈTES AVEC 'en_attente_approbation'
     def get_statut_label(self):
-        labels = {'ouvert': 'Ouvert', 'en_cours': 'En cours', 'resolu': 'Résolu', 'ferme': 'Fermé', 'rejete': 'Rejeté'}
+        """Retourne le libellé du statut"""
+        labels = {
+            'ouvert': 'Ouvert',
+            'en_cours': 'En cours',
+            'en_attente_approbation': 'En attente d\'approbation',
+            'resolu': 'Résolu',
+            'ferme': 'Fermé',
+            'rejete': 'Rejeté'
+        }
         return labels.get(self.statut, self.statut)
     
     def get_statut_color(self):
-        colors = {'ouvert': 'danger', 'en_cours': 'warning', 'resolu': 'info', 'ferme': 'success', 'rejete': 'secondary'}
+        """Retourne la couleur Bootstrap du statut"""
+        colors = {
+            'ouvert': 'danger',
+            'en_cours': 'warning',
+            'en_attente_approbation': 'info',
+            'resolu': 'success',
+            'ferme': 'secondary',
+            'rejete': 'secondary'
+        }
         return colors.get(self.statut, 'secondary')
+    
+    def get_statut_icon(self):
+        """Retourne l'icône Font Awesome du statut"""
+        icons = {
+            'ouvert': 'fa-circle-exclamation',
+            'en_cours': 'fa-spinner fa-spin',
+            'en_attente_approbation': 'fa-clock',
+            'resolu': 'fa-check-circle',
+            'ferme': 'fa-check-double',
+            'rejete': 'fa-times-circle'
+        }
+        return icons.get(self.statut, 'fa-circle')
+    
+    def get_statut_badge_class(self):
+        """Retourne la classe CSS complète pour le badge"""
+        return f"badge bg-{self.get_statut_color()} bg-opacity-10 text-{self.get_statut_color()}"
     
     def get_niveau_escalade_label(self):
         labels = {1: 'Niveau 1 (Support)', 2: 'Niveau 2 (Superviseur)', 3: 'Niveau 3 (Direction)'}
@@ -14798,6 +14864,10 @@ class Incident(db.Model):
     def get_approbation_statut_label(self):
         labels = {'en_attente': 'En attente', 'approuve': 'Approuvé', 'rejete': 'Rejeté'}
         return labels.get(self.approbation_statut, self.approbation_statut)
+    
+    def get_approbation_statut_color(self):
+        colors = {'en_attente': 'warning', 'approuve': 'success', 'rejete': 'danger'}
+        return colors.get(self.approbation_statut, 'secondary')
     
     # ==================== MÉTHODES IA ====================
     
@@ -14823,6 +14893,8 @@ class Incident(db.Model):
             'type_label': self.get_type_label(),
             'statut': self.statut,
             'statut_label': self.get_statut_label(),
+            'statut_color': self.get_statut_color(),
+            'statut_icon': self.get_statut_icon(),
             'niveau_escalade': self.niveau_escalade,
             'niveau_escalade_label': self.get_niveau_escalade_label(),
             'delai_restant_escalade': self.get_delai_restant_escalade(),
@@ -14839,16 +14911,22 @@ class Incident(db.Model):
             'plan_action_id': self.plan_action_id,
             'risque_reference': self.risque.reference if self.risque else None,
             'dispositif_reference': self.dispositif.reference if self.dispositif else None,
+            'approbation_requise': self.approbation_requise,
+            'approbation_statut': self.approbation_statut,
+            'approbation_statut_label': self.get_approbation_statut_label(),
             'created_at': self.created_at.isoformat() if self.created_at else None,
             'is_archived': self.is_archived,
-            'impact_total': self.get_impact_total()
+            'impact_total': self.get_impact_total(),
+            'peut_modifier': lambda user: self.peut_modifier(user),
+            'peut_approuver': lambda user: self.peut_approuver(user),
+            'peut_archiver': lambda user: self.peut_archiver(user),
+            'peut_escalader': lambda user: self.peut_escalader(user),
+            'peut_reouvrir': lambda user: self.peut_reouvrir(user)
         }
     
     def __repr__(self):
         return f'<Incident {self.reference}: {self.titre[:30]}>'
-# ========================
-# MODÈLE TICKET SUPPORT (NOUVEAU)
-# ========================
+
 # ========================
 # MODÈLE TICKET SUPPORT AMÉLIORÉ
 # ========================
