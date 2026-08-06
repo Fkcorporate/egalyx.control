@@ -74,6 +74,13 @@
         letter-spacing: 0.5px;
         font-weight: 600;
     }
+    
+    .status-badge {
+        padding: 0.35rem 1rem;
+        border-radius: 30px;
+        font-weight: 600;
+        font-size: 0.75rem;
+    }
 </style>
 
 <div class="container-fluid px-4">
@@ -126,6 +133,7 @@
                         <option value="">Tous</option>
                         <option value="ouvert" {% if statut == 'ouvert' %}selected{% endif %}>Ouvert</option>
                         <option value="en_cours" {% if statut == 'en_cours' %}selected{% endif %}>En cours</option>
+                        <option value="en_attente_approbation" {% if statut == 'en_attente_approbation' %}selected{% endif %}>En attente d'approbation</option>
                         <option value="resolu" {% if statut == 'resolu' %}selected{% endif %}>Résolu</option>
                         <option value="ferme" {% if statut == 'ferme' %}selected{% endif %}>Fermé</option>
                     </select>
@@ -141,24 +149,30 @@
                         <option value="juridique" {% if type_incident == 'juridique' %}selected{% endif %}>Juridique</option>
                     </select>
                 </div>
-                <div class="col-md-2">
-                    <label class="form-label small text-muted mb-1">Direction</label>
-                    <select name="direction" class="form-select form-select-sm bg-light border-0">
+                
+                <div class="col-md-3">
+                    <label class="form-label small text-muted">Direction</label>
+                    <select name="direction_associee" class="form-select form-select-sm bg-light border-0">
                         <option value="">Toutes</option>
-                        {% for dir in directions_list %}
-                        <option value="{{ dir }}" {% if direction_filter == dir %}selected{% endif %}>{{ dir }}</option>
+                        {% for direction in directions_list %}
+                        <option value="{{ direction }}" {% if direction_filter == direction %}selected{% endif %}>
+                            {{ direction }}
+                        </option>
                         {% endfor %}
                     </select>
                 </div>
-                <div class="col-md-2">
-                    <label class="form-label small text-muted mb-1">Service</label>
-                    <select name="service" class="form-select form-select-sm bg-light border-0">
+                <div class="col-md-3">
+                    <label class="form-label small text-muted">Service</label>
+                    <select name="service_associe" class="form-select form-select-sm bg-light border-0">
                         <option value="">Tous</option>
-                        {% for serv in services_list %}
-                        <option value="{{ serv }}" {% if service_filter == serv %}selected{% endif %}>{{ serv }}</option>
+                        {% for service in services_list %}
+                        <option value="{{ service }}" {% if service_filter == service %}selected{% endif %}>
+                            {{ service }}
+                        </option>
                         {% endfor %}
                     </select>
                 </div>
+                
                 <div class="col-md-2">
                     <div class="d-flex gap-2">
                         <div class="form-check form-switch mt-3">
@@ -347,6 +361,11 @@
                                 <a href="{{ url_for('detail_incident', id=incident.id) }}" class="text-decoration-none">
                                     {{ incident.titre|truncate(50) }}
                                 </a>
+                                {% if incident.approbation_requise and incident.approbation_statut == 'en_attente' %}
+                                <span class="badge bg-warning ms-1" title="En attente d'approbation">
+                                    <i class="fas fa-clock"></i>
+                                </span>
+                                {% endif %}
                             </td>
                             <td>
                                 {% if incident.direction_associee %}
@@ -367,14 +386,13 @@
                                 {% endif %}
                             </td>
                             <td>
-                                {% set gravite_colors = {'critique': 'danger', 'elevee': 'warning', 'moyenne': 'primary', 'mineure': 'secondary'} %}
-                                <span class="badge bg-{{ gravite_colors.get(incident.gravite, 'secondary') }} bg-opacity-10 text-{{ gravite_colors.get(incident.gravite, 'secondary') }} px-3 py-2">
+                                <span class="badge bg-{{ incident.get_gravite_color() }} bg-opacity-10 text-{{ incident.get_gravite_color() }} px-3 py-2">
                                     {{ incident.get_gravite_label() }}
                                 </span>
                             </td>
                             <td>
-                                {% set statut_colors = {'ouvert': 'warning', 'en_cours': 'info', 'resolu': 'success', 'ferme': 'secondary'} %}
-                                <span class="badge bg-{{ statut_colors.get(incident.statut, 'secondary') }} bg-opacity-10 text-{{ statut_colors.get(incident.statut, 'secondary') }} px-3 py-2">
+                                <span class="badge bg-{{ incident.get_statut_color() }} bg-opacity-10 text-{{ incident.get_statut_color() }} px-3 py-2">
+                                    <i class="fas {{ incident.get_statut_icon() }} me-1"></i>
                                     {{ incident.get_statut_label() }}
                                 </span>
                             </td>
@@ -397,14 +415,33 @@
                             <td class="small">{{ incident.date_occurrence.strftime('%d/%m/%Y') }}</td>
                             <td class="text-end pe-3">
                                 <div class="btn-group btn-group-sm">
+                                    <!-- Détails -->
                                     <a href="{{ url_for('detail_incident', id=incident.id) }}" class="btn-action primary" title="Détails">
                                         <i class="fas fa-eye"></i>
                                     </a>
-                                    {% if incident.statut in ['ouvert', 'en_cours'] %}
+                                    
+                                    <!-- RÉSOUDRE - Pour tous les incidents non résolus/fermés -->
+                                    {% if not incident.is_archived and incident.statut not in ['resolu', 'ferme'] %}
                                     <a href="{{ url_for('resoudre_incident', id=incident.id) }}" class="btn-action success" title="Résoudre">
                                         <i class="fas fa-check-circle"></i>
                                     </a>
                                     {% endif %}
+                                    
+                                    <!-- RÉOUVRIR - Pour les incidents résolus/fermés -->
+                                    {% if not incident.is_archived and incident.statut in ['resolu', 'ferme'] %}
+                                    <a href="{{ url_for('reouvrir_incident', id=incident.id) }}" class="btn-action warning" title="Réouvrir" onclick="return confirm('Réouvrir cet incident ?')">
+                                        <i class="fas fa-undo"></i>
+                                    </a>
+                                    {% endif %}
+                                    
+                                    <!-- APPROUVER - Pour les incidents en attente d'approbation -->
+                                    {% if incident.approbation_requise and incident.approbation_statut == 'en_attente' and current_user.id in [incident.superviseur_id, incident.directeur_id] %}
+                                    <a href="{{ url_for('approuver_incident', id=incident.id) }}" class="btn-action info" title="Approuver">
+                                        <i class="fas fa-stamp"></i>
+                                    </a>
+                                    {% endif %}
+                                    
+                                    <!-- Archiver -->
                                     {% if not incident.is_archived %}
                                     <button class="btn-action danger" title="Archiver" data-bs-toggle="modal" data-bs-target="#archiveModal{{ incident.id }}">
                                         <i class="fas fa-archive"></i>
@@ -453,32 +490,16 @@
     </div>
 </div>
 
-<!-- Script Chart.js -->
-<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-
 <script>
 // Gestion du filtre SLA
 document.getElementById('slaViole')?.addEventListener('change', function() {
     this.form.submit();
 });
-// Dans liste.html, ajoutez
-function jouerSonNotification() {
-    const audio = new Audio('/static/sounds/notification.mp3');
-    audio.play().catch(e => console.log('Son non supporté'));
-}
 
-// Dans setInterval, si nouvelles notifications
-setInterval(() => {
-    fetch('/api/notifications/count')
-        .then(r => r.json())
-        .then(data => {
-            const previousCount = parseInt(document.getElementById('notificationCount').dataset.count || '0');
-            if (data.count > previousCount) {
-                jouerSonNotification();
-            }
-            document.getElementById('notificationCount').dataset.count = data.count;
-            updateNotificationBadge(data.count);
-        });
+// Auto-refresh des statuts toutes les 60 secondes
+setTimeout(function() {
+    location.reload();
 }, 60000);
 </script>
+
 {% endblock %}
