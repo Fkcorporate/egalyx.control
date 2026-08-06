@@ -21,7 +21,10 @@
                         <div class="mt-2 mt-sm-0">
                             <span class="badge bg-light text-dark me-2">{{ incident.get_type_label() }}</span>
                             <span class="badge bg-{{ incident.get_gravite_color() }}">{{ incident.get_gravite_label() }}</span>
-                            <span class="badge bg-{{ incident.get_statut_color() }}">{{ incident.get_statut_label() }}</span>
+                            <span class="badge bg-{{ incident.get_statut_color() }}">
+                                <i class="fas {{ incident.get_statut_icon() }} me-1"></i>
+                                {{ incident.get_statut_label() }}
+                            </span>
                             {% if incident.is_archived %}
                             <span class="badge bg-secondary"><i class="fas fa-archive me-1"></i> Archivé</span>
                             {% endif %}
@@ -47,7 +50,16 @@
                         <div class="col-md-4">
                             <div class="info-group mb-3">
                                 <label class="text-muted small text-uppercase">Date de résolution</label>
-                                <p class="mb-0 fw-semibold">{{ incident.date_resolution.strftime('%d/%m/%Y à %H:%M') if incident.date_resolution else 'Non résolu' }}</p>
+                                <p class="mb-0 fw-semibold">
+                                    {% if incident.date_resolution %}
+                                    {{ incident.date_resolution.strftime('%d/%m/%Y à %H:%M') }}
+                                    {% if incident.get_delai_resolution() %}
+                                    <span class="badge bg-success ms-2">{{ incident.get_delai_resolution() }} jours</span>
+                                    {% endif %}
+                                    {% else %}
+                                    <span class="text-muted">Non résolu</span>
+                                    {% endif %}
+                                </p>
                             </div>
                         </div>
                     </div>
@@ -59,7 +71,7 @@
                                 <label class="text-muted small text-uppercase"><i class="fas fa-building me-1"></i> Direction associée</label>
                                 <p class="mb-0 fw-semibold">
                                     {% if incident.direction_associee %}
-                                    <span class="badge bg-info">{{ incident.direction_associee }}</span>
+                                    <span class="badge bg-info fs-6 px-3 py-2">{{ incident.direction_associee }}</span>
                                     {% else %}
                                     <span class="text-muted">Non spécifiée</span>
                                     {% endif %}
@@ -71,7 +83,7 @@
                                 <label class="text-muted small text-uppercase"><i class="fas fa-users me-1"></i> Service associé</label>
                                 <p class="mb-0 fw-semibold">
                                     {% if incident.service_associe %}
-                                    <span class="badge bg-secondary">{{ incident.service_associe }}</span>
+                                    <span class="badge bg-secondary fs-6 px-3 py-2">{{ incident.service_associe }}</span>
                                     {% else %}
                                     <span class="text-muted">Non spécifié</span>
                                     {% endif %}
@@ -110,7 +122,7 @@
                     <div class="row">
                         <div class="col-md-6">
                             <div class="info-group mb-3">
-                                <label class="text-muted small text-uppercase">SLA (heures)</label>
+                                <label class="text-muted small text-uppercase"><i class="fas fa-hourglass-half me-1"></i> SLA (heures)</label>
                                 <p class="mb-0">
                                     {% if incident.sla_heures %}
                                         <span class="badge bg-secondary">{{ incident.sla_heures }} heures</span>
@@ -130,25 +142,56 @@
                         </div>
                         <div class="col-md-6">
                             <div class="info-group mb-3">
-                                <label class="text-muted small text-uppercase">Niveau d'escalade</label>
+                                <label class="text-muted small text-uppercase"><i class="fas fa-arrow-up me-1"></i> Niveau d'escalade</label>
                                 <p class="mb-0">
                                     <span class="badge bg-{{ 'danger' if incident.niveau_escalade == 3 else 'warning' if incident.niveau_escalade == 2 else 'secondary' }}">{{ incident.get_niveau_escalade_label() }}</span>
-                                    {% if incident.escalade_date %}<small class="text-muted ms-2">(depuis {{ incident.escalade_date.strftime('%d/%m/%Y') }})</small>{% endif %}
+                                    {% if incident.escalation_date %}<small class="text-muted ms-2">(depuis {{ incident.escalation_date.strftime('%d/%m/%Y') }})</small>{% endif %}
                                     {% if incident.raison_escalade %}<br><small class="text-muted">Raison: {{ incident.raison_escalade }}</small>{% endif %}
                                 </p>
                             </div>
                         </div>
                     </div>
                     
-                    <!-- ========== DESCRIPTION (SANS <br>) ========== -->
+                    <!-- ========== DÉLAI AVANT PROCHAINE ESCALADE ========== -->
+                    <div class="row mt-2">
+                        <div class="col-md-6">
+                            <div class="info-group mb-2">
+                                <label class="text-muted small text-uppercase">Délai avant prochaine escalade</label>
+                                <p class="mb-0">
+                                    {% set delai_restant = incident.get_delai_restant_escalade() %}
+                                    {% if delai_restant > 0 %}
+                                        <span class="badge bg-{{ 'danger' if delai_restant < 12 else 'warning' if delai_restant < 24 else 'info' }}">
+                                            {{ delai_restant|round(1) }} heures
+                                        </span>
+                                    {% else %}
+                                        <span class="badge bg-danger">⚠️ Délai dépassé - Escalade imminente</span>
+                                    {% endif %}
+                                </p>
+                            </div>
+                        </div>
+                        <div class="col-md-6">
+                            <div class="info-group mb-2">
+                                <label class="text-muted small text-uppercase">Escalade automatique</label>
+                                <p class="mb-0">
+                                    {% if incident.escalation_auto %}
+                                        <span class="badge bg-warning">✅ Activée ({{ incident.delai_escalade_niveau2 }}h → {{ incident.delai_escalade_niveau3 }}h)</span>
+                                    {% else %}
+                                        <span class="badge bg-secondary">Manuelle uniquement</span>
+                                    {% endif %}
+                                </p>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- ========== DESCRIPTION ========== -->
                     <div class="info-group mb-3">
-                        <label class="text-muted small text-uppercase">Description</label>
+                        <label class="text-muted small text-uppercase"><i class="fas fa-align-left me-1"></i> Description</label>
                         <div class="p-3 bg-light rounded">
                             {% if incident.description %}
                                 {% set clean_description = incident.description|replace('<br>', '\n')|replace('<br/>', '\n')|replace('<br />', '\n')|striptags %}
                                 {{ clean_description|nl2br|safe }}
                             {% else %}
-                                Aucune description
+                                <span class="text-muted">Aucune description</span>
                             {% endif %}
                         </div>
                     </div>
@@ -198,21 +241,21 @@
                     
                     <!-- ========== LIENS MÉTIER ========== -->
                     <div class="row">
-                        <div class="col-md-4">
+                        <div class="col-md-6">
                             <div class="info-group mb-3">
-                                <label class="text-muted small text-uppercase">Risque associé</label>
+                                <label class="text-muted small text-uppercase"><i class="fas fa-shield-alt me-1"></i> Risque associé</label>
                                 <p>{% if incident.risque %}<a href="{{ url_for('detail_risque', id=incident.risque.id) }}" class="text-decoration-none"><i class="fas fa-shield-alt"></i> {{ incident.risque.reference }} - {{ incident.risque.intitule }}</a>{% else %}<span class="text-muted">Aucun risque associé</span>{% endif %}</p>
                             </div>
                         </div>
-                        <div class="col-md-4">
+                        <div class="col-md-6">
                             <div class="info-group mb-3">
-                                <label class="text-muted small text-uppercase">Ticket source</label>
+                                <label class="text-muted small text-uppercase"><i class="fas fa-headset me-1"></i> Ticket source</label>
                                 <p>{% if incident.ticket_source %}<a href="{{ url_for('detail_ticket', ticket_id=incident.ticket_source.id) }}" class="text-decoration-none"><i class="fas fa-headset"></i> {{ incident.ticket_source.reference }}</a>{% else %}<span class="text-muted">Non issu d'un ticket</span>{% endif %}</p>
                             </div>
                         </div>
                     </div>
                     
-                    <!-- ========== PLAN D'ACTION ASSOCIÉ À L'INCIDENT ========== -->
+                    <!-- ========== PLAN D'ACTION ASSOCIÉ ========== -->
                     <div class="card mt-3 mb-3 border-info">
                         <div class="card-header bg-info text-white">
                             <h5 class="mb-0"><i class="fas fa-tasks me-2"></i> Plan d'action associé</h5>
@@ -265,11 +308,22 @@
                                     </div>
                                     {% endif %}
                                 </div>
+                                
                                 <div class="mt-2 mt-sm-0">
                                     <button type="button" class="btn btn-outline-danger btn-sm" onclick="dissocierDispositif({{ incident.id }})"><i class="fas fa-unlink me-1"></i> Dissocier</button>
                                     <button type="button" class="btn btn-outline-info btn-sm ms-1" onclick="window.location.href='{{ url_for('detail_dispositif', dispositif_id=incident.dispositif.id) }}'"><i class="fas fa-eye me-1"></i> Voir</button>
                                 </div>
                             </div>
+                            
+                            <!-- Bouton restauration dispositif -->
+                            {% if incident.dispositif and incident.statut in ['resolu', 'ferme'] and incident.dispositif.efficacite_reelle < 5 %}
+                            <div class="mt-3">
+                                <button class="btn btn-sm btn-outline-success" onclick="restaurerDispositif({{ incident.id }})">
+                                    <i class="fas fa-sync-alt me-1"></i> Restaurer l'efficacité du dispositif
+                                </button>
+                            </div>
+                            {% endif %}
+                            
                             {% else %}
                             <div class="text-center py-3"><i class="fas fa-shield-alt fa-2x text-muted mb-2"></i><p class="text-muted">Aucun dispositif de maîtrise associé</p><button type="button" class="btn btn-outline-primary" data-bs-toggle="modal" data-bs-target="#lierDispositifModal"><i class="fas fa-link me-1"></i> Associer un dispositif</button></div>
                             {% endif %}
@@ -285,7 +339,7 @@
                         <div class="card-body p-0">
                             <div class="table-responsive">
                                 <table class="table table-sm mb-0">
-                                    <thead class="table-light"><tr><th>Référence</th><th>Nom</th><th>Statut</th><th>Progression</th><th>Actions</th></td></thead>
+                                    <thead class="table-light"><tr><th>Référence</th><th>Nom</th><th>Statut</th><th>Progression</th><th>Actions</th></tr></thead>
                                     <tbody>
                                         {% for plan in plans_dispositif %}
                                         {% if not incident.plan_action or plan.id != incident.plan_action.id %}
@@ -304,19 +358,42 @@
                         </div>
                     </div>
                     {% endif %}
-
                     
                     <!-- ========== ACTEURS ========== -->
                     <div class="row">
-                        <div class="col-md-4"><div class="info-group mb-3"><label class="text-muted small text-uppercase">Déclaré par</label><p class="fw-semibold">{{ incident.declare_par.username if incident.declare_par else 'Système' }}</p></div></div>
-                        <div class="col-md-4"><div class="info-group mb-3"><label class="text-muted small text-uppercase">Responsable (Niveau 1)</label><p class="fw-semibold">{{ incident.responsable.username if incident.responsable else 'Non assigné' }}</p></div></div>
-                        <div class="col-md-4"><div class="info-group mb-3"><label class="text-muted small text-uppercase">Superviseur (Niveau 2)</label><p class="fw-semibold">{{ incident.superviseur.username if incident.superviseur else 'Non assigné' }}</p></div></div>
+                        <div class="col-md-4">
+                            <div class="info-group mb-3">
+                                <label class="text-muted small text-uppercase"><i class="fas fa-user me-1"></i> Déclaré par</label>
+                                <p class="fw-semibold">{{ incident.declare_par.username if incident.declare_par else 'Système' }}</p>
+                            </div>
+                        </div>
+                        <div class="col-md-4">
+                            <div class="info-group mb-3">
+                                <label class="text-muted small text-uppercase"><i class="fas fa-user-tie me-1"></i> Responsable (Niveau 1)</label>
+                                <p class="fw-semibold">{{ incident.responsable.username if incident.responsable else 'Non assigné' }}</p>
+                            </div>
+                        </div>
+                        <div class="col-md-4">
+                            <div class="info-group mb-3">
+                                <label class="text-muted small text-uppercase"><i class="fas fa-user-cog me-1"></i> Superviseur (Niveau 2)</label>
+                                <p class="fw-semibold">{{ incident.superviseur.username if incident.superviseur else 'Non assigné' }}</p>
+                            </div>
+                        </div>
                     </div>
-                    {% if incident.directeur_id %}<div class="row"><div class="col-md-4"><div class="info-group mb-3"><label class="text-muted small text-uppercase">Directeur (Niveau 3)</label><p class="fw-semibold">{{ incident.directeur.username if incident.directeur else 'Non assigné' }}</p></div></div></div>{% endif %}
+                    {% if incident.directeur_id %}
+                    <div class="row">
+                        <div class="col-md-4">
+                            <div class="info-group mb-3">
+                                <label class="text-muted small text-uppercase"><i class="fas fa-user-shield me-1"></i> Directeur (Niveau 3)</label>
+                                <p class="fw-semibold">{{ incident.directeur.username if incident.directeur else 'Non assigné' }}</p>
+                            </div>
+                        </div>
+                    </div>
+                    {% endif %}
                     
                     <!-- ========== APPROBATION ========== -->
                     {% if incident.approbation_requise %}
-                    <div class="alert alert-{{ 'success' if incident.approbation_statut == 'approuve' else 'danger' if incident.approbation_statut == 'rejete' else 'info' }} mt-3">
+                    <div class="alert alert-{{ incident.get_approbation_statut_color() if incident.get_approbation_statut_color() else 'info' }} mt-3">
                         <i class="fas fa-stamp me-2"></i>
                         <strong>Approbation:</strong> {{ incident.get_approbation_statut_label() }}
                         {% if incident.approbation_date %} - le {{ incident.approbation_date.strftime('%d/%m/%Y à %H:%M') }}{% endif %}
@@ -327,13 +404,46 @@
                     
                     <!-- ========== RÉSOLUTION ========== -->
                     {% if incident.cause_racine or incident.actions_correctives or incident.lecons_apprises %}
-                    <hr><h5 class="mt-3">Résolution</h5>
-                    {% if incident.cause_racine %}<div class="info-group mb-3"><label class="text-muted small text-uppercase">Cause racine</label><div class="p-3 bg-light rounded">{{ incident.cause_racine|nl2br|safe }}</div></div>{% endif %}
-                    {% if incident.actions_correctives %}<div class="info-group mb-3"><label class="text-muted small text-uppercase">Actions correctives</label><div class="p-3 bg-light rounded">{{ incident.actions_correctives|nl2br|safe }}</div></div>{% endif %}
-                    {% if incident.lecons_apprises %}<div class="info-group mb-3"><label class="text-muted small text-uppercase">Leçons apprises</label><div class="p-3 bg-light rounded">{{ incident.lecons_apprises|nl2br|safe }}</div></div>{% endif %}
-                    {% if incident.commentaire_cloture %}<div class="info-group mb-3"><label class="text-muted small text-uppercase">Commentaire de clôture</label><div class="p-3 bg-light rounded">{{ incident.commentaire_cloture|nl2br|safe }}</div></div>{% endif %}
-                    {% if incident.date_resolution %}<div class="alert alert-success"><i class="fas fa-check-circle me-2"></i> Incident clôturé le {{ incident.date_resolution.strftime('%d/%m/%Y à %H:%M') }}{% if incident.get_delai_resolution() %} - Délai de résolution : {{ incident.get_delai_resolution() }} jours{% endif %}</div>{% endif %}
+                    <hr>
+                    <h5 class="mt-3"><i class="fas fa-check-circle me-2 text-success"></i> Résolution</h5>
+                    
+                    {% if incident.cause_racine %}
+                    <div class="info-group mb-3">
+                        <label class="text-muted small text-uppercase">Cause racine</label>
+                        <div class="p-3 bg-light rounded">{{ incident.cause_racine|nl2br|safe }}</div>
+                    </div>
                     {% endif %}
+                    
+                    {% if incident.actions_correctives %}
+                    <div class="info-group mb-3">
+                        <label class="text-muted small text-uppercase">Actions correctives</label>
+                        <div class="p-3 bg-light rounded">{{ incident.actions_correctives|nl2br|safe }}</div>
+                    </div>
+                    {% endif %}
+                    
+                    {% if incident.lecons_apprises %}
+                    <div class="info-group mb-3">
+                        <label class="text-muted small text-uppercase">Leçons apprises</label>
+                        <div class="p-3 bg-light rounded">{{ incident.lecons_apprises|nl2br|safe }}</div>
+                    </div>
+                    {% endif %}
+                    
+                    {% if incident.commentaire_cloture %}
+                    <div class="info-group mb-3">
+                        <label class="text-muted small text-uppercase">Commentaire de clôture</label>
+                        <div class="p-3 bg-light rounded">{{ incident.commentaire_cloture|nl2br|safe }}</div>
+                    </div>
+                    {% endif %}
+                    
+                    {% if incident.date_resolution %}
+                    <div class="alert alert-success">
+                        <i class="fas fa-check-circle me-2"></i> Incident clôturé le {{ incident.date_resolution.strftime('%d/%m/%Y à %H:%M') }}
+                        {% if incident.get_delai_resolution() %} - Délai de résolution : {{ incident.get_delai_resolution() }} jours{% endif %}
+                    </div>
+                    {% endif %}
+                    {% endif %}
+                    
+                    <!-- ========== PREUVES DE RÉSOLUTION ========== -->
                     {% if resolution_fichiers %}
                     <div class="card mt-3 mb-3 border-success">
                         <div class="card-header bg-success text-white">
@@ -374,36 +484,155 @@
                         </div>
                     </div>
                     {% endif %}
+                    
                     <!-- ========== ANALYSE IA ========== -->
                     {% if incident.analyse_ia %}
-                    <hr><h5 class="mt-3"><i class="fas fa-robot me-2"></i> Analyse IA <small class="text-muted">(score de confiance: {{ incident.ia_score_confiance }}%)</small></h5>
+                    <hr>
+                    <h5 class="mt-3"><i class="fas fa-robot me-2"></i> Analyse IA <small class="text-muted">(score de confiance: {{ incident.ia_score_confiance }}%)</small></h5>
                     {% set analyse = incident.analyse_ia|from_json if incident.analyse_ia else {} %}
-                    {% if analyse.causes_probables %}<div class="info-group mb-3"><label class="text-muted small text-uppercase">Causes probables</label><ul class="mb-0">{% for cause in analyse.causes_probables %}<li>{{ cause }}</li>{% endfor %}</ul></div>{% endif %}
-                    {% if analyse.recommandations %}<div class="info-group mb-3"><label class="text-muted small text-uppercase">Recommandations</label><ul class="mb-0">{% for rec in analyse.recommandations %}<li>{{ rec }}</li>{% endfor %}</ul></div>{% endif %}
-                    <div class="alert alert-{{ 'success' if incident.ia_score_confiance >= 80 else 'warning' if incident.ia_score_confiance >= 60 else 'secondary' }}"><i class="fas fa-chart-line me-2"></i> <strong>Confiance IA:</strong> {{ incident.ia_score_confiance }}%{% if incident.ia_score_confiance >= 80 %} - Analyse fiable{% elif incident.ia_score_confiance >= 60 %} - Analyse à confirmer{% else %} - Analyse à prendre avec précaution{% endif %}</div>
+                    
+                    {% if analyse.causes_probables %}
+                    <div class="info-group mb-3">
+                        <label class="text-muted small text-uppercase">Causes probables</label>
+                        <ul class="mb-0">
+                            {% for cause in analyse.causes_probables %}
+                            <li>{{ cause }}</li>
+                            {% endfor %}
+                        </ul>
+                    </div>
+                    {% endif %}
+                    
+                    {% if analyse.recommandations %}
+                    <div class="info-group mb-3">
+                        <label class="text-muted small text-uppercase">Recommandations</label>
+                        <ul class="mb-0">
+                            {% for rec in analyse.recommandations %}
+                            <li>{{ rec }}</li>
+                            {% endfor %}
+                        </ul>
+                    </div>
+                    {% endif %}
+                    
+                    <div class="alert alert-{{ 'success' if incident.ia_score_confiance >= 80 else 'warning' if incident.ia_score_confiance >= 60 else 'secondary' }}">
+                        <i class="fas fa-chart-line me-2"></i> 
+                        <strong>Confiance IA:</strong> {{ incident.ia_score_confiance }}%
+                        {% if incident.ia_score_confiance >= 80 %}
+                            - Analyse fiable
+                        {% elif incident.ia_score_confiance >= 60 %}
+                            - Analyse à confirmer
+                        {% else %}
+                            - Analyse à prendre avec précaution
+                        {% endif %}
+                    </div>
                     {% endif %}
                     
                     <!-- ========== HISTORIQUE ========== -->
                     {% if historique %}
-                    <hr><h5 class="mt-3">Historique des actions</h5>
+                    <hr>
+                    <h5 class="mt-3"><i class="fas fa-history me-2"></i> Historique des actions</h5>
                     <div class="timeline">
                         {% for entry in historique %}
-                        <div class="timeline-item mb-3"><div class="d-flex"><div class="timeline-icon me-3"><i class="fas fa-{{ 'check-circle' if 'resolu' in entry.action or 'resolution' in entry.action else 'edit' if 'modification' in entry.action else 'arrow-up' if 'escalade' in entry.action else 'flag' if 'approbation' in entry.action else 'info-circle' }}"></i></div><div class="timeline-content"><div class="d-flex justify-content-between flex-wrap"><strong>{% if 'resolu' in entry.action or 'resolution' in entry.action %}Résolution{% elif 'modification' in entry.action %}Modification{% elif 'escalade' in entry.action %}Escalade{% elif 'approbation' in entry.action %}Approbation{% else %}{{ entry.action|replace('_', ' ')|title }}{% endif %}</strong><small class="text-muted">{{ entry.created_at.strftime('%d/%m/%Y %H:%M') }}</small></div><p class="mb-0 small">{{ entry.details }}</p><small class="text-muted">par {{ entry.utilisateur.username if entry.utilisateur else 'Système' }}</small></div></div></div>
+                        <div class="timeline-item mb-3">
+                            <div class="d-flex">
+                                <div class="timeline-icon me-3">
+                                    <i class="fas fa-{{ 'check-circle' if 'resolu' in entry.action or 'resolution' in entry.action else 'edit' if 'modification' in entry.action else 'arrow-up' if 'escalade' in entry.action else 'flag' if 'approbation' in entry.action else 'info-circle' }}"></i>
+                                </div>
+                                <div class="timeline-content">
+                                    <div class="d-flex justify-content-between flex-wrap">
+                                        <strong>
+                                            {% if 'resolu' in entry.action or 'resolution' in entry.action %}
+                                                Résolution
+                                            {% elif 'modification' in entry.action %}
+                                                Modification
+                                            {% elif 'escalade' in entry.action %}
+                                                Escalade
+                                            {% elif 'approbation' in entry.action %}
+                                                Approbation
+                                            {% elif 'reouverture' in entry.action %}
+                                                Réouverture
+                                            {% elif 'archivage' in entry.action %}
+                                                Archivage
+                                            {% else %}
+                                                {{ entry.action|replace('_', ' ')|title }}
+                                            {% endif %}
+                                        </strong>
+                                        <small class="text-muted">{{ entry.created_at.strftime('%d/%m/%Y %H:%M') }}</small>
+                                    </div>
+                                    <p class="mb-0 small">{{ entry.details }}</p>
+                                    <small class="text-muted">par {{ entry.utilisateur.username if entry.utilisateur else 'Système' }}</small>
+                                </div>
+                            </div>
+                        </div>
                         {% endfor %}
                     </div>
                     {% endif %}
                     
                     <!-- ========== BOUTONS D'ACTION ========== -->
                     <div class="d-flex justify-content-between flex-wrap gap-2 mt-4">
-                        <a href="{{ url_for('liste_incidents') }}" class="btn btn-outline-secondary"><i class="fas fa-arrow-left me-1"></i> Retour</a>
+                        <a href="{{ url_for('liste_incidents') }}" class="btn btn-outline-secondary">
+                            <i class="fas fa-arrow-left me-1"></i> Retour
+                        </a>
                         <div class="d-flex gap-2 flex-wrap">
-                            {% if incident.peut_modifier(current_user) and incident.statut not in ['ferme', 'resolu'] %}<a href="{{ url_for('modifier_incident', id=incident.id) }}" class="btn btn-primary"><i class="fas fa-edit me-1"></i> Modifier</a>{% endif %}
-                            {% if incident.statut not in ['ferme', 'resolu'] and incident.peut_modifier(current_user) %}<a href="{{ url_for('resoudre_incident', id=incident.id) }}" class="btn btn-success"><i class="fas fa-check-circle me-1"></i> Résoudre</a>{% endif %}
-                            {% if incident.peut_escalader(current_user) %}<button type="button" class="btn btn-warning" data-bs-toggle="modal" data-bs-target="#escaladeModal"><i class="fas fa-arrow-up me-1"></i> Escalader</button>{% endif %}
-                            {% if incident.peut_approuver(current_user) %}<a href="{{ url_for('approuver_incident', id=incident.id) }}" class="btn btn-info"><i class="fas fa-stamp me-1"></i> Approuver</a>{% endif %}
-                            {% if not incident.analyse_ia %}<a href="{{ url_for('analyse_ia_incident', id=incident.id) }}" class="btn btn-secondary"><i class="fas fa-robot me-1"></i> Analyser IA</a>{% endif %}
-                            {% if not incident.is_archived and incident.peut_archiver(current_user) %}<button type="button" class="btn btn-secondary" data-bs-toggle="modal" data-bs-target="#archiveModal"><i class="fas fa-archive me-1"></i> Archiver</button>{% endif %}
-                            {% if incident.is_archived and incident.peut_supprimer_definitivement(current_user) %}<button type="button" class="btn btn-danger" onclick="supprimerDefinitivement({{ incident.id }}, '{{ incident.reference }}')"><i class="fas fa-trash-alt me-1"></i> Supprimer définitivement</button>{% endif %}
+                            <!-- Modifier -->
+                            {% if incident.peut_modifier(current_user) and incident.statut not in ['ferme', 'resolu'] and not incident.is_archived %}
+                            <a href="{{ url_for('modifier_incident', id=incident.id) }}" class="btn btn-primary">
+                                <i class="fas fa-edit me-1"></i> Modifier
+                            </a>
+                            {% endif %}
+                            
+                            <!-- Résoudre - Pour tous les incidents non résolus/fermés -->
+                            {% if incident.statut not in ['resolu', 'ferme'] and not incident.is_archived %}
+                            <a href="{{ url_for('resoudre_incident', id=incident.id) }}" class="btn btn-success">
+                                <i class="fas fa-check-circle me-1"></i> 
+                                {% if incident.approbation_requise %}
+                                Résoudre & soumettre à approbation
+                                {% else %}
+                                Résoudre
+                                {% endif %}
+                            </a>
+                            {% endif %}
+                            
+                            <!-- Réouvrir - Pour les incidents résolus/fermés -->
+                            {% if incident.statut in ['resolu', 'ferme'] and not incident.is_archived and incident.peut_reouvrir(current_user) %}
+                            <a href="{{ url_for('reouvrir_incident', id=incident.id) }}" class="btn btn-warning" onclick="return confirm('Réouvrir cet incident ?')">
+                                <i class="fas fa-undo me-1"></i> Réouvrir
+                            </a>
+                            {% endif %}
+                            
+                            <!-- Approuver -->
+                            {% if incident.approbation_requise and incident.approbation_statut == 'en_attente' and incident.peut_approuver(current_user) %}
+                            <a href="{{ url_for('approuver_incident', id=incident.id) }}" class="btn btn-info">
+                                <i class="fas fa-stamp me-1"></i> Approuver
+                            </a>
+                            {% endif %}
+                            
+                            <!-- Escalader -->
+                            {% if incident.peut_escalader(current_user) %}
+                            <button type="button" class="btn btn-warning" data-bs-toggle="modal" data-bs-target="#escaladeModal">
+                                <i class="fas fa-arrow-up me-1"></i> Escalader
+                            </button>
+                            {% endif %}
+                            
+                            <!-- Analyse IA -->
+                            {% if not incident.analyse_ia %}
+                            <a href="{{ url_for('analyse_ia_incident', id=incident.id) }}" class="btn btn-secondary">
+                                <i class="fas fa-robot me-1"></i> Analyser IA
+                            </a>
+                            {% endif %}
+                            
+                            <!-- Archiver -->
+                            {% if not incident.is_archived and incident.peut_archiver(current_user) %}
+                            <button type="button" class="btn btn-secondary" data-bs-toggle="modal" data-bs-target="#archiveModal">
+                                <i class="fas fa-archive me-1"></i> Archiver
+                            </button>
+                            {% endif %}
+                            
+                            <!-- Supprimer définitivement -->
+                            {% if incident.is_archived and incident.peut_supprimer_definitivement(current_user) %}
+                            <button type="button" class="btn btn-danger" onclick="supprimerDefinitivamente({{ incident.id }}, '{{ incident.reference }}')">
+                                <i class="fas fa-trash-alt me-1"></i> Supprimer définitivement
+                            </button>
+                            {% endif %}
                         </div>
                     </div>
                 </div>
@@ -424,10 +653,25 @@
                 </div>
                 <div class="modal-body">
                     <p>Escalader l'incident <strong>{{ incident.reference }}</strong> au niveau supérieur ?</p>
-                    <div class="mb-3"><label class="form-label fw-semibold">Raison de l'escalade <span class="text-danger">*</span></label><textarea name="raison" class="form-control" rows="3" required placeholder="Expliquez pourquoi vous escaladez cet incident..."></textarea></div>
-                    <div class="alert alert-info"><i class="fas fa-info-circle me-2"></i><strong>Niveau actuel:</strong> {{ incident.get_niveau_escalade_label() }}<br><strong>Prochain niveau:</strong> {% if incident.niveau_escalade == 1 %}Niveau 2 (Superviseur) - {{ incident.superviseur.username if incident.superviseur else 'Non assigné' }}{% else %}Niveau 3 (Direction) - {{ incident.directeur.username if incident.directeur else 'Non assigné' }}{% endif %}</div>
+                    <div class="mb-3">
+                        <label class="form-label fw-semibold">Raison de l'escalade <span class="text-danger">*</span></label>
+                        <textarea name="raison" class="form-control" rows="3" required placeholder="Expliquez pourquoi vous escaladez cet incident..."></textarea>
+                    </div>
+                    <div class="alert alert-info">
+                        <i class="fas fa-info-circle me-2"></i>
+                        <strong>Niveau actuel:</strong> {{ incident.get_niveau_escalade_label() }}<br>
+                        <strong>Prochain niveau:</strong> 
+                        {% if incident.niveau_escalade == 1 %}
+                            Niveau 2 (Superviseur) - {{ incident.superviseur.username if incident.superviseur else 'Non assigné' }}
+                        {% else %}
+                            Niveau 3 (Direction) - {{ incident.directeur.username if incident.directeur else 'Non assigné' }}
+                        {% endif %}
+                    </div>
                 </div>
-                <div class="modal-footer"><button type="button" class="btn btn-light" data-bs-dismiss="modal">Annuler</button><button type="submit" class="btn btn-warning"><i class="fas fa-arrow-up me-1"></i> Confirmer l'escalade</button></div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-light" data-bs-dismiss="modal">Annuler</button>
+                    <button type="submit" class="btn btn-warning"><i class="fas fa-arrow-up me-1"></i> Confirmer l'escalade</button>
+                </div>
             </form>
         </div>
     </div>
@@ -443,8 +687,21 @@
                     <h5 class="modal-title"><i class="fas fa-archive me-2"></i> Archiver l'incident</h5>
                     <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
                 </div>
-                <div class="modal-body"><p>Archiver l'incident <strong>{{ incident.reference }}</strong> ?</p><div class="mb-3"><label class="form-label fw-semibold">Raison de l'archivage</label><textarea name="raison" class="form-control" rows="3" required></textarea></div><div class="alert alert-warning"><i class="fas fa-exclamation-triangle me-2"></i> L'incident archivé ne sera plus visible dans la liste active, mais restera consultable dans les archives.</div></div>
-                <div class="modal-footer"><button type="button" class="btn btn-light" data-bs-dismiss="modal">Annuler</button><button type="submit" class="btn btn-secondary"><i class="fas fa-archive me-1"></i> Archiver</button></div>
+                <div class="modal-body">
+                    <p>Archiver l'incident <strong>{{ incident.reference }}</strong> ?</p>
+                    <div class="mb-3">
+                        <label class="form-label fw-semibold">Raison de l'archivage</label>
+                        <textarea name="raison" class="form-control" rows="3" required></textarea>
+                    </div>
+                    <div class="alert alert-warning">
+                        <i class="fas fa-exclamation-triangle me-2"></i> 
+                        L'incident archivé ne sera plus visible dans la liste active, mais restera consultable dans les archives.
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-light" data-bs-dismiss="modal">Annuler</button>
+                    <button type="submit" class="btn btn-secondary"><i class="fas fa-archive me-1"></i> Archiver</button>
+                </div>
             </form>
         </div>
     </div>
@@ -454,41 +711,310 @@
 <div class="modal fade" id="lierDispositifModal" tabindex="-1">
     <div class="modal-dialog modal-lg">
         <div class="modal-content">
-            <div class="modal-header"><h5 class="modal-title"><i class="fas fa-link me-2"></i> Associer un dispositif de maîtrise</h5><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div>
-            <div class="modal-body">
-                <div class="alert alert-info"><i class="fas fa-info-circle me-2"></i> L'association d'un dispositif permet d'évaluer l'impact de l'incident sur son efficacité.</div>
-                <div class="mb-3"><label class="form-label fw-bold">Rechercher un dispositif</label><input type="text" id="searchDispositif" class="form-control" placeholder="Référence, nom..." onkeyup="filtrerDispositifs()"></div>
-                <div class="mb-3"><label class="form-label fw-bold">Filtrer par risque associé</label><select id="risqueFilter" class="form-select" onchange="filtrerDispositifs()"><option value="">Tous les risques</option>{% if incident.risque %}<option value="{{ incident.risque.id }}" selected>🔴 {{ incident.risque.reference }} - {{ incident.risque.intitule[:50] }}</option>{% endif %}<option value="all">--- Afficher tous les dispositifs ---</option><option value="without">📌 Dispositifs sans risque associé</option></select></div>
-                <div class="table-responsive" style="max-height: 400px; overflow-y: auto;">
-                    <table class="table table-sm" id="dispositifsTable"><thead class="table-light"><tr><th>Sélection</th><th>Référence</th><th>Nom</th><th>Type</th><th>Efficacité</th><th>Risque associé</th></tr></thead><tbody>{% if dispositifs_disponibles %}{% for dispositif in dispositifs_disponibles %}<tr data-risque-id="{{ dispositif.risque_id or 0 }}" data-reference="{{ dispositif.reference|lower }}" data-nom="{{ dispositif.nom|lower }}"><td><input type="radio" name="dispositif_id" value="{{ dispositif.id }}" class="form-check-input dispositif-radio"></td><td><code>{{ dispositif.reference }}</code></td><td>{{ dispositif.nom[:40] }}</td><td><span class="badge bg-{{ 'success' if dispositif.type_dispositif == 'Préventif' else 'warning' if dispositif.type_dispositif == 'Détectif' else 'danger' }}">{{ dispositif.type_dispositif or 'Non spécifié' }}</span></td><td><span class="badge bg-{{ 'success' if (dispositif.efficacite_reelle or 0) >= 4 else 'warning' if (dispositif.efficacite_reelle or 0) >= 3 else 'danger' }}">{{ dispositif.efficacite_reelle or 'N/A' }}/5</span></td><td>{% if dispositif.risque %}<code>{{ dispositif.risque.reference }}</code>{% else %}<span class="text-muted">Non associé</span>{% endif %}</td></tr>{% endfor %}{% else %}<tr><td colspan="6" class="text-center py-4"><i class="fas fa-shield-alt fa-2x mb-2"></i><p>Aucun dispositif de maîtrise disponible</p></td></tr>{% endif %}</tbody></table>
-                </div>
-                <div id="incoherenceWarning" class="alert alert-warning mt-3" style="display: none;"><i class="fas fa-exclamation-triangle me-2"></i><strong>Attention :</strong> Le dispositif sélectionné n'est pas lié au même risque que l'incident.<br>Voulez-vous quand même l'associer ?<div class="mt-2"><button type="button" class="btn btn-sm btn-warning" onclick="confirmerLiaisonForcee()"><i class="fas fa-link me-1"></i> Associer quand même</button><button type="button" class="btn btn-sm btn-secondary" onclick="annulerLiaisonForcee()">Annuler</button></div></div>
+            <div class="modal-header">
+                <h5 class="modal-title"><i class="fas fa-link me-2"></i> Associer un dispositif de maîtrise</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
             </div>
-            <div class="modal-footer"><button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Annuler</button><button type="button" class="btn btn-primary" onclick="lierDispositif()" id="btnLierDispositif"><i class="fas fa-link me-1"></i> Associer et évaluer l'impact</button></div>
+            <div class="modal-body">
+                <div class="alert alert-info">
+                    <i class="fas fa-info-circle me-2"></i> 
+                    L'association d'un dispositif permet d'évaluer l'impact de l'incident sur son efficacité.
+                </div>
+                <div class="mb-3">
+                    <label class="form-label fw-bold">Rechercher un dispositif</label>
+                    <input type="text" id="searchDispositif" class="form-control" placeholder="Référence, nom..." onkeyup="filtrerDispositifs()">
+                </div>
+                <div class="mb-3">
+                    <label class="form-label fw-bold">Filtrer par risque associé</label>
+                    <select id="risqueFilter" class="form-select" onchange="filtrerDispositifs()">
+                        <option value="">Tous les risques</option>
+                        {% if incident.risque %}
+                        <option value="{{ incident.risque.id }}" selected>🔴 {{ incident.risque.reference }} - {{ incident.risque.intitule[:50] }}</option>
+                        {% endif %}
+                        <option value="all">--- Afficher tous les dispositifs ---</option>
+                        <option value="without">📌 Dispositifs sans risque associé</option>
+                    </select>
+                </div>
+                <div class="table-responsive" style="max-height: 400px; overflow-y: auto;">
+                    <table class="table table-sm" id="dispositifsTable">
+                        <thead class="table-light">
+                            <tr>
+                                <th>Sélection</th>
+                                <th>Référence</th>
+                                <th>Nom</th>
+                                <th>Type</th>
+                                <th>Efficacité</th>
+                                <th>Risque associé</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% if dispositifs_disponibles %}
+                            {% for dispositif in dispositifs_disponibles %}
+                            <tr data-risque-id="{{ dispositif.risque_id or 0 }}" data-reference="{{ dispositif.reference|lower }}" data-nom="{{ dispositif.nom|lower }}">
+                                <td><input type="radio" name="dispositif_id" value="{{ dispositif.id }}" class="form-check-input dispositif-radio"></td>
+                                <td><code>{{ dispositif.reference }}</code></td>
+                                <td>{{ dispositif.nom[:40] }}</td>
+                                <td><span class="badge bg-{{ 'success' if dispositif.type_dispositif == 'Préventif' else 'warning' if dispositif.type_dispositif == 'Détectif' else 'danger' }}">{{ dispositif.type_dispositif or 'Non spécifié' }}</span></td>
+                                <td><span class="badge bg-{{ 'success' if (dispositif.efficacite_reelle or 0) >= 4 else 'warning' if (dispositif.efficacite_reelle or 0) >= 3 else 'danger' }}">{{ dispositif.efficacite_reelle or 'N/A' }}/5</span></td>
+                                <td>{% if dispositif.risque %}<code>{{ dispositif.risque.reference }}</code>{% else %}<span class="text-muted">Non associé</span>{% endif %}</td>
+                            </tr>
+                            {% endfor %}
+                            {% else %}
+                            <tr>
+                                <td colspan="6" class="text-center py-4">
+                                    <i class="fas fa-shield-alt fa-2x mb-2"></i>
+                                    <p>Aucun dispositif de maîtrise disponible</p>
+                                </td>
+                            </tr>
+                            {% endif %}
+                        </tbody>
+                    </table>
+                </div>
+                <div id="incoherenceWarning" class="alert alert-warning mt-3" style="display: none;">
+                    <i class="fas fa-exclamation-triangle me-2"></i>
+                    <strong>Attention :</strong> Le dispositif sélectionné n'est pas lié au même risque que l'incident.<br>
+                    Voulez-vous quand même l'associer ?
+                    <div class="mt-2">
+                        <button type="button" class="btn btn-sm btn-warning" onclick="confirmerLiaisonForcee()">
+                            <i class="fas fa-link me-1"></i> Associer quand même
+                        </button>
+                        <button type="button" class="btn btn-sm btn-secondary" onclick="annulerLiaisonForcee()">Annuler</button>
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Annuler</button>
+                <button type="button" class="btn btn-primary" onclick="lierDispositif()" id="btnLierDispositif">
+                    <i class="fas fa-link me-1"></i> Associer et évaluer l'impact
+                </button>
+            </div>
         </div>
     </div>
 </div>
 
-
 <style>
-.timeline-icon{width:36px;height:36px;background:#e9ecef;border-radius:50%;display:flex;align-items:center;justify-content:center;flex-shrink:0}
-.timeline-content{flex:1;padding:10px 15px;background:#f8f9fa;border-radius:10px}
-.info-group label{font-size:0.7rem;text-transform:uppercase;letter-spacing:0.5px;font-weight:600}
-.info-group{margin-bottom:1rem}
-[data-bs-theme="dark"] .timeline-icon{background:#334155}
-[data-bs-theme="dark"] .timeline-content{background:#1E293B}
+.timeline-icon {
+    width: 36px;
+    height: 36px;
+    background: #e9ecef;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+}
+.timeline-content {
+    flex: 1;
+    padding: 10px 15px;
+    background: #f8f9fa;
+    border-radius: 10px;
+}
+.info-group label {
+    font-size: 0.7rem;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    font-weight: 600;
+}
+.info-group {
+    margin-bottom: 1rem;
+}
+[data-bs-theme="dark"] .timeline-icon {
+    background: #334155;
+}
+[data-bs-theme="dark"] .timeline-content {
+    background: #1E293B;
+}
 </style>
 
 <script>
-let selectedDispositifId = null, forceLiaison = false, incidentRisqueId = {{ incident.risque_id or 0 }};
-function filtrerDispositifs(){const searchTerm=document.getElementById('searchDispositif').value.toLowerCase(),risqueFilter=document.getElementById('risqueFilter').value,rows=document.querySelectorAll('#dispositifsTable tbody tr');rows.forEach(row=>{const reference=row.dataset.reference||'',nom=row.dataset.nom||'',risqueId=parseInt(row.dataset.risqueId)||0;let visible=true;if(searchTerm&&!reference.includes(searchTerm)&&!nom.includes(searchTerm))visible=false;if(risqueFilter==='all'){visible=visible}else if(risqueFilter==='without'){if(risqueId!==0)visible=false}else if(risqueFilter&&risqueFilter!==''&&risqueFilter!=='all'&&risqueFilter!=='without'){const filterValue=parseInt(risqueFilter);if(filterValue!==risqueId)visible=false}row.style.display=visible?'':'none'})}
-document.querySelectorAll('.dispositif-radio').forEach(radio=>{radio.addEventListener('change',function(){selectedDispositifId=this.value;const warning=document.getElementById('incoherenceWarning'),row=this.closest('tr'),risqueDispositif=parseInt(row.dataset.risqueId)||0;if(incidentRisqueId&&incidentRisqueId!==0&&risqueDispositif!==0&&incidentRisqueId!==risqueDispositif){warning.style.display='block';forceLiaison=false}else{warning.style.display='none';forceLiaison=true}})});
-function confirmerLiaisonForcee(){forceLiaison=true;document.getElementById('incoherenceWarning').style.display='none'}
-function annulerLiaisonForcee(){forceLiaison=false;document.getElementById('incoherenceWarning').style.display='none';if(selectedDispositifId){const radio=document.querySelector(`.dispositif-radio[value="${selectedDispositifId}"]`);if(radio)radio.checked=false}selectedDispositifId=null}
-function lierDispositif(){if(!selectedDispositifId){alert('Veuillez sélectionner un dispositif');return}const btn=document.getElementById('btnLierDispositif');btn.disabled=true;btn.innerHTML='<i class="fas fa-spinner fa-spin me-1"></i> Association...';fetch(`/api/incident/{{ incident.id }}/dispositif`,{method:'POST',headers:{'Content-Type':'application/json','X-CSRFToken':'{{ csrf_token() }}'},body:JSON.stringify({dispositif_id:selectedDispositifId,force:forceLiaison})}).then(response=>response.json()).then(data=>{if(data.success)location.reload();else alert('Erreur: '+data.error);btn.disabled=false;btn.innerHTML='<i class="fas fa-link me-1"></i> Associer'}).catch(error=>{alert('Erreur: '+error);btn.disabled=false})}
-function dissocierDispositif(incidentId){if(!confirm('Dissocier ce dispositif ?'))return;fetch(`/api/incident/${incidentId}/dispositif`,{method:'DELETE',headers:{'X-CSRFToken':'{{ csrf_token() }}'}}).then(response=>response.json()).then(data=>{if(data.success)location.reload();else alert('Erreur: '+data.error)}).catch(error=>alert('Erreur: '+error))}
-function creerPlanActionDepuisIncident(incidentId){if(!confirm('Créer un plan d\'action ?'))return;fetch(`/api/incident/${incidentId}/creer-plan-action`,{method:'POST',headers:{'X-CSRFToken':'{{ csrf_token() }}'}}).then(response=>response.json()).then(data=>{if(data.success)window.location.href=data.redirect_url;else alert('Erreur: '+data.error)}).catch(error=>alert('Erreur: '+error))}
-function supprimerDefinitivement(incidentId,reference){if(!confirm(`⚠️ Supprimer définitivement ${reference} ?`))return;fetch(`/api/incident/${incidentId}/supprimer-definitivement`,{method:'DELETE',headers:{'X-CSRFToken':'{{ csrf_token() }}'}}).then(response=>response.json()).then(data=>{if(data.success)window.location.href='{{ url_for("liste_incidents") }}';else alert('Erreur: '+data.error)}).catch(error=>alert('Erreur: '+error))}
-document.addEventListener('DOMContentLoaded',function(){filtrerDispositifs()});
+let selectedDispositifId = null;
+let forceLiaison = false;
+let incidentRisqueId = {{ incident.risque_id or 0 }};
+
+function filtrerDispositifs(){
+    const searchTerm = document.getElementById('searchDispositif').value.toLowerCase();
+    const risqueFilter = document.getElementById('risqueFilter').value;
+    const rows = document.querySelectorAll('#dispositifsTable tbody tr');
+    
+    rows.forEach(row => {
+        const reference = row.dataset.reference || '';
+        const nom = row.dataset.nom || '';
+        const risqueId = parseInt(row.dataset.risqueId) || 0;
+        let visible = true;
+        
+        if (searchTerm && !reference.includes(searchTerm) && !nom.includes(searchTerm)) {
+            visible = false;
+        }
+        
+        if (risqueFilter === 'all') {
+            // Afficher tous
+        } else if (risqueFilter === 'without') {
+            if (risqueId !== 0) visible = false;
+        } else if (risqueFilter && risqueFilter !== '' && risqueFilter !== 'all' && risqueFilter !== 'without') {
+            const filterValue = parseInt(risqueFilter);
+            if (filterValue !== risqueId) visible = false;
+        }
+        
+        row.style.display = visible ? '' : 'none';
+    });
+}
+
+function initDispositifRadios(){
+    document.querySelectorAll('.dispositif-radio').forEach(radio => {
+        radio.addEventListener('change', function(){
+            selectedDispositifId = this.value;
+            const warning = document.getElementById('incoherenceWarning');
+            const row = this.closest('tr');
+            const risqueDispositif = parseInt(row.dataset.risqueId) || 0;
+            
+            if (incidentRisqueId && incidentRisqueId !== 0 && risqueDispositif !== 0 && incidentRisqueId !== risqueDispositif) {
+                warning.style.display = 'block';
+                forceLiaison = false;
+            } else {
+                warning.style.display = 'none';
+                forceLiaison = true;
+            }
+        });
+    });
+}
+
+function confirmerLiaisonForcee(){
+    forceLiaison = true;
+    document.getElementById('incoherenceWarning').style.display = 'none';
+}
+
+function annulerLiaisonForcee(){
+    forceLiaison = false;
+    document.getElementById('incoherenceWarning').style.display = 'none';
+    if (selectedDispositifId) {
+        const radio = document.querySelector(`.dispositif-radio[value="${selectedDispositifId}"]`);
+        if (radio) radio.checked = false;
+    }
+    selectedDispositifId = null;
+}
+
+function lierDispositif(){
+    if (!selectedDispositifId) {
+        alert('Veuillez sélectionner un dispositif');
+        return;
+    }
+    
+    const btn = document.getElementById('btnLierDispositif');
+    btn.disabled = true;
+    btn.innerHTML = '<i class="fas fa-spinner fa-spin me-1"></i> Association...';
+    
+    fetch(`/api/incident/{{ incident.id }}/dispositif`, {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            'X-CSRFToken': '{{ csrf_token() }}'
+        },
+        body: JSON.stringify({
+            dispositif_id: selectedDispositifId,
+            force: forceLiaison
+        })
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            location.reload();
+        } else {
+            alert('Erreur: ' + data.error);
+        }
+        btn.disabled = false;
+        btn.innerHTML = '<i class="fas fa-link me-1"></i> Associer et évaluer l\'impact';
+    })
+    .catch(error => {
+        alert('Erreur: ' + error);
+        btn.disabled = false;
+    });
+}
+
+function dissocierDispositif(incidentId){
+    if (!confirm('Dissocier ce dispositif ?')) return;
+    
+    fetch(`/api/incident/${incidentId}/dispositif`, {
+        method: 'DELETE',
+        headers: {
+            'X-CSRFToken': '{{ csrf_token() }}'
+        }
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            location.reload();
+        } else {
+            alert('Erreur: ' + data.error);
+        }
+    })
+    .catch(error => alert('Erreur: ' + error));
+}
+
+function creerPlanActionDepuisIncident(incidentId){
+    if (!confirm('Créer un plan d\'action ?')) return;
+    
+    fetch(`/api/incident/${incidentId}/creer-plan-action`, {
+        method: 'POST',
+        headers: {
+            'X-CSRFToken': '{{ csrf_token() }}'
+        }
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            window.location.href = data.redirect_url;
+        } else {
+            alert('Erreur: ' + data.error);
+        }
+    })
+    .catch(error => alert('Erreur: ' + error));
+}
+
+function restaurerDispositif(incidentId){
+    if (!confirm('Restaurer l\'efficacité du dispositif associé ?')) return;
+    
+    fetch(`/api/incident/${incidentId}/restaurer-dispositif`, {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            'X-CSRFToken': '{{ csrf_token() }}'
+        }
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            alert('✅ Efficacité du dispositif restaurée');
+            location.reload();
+        } else {
+            alert('Erreur: ' + data.error);
+        }
+    })
+    .catch(error => alert('Erreur: ' + error));
+}
+
+function supprimerDefinitivamente(incidentId, reference){
+    if (!confirm(`⚠️ Supprimer définitivement ${reference} ? Cette action est irréversible.`)) return;
+    
+    fetch(`/api/incident/${incidentId}/supprimer-definitivement`, {
+        method: 'DELETE',
+        headers: {
+            'X-CSRFToken': '{{ csrf_token() }}'
+        }
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            window.location.href = '{{ url_for("liste_incidents") }}';
+        } else {
+            alert('Erreur: ' + data.error);
+        }
+    })
+    .catch(error => alert('Erreur: ' + error));
+}
+
+document.addEventListener('DOMContentLoaded', function(){
+    filtrerDispositifs();
+    initDispositifRadios();
+});
 </script>
 {% endblock %}
