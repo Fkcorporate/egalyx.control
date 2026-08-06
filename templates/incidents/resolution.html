@@ -14,6 +14,10 @@
         height: 4px;
         transition: width 0.3s ease;
     }
+    .suggestion-card {
+        border-left: 4px solid #0d6efd;
+        background: #f0f7ff;
+    }
 </style>
 
 <div class="container-fluid">
@@ -28,9 +32,22 @@
                 </div>
                 <div class="card-body">
                     
+                    <!-- Information sur l'approbation -->
+                    {% if incident.approbation_requise %}
+                    <div class="alert alert-warning mb-4">
+                        <i class="fas fa-info-circle me-2"></i>
+                        <strong>Approbation requise</strong>
+                        <p class="mb-0 small">
+                            Cet incident nécessite une approbation par {{ incident.superviseur.username if incident.superviseur else 'le superviseur' }}
+                            {% if incident.directeur %} ou {{ incident.directeur.username }}{% endif %}.
+                            Après résolution, il passera en <strong>attente d'approbation</strong>.
+                        </p>
+                    </div>
+                    {% endif %}
+                    
                     <!-- ========== SUGGESTIONS IA ========== -->
                     {% if suggestions_ia and (suggestions_ia.cause_racine or suggestions_ia.actions_correctives) %}
-                    <div class="alert alert-info mb-4">
+                    <div class="alert alert-info suggestion-card mb-4">
                         <div class="d-flex justify-content-between align-items-start">
                             <div>
                                 <i class="fas fa-robot me-2"></i>
@@ -71,6 +88,13 @@
                             <div class="col-md-12 mb-3">
                                 <label class="form-label">{{ form.statut.label }}</label>
                                 {{ form.statut(class="form-select") }}
+                                <small class="text-muted">
+                                    {% if incident.approbation_requise %}
+                                    <i class="fas fa-info-circle"></i> L'incident passera en "En attente d'approbation" si vous choisissez "Résolu"
+                                    {% else %}
+                                    <i class="fas fa-info-circle"></i> L'incident sera directement marqué comme "Résolu" ou "Fermé"
+                                    {% endif %}
+                                </small>
                             </div>
                         </div>
                         
@@ -125,7 +149,7 @@
                                     </div>
                                 </div>
                                 
-                                <!-- ========== LISTE DES FICHIERS EXISTANTS ========== -->
+                                <!-- Liste des fichiers existants -->
                                 <div id="preuvesList">
                                     {% if resolution_fichiers %}
                                     <label class="form-label fw-bold mt-3">Fichiers déjà joints</label>
@@ -174,7 +198,12 @@
                                 <i class="fas fa-arrow-left me-1"></i> Annuler
                             </a>
                             <button type="submit" class="btn btn-success" id="submitBtn">
-                                <i class="fas fa-check-circle me-1"></i> Enregistrer la résolution
+                                <i class="fas fa-check-circle me-1"></i> 
+                                {% if incident.approbation_requise %}
+                                Soumettre à approbation
+                                {% else %}
+                                Enregistrer la résolution
+                                {% endif %}
                             </button>
                         </div>
                     </form>
@@ -205,7 +234,7 @@ function appliquerSuggestionsIA() {
 }
 
 // ============================================
-// GESTION DES FICHIERS (UPLOAD MULTIPLE)
+// GESTION DES FICHIERS
 // ============================================
 const preuvesInput = document.getElementById('preuvesInput');
 const uploadProgress = document.getElementById('uploadProgress');
@@ -235,7 +264,6 @@ async function uploadFiles(files) {
         const data = await response.json();
         
         if (data.success) {
-            // Recharger la liste des fichiers
             await reloadPreuvesList();
             showNotification(`${data.fichiers.length} fichier(s) uploadé(s) avec succès`, 'success');
         } else {
@@ -250,8 +278,6 @@ async function uploadFiles(files) {
         }, 1000);
     }
 }
-
-
 
 async function supprimerFichierResolution(fichierId) {
     if (!confirm('Supprimer ce fichier ?')) return;
@@ -270,7 +296,6 @@ async function supprimerFichierResolution(fichierId) {
             const element = document.getElementById(`preuve-${fichierId}`);
             if (element) element.remove();
             
-            // Vérifier s'il reste des fichiers
             const remaining = document.querySelectorAll('.preuve-item').length;
             if (remaining === 0) {
                 document.getElementById('preuvesList').innerHTML = '<p class="text-muted text-center py-3"><i class="fas fa-info-circle me-1"></i> Aucune preuve jointe pour le moment</p>';
@@ -285,35 +310,6 @@ async function supprimerFichierResolution(fichierId) {
     }
 }
 
-function showNotification(message, type) {
-    const notification = document.createElement('div');
-    notification.className = `alert alert-${type} position-fixed top-0 end-0 m-3`;
-    notification.style.zIndex = '9999';
-    notification.style.minWidth = '300px';
-    notification.innerHTML = `
-        <div class="d-flex align-items-center">
-            <i class="fas fa-${type === 'success' ? 'check-circle' : 'exclamation-circle'} me-2"></i>
-            <div>${message}</div>
-            <button type="button" class="btn-close ms-auto" onclick="this.parentElement.parentElement.remove()"></button>
-        </div>
-    `;
-    document.body.appendChild(notification);
-    setTimeout(() => notification.remove(), 3000);
-}
-
-// Gestionnaire d'upload
-preuvesInput.addEventListener('change', function(e) {
-    if (this.files.length > 0) {
-        uploadFiles(this.files);
-        this.value = ''; // Réinitialiser pour permettre de nouveaux uploads
-    }
-});
-
-// Soumission du formulaire
-document.getElementById('resolutionForm').addEventListener('submit', function(e) {
-    submitBtn.disabled = true;
-    submitBtn.innerHTML = '<i class="fas fa-spinner fa-spin me-1"></i> Enregistrement en cours...';
-});
 async function reloadPreuvesList() {
     try {
         const response = await fetch(`/incident/{{ incident.id }}/resolution/fichiers`);
@@ -351,5 +347,35 @@ async function reloadPreuvesList() {
         console.error('Erreur rechargement:', error);
     }
 }
+
+function showNotification(message, type) {
+    const notification = document.createElement('div');
+    notification.className = `alert alert-${type} position-fixed top-0 end-0 m-3`;
+    notification.style.zIndex = '9999';
+    notification.style.minWidth = '300px';
+    notification.innerHTML = `
+        <div class="d-flex align-items-center">
+            <i class="fas fa-${type === 'success' ? 'check-circle' : 'exclamation-circle'} me-2"></i>
+            <div>${message}</div>
+            <button type="button" class="btn-close ms-auto" onclick="this.parentElement.parentElement.remove()"></button>
+        </div>
+    `;
+    document.body.appendChild(notification);
+    setTimeout(() => notification.remove(), 3000);
+}
+
+// Gestionnaire d'upload
+preuvesInput.addEventListener('change', function(e) {
+    if (this.files.length > 0) {
+        uploadFiles(this.files);
+        this.value = '';
+    }
+});
+
+// Soumission du formulaire
+document.getElementById('resolutionForm').addEventListener('submit', function(e) {
+    submitBtn.disabled = true;
+    submitBtn.innerHTML = '<i class="fas fa-spinner fa-spin me-1"></i> Enregistrement en cours...';
+});
 </script>
 {% endblock %}
