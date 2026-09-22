@@ -1,254 +1,304 @@
-{# ============================================
-   CARTE CARTOGRAPHIE — Version propre
-   Variables attendues :
-     - cartographie : dict {cartographie, nb_risques_actifs, nb_evalues, niveaux_risques, campagne_active}
-   ============================================ #}
+{# ============================================ #}
+{# CARTE CARTOGRAPHIE — VERSION MODERNE ÉLÉGANTE #}
+{# Fichier autonome : markup + style + script     #}
+{# ============================================ #}
 
 {% set carto = cartographie.cartographie %}
 {% set niveaux = cartographie.niveaux_risques %}
-{% set nb_total = cartographie.nb_risques_actifs %}
-{% set nb_evalues = cartographie.nb_evalues|default(0) %}
-{% set progression = (nb_evalues / nb_total * 100)|round|int if nb_total > 0 else 0 %}
+{% set campagne = cartographie.campagne_active %}
 
-<div class="cartographie-card fk-card h-100"
-     data-nom="{{ carto.nom|lower }}"
-     data-pole-id="{{ carto.pole_id or '' }}"
-     data-direction-id="{{ carto.direction_id or '' }}">
+<article class="carto-card" data-nom="{{ carto.nom|lower }}" data-pole-id="{{ carto.pole_id or '' }}" data-direction-id="{{ carto.direction_id or '' }}">
 
-    {# ========== EN-TÊTE ========== #}
-    <div class="fk-card-header">
-        <div class="d-flex justify-content-between align-items-start gap-2">
-            <div class="flex-grow-1" style="min-width: 0;">
-                <h5 class="mb-1 text-truncate" title="{{ carto.nom }}">
-                    <i class="fas fa-map-marked-alt me-2 text-primary"></i>
-                    {{ carto.nom }}
-                </h5>
-                {% if carto.description %}
-                <small class="text-muted d-block text-truncate" title="{{ carto.description }}">
-                    {{ carto.description|truncate(60) }}
-                </small>
+    {# ========================================== #}
+    {# EN-TÊTE #}
+    {# ========================================== #}
+    <header class="carto-card__header">
+        <div class="carto-card__header-top">
+            <div class="carto-card__icon">
+                <i class="fas fa-map-marked-alt"></i>
+            </div>
+            <div class="carto-card__header-titles">
+                <h3 class="carto-card__title" title="{{ carto.nom }}">
+                    {{ carto.nom|truncate(40) }}
+                </h3>
+                {% if carto.pole %}
+                <span class="carto-card__breadcrumb">
+                    <i class="fas fa-layer-group me-1"></i>{{ carto.pole.nom }}
+                    {% if carto.direction %}
+                    <i class="fas fa-chevron-right mx-1" style="font-size: 0.6rem;"></i>
+                    {{ carto.direction.nom }}
+                    {% endif %}
+                </span>
                 {% endif %}
             </div>
-
-            {# ========== MENU D'ACTIONS ========== #}
-            <div class="dropdown" onclick="event.stopPropagation();">
-                <button class="btn btn-sm btn-light border-0" type="button"
-                        data-bs-toggle="dropdown" aria-expanded="false"
-                        title="Actions disponibles">
-                    <i class="fas fa-ellipsis-v"></i>
-                </button>
-                <ul class="dropdown-menu dropdown-menu-end">
-                    <li>
-                        <a class="dropdown-item" href="{{ url_for('detail_cartographie', id=carto.id) }}">
-                            <i class="fas fa-eye me-2 text-primary"></i>Ouvrir
-                        </a>
-                    </li>
-                    <li>
-                        <a class="dropdown-item" href="{{ url_for('modifier_cartographie', id=carto.id) }}">
-                            <i class="fas fa-edit me-2 text-info"></i>Modifier
-                        </a>
-                    </li>
-                    <li>
-                        <a class="dropdown-item" href="{{ url_for('nouvelle_campagne_cartographie', id=carto.id) }}">
-                            <i class="fas fa-calendar-plus me-2 text-success"></i>Nouvelle campagne
-                        </a>
-                    </li>
-                    <li>
-                        <a class="dropdown-item" href="{{ url_for('dupliquer_cartographie', id=carto.id) }}">
-                            <i class="fas fa-copy me-2 text-secondary"></i>Dupliquer
-                        </a>
-                    </li>
-                    <li><hr class="dropdown-divider"></li>
-                    <li>
-                        <a class="dropdown-item text-warning"
-                           href="#"
-                           onclick="event.preventDefault(); archiverCarto({{ carto.id }}, '{{ carto.nom|e }}');">
-                            <i class="fas fa-archive me-2"></i>Archiver
-                        </a>
-                    </li>
-                    {% if current_user.has_permission('can_delete_data') %}
-                    <li>
-                        <a class="dropdown-item text-danger"
-                           href="#"
-                           onclick="event.preventDefault(); supprimerCarto({{ carto.id }}, '{{ carto.nom|e }}');">
-                            <i class="fas fa-trash me-2"></i>Supprimer
-                        </a>
-                    </li>
-                    {% endif %}
-                </ul>
-            </div>
         </div>
-    </div>
+    </header>
 
-    {# ========== CORPS — CLIQUABLE POUR OUVRIR ========== #}
-    <div class="fk-card-body cartographie-body"
-         onclick="window.location='{{ url_for('detail_cartographie', id=carto.id) }}'"
-         style="cursor: pointer;">
+    {# ========================================== #}
+    {# CORPS #}
+    {# ========================================== #}
+    <div class="carto-card__body">
 
-        {# ===== Localisation ===== #}
-        <div class="mb-3">
-            {% if carto.pole %}
-            <span class="badge bg-primary me-1" style="background: {{ carto.pole.couleur or '#1a2a5e' }} !important;">
-                <i class="fas fa-layer-group me-1"></i>{{ carto.pole.nom }}
-            </span>
-            {% endif %}
-            {% if carto.direction %}
-            <span class="badge bg-info text-dark me-1">
-                <i class="fas fa-sitemap me-1"></i>{{ carto.direction.nom }}
-            </span>
-            {% endif %}
-            {% if carto.service %}
-            <span class="badge bg-secondary">
-                <i class="fas fa-building me-1"></i>{{ carto.service.nom }}
-            </span>
-            {% endif %}
-        </div>
-
-        {# ===== Campagne active ===== #}
-        {% if cartographie.campagne_active %}
-        <div class="alert alert-success py-1 px-2 mb-3 small">
-            <i class="fas fa-campground me-1"></i>
-            Campagne active : <strong>{{ cartographie.campagne_active.nom }}</strong>
+        {# CAMPAGNE ACTIVE #}
+        {% if campagne %}
+        <div class="carto-card__campaign carto-card__campaign--active">
+            <i class="fas fa-campground me-2"></i>
+            <span class="carto-card__campaign-label">Campagne active</span>
+            <strong class="ms-auto">{{ campagne.nom }}</strong>
         </div>
         {% else %}
-        <div class="alert alert-warning py-1 px-2 mb-3 small">
-            <i class="fas fa-exclamation-triangle me-1"></i>
-            Aucune campagne active
+        <div class="carto-card__campaign carto-card__campaign--inactive">
+            <i class="fas fa-exclamation-triangle me-2"></i>
+            <span class="carto-card__campaign-label">Aucune campagne active</span>
         </div>
         {% endif %}
 
-        {# ===== Progression ===== #}
-        <div class="mb-3">
-            <div class="d-flex justify-content-between mb-1 small">
-                <span class="text-muted">
+        {# DESCRIPTION #}
+        {% if carto.description %}
+        <p class="carto-card__description">
+            {{ carto.description|truncate(120) }}
+        </p>
+        {% endif %}
+
+        {# PROGRESSION #}
+        <div class="carto-card__progress">
+            <div class="carto-card__progress-header">
+                <span class="carto-card__progress-label">
                     <i class="fas fa-chart-pie me-1"></i>Progression
                 </span>
-                <strong>{{ nb_evalues }}/{{ nb_total }} évalués ({{ progression }}%)</strong>
+                <span class="carto-card__progress-value">
+                    <strong>{{ cartographie.nb_evalues }}</strong>
+                    <span class="text-muted">/ {{ cartographie.nb_risques_actifs }}</span>
+                    <span class="text-muted">({{ cartographie.pourcentage_evaluation }}%)</span>
+                </span>
             </div>
-            <div class="progress" style="height: 6px;">
-                <div class="progress-bar
-                    {% if progression >= 80 %}bg-success
-                    {% elif progression >= 50 %}bg-warning
-                    {% else %}bg-danger{% endif %}"
-                     style="width: {{ progression }}%;"></div>
-            </div>
-        </div>
-
-        {# ===== Répartition par niveau ===== #}
-        <div class="row g-1 text-center small">
-            <div class="col-3">
-                <div class="p-2 rounded" style="background: rgba(220,38,38,0.08);">
-                    <div class="fw-bold text-danger" style="font-size: 1.2rem;">
-                        {{ niveaux.Critique|default(0) }}
-                    </div>
-                    <div class="text-muted" style="font-size: 0.65rem;">Critique</div>
-                </div>
-            </div>
-            <div class="col-3">
-                <div class="p-2 rounded" style="background: rgba(245,158,11,0.08);">
-                    <div class="fw-bold text-warning" style="font-size: 1.2rem;">
-                        {{ niveaux['Élevé']|default(0) }}
-                    </div>
-                    <div class="text-muted" style="font-size: 0.65rem;">Élevé</div>
-                </div>
-            </div>
-            <div class="col-3">
-                <div class="p-2 rounded" style="background: rgba(59,130,246,0.08);">
-                    <div class="fw-bold text-info" style="font-size: 1.2rem;">
-                        {{ niveaux.Moyen|default(0) }}
-                    </div>
-                    <div class="text-muted" style="font-size: 0.65rem;">Moyen</div>
-                </div>
-            </div>
-            <div class="col-3">
-                <div class="p-2 rounded" style="background: rgba(16,185,129,0.08);">
-                    <div class="fw-bold text-success" style="font-size: 1.2rem;">
-                        {{ niveaux.Faible|default(0) }}
-                    </div>
-                    <div class="text-muted" style="font-size: 0.65rem;">Faible</div>
+            <div class="carto-card__progress-bar">
+                <div class="carto-card__progress-fill
+                    {% if cartographie.pourcentage_evaluation >= 80 %}is-success
+                    {% elif cartographie.pourcentage_evaluation >= 50 %}is-warning
+                    {% else %}is-danger{% endif %}"
+                    style="width: {{ cartographie.pourcentage_evaluation }}%;">
                 </div>
             </div>
         </div>
 
-        {% if niveaux['Non évalué']|default(0) > 0 %}
-        <div class="text-center mt-2 small text-muted">
-            <i class="fas fa-hourglass-half me-1"></i>
-            {{ niveaux['Non évalué'] }} non évalué(s)
+        {# RÉPARTITION PAR NIVEAU #}
+        <div class="carto-card__niveaux">
+            {% if niveaux.Critique > 0 %}
+            <div class="carto-card__niveau carto-card__niveau--critique" title="{{ niveaux.Critique }} critique(s)">
+                <span class="carto-card__niveau-count">{{ niveaux.Critique }}</span>
+                <span class="carto-card__niveau-label">Critique</span>
+            </div>
+            {% endif %}
+            {% if niveaux['Élevé'] > 0 %}
+            <div class="carto-card__niveau carto-card__niveau--eleve" title="{{ niveaux['Élevé'] }} élevé(s)">
+                <span class="carto-card__niveau-count">{{ niveaux['Élevé'] }}</span>
+                <span class="carto-card__niveau-label">Élevé</span>
+            </div>
+            {% endif %}
+            {% if niveaux.Moyen > 0 %}
+            <div class="carto-card__niveau carto-card__niveau--moyen" title="{{ niveaux.Moyen }} moyen(s)">
+                <span class="carto-card__niveau-count">{{ niveaux.Moyen }}</span>
+                <span class="carto-card__niveau-label">Moyen</span>
+            </div>
+            {% endif %}
+            {% if niveaux.Faible > 0 %}
+            <div class="carto-card__niveau carto-card__niveau--faible" title="{{ niveaux.Faible }} faible(s)">
+                <span class="carto-card__niveau-count">{{ niveaux.Faible }}</span>
+                <span class="carto-card__niveau-label">Faible</span>
+            </div>
+            {% endif %}
+            {% if niveaux['Non évalué'] > 0 %}
+            <div class="carto-card__niveau carto-card__niveau--non-evalue" title="{{ niveaux['Non évalué'] }} non évalué(s)">
+                <span class="carto-card__niveau-count">{{ niveaux['Non évalué'] }}</span>
+                <span class="carto-card__niveau-label">À évaluer</span>
+            </div>
+            {% endif %}
+        </div>
+
+        {# BADGE RÉÉVALUATION #}
+        {% if cartographie.nb_a_revaluer > 0 %}
+        <div class="carto-card__badge carto-card__badge--warning">
+            <i class="fas fa-redo me-1"></i>
+            {{ cartographie.nb_a_revaluer }} risque(s) à réévaluer
         </div>
         {% endif %}
 
-    </div>
-
-    {# ========== PIED DE CARTE — Actions rapides ========== #}
-    <div class="fk-card-footer d-flex justify-content-between align-items-center"
-         onclick="event.stopPropagation();">
-        <small class="text-muted">
-            <i class="far fa-calendar me-1"></i>
-            {{ carto.created_at.strftime('%d/%m/%Y') if carto.created_at else 'N/A' }}
-        </small>
-
-        <div class="d-flex gap-1">
-            <a href="{{ url_for('detail_cartographie', id=carto.id) }}"
-               class="btn btn-sm btn-outline-primary"
-               title="Ouvrir la cartographie">
-                <i class="fas fa-arrow-right"></i>
-            </a>
+        {# DERNIÈRE ACTIVITÉ #}
+        {% if cartographie.derniere_date_eval %}
+        <div class="carto-card__meta">
+            <i class="far fa-clock me-1"></i>
+            Dernière évaluation : {{ cartographie.derniere_date_eval.strftime('%d/%m/%Y') }}
         </div>
+        {% endif %}
     </div>
-</div>
 
-{# ========== FORMULAIRES CACHÉS POUR ACTIONS ========== #}
-<form id="form-archiver-{{ carto.id }}"
-      method="POST"
-      action="{{ url_for('archiver_cartographie', id=carto.id) }}"
-      style="display: none;">
-    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-    <input type="hidden" name="confirm" value="oui">
-</form>
+    {# ========================================== #}
+    {# ACTIONS #}
+    {# ========================================== #}
+    <footer class="carto-card__footer">
+        <a href="{{ url_for('detail_cartographie', id=carto.id) }}"
+           class="carto-btn carto-btn--primary"
+           onclick="event.stopPropagation()">
+            <i class="fas fa-chart-line me-1"></i>Ouvrir
+        </a>
 
-{% if current_user.has_permission('can_delete_data') %}
-<form id="form-supprimer-{{ carto.id }}"
-      method="POST"
-      action="{{ url_for('supprimer_cartographie', id=carto.id) }}"
-      style="display: none;">
-    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-    <input type="hidden" name="confirm" value="oui">
-</form>
-{% endif %}
+        <div class="carto-card__menu">
+            <button type="button"
+                    class="carto-btn carto-btn--icon"
+                    title="Plus d'actions"
+                    onclick="toggleMenu(event, {{ carto.id }})">
+                <i class="fas fa-ellipsis-v"></i>
+            </button>
 
-<script>
-// ============================================
-// ARCHIVER UNE CARTOGRAPHIE (avec confirmation)
-// ============================================
-function archiverCarto(cartoId, cartoNom) {
-    const message = `⚠️ Archiver la cartographie "${cartoNom}" ?\n\n` +
-                    `Cette action archivera également tous les risques associés.\n` +
-                    `Les données resteront consultables dans les archives.`;
+            <div class="carto-menu" id="menu-{{ carto.id }}">
+                <a href="{{ url_for('detail_cartographie', id=carto.id) }}" class="carto-menu__item">
+                    <i class="fas fa-eye"></i>Voir le détail
+                </a>
+                <a href="{{ url_for('modifier_cartographie', id=carto.id) }}" class="carto-menu__item">
+                    <i class="fas fa-edit"></i>Modifier
+                </a>
+                <a href="{{ url_for('liste_campagnes_cartographie', cartographie_id=carto.id) }}" class="carto-menu__item">
+                    <i class="fas fa-calendar-alt"></i>Campagnes
+                </a>
+                <div class="carto-menu__divider"></div>
+                <form method="POST"
+                      action="{{ url_for('dupliquer_cartographie', id=carto.id) }}"
+                      class="carto-menu__form"
+                      onsubmit="return confirm('Dupliquer cette cartographie ?\n\nUne copie sera créée avec tous les risques non archivés.');">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                    <button type="submit" class="carto-menu__item">
+                        <i class="fas fa-copy"></i>Dupliquer
+                    </button>
+                </form>
+                <div class="carto-menu__divider"></div>
+                <form method="POST"
+                      action="{{ url_for('archiver_cartographie', id=carto.id) }}"
+                      class="carto-menu__form"
+                      onsubmit="return confirm('Archiver cette cartographie ?\n\nCette action archivera également tous les risques associés.');">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                    <button type="submit" class="carto-menu__item carto-menu__item--danger">
+                        <i class="fas fa-archive"></i>Archiver
+                    </button>
+                </form>
+            </div>
+        </div>
+    </footer>
+</article>
 
-    if (confirm(message)) {
-        const form = document.getElementById(`form-archiver-${cartoId}`);
-        if (form) form.submit();
-    }
+{# ============================================ #}
+{# STYLE — inclus avec la carte (voir note dans le message : #}
+{# se duplique une fois par carte, sans casser le rendu)      #}
+{# ============================================ #}
+<style>
+.carto-card {
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+    background: #fff;
+    border: 1px solid #e2e8f0;
+    border-radius: 14px;
+    overflow: visible;
+    transition: transform .25s ease, box-shadow .25s ease, border-color .25s ease;
+}
+.carto-card:hover { transform: translateY(-4px); box-shadow: 0 14px 28px rgba(15, 23, 42, .08); border-color: #93c5fd; }
+
+.carto-card__header { padding: 1.1rem 1.25rem .9rem; border-bottom: 1px solid #eef2f6; }
+.carto-card__header-top { display: flex; gap: .75rem; align-items: flex-start; }
+.carto-card__icon {
+    width: 40px; height: 40px; border-radius: 10px; flex-shrink: 0;
+    background: linear-gradient(135deg, #3498db, #2361a8);
+    color: #fff; display: flex; align-items: center; justify-content: center; font-size: 1rem;
+}
+.carto-card__header-titles { min-width: 0; }
+.carto-card__title { font-size: 1rem; font-weight: 700; margin: 0 0 .2rem; color: #1e293b; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.carto-card__breadcrumb { font-size: .75rem; color: #64748b; display: flex; align-items: center; flex-wrap: wrap; }
+
+.carto-card__body { padding: 1.1rem 1.25rem; flex: 1; display: flex; flex-direction: column; gap: .85rem; }
+
+.carto-card__campaign { display: flex; align-items: center; font-size: .8rem; padding: .45rem .65rem; border-radius: 8px; }
+.carto-card__campaign--active { background: rgba(16,185,129,.09); color: #0d8f5f; }
+.carto-card__campaign--inactive { background: rgba(245,158,11,.09); color: #b45309; }
+
+.carto-card__description { font-size: .83rem; color: #64748b; margin: 0; line-height: 1.4; }
+
+.carto-card__progress-header { display: flex; justify-content: space-between; font-size: .78rem; margin-bottom: .35rem; }
+.carto-card__progress-label { color: #64748b; }
+.carto-card__progress-value strong { color: #1e293b; }
+.carto-card__progress-bar { height: 6px; border-radius: 4px; background: #eef2f6; overflow: hidden; }
+.carto-card__progress-fill { height: 100%; border-radius: 4px; transition: width .4s; }
+.carto-card__progress-fill.is-success { background: #10b981; }
+.carto-card__progress-fill.is-warning { background: #f59e0b; }
+.carto-card__progress-fill.is-danger { background: #ef4444; }
+
+.carto-card__niveaux { display: flex; flex-wrap: wrap; gap: .4rem; }
+.carto-card__niveau { display: flex; align-items: center; gap: .3rem; font-size: .72rem; padding: .25rem .55rem; border-radius: 999px; font-weight: 600; }
+.carto-card__niveau--critique { background: rgba(220,38,38,.1); color: #dc2626; }
+.carto-card__niveau--eleve { background: rgba(245,158,11,.1); color: #d97706; }
+.carto-card__niveau--moyen { background: rgba(59,130,246,.1); color: #2563eb; }
+.carto-card__niveau--faible { background: rgba(16,185,129,.1); color: #059669; }
+.carto-card__niveau--non-evalue { background: rgba(100,116,139,.1); color: #475569; }
+
+.carto-card__badge { font-size: .75rem; padding: .4rem .6rem; border-radius: 8px; display: inline-flex; align-items: center; width: fit-content; }
+.carto-card__badge--warning { background: rgba(245,158,11,.1); color: #b45309; }
+
+.carto-card__meta { font-size: .72rem; color: #94a3b8; margin-top: auto; }
+
+.carto-card__footer { padding: .9rem 1.25rem; border-top: 1px solid #eef2f6; display: flex; align-items: center; gap: .5rem; background: #fafbfc; }
+.carto-btn { border-radius: 8px; font-size: .83rem; font-weight: 600; padding: .5rem .8rem; display: inline-flex; align-items: center; justify-content: center; text-decoration: none; border: none; cursor: pointer; transition: .2s; }
+.carto-btn--primary { background: #3498db; color: #fff; flex: 1; }
+.carto-btn--primary:hover { background: #2980b9; color: #fff; }
+.carto-btn--icon { background: transparent; color: #64748b; width: 38px; height: 38px; padding: 0; border: 1px solid #e2e8f0; }
+.carto-btn--icon:hover { background: #f1f5f9; }
+
+.carto-card__menu { position: relative; }
+.carto-menu {
+    position: absolute; right: 0; bottom: calc(100% + 6px);
+    background: #fff; border: 1px solid #e2e8f0; border-radius: 10px;
+    box-shadow: 0 10px 30px rgba(0,0,0,.12); min-width: 210px; padding: .4rem;
+    display: none; z-index: 50;
+}
+.carto-menu.is-open { display: block; }
+.carto-menu__item { display: flex; align-items: center; gap: .6rem; padding: .5rem .6rem; border-radius: 7px; font-size: .83rem; color: #334155; text-decoration: none; width: 100%; background: none; border: none; text-align: left; cursor: pointer; }
+.carto-menu__item:hover { background: #f1f5f9; }
+.carto-menu__item--danger { color: #dc2626; }
+.carto-menu__item--danger:hover { background: rgba(220,38,38,.08); }
+.carto-menu__divider { height: 1px; background: #eef2f6; margin: .3rem 0; }
+.carto-menu__form { width: 100%; }
+
+.vue-liste .carto-card { flex-direction: row; align-items: stretch; }
+.vue-liste .carto-card__header { flex: 0 0 240px; border-right: 1px solid #eef2f6; border-bottom: none; display: flex; align-items: center; }
+.vue-liste .carto-card__body { flex: 1; }
+.vue-liste .carto-card__footer { flex: 0 0 170px; border-left: 1px solid #eef2f6; border-top: none; flex-direction: column; align-items: stretch; }
+.vue-liste .carto-card__footer .carto-btn--primary { width: 100%; }
+
+@media (max-width: 768px) {
+    .vue-liste .carto-card { flex-direction: column; }
+    .vue-liste .carto-card__header { flex: none; border-right: none; border-bottom: 1px solid #eef2f6; }
+    .vue-liste .carto-card__footer { flex: none; flex-direction: row; border-left: none; border-top: 1px solid #eef2f6; }
 }
 
-// ============================================
-// SUPPRIMER UNE CARTOGRAPHIE (avec double confirmation)
-// ============================================
-function supprimerCarto(cartoId, cartoNom) {
-    const message1 = `🚨 SUPPRESSION DÉFINITIVE de "${cartoNom}" ?\n\n` +
-                     `Cette action est IRRÉVERSIBLE.`;
-
-    if (!confirm(message1)) return;
-
-    const saisie = prompt(
-        `Pour confirmer la suppression, tapez exactement le nom de la cartographie :\n\n"${cartoNom}"`
-    );
-
-    if (saisie === cartoNom) {
-        const form = document.getElementById(`form-supprimer-${cartoId}`);
-        if (form) form.submit();
-    } else if (saisie !== null) {
-        alert('❌ Nom incorrect. Suppression annulée.');
-    }
+[data-bs-theme="dark"] .carto-card { background: #1e293b; border-color: #334155; }
+[data-bs-theme="dark"] .carto-card:hover { border-color: #3b82f6; }
+[data-bs-theme="dark"] .carto-card__header,
+[data-bs-theme="dark"] .carto-card__footer { border-color: #334155; }
+[data-bs-theme="dark"] .carto-card__footer { background: #16202f; }
+[data-bs-theme="dark"] .carto-card__title { color: #f1f5f9; }
+[data-bs-theme="dark"] .carto-menu { background: #1e293b; border-color: #334155; }
+[data-bs-theme="dark"] .carto-menu__item { color: #cbd5e1; }
+[data-bs-theme="dark"] .carto-menu__item:hover { background: #334155; }
+</style>
+<script>
+if (!window.toggleMenu) {
+    window.toggleMenu = function(event, id) {
+        event.stopPropagation();
+        const menu = document.getElementById('menu-' + id);
+        const wasOpen = menu.classList.contains('is-open');
+        document.querySelectorAll('.carto-menu.is-open').forEach(m => m.classList.remove('is-open'));
+        if (!wasOpen) menu.classList.add('is-open');
+    };
+    document.addEventListener('click', function() {
+        document.querySelectorAll('.carto-menu.is-open').forEach(m => m.classList.remove('is-open'));
+    });
 }
 </script>
