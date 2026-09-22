@@ -883,6 +883,12 @@
         .modal-dialog { margin: 0.5rem; }
         .modal-content { max-height: 95vh; }
     }
+    .matrix-header-info {
+    padding: 0.75rem 1rem;
+    background: linear-gradient(135deg, rgba(26, 42, 94, 0.04), rgba(201, 168, 76, 0.04));
+    border-left: 4px solid var(--gold);
+    border-radius: var(--radius-sm);
+}
 </style>
 {% endblock %}
 
@@ -925,7 +931,6 @@
                     </div>
                 </div>
                 <div class="col-auto">
-                    <div class="col-auto">
                     <div class="header-actions d-flex align-items-center gap-1">
                         
                         {# ========== BOUTON PRINCIPAL ========== #}
@@ -1085,7 +1090,93 @@
                 </div>
             </div>
         </div>
+        {# ========== ANOMALIES GLOBALES ========== #}
+        {% if anomalies_globales and anomalies_globales|length > 0 %}
+        <div class="row mb-4">
+            <div class="col-12">
+                <div class="card-modern animate-in" style="border-left: 4px solid var(--warning);">
 
+                    {# En-tête cliquable #}
+                    <div class="card-header card-header-warning"
+                        style="cursor: pointer; user-select: none;"
+                        data-bs-toggle="collapse"
+                        data-bs-target="#anomaliesCollapse"
+                        aria-expanded="false"
+                        aria-controls="anomaliesCollapse">
+                        <div class="d-flex justify-content-between align-items-center">
+                            <h5 class="mb-0">
+                                <i class="fas fa-exclamation-triangle"></i>
+                                Anomalies détectées
+                                <span class="badge-modern ms-2" style="background: rgba(255,255,255,0.25); color: white;">
+                                    {{ anomalies_globales|length }}
+                                </span>
+                            </h5>
+                            <button type="button"
+                                    class="btn btn-sm btn-outline-light"
+                                    style="pointer-events: none;"
+                                    aria-label="Basculer">
+                                <i class="fas fa-chevron-down"
+                                id="anomaliesChevron"
+                                style="transition: transform 0.3s ease;"></i>
+                            </button>
+                        </div>
+                    </div>
+
+                    {# Contenu dépliable #}
+                    <div class="collapse" id="anomaliesCollapse">
+                        <div class="card-body">
+                            <div class="row g-2">
+                                {% for a in anomalies_globales %}
+                                <div class="col-md-6">
+                                    <div class="alert-modern {{ a.niveau }} d-flex align-items-start gap-2 mb-0">
+                                        <i class="fas fa-{{ 'exclamation-circle' if a.niveau == 'danger' 
+                                                            else 'exclamation-triangle' if a.niveau == 'warning' 
+                                                            else 'info-circle' }} mt-1"></i>
+                                        <div class="flex-grow-1">
+                                            <div class="d-flex justify-content-between align-items-start gap-2">
+                                                <a href="{{ url_for('detail_risque', id=a.risque.id) }}" 
+                                                class="fw-bold text-decoration-none"
+                                                style="color: var(--primary);">
+                                                    {{ a.risque.reference }}
+                                                </a>
+                                                <span class="badge-modern 
+                                                    {% if a.niveau == 'danger' %}badge-danger
+                                                    {% elif a.niveau == 'warning' %}badge-warning
+                                                    {% else %}badge-info{% endif %}"
+                                                    style="font-size: 0.65rem;">
+                                                    {{ a.niveau|upper }}
+                                                </span>
+                                            </div>
+                                            <div class="small mt-1">{{ a.message }}</div>
+                                        </div>
+                                    </div>
+                                </div>
+                                {% endfor %}
+                            </div>
+                        </div>
+                    </div>
+
+                </div>
+            </div>
+        </div>
+
+        <script>
+        (function() {
+            // Rotation du chevron quand le collapse s'ouvre/ferme
+            const collapseEl = document.getElementById('anomaliesCollapse');
+            const chevron = document.getElementById('anomaliesChevron');
+
+            if (collapseEl && chevron) {
+                collapseEl.addEventListener('show.bs.collapse', function() {
+                    chevron.style.transform = 'rotate(180deg)';
+                });
+                collapseEl.addEventListener('hide.bs.collapse', function() {
+                    chevron.style.transform = 'rotate(0deg)';
+                });
+            }
+        })();
+        </script>
+        {% endif %}
         {# ========== INFORMATIONS & MATRICE ========== #}
         <div class="row">
             {# Colonne Informations #}
@@ -1193,26 +1284,35 @@
                     </div>
                     <div class="card-body matrix-preview">
                         {# Matrice Classique #}
+                        <!-- ========== MATRICE CLASSIQUE ========== -->
                         <div id="matriceClassique" class="matrice-container">
                             {% if matrice_classique %}
+                                <div class="matrix-header-info mb-2">
+                                    <h6 class="mb-0" style="color: var(--primary); font-family: Georgia, serif;">
+                                        <i class="fas fa-chart-bar me-2" style="color: var(--gold);"></i>
+                                        Vue d'ensemble — Niveau NET
+                                    </h6>
+                                    <p class="text-muted small mb-0">
+                                        Positionnement des risques sur la grille impact × probabilité, après application des dispositifs.
+                                    </p>
+                                </div>
                                 <img src="data:image/png;base64,{{ matrice_classique }}" 
-                                     alt="Matrice classique" 
-                                     class="matrix-image clickable-matrix" 
-                                     onclick="ouvrirVuePleine()">
-                                <div class="mt-2 small text-muted">
-                                    Campagne : {{ campagne_active.nom }} • 
-                                    {{ nb_risques_evalues }}/{{ nb_risques_total }} risques évalués
+                                    alt="Matrice classique" 
+                                    class="matrix-image clickable-matrix" 
+                                    onclick="ouvrirVuePleine()">
+                                <div class="alert-modern info mt-2" style="font-size: 0.8rem;">
+                                    <i class="fas fa-info-circle me-2"></i>
+                                    <strong>Lecture :</strong> chaque point affiche <code>REF</code> puis 
+                                    <code>NET(BRUT)</code>. La couleur reflète le niveau NET. 
+                                    Un point rouge avec un score NET faible signifie que le risque est 
+                                    <strong>bien maîtrisé malgré une gravité initiale élevée</strong>.
                                 </div>
                             {% else %}
                                 <div class="empty-matrix-state text-center py-5">
-                                    <i class="fas fa-chart-bar fa-3x mb-3" style="color: var(--text-muted); opacity: 0.5;"></i>
+                                    <i class="fas fa-chart-bar fa-3x mb-3" style="color: var(--border);"></i>
                                     <h6 class="text-muted">Aucune donnée disponible</h6>
                                     <p class="text-muted small mb-3">
-                                        {% if campagne_active and campagne_active.nom %}
-                                            Les risques n'ont pas encore été évalués dans la campagne "{{ campagne_active.nom }}"
-                                        {% else %}
-                                            Les risques n'ont pas encore été évalués
-                                        {% endif %}
+                                        Les risques n'ont pas encore été évalués dans cette campagne.
                                     </p>
                                     {% if campagne_active and campagne_active.id %}
                                     <a href="{{ url_for('evaluer_tous_risques', cartographie_id=cartographie.id, campagne_id=campagne_active.id) }}" 
@@ -1223,59 +1323,99 @@
                                 </div>
                             {% endif %}
                         </div>
-                        
-                        {# Matrice Criticité #}
+
+                        <!-- ========== MATRICE CRITICITÉ ========== -->
                         <div id="matriceCriticite" class="matrice-container" style="display: none;">
                             {% if matrice_criticite %}
+                                <div class="matrix-header-info mb-2">
+                                    <h6 class="mb-0" style="color: var(--primary); font-family: Georgia, serif;">
+                                        <i class="fas fa-exclamation-triangle me-2" style="color: var(--gold);"></i>
+                                        Risque intrinsèque — Gravité avant contrôles
+                                    </h6>
+                                    <p class="text-muted small mb-0">
+                                        Taille du point = score BRUT (risque maximal possible). Contour = niveau NET (résiduel).
+                                    </p>
+                                </div>
                                 <img src="data:image/png;base64,{{ matrice_criticite }}" 
-                                     alt="Matrice de criticité" 
-                                     class="matrix-image clickable-matrix" 
-                                     onclick="ouvrirVuePleine()">
+                                    alt="Matrice de criticité" 
+                                    class="matrix-image clickable-matrix" 
+                                    onclick="ouvrirVuePleine()">
+                                <div class="alert-modern warning mt-2" style="font-size: 0.8rem;">
+                                    <i class="fas fa-bullseye me-2"></i>
+                                    <strong>Lecture :</strong> Plus le point est <strong>gros</strong>, plus le risque est 
+                                    <strong>grave en soi</strong>. Le <strong>remplissage</strong> indique le niveau brut, 
+                                    le <strong>contour</strong> le niveau net. Exemple : gros point rouge à contour vert 
+                                    = risque très grave mais <strong>très bien maîtrisé</strong>.
+                                </div>
                             {% else %}
                                 <div class="empty-matrix-state text-center py-5">
-                                    <i class="fas fa-chart-bar fa-3x mb-3" style="color: var(--text-muted); opacity: 0.5;"></i>
+                                    <i class="fas fa-exclamation-triangle fa-3x mb-3" style="color: var(--border);"></i>
                                     <h6 class="text-muted">Aucune donnée disponible</h6>
                                     <p class="text-muted small mb-3">
-                                        {% if campagne_active and campagne_active.nom %}
-                                            Les risques n'ont pas encore été évalués dans la campagne "{{ campagne_active.nom }}"
-                                        {% else %}
-                                            Les risques n'ont pas encore été évalués
-                                        {% endif %}
+                                        Aucun risque évalué dans cette campagne.
                                     </p>
-                                    {% if campagne_active and campagne_active.id %}
-                                    <a href="{{ url_for('evaluer_tous_risques', cartographie_id=cartographie.id, campagne_id=campagne_active.id) }}" 
-                                       class="btn-modern btn-warning">
-                                        <i class="fas fa-play-circle me-2"></i>Commencer l'évaluation
-                                    </a>
-                                    {% endif %}
                                 </div>
                             {% endif %}
                         </div>
-                        
-                        {# Matrice Priorisation #}
+
+                        <!-- ========== MATRICE PRIORISATION ========== -->
                         <div id="matricePriorisation" class="matrice-container" style="display: none;">
                             {% if matrice_priorisation %}
+                                <div class="matrix-header-info mb-2">
+                                    <h6 class="mb-0" style="color: var(--primary); font-family: Georgia, serif;">
+                                        <i class="fas fa-bullseye me-2" style="color: var(--gold);"></i>
+                                        Plan d'action — Où agir maintenant
+                                    </h6>
+                                    <p class="text-muted small mb-0">
+                                        Croise le risque résiduel (NET) et le niveau de maîtrise pour identifier les priorités.
+                                    </p>
+                                </div>
                                 <img src="data:image/png;base64,{{ matrice_priorisation }}" 
-                                     alt="Matrice de priorisation" 
-                                     class="matrix-image clickable-matrix" 
-                                     onclick="ouvrirVuePleine()">
+                                    alt="Matrice de priorisation" 
+                                    class="matrix-image clickable-matrix" 
+                                    onclick="ouvrirVuePleine()">
+                                <div class="row g-2 mt-2">
+                                    <div class="col-md-6">
+                                        <div class="alert-modern danger" style="font-size: 0.8rem;">
+                                            <i class="fas fa-fire me-2"></i>
+                                            <strong>Bas à droite (Urgent) :</strong> NET élevé + maîtrise faible.
+                                            <br><strong>Action :</strong> plan de remédiation immédiat.
+                                        </div>
+                                    </div>
+                                    <div class="col-md-6">
+                                        <div class="alert-modern warning" style="font-size: 0.8rem;">
+                                            <i class="fas fa-eye me-2"></i>
+                                            <strong>Haut à droite (Surveiller) :</strong> NET élevé malgré bonne maîtrise.
+                                            <br><strong>Action :</strong> surveillance renforcée, révision des DMR.
+                                        </div>
+                                    </div>
+                                    <div class="col-md-6">
+                                        <div class="alert-modern info" style="font-size: 0.8rem;">
+                                            <i class="fas fa-lightbulb me-2"></i>
+                                            <strong>Bas à gauche (Améliorer) :</strong> NET faible, maîtrise faible.
+                                            <br><strong>Action :</strong> renforcer les dispositifs, priorité secondaire.
+                                        </div>
+                                    </div>
+                                    <div class="col-md-6">
+                                        <div class="alert-modern success" style="font-size: 0.8rem;">
+                                            <i class="fas fa-check-circle me-2"></i>
+                                            <strong>Haut à gauche (Sous contrôle) :</strong> NET faible + maîtrise bonne.
+                                            <br><strong>Action :</strong> maintien, surveillance standard.
+                                        </div>
+                                    </div>
+                                </div>
+                                <div class="alert-modern info mt-2" style="font-size: 0.8rem;">
+                                    <i class="fas fa-balance-scale me-2"></i>
+                                    <strong>Taille du point :</strong> proportionnelle à l'écart entre la maîtrise saisie 
+                                    et celle suggérée par les DMR. Plus le point est gros, plus il faut revoir la cotation.
+                                </div>
                             {% else %}
                                 <div class="empty-matrix-state text-center py-5">
-                                    <i class="fas fa-chart-bar fa-3x mb-3" style="color: var(--text-muted); opacity: 0.5;"></i>
+                                    <i class="fas fa-bullseye fa-3x mb-3" style="color: var(--border);"></i>
                                     <h6 class="text-muted">Aucune donnée disponible</h6>
                                     <p class="text-muted small mb-3">
-                                        {% if campagne_active and campagne_active.nom %}
-                                            Les risques n'ont pas encore été évalués dans la campagne "{{ campagne_active.nom }}"
-                                        {% else %}
-                                            Les risques n'ont pas encore été évalués
-                                        {% endif %}
+                                        Aucun risque évalué dans cette campagne.
                                     </p>
-                                    {% if campagne_active and campagne_active.id %}
-                                    <a href="{{ url_for('evaluer_tous_risques', cartographie_id=cartographie.id, campagne_id=campagne_active.id) }}" 
-                                       class="btn-modern btn-warning">
-                                        <i class="fas fa-play-circle me-2"></i>Commencer l'évaluation
-                                    </a>
-                                    {% endif %}
                                 </div>
                             {% endif %}
                         </div>
@@ -1382,7 +1522,20 @@
                                                 </div>
                                                 <p class="risk-description-modern">{{ item.risque.intitule }}</p>
                                                 <div class="risk-footer-modern">
-                                                    <span class="risk-score-modern">Score: {{ item.score }}</span>
+                                                    <div class="risk-score-modern">
+                                                        <i class="fas fa-shield-alt me-1" style="color: var(--gold); font-size: 0.7rem;"></i>
+                                                        <strong>{{ item.score }}</strong>
+                                                        {% if item.score_brut and item.score_brut != item.score %}
+                                                        <small class="text-muted" style="font-size: 0.65rem;">
+                                                            (brut: {{ item.score_brut|round(2) }})
+                                                            {% if item.taux_reduction > 0 %}
+                                                            <span class="badge-modern badge-success" style="font-size: 0.55rem; padding: 0px 4px;">
+                                                                −{{ (item.taux_reduction * 100)|int }}%
+                                                            </span>
+                                                            {% endif %}
+                                                        </small>
+                                                        {% endif %}
+                                                    </div>
                                                     <div class="risk-actions-modern">
                                                         <a href="{{ url_for('detail_risque', id=item.risque.id) }}" class="risk-action-modern">
                                                             <i class="fas fa-eye"></i>
@@ -1562,135 +1715,239 @@
         <div class="row mb-4">
             <div class="col-12">
                 <div class="card-modern animate-in">
-                    <div class="card-header card-header-success">
-                        <div class="d-flex align-items-center">
-                            <div class="bordeaux-icon" style="background: var(--success); color: white; border-radius: var(--radius-sm); width: 40px; height: 40px; display: flex; align-items: center; justify-content: center;">
-                                <i class="fas fa-shield-alt"></i>
+
+                    {# En-tête cliquable #}
+                    <div class="card-header card-header-success"
+                        style="cursor: pointer; user-select: none;"
+                        data-bs-toggle="collapse"
+                        data-bs-target="#dispositifsCollapse"
+                        aria-expanded="false"
+                        aria-controls="dispositifsCollapse">
+                        <div class="d-flex justify-content-between align-items-center">
+                            <div class="d-flex align-items-center gap-2">
+                                <h5 class="mb-0">
+                                    <i class="fas fa-shield-alt"></i>
+                                    Dispositifs de Maîtrise — Synthèse
+                                </h5>
+                                <span class="badge-modern" 
+                                    style="background: rgba(255,255,255,0.25); color: white;">
+                                    {{ total_dispositifs }} dispositif{{ 's' if total_dispositifs > 1 else '' }}
+                                </span>
                             </div>
-                            <h5 class="mb-0 ms-2">Dispositifs de Maîtrise - Synthèse</h5>
-                            <span class="badge-modern ms-3" style="background: rgba(255,255,255,0.2); color: white;">{{ total_dispositifs }} dispositifs</span>
+                            <button type="button"
+                                    class="btn btn-sm btn-outline-light"
+                                    style="pointer-events: none;"
+                                    aria-label="Basculer">
+                                <i class="fas fa-chevron-down"
+                                id="dispositifsChevron"
+                                style="transition: transform 0.3s ease;"></i>
+                            </button>
                         </div>
                     </div>
-                    <div class="card-body">
-                        <div class="row g-4">
-                            {% for risque in risques_avec_evaluation %}
-                            {% set dispositifs_risque = risque.risque.dispositifs_maitrise_list %}
-                            {% if dispositifs_risque %}
-                            <div class="col-md-6">
-                                <div class="risk-controls-card">
-                                    <div class="controls-header">
-                                        <div class="d-flex justify-content-between align-items-center">
-                                            <div>
-                                                <a href="{{ url_for('detail_risque', id=risque.risque.id) }}" 
-                                                   class="risk-ref fw-semibold text-primary text-decoration-none">
-                                                    {{ risque.risque.reference }}
-                                                </a>
-                                                <span class="badge-modern 
-                                                    {% if risque.evaluation.niveau_risque == 'Critique' %}badge-danger
-                                                    {% elif risque.evaluation.niveau_risque == 'Élevé' %}badge-warning
-                                                    {% elif risque.evaluation.niveau_risque == 'Moyen' %}badge-info
-                                                    {% else %}badge-success{% endif %} ms-2">
-                                                    {{ risque.evaluation.niveau_risque if risque.evaluation else 'Non évalué' }}
-                                                </span>
-                                            </div>
-                                            <a href="{{ url_for('liste_dispositifs_risque', risque_id=risque.risque.id) }}" 
-                                               class="btn-action" style="width: 28px; height: 28px;">
-                                                <i class="fas fa-external-link-alt"></i>
-                                            </a>
+
+                    {# Contenu dépliable #}
+                    <div class="collapse" id="dispositifsCollapse">
+                        <div class="card-body">
+
+                            {# Résumé stats #}
+                            {% if total_dispositifs > 0 %}
+                            <div class="row g-2 mb-4">
+                                <div class="col-md-3 col-6">
+                                    <div class="info-item-modern text-center">
+                                        <div class="info-item-label">
+                                            <i class="fas fa-layer-group"></i>Total
                                         </div>
-                                        <div class="small text-muted mt-1">{{ risque.risque.intitule|truncate(60) }}</div>
+                                        <div class="info-item-value">{{ total_dispositifs }}</div>
                                     </div>
-                                    <div class="controls-body">
-                                        {# Efficacité moyenne #}
-                                        {% set efficacite_moyenne = dispositifs_risque|map(attribute='efficacite_reelle')|select|list|average %}
-                                        <div class="d-flex align-items-center justify-content-between p-2 rounded" style="background: var(--gray-light); margin-bottom: 1rem;">
-                                            <span class="small text-muted"><i class="fas fa-chart-line"></i> Efficacité moyenne:</span>
-                                            {% if efficacite_moyenne %}
-                                                <span class="badge-modern 
-                                                    {% if efficacite_moyenne >= 4 %}badge-success
-                                                    {% elif efficacite_moyenne >= 3 %}badge-warning
-                                                    {% else %}badge-danger{% endif %}">
-                                                    {{ efficacite_moyenne|round(1) }}/5
-                                                </span>
-                                            {% else %}
-                                                <span class="badge-modern badge-secondary">Non évalué</span>
-                                            {% endif %}
+                                </div>
+                                <div class="col-md-3 col-6">
+                                    <div class="info-item-modern text-center">
+                                        <div class="info-item-label">
+                                            <i class="fas fa-check-circle"></i>Efficaces
                                         </div>
-                                        
-                                        {# Liste des dispositifs #}
-                                        <div class="controls-list">
-                                            {% for dispositif in dispositifs_risque[:3] %}
-                                            <div class="control-item">
-                                                <span class="badge-modern 
-                                                    {% if dispositif.type_dispositif == 'Préventif' %}badge-success
-                                                    {% elif dispositif.type_dispositif == 'Détectif' %}badge-warning
-                                                    {% else %}badge-danger{% endif %}"
-                                                    style="font-size: 0.7rem; padding: 0.2rem 0.4rem; border-radius: 4px;">
-                                                    {{ dispositif.type_dispositif[:1] if dispositif.type_dispositif else '?' }}
-                                                </span>
-                                                <div class="flex-grow-1">
-                                                    <div class="small fw-semibold">{{ dispositif.nom|truncate(40) }}</div>
-                                                    {% if dispositif.efficacite_reelle %}
-                                                    <div class="progress-modern" style="height: 3px;">
-                                                        <div class="progress-modern-bar 
-                                                            {% if dispositif.efficacite_reelle >= 4 %}success
-                                                            {% elif dispositif.efficacite_reelle >= 3 %}warning
-                                                            {% else %}danger{% endif %}" 
-                                                            style="width: {{ (dispositif.efficacite_reelle / 5) * 100 }}%;">
-                                                        </div>
-                                                    </div>
-                                                    {% else %}
-                                                    <span class="text-muted small">Non évalué</span>
-                                                    {% endif %}
-                                                </div>
-                                            </div>
-                                            {% endfor %}
-                                            {% if dispositifs_risque|length > 3 %}
-                                            <div class="text-center mt-2">
-                                                <small class="text-muted">+ {{ dispositifs_risque|length - 3 }} autre(s) dispositif(s)</small>
-                                            </div>
-                                            {% endif %}
+                                        <div class="info-item-value text-success">
+                                            {{ stats_dispositifs.efficaces if stats_dispositifs else 0 }}
                                         </div>
-                                        
-                                        {# Actions #}
-                                        <div class="d-flex gap-2 justify-content-end mt-2 pt-2 border-top">
-                                            <a href="{{ url_for('nouveau_dispositif', risque_id=risque.risque.id) }}" 
-                                               class="btn-action" style="background: var(--success); color: white; border: none;">
-                                                <i class="fas fa-plus"></i>
-                                            </a>
-                                            {% if dispositifs_risque %}
-                                            <a href="{{ url_for('evaluer_dispositif', dispositif_id=dispositifs_risque[0].id) }}" 
-                                               class="btn-action" style="background: var(--warning); color: white; border: none;">
-                                                <i class="fas fa-chart-bar"></i>
-                                            </a>
-                                            {% endif %}
-                                            <a href="{{ url_for('voir_plans_action_risque', risque_id=risque.risque.id) }}" 
-                                               class="btn-action" style="background: var(--info); color: white; border: none;">
-                                                <i class="fas fa-tasks"></i>
-                                            </a>
+                                    </div>
+                                </div>
+                                <div class="col-md-3 col-6">
+                                    <div class="info-item-modern text-center">
+                                        <div class="info-item-label">
+                                            <i class="fas fa-clock"></i>À vérifier
+                                        </div>
+                                        <div class="info-item-value text-warning">
+                                            {{ stats_dispositifs.a_verifier if stats_dispositifs else 0 }}
+                                        </div>
+                                    </div>
+                                </div>
+                                <div class="col-md-3 col-6">
+                                    <div class="info-item-modern text-center">
+                                        <div class="info-item-label">
+                                            <i class="fas fa-question-circle"></i>Non évalués
+                                        </div>
+                                        <div class="info-item-value text-secondary">
+                                            {{ stats_dispositifs.non_evalues if stats_dispositifs else 0 }}
                                         </div>
                                     </div>
                                 </div>
                             </div>
                             {% endif %}
-                            {% endfor %}
+
+                            {# Liste des dispositifs par risque #}
+                            <div class="row g-4">
+                                {% for risque in risques_avec_evaluation %}
+                                {% set dispositifs_risque = risque.risque.dispositifs_maitrise_list %}
+                                {% if dispositifs_risque %}
+                                <div class="col-md-6">
+                                    <div class="risk-controls-card">
+                                        <div class="controls-header">
+                                            <div class="d-flex justify-content-between align-items-center">
+                                                <div>
+                                                    <a href="{{ url_for('detail_risque', id=risque.risque.id) }}" 
+                                                    class="risk-ref fw-semibold text-primary text-decoration-none">
+                                                        {{ risque.risque.reference }}
+                                                    </a>
+                                                    <span class="badge-modern 
+                                                        {% if risque.evaluation and risque.evaluation.niveau_risque == 'Critique' %}badge-danger
+                                                        {% elif risque.evaluation and risque.evaluation.niveau_risque == 'Élevé' %}badge-warning
+                                                        {% elif risque.evaluation and risque.evaluation.niveau_risque == 'Moyen' %}badge-info
+                                                        {% else %}badge-success{% endif %} ms-2">
+                                                        {{ risque.evaluation.niveau_risque if risque.evaluation else 'Non évalué' }}
+                                                    </span>
+                                                </div>
+                                                <a href="{{ url_for('liste_dispositifs_risque', risque_id=risque.risque.id) }}" 
+                                                class="btn-action" style="width: 28px; height: 28px;">
+                                                    <i class="fas fa-external-link-alt"></i>
+                                                </a>
+                                            </div>
+                                            <div class="small text-muted mt-1">{{ risque.risque.intitule|truncate(60) }}</div>
+                                        </div>
+                                        <div class="controls-body">
+
+                                            {# Efficacité moyenne #}
+                                            {% set efficacite_moyenne = dispositifs_risque|map(attribute='efficacite_reelle')|select|list|average %}
+                                            <div class="d-flex align-items-center justify-content-between p-2 rounded mb-3"
+                                                style="background: var(--gray-light);">
+                                                <span class="small text-muted">
+                                                    <i class="fas fa-chart-line"></i> Efficacité moyenne:
+                                                </span>
+                                                {% if efficacite_moyenne %}
+                                                    <span class="badge-modern 
+                                                        {% if efficacite_moyenne >= 4 %}badge-success
+                                                        {% elif efficacite_moyenne >= 3 %}badge-warning
+                                                        {% else %}badge-danger{% endif %}">
+                                                        {{ efficacite_moyenne|round(1) }}/5
+                                                    </span>
+                                                {% else %}
+                                                    <span class="badge-modern badge-secondary">Non évalué</span>
+                                                {% endif %}
+                                            </div>
+
+                                            {# Liste (3 premiers) #}
+                                            <div class="controls-list">
+                                                {% for dispositif in dispositifs_risque[:3] %}
+                                                <div class="control-item">
+                                                    <span class="badge-modern 
+                                                        {% if dispositif.type_dispositif == 'Préventif' %}badge-success
+                                                        {% elif dispositif.type_dispositif == 'Détectif' %}badge-warning
+                                                        {% else %}badge-danger{% endif %}"
+                                                        style="font-size: 0.7rem; padding: 0.2rem 0.4rem; border-radius: 4px;">
+                                                        {{ dispositif.type_dispositif[:1] if dispositif.type_dispositif else '?' }}
+                                                    </span>
+                                                    <div class="flex-grow-1">
+                                                        <div class="small fw-semibold">{{ dispositif.nom|truncate(40) }}</div>
+                                                        {% if dispositif.efficacite_reelle %}
+                                                        <div class="progress-modern" style="height: 3px;">
+                                                            <div class="progress-modern-bar 
+                                                                {% if dispositif.efficacite_reelle >= 4 %}success
+                                                                {% elif dispositif.efficacite_reelle >= 3 %}warning
+                                                                {% else %}danger{% endif %}" 
+                                                                style="width: {{ (dispositif.efficacite_reelle / 5) * 100 }}%;">
+                                                            </div>
+                                                        </div>
+                                                        {% else %}
+                                                        <span class="text-muted small">Non évalué</span>
+                                                        {% endif %}
+                                                    </div>
+                                                </div>
+                                                {% endfor %}
+                                                {% if dispositifs_risque|length > 3 %}
+                                                <div class="text-center mt-2">
+                                                    <small class="text-muted">
+                                                        + {{ dispositifs_risque|length - 3 }} autre(s) dispositif(s)
+                                                    </small>
+                                                </div>
+                                                {% endif %}
+                                            </div>
+
+                                            {# Actions #}
+                                            <div class="d-flex gap-2 justify-content-end mt-2 pt-2 border-top">
+                                                <a href="{{ url_for('nouveau_dispositif', risque_id=risque.risque.id) }}" 
+                                                class="btn-action"
+                                                style="background: var(--success); color: white; border: none;"
+                                                title="Créer un dispositif">
+                                                    <i class="fas fa-plus"></i>
+                                                </a>
+                                                {% if dispositifs_risque %}
+                                                <a href="{{ url_for('evaluer_dispositif', dispositif_id=dispositifs_risque[0].id) }}" 
+                                                class="btn-action"
+                                                style="background: var(--warning); color: white; border: none;"
+                                                title="Évaluer un dispositif">
+                                                    <i class="fas fa-chart-bar"></i>
+                                                </a>
+                                                {% endif %}
+                                                <a href="{{ url_for('voir_plans_action_risque', risque_id=risque.risque.id) }}" 
+                                                class="btn-action"
+                                                style="background: var(--info); color: white; border: none;"
+                                                title="Voir les plans d'action">
+                                                    <i class="fas fa-tasks"></i>
+                                                </a>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                                {% endif %}
+                                {% endfor %}
+                            </div>
+
+                            {# Empty state #}
+                            {% if total_dispositifs == 0 %}
+                            <div class="empty-state-full">
+                                <i class="fas fa-shield-alt fa-4x mb-3 text-muted"></i>
+                                <h5 class="text-muted">Aucun dispositif de maîtrise défini</h5>
+                                <p class="text-muted">
+                                    Les dispositifs de maîtrise renforcent la gestion des risques identifiés
+                                </p>
+                                <a href="{{ url_for('nouveau_dispositif', risque_id=risques_avec_evaluation[0].risque.id) if risques_avec_evaluation else '#' }}" 
+                                class="btn-modern btn-primary"
+                                {% if not risques_avec_evaluation %}disabled{% endif %}>
+                                    <i class="fas fa-plus"></i> Créer le premier dispositif
+                                </a>
+                            </div>
+                            {% endif %}
+
                         </div>
-                        
-                        {% if total_dispositifs == 0 %}
-                        <div class="empty-state-full">
-                            <i class="fas fa-shield-alt fa-4x mb-3 text-muted"></i>
-                            <h5 class="text-muted">Aucun dispositif de maîtrise défini</h5>
-                            <p class="text-muted">Les dispositifs de maîtrise renforcent la gestion des risques identifiés</p>
-                            <a href="{{ url_for('nouveau_dispositif', risque_id=risques_avec_evaluation[0].risque.id) if risques_avec_evaluation else '#' }}" 
-                               class="btn-modern btn-primary" {% if not risques_avec_evaluation %}disabled{% endif %}>
-                                <i class="fas fa-plus"></i> Créer le premier dispositif
-                            </a>
-                        </div>
-                        {% endif %}
                     </div>
+
                 </div>
             </div>
         </div>
+
+        <script>
+        (function() {
+            const collapseEl = document.getElementById('dispositifsCollapse');
+            const chevron = document.getElementById('dispositifsChevron');
+
+            if (collapseEl && chevron) {
+                collapseEl.addEventListener('show.bs.collapse', function() {
+                    chevron.style.transform = 'rotate(180deg)';
+                });
+                collapseEl.addEventListener('hide.bs.collapse', function() {
+                    chevron.style.transform = 'rotate(0deg)';
+                });
+            }
+        })();
+        </script>
 
         {# ========== SUGGESTION DISPOSITIFS ========== #}
         {% set risques_a_suggérer = [] %}
@@ -1805,8 +2062,9 @@
                                 <div class="filter-group">
                                     <label class="filter-label">Hiérarchisation</label>
                                     <select class="filter-select" onchange="hierarchiserRisques(this.value)">
-                                        <option value="score_desc">Score décroissant ▼</option>
-                                        <option value="score_asc">Score croissant ▲</option>
+                                        <option value="score_desc">Score NET décroissant ▼</option>
+                                        <option value="score_asc">Score NET croissant ▲</option>
+                                        <option value="score_brut_desc">Score BRUT décroissant ▼</option>
                                         <option value="niveau_critique">Niveau critique d'abord</option>
                                         <option value="impact_desc">Impact décroissant</option>
                                         <option value="probabilite_desc">Probabilité décroissante</option>
@@ -1858,15 +2116,17 @@
                         <div class="table-modern-container">
                             <table class="table-modern" id="tableauRisques">
                                 <thead>
-                                    <tr>
-                                        <th>RÉFÉRENCE</th>
-                                        <th>INTITULÉ</th>
-                                        <th>CATÉGORIE</th>
-                                        <th>STATUT</th>
-                                        <th>IMPACT/PROB</th>
-                                        <th>NIVEAU</th>
-                                        <th class="text-end">ACTIONS</th>
-                                    </tr>
+                                <tr>
+                                    <th>RÉFÉRENCE</th>
+                                    <th>INTITULÉ</th>
+                                    <th>CATÉGORIE</th>
+                                    <th>STATUT</th>
+                                    <th>IMPACT/PROB</th>
+                                    <th>MAÎTRISE</th>
+                                    <th>SCORE BRUT / NET</th>
+                                    <th>NIVEAU</th>
+                                    <th class="text-end">ACTIONS</th>
+                                </tr>
                                 </thead>
                                 <tbody>
                                     {% for item in risques_avec_evaluation %}
@@ -1895,6 +2155,7 @@
                                                 <span class="badge-modern badge-warning">À évaluer</span>
                                             {% endif %}
                                         </td>
+                                        {# ====== COLONNE IMPACT / PROBABILITÉ (inchangée) ====== #}
                                         <td>
                                             {% if evaluation %}
                                                 {% set impact_final = evaluation.impact_conf or evaluation.impact_val or evaluation.impact_pre %}
@@ -1911,20 +2172,65 @@
                                                 <span class="text-muted">-/-</span>
                                             {% endif %}
                                         </td>
+
+                                        {# ====== ✅ NOUVELLE COLONNE : MAÎTRISE ====== #}
                                         <td>
-                                            {% if evaluation and evaluation.niveau_risque %}
-                                                {% set niveau_final = evaluation.niveau_risque %}
-                                                <span class="level-badge 
-                                                    {% if niveau_final == 'Critique' %}critical
-                                                    {% elif niveau_final == 'Élevé' %}high
-                                                    {% elif niveau_final == 'Moyen' %}medium
-                                                    {% else %}low{% endif %}">
-                                                    {{ niveau_final }}
+                                            {% if item.niveau_maitrise %}
+                                                <span class="badge-modern 
+                                                    {% if item.niveau_maitrise >= 4 %}badge-success
+                                                    {% elif item.niveau_maitrise >= 3 %}badge-warning
+                                                    {% else %}badge-danger{% endif %}">
+                                                    {{ item.niveau_maitrise }}/5
                                                 </span>
+                                                {% if item.niveau_maitrise_dmr %}
+                                                <div class="small text-muted" style="font-size: 0.65rem;">
+                                                    DMR: {{ '%.1f'|format(item.niveau_maitrise_dmr) }}/5
+                                                </div>
+                                                {% endif %}
+                                            {% else %}
+                                                <span class="text-muted">-</span>
+                                            {% endif %}
+                                        </td>
+
+                                        {# ====== ✅ NOUVELLE COLONNE : SCORE BRUT / NET ====== #}
+                                        <td>
+                                            {% if item.est_evalue %}
+                                                <div style="font-size: 0.7rem; color: var(--gray);">
+                                                    <i class="fas fa-fire me-1"></i>Brut: <strong>{{ item.score_brut|round(2) }}</strong>
+                                                </div>
+                                                <div class="fw-bold" style="color: var(--primary); font-size: 0.95rem;">
+                                                    <i class="fas fa-shield-alt me-1"></i>Net: {{ item.score }}
+                                                </div>
+                                                {% if item.taux_reduction > 0 %}
+                                                <small class="badge-modern badge-success" style="font-size: 0.6rem; padding: 1px 6px;">
+                                                    −{{ (item.taux_reduction * 100)|int }}%
+                                                </small>
+                                                {% endif %}
+                                            {% else %}
+                                                <span class="text-muted">-</span>
+                                            {% endif %}
+                                        </td>
+
+                                        {# ====== COLONNE NIVEAU (utilise NET) ====== #}
+                                        <td>
+                                            {% if item.est_evalue and item.niveau %}
+                                                <span class="level-badge 
+                                                    {% if item.niveau == 'Critique' %}critical
+                                                    {% elif item.niveau == 'Élevé' %}high
+                                                    {% elif item.niveau == 'Moyen' %}medium
+                                                    {% else %}low{% endif %}">
+                                                    {{ item.niveau }}
+                                                </span>
+                                                {% if item.niveau_brut and item.niveau_brut != item.niveau %}
+                                                <div class="small text-muted" style="font-size: 0.65rem;">
+                                                    (brut: {{ item.niveau_brut }})
+                                                </div>
+                                                {% endif %}
                                             {% else %}
                                                 <span class="level-badge bg-secondary">Non évalué</span>
                                             {% endif %}
                                         </td>
+
                                         <td class="text-end">
                                             <div class="action-buttons">
                                                 {% if evaluation %}
@@ -2077,393 +2383,364 @@
 {# ============================================ #}
 {% block scripts %}
 <script>
-(function() {
-    'use strict';
+// ============================================
+// CONFIGURATION
+// ============================================
+const CONFIG = {
+    cartographieId: {{ cartographie.id }},
+    campagneId: {{ campagne_active.id }},
+    csrfToken: '{{ csrf_token() }}'
+};
 
-    // ============================================
-    // CONFIGURATION
-    // ============================================
-    const CONFIG = {
-        cartographieId: {{ cartographie.id }},
-        campagneId: {{ campagne_active.id }},
-        csrfToken: '{{ csrf_token() }}'
+let matriceActuelle = 'classique';
+let reevaluationInterval = null;
+
+// ============================================
+// HELPERS GLOBAUX (hors IIFE - accessibles partout)
+// ============================================
+function getScoreNet(row) {
+    const text = row.textContent || '';
+    const match = text.match(/Net:\s*([\d.]+)/);
+    return match ? parseFloat(match[1]) : 0;
+}
+function getScoreBrut(row) {
+    const text = row.textContent || '';
+    const match = text.match(/Brut:\s*([\d.]+)/);
+    return match ? parseFloat(match[1]) : 0;
+}
+function getImpact(row) {
+    const el = row.querySelector('.impact-badge');
+    if (el) {
+        const match = el.textContent.match(/(\d+)\/5/);
+        return match ? parseInt(match[1]) : 0;
+    }
+    return 0;
+}
+function getProbabilite(row) {
+    const el = row.querySelector('.prob-badge');
+    if (el) {
+        const match = el.textContent.match(/(\d+)\/5/);
+        return match ? parseInt(match[1]) : 0;
+    }
+    return 0;
+}
+
+function appliquerFiltresExistants() {
+    const niveauSelect = document.querySelector('select[onchange*="filtrerTableau"]');
+    const categorieSelect = document.querySelector('select[onchange*="filtrerParCategorie"]');
+    const searchInput = document.querySelector('.search-input');
+    if (niveauSelect && niveauSelect.value !== 'tous') window.filtrerTableau(niveauSelect.value);
+    if (categorieSelect && categorieSelect.value !== 'tous') window.filtrerParCategorie(categorieSelect.value);
+    if (searchInput && searchInput.value) window.rechercherRisque(searchInput.value);
+}
+
+// ============================================
+// MATRICE
+// ============================================
+window.changerMatrice = function(type) {
+    document.querySelectorAll('.matrice-container').forEach(el => el.style.display = 'none');
+    const target = document.getElementById('matrice' + type.charAt(0).toUpperCase() + type.slice(1));
+    if (target) target.style.display = 'block';
+
+    const titres = {
+        classique: 'Matrice des Risques - {{ campagne_active.nom }}',
+        criticite: 'Matrice de Criticité - {{ campagne_active.nom }}',
+        priorisation: 'Matrice de Priorisation - {{ campagne_active.nom }}',
+        surbrillance: 'Visualisation des Risques - {{ campagne_active.nom }}'
     };
+    const titreEl = document.getElementById('matriceTitre');
+    if (titreEl) titreEl.textContent = titres[type] || titres.classique;
 
-    let matriceActuelle = 'classique';
-    let reevaluationInterval = null;
-    let risqueSelectionne = null;
+    document.querySelectorAll('.matrix-btn').forEach(btn => btn.classList.remove('active'));
+    const activeBtn = document.querySelector(`.matrix-btn[onclick*="${type}"]`);
+    if (activeBtn) activeBtn.classList.add('active');
 
-    // ============================================
-    // MATRICE
-    // ============================================
-    window.changerMatrice = function(type) {
-        document.querySelectorAll('.matrice-container').forEach(el => el.style.display = 'none');
-        const target = document.getElementById('matrice' + type.charAt(0).toUpperCase() + type.slice(1));
-        if (target) target.style.display = 'block';
-        
-        const titres = {
-            classique: 'Matrice des Risques - {{ campagne_active.nom }}',
-            criticite: 'Matrice de Criticité - {{ campagne_active.nom }}',
-            priorisation: 'Matrice de Priorisation - {{ campagne_active.nom }}',
-            surbrillance: 'Visualisation des Risques - {{ campagne_active.nom }}'
-        };
-        const titreEl = document.getElementById('matriceTitre');
-        if (titreEl) titreEl.textContent = titres[type] || titres.classique;
-        
-        document.querySelectorAll('.matrix-btn').forEach(btn => btn.classList.remove('active'));
-        const activeBtn = document.querySelector(`.matrix-btn[onclick*="${type}"]`);
-        if (activeBtn) activeBtn.classList.add('active');
-        
-        matriceActuelle = type;
-    };
+    matriceActuelle = type;
+};
 
-    window.highlightRisk = function(risqueId) {
-        risqueSelectionne = risqueId;
-        if (matriceActuelle === 'surbrillance') {
-            const url = "{{ url_for('matrice_risque_specifique', cartographie_id=0, risque_id=0) }}"
-                .replace('0', CONFIG.cartographieId)
-                .replace('0', risqueId);
-            window.location.href = url + '?campagne=' + CONFIG.campagneId;
-        }
-    };
+window.highlightRisk = function(risqueId, event) {
+    if (event) event.stopPropagation();
+    if (matriceActuelle !== 'surbrillance') return;
+    const url = "{{ url_for('matrice_risque_specifique', cartographie_id=0, risque_id=0) }}"
+        .replace('0', CONFIG.cartographieId)
+        .replace('0', risqueId);
+    window.location.href = url + '?campagne=' + CONFIG.campagneId;
+};
 
-    window.ouvrirVuePleine = function() {
-        const container = document.querySelector('.matrice-container[style*="display: block"]');
-        const img = container?.querySelector('img');
-        if (!img) {
-            alert('Aucune matrice disponible à afficher en plein écran');
-            return;
-        }
-        const fullscreen = document.getElementById('fullscreenMatrix');
-        if (fullscreen) fullscreen.src = img.src;
-        const modal = new bootstrap.Modal(document.getElementById('matrixModal'));
-        modal.show();
-    };
+window.ouvrirVuePleine = function() {
+    const container = document.querySelector('.matrice-container[style*="display: block"]');
+    const img = container?.querySelector('img');
+    if (!img) { alert('Aucune matrice disponible'); return; }
+    const fullscreen = document.getElementById('fullscreenMatrix');
+    if (fullscreen) fullscreen.src = img.src;
+    new bootstrap.Modal(document.getElementById('matrixModal')).show();
+};
 
-    window.exporterMatrice = function() {
-        const container = document.querySelector('.matrice-container[style*="display: block"]');
-        const img = container?.querySelector('img');
-        if (!img) {
-            alert('Aucune matrice disponible à exporter');
-            return;
-        }
-        const link = document.createElement('a');
-        link.download = `matrice-{{ campagne_active.nom|slugify }}-${matriceActuelle}.png`;
-        link.href = img.src;
-        link.click();
-    };
+window.exporterMatrice = function() {
+    const container = document.querySelector('.matrice-container[style*="display: block"]');
+    const img = container?.querySelector('img');
+    if (!img) { alert('Aucune matrice disponible'); return; }
+    const link = document.createElement('a');
+    link.download = `matrice-{{ campagne_active.nom|slugify }}-${matriceActuelle}.png`;
+    link.href = img.src;
+    link.click();
+};
 
-    window.actualiserMatrice = function() {
-        window.location.reload();
-    };
+window.actualiserMatrice = function() { window.location.reload(); };
 
-    // ============================================
-    // FILTRES
-    // ============================================
-    window.toggleFiltres = function() {
-        const section = document.getElementById('filtresSection');
-        if (section) section.style.display = section.style.display === 'none' ? 'block' : 'none';
-    };
+// ============================================
+// FILTRES
+// ============================================
+window.toggleFiltres = function() {
+    const section = document.getElementById('filtresSection');
+    if (section) section.style.display = section.style.display === 'none' ? 'block' : 'none';
+};
 
-    window.filtrerTableau = function(niveau) {
-        document.querySelectorAll('#tableauRisques tbody tr').forEach(row => {
-            const rowNiveau = row.getAttribute('data-niveau');
-            row.style.display = (niveau === 'tous' || rowNiveau === niveau) ? '' : 'none';
-        });
-    };
+window.filtrerTableau = function(niveau) {
+    document.querySelectorAll('#tableauRisques tbody tr').forEach(row => {
+        const rowNiveau = row.getAttribute('data-niveau');
+        row.style.display = (niveau === 'tous' || rowNiveau === niveau) ? '' : 'none';
+    });
+};
 
-    window.filtrerParCategorie = function(categorie) {
-        document.querySelectorAll('#tableauRisques tbody tr').forEach(row => {
-            const rowCategorie = row.getAttribute('data-categorie');
-            row.style.display = (categorie === 'tous' || rowCategorie === categorie) ? '' : 'none';
-        });
-    };
+window.filtrerParCategorie = function(categorie) {
+    document.querySelectorAll('#tableauRisques tbody tr').forEach(row => {
+        const rowCategorie = row.getAttribute('data-categorie');
+        row.style.display = (categorie === 'tous' || rowCategorie === categorie) ? '' : 'none';
+    });
+};
 
-    window.rechercherRisque = function(terme) {
-        const termeMin = terme.toLowerCase();
-        document.querySelectorAll('#tableauRisques tbody tr').forEach(row => {
-            const text = row.textContent.toLowerCase();
-            row.style.display = text.includes(termeMin) ? '' : 'none';
-        });
-    };
+window.rechercherRisque = function(terme) {
+    const termeMin = terme.toLowerCase();
+    document.querySelectorAll('#tableauRisques tbody tr').forEach(row => {
+        const text = row.textContent.toLowerCase();
+        row.style.display = text.includes(termeMin) ? '' : 'none';
+    });
+};
 
-    window.hierarchiserRisques = function(critere) {
-        const lignes = Array.from(document.querySelectorAll('#tableauRisques tbody tr'));
-        const sorters = {
-            score_desc: (a, b) => getScore(b) - getScore(a),
-            score_asc: (a, b) => getScore(a) - getScore(b),
-            niveau_critique: (a, b) => {
-                const order = { 'Critique': 1, 'Élevé': 2, 'Moyen': 3, 'Faible': 4, 'Non évalué': 5 };
-                const diff = (order[a.dataset.niveau] || 5) - (order[b.dataset.niveau] || 5);
-                return diff || getScore(b) - getScore(a);
-            },
-            impact_desc: (a, b) => getImpact(b) - getImpact(a),
-            probabilite_desc: (a, b) => getProbabilite(b) - getProbabilite(a),
-            reference: (a, b) => {
-                const refA = a.querySelector('.risk-ref')?.textContent || '';
-                const refB = b.querySelector('.risk-ref')?.textContent || '';
-                return refA.localeCompare(refB);
-            },
-            categorie: (a, b) => {
-                const catA = a.dataset.categorie || '';
-                const catB = b.dataset.categorie || '';
-                return catA.localeCompare(catB);
-            }
-        };
-        if (sorters[critere]) {
-            lignes.sort(sorters[critere]);
-            const tbody = document.querySelector('#tableauRisques tbody');
-            if (tbody) {
-                tbody.innerHTML = '';
-                lignes.forEach(row => tbody.appendChild(row));
-            }
-        }
-        const label = document.getElementById('triLabel');
-        const indicator = document.getElementById('triActif');
-        const labels = {
-            score_desc: 'Score décroissant',
-            score_asc: 'Score croissant',
-            niveau_critique: 'Niveau critique d\'abord',
-            impact_desc: 'Impact décroissant',
-            probabilite_desc: 'Probabilité décroissante',
-            reference: 'Par référence',
-            categorie: 'Par catégorie'
-        };
-        if (label) label.textContent = labels[critere] || 'Tri personnalisé';
-        if (indicator) indicator.style.display = 'block';
-        appliquerFiltresExistants();
-    };
-
-    window.reinitialiserTri = function() {
-        const tbody = document.querySelector('#tableauRisques tbody');
-        const rows = tbody ? Array.from(tbody.querySelectorAll('tr')) : [];
-        rows.sort((a, b) => {
+window.hierarchiserRisques = function(critere) {
+    const lignes = Array.from(document.querySelectorAll('#tableauRisques tbody tr'));
+    const sorters = {
+        score_desc:       (a, b) => getScoreNet(b) - getScoreNet(a),
+        score_asc:        (a, b) => getScoreNet(a) - getScoreNet(b),
+        score_brut_desc:  (a, b) => getScoreBrut(b) - getScoreBrut(a),
+        niveau_critique:  (a, b) => {
+            const order = { 'Critique': 1, 'Élevé': 2, 'Moyen': 3, 'Faible': 4, 'Non évalué': 5 };
+            const diff = (order[a.dataset.niveau] || 5) - (order[b.dataset.niveau] || 5);
+            return diff || getScoreNet(b) - getScoreNet(a);
+        },
+        impact_desc:      (a, b) => getImpact(b) - getImpact(a),
+        probabilite_desc: (a, b) => getProbabilite(b) - getProbabilite(a),
+        reference:        (a, b) => {
             const refA = a.querySelector('.risk-ref')?.textContent || '';
             const refB = b.querySelector('.risk-ref')?.textContent || '';
             return refA.localeCompare(refB);
-        });
+        },
+        categorie:        (a, b) => {
+            const catA = a.dataset.categorie || '';
+            const catB = b.dataset.categorie || '';
+            return catA.localeCompare(catB);
+        }
+    };
+    if (sorters[critere]) {
+        lignes.sort(sorters[critere]);
+        const tbody = document.querySelector('#tableauRisques tbody');
         if (tbody) {
             tbody.innerHTML = '';
-            rows.forEach(row => tbody.appendChild(row));
+            lignes.forEach(row => tbody.appendChild(row));
         }
-        const indicator = document.getElementById('triActif');
-        if (indicator) indicator.style.display = 'none';
-        const select = document.querySelector('select[onchange*="hierarchiserRisques"]');
-        if (select) select.value = 'score_desc';
-        appliquerFiltresExistants();
+    }
+    const label = document.getElementById('triLabel');
+    const indicator = document.getElementById('triActif');
+    const labels = {
+        score_desc: 'Score NET décroissant',
+        score_asc: 'Score NET croissant',
+        score_brut_desc: 'Score BRUT décroissant',
+        niveau_critique: "Niveau critique d'abord",
+        impact_desc: 'Impact décroissant',
+        probabilite_desc: 'Probabilité décroissante',
+        reference: 'Par référence',
+        categorie: 'Par catégorie'
     };
+    if (label) label.textContent = labels[critere] || 'Tri personnalisé';
+    if (indicator) indicator.style.display = 'block';
+    appliquerFiltresExistants();
+};
 
-    function getScore(row) {
-        const scoreEl = row.querySelector('.risk-score-modern');
-        if (scoreEl) {
-            const match = scoreEl.textContent.match(/Score:\s*(\d+)/);
-            return match ? parseInt(match[1]) : 0;
-        }
-        return getImpact(row) * getProbabilite(row);
+window.reinitialiserTri = function() {
+    const tbody = document.querySelector('#tableauRisques tbody');
+    const rows = tbody ? Array.from(tbody.querySelectorAll('tr')) : [];
+    rows.sort((a, b) => {
+        const refA = a.querySelector('.risk-ref')?.textContent || '';
+        const refB = b.querySelector('.risk-ref')?.textContent || '';
+        return refA.localeCompare(refB);
+    });
+    if (tbody) {
+        tbody.innerHTML = '';
+        rows.forEach(row => tbody.appendChild(row));
     }
+    const indicator = document.getElementById('triActif');
+    if (indicator) indicator.style.display = 'none';
+    const select = document.querySelector('select[onchange*="hierarchiserRisques"]');
+    if (select) select.value = 'score_desc';
+    appliquerFiltresExistants();
+};
 
-    function getImpact(row) {
-        const el = row.querySelector('.impact-badge');
-        if (el) {
-            const match = el.textContent.match(/(\d+)\/5/);
-            return match ? parseInt(match[1]) : 0;
-        }
-        return 0;
+// ============================================
+// CAMPAGNE
+// ============================================
+window.ouvrirModalNouvelleCampagne = function() {
+    new bootstrap.Modal(document.getElementById('modalNouvelleCampagne')).show();
+};
+
+window.changerCampagne = function() {
+    const select = document.getElementById('selectCampagne');
+    if (select && select.value) {
+        window.location.href = `/cartographie/${CONFIG.cartographieId}/changer-campagne/${select.value}`;
     }
+};
 
-    function getProbabilite(row) {
-        const el = row.querySelector('.prob-badge');
-        if (el) {
-            const match = el.textContent.match(/(\d+)\/5/);
-            return match ? parseInt(match[1]) : 0;
-        }
-        return 0;
+window.cloturerCampagne = function() {
+    if (confirm('Êtes-vous sûr de vouloir clôturer la campagne "{{ campagne_active.nom }}" ?')) {
+        window.location.href = `/cartographie/${CONFIG.cartographieId}/cloturer-campagne`;
     }
+};
 
-    function appliquerFiltresExistants() {
-        const niveauSelect = document.querySelector('select[onchange*="filtrerTableau"]');
-        const categorieSelect = document.querySelector('select[onchange*="filtrerParCategorie"]');
-        const searchInput = document.querySelector('.search-input');
-        if (niveauSelect && niveauSelect.value !== 'tous') window.filtrerTableau(niveauSelect.value);
-        if (categorieSelect && categorieSelect.value !== 'tous') window.filtrerParCategorie(categorieSelect.value);
-        if (searchInput && searchInput.value) window.rechercherRisque(searchInput.value);
-    }
-
-    // ============================================
-    // CAMPAGNE
-    // ============================================
-    window.ouvrirModalNouvelleCampagne = function() {
-        const modal = new bootstrap.Modal(document.getElementById('modalNouvelleCampagne'));
-        modal.show();
-    };
-
-    window.changerCampagne = function() {
-        const select = document.getElementById('selectCampagne');
-        if (select && select.value) {
-            window.location.href = `/cartographie/${CONFIG.cartographieId}/changer-campagne/${select.value}`;
-        }
-    };
-
-    window.cloturerCampagne = function() {
-        if (confirm('Êtes-vous sûr de vouloir clôturer la campagne "{{ campagne_active.nom }}" ?')) {
-            window.location.href = `/cartographie/${CONFIG.cartographieId}/cloturer-campagne`;
-        }
-    };
-
-    // ============================================
-    // RÉÉVALUATIONS
-    // ============================================
-    function chargerDemandesReevaluation() {
-        fetch(`/api/cartographie/${CONFIG.cartographieId}/demandes-reevaluation`)
-            .then(response => response.json())
-            .then(data => {
-                if (data.success) {
-                    const mapping = {
-                        'reevalAttente': data.nb_attente,
-                        'reevalValidees': data.nb_validees,
-                        'reevalRejetees': data.nb_rejetees,
-                        'reevalTotal': data.total
-                    };
-                    Object.entries(mapping).forEach(([id, value]) => {
-                        const el = document.getElementById(id);
-                        if (el) el.textContent = value;
-                    });
-                    const badge = document.getElementById('reevalBadge');
-                    if (badge) {
-                        badge.textContent = data.nb_attente;
-                        badge.className = `badge-modern ${data.nb_attente > 0 ? 'badge-warning' : 'badge-secondary'} ms-2`;
-                    }
-                }
-            })
-            .catch(err => console.error('Erreur chargement réévaluations:', err));
-    }
-
-    window.rafraichirReevaluations = function() {
-        chargerDemandesReevaluation();
-    };
-
-    function demarrerRafraichissement() {
-        if (reevaluationInterval) clearInterval(reevaluationInterval);
-        chargerDemandesReevaluation();
-        reevaluationInterval = setInterval(chargerDemandesReevaluation, 30000);
-    }
-
-    // ============================================
-    // ACTUALISATION COMPLÈTE
-    // ============================================
-    window.actualiserComplet = function() {
-        const btn = document.getElementById('btnActualiserComplet');
-        if (!btn) return;
-        const originalHtml = btn.innerHTML;
-        btn.disabled = true;
-        btn.innerHTML = '<i class="fas fa-spinner fa-spin me-2"></i>Actualisation en cours...';
-
-        const overlay = document.createElement('div');
-        overlay.id = 'progressOverlay';
-        overlay.style.cssText = `
-            position: fixed; top: 0; left: 0; width: 100%; height: 100%;
-            background: rgba(0,0,0,0.7); z-index: 9999;
-            display: flex; align-items: center; justify-content: center;
-        `;
-        overlay.innerHTML = `
-            <div style="background: white; padding: 30px; border-radius: 10px; text-align: center; max-width: 400px;">
-                <i class="fas fa-sync-alt fa-spin fa-3x mb-3" style="color: #3498db;"></i>
-                <h3>Actualisation de la cartographie...</h3>
-                <div class="progress mt-3" style="width: 100%; height: 20px;">
-                    <div class="progress-bar" id="progressBar" role="progressbar" style="width: 0%">0%</div>
-                </div>
-                <p class="mt-3 text-muted" id="progressMessage">Préparation...</p>
-            </div>
-        `;
-        document.body.appendChild(overlay);
-
-        let progress = 0;
-        const progressBar = document.getElementById('progressBar');
-        const progressMessage = document.getElementById('progressMessage');
-        const messages = ['Récupération des risques...', 'Synchronisation des dispositifs...', 
-                         'Analyse des incidents...', 'Mise à jour des évaluations...', 
-                         'Génération des matrices...', 'Finalisation...'];
-        const interval = setInterval(() => {
-            if (progress < 90) {
-                progress += 10;
-                progressBar.style.width = progress + '%';
-                progressBar.textContent = progress + '%';
-                const idx = Math.floor(progress / 15);
-                if (idx < messages.length) progressMessage.textContent = messages[idx];
-            }
-        }, 500);
-
-        fetch(`/api/cartographie/${CONFIG.cartographieId}/actualiser`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json', 'X-CSRFToken': CONFIG.csrfToken }
-        })
+// ============================================
+// RÉÉVALUATIONS
+// ============================================
+function chargerDemandesReevaluation() {
+    fetch(`/api/cartographie/${CONFIG.cartographieId}/demandes-reevaluation`)
         .then(response => response.json())
         .then(data => {
-            clearInterval(interval);
             if (data.success) {
-                progressBar.style.width = '100%';
-                progressBar.textContent = '100%';
-                progressMessage.textContent = '✅ Actualisation terminée !';
-                setTimeout(() => {
-                    overlay.remove();
-                    window.location.reload();
-                }, 1000);
-            } else {
-                throw new Error(data.error || 'Erreur inconnue');
+                const mapping = {
+                    'reevalAttente': data.nb_attente,
+                    'reevalValidees': data.nb_validees,
+                    'reevalRejetees': data.nb_rejetees,
+                    'reevalTotal': data.total
+                };
+                Object.entries(mapping).forEach(([id, value]) => {
+                    const el = document.getElementById(id);
+                    if (el) el.textContent = value;
+                });
+                const badge = document.getElementById('reevalBadge');
+                if (badge) {
+                    badge.textContent = data.nb_attente;
+                    badge.className = `badge-modern ${data.nb_attente > 0 ? 'badge-warning' : 'badge-secondary'} ms-2`;
+                }
             }
         })
-        .catch(err => {
-            clearInterval(interval);
-            overlay.innerHTML = `
-                <div style="background: white; padding: 30px; border-radius: 10px; text-align: center; max-width: 400px;">
-                    <i class="fas fa-exclamation-triangle fa-3x mb-3" style="color: #e74c3c;"></i>
-                    <h3>Erreur lors de l'actualisation</h3>
-                    <p>${err.message}</p>
-                    <button class="btn btn-primary" onclick="location.reload()">Recharger</button>
-                </div>
-            `;
-            btn.disabled = false;
-            btn.innerHTML = originalHtml;
-        });
-    };
+        .catch(err => console.error('Erreur chargement réévaluations:', err));
+}
 
-    // ============================================
-    // INITIALISATION
-    // ============================================
-    document.addEventListener('DOMContentLoaded', function() {
-        // Initialiser la matrice
-        window.changerMatrice('classique');
+window.rafraichirReevaluations = function() { chargerDemandesReevaluation(); };
 
-        // Tri initial
-        setTimeout(() => window.hierarchiserRisques('score_desc'), 100);
+function demarrerRafraichissement() {
+    if (reevaluationInterval) clearInterval(reevaluationInterval);
+    chargerDemandesReevaluation();
+    reevaluationInterval = setInterval(chargerDemandesReevaluation, 30000);
+}
 
-        // Démarrer le rafraîchissement des réévaluations
-        demarrerRafraichissement();
+// ============================================
+// ACTUALISATION COMPLÈTE
+// ============================================
+window.actualiserComplet = function() {
+    const btn = document.getElementById('btnActualiserComplet');
+    if (!btn) return;
+    const originalHtml = btn.innerHTML;
+    btn.disabled = true;
+    btn.innerHTML = '<i class="fas fa-spinner fa-spin me-2"></i>Actualisation en cours...';
 
-        // Gérer la visibilité de la page
-        document.addEventListener('visibilitychange', function() {
-            if (document.hidden) {
-                if (reevaluationInterval) clearInterval(reevaluationInterval);
-            } else {
-                demarrerRafraichissement();
+    const overlay = document.createElement('div');
+    overlay.id = 'progressOverlay';
+    overlay.style.cssText = `position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.7); z-index: 9999; display: flex; align-items: center; justify-content: center;`;
+    overlay.innerHTML = `
+        <div style="background: white; padding: 30px; border-radius: 10px; text-align: center; max-width: 400px;">
+            <i class="fas fa-sync-alt fa-spin fa-3x mb-3" style="color: #3498db;"></i>
+            <h3>Actualisation de la cartographie...</h3>
+            <div class="progress mt-3" style="width: 100%; height: 20px;">
+                <div class="progress-bar" id="progressBar" role="progressbar" style="width: 0%">0%</div>
+            </div>
+            <p class="mt-3 text-muted" id="progressMessage">Préparation...</p>
+        </div>
+    `;
+    document.body.appendChild(overlay);
+
+    let progress = 0;
+    const progressBar = document.getElementById('progressBar');
+    const progressMessage = document.getElementById('progressMessage');
+    const messages = ['Récupération des risques...', 'Synchronisation des dispositifs...',
+                     'Analyse des incidents...', 'Mise à jour des évaluations...',
+                     'Génération des matrices...', 'Finalisation...'];
+    const interval = setInterval(() => {
+        if (progress < 90) {
+            progress += 10;
+            progressBar.style.width = progress + '%';
+            progressBar.textContent = progress + '%';
+            const idx = Math.floor(progress / 15);
+            if (idx < messages.length) progressMessage.textContent = messages[idx];
+        }
+    }, 500);
+
+    fetch(`/api/cartographie/${CONFIG.cartographieId}/actualiser`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'X-CSRFToken': CONFIG.csrfToken }
+    })
+    .then(response => response.json())
+    .then(data => {
+        clearInterval(interval);
+        if (data.success) {
+            progressBar.style.width = '100%';
+            progressBar.textContent = '100%';
+            progressMessage.textContent = '✅ Actualisation terminée !';
+            setTimeout(() => { overlay.remove(); window.location.reload(); }, 1000);
+        } else {
+            throw new Error(data.error || 'Erreur inconnue');
+        }
+    })
+    .catch(err => {
+        clearInterval(interval);
+        overlay.innerHTML = `
+            <div style="background: white; padding: 30px; border-radius: 10px; text-align: center; max-width: 400px;">
+                <i class="fas fa-exclamation-triangle fa-3x mb-3" style="color: #e74c3c;"></i>
+                <h3>Erreur lors de l'actualisation</h3>
+                <p>${err.message}</p>
+                <button class="btn btn-primary" onclick="location.reload()">Recharger</button>
+            </div>
+        `;
+        btn.disabled = false;
+        btn.innerHTML = originalHtml;
+    });
+};
+
+// ============================================
+// INITIALISATION
+// ============================================
+document.addEventListener('DOMContentLoaded', function() {
+    window.changerMatrice('classique');
+    setTimeout(() => window.hierarchiserRisques('score_desc'), 100);
+    demarrerRafraichissement();
+
+    document.addEventListener('visibilitychange', function() {
+        if (document.hidden) {
+            if (reevaluationInterval) clearInterval(reevaluationInterval);
+        } else {
+            demarrerRafraichissement();
+        }
+    });
+
+    document.querySelectorAll('form[action*="supprimer"]').forEach(form => {
+        form.addEventListener('submit', function(e) {
+            if (!confirm('Êtes-vous sûr de vouloir supprimer ce risque ? Cette action est irréversible.')) {
+                e.preventDefault();
             }
-        });
-
-        // Confirmation de suppression
-        document.querySelectorAll('form[action*="supprimer"]').forEach(form => {
-            form.addEventListener('submit', function(e) {
-                if (!confirm('Êtes-vous sûr de vouloir supprimer ce risque ? Cette action est irréversible.')) {
-                    e.preventDefault();
-                }
-            });
-        });
-
-        // Tooltips
-        document.querySelectorAll('[title]').forEach(el => {
-            new bootstrap.Tooltip(el);
         });
     });
 
-})();
+    document.querySelectorAll('[title]').forEach(el => {
+        new bootstrap.Tooltip(el);
+    });
+});
 </script>
 {% endblock %}
