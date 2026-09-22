@@ -1973,6 +1973,38 @@ class EvaluationRisque(db.Model):
     def get_pourcentage_reduction(self):
         """Retourne le pourcentage de réduction sous forme lisible"""
         return round((self.taux_reduction_maitrise or 0) * 100)
+
+    @property
+    def score_net_safe(self):
+        """Score NET avec fallback legacy si colonne absente."""
+        val = getattr(self, 'score_risque_net', None)
+        return val if val is not None else (self.score_risque or 0)
+    
+    @property
+    def niveau_net_safe(self):
+        """Niveau NET avec fallback legacy."""
+        val = getattr(self, 'niveau_risque_net', None)
+        return val or self.niveau_risque
+    
+    @property
+    def score_brut_safe(self):
+        """Score BRUT avec fallback calculé."""
+        val = getattr(self, 'score_risque_brut', None)
+        if val:
+            return val
+        impact = self.impact_conf or self.impact_val or self.impact_pre
+        proba = self.probabilite_conf or self.probabilite_val or self.probabilite_pre
+        return impact * proba if impact and proba else 0
+    
+    @property
+    def niveau_brut_safe(self):
+        """Niveau BRUT avec fallback."""
+        return getattr(self, 'niveau_risque_brut', None)
+    
+    @property
+    def taux_reduction_safe(self):
+        """Taux de réduction avec fallback."""
+        return getattr(self, 'taux_reduction_maitrise', 0) or 0
     
     def get_score_affichage(self):
         """
