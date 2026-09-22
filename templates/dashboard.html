@@ -1,18 +1,18 @@
-<!-- dashboard.html - Version corrigée avec compatibilité Dark/White -->
 {% extends "base.html" %}
 
 {% block title %}Tableau de Bord - Egalyx Control{% endblock %}
 
 {% block content %}
 <div class="container-fluid">
-    <!-- En-tête -->
+
+    <!-- ========== EN-TÊTE ========== -->
     <div class="d-flex justify-content-between align-items-center mb-4 fade-in">
         <div>
-            <h1 class="h3 mb-1 fw-bold" style="color: var(--fk-navy);">
+            <h1 class="h3 mb-1 fw-bold">
                 <i class="fas fa-tachometer-alt me-2"></i>
                 Tableau de Bord
             </h1>
-            <p class="text-muted">Vue d'ensemble de la gestion des risques et du contrôle interne</p>
+            <p class="text-muted mb-0">Vue d'ensemble de la gestion des risques et du contrôle interne</p>
         </div>
         <div class="btn-group">
             <button class="fk-btn fk-btn-outline" onclick="actualiserDonnees()">
@@ -25,24 +25,86 @@
     </div>
 
     <!-- ========================================================== -->
-    <!-- 8 CARTES DE STATISTIQUES AVEC FILTRAGE DYNAMIQUE           -->
+    <!-- BANDEAU DISTINCTION CRITIQUES                              -->
     <!-- ========================================================== -->
-    
+    {% if total_critiques and total_critiques > 0 %}
     <div class="row mb-4">
-        
+        <div class="col-12">
+            <div class="fk-card" style="border-left: 4px solid #dc2626;">
+                <div class="fk-card-body">
+                    <div class="d-flex justify-content-between align-items-center flex-wrap gap-3">
+                        <div>
+                            <h5 class="mb-1" style="color: #dc2626;">
+                                <i class="fas fa-fire me-2"></i>
+                                {{ total_critiques }} Risque(s) Critique(s) NET
+                            </h5>
+                            <p class="mb-0 text-muted small">
+                                Score NET ≥ 17/25 après application des contrôles
+                            </p>
+                        </div>
+
+                        <div class="d-flex gap-4">
+                            <!-- Campagne active -->
+                            <a href="{{ url_for('dashboard_risques', niveau='critique_active') }}"
+                               class="text-decoration-none"
+                               style="color: #dc2626;">
+                                <div class="text-center">
+                                    <div style="font-size: 2rem; font-weight: 700; line-height: 1;">
+                                        {{ risques_critiques_count|default(0) }}
+                                    </div>
+                                    <small class="fw-semibold">
+                                        <i class="fas fa-check-circle me-1"></i>Campagne active
+                                    </small>
+                                </div>
+                            </a>
+
+                            <!-- N-1 -->
+                            {% if risques_critiques_n_moins_1 and risques_critiques_n_moins_1 > 0 %}
+                            <a href="{{ url_for('dashboard_risques', niveau='critique_n_moins_1') }}"
+                               class="text-decoration-none"
+                               style="color: #f59e0b;">
+                                <div class="text-center">
+                                    <div style="font-size: 2rem; font-weight: 700; line-height: 1;">
+                                        {{ risques_critiques_n_moins_1 }}
+                                    </div>
+                                    <small class="fw-semibold">
+                                        <i class="fas fa-redo me-1"></i>N-1 à réévaluer
+                                    </small>
+                                </div>
+                            </a>
+                            {% endif %}
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    {% endif %}
+
+    <!-- ========================================================== -->
+    <!-- CARTES DE STATISTIQUES                                     -->
+    <!-- ========================================================== -->
+    <div class="row mb-4">
+
         <!-- CARTE 1: RISQUES -->
         {% if current_user.has_permission('can_manage_risks') or current_user.is_client_admin or current_user.role == 'super_admin' %}
-        <div class="col-xl-3 col-md-6 mb-4 fade-in" style="animation-delay: 0.1s;">
+        <div class="col-xl-3 col-md-6 mb-4 fade-in">
             <div class="fk-card clickable-card" onclick="location.href='{{ url_for('liste_cartographies') }}'">
                 <div class="fk-card-header" style="background: var(--accent-gradient);">
                     <div class="d-flex justify-content-between align-items-center">
                         <div>
                             <h6 class="mb-2 text-white-75">TOTAL RISQUES</h6>
                             <h2 class="mb-0 text-white fw-bold">{{ total_risques|default(0) }}</h2>
-                            <small class="text-white-90">
-                                <i class="fas fa-exclamation-circle me-1"></i>
-                                {{ risques_critiques_count|default(0) }} critiques ({{ pourcentage_critiques|default(0) }}%)
+                            <small class="text-white-90 d-block">
+                                <i class="fas fa-fire me-1"></i>
+                                <strong>{{ risques_critiques_count|default(0) }}</strong> critiques NET
                             </small>
+                            {% if risques_critiques_n_moins_1 and risques_critiques_n_moins_1 > 0 %}
+                            <small class="text-white-90 d-block mt-1">
+                                <i class="fas fa-redo me-1"></i>
+                                <strong>{{ risques_critiques_n_moins_1 }}</strong> N-1 à réévaluer
+                            </small>
+                            {% endif %}
                         </div>
                         <div class="icon-circle bg-white-20">
                             <i class="fas fa-exclamation-triangle text-white fa-lg"></i>
@@ -50,20 +112,17 @@
                     </div>
                 </div>
                 <div class="fk-card-body">
-                    <div class="risk-progress">
-                        <div class="d-flex justify-content-between mb-1">
-                            <small class="text-muted">Niveau de criticité</small>
-                            <small class="fw-semibold" style="color: var(--fk-error);">{{ pourcentage_critiques|default(0) }}%</small>
-                        </div>
-                        <div class="progress" style="height: 8px; border-radius: 4px; background: var(--bs-gray-300);">
-                            <div class="progress-bar bg-gradient-danger" 
-                                 style="width: {{ pourcentage_critiques|default(0) }}%; border-radius: 4px;"></div>
-                        </div>
+                    <div class="d-flex justify-content-between mb-1">
+                        <small class="text-muted">Total à surveiller</small>
+                        <small class="fw-semibold text-danger">{{ total_critiques|default(0) }}</small>
+                    </div>
+                    <div class="progress" style="height: 8px;">
+                        <div class="progress-bar bg-gradient-danger"
+                             style="width: {{ pourcentage_critiques|default(0) }}%;"></div>
                     </div>
                     <div class="mt-3 d-flex justify-content-between align-items-center">
                         <span class="badge fk-badge fk-badge-primary">
-                            <i class="fas fa-chart-line me-1"></i>
-                            Surveillance active
+                            <i class="fas fa-chart-line me-1"></i>Surveillance active
                         </span>
                         <i class="fas fa-arrow-right text-muted"></i>
                     </div>
@@ -74,7 +133,7 @@
 
         <!-- CARTE 2: KRI -->
         {% if current_user.has_permission('can_manage_kri') or current_user.is_client_admin or current_user.role == 'super_admin' %}
-        <div class="col-xl-3 col-md-6 mb-4 fade-in" style="animation-delay: 0.2s;">
+        <div class="col-xl-3 col-md-6 mb-4 fade-in">
             <div class="fk-card clickable-card" onclick="location.href='{{ url_for('liste_kri') }}'">
                 <div class="fk-card-header" style="background: linear-gradient(135deg, var(--fk-success) 0%, #10b981 100%);">
                     <div class="d-flex justify-content-between align-items-center">
@@ -82,8 +141,7 @@
                             <h6 class="mb-2 text-white-75">KRI ACTIFS</h6>
                             <h2 class="mb-0 text-white fw-bold">{{ total_kri|default(0) }}</h2>
                             <small class="text-white-90">
-                                <i class="fas fa-bell me-1"></i>
-                                {{ kri_alertes|default(0) }} en alerte
+                                <i class="fas fa-bell me-1"></i>{{ kri_alertes|default(0) }} en alerte
                             </small>
                         </div>
                         <div class="icon-circle bg-white-20">
@@ -92,24 +150,21 @@
                     </div>
                 </div>
                 <div class="fk-card-body">
-                    <div class="kri-progress">
-                        <div class="d-flex justify-content-between mb-1">
-                            <small class="text-muted">Taux d'alerte</small>
-                            <small class="fw-semibold" style="color: var(--fk-warning);">
-                                {% if total_kri|default(0) > 0 %}
-                                    {{ (kri_alertes|default(0) / total_kri * 100)|round(1) }}%
-                                {% else %}0%{% endif %}
-                            </small>
-                        </div>
-                        <div class="progress" style="height: 8px; border-radius: 4px; background: var(--bs-gray-300);">
-                            <div class="progress-bar bg-gradient-warning" 
-                                 style="width: {% if total_kri|default(0) > 0 %}{{ (kri_alertes|default(0) / total_kri * 100)|round(1) }}{% else %}0{% endif %}%; border-radius: 4px;"></div>
-                        </div>
+                    <div class="d-flex justify-content-between mb-1">
+                        <small class="text-muted">Taux d'alerte</small>
+                        <small class="fw-semibold text-warning">
+                            {% if total_kri|default(0) > 0 %}
+                                {{ (kri_alertes|default(0) / total_kri * 100)|round(1) }}%
+                            {% else %}0%{% endif %}
+                        </small>
+                    </div>
+                    <div class="progress" style="height: 8px;">
+                        <div class="progress-bar bg-gradient-warning"
+                             style="width: {% if total_kri|default(0) > 0 %}{{ (kri_alertes|default(0) / total_kri * 100)|round(1) }}{% else %}0{% endif %}%;"></div>
                     </div>
                     <div class="mt-3 d-flex justify-content-between align-items-center">
                         <span class="badge fk-badge fk-badge-success">
-                            <i class="fas fa-eye me-1"></i>
-                            Surveillance continue
+                            <i class="fas fa-eye me-1"></i>Surveillance continue
                         </span>
                         <i class="fas fa-arrow-right text-muted"></i>
                     </div>
@@ -120,7 +175,7 @@
 
         <!-- CARTE 3: LOGIGRAMMES -->
         {% if current_user.has_permission('can_manage_logigram') or current_user.is_client_admin or current_user.role == 'super_admin' %}
-        <div class="col-xl-3 col-md-6 mb-4 fade-in" style="animation-delay: 0.3s;">
+        <div class="col-xl-3 col-md-6 mb-4 fade-in">
             <div class="fk-card clickable-card" onclick="location.href='{{ url_for('liste_logigrammes') }}'">
                 <div class="fk-card-header" style="background: linear-gradient(135deg, #3B82F6 0%, #1D4ED8 100%);">
                     <div class="d-flex justify-content-between align-items-center">
@@ -128,8 +183,7 @@
                             <h6 class="mb-2 text-white-75">LOGIGRAMMES</h6>
                             <h2 class="mb-0 text-white fw-bold">{{ total_logigrammes|default(0) }}</h2>
                             <small class="text-white-90">
-                                <i class="fas fa-check-circle me-1"></i>
-                                {{ logigrammes_actifs|default(0) }} actifs
+                                <i class="fas fa-check-circle me-1"></i>{{ logigrammes_actifs|default(0) }} actifs
                             </small>
                         </div>
                         <div class="icon-circle bg-white-20">
@@ -138,24 +192,21 @@
                     </div>
                 </div>
                 <div class="fk-card-body">
-                    <div class="logigramme-progress">
-                        <div class="d-flex justify-content-between mb-1">
-                            <small class="text-muted">Taux d'activité</small>
-                            <small class="fw-semibold" style="color: var(--fk-accent);">
-                                {% if total_logigrammes|default(0) > 0 %}
-                                    {{ (logigrammes_actifs|default(0) / total_logigrammes * 100)|round(1) }}%
-                                {% else %}0%{% endif %}
-                            </small>
-                        </div>
-                        <div class="progress" style="height: 8px; border-radius: 4px; background: var(--bs-gray-300);">
-                            <div class="progress-bar bg-gradient-info" 
-                                 style="width: {% if total_logigrammes|default(0) > 0 %}{{ (logigrammes_actifs|default(0) / total_logigrammes * 100)|round(1) }}{% else %}0{% endif %}%; border-radius: 4px;"></div>
-                        </div>
+                    <div class="d-flex justify-content-between mb-1">
+                        <small class="text-muted">Taux d'activité</small>
+                        <small class="fw-semibold" style="color: var(--fk-accent);">
+                            {% if total_logigrammes|default(0) > 0 %}
+                                {{ (logigrammes_actifs|default(0) / total_logigrammes * 100)|round(1) }}%
+                            {% else %}0%{% endif %}
+                        </small>
+                    </div>
+                    <div class="progress" style="height: 8px;">
+                        <div class="progress-bar bg-gradient-info"
+                             style="width: {% if total_logigrammes|default(0) > 0 %}{{ (logigrammes_actifs|default(0) / total_logigrammes * 100)|round(1) }}{% else %}0{% endif %}%;"></div>
                     </div>
                     <div class="mt-3 d-flex justify-content-between align-items-center">
                         <span class="badge fk-badge fk-badge-primary">
-                            <i class="fas fa-diagram-project me-1"></i>
-                            Modélisation processus
+                            <i class="fas fa-diagram-project me-1"></i>Modélisation
                         </span>
                         <i class="fas fa-arrow-right text-muted"></i>
                     </div>
@@ -166,7 +217,7 @@
 
         <!-- CARTE 4: VEILLES -->
         {% if current_user.has_permission('can_manage_regulatory') or current_user.is_client_admin or current_user.role == 'super_admin' %}
-        <div class="col-xl-3 col-md-6 mb-4 fade-in" style="animation-delay: 0.4s;">
+        <div class="col-xl-3 col-md-6 mb-4 fade-in">
             <div class="fk-card clickable-card" onclick="location.href='{{ url_for('veille_reglementaire') }}'">
                 <div class="fk-card-header" style="background: linear-gradient(135deg, var(--fk-warning) 0%, #D97706 100%);">
                     <div class="d-flex justify-content-between align-items-center">
@@ -174,8 +225,7 @@
                             <h6 class="mb-2 text-white-75">VEILLES ACTIVES</h6>
                             <h2 class="mb-0 text-white fw-bold">{{ veilles_actives|default(0) }}</h2>
                             <small class="text-white-90">
-                                <i class="fas fa-clock me-1"></i>
-                                {{ actions_retardees|default(0) }} retards
+                                <i class="fas fa-clock me-1"></i>{{ actions_retardees|default(0) }} retards
                             </small>
                         </div>
                         <div class="icon-circle bg-white-20">
@@ -184,24 +234,21 @@
                     </div>
                 </div>
                 <div class="fk-card-body">
-                    <div class="veille-progress">
-                        <div class="d-flex justify-content-between mb-1">
-                            <small class="text-muted">Taux de retard</small>
-                            <small class="fw-semibold" style="color: var(--fk-warning);">
-                                {% if veilles_actives|default(0) > 0 %}
-                                    {{ (actions_retardees|default(0) / veilles_actives * 100)|round(1) }}%
-                                {% else %}0%{% endif %}
-                            </small>
-                        </div>
-                        <div class="progress" style="height: 8px; border-radius: 4px; background: var(--bs-gray-300);">
-                            <div class="progress-bar bg-gradient-warning" 
-                                 style="width: {% if veilles_actives|default(0) > 0 %}{{ (actions_retardees|default(0) / veilles_actives * 100)|round(1) }}{% else %}0{% endif %}%; border-radius: 4px;"></div>
-                        </div>
+                    <div class="d-flex justify-content-between mb-1">
+                        <small class="text-muted">Taux de retard</small>
+                        <small class="fw-semibold text-warning">
+                            {% if veilles_actives|default(0) > 0 %}
+                                {{ (actions_retardees|default(0) / veilles_actives * 100)|round(1) }}%
+                            {% else %}0%{% endif %}
+                        </small>
+                    </div>
+                    <div class="progress" style="height: 8px;">
+                        <div class="progress-bar bg-gradient-warning"
+                             style="width: {% if veilles_actives|default(0) > 0 %}{{ (actions_retardees|default(0) / veilles_actives * 100)|round(1) }}{% else %}0{% endif %}%;"></div>
                     </div>
                     <div class="mt-3 d-flex justify-content-between align-items-center">
-                        <span class="badge fk-badge" style="background: linear-gradient(135deg, var(--fk-warning) 0%, #D97706 100%); color: white;">
-                            <i class="fas fa-clock me-1"></i>
-                            Conformité réglementaire
+                        <span class="badge fk-badge fk-badge-warning">
+                            <i class="fas fa-clock me-1"></i>Conformité
                         </span>
                         <i class="fas fa-arrow-right text-muted"></i>
                     </div>
@@ -212,7 +259,7 @@
 
         <!-- CARTE 5: INCIDENTS -->
         {% if current_user.has_permission('can_manage_incidents') or current_user.is_client_admin or current_user.role == 'super_admin' %}
-        <div class="col-xl-3 col-md-6 mb-4 fade-in" style="animation-delay: 0.5s;">
+        <div class="col-xl-3 col-md-6 mb-4 fade-in">
             <div class="fk-card clickable-card" onclick="location.href='{{ url_for('liste_incidents') }}'">
                 <div class="fk-card-header" style="background: linear-gradient(135deg, #dc2626 0%, #991b1b 100%);">
                     <div class="d-flex justify-content-between align-items-center">
@@ -220,8 +267,7 @@
                             <h6 class="mb-2 text-white-75">INCIDENTS ACTIFS</h6>
                             <h2 class="mb-0 text-white fw-bold">{{ stats_incidents.total|default(0) }}</h2>
                             <small class="text-white-90">
-                                <i class="fas fa-skull-crosswalk me-1"></i>
-                                {{ stats_incidents.critiques|default(0) }} critiques
+                                <i class="fas fa-fire me-1"></i>{{ stats_incidents.critiques|default(0) }} critiques
                             </small>
                         </div>
                         <div class="icon-circle bg-white-20">
@@ -230,24 +276,21 @@
                     </div>
                 </div>
                 <div class="fk-card-body">
-                    <div class="incident-progress">
-                        <div class="d-flex justify-content-between mb-1">
-                            <small class="text-muted">Taux de criticité</small>
-                            <small class="fw-semibold" style="color: var(--fk-error);">
-                                {% if stats_incidents.total|default(0) > 0 %}
-                                    {{ (stats_incidents.critiques|default(0) / stats_incidents.total * 100)|round(1) }}%
-                                {% else %}0%{% endif %}
-                            </small>
-                        </div>
-                        <div class="progress" style="height: 8px; border-radius: 4px; background: var(--bs-gray-300);">
-                            <div class="progress-bar bg-gradient-danger" 
-                                 style="width: {% if stats_incidents.total|default(0) > 0 %}{{ (stats_incidents.critiques|default(0) / stats_incidents.total * 100)|round(1) }}{% else %}0{% endif %}%; border-radius: 4px;"></div>
-                        </div>
+                    <div class="d-flex justify-content-between mb-1">
+                        <small class="text-muted">Taux de criticité</small>
+                        <small class="fw-semibold text-danger">
+                            {% if stats_incidents.total|default(0) > 0 %}
+                                {{ (stats_incidents.critiques|default(0) / stats_incidents.total * 100)|round(1) }}%
+                            {% else %}0%{% endif %}
+                        </small>
+                    </div>
+                    <div class="progress" style="height: 8px;">
+                        <div class="progress-bar bg-gradient-danger"
+                             style="width: {% if stats_incidents.total|default(0) > 0 %}{{ (stats_incidents.critiques|default(0) / stats_incidents.total * 100)|round(1) }}{% else %}0{% endif %}%;"></div>
                     </div>
                     <div class="mt-3 d-flex justify-content-between align-items-center">
-                        <span class="badge fk-badge" style="background: linear-gradient(135deg, #dc2626 0%, #991b1b 100%); color: white;">
-                            <i class="fas fa-bell me-1"></i>
-                            {{ stats_incidents.en_cours|default(0) }} en cours
+                        <span class="badge fk-badge fk-badge-danger">
+                            <i class="fas fa-bell me-1"></i>{{ stats_incidents.en_cours|default(0) }} en cours
                         </span>
                         <i class="fas fa-arrow-right text-muted"></i>
                     </div>
@@ -258,7 +301,7 @@
 
         <!-- CARTE 6: SUPPORT -->
         {% if current_user.has_permission('can_view_tickets') or current_user.is_client_admin or current_user.role == 'super_admin' %}
-        <div class="col-xl-3 col-md-6 mb-4 fade-in" style="animation-delay: 0.6s;">
+        <div class="col-xl-3 col-md-6 mb-4 fade-in">
             <div class="fk-card clickable-card" onclick="location.href='{{ url_for('liste_tickets_support') }}'">
                 <div class="fk-card-header" style="background: linear-gradient(135deg, #8b5cf6 0%, #6d28d9 100%);">
                     <div class="d-flex justify-content-between align-items-center">
@@ -266,8 +309,7 @@
                             <h6 class="mb-2 text-white-75">TICKETS SUPPORT</h6>
                             <h2 class="mb-0 text-white fw-bold">{{ tickets_nouveaux|default(0) }}</h2>
                             <small class="text-white-90">
-                                <i class="fas fa-clock me-1"></i>
-                                en attente de traitement
+                                <i class="fas fa-clock me-1"></i>en attente
                             </small>
                         </div>
                         <div class="icon-circle bg-white-20">
@@ -276,26 +318,19 @@
                     </div>
                 </div>
                 <div class="fk-card-body">
-                    <div class="support-progress">
-                        <div class="d-flex justify-content-between mb-1">
-                            <small class="text-muted">Taux de réponse</small>
-                            <small class="fw-semibold" style="color: var(--fk-accent);">
-                                {% if tickets_nouveaux|default(0) > 0 %}
-                                    En attente
-                                {% else %}
-                                    À jour
-                                {% endif %}
-                            </small>
-                        </div>
-                        <div class="progress" style="height: 8px; border-radius: 4px; background: var(--bs-gray-300);">
-                            <div class="progress-bar bg-gradient-info" 
-                                 style="width: {% if tickets_nouveaux|default(0) > 0 %}100{% else %}0{% endif %}%; border-radius: 4px;"></div>
-                        </div>
+                    <div class="d-flex justify-content-between mb-1">
+                        <small class="text-muted">État</small>
+                        <small class="fw-semibold" style="color: var(--fk-accent);">
+                            {% if tickets_nouveaux|default(0) > 0 %}En attente{% else %}À jour{% endif %}
+                        </small>
+                    </div>
+                    <div class="progress" style="height: 8px;">
+                        <div class="progress-bar bg-gradient-info"
+                             style="width: {% if tickets_nouveaux|default(0) > 0 %}100{% else %}0{% endif %}%;"></div>
                     </div>
                     <div class="mt-3 d-flex justify-content-between align-items-center">
                         <a href="{{ url_for('nouveau_ticket_support') }}" class="btn btn-sm fk-btn-outline">
-                            <i class="fas fa-plus me-1"></i>
-                            Nouveau ticket
+                            <i class="fas fa-plus me-1"></i>Nouveau ticket
                         </a>
                         <i class="fas fa-arrow-right text-muted"></i>
                     </div>
@@ -305,16 +340,15 @@
         {% endif %}
 
         <!-- CARTE 7: SCORE GLOBAL -->
-        <div class="col-xl-3 col-md-6 mb-4 fade-in" style="animation-delay: 0.7s;">
+        <div class="col-xl-3 col-md-6 mb-4 fade-in">
             <div class="fk-card clickable-card" onclick="location.href='{{ url_for('dashboard_risques') if url_exists('dashboard_risques') else '#' }}'">
                 <div class="fk-card-header" style="background: linear-gradient(135deg, #0ea5e9 0%, #0369a1 100%);">
                     <div class="d-flex justify-content-between align-items-center">
                         <div>
-                            <h6 class="mb-2 text-white-75">SCORE GLOBAL</h6>
+                            <h6 class="mb-2 text-white-75">SCORE NET MOYEN</h6>
                             <h2 class="mb-0 text-white fw-bold">{{ score_risque_moyen|default(0) }}/25</h2>
                             <small class="text-white-90">
-                                <i class="fas fa-chart-line me-1"></i>
-                                {{ tendance_globale|default('stable')|title }}
+                                <i class="fas fa-chart-line me-1"></i>{{ tendance_globale|default('stable')|title }}
                             </small>
                         </div>
                         <div class="icon-circle bg-white-20">
@@ -323,22 +357,17 @@
                     </div>
                 </div>
                 <div class="fk-card-body">
-                    <div class="score-progress">
-                        <div class="d-flex justify-content-between mb-1">
-                            <small class="text-muted">Niveau de risque</small>
-                            <small class="fw-semibold" style="color: var(--fk-accent);">
-                                {{ score_risque_moyen|default(0) }}/25
-                            </small>
-                        </div>
-                        <div class="progress" style="height: 8px; border-radius: 4px; background: var(--bs-gray-300);">
-                            <div class="progress-bar bg-gradient-info" 
-                                 style="width: {{ (score_risque_moyen|default(0) / 25 * 100)|round(1) }}%; border-radius: 4px;"></div>
-                        </div>
+                    <div class="d-flex justify-content-between mb-1">
+                        <small class="text-muted">Niveau de risque résiduel</small>
+                        <small class="fw-semibold" style="color: var(--fk-accent);">{{ score_risque_moyen|default(0) }}/25</small>
+                    </div>
+                    <div class="progress" style="height: 8px;">
+                        <div class="progress-bar bg-gradient-info"
+                             style="width: {{ (score_risque_moyen|default(0) / 25 * 100)|round(1) }}%;"></div>
                     </div>
                     <div class="mt-3 d-flex justify-content-between align-items-center">
                         <span class="badge fk-badge fk-badge-primary">
-                            <i class="fas fa-chart-line me-1"></i>
-                            Vue d'ensemble
+                            <i class="fas fa-chart-line me-1"></i>Vue d'ensemble
                         </span>
                         <i class="fas fa-arrow-right text-muted"></i>
                     </div>
@@ -346,18 +375,17 @@
             </div>
         </div>
 
-        <!-- CARTE 8: CAMPAGNES DE CONTRÔLE -->
+        <!-- CARTE 8: CAMPAGNES -->
         {% if current_user.has_permission('can_manage_campaigns') or current_user.is_client_admin or current_user.role == 'super_admin' %}
-        <div class="col-xl-3 col-md-6 mb-4 fade-in" style="animation-delay: 0.8s;">
+        <div class="col-xl-3 col-md-6 mb-4 fade-in">
             <div class="fk-card clickable-card" onclick="location.href='{{ url_for('liste_campagnes_controle') }}'">
                 <div class="fk-card-header" style="background: linear-gradient(135deg, #8b5cf6 0%, #6d28d9 100%);">
                     <div class="d-flex justify-content-between align-items-center">
                         <div>
-                            <h6 class="mb-2 text-white-75">CAMPAGNES DE CONTRÖLE</h6>
+                            <h6 class="mb-2 text-white-75">CAMPAGNES</h6>
                             <h2 class="mb-0 text-white fw-bold">{{ stats_campagnes.total|default(0) }}</h2>
                             <small class="text-white-90">
-                                <i class="fas fa-play me-1"></i>
-                                {{ stats_campagnes.en_cours|default(0) }} en cours
+                                <i class="fas fa-play me-1"></i>{{ stats_campagnes.en_cours|default(0) }} en cours
                             </small>
                         </div>
                         <div class="icon-circle bg-white-20">
@@ -366,22 +394,17 @@
                     </div>
                 </div>
                 <div class="fk-card-body">
-                    <div class="campagne-progress">
-                        <div class="d-flex justify-content-between mb-1">
-                            <small class="text-muted">Taux de conformité moyen</small>
-                            <small class="fw-semibold" style="color: var(--fk-accent);">
-                                {{ stats_campagnes.taux_moyen|default(0) }}%
-                            </small>
-                        </div>
-                        <div class="progress" style="height: 8px; border-radius: 4px; background: var(--bs-gray-300);">
-                            <div class="progress-bar bg-gradient-info" 
-                                 style="width: {{ stats_campagnes.taux_moyen|default(0) }}%; border-radius: 4px;"></div>
-                        </div>
+                    <div class="d-flex justify-content-between mb-1">
+                        <small class="text-muted">Conformité moyenne</small>
+                        <small class="fw-semibold" style="color: var(--fk-accent);">{{ stats_campagnes.taux_moyen|default(0) }}%</small>
+                    </div>
+                    <div class="progress" style="height: 8px;">
+                        <div class="progress-bar bg-gradient-info"
+                             style="width: {{ stats_campagnes.taux_moyen|default(0) }}%;"></div>
                     </div>
                     <div class="mt-3 d-flex justify-content-between align-items-center">
-                        <span class="badge fk-badge" style="background: linear-gradient(135deg, #8b5cf6 0%, #6d28d9 100%); color: white;">
-                            <i class="fas fa-check-double me-1"></i>
-                            {{ stats_campagnes.termine|default(0) }} terminées
+                        <span class="badge fk-badge fk-badge-primary">
+                            <i class="fas fa-check-double me-1"></i>{{ stats_campagnes.termine|default(0) }} terminées
                         </span>
                         <i class="fas fa-arrow-right text-muted"></i>
                     </div>
@@ -389,114 +412,197 @@
             </div>
         </div>
         {% endif %}
-        
+
     </div>
 
     <!-- ========================================================== -->
-    <!-- SECTION PRINCIPALE: GRAPHIQUES + ALERTES                   -->
+    <!-- SECTION PRINCIPALE                                         -->
     <!-- ========================================================== -->
     <div class="row">
-        <!-- Section gauche : Graphiques et Alertes -->
+
+        <!-- COLONNE GAUCHE -->
         <div class="col-lg-8">
-            <!-- Graphique de répartition des risques -->
+
+            <!-- GRAPHIQUE RÉPARTITION NET -->
             <div class="fk-card mb-4 fade-in">
                 <div class="fk-card-header" style="background: var(--primary-gradient);">
                     <div class="d-flex justify-content-between align-items-center">
                         <h5 class="mb-0 text-white">
                             <i class="fas fa-chart-pie me-2"></i>
-                            Répartition des Risques
+                            Répartition des Risques (NET)
                         </h5>
                         <div class="btn-group btn-group-sm">
-                            <button class="btn btn-sm btn-outline-light active" onclick="changerVueGraphique('doughnut')">
+                            <button class="btn btn-sm btn-outline-light active" onclick="changerVueGraphique('doughnut', event)">
                                 <i class="fas fa-chart-pie"></i>
                             </button>
-                            <button class="btn btn-sm btn-outline-light ms-1" onclick="changerVueGraphique('bar')">
+                            <button class="btn btn-sm btn-outline-light ms-1" onclick="changerVueGraphique('bar', event)">
                                 <i class="fas fa-chart-bar"></i>
                             </button>
                         </div>
                     </div>
                 </div>
                 <div class="fk-card-body">
-                    <div class="chart-container" style="height: 300px;">
+                    <div class="chart-container" style="height: 300px; position: relative;">
                         <canvas id="riskChart"></canvas>
                     </div>
+
+                    <!-- LÉGENDE COULEURS -->
                     <div class="text-center mt-4">
-                        <div class="row">
-                            <div class="col-3">
+                        <div class="row g-2">
+                            <div class="col-6 col-md-3">
                                 <div class="d-flex align-items-center justify-content-center">
-                                    <div class="legend-dot me-2" style="background: #28a745;"></div>
-                                    <small class="text-muted">Faible: {{ risques_faibles|default(0) }}</small>
+                                    <div class="legend-dot me-2" style="background: #10b981;"></div>
+                                    <small class="text-muted">
+                                        Faible: <strong>{{ risques_faibles|default(0) }}</strong>
+                                    </small>
                                 </div>
                             </div>
-                            <div class="col-3">
+                            <div class="col-6 col-md-3">
                                 <div class="d-flex align-items-center justify-content-center">
-                                    <div class="legend-dot me-2" style="background: #ffc107;"></div>
-                                    <small class="text-muted">Moyen: {{ risques_moyens|default(0) }}</small>
+                                    <div class="legend-dot me-2" style="background: #f59e0b;"></div>
+                                    <small class="text-muted">
+                                        Moyen: <strong>{{ risques_moyens|default(0) }}</strong>
+                                    </small>
                                 </div>
                             </div>
-                            <div class="col-3">
+                            <div class="col-6 col-md-3">
                                 <div class="d-flex align-items-center justify-content-center">
-                                    <div class="legend-dot me-2" style="background: #fd7e14;"></div>
-                                    <small class="text-muted">Élevé: {{ risques_eleves|default(0) }}</small>
+                                    <div class="legend-dot me-2" style="background: #ef4444;"></div>
+                                    <small class="text-muted">
+                                        Élevé: <strong>{{ risques_eleves|default(0) }}</strong>
+                                    </small>
                                 </div>
                             </div>
-                            <div class="col-3">
+                            <div class="col-6 col-md-3">
                                 <div class="d-flex align-items-center justify-content-center">
-                                    <div class="legend-dot me-2" style="background: #dc3545;"></div>
-                                    <small class="text-muted">Critique: {{ risques_critiques_count|default(0) }}</small>
+                                    <div class="legend-dot me-2" style="background: #dc2626;"></div>
+                                    <small class="text-danger fw-bold">
+                                        Critique: <strong>{{ risques_critiques_count|default(0) }}</strong>
+                                    </small>
                                 </div>
                             </div>
+                        </div>
+
+                        {% if risques_critiques_n_moins_1 and risques_critiques_n_moins_1 > 0 %}
+                        <div class="row mt-2">
+                            <div class="col-12">
+                                <div class="d-flex align-items-center justify-content-center">
+                                    <div class="legend-dot me-2" style="background: #f59e0b; border: 2px dashed #d97706;"></div>
+                                    <small class="text-warning fw-bold">
+                                        Critique N-1 (à réévaluer): <strong>{{ risques_critiques_n_moins_1 }}</strong>
+                                    </small>
+                                </div>
+                            </div>
+                        </div>
+                        {% endif %}
+
+                        <div class="mt-3 text-muted small">
+                            <i class="fas fa-info-circle me-1"></i>
+                            Basé sur le niveau <strong>NET</strong> (après application des dispositifs de maîtrise)
                         </div>
                     </div>
                 </div>
             </div>
 
-            <!-- Alertes urgentes -->
+            <!-- ALERTES URGENTES -->
             <div class="fk-card mb-4 fade-in">
-                <div class="fk-card-header d-flex justify-content-between align-items-center" 
-                     style="{% if (risques_critiques_count|default(0) > 0) or (actions_retardees|default(0) > 0) or (kri_alertes|default(0) > 0) %}background: linear-gradient(135deg, #dc2626 0%, #b91c1c 100%){% else %}background: linear-gradient(135deg, #10b981 0%, #059669 100%){% endif %}">
+                <div class="fk-card-header d-flex justify-content-between align-items-center"
+                     style="{% if total_critiques > 0 or actions_retardees > 0 or kri_alertes > 0 %}background: linear-gradient(135deg, #dc2626 0%, #b91c1c 100%){% else %}background: linear-gradient(135deg, #10b981 0%, #059669 100%){% endif %}">
                     <h5 class="mb-0 text-white">
                         <i class="fas fa-bell me-2"></i>
-                        {% if (risques_critiques_count|default(0) > 0) or (actions_retardees|default(0) > 0) or (kri_alertes|default(0) > 0) %}
+                        {% if total_critiques > 0 or actions_retardees > 0 or kri_alertes > 0 %}
                         Alertes Requérant une Attention
                         {% else %}
                         Statut du Système
                         {% endif %}
                     </h5>
-                    {% if (risques_critiques_count|default(0) > 0) or (actions_retardees|default(0) > 0) %}
+                    {% if total_critiques > 0 or actions_retardees > 0 or kri_alertes > 0 %}
                     <span class="badge bg-white text-dark fw-bold">
-                        {{ risques_critiques_count|default(0) + (actions_retardees|default(0) if actions_retardees|default(0) > 0 else 0) + (kri_alertes|default(0) if kri_alertes|default(0) > 0 else 0) }}
+                        {{ total_critiques + (actions_retardees or 0) + (kri_alertes or 0) }}
                     </span>
                     {% endif %}
                 </div>
                 <div class="fk-card-body">
-                    {% if risques_critiques_count|default(0) > 0 %}
+
+                    {# ========== RISQUES CRITIQUES (NET) ========== #}
+                    {% if total_critiques > 0 %}
                     <div class="fk-alert fk-alert-error mb-3">
                         <i class="fas fa-fire fa-lg"></i>
                         <div class="flex-grow-1">
-                            <h6 class="mb-1">{{ risques_critiques_count|default(0) }} Risque(s) Critique(s)</h6>
-                            <p class="mb-2">Nécessitent une action immédiate</p>
-                            <div class="risk-tags">
+                            <h6 class="mb-1">
+                                {{ total_critiques }} Risque(s) Critique(s) NET
+                            </h6>
+                            <p class="mb-2 small text-muted">
+                                Score NET ≥ 17/25 après application des contrôles
+                            </p>
+
+                            <div class="critiques-list mt-2">
                                 {% for item in risques_critiques|default([]) %}
-                                <a href="{{ url_for('detail_risque', id=item.risque.id) }}" 
-                                   class="badge bg-danger me-1 mb-1 text-decoration-none">
-                                    {{ item.risque.reference }} ({{ item.risque.cartographie.nom|truncate(15) }})
-                                </a>
+                                <div class="critique-item mb-2 p-2 rounded"
+                                     style="background: {% if item.est_revaluation %}rgba(245, 158, 11, 0.08){% else %}rgba(220, 38, 38, 0.05){% endif %};
+                                            border-left: 3px solid {% if item.est_revaluation %}#f59e0b{% else %}#dc2626{% endif %};">
+
+                                    <div class="d-flex justify-content-between align-items-start">
+                                        <div class="flex-grow-1">
+                                            <a href="{{ url_for('detail_risque', id=item.risque.id) }}"
+                                               class="fw-bold text-decoration-none"
+                                               style="color: {% if item.est_revaluation %}#d97706{% else %}#dc2626{% endif %};">
+                                                {{ item.risque.reference }}
+                                            </a>
+                                            <span class="text-muted small ms-2">
+                                                {{ item.risque.intitule|truncate(40) }}
+                                            </span>
+
+                                            {# Badge distinction #}
+                                            {% if item.est_revaluation %}
+                                            <span class="badge bg-warning text-dark ms-2" style="font-size: 0.6rem;">
+                                                <i class="fas fa-redo me-1"></i>N-1 à réévaluer
+                                            </span>
+                                            {% else %}
+                                            <span class="badge bg-danger ms-2" style="font-size: 0.6rem;">
+                                                <i class="fas fa-fire me-1"></i>Campagne active
+                                            </span>
+                                            {% endif %}
+
+                                            {% if item.campagne_nom %}
+                                            <div class="text-muted small mt-1" style="font-size: 0.7rem;">
+                                                <i class="fas fa-campground me-1"></i>{{ item.campagne_nom }}
+                                            </div>
+                                            {% endif %}
+                                        </div>
+
+                                        <div class="text-end">
+                                            <span class="badge {% if item.est_revaluation %}bg-warning text-dark{% else %}bg-danger{% endif %}">
+                                                NET {{ '%.1f'|format(item.score_net) }}
+                                            </span>
+                                            {% if item.score_brut and item.score_brut != item.score_net %}
+                                            <div class="small text-muted mt-1" style="font-size: 0.65rem;">
+                                                BRUT {{ '%.1f'|format(item.score_brut) }}
+                                                {% if item.taux_reduction and item.taux_reduction > 0 %}
+                                                <span class="text-success">(−{{ (item.taux_reduction * 100)|int }}%)</span>
+                                                {% endif %}
+                                            </div>
+                                            {% endif %}
+                                        </div>
+                                    </div>
+                                </div>
                                 {% endfor %}
                             </div>
                         </div>
-                        <a href="{{ url_for('liste_cartographies') }}" class="fk-btn fk-btn-outline btn-sm">
+                        <a href="{{ url_for('dashboard_risques', niveau='critique') }}"
+                           class="fk-btn fk-btn-outline btn-sm">
                             Voir <i class="fas fa-arrow-right ms-1"></i>
                         </a>
                     </div>
                     {% endif %}
 
-                    {% if kri_alertes|default(0) > 0 %}
+                    {# ========== KRI ALERTES ========== #}
+                    {% if kri_alertes > 0 %}
                     <div class="fk-alert fk-alert-warning mb-3">
                         <i class="fas fa-chart-line fa-lg"></i>
                         <div class="flex-grow-1">
-                            <h6 class="mb-1">{{ kri_alertes|default(0) }} KRI en Alerte</h6>
-                            <p class="mb-2">Indicateurs dépassant les seuils critiques</p>
+                            <h6 class="mb-1">{{ kri_alertes }} KRI en Alerte</h6>
+                            <p class="mb-0 small text-muted">Indicateurs dépassant les seuils critiques</p>
                         </div>
                         <a href="{{ url_for('liste_kri') }}" class="fk-btn fk-btn-outline btn-sm">
                             Voir <i class="fas fa-arrow-right ms-1"></i>
@@ -504,13 +610,13 @@
                     </div>
                     {% endif %}
 
-                    {% if actions_retardees|default(0) > 0 %}
+                    {# ========== ACTIONS RETARDÉES ========== #}
+                    {% if actions_retardees > 0 %}
                     <div class="fk-alert fk-alert-warning">
                         <i class="fas fa-clock fa-lg"></i>
                         <div class="flex-grow-1">
-                            <h6 class="mb-1">{{ actions_retardees|default(0) }} Action(s) en Retard</h6>
-                            <p class="mb-0">Dépassement des délais de conformité</p>
-                            <small class="text-muted">Actions associées aux veilles actives non archivées</small>
+                            <h6 class="mb-1">{{ actions_retardees }} Action(s) en Retard</h6>
+                            <p class="mb-0 small text-muted">Dépassement des délais de conformité</p>
                         </div>
                         <a href="{{ url_for('veille_reglementaire') }}" class="fk-btn fk-btn-outline btn-sm">
                             Voir <i class="fas fa-arrow-right ms-1"></i>
@@ -518,11 +624,10 @@
                     </div>
                     {% endif %}
 
-                    {% if (risques_critiques_count|default(0) == 0) and (actions_retardees|default(0) == 0) and (kri_alertes|default(0) == 0) %}
+                    {# ========== TOUT OK ========== #}
+                    {% if total_critiques == 0 and actions_retardees == 0 and kri_alertes == 0 %}
                     <div class="text-center py-4">
-                        <div class="mb-3">
-                            <i class="fas fa-check-circle fa-4x" style="color: var(--fk-success);"></i>
-                        </div>
+                        <i class="fas fa-check-circle fa-4x text-success mb-3"></i>
                         <h5 class="text-success mb-2">Système sous contrôle</h5>
                         <p class="text-muted mb-0">Tous les indicateurs sont dans les normes</p>
                     </div>
@@ -531,205 +636,64 @@
             </div>
         </div>
 
-        <!-- Section droite : Actions rapides et Vue d'ensemble -->
+        <!-- COLONNE DROITE -->
         <div class="col-lg-4">
-            <!-- Actions rapides -->
+
+            <!-- ACTIONS RAPIDES -->
             <div class="fk-card mb-4 fade-in">
                 <div class="fk-card-header" style="background: var(--accent-gradient);">
                     <h5 class="mb-0 text-white">
-                        <i class="fas fa-bolt me-2"></i>
-                        Actions Rapides
+                        <i class="fas fa-bolt me-2"></i>Actions Rapides
                     </h5>
                 </div>
                 <div class="fk-card-body">
                     <div class="d-grid gap-2">
                         {% if current_user.has_permission('can_manage_risks') or current_user.is_client_admin or current_user.role == 'super_admin' %}
                         <a href="{{ url_for('nouvelle_cartographie') }}" class="fk-btn fk-btn-primary">
-                            <i class="fas fa-map me-2"></i>
-                            Nouvelle Cartographie
-                        </a>
-                        <a href="{{ url_for('choisir_cartographie_risque') if url_exists('choisir_cartographie_risque') else '#' }}" class="fk-btn fk-btn-outline">
-                            <i class="fas fa-exclamation-triangle me-2"></i>
-                            Nouveau Risque
+                            <i class="fas fa-map me-2"></i>Nouvelle Cartographie
                         </a>
                         {% endif %}
-                        
-                        {% if current_user.has_permission('can_manage_logigram') or current_user.is_client_admin or current_user.role == 'super_admin' %}
-                        <a href="{{ url_for('nouveau_logigramme') }}" class="fk-btn fk-btn-outline">
-                            <i class="fas fa-project-diagram me-2"></i>
-                            Nouveau Logigramme
-                        </a>
-                        {% endif %}
-                        
-                        {% if current_user.has_permission('can_manage_regulatory') or current_user.is_client_admin or current_user.role == 'super_admin' %}
-                        <a href="{{ url_for('nouvelle_veille') }}" class="fk-btn fk-btn-outline">
-                            <i class="fas fa-balance-scale me-2"></i>
-                            Nouvelle Veille
-                        </a>
-                        {% endif %}
-                        
-                        {% if current_user.has_permission('can_manage_incidents') or current_user.is_client_admin or current_user.role == 'super_admin' %}
-                        <a href="{{ url_for('nouvel_incident') }}" class="fk-btn fk-btn-outline">
-                            <i class="fas fa-exclamation-triangle me-2"></i>
-                            Déclarer un incident
-                        </a>
-                        {% endif %}
-                        
+
                         {% if current_user.has_permission('can_manage_campaigns') or current_user.is_client_admin or current_user.role == 'super_admin' %}
                         <a href="{{ url_for('nouvelle_campagne_controle') }}" class="fk-btn fk-btn-outline">
-                            <i class="fas fa-clipboard-list me-2"></i>
-                            Nouvelle Campagne
+                            <i class="fas fa-clipboard-list me-2"></i>Nouvelle Campagne
                         </a>
                         {% endif %}
                     </div>
                 </div>
             </div>
 
-            <!-- Vue d'ensemble des indicateurs -->
-            <div class="fk-card mb-4 fade-in">
-                <div class="fk-card-header" style="background: linear-gradient(135deg, #6B7280 0%, #4B5563 100%);">
-                    <h5 class="mb-0 text-white">
-                        <i class="fas fa-chart-line me-2"></i>
-                        Indicateurs Clés
-                    </h5>
-                </div>
-                <div class="fk-card-body">
-                    <div class="indicator-list">
-                        <div class="indicator-item d-flex justify-content-between align-items-center mb-3 p-2 rounded hover-light">
-                            <div class="d-flex align-items-center">
-                                <div class="indicator-icon me-3">
-                                    <i class="fas fa-trend-up" style="color: var(--fk-success);"></i>
-                                </div>
-                                <div>
-                                    <div class="fw-semibold">Tendance Globale</div>
-                                    <small class="text-muted">Évolution des risques</small>
-                                </div>
-                            </div>
-                            <span class="badge fk-badge" 
-                                  style="background: {% if couleur_tendance|default('success') == 'success' %}linear-gradient(135deg, var(--fk-success) 0%, #10b981 100%){% elif couleur_tendance|default('success') == 'warning' %}linear-gradient(135deg, var(--fk-warning) 0%, #D97706 100%){% else %}linear-gradient(135deg, var(--fk-error) 0%, #b91c1c 100%){% endif %}; color: white;">
-                                {{ tendance_globale|default('stable')|title }}
-                            </span>
-                        </div>
-
-                        <div class="indicator-item d-flex justify-content-between align-items-center mb-3 p-2 rounded hover-light">
-                            <div class="d-flex align-items-center">
-                                <div class="indicator-icon me-3">
-                                    <i class="fas fa-calculator" style="color: var(--fk-accent);"></i>
-                                </div>
-                                <div>
-                                    <div class="fw-semibold">Score Moyen</div>
-                                    <small class="text-muted">Niveau de risque moyen</small>
-                                </div>
-                            </div>
-                            <span class="badge fk-badge fk-badge-primary">{{ score_risque_moyen|default(0) }}</span>
-                        </div>
-
-                        <div class="indicator-item d-flex justify-content-between align-items-center mb-3 p-2 rounded hover-light">
-                            <div class="d-flex align-items-center">
-                                <div class="indicator-icon me-3">
-                                    <i class="fas fa-bell" style="color: var(--fk-warning);"></i>
-                                </div>
-                                <div>
-                                    <div class="fw-semibold">KRI en Alerte</div>
-                                    <small class="text-muted">Indicateurs dépassés</small>
-                                </div>
-                            </div>
-                            <span class="badge fk-badge fk-badge-warning">{{ kri_alertes|default(0) }}</span>
-                        </div>
-
-                        <div class="indicator-item d-flex justify-content-between align-items-center mb-3 p-2 rounded hover-light">
-                            <div class="d-flex align-items-center">
-                                <div class="indicator-icon me-3">
-                                    <i class="fas fa-ticket-alt" style="color: var(--fk-purple);"></i>
-                                </div>
-                                <div>
-                                    <div class="fw-semibold">Tickets Support</div>
-                                    <small class="text-muted">En attente de traitement</small>
-                                </div>
-                            </div>
-                            <span class="badge fk-badge" style="background: linear-gradient(135deg, #8b5cf6 0%, #6d28d9 100%); color: white;">
-                                {{ tickets_nouveaux|default(0) }}
-                            </span>
-                        </div>
-
-                        <div class="indicator-item d-flex justify-content-between align-items-center mb-3 p-2 rounded hover-light">
-                            <div class="d-flex align-items-center">
-                                <div class="indicator-icon me-3">
-                                    <i class="fas fa-balance-scale" style="color: var(--fk-blue);"></i>
-                                </div>
-                                <div>
-                                    <div class="fw-semibold">Veilles Actives</div>
-                                    <small class="text-muted">En vigueur et non archivées</small>
-                                </div>
-                            </div>
-                            <span class="badge fk-badge fk-badge-primary">{{ veilles_actives|default(0) }}</span>
-                        </div>
-                        
-                        {% if current_user.has_permission('can_manage_campaigns') or current_user.is_client_admin or current_user.role == 'super_admin' %}
-                        <div class="indicator-item d-flex justify-content-between align-items-center p-2 rounded hover-light">
-                            <div class="d-flex align-items-center">
-                                <div class="indicator-icon me-3">
-                                    <i class="fas fa-clipboard-list" style="color: #8b5cf6;"></i>
-                                </div>
-                                <div>
-                                    <div class="fw-semibold">Campagnes</div>
-                                    <small class="text-muted">En cours / Terminées</small>
-                                </div>
-                            </div>
-                            <span class="badge fk-badge" style="background: linear-gradient(135deg, #8b5cf6 0%, #6d28d9 100%); color: white;">
-                                {{ stats_campagnes.en_cours|default(0) }}/{{ stats_campagnes.termine|default(0) }}
-                            </span>
-                        </div>
-                        {% endif %}
-                    </div>
-                </div>
-            </div>
-
-            <!-- Cartographies récentes -->
+            <!-- CARTOS RÉCENTES -->
             <div class="fk-card fade-in">
                 <div class="fk-card-header" style="background: linear-gradient(135deg, var(--fk-success) 0%, #059669 100%);">
                     <h5 class="mb-0 text-white">
-                        <i class="fas fa-map-marked-alt me-2"></i>
-                        Cartographies Récentes
+                        <i class="fas fa-map-marked-alt me-2"></i>Cartographies Récentes
                     </h5>
                 </div>
                 <div class="fk-card-body">
                     {% if cartographies %}
-                    <div class="cartographie-list">
-                        {% for item in cartographies %}
-                        {% set cartographie = item.cartographie %}
-                        <div class="cartographie-item mb-3 p-3 border rounded hover-light" style="border-color: var(--bs-border-color) !important;">
-                            <div class="d-flex justify-content-between align-items-start mb-2">
-                                <h6 class="mb-0 fw-semibold" style="color: var(--bs-body-color);">
-                                    {{ cartographie.nom|truncate(25) }}
-                                </h6>
-                                <span class="badge fk-badge fk-badge-success">{{ item.nb_risques_actifs }} risques</span>
-                            </div>
-                            <p class="text-muted small mb-2">
-                                {{ cartographie.description|truncate(60) if cartographie.description else 'Aucune description' }}
-                            </p>
-                            <div class="d-flex justify-content-between align-items-center">
-                                <small class="text-muted">
-                                    <i class="fas fa-building me-1"></i>
-                                    {{ cartographie.direction.nom if cartographie.direction else 'Non assigné' }}
-                                </small>
-                                <a href="{{ url_for('detail_cartographie', id=cartographie.id) }}" 
-                                   class="btn btn-sm fk-btn-outline">
-                                    <i class="fas fa-arrow-right"></i>
-                                </a>
-                            </div>
+                    {% for item in cartographies %}
+                    <div class="cartographie-item mb-3 p-3 border rounded">
+                        <div class="d-flex justify-content-between align-items-start mb-2">
+                            <h6 class="mb-0 fw-semibold">{{ item.cartographie.nom|truncate(25) }}</h6>
+                            <span class="badge fk-badge fk-badge-success">{{ item.nb_risques_actifs }} risques</span>
                         </div>
-                        {% endfor %}
+                        <div class="d-flex justify-content-between align-items-center">
+                            <small class="text-muted">
+                                <i class="fas fa-building me-1"></i>
+                                {{ item.cartographie.direction.nom if item.cartographie.direction else 'Non assigné' }}
+                            </small>
+                            <a href="{{ url_for('detail_cartographie', id=item.cartographie.id) }}"
+                               class="btn btn-sm fk-btn-outline">
+                                <i class="fas fa-arrow-right"></i>
+                            </a>
+                        </div>
                     </div>
+                    {% endfor %}
                     {% else %}
                     <div class="text-center py-4">
-                        <div class="mb-3">
-                            <i class="fas fa-map fa-3x" style="color: var(--bs-secondary-color);"></i>
-                        </div>
-                        <h6 class="text-muted mb-2">Aucune cartographie</h6>
-                        <a href="{{ url_for('nouvelle_cartographie') }}" class="fk-btn fk-btn-outline btn-sm">
-                            Créer la première
-                        </a>
+                        <i class="fas fa-map fa-3x text-muted mb-3"></i>
+                        <h6 class="text-muted">Aucune cartographie</h6>
                     </div>
                     {% endif %}
                 </div>
@@ -743,58 +707,84 @@
 <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 <script>
 // ============================================
-// DONNÉES POUR LE GRAPHIQUE
+// DONNÉES GRAPHIQUE (6 catégories)
 // ============================================
 const riskData = {
     faible: {{ risques_faibles|default(0) }},
     moyen: {{ risques_moyens|default(0) }},
     eleve: {{ risques_eleves|default(0) }},
-    critique: {{ risques_critiques_count|default(0) }}
+    critique: {{ risques_critiques_count|default(0) }},
+    critique_n_moins_1: {{ risques_critiques_n_moins_1|default(0) }}
 };
 
 let riskChart;
+let chartType = 'doughnut';
 
 // ============================================
 // INITIALISATION DU GRAPHIQUE
 // ============================================
 function initialiserGraphique(type = 'doughnut') {
     const ctx = document.getElementById('riskChart').getContext('2d');
-    
+
     if (riskChart) {
         riskChart.destroy();
     }
-    
-    const data = {
-        labels: ['Faible', 'Moyen', 'Élevé', 'Critique'],
-        datasets: [{
-            data: [riskData.faible, riskData.moyen, riskData.eleve, riskData.critique],
-            backgroundColor: ['#10b981', '#f59e0b', '#ef4444', '#7f1d1d'],
-            borderWidth: 2,
-            borderColor: '#fff',
-            hoverOffset: 15
-        }]
-    };
 
-    const options = {
+    // 🔥 5 catégories : les 2 critiques sont distinguées
+    const labels = [
+        'Faible',
+        'Moyen',
+        'Élevé',
+        'Critique (active)',
+        'Critique N-1'
+    ];
+
+    const data = [
+        riskData.faible,
+        riskData.moyen,
+        riskData.eleve,
+        riskData.critique,
+        riskData.critique_n_moins_1
+    ];
+
+    // 🔥 COULEURS — Critique en ROUGE
+    const colors = [
+        '#10b981',      // Faible — vert
+        '#f59e0b',      // Moyen — jaune
+        '#ef4444',      // Élevé — rouge clair
+        '#dc2626',      // Critique active — ROUGE FONCÉ
+        '#f59e0b'       // Critique N-1 — orange (distinction)
+    ];
+
+    const borders = [
+        '#ffffff',
+        '#ffffff',
+        '#ffffff',
+        '#ffffff',
+        '#dc2626'       // Bordure rouge pour N-1 (dashed visuel)
+    ];
+
+    const commonOptions = {
         responsive: true,
         maintainAspectRatio: false,
-        cutout: type === 'doughnut' ? '70%' : 0,
         plugins: {
-            legend: { display: false },
+            legend: {
+                display: false        // Désactivé : la légende est affichée en HTML
+            },
             tooltip: {
                 backgroundColor: 'rgba(10, 25, 41, 0.95)',
                 titleColor: '#fff',
                 bodyColor: '#fff',
-                borderColor: 'var(--fk-accent)',
+                borderColor: '#dc2626',
                 borderWidth: 1,
                 cornerRadius: 8,
+                padding: 10,
                 callbacks: {
                     label: function(context) {
-                        const label = context.label || '';
                         const value = context.raw || 0;
-                        const total = context.dataset.data.reduce((a, b) => a + b, 0);
-                        const percentage = total > 0 ? Math.round((value / total) * 100) : 0;
-                        return `${label}: ${value} risques (${percentage}%)`;
+                        const total = data.reduce((a, b) => a + b, 0);
+                        const pct = total > 0 ? Math.round((value / total) * 100) : 0;
+                        return ` ${context.label}: ${value} risque(s) — ${pct}%`;
                     }
                 }
             }
@@ -809,41 +799,68 @@ function initialiserGraphique(type = 'doughnut') {
         riskChart = new Chart(ctx, {
             type: 'bar',
             data: {
-                labels: ['Faible', 'Moyen', 'Élevé', 'Critique'],
+                labels: labels,
                 datasets: [{
                     label: 'Nombre de risques',
-                    data: [riskData.faible, riskData.moyen, riskData.eleve, riskData.critique],
-                    backgroundColor: ['#10b981', '#f59e0b', '#ef4444', '#7f1d1d'],
-                    borderRadius: 6,
-                    borderWidth: 0
+                    data: data,
+                    backgroundColor: colors,
+                    borderColor: borders,
+                    borderWidth: 2,
+                    borderRadius: 6
                 }]
             },
             options: {
-                ...options,
+                ...commonOptions,
                 scales: {
                     y: {
                         beginAtZero: true,
-                        grid: { color: 'rgba(0, 0, 0, 0.05)' },
-                        ticks: { stepSize: 1 }
+                        ticks: { stepSize: 1 },
+                        grid: { color: 'rgba(0,0,0,0.05)' }
                     },
-                    x: { grid: { display: false } }
+                    x: {
+                        grid: { display: false },
+                        ticks: { font: { size: 11 } }
+                    }
                 }
             }
         });
     } else {
-        riskChart = new Chart(ctx, { type: 'doughnut', data: data, options: options });
+        riskChart = new Chart(ctx, {
+            type: 'doughnut',
+            data: {
+                labels: labels,
+                datasets: [{
+                    data: data,
+                    backgroundColor: colors,
+                    borderColor: '#ffffff',
+                    borderWidth: 3,
+                    hoverOffset: 15
+                }]
+            },
+            options: {
+                ...commonOptions,
+                cutout: '65%'
+            }
+        });
     }
 }
 
-function changerVueGraphique(type) {
+// ============================================
+// CHANGER TYPE DE GRAPHIQUE
+// ============================================
+function changerVueGraphique(type, event) {
+    chartType = type;
     initialiserGraphique(type);
-    const buttons = event.target.closest('.btn-group').querySelectorAll('.btn');
-    buttons.forEach(btn => btn.classList.remove('active'));
-    event.target.classList.add('active');
+
+    const btnGroup = event.target.closest('.btn-group');
+    if (btnGroup) {
+        btnGroup.querySelectorAll('.btn').forEach(btn => btn.classList.remove('active'));
+        event.target.classList.add('active');
+    }
 }
 
 // ============================================
-// ACTIONS DU DASHBOARD
+// ACTIONS DASHBOARD
 // ============================================
 function actualiserDonnees() {
     const btn = event.target.closest('.fk-btn');
@@ -854,115 +871,66 @@ function actualiserDonnees() {
 }
 
 function exporterDashboard() {
-    const exportModal = `
-        <div class="modal fade" id="exportModal" tabindex="-1">
-            <div class="modal-dialog modal-sm">
-                <div class="modal-content">
-                    <div class="modal-header">
-                        <h5 class="modal-title">Format d'export</h5>
-                        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
-                    </div>
-                    <div class="modal-body">
-                        <div class="d-grid gap-2">
-                            <button class="fk-btn fk-btn-primary" onclick="telechargerExport('pdf')">
-                                <i class="fas fa-file-pdf me-2"></i>PDF Complet
-                            </button>
-                            <button class="fk-btn fk-btn-outline" onclick="telechargerExport('csv')">
-                                <i class="fas fa-file-csv me-2"></i>CSV Analytique
-                            </button>
-                        </div>
-                    </div>
-                </div>
-            </div>
-        </div>
-    `;
-    
-    if (!document.getElementById('exportModal')) {
-        document.body.insertAdjacentHTML('beforeend', exportModal);
-    }
-    const modal = new bootstrap.Modal(document.getElementById('exportModal'));
-    modal.show();
-}
-
-function telechargerExport(format) {
-    const modal = bootstrap.Modal.getInstance(document.getElementById('exportModal'));
-    modal.hide();
-    const url = `/export/dashboard?format=${format}`;
-    window.open(url, '_blank');
-    showToast(`Export ${format.toUpperCase()} lancé avec succès`, 'success');
+    showToast('Export en cours de préparation...', 'info');
+    setTimeout(() => {
+        window.open('/export/dashboard', '_blank');
+    }, 500);
 }
 
 // ============================================
-// NOTIFICATIONS TOAST
+// TOAST
 // ============================================
 function showToast(message, type = 'info') {
-    const toastId = 'dashboard-toast-' + Date.now();
-    const toastHtml = `
+    const toastId = 'dash-toast-' + Date.now();
+    const html = `
         <div id="${toastId}" class="toast align-items-center text-bg-${type} border-0" role="alert">
             <div class="d-flex">
                 <div class="toast-body">
-                    <i class="fas fa-${type === 'success' ? 'check-circle' : type === 'warning' ? 'exclamation-triangle' : type === 'error' ? 'exclamation-circle' : 'info-circle'} me-2"></i>
+                    <i class="fas fa-${type === 'success' ? 'check-circle' : type === 'error' ? 'exclamation-circle' : 'info-circle'} me-2"></i>
                     ${message}
                 </div>
                 <button type="button" class="btn-close btn-close-white me-2 m-auto" data-bs-dismiss="toast"></button>
             </div>
-        </div>
-    `;
-    
-    let toastContainer = document.getElementById('toast-container');
-    if (!toastContainer) {
-        toastContainer = document.createElement('div');
-        toastContainer.id = 'toast-container';
-        toastContainer.className = 'toast-container position-fixed top-0 end-0 p-3';
-        toastContainer.style.zIndex = '1060';
-        document.body.appendChild(toastContainer);
+        </div>`;
+
+    let container = document.getElementById('toast-container');
+    if (!container) {
+        container = document.createElement('div');
+        container.id = 'toast-container';
+        container.className = 'toast-container position-fixed top-0 end-0 p-3';
+        container.style.zIndex = '1060';
+        document.body.appendChild(container);
     }
-    
-    toastContainer.innerHTML += toastHtml;
-    const toastEl = document.getElementById(toastId);
-    const toast = new bootstrap.Toast(toastEl, { delay: 3000 });
-    toast.show();
-    toastEl.addEventListener('hidden.bs.toast', () => toastEl.remove());
+
+    container.insertAdjacentHTML('beforeend', html);
+    const el = document.getElementById(toastId);
+    new bootstrap.Toast(el, { delay: 3000 }).show();
+    el.addEventListener('hidden.bs.toast', () => el.remove());
 }
 
 // ============================================
 // INITIALISATION
 // ============================================
 document.addEventListener('DOMContentLoaded', function() {
-    initialiserGraphique();
-    
-    // Effets hover sur les éléments interactifs
-    document.querySelectorAll('.clickable-card, .hover-light').forEach(element => {
-        element.addEventListener('mouseenter', function() {
+    initialiserGraphique('doughnut');
+
+    // Effets hover sur les cartes
+    document.querySelectorAll('.clickable-card, .hover-light').forEach(el => {
+        el.addEventListener('mouseenter', function() {
             this.style.transform = 'translateY(-3px)';
-            this.style.boxShadow = 'var(--shadow-medium)';
-            this.style.transition = 'all 0.3s ease';
         });
-        element.addEventListener('mouseleave', function() {
+        el.addEventListener('mouseleave', function() {
             this.style.transform = 'translateY(0)';
-            this.style.boxShadow = 'var(--shadow-soft)';
         });
     });
-    
-    // Animation des cartes
-    const cards = document.querySelectorAll('.fk-card');
-    cards.forEach((card, index) => {
-        card.style.opacity = '0';
-        card.style.transform = 'translateY(20px)';
-        setTimeout(() => {
-            card.style.opacity = '1';
-            card.style.transform = 'translateY(0)';
-            card.style.transition = 'all 0.6s ease-out';
-        }, 100 * index);
-    });
-    
+
     // Date d'actualisation
     const now = new Date();
     const dateStr = now.toLocaleDateString('fr-FR', {
         weekday: 'long', year: 'numeric', month: 'long', day: 'numeric',
         hour: '2-digit', minute: '2-digit'
     });
-    const headerParagraph = document.querySelector('.container-fluid > .d-flex + .text-muted');
+    const headerParagraph = document.querySelector('.container-fluid > .d-flex p');
     if (headerParagraph) {
         headerParagraph.innerHTML += ` • <span class="text-primary fw-semibold">${dateStr}</span>`;
     }
@@ -970,6 +938,9 @@ document.addEventListener('DOMContentLoaded', function() {
 </script>
 
 <style>
+/* ============================================
+   VARIABLES
+   ============================================ */
 :root {
     --gradient-danger: linear-gradient(135deg, #dc2626 0%, #b91c1c 100%);
     --gradient-warning: linear-gradient(135deg, #f59e0b 0%, #d97706 100%);
@@ -978,18 +949,27 @@ document.addEventListener('DOMContentLoaded', function() {
     --fk-purple: #8b5cf6;
 }
 
+/* ============================================
+   CARTES
+   ============================================ */
 .fk-card {
-    transition: var(--transition-smooth);
-    background: var(--bs-card-bg);
-    border: 1px solid var(--bs-border-color);
+    transition: all 0.3s ease;
+    background: #fff;
+    border: 1px solid #e2e8f0;
+    border-radius: 12px;
+    overflow: hidden;
 }
 .fk-card:hover {
     transform: translateY(-4px);
-    box-shadow: var(--shadow-medium);
+    box-shadow: 0 10px 25px rgba(0,0,0,0.08);
 }
 .clickable-card {
     cursor: pointer;
 }
+
+/* ============================================
+   ICÔNES CIRCULAIRES
+   ============================================ */
 .icon-circle {
     width: 48px;
     height: 48px;
@@ -998,85 +978,127 @@ document.addEventListener('DOMContentLoaded', function() {
     align-items: center;
     justify-content: center;
     background: rgba(255, 255, 255, 0.2);
-    transition: var(--transition-smooth);
+    transition: all 0.3s ease;
+    flex-shrink: 0;
 }
 .clickable-card:hover .icon-circle {
     transform: scale(1.1);
     background: rgba(255, 255, 255, 0.3);
 }
+
 .text-white-75 { color: rgba(255, 255, 255, 0.75); }
 .text-white-90 { color: rgba(255, 255, 255, 0.9); }
-.hover-light:hover { background-color: rgba(var(--bs-secondary-bg-rgb), 0.5); }
-.indicator-icon {
-    width: 32px;
-    height: 32px;
-    border-radius: 8px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    background-color: rgba(59, 130, 246, 0.1);
-}
-.cartographie-item {
-    transition: var(--transition-smooth);
-    border-color: var(--bs-border-color) !important;
-}
-.cartographie-item:hover {
-    border-color: var(--fk-accent) !important;
-    box-shadow: 0 2px 8px rgba(59, 130, 246, 0.1);
-}
+
+/* ============================================
+   LÉGENDE DU GRAPHIQUE
+   ============================================ */
 .legend-dot {
-    width: 10px;
-    height: 10px;
+    width: 14px;
+    height: 14px;
     border-radius: 50%;
     display: inline-block;
+    flex-shrink: 0;
 }
+
+/* ============================================
+   ITEMS CRITIQUES
+   ============================================ */
+.critique-item {
+    transition: all 0.2s ease;
+}
+.critique-item:hover {
+    transform: translateX(3px);
+    filter: brightness(1.02);
+}
+
+/* ============================================
+   BARRES DE PROGRESSION
+   ============================================ */
 .progress-bar.bg-gradient-danger { background: var(--gradient-danger); }
 .progress-bar.bg-gradient-warning { background: var(--gradient-warning); }
 .progress-bar.bg-gradient-info { background: var(--gradient-info); }
 .progress-bar.bg-gradient-success { background: var(--gradient-success); }
 
-/* Mode sombre */
+/* ============================================
+   CARTOS RÉCENTES
+   ============================================ */
+.cartographie-item {
+    transition: all 0.3s ease;
+    border-color: #e2e8f0 !important;
+}
+.cartographie-item:hover {
+    border-color: #3b82f6 !important;
+    box-shadow: 0 2px 8px rgba(59, 130, 246, 0.1);
+}
+
+/* ============================================
+   BADGE DANGER
+   ============================================ */
+.fk-badge-danger {
+    background: linear-gradient(135deg, #dc2626 0%, #991b1b 100%) !important;
+    color: white !important;
+}
+
+/* ============================================
+   ALERTES
+   ============================================ */
+.fk-alert {
+    display: flex;
+    gap: 1rem;
+    padding: 1rem;
+    border-radius: 12px;
+    align-items: flex-start;
+}
+.fk-alert-error {
+    background: rgba(220, 38, 38, 0.06);
+    border-left: 4px solid #dc2626;
+    color: #991b1b;
+}
+.fk-alert-warning {
+    background: rgba(245, 158, 11, 0.06);
+    border-left: 4px solid #f59e0b;
+    color: #92400e;
+}
+
+/* ============================================
+   MODE SOMBRE
+   ============================================ */
 [data-bs-theme="dark"] .fk-card {
-    background: #1E293B;
+    background: #1e293b;
     border-color: #334155;
 }
 [data-bs-theme="dark"] .cartographie-item {
     border-color: #334155 !important;
 }
 [data-bs-theme="dark"] .cartographie-item:hover {
-    border-color: #3B82F6 !important;
-}
-[data-bs-theme="dark"] .hover-light:hover {
-    background-color: rgba(255, 255, 255, 0.05);
+    border-color: #3b82f6 !important;
 }
 [data-bs-theme="dark"] .progress {
-    background-color: #334155 !important;
+    background-color: #334155;
 }
-[data-bs-theme="dark"] .fk-badge.fk-badge-primary {
-    background: linear-gradient(135deg, #2563eb 0%, #1d4ed8 100%);
+[data-bs-theme="dark"] .fk-alert-error {
+    background: rgba(220, 38, 38, 0.15);
 }
-[data-bs-theme="dark"] .fk-badge.fk-badge-success {
-    background: linear-gradient(135deg, #059669 0%, #047857 100%);
-}
-[data-bs-theme="dark"] .fk-badge.fk-badge-warning {
-    background: linear-gradient(135deg, #d97706 0%, #b45309 100%);
-}
-[data-bs-theme="dark"] .text-white-75 { color: rgba(255, 255, 255, 0.75); }
-[data-bs-theme="dark"] .text-white-90 { color: rgba(255, 255, 255, 0.9); }
-[data-bs-theme="dark"] .indicator-icon {
-    background-color: rgba(59, 130, 246, 0.2);
+[data-bs-theme="dark"] .fk-alert-warning {
+    background: rgba(245, 158, 11, 0.15);
 }
 
+/* ============================================
+   ANIMATIONS
+   ============================================ */
 @keyframes fadeInUp {
     from { opacity: 0; transform: translateY(20px); }
     to { opacity: 1; transform: translateY(0); }
 }
 .fade-in { animation: fadeInUp 0.6s ease-out forwards; }
 
+/* ============================================
+   RESPONSIVE
+   ============================================ */
 @media (max-width: 768px) {
-    .fk-card-header h5 { font-size: 1rem; }
-    .fk-card-header h2 { font-size: 1.5rem; }
     .icon-circle { width: 36px; height: 36px; }
+    .chart-container { height: 240px !important; }
+    .critiques-list .critique-item { font-size: 0.85rem; }
 }
 </style>
 {% endblock %}
