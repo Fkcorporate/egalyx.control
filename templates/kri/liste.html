@@ -1,1146 +1,438 @@
 {% extends "base.html" %}
 
-{% block title %}Indicateurs KRI/KPI - FabriceKonan Corporate{% endblock %}
+{% block title %}Cartographie des Risques{% endblock %}
 
 {% block content %}
 <div class="container-fluid">
-    <!-- En-tête -->
-    <div class="d-flex justify-content-between align-items-center mb-4">
+
+    <!-- ============ EN-TÊTE ============ -->
+    <div class="d-flex justify-content-between align-items-center mb-4 flex-wrap gap-2">
         <div>
             <h2 class="h4 mb-2">
-                <i class="fas fa-chart-line me-2 text-primary"></i>
-                Indicateurs de Surveillance
+                <i class="fas fa-map me-2 text-primary"></i>
+                Cartographie des Risques
             </h2>
             <nav aria-label="breadcrumb">
                 <ol class="breadcrumb mb-0">
                     <li class="breadcrumb-item"><a href="{{ url_for('dashboard') }}">Tableau de bord</a></li>
-                    <li class="breadcrumb-item active">KRI & KPI</li>
+                    <li class="breadcrumb-item active">Cartographie</li>
                 </ol>
             </nav>
         </div>
-        <div class="d-flex gap-2">
-            <a href="{{ url_for('kris_archives') }}" class="fk-btn fk-btn-outline">
-                <i class="fas fa-archive me-2"></i>
-                Archives
+        <div class="d-flex gap-2 align-items-center flex-wrap">
+            <div class="btn-group me-2" role="group" aria-label="Options d'affichage">
+                <button type="button" class="btn btn-outline-primary active" id="btnGrille" onclick="changerVue('grille')" title="Vue en grille">
+                    <i class="fas fa-th"></i>
+                </button>
+                <button type="button" class="btn btn-outline-primary" id="btnListe" onclick="changerVue('liste')" title="Vue en liste">
+                    <i class="fas fa-list"></i>
+                </button>
+            </div>
+            <a href="{{ url_for('cartographies_archives') }}" class="fk-btn fk-btn-outline-secondary">
+                <i class="fas fa-archive me-2"></i>Archives
             </a>
-            <a href="{{ url_for('nouveau_kri_sans_risque') }}" class="fk-btn fk-btn-primary">
-                <i class="fas fa-plus me-2"></i>
-                Nouvel indicateur
+            <a href="{{ url_for('nouvelle_cartographie') }}" class="fk-btn fk-btn-primary">
+                <i class="fas fa-plus me-2"></i>Nouvelle Cartographie
             </a>
         </div>
     </div>
 
-    <!-- Statistiques -->
-    <div class="row mb-4">
-        <div class="col-xl-2 col-lg-4 col-md-6 mb-3">
-            <div class="fk-card">
-                <div class="fk-card-body">
-                    <div class="d-flex align-items-center">
-                        <div class="rounded-circle bg-primary bg-opacity-10 p-3 me-3">
-                            <i class="fas fa-chart-line text-primary fs-4"></i>
-                        </div>
-                        <div>
-                            <h3 class="mb-0">{{ stats.total if stats else kris|length }}</h3>
-                            <small class="text-muted">Total indicateurs</small>
-                        </div>
-                    </div>
+    <!-- ============ BANDEAU KPI ============ -->
+    {% set taux_eval = (stats.total_evalues / stats.total_risques * 100)|round|int if stats.total_risques > 0 else 0 %}
+    {% set niveau_colors = {'Critique': 'danger', 'Élevé': 'warning', 'Moyen': 'info', 'Faible': 'success'} %}
+    <div class="row g-3 mb-4">
+        <div class="col-6 col-lg-2-4 col-xl">
+            <div class="kpi-card">
+                <div class="kpi-icon bg-primary-subtle text-primary"><i class="fas fa-map-marked-alt"></i></div>
+                <div>
+                    <div class="kpi-value">{{ stats.total_cartographies }}</div>
+                    <div class="kpi-label">Cartographies</div>
                 </div>
             </div>
         </div>
-        
-        <div class="col-xl-2 col-lg-4 col-md-6 mb-3">
-            <div class="fk-card">
-                <div class="fk-card-body">
-                    <div class="d-flex align-items-center">
-                        <div class="rounded-circle bg-danger bg-opacity-10 p-3 me-3">
-                            <i class="fas fa-exclamation-triangle text-danger fs-4"></i>
-                        </div>
-                        <div>
-                            <h3 class="mb-0">{{ stats.kris if stats else kris|selectattr('type_indicateur', 'equalto', 'kri')|list|length }}</h3>
-                            <small class="text-muted">Indicateurs KRI</small>
-                        </div>
-                    </div>
+        <div class="col-6 col-lg-2-4 col-xl">
+            <div class="kpi-card">
+                <div class="kpi-icon bg-secondary-subtle text-secondary"><i class="fas fa-shield-halved"></i></div>
+                <div>
+                    <div class="kpi-value">{{ stats.total_risques }}</div>
+                    <div class="kpi-label">Risques suivis</div>
                 </div>
             </div>
         </div>
-        
-        <div class="col-xl-2 col-lg-4 col-md-6 mb-3">
-            <div class="fk-card">
-                <div class="fk-card-body">
-                    <div class="d-flex align-items-center">
-                        <div class="rounded-circle bg-success bg-opacity-10 p-3 me-3">
-                            <i class="fas fa-chart-bar text-success fs-4"></i>
-                        </div>
-                        <div>
-                            <h3 class="mb-0">{{ stats.kpis if stats else kris|selectattr('type_indicateur', 'equalto', 'kpi')|list|length }}</h3>
-                            <small class="text-muted">Indicateurs KPI</small>
-                        </div>
-                    </div>
+        <div class="col-6 col-lg-2-4 col-xl">
+            <div class="kpi-card">
+                <div class="kpi-icon bg-success-subtle text-success"><i class="fas fa-chart-pie"></i></div>
+                <div>
+                    <div class="kpi-value">{{ taux_eval }}%</div>
+                    <div class="kpi-label">Taux d'évaluation</div>
                 </div>
             </div>
         </div>
-        
-        <div class="col-xl-2 col-lg-4 col-md-6 mb-3">
-            <div class="fk-card">
-                <div class="fk-card-body">
-                    <div class="d-flex align-items-center">
-                        <div class="rounded-circle bg-warning bg-opacity-10 p-3 me-3">
-                            <i class="fas fa-bell text-warning fs-4"></i>
-                        </div>
-                        <div>
-                            <h3 class="mb-0">{{ stats.alertes if stats else 0 }}</h3>
-                            <small class="text-muted">En alerte</small>
-                        </div>
-                    </div>
+        <div class="col-6 col-lg-2-4 col-xl">
+            <div class="kpi-card">
+                <div class="kpi-icon bg-danger-subtle text-danger"><i class="fas fa-triangle-exclamation"></i></div>
+                <div>
+                    <div class="kpi-value">{{ stats.total_critiques }}</div>
+                    <div class="kpi-label">Risques critiques</div>
                 </div>
             </div>
         </div>
-        
-        <div class="col-xl-2 col-lg-4 col-md-6 mb-3">
-            <div class="fk-card">
-                <div class="fk-card-body">
-                    <div class="d-flex align-items-center">
-                        <div class="rounded-circle bg-danger bg-opacity-10 p-3 me-3">
-                            <i class="fas fa-fire text-danger fs-4"></i>
-                        </div>
-                        <div>
-                            <h3 class="mb-0">{{ stats.critiques if stats else 0 }}</h3>
-                            <small class="text-muted">Critiques</small>
-                        </div>
-                    </div>
+        <div class="col-6 col-lg-2-4 col-xl">
+            <div class="kpi-card">
+                <div class="kpi-icon bg-{{ niveau_colors.get(stats.niveau_max, 'secondary') }}-subtle text-{{ niveau_colors.get(stats.niveau_max, 'secondary') }}">
+                    <i class="fas fa-gauge-high"></i>
                 </div>
-            </div>
-        </div>
-        
-        <div class="col-xl-2 col-lg-4 col-md-6 mb-3">
-            <div class="fk-card">
-                <div class="fk-card-body">
-                    <div class="d-flex align-items-center">
-                        <div class="rounded-circle bg-info bg-opacity-10 p-3 me-3">
-                            <i class="fas fa-unlink text-info fs-4"></i>
-                        </div>
-                        <div>
-                            <h3 class="mb-0">{{ stats.sans_risque if stats else 0 }}</h3>
-                            <small class="text-muted">Indépendants</small>
-                        </div>
+                <div>
+                    <div class="kpi-value" style="font-size:1.1rem;">
+                        <span class="badge text-bg-{{ niveau_colors.get(stats.niveau_max, 'secondary') }}">{{ stats.niveau_max }}</span>
                     </div>
+                    <div class="kpi-label">Niveau global</div>
                 </div>
             </div>
         </div>
     </div>
 
-    <!-- Filtres -->
-    <div class="fk-card mb-4">
-        <div class="fk-card-header">
-            <h6 class="mb-0">
-                <i class="fas fa-filter me-2"></i>
-                Filtres de recherche
-            </h6>
-        </div>
-        <div class="fk-card-body">
-            <div class="row g-3">
-                <div class="col-lg-4">
+    <!-- ============ FILTRES ============ -->
+    <div class="card mb-4">
+        <div class="card-body">
+            <div class="row g-2 align-items-center mb-3">
+                <div class="col-auto">
+                    <span class="text-muted small fw-semibold me-1">Organiser par :</span>
+                </div>
+                <div class="col-auto">
+                    <div class="btn-group btn-group-sm" role="group">
+                        <button type="button" class="btn btn-outline-primary {% if mode_vue != 'pays' %}active{% endif %}" onclick="changerModeVue('poles')">
+                            <i class="fas fa-layer-group me-1"></i>Par pôle
+                        </button>
+                        <button type="button" class="btn btn-outline-primary {% if mode_vue == 'pays' %}active{% endif %}" onclick="changerModeVue('pays')">
+                            <i class="fas fa-earth-africa me-1"></i>Par pays
+                        </button>
+                    </div>
+                </div>
+            </div>
+            <div class="row g-2">
+                <div class="col-md-4">
                     <div class="input-group">
-                        <span class="input-group-text">
-                            <i class="fas fa-search"></i>
+                        <span class="input-group-text bg-white">
+                            <i class="fas fa-search text-muted"></i>
                         </span>
-                        <input type="text" id="searchKri" class="fk-form-control" placeholder="Rechercher un indicateur...">
+                        <input type="text" class="form-control" id="searchCartographie"
+                               placeholder="Rechercher une cartographie..." value="{{ search_query }}">
                     </div>
                 </div>
-                <div class="col-lg-4">
-                    <select id="filterType" class="fk-form-control">
-                        <option value="all">Tous les types</option>
-                        <option value="kri">KRI seulement</option>
-                        <option value="kpi">KPI seulement</option>
+
+                {% if mode_vue == 'pays' %}
+                <div class="col-md-3">
+                    <select class="form-select" id="filterPays" onchange="appliquerFiltres()">
+                        <option value="tous">Tous les pays</option>
+                        {% for pays in pays_list %}
+                        <option value="{{ pays.id }}" {% if pays_filter|string == pays.id|string %}selected{% endif %}>
+                            {{ pays.nom }}
+                        </option>
+                        {% endfor %}
                     </select>
                 </div>
-                <div class="col-lg-4">
-                    <div class="btn-group w-100" role="group">
-                        <button type="button" class="fk-btn fk-btn-outline active" data-filter="all">Tous</button>
-                        <button type="button" class="fk-btn fk-btn-outline" data-filter="alert">En alerte</button>
-                        <button type="button" class="fk-btn fk-btn-outline" data-filter="critical">Critiques</button>
-                        <button type="button" class="fk-btn fk-btn-outline" data-filter="hausse">En hausse</button>
-                        <button type="button" class="fk-btn fk-btn-outline" data-filter="sans_risque">Indépendants</button>
-                    </div>
+                {% else %}
+                <div class="col-md-3">
+                    <select class="form-select" id="filterPole" onchange="appliquerFiltres()">
+                        <option value="tous">Tous les pôles</option>
+                        {% for pole in poles %}
+                        <option value="{{ pole.id }}" {% if pole_filter|string == pole.id|string %}selected{% endif %}>
+                            {{ pole.nom }}
+                        </option>
+                        {% endfor %}
+                    </select>
+                </div>
+                {% endif %}
+
+                <div class="col-md-3">
+                    <select class="form-select" id="filterDirection" onchange="appliquerFiltres()">
+                        <option value="toutes">Toutes les directions</option>
+                        {% for direction in directions %}
+                        <option value="{{ direction.id }}" {% if direction_filter|string == direction.id|string %}selected{% endif %}>
+                            {{ direction.nom }}
+                        </option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="col-md-2">
+                    <button class="btn btn-outline-secondary w-100" onclick="reinitialiserFiltres()">
+                        <i class="fas fa-undo me-2"></i>Réinitialiser
+                    </button>
+                </div>
+            </div>
+            <div class="row mt-2">
+                <div class="col-12">
+                    <small class="text-muted" id="resultCount">{{ cartographies|length }} cartographie(s) trouvée(s)</small>
                 </div>
             </div>
         </div>
     </div>
 
-    <!-- Liste des indicateurs -->
-    <div class="row" id="kriGrid">
-        {% for kri in kris %}
-        {% set derniere_mesure = kri.get_derniere_mesure() %}
-        <div class="col-xl-4 col-lg-6 col-md-12 mb-4" data-kri 
-             data-type="{{ kri.type_indicateur }}"
-             data-tendance="{{ kri.tendance if kri.tendance else 'stable' }}" 
-             data-valeur="{{ derniere_mesure.valeur if derniere_mesure else 0 }}"
-             data-seuil-alerte="{{ kri.seuil_alerte or 0 }}" 
-             data-seuil-critique="{{ kri.seuil_critique or 0 }}"
-             data-seuil-cible="{{ kri.seuil_cible or 0 }}"
-             data-sens-evaluation="{{ kri.sens_evaluation_seuil }}">
-            
-            <div class="fk-card h-100">
-                <div class="fk-card-header d-flex justify-content-between align-items-center">
-                    <div class="d-flex align-items-center flex-wrap gap-1">
-                        {% if kri.type_indicateur == 'kri' %}
-                        <span class="fk-badge fk-badge-danger me-2">
-                            <i class="fas fa-exclamation-triangle me-1"></i>KRI
-                        </span>
-                        {% else %}
-                        <span class="fk-badge fk-badge-success me-2">
-                            <i class="fas fa-chart-bar me-1"></i>KPI
-                        </span>
-                        {% endif %}
-                        
-                        <!-- NOUVEAU : Indicateur d'écart pour KPI -->
-                        {% if kri.type_indicateur == 'kpi' and kri.seuil_cible and derniere_mesure %}
-                            {% set diff = kri.get_difference_cible(derniere_mesure.valeur) %}
-                            {% set interpretation = kri.get_interpretation_difference(derniere_mesure.valeur) %}
-                            {% if diff is not none and interpretation %}
-                            <span class="fk-badge fk-badge-{{ interpretation.couleur }}" 
-                                  title="{{ interpretation.explication }}">
-                                <i class="fas fa-arrow-{{ 'up' if diff > 0 else 'down' if diff < 0 else 'right' }} me-1"></i>
-                                {{ "%+.1f"|format(diff) }} {{ kri.unite_mesure }}
-                            </span>
-                            {% endif %}
-                        {% endif %}
-                        
-                        {% if not kri.risque_id %}
-                        <span class="fk-badge fk-badge-info">
-                            <i class="fas fa-unlink me-1"></i>Indépendant
-                        </span>
-                        {% endif %}
+    <!-- ============ CONTENU ============ -->
+    <div id="cartographieContainer">
 
-                        {% if kri.type_indicateur == 'kpi' and kri.seuil_cible %}
-                        <span class="fk-badge fk-badge-info" title="Seuil cible: {{ kri.seuil_cible }} {{ kri.unite_mesure }}">
-                            <i class="fas fa-bullseye me-1"></i>Cible
-                        </span>
-                        {% endif %}
-                    </div>
-                    
-                    <div class="dropdown">
-                        <button class="btn btn-sm btn-outline-secondary border-0" type="button" 
-                                data-bs-toggle="dropdown" aria-expanded="false">
-                            <i class="fas fa-ellipsis-v"></i>
-                        </button>
-                        <ul class="dropdown-menu dropdown-menu-end">
-                            <li>
-                                <a class="dropdown-item" href="{{ url_for('modifier_kri', kri_id=kri.id) }}">
-                                    <i class="fas fa-edit me-2"></i>Modifier
-                                </a>
-                            </li>
-                            <li>
-                                <a class="dropdown-item" href="{{ url_for('detail_kri', kri_id=kri.id) }}">
-                                    <i class="fas fa-file-alt me-2"></i>Fiche détaillée
-                                </a>
-                            </li>
-                            <li>
-                                <a class="dropdown-item" href="#" data-bs-toggle="modal" 
-                                   data-bs-target="#graphModal{{ kri.id }}">
-                                    <i class="fas fa-chart-line me-2"></i>Graphique
-                                </a>
-                            </li>
-                            <li>
-                                <a class="dropdown-item" href="#" data-bs-toggle="modal" 
-                                   data-bs-target="#mesureModal{{ kri.id }}">
-                                    <i class="fas fa-plus me-2"></i>Ajouter mesure
-                                </a>
-                            </li>
-                            <li>
-                                <a class="dropdown-item" href="{{ url_for('telecharger_rapport_kri_pdf', kri_id=kri.id) }}" target="_blank">
-                                    <i class="fas fa-file-pdf me-2 text-danger"></i>Rapport PDF
-                                </a>
-                            </li>
-                            <li><hr class="dropdown-divider"></li>
-                            
-                            {% if kri.est_actif %}
-                            <li>
-                                <a class="dropdown-item archiver-kri" href="#" data-kri-id="{{ kri.id }}">
-                                    <i class="fas fa-archive me-2"></i>Archiver
-                                </a>
-                            </li>
-                            <li>
-                                <a class="dropdown-item dupliquer-kri" href="#" data-kri-id="{{ kri.id }}">
-                                    <i class="fas fa-copy me-2"></i>Dupliquer
-                                </a>
-                            </li>
-                            {% else %}
-                            <li>
-                                <a class="dropdown-item restaurer-kri" href="#" data-kri-id="{{ kri.id }}">
-                                    <i class="fas fa-undo me-2"></i>Restaurer
-                                </a>
-                            </li>
-                            {% if current_user.role == 'admin' %}
-                            <li>
-                                <a class="dropdown-item text-danger supprimer-kri" href="#" data-kri-id="{{ kri.id }}">
-                                    <i class="fas fa-trash me-2"></i>Supprimer définitivement
-                                </a>
-                            </li>
-                            {% endif %}
-                            {% endif %}
-                        </ul>
+        {% if mode_vue == 'pays' %}
+            {# ---------- GROUPEMENT PAR PAYS ---------- #}
+            {% for pays in pays_list %}
+                {% set cartos_pays = cartographies|selectattr('cartographie.pole')|selectattr('cartographie.pole.pays_id', 'equalto', pays.id)|list %}
+                {% if cartos_pays %}
+                <div class="mb-4">
+                    <h5 class="mb-3 groupe-titre">
+                        <i class="fas fa-earth-africa me-2 text-primary"></i>
+                        {{ pays.nom }}
+                        <small class="text-muted">({{ cartos_pays|length }} cartographie(s) · {{ (stats_pays.get(pays.id, {}) or {}).get('risques', 0) }} risque(s))</small>
+                    </h5>
+                    <div class="row g-3">
+                        {% for item in cartos_pays %}
+                        <div class="col-xl-4 col-lg-6 col-md-12 mb-4 cartographie-col">
+                            {% with cartographie = item %}
+                                {% include 'cartographie/_carte_moderne.html' %}
+                            {% endwith %}
+                        </div>
+                        {% endfor %}
                     </div>
                 </div>
-                
-                <div class="fk-card-body">
-                    <!-- Titre et description -->
-                    <h5 class="h6 fw-bold mb-2">{{ kri.nom }}</h5>
-                    <p class="text-muted small mb-4">
-                        {{ kri.description|truncate(100) if kri.description else 'Aucune description disponible' }}
-                    </p>
-                    
-                    <!-- Indicateur principal -->
-                    <div class="mb-4">
-                        <div class="d-flex justify-content-between align-items-center mb-2">
-                            <small class="text-muted">Valeur actuelle</small>
-                            <span class="badge bg-{{ kri.get_couleur_etat(derniere_mesure.valeur if derniere_mesure else None) }}">
-                                {% if derniere_mesure %}
-                                    {{ kri.get_libelle_etat(derniere_mesure.valeur) }}
-                                {% else %}
-                                    N/A
-                                {% endif %}
-                            </span>
-                        </div>
-                        
-                        <div class="d-flex align-items-end">
-                            <h2 class="mb-0 me-2">
-                                {% if derniere_mesure %}
-                                    {{ "%.2f"|format(derniere_mesure.valeur) }}
-                                {% else %}
-                                    N/A
-                                {% endif %}
-                            </h2>
-                            <small class="text-muted mb-1">{{ kri.unite_mesure }}</small>
-                        </div>
-                        
-                        {% if derniere_mesure %}
-                        <small class="text-muted d-block mt-1">
-                            Dernière mesure: {{ derniere_mesure.date_mesure.strftime('%d/%m/%Y') }}
-                        </small>
-                        {% endif %}
-                    </div>
+                {% endif %}
+            {% endfor %}
 
-                    <!-- Seuils et cibles -->
-                    <div class="mb-4">
-                        <small class="text-muted d-block mb-2">
-                            <i class="fas fa-arrow-{% if kri.sens_evaluation_seuil == 'inferieur' %}down{% else %}up{% endif %} me-1"></i>
-                            {{ kri.get_description_sens_evaluation() }}
-                        </small>
-                        
-                        <!-- Barre de progression des seuils -->
-                        {% if derniere_mesure and (kri.seuil_alerte or kri.seuil_critique) %}
-                        <div class="progress mb-2" style="height: 8px;">
-                            {% set valeur_actuelle = derniere_mesure.valeur %}
-                            {% set max_val = [valeur_actuelle, kri.seuil_alerte or 0, kri.seuil_critique or 0]|max * 1.2 %}
-                            {% set pourcentage = (valeur_actuelle / max_val) * 100 if max_val > 0 else 0 %}
-                            
-                            <div class="progress-bar bg-{{ kri.get_couleur_etat(valeur_actuelle) }}" 
-                                 style="width: {{ pourcentage }}%">
-                            </div>
-                        </div>
-                        
-                        <div class="d-flex justify-content-between small">
-                            {% if kri.seuil_alerte %}
-                            <span class="text-warning">
-                                <i class="fas fa-exclamation-circle me-1"></i>{{ "%.2f"|format(kri.seuil_alerte) }}
-                            </span>
-                            {% endif %}
-                            {% if kri.seuil_critique %}
-                            <span class="text-danger">
-                                <i class="fas fa-skull-crossbones me-1"></i>{{ "%.2f"|format(kri.seuil_critique) }}
-                            </span>
-                            {% endif %}
-                        </div>
-                        {% endif %}
-
-                        <!-- Affichage de la cible pour les KPI - VERSION DIFFÉRENCE ABSOLUE -->
-                        {% if kri.type_indicateur == 'kpi' and kri.seuil_cible and derniere_mesure %}
-                            {% set diff = kri.get_difference_cible(derniere_mesure.valeur) %}
-                            {% set interpretation = kri.get_interpretation_difference(derniere_mesure.valeur) %}
-                            {% if diff is not none %}
-                            <div class="mt-2 pt-2 border-top">
-                                <div class="d-flex justify-content-between align-items-center">
-                                    <small class="text-muted">
-                                        <i class="fas fa-bullseye text-info me-1"></i>Cible:
-                                    </small>
-                                    <span class="text-info fw-bold">{{ "%.2f"|format(kri.seuil_cible) }} {{ kri.unite_mesure }}</span>
-                                </div>
-                                
-                                <div class="d-flex justify-content-between align-items-center mt-1">
-                                    <small class="text-muted">Écart:</small>
-                                    <div class="d-flex align-items-center gap-1">
-                                        <span class="badge bg-{{ interpretation.couleur if interpretation else 'secondary' }}">
-                                            {{ "%+.2f"|format(diff) }} {{ kri.unite_mesure }}
-                                        </span>
-                                        {% if interpretation %}
-                                        <small class="text-{{ interpretation.couleur }}" style="font-size: 10px;">
-                                            ({{ interpretation.message }})
-                                        </small>
-                                        {% endif %}
-                                    </div>
-                                </div>
-                                
-                                {% if interpretation %}
-                                <div class="mt-1 small text-muted">
-                                    <i class="fas fa-info-circle me-1"></i>{{ interpretation.explication }}
-                                </div>
-                                {% endif %}
-                            </div>
-                            {% endif %}
-                        {% endif %}
-                    </div>
-
-                    <!-- Métadonnées -->
-                    <div class="border-top pt-3">
-                        <div class="row g-2">
-                            <div class="col-6">
-                                <div class="d-flex align-items-center">
-                                    <div class="rounded-circle bg-light p-2 me-2">
-                                        <i class="fas fa-sync-alt text-muted"></i>
-                                    </div>
-                                    <div>
-                                        <small class="text-muted d-block">Fréquence</small>
-                                        <strong class="small">{{ kri.frequence_mesure|title if kri.frequence_mesure else 'Non définie' }}</strong>
-                                    </div>
-                                </div>
-                            </div>
-                            <div class="col-6">
-                                <div class="d-flex align-items-center">
-                                    <div class="rounded-circle bg-light p-2 me-2">
-                                        <i class="fas fa-user text-muted"></i>
-                                    </div>
-                                    <div>
-                                        <small class="text-muted d-block">Responsable</small>
-                                        <strong class="small">{{ kri.responsable_mesure.username|truncate(12) if kri.responsable_mesure else 'Non assigné' }}</strong>
-                                    </div>
-                                </div>
-                            </div>
-                            {% if kri.risque %}
-                            <div class="col-12 mt-2">
-                                <div class="d-flex align-items-center">
-                                    <div class="rounded-circle bg-light p-2 me-2">
-                                        <i class="fas fa-exclamation-triangle text-warning"></i>
-                                    </div>
-                                    <div>
-                                        <small class="text-muted d-block">Risque associé</small>
-                                        <a href="{{ url_for('detail_risque', id=kri.risque.id) }}" 
-                                           class="text-decoration-none small fw-bold">
-                                            {{ kri.risque.reference }} - {{ kri.risque.intitule|truncate(25) }}
-                                        </a>
-                                    </div>
-                                </div>
-                            </div>
-                            {% endif %}
-                        </div>
-                    </div>
-                </div>
-                
-                <!-- Actions -->
-                <div class="fk-card-body border-top pt-3 pb-3">
-                    <div class="row g-2">
-                        <div class="col-6">
-                            <a href="{{ url_for('detail_kri', kri_id=kri.id) }}" 
-                               class="fk-btn fk-btn-outline w-100 btn-sm">
-                                <i class="fas fa-eye me-1"></i>
-                                Détails
-                            </a>
-                        </div>
-                        <div class="col-6">
-                            <button class="fk-btn fk-btn-primary w-100 btn-sm" 
-                                    data-bs-toggle="modal" 
-                                    data-bs-target="#mesureModal{{ kri.id }}">
-                                <i class="fas fa-plus me-1"></i>
-                                Mesure
-                            </button>
-                        </div>
-                    </div>
-                </div>
-            </div>
-        </div>
-
-        <!-- Modal Graphique -->
-        <div class="modal fade" id="graphModal{{ kri.id }}" tabindex="-1">
-            <div class="modal-dialog modal-lg">
-                <div class="modal-content">
-                    <div class="modal-header">
-                        <h5 class="modal-title">
-                            <i class="fas fa-chart-line me-2"></i>
-                            Évolution - {{ kri.nom }}
-                        </h5>
-                        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
-                    </div>
-                    <div class="modal-body">
-                        {% if kri.mesures and kri.mesures|length > 1 %}
-                        <div style="height: 300px;">
-                            <canvas id="kriChart{{ kri.id }}"></canvas>
-                        </div>
-                        
-                        <!-- Légende des seuils -->
-                        <div class="d-flex justify-content-center gap-4 mt-3">
-                            {% if kri.seuil_alerte %}
-                            <div class="d-flex align-items-center">
-                                <div style="width: 20px; height: 3px; background-color: #ffc107;" class="me-2"></div>
-                                <small>Seuil alerte: {{ kri.seuil_alerte }} {{ kri.unite_mesure }}</small>
-                            </div>
-                            {% endif %}
-                            {% if kri.seuil_critique %}
-                            <div class="d-flex align-items-center">
-                                <div style="width: 20px; height: 3px; background-color: #dc3545;" class="me-2"></div>
-                                <small>Seuil critique: {{ kri.seuil_critique }} {{ kri.unite_mesure }}</small>
-                            </div>
-                            {% endif %}
-                            {% if kri.type_indicateur == 'kpi' and kri.seuil_cible %}
-                            <div class="d-flex align-items-center">
-                                <div style="width: 20px; height: 3px; background-color: #17a2b8;" class="me-2"></div>
-                                <small>Cible: {{ kri.seuil_cible }} {{ kri.unite_mesure }}</small>
-                            </div>
-                            {% endif %}
-                        </div>
-                        
-                        <div class="row text-center mt-4">
-                            <div class="col-4">
-                                <div class="rounded-circle bg-primary bg-opacity-10 d-inline-flex align-items-center justify-content-center mb-2" 
-                                     style="width: 40px; height: 40px;">
-                                    <i class="fas fa-chart-line text-primary"></i>
-                                </div>
-                                <h6 class="mb-1">{{ "%.2f"|format(kri.mesures[-1].valeur) }} {{ kri.unite_mesure }}</h6>
-                                <small class="text-muted">Dernière valeur</small>
-                            </div>
-                            <div class="col-4">
-                                <div class="rounded-circle bg-{{ 'success' if kri.tendance == 'baisse' else 'danger' if kri.tendance == 'hausse' else 'primary' }} bg-opacity-10 d-inline-flex align-items-center justify-content-center mb-2" 
-                                     style="width: 40px; height: 40px;">
-                                    <i class="fas fa-arrow-{{ 'down' if kri.tendance == 'baisse' else 'up' if kri.tendance == 'hausse' else 'right' }} text-{{ 'success' if kri.tendance == 'baisse' else 'danger' if kri.tendance == 'hausse' else 'primary' }}"></i>
-                                </div>
-                                <h6 class="mb-1">{{ kri.tendance|title if kri.tendance else 'Stable' }}</h6>
-                                <small class="text-muted">Tendance</small>
-                            </div>
-                            <div class="col-4">
-                                <div class="rounded-circle bg-info bg-opacity-10 d-inline-flex align-items-center justify-content-center mb-2" 
-                                     style="width: 40px; height: 40px;">
-                                    <i class="fas fa-ruler text-info"></i>
-                                </div>
-                                <h6 class="mb-1">{{ kri.mesures|length }}</h6>
-                                <small class="text-muted">Mesures</small>
-                            </div>
-                        </div>
-                        
-                        <!-- Affichage de l'écart dans le modal -->
-                        {% if kri.type_indicateur == 'kpi' and kri.seuil_cible and derniere_mesure %}
-                            {% set diff = kri.get_difference_cible(kri.mesures[-1].valeur) %}
-                            {% set interpretation = kri.get_interpretation_difference(kri.mesures[-1].valeur) %}
-                            {% if diff is not none %}
-                            <div class="alert alert-{{ interpretation.couleur if interpretation else 'info' }} mt-3 mb-0">
-                                <div class="d-flex align-items-center">
-                                    <i class="fas fa-{{ 'exclamation-triangle' if interpretation.statut == 'sous_performance' else 'check-circle' if interpretation.statut == 'performance' else 'info-circle' }} me-2 fs-5"></i>
-                                    <div>
-                                        <strong>Écart par rapport à la cible :</strong>
-                                        {{ "%+.2f"|format(diff) }} {{ kri.unite_mesure }}
-                                        ({{ interpretation.explication if interpretation else '' }})
-                                    </div>
-                                </div>
-                            </div>
-                            {% endif %}
-                        {% endif %}
-                        
-                        {% else %}
-                        <div class="text-center py-5">
-                            <i class="fas fa-chart-line fa-3x text-muted mb-3"></i>
-                            <h5 class="text-muted mb-2">Pas assez de données</h5>
-                            <p class="text-muted small mb-0">Ajoutez au moins 2 mesures pour voir l'évolution</p>
-                        </div>
-                        {% endif %}
-                    </div>
-                </div>
-            </div>
-        </div>
-
-        <!-- Modal Mesure -->
-        <div class="modal fade" id="mesureModal{{ kri.id }}" tabindex="-1">
-            <div class="modal-dialog">
-                <div class="modal-content">
-                    <div class="modal-header">
-                        <h5 class="modal-title">
-                            <i class="fas fa-plus-circle me-2"></i>
-                            Nouvelle Mesure - {{ kri.nom }}
-                        </h5>
-                        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
-                    </div>
-                    <div class="modal-body">
-                        <form action="{{ url_for('ajouter_mesure_periodique', kri_id=kri.id) }}" method="POST">
-                            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                            
-                            <div class="mb-3">
-                                <label class="form-label fw-semibold">Valeur *</label>
-                                <div class="input-group">
-                                    <input type="number" step="0.01" class="fk-form-control" name="valeur" required>
-                                    <span class="input-group-text">{{ kri.unite_mesure }}</span>
-                                </div>
-                                {% if kri.seuil_alerte or kri.seuil_critique or kri.seuil_cible %}
-                                <small class="text-muted">
-                                    Seuils: 
-                                    {% if kri.seuil_alerte %}Alerte: {{ kri.seuil_alerte }}{% endif %}
-                                    {% if kri.seuil_critique %} | Critique: {{ kri.seuil_critique }}{% endif %}
-                                    {% if kri.type_indicateur == 'kpi' and kri.seuil_cible %} | Cible: {{ kri.seuil_cible }}{% endif %}
-                                </small>
-                                {% endif %}
-                            </div>
-                            
-                            <div class="mb-3">
-                                <label class="form-label fw-semibold">Date de mesure *</label>
-                                <input type="date" class="fk-form-control" name="date_mesure" 
-                                       value="{{ now().strftime('%Y-%m-%d') if now else '' }}" required>
-                            </div>
-                            
-                            <div class="mb-3">
-                                <label class="form-label fw-semibold">Commentaire</label>
-                                <textarea class="fk-form-control" name="commentaire" rows="3" 
-                                          placeholder="Expliquez la valeur mesurée, les facteurs influents..."></textarea>
-                            </div>
-                            
-                            <div class="d-flex gap-2 justify-content-end">
-                                <button type="button" class="fk-btn fk-btn-outline" data-bs-dismiss="modal">
-                                    Annuler
-                                </button>
-                                <button type="submit" class="fk-btn fk-btn-primary">
-                                    <i class="fas fa-save me-2"></i>
-                                    Enregistrer
-                                </button>
-                            </div>
-                        </form>
-                    </div>
-                </div>
-            </div>
-        </div>
-        {% else %}
-        <!-- État vide -->
-        <div class="col-12">
-            <div class="fk-card">
-                <div class="fk-card-body text-center py-5">
-                    <div class="mb-4">
-                        <i class="fas fa-chart-network fa-4x text-muted opacity-25"></i>
-                    </div>
-                    <h4 class="mb-3">Commencez la surveillance de vos indicateurs</h4>
-                    <p class="text-muted mb-4">
-                        Les KRI et KPI vous permettent de suivre l'évolution des risques et performances de votre organisation.
-                    </p>
-                    <a href="{{ url_for('nouveau_kri_sans_risque') }}" class="fk-btn fk-btn-primary">
-                        <i class="fas fa-plus me-2"></i>
-                        Créer votre premier indicateur
-                    </a>
-                </div>
-            </div>
-        </div>
-        {% endfor %}
-    </div>
-</div>
-
-<!-- Modal Confirmation Suppression -->
-<div class="modal fade" id="confirmationSuppressionModal" tabindex="-1">
-    <div class="modal-dialog">
-        <div class="modal-content">
-            <div class="modal-header">
-                <h5 class="modal-title text-danger">
-                    <i class="fas fa-exclamation-triangle me-2"></i>
-                    Confirmation de suppression
+            {% set cartos_sans_pays = cartographies|rejectattr('cartographie.pole')|list %}
+            {% if cartos_sans_pays %}
+            <div class="mb-4">
+                <h5 class="mb-3 groupe-titre groupe-titre-neutre">
+                    <i class="fas fa-globe me-2 text-secondary"></i>
+                    Non rattachées à un pays
+                    <small class="text-muted">({{ cartos_sans_pays|length }} cartographie(s))</small>
                 </h5>
-                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
-            </div>
-            <div class="modal-body">
-                <div class="fk-alert fk-alert-error mb-3">
-                    <i class="fas fa-skull-crossbones"></i>
-                    <div>
-                        <strong>Cette action est irréversible !</strong>
-                        <p class="mb-0 small">Toutes les mesures associées seront également supprimées.</p>
+                <div class="row g-3">
+                    {% for item in cartos_sans_pays %}
+                    <div class="col-xl-4 col-lg-6 col-md-12 mb-4 cartographie-col">
+                        {% with cartographie = item %}
+                            {% include 'cartographie/_carte_moderne.html' %}
+                        {% endwith %}
                     </div>
+                    {% endfor %}
                 </div>
-                
-                <p class="mb-3">Êtes-vous sûr de vouloir supprimer définitivement cet indicateur ?</p>
-                
-                <form id="formSuppressionKri" method="POST">
-                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                    <div class="d-flex gap-2 justify-content-end">
-                        <button type="button" class="fk-btn fk-btn-outline" data-bs-dismiss="modal">
-                            Annuler
-                        </button>
-                        <button type="submit" class="fk-btn fk-btn-danger">
-                            <i class="fas fa-trash me-2"></i>
-                            Supprimer définitivement
-                        </button>
+            </div>
+            {% endif %}
+
+        {% else %}
+            {# ---------- GROUPEMENT PAR PÔLE (par défaut) ---------- #}
+            {% if poles %}
+                {% for pole in poles %}
+                    {% set cartos_pole = cartographies|selectattr('cartographie.pole_id', 'equalto', pole.id)|list %}
+                    {% if cartos_pole %}
+                    <div class="mb-4">
+                        <h5 class="mb-3 groupe-titre" style="border-left-color: {{ pole.couleur }};">
+                            <i class="fas fa-layer-group me-2" style="color: {{ pole.couleur }};"></i>
+                            {{ pole.nom }}
+                            <small class="text-muted">({{ cartos_pole|length }} cartographie(s))</small>
+                        </h5>
+                        <div class="row g-3">
+                            {% for item in cartos_pole %}
+                            <div class="col-xl-4 col-lg-6 col-md-12 mb-4 cartographie-col">
+                                {% with cartographie = item %}
+                                    {% include 'cartographie/_carte_moderne.html' %}
+                                {% endwith %}
+                            </div>
+                            {% endfor %}
+                        </div>
                     </div>
-                </form>
+                    {% endif %}
+                {% endfor %}
+            {% endif %}
+
+            {% set cartos_sans_pole = cartographies|rejectattr('cartographie.pole_id')|list %}
+            {% if cartos_sans_pole %}
+            <div class="mb-4">
+                <h5 class="mb-3 groupe-titre groupe-titre-neutre">
+                    <i class="fas fa-globe me-2 text-secondary"></i>
+                    Cartographies sans pôle
+                    <small class="text-muted">({{ cartos_sans_pole|length }} cartographie(s))</small>
+                </h5>
+                <div class="row g-3">
+                    {% for item in cartos_sans_pole %}
+                    <div class="col-xl-4 col-lg-6 col-md-12 mb-4 cartographie-col">
+                        {% with cartographie = item %}
+                            {% include 'cartographie/_carte_moderne.html' %}
+                        {% endwith %}
+                    </div>
+                    {% endfor %}
+                </div>
+            </div>
+            {% endif %}
+        {% endif %}
+    </div>
+
+    <!-- ============ ÉTAT VIDE ============ -->
+    {% if not cartographies %}
+    <div class="col-12">
+        <div class="fk-card">
+            <div class="fk-card-body text-center py-5">
+                <div class="mb-4">
+                    <i class="fas fa-map-marked-alt fa-4x text-muted opacity-25"></i>
+                </div>
+                <h4 class="mb-3">Aucune cartographie</h4>
+                <p class="text-muted mb-4">
+                    {% if search_query or pole_filter != 'tous' or direction_filter != 'toutes' or pays_filter != 'tous' %}
+                        Aucun résultat ne correspond à vos filtres actuels.
+                    {% else %}
+                        Commencez par créer votre première cartographie des risques pour votre organisation.
+                    {% endif %}
+                </p>
+                {% if search_query or pole_filter != 'tous' or direction_filter != 'toutes' or pays_filter != 'tous' %}
+                <button class="fk-btn fk-btn-outline-secondary" onclick="reinitialiserFiltres()">
+                    <i class="fas fa-undo me-2"></i>Réinitialiser les filtres
+                </button>
+                {% else %}
+                <a href="{{ url_for('nouvelle_cartographie') }}" class="fk-btn fk-btn-primary">
+                    <i class="fas fa-plus me-2"></i>
+                    Créer ma première cartographie
+                </a>
+                {% endif %}
             </div>
         </div>
     </div>
+    {% endif %}
 </div>
 
-<!-- Styles supplémentaires pour les badges -->
-<style>
-.fk-badge-success {
-    background-color: #d1e7dd;
-    color: #0a3622;
-    border: 1px solid #a3cfbb;
-    padding: 4px 8px;
-    border-radius: 4px;
-    font-size: 11px;
-    font-weight: 600;
-    display: inline-flex;
-    align-items: center;
-}
-
-.fk-badge-warning {
-    background-color: #fff3cd;
-    color: #856404;
-    border: 1px solid #ffe69c;
-    padding: 4px 8px;
-    border-radius: 4px;
-    font-size: 11px;
-    font-weight: 600;
-    display: inline-flex;
-    align-items: center;
-}
-
-.fk-badge-danger {
-    background-color: #f8d7da;
-    color: #58151c;
-    border: 1px solid #f1aeb5;
-    padding: 4px 8px;
-    border-radius: 4px;
-    font-size: 11px;
-    font-weight: 600;
-    display: inline-flex;
-    align-items: center;
-}
-
-.fk-badge-info {
-    background-color: #cff4fc;
-    color: #055160;
-    border: 1px solid #9eeaf9;
-    padding: 4px 8px;
-    border-radius: 4px;
-    font-size: 11px;
-    font-weight: 600;
-    display: inline-flex;
-    align-items: center;
-}
-</style>
-{% endblock %}
-
-{% block scripts %}
-<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 <script>
+// ============================================
+// BASCULE VUE GRILLE / VUE LISTE
+// ============================================
+function changerVue(vue) {
+    document.getElementById('btnGrille').classList.toggle('active', vue === 'grille');
+    document.getElementById('btnListe').classList.toggle('active', vue === 'liste');
+    localStorage.setItem('vueCartographie', vue);
+
+    const cols = document.querySelectorAll('.cartographie-col');
+    const container = document.querySelector('#cartographieContainer');
+
+    if (vue === 'liste') {
+        container?.classList.add('vue-liste');
+        cols.forEach(col => { col.className = 'col-12 mb-3 cartographie-col'; });
+    } else {
+        container?.classList.remove('vue-liste');
+        cols.forEach(col => { col.className = 'col-xl-4 col-lg-6 col-md-12 mb-4 cartographie-col'; });
+    }
+}
+
+// ============================================
+// BASCULE MODE (PAR PÔLE / PAR PAYS) — recharge côté serveur
+// ============================================
+function changerModeVue(mode) {
+    const url = new URL(window.location.href);
+    url.searchParams.set('mode', mode);
+    url.searchParams.delete('pole');
+    url.searchParams.delete('pays');
+    window.location.href = url.toString();
+}
+
+// ============================================
+// RECHERCHE INSTANTANÉE (client, sans rechargement)
+// ============================================
+function filterCartographies() {
+    const searchTerm = document.getElementById('searchCartographie')?.value.toLowerCase() || '';
+    const cards = document.querySelectorAll('.carto-card');
+    let visibleCount = 0;
+
+    cards.forEach(card => {
+        const cardNom = card.dataset.nom || '';
+        const show = cardNom.includes(searchTerm);
+        const col = card.closest('.cartographie-col');
+        if (col) col.style.display = show ? '' : 'none';
+        if (show) visibleCount++;
+    });
+
+    document.querySelectorAll('#cartographieContainer > div.mb-4').forEach(groupe => {
+        const visibles = groupe.querySelectorAll('.cartographie-col:not([style*="display: none"])');
+        groupe.style.display = visibles.length === 0 ? 'none' : '';
+    });
+
+    document.getElementById('resultCount').textContent = `${visibleCount} cartographie(s) trouvée(s)`;
+}
+
+// ============================================
+// FILTRES SERVEUR (pôle / pays / direction) + recherche texte en repli
+// ============================================
+window.appliquerFiltres = function() {
+    const direction = document.getElementById('filterDirection').value;
+    const search = document.getElementById('searchCartographie').value;
+    const url = new URL(window.location.href);
+
+    const filterPole = document.getElementById('filterPole');
+    const filterPays = document.getElementById('filterPays');
+    if (filterPole) url.searchParams.set('pole', filterPole.value);
+    if (filterPays) url.searchParams.set('pays', filterPays.value);
+
+    url.searchParams.set('direction', direction);
+    url.searchParams.set('search', search);
+    window.location.href = url.toString();
+};
+
+window.reinitialiserFiltres = function() {
+    const url = new URL(window.location.href);
+    window.location.href = url.origin + url.pathname + '?mode=' + (new URLSearchParams(url.search).get('mode') || 'poles');
+};
+
+// ============================================
+// INITIALISATION
+// (toggleMenu et son listener de clic sont définis dans
+//  _carte_moderne.html, protégés par "if (!window.toggleMenu)")
+// ============================================
 document.addEventListener('DOMContentLoaded', function() {
-    // ============================================
-    // FONCTIONS UTILITAIRES
-    // ============================================
-    function getCsrfToken() {
-        const csrfInput = document.querySelector('input[name="csrf_token"]');
-        return csrfInput ? csrfInput.value : '';
-    }
+    const vuePreferee = localStorage.getItem('vueCartographie') || 'grille';
+    changerVue(vuePreferee);
 
-    function showToast(message, type = 'info') {
-        if (window.showToast) {
-            window.showToast(message, type);
-        } else {
-            const toast = document.createElement('div');
-            toast.className = `alert alert-${type} alert-dismissible fade show position-fixed`;
-            toast.style.cssText = 'top: 20px; right: 20px; z-index: 9999; min-width: 300px;';
-            toast.innerHTML = `
-                ${message}
-                <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
-            `;
-            document.body.appendChild(toast);
-            
-            setTimeout(() => {
-                toast.remove();
-            }, 5000);
-        }
-    }
-
-    async function fetchJSON(url, options = {}) {
-        if (!options.headers) options.headers = {};
-        if (!options.headers['X-Requested-With']) {
-            options.headers['X-Requested-With'] = 'XMLHttpRequest';
-        }
-        
-        if ((!options.method || options.method === 'POST') && !options.body?.includes('csrf_token')) {
-            if (!options.headers['Content-Type']) {
-                options.headers['Content-Type'] = 'application/x-www-form-urlencoded';
-            }
-            if (options.body) {
-                options.body += `&csrf_token=${getCsrfToken()}`;
-            } else {
-                options.body = `csrf_token=${getCsrfToken()}`;
-            }
-        }
-        
-        try {
-            const response = await fetch(url, options);
-            const contentType = response.headers.get('content-type') || '';
-            const isJson = contentType.includes('application/json');
-            
-            if (!response.ok) {
-                if (!isJson) {
-                    const text = await response.text();
-                    throw new Error(`Erreur ${response.status}: Réponse non-JSON reçue`);
-                }
-                const errorData = await response.json();
-                throw new Error(errorData.error || `Erreur ${response.status}`);
-            }
-            
-            if (!isJson) {
-                throw new Error('La réponse n\'est pas au format JSON');
-            }
-            
-            return await response.json();
-            
-        } catch (error) {
-            console.error('Erreur fetch:', error);
-            
-            let userMessage = error.message;
-            if (error.message.includes('Unexpected token')) {
-                userMessage = 'Le serveur a retourné une réponse inattendue. Vérifiez que la route existe.';
-            } else if (error.message.includes('Failed to fetch')) {
-                userMessage = 'Impossible de contacter le serveur. Vérifiez votre connexion.';
-            } else if (error.message.includes('non-JSON')) {
-                userMessage = 'Le serveur a retourné une page HTML au lieu de données JSON.';
-            }
-            
-            showToast(`Erreur: ${userMessage}`, 'error');
-            throw error;
-        }
-    }
-
-    // ============================================
-    // FONCTIONNALITÉS DE FILTRAGE
-    // ============================================
-    const filterButtons = document.querySelectorAll('[data-filter]');
-    const searchInput = document.getElementById('searchKri');
-    const filterType = document.getElementById('filterType');
-    const kriCards = document.querySelectorAll('[data-kri]');
-    
-    function applyFilters() {
-        const searchTerm = searchInput.value.toLowerCase();
-        const filterTypeValue = filterType.value;
-        const activeFilter = document.querySelector('[data-filter].active')?.getAttribute('data-filter') || 'all';
-        
-        kriCards.forEach(card => {
-            const type = card.getAttribute('data-type');
-            const tendance = card.getAttribute('data-tendance');
-            const valeur = parseFloat(card.getAttribute('data-valeur')) || 0;
-            const seuilAlerte = parseFloat(card.getAttribute('data-seuil-alerte')) || 0;
-            const seuilCritique = parseFloat(card.getAttribute('data-seuil-critique')) || 0;
-            const sensEvaluation = card.getAttribute('data-sens-evaluation');
-            const title = card.querySelector('.h6')?.textContent.toLowerCase() || '';
-            const description = card.querySelector('.small')?.textContent.toLowerCase() || '';
-            const hasRisque = card.querySelector('.fa-exclamation-triangle') !== null;
-            
-            let show = true;
-            
-            // Filtre par type
-            if (filterTypeValue !== 'all' && type !== filterTypeValue) {
-                show = false;
-            }
-            
-            // Filtre par état
-            if (show && activeFilter !== 'all') {
-                switch(activeFilter) {
-                    case 'alert':
-                        if (sensEvaluation === 'superieur') {
-                            show = seuilAlerte > 0 && valeur >= seuilAlerte && (seuilCritique === 0 || valeur < seuilCritique);
-                        } else {
-                            show = seuilAlerte > 0 && valeur <= seuilAlerte && (seuilCritique === 0 || valeur > seuilCritique);
-                        }
-                        break;
-                    case 'critical':
-                        if (sensEvaluation === 'superieur') {
-                            show = seuilCritique > 0 && valeur >= seuilCritique;
-                        } else {
-                            show = seuilCritique > 0 && valeur <= seuilCritique;
-                        }
-                        break;
-                    case 'hausse':
-                        show = tendance === 'hausse';
-                        break;
-                    case 'sans_risque':
-                        show = !hasRisque;
-                        break;
-                }
-            }
-            
-            // Filtre par recherche
-            if (show && searchTerm) {
-                show = title.includes(searchTerm) || description.includes(searchTerm);
-            }
-            
-            card.style.display = show ? 'block' : 'none';
+    const searchInput = document.getElementById('searchCartographie');
+    if (searchInput) {
+        searchInput.addEventListener('keyup', function(e) {
+            filterCartographies();
+            if (e.key === 'Enter') appliquerFiltres();
         });
     }
-    
-    filterButtons.forEach(btn => {
-        btn.addEventListener('click', function() {
-            filterButtons.forEach(b => b.classList.remove('active'));
-            this.classList.add('active');
-            applyFilters();
-        });
-    });
-    
-    searchInput.addEventListener('input', applyFilters);
-    filterType.addEventListener('change', applyFilters);
-    
-    // ============================================
-    // GESTION DES ACTIONS KRI
-    // ============================================
-    
-    document.querySelectorAll('.archiver-kri').forEach(btn => {
-        btn.addEventListener('click', async function(e) {
-            e.preventDefault();
-            const kriId = this.getAttribute('data-kri-id');
-            
-            if (confirm('Êtes-vous sûr de vouloir archiver cet indicateur ?\n\nIl sera déplacé dans les archives.')) {
-                try {
-                    const data = await fetchJSON(`/kri/${kriId}/changer-statut`, {
-                        method: 'POST',
-                        body: `action=archiver`
-                    });
-                    
-                    if (data.success) {
-                        showToast(data.message || 'Indicateur archivé avec succès', 'success');
-                        setTimeout(() => location.reload(), 1000);
-                    } else {
-                        showToast('Erreur: ' + (data.error || 'Erreur lors de l\'archivage'), 'error');
-                    }
-                } catch (error) {
-                    showToast('Erreur lors de la communication avec le serveur', 'error');
-                }
-            }
-        });
-    });
-    
-    document.querySelectorAll('.restaurer-kri').forEach(btn => {
-        btn.addEventListener('click', async function(e) {
-            e.preventDefault();
-            const kriId = this.getAttribute('data-kri-id');
-            
-            if (confirm('Êtes-vous sûr de vouloir restaurer cet indicateur ?')) {
-                try {
-                    const data = await fetchJSON(`/kri/${kriId}/changer-statut`, {
-                        method: 'POST',
-                        body: `action=restaurer`
-                    });
-                    
-                    if (data.success) {
-                        showToast(data.message || 'Indicateur restauré avec succès', 'success');
-                        setTimeout(() => location.reload(), 1000);
-                    } else {
-                        showToast('Erreur: ' + (data.error || 'Erreur lors de la restauration'), 'error');
-                    }
-                } catch (error) {
-                    showToast('Erreur lors de la communication avec le serveur', 'error');
-                }
-            }
-        });
-    });
-    
-    document.querySelectorAll('.dupliquer-kri').forEach(btn => {
-        btn.addEventListener('click', async function(e) {
-            e.preventDefault();
-            const kriId = this.getAttribute('data-kri-id');
-            
-            if (confirm('Êtes-vous sûr de vouloir dupliquer cet indicateur ?')) {
-                try {
-                    const data = await fetchJSON(`/kri/${kriId}/dupliquer`, {
-                        method: 'POST'
-                    });
-                    
-                    if (data.success) {
-                        showToast(data.message || 'Indicateur dupliqué avec succès', 'success');
-                        setTimeout(() => location.reload(), 1000);
-                    } else {
-                        showToast('Erreur: ' + (data.error || 'Erreur lors de la duplication'), 'error');
-                    }
-                } catch (error) {
-                    showToast('Erreur lors de la communication avec le serveur', 'error');
-                }
-            }
-        });
-    });
-    
-    document.querySelectorAll('.supprimer-kri').forEach(btn => {
-        btn.addEventListener('click', function(e) {
-            e.preventDefault();
-            const kriId = this.getAttribute('data-kri-id');
-            
-            const form = document.getElementById('formSuppressionKri');
-            if (form) {
-                form.action = `/kri/${kriId}/supprimer-definitivement`;
-                const modal = new bootstrap.Modal(document.getElementById('confirmationSuppressionModal'));
-                modal.show();
-            } else {
-                showToast('Erreur: Formulaire de suppression non trouvé', 'error');
-            }
-        });
-    });
-    
-    // ============================================
-    // GRAPHIQUES
-    // ============================================
-    {% for kri in kris %}
-    {% if kri.mesures and kri.mesures|length > 1 %}
-    (function() {
-        const modal = document.getElementById('graphModal{{ kri.id }}');
-        if (modal) {
-            modal.addEventListener('shown.bs.modal', async function() {
-                const ctx = document.getElementById('kriChart{{ kri.id }}');
-                
-                if (ctx && !ctx.chart) {
-                    try {
-                        const response = await fetch('{{ url_for("api_kri_evolution", kri_id=kri.id) }}', {
-                            headers: { 'X-Requested-With': 'XMLHttpRequest' }
-                        });
-                        
-                        if (!response.ok) {
-                            console.warn(`Route api_kri_evolution non disponible pour KRI {{ kri.id }}`);
-                            return;
-                        }
-                        
-                        const data = await response.json();
-                        
-                        if (!data.success) {
-                            console.error('Erreur API:', data.error);
-                            return;
-                        }
-                        
-                        const couleur = '{{ kri.get_couleur_type() }}' === 'danger' ? '#dc3545' : '#28a745';
-                        
-                        // Ajouter les lignes de seuils
-                        const datasets = [{
-                            label: '{{ kri.nom }}',
-                            data: data.valeurs || [],
-                            borderColor: couleur,
-                            backgroundColor: couleur + '20',
-                            borderWidth: 3,
-                            tension: 0.4,
-                            fill: true,
-                            pointBackgroundColor: couleur,
-                            pointBorderColor: '#fff',
-                            pointBorderWidth: 2
-                        }];
-                        
-                        // Ajouter le seuil d'alerte
-                        {% if kri.seuil_alerte %}
-                        datasets.push({
-                            label: 'Seuil alerte',
-                            data: Array(data.valeurs.length).fill({{ kri.seuil_alerte }}),
-                            borderColor: '#ffc107',
-                            borderWidth: 2,
-                            borderDash: [5, 5],
-                            pointRadius: 0,
-                            fill: false,
-                            tension: 0
-                        });
-                        {% endif %}
-                        
-                        // Ajouter le seuil critique
-                        {% if kri.seuil_critique %}
-                        datasets.push({
-                            label: 'Seuil critique',
-                            data: Array(data.valeurs.length).fill({{ kri.seuil_critique }}),
-                            borderColor: '#dc3545',
-                            borderWidth: 2,
-                            borderDash: [5, 5],
-                            pointRadius: 0,
-                            fill: false,
-                            tension: 0
-                        });
-                        {% endif %}
-                        
-                        // Ajouter la cible pour KPI
-                        {% if kri.type_indicateur == 'kpi' and kri.seuil_cible %}
-                        datasets.push({
-                            label: 'Cible',
-                            data: Array(data.valeurs.length).fill({{ kri.seuil_cible }}),
-                            borderColor: '#17a2b8',
-                            borderWidth: 2,
-                            borderDash: [5, 5],
-                            pointRadius: 0,
-                            fill: false,
-                            tension: 0
-                        });
-                        {% endif %}
-                        
-                        ctx.chart = new Chart(ctx, {
-                            type: 'line',
-                            data: {
-                                labels: data.dates || [],
-                                datasets: datasets
-                            },
-                            options: {
-                                responsive: true,
-                                maintainAspectRatio: false,
-                                plugins: {
-                                    tooltip: {
-                                        backgroundColor: 'rgba(0, 0, 0, 0.8)',
-                                        titleColor: '#fff',
-                                        bodyColor: '#fff',
-                                        callbacks: {
-                                            label: function(context) {
-                                                return context.dataset.label + ': ' + context.parsed.y + ' {{ kri.unite_mesure }}';
-                                            }
-                                        }
-                                    }
-                                },
-                                scales: {
-                                    y: {
-                                        beginAtZero: false,
-                                        grid: { color: 'rgba(0, 0, 0, 0.05)' },
-                                        title: {
-                                            display: true,
-                                            text: '{{ kri.unite_mesure }}',
-                                            color: '#666'
-                                        }
-                                    },
-                                    x: {
-                                        grid: { color: 'rgba(0, 0, 0, 0.05)' }
-                                    }
-                                }
-                            }
-                        });
-                    } catch (error) {
-                        console.error('Erreur chargement graphique KRI {{ kri.id }}:', error);
-                    }
-                }
-            });
-        }
-    })();
-    {% endif %}
-    {% endfor %}
-    
-    // ============================================
-    // ANIMATIONS
-    // ============================================
-    const observerOptions = {
-        threshold: 0.1,
-        rootMargin: '0px 0px -50px 0px'
-    };
-    
-    const observer = new IntersectionObserver((entries) => {
-        entries.forEach(entry => {
-            if (entry.isIntersecting) {
-                entry.target.style.opacity = '1';
-                entry.target.style.transform = 'translateY(0)';
-            }
-        });
-    }, observerOptions);
-    
-    document.querySelectorAll('.fk-card').forEach(el => {
-        el.style.opacity = '0';
-        el.style.transform = 'translateY(20px)';
-        el.style.transition = 'all 0.6s ease-out';
-        observer.observe(el);
-    });
-    
-    applyFilters();
 });
 </script>
+
+<style>
+/* ============ KPI ============ */
+.col-lg-2-4 { flex: 0 0 auto; width: 20%; }
+@media (max-width: 991px) { .col-lg-2-4 { width: 50%; } }
+
+.kpi-card {
+    display: flex;
+    align-items: center;
+    gap: 0.9rem;
+    background: white;
+    border: 1px solid #e2e8f0;
+    border-radius: 12px;
+    padding: 1rem 1.1rem;
+    height: 100%;
+    transition: box-shadow .2s, transform .2s;
+}
+.kpi-card:hover { box-shadow: 0 8px 18px rgba(0,0,0,.06); transform: translateY(-2px); }
+.kpi-icon {
+    width: 44px; height: 44px; border-radius: 10px;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 1.05rem; flex-shrink: 0;
+}
+.kpi-value { font-size: 1.5rem; font-weight: 700; line-height: 1.1; color: #1e293b; }
+.kpi-label { font-size: .75rem; color: #64748b; text-transform: uppercase; letter-spacing: .03em; }
+
+[data-bs-theme="dark"] .kpi-card { background: #1e293b; border-color: #334155; }
+[data-bs-theme="dark"] .kpi-value { color: #f1f5f9; }
+
+/* ============ Titres de groupe ============ */
+.groupe-titre { border-left: 4px solid #3498db; padding-left: 10px; }
+.groupe-titre-neutre { border-left-color: #6c757d; }
+
+/* ============ fk-card générique (état vide) ============ */
+.fk-card { border: 1px solid #e2e8f0; border-radius: 12px; overflow: hidden; background: white; }
+.fk-card-body { padding: 1.5rem; }
+.fk-btn { border-radius: 8px; padding: 0.5rem 1rem; font-weight: 500; transition: all 0.2s; display: inline-block; text-decoration: none; }
+.fk-btn-primary { background-color: #3498db; color: white; border: 2px solid #3498db; }
+.fk-btn-primary:hover { background-color: #2980b9; border-color: #2980b9; color: white; }
+.fk-btn-outline-secondary { border: 2px solid #95a5a6; color: #7f8c8d; background: transparent; }
+.fk-btn-outline-secondary:hover { background-color: #95a5a6; color: white; }
+</style>
 {% endblock %}
