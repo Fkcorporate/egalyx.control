@@ -26,6 +26,7 @@
                     </div>
                     {% endif %}
                     
+                    <!-- NOM -->
                     <div class="mb-3">
                         {{ form.nom.label(class="form-label") }}
                         {{ form.nom(class="form-control", placeholder="Ex: Cartographie des risques - Direction Financière") }}
@@ -34,6 +35,7 @@
                         {% endfor %}
                     </div>
                     
+                    <!-- DESCRIPTION -->
                     <div class="mb-3">
                         {{ form.description.label(class="form-label") }}
                         {{ form.description(class="form-control", rows="4", placeholder="Description de la cartographie...") }}
@@ -42,7 +44,34 @@
                         {% endfor %}
                     </div>
                     
-                    <!-- Sélection du Pôle -->
+                    <!-- ============================================ -->
+                    <!-- SÉLECTION DU PAYS (NOUVEAU - niveau le plus haut) -->
+                    <!-- ============================================ -->
+                    <div class="mb-3">
+                        <label class="form-label fw-bold">
+                            <i class="fas fa-globe text-primary me-2"></i>
+                            Pays (optionnel)
+                        </label>
+                        <select name="pays_id" id="pays_id" class="form-select">
+                            <option value="">--- Aucun pays (voir tous les pôles) ---</option>
+                            {% for pays in pays_list %}
+                            <option value="{{ pays.id }}"
+                                    data-code="{{ pays.code or '' }}"
+                                    data-drapeau="{{ pays.drapeau or '' }}"
+                                    {% if form.pays_id.data == pays.id %}selected{% endif %}>
+                                {{ pays.drapeau or '🌍' }} {{ pays.nom }}{% if pays.code %} ({{ pays.code }}){% endif %}
+                            </option>
+                            {% endfor %}
+                        </select>
+                        <small class="form-text text-muted">
+                            <i class="fas fa-info-circle me-1"></i>
+                            Laissez vide pour voir tous les pôles
+                        </small>
+                    </div>
+                    
+                    <!-- ============================================ -->
+                    <!-- SÉLECTION DU PÔLE (dépend du pays) -->
+                    <!-- ============================================ -->
                     <div class="mb-3">
                         <label class="form-label fw-bold">
                             <i class="fas fa-layer-group text-primary me-2"></i>
@@ -53,6 +82,7 @@
                             {% for pole in poles %}
                             <option value="{{ pole.id }}" 
                                     data-couleur="{{ pole.couleur|default('#3b82f6') }}"
+                                    data-pays-id="{{ pole.pays_id or '' }}"
                                     {% if form.pole_id.data == pole.id %}selected{% endif %}>
                                 {{ pole.nom }}
                             </option>
@@ -64,7 +94,7 @@
                         </small>
                     </div>
                     
-                    <!-- Type de cartographie -->
+                    <!-- TYPE DE CARTOGRAPHIE -->
                     <div class="mb-3">
                         <label class="form-label fw-bold">Type de cartographie *</label>
                         <div class="form-check">
@@ -85,13 +115,16 @@
                         </div>
                     </div>
                     
-                    <!-- Sélection Direction -->
+                    <!-- SÉLECTION DIRECTION -->
                     <div class="mb-3" id="directionField">
                         <label class="form-label fw-bold">
                             <i class="fas fa-building me-2"></i>Direction *
                         </label>
                         <select class="form-select" name="direction_id" id="direction_id" required>
                             <option value="">--- Chargement des directions ---</option>
+                            {% for value, label in form.direction_id.choices %}
+                            <option value="{{ value }}" {% if form.direction_id.data == value %}selected{% endif %}>{{ label }}</option>
+                            {% endfor %}
                         </select>
                         <div id="directionLoading" style="display: none;" class="text-muted mt-1">
                             <i class="fas fa-spinner fa-spin me-1"></i> Chargement des directions...
@@ -104,13 +137,16 @@
                         {% endfor %}
                     </div>
                     
-                    <!-- Sélection Service (caché par défaut) -->
+                    <!-- SÉLECTION SERVICE (caché par défaut) -->
                     <div class="mb-3" id="serviceField" style="display: none;">
                         <label class="form-label fw-bold">
                             <i class="fas fa-cubes me-2"></i>Service *
                         </label>
                         <select class="form-select" name="service_id" id="service_id">
                             <option value="">--- Sélectionnez d'abord une direction ---</option>
+                            {% for value, label in form.service_id.choices %}
+                            <option value="{{ value }}" {% if form.service_id.data == value %}selected{% endif %}>{{ label }}</option>
+                            {% endfor %}
                         </select>
                         <div id="serviceLoading" style="display: none;" class="text-muted mt-1">
                             <i class="fas fa-spinner fa-spin me-1"></i> Chargement des services...
@@ -123,7 +159,7 @@
                         {% endfor %}
                     </div>
                     
-                    <!-- Aperçu de la hiérarchie -->
+                    <!-- APERÇU DE LA HIÉRARCHIE -->
                     <div class="card bg-light mt-4" id="hierarchyPreview" style="display: none;">
                         <div class="card-body">
                             <h6 class="card-subtitle mb-2 text-muted">
@@ -148,22 +184,32 @@
         </div>
     </div>
     
+    <!-- GUIDE -->
     <div class="col-md-4">
         <div class="card shadow">
             <div class="card-header bg-info text-white">
                 <h6 class="mb-0"><i class="fas fa-info-circle"></i> Guide</h6>
             </div>
             <div class="card-body">
-                <p><strong>Filtrage des directions :</strong></p>
+                <p><strong>Filtrage hiérarchique :</strong></p>
                 <ul class="small">
-                    <li><strong>Aucun pôle sélectionné</strong> → affiche TOUTES les directions</li>
-                    <li><strong>Pôle sélectionné</strong> → affiche uniquement les directions de ce pôle</li>
-                    <li><strong>Direction sélectionnée</strong> → charge ses services</li>
+                    <li><strong>Pays</strong> → filtre les pôles disponibles</li>
+                    <li><strong>Pôle</strong> → filtre les directions disponibles</li>
+                    <li><strong>Direction</strong> → charge ses services</li>
+                    <li><strong>Service</strong> → précise le périmètre</li>
                 </ul>
                 <div class="alert alert-primary mt-3">
                     <small>
                         <i class="fas fa-magic"></i>
-                        <strong>Hiérarchie :</strong> Pôle → Direction → Service → Cartographie
+                        <strong>Hiérarchie :</strong> 
+                        Pays → Pôle → Direction → Service → Cartographie
+                    </small>
+                </div>
+                <div class="alert alert-light mt-3 border">
+                    <small>
+                        <i class="fas fa-lightbulb text-warning"></i>
+                        <strong>Astuce :</strong> Laissez les champs vides pour élargir le périmètre. 
+                        Plus vous descendez dans la hiérarchie, plus la cartographie est précise.
                     </small>
                 </div>
             </div>
@@ -177,7 +223,7 @@
 (function() {
     'use strict';
     
-    console.log('📝 Initialisation du formulaire avec filtrage dynamique...');
+    console.log('📝 Initialisation du formulaire avec filtrage dynamique Pays → Pôle → Direction → Service...');
     
     if (document.readyState === 'loading') {
         document.addEventListener('DOMContentLoaded', initForm);
@@ -187,20 +233,30 @@
     
     function initForm() {
         const elements = {
+            // 🔥 NOUVEAU : Pays
+            paysSelect: document.getElementById('pays_id'),
+            // Pôle
             poleSelect: document.getElementById('pole_id'),
+            // Direction
             directionSelect: document.getElementById('direction_id'),
+            // Service
             serviceSelect: document.getElementById('service_id'),
+            // Types
             typeDirection: document.getElementById('type_direction'),
             typeService: document.getElementById('type_service'),
+            // Champs
             directionField: document.getElementById('directionField'),
             serviceField: document.getElementById('serviceField'),
+            // Loaders
             directionLoading: document.getElementById('directionLoading'),
             directionEmpty: document.getElementById('directionEmpty'),
             serviceLoading: document.getElementById('serviceLoading'),
             serviceEmpty: document.getElementById('serviceEmpty'),
+            // Aperçu hiérarchie
             hierarchyPreview: document.getElementById('hierarchyPreview'),
             hierarchyPath: document.getElementById('hierarchyPath'),
             hierarchyDescription: document.getElementById('hierarchyDescription'),
+            // Divers
             nomInput: document.querySelector('input[name="nom"]'),
             form: document.getElementById('cartographieForm')
         };
@@ -213,11 +269,76 @@
         let currentDirections = [];
         let currentServices = [];
         
-        // Fonction principale pour charger les directions
-        async function loadDirections() {
-            const poleId = elements.poleSelect.value;
+        // ============================================
+        // 🔥 NOUVEAU : Charger les pôles selon le pays
+        // ============================================
+        async function loadPolesByPays(paysId, keepSelection = false) {
+            if (!elements.poleSelect) return;
             
-            // Afficher le chargement
+            const selectedPoleId = keepSelection ? elements.poleSelect.value : '';
+            
+            elements.poleSelect.disabled = true;
+            elements.poleSelect.innerHTML = '<option value="">Chargement...</option>';
+            
+            try {
+                let url;
+                if (paysId) {
+                    url = `/api/poles/by-pays/${paysId}`;
+                } else {
+                    url = '/api/poles-disponibles';
+                }
+                
+                console.log(`📡 Chargement des pôles depuis: ${url}`);
+                const response = await fetch(url);
+                const data = await response.json();
+                
+                let poles = [];
+                if (data.poles) {
+                    poles = data.poles;
+                } else if (Array.isArray(data)) {
+                    poles = data;
+                }
+                
+                let options = '<option value="">--- Aucun pôle (voir toutes les directions) ---</option>';
+                poles.forEach(pole => {
+                    const selected = (keepSelection && selectedPoleId && selectedPoleId == pole.id) ? 'selected' : '';
+                    options += `<option value="${pole.id}" 
+                                         data-couleur="${pole.couleur || '#3b82f6'}"
+                                         data-pays-id="${pole.pays_id || ''}"
+                                         ${selected}>
+                                    ${escapeHtml(pole.nom)}
+                                </option>`;
+                });
+                
+                elements.poleSelect.innerHTML = options;
+                elements.poleSelect.disabled = false;
+                
+                console.log(`✅ ${poles.length} pôles chargés`);
+                
+                // Vérifier si l'ancien pôle est toujours valide
+                if (keepSelection && selectedPoleId) {
+                    const stillExists = elements.poleSelect.querySelector(`option[value="${selectedPoleId}"]`);
+                    if (!stillExists) {
+                        elements.poleSelect.value = '';
+                        // Si le pôle n'existe plus, recharger les directions
+                        await loadDirections();
+                    }
+                }
+                
+            } catch (error) {
+                console.error('❌ Erreur chargement pôles:', error);
+                elements.poleSelect.innerHTML = '<option value="">--- Erreur de chargement ---</option>';
+                elements.poleSelect.disabled = false;
+            }
+        }
+        
+        // ============================================
+        // Charger les directions (filtrées par pôle si sélectionné)
+        // ============================================
+        async function loadDirections() {
+            const poleId = elements.poleSelect ? elements.poleSelect.value : '';
+            const paysId = elements.paysSelect ? elements.paysSelect.value : '';
+            
             if (elements.directionLoading) elements.directionLoading.style.display = 'block';
             if (elements.directionEmpty) elements.directionEmpty.style.display = 'none';
             if (elements.directionSelect) {
@@ -228,10 +349,13 @@
             try {
                 let url;
                 if (poleId) {
-                    // Si un pôle est sélectionné, charger ses directions
+                    // Priorité : pôle sélectionné
                     url = `/api/directions/by-pole/${poleId}`;
+                } else if (paysId) {
+                    // Sinon : pays sélectionné (toutes les directions du pays)
+                    url = `/api/directions/by-pays/${paysId}`;
                 } else {
-                    // Sinon, charger toutes les directions
+                    // Sinon : toutes les directions
                     url = '/api/directions-disponibles';
                 }
                 
@@ -243,24 +367,19 @@
                     throw new Error(data.error || 'Erreur chargement directions');
                 }
                 
-                // Extraire les directions (les deux APIs ont des formats différents)
                 let directions = [];
                 if (data.directions) {
-                    // Format /api/directions/by-pole/
                     directions = data.directions;
                 } else if (Array.isArray(data)) {
-                    // Format /api/directions-disponibles
                     directions = data;
-                } else {
-                    directions = [];
                 }
                 
                 currentDirections = directions;
                 
-                // Mettre à jour le select des directions
                 if (elements.directionSelect) {
                     if (currentDirections.length === 0) {
-                        let message = poleId ? 'Aucune direction dans ce pôle' : 'Aucune direction disponible';
+                        let message = poleId ? 'Aucune direction dans ce pôle' : 
+                                     (paysId ? 'Aucune direction dans ce pays' : 'Aucune direction disponible');
                         elements.directionSelect.innerHTML = `<option value="">--- ${message} ---</option>`;
                         if (elements.directionEmpty) elements.directionEmpty.style.display = 'block';
                     } else {
@@ -277,17 +396,14 @@
                     elements.directionSelect.disabled = false;
                 }
                 
-                // Réinitialiser le service
                 resetServices();
-                
                 console.log(`✅ ${currentDirections.length} directions chargées`);
                 
-                // Restaurer la valeur pré-sélectionnée si elle existe
+                // Restaurer la valeur pré-sélectionnée
                 {% if form.direction_id.data %}
                 const preselectedValue = "{{ form.direction_id.data }}";
                 if (elements.directionSelect.querySelector(`option[value="${preselectedValue}"]`)) {
                     elements.directionSelect.value = preselectedValue;
-                    // Si c'est un service, charger les services
                     if (elements.typeService && elements.typeService.checked) {
                         loadServices(preselectedValue);
                     }
@@ -308,7 +424,9 @@
             }
         }
         
-        // Fonction pour charger les services d'une direction
+        // ============================================
+        // Charger les services d'une direction
+        // ============================================
         async function loadServices(directionId) {
             if (!directionId) {
                 resetServices();
@@ -348,7 +466,6 @@
                 
                 console.log(`✅ ${currentServices.length} services chargés`);
                 
-                // Restaurer la valeur pré-sélectionnée
                 {% if form.service_id.data %}
                 const preselectedService = "{{ form.service_id.data }}";
                 if (elements.serviceSelect.querySelector(`option[value="${preselectedService}"]`)) {
@@ -376,9 +493,13 @@
             currentServices = [];
         }
         
+        // ============================================
+        // 🔥 Aperçu de la hiérarchie (avec Pays)
+        // ============================================
         function updateHierarchyPreview() {
             if (!elements.hierarchyPreview || !elements.hierarchyPath || !elements.hierarchyDescription) return;
             
+            const paysId = elements.paysSelect ? elements.paysSelect.value : '';
             const poleId = elements.poleSelect ? elements.poleSelect.value : '';
             const directionId = elements.directionSelect ? elements.directionSelect.value : '';
             const serviceId = elements.serviceSelect ? elements.serviceSelect.value : '';
@@ -387,7 +508,16 @@
             let path = '';
             let hasHierarchy = false;
             
-            // Pôle
+            // 🔥 PAYS
+            if (paysId && elements.paysSelect) {
+                const paysOption = elements.paysSelect.options[elements.paysSelect.selectedIndex];
+                const paysText = paysOption ? paysOption.text.trim() : 'Pays';
+                path += `<span class="badge bg-primary">${escapeHtml(paysText)}</span>`;
+                path += ` <i class="fas fa-chevron-right text-muted mx-1"></i> `;
+                hasHierarchy = true;
+            }
+            
+            // PÔLE
             if (poleId && elements.poleSelect) {
                 const poleOption = elements.poleSelect.options[elements.poleSelect.selectedIndex];
                 const poleNom = poleOption ? poleOption.text.split('(')[0].trim() : 'Pôle';
@@ -397,7 +527,7 @@
                 hasHierarchy = true;
             }
             
-            // Direction
+            // DIRECTION
             if (directionId && currentDirections.length > 0) {
                 const direction = currentDirections.find(d => d.id == directionId);
                 const directionNom = direction ? direction.nom : 'Direction';
@@ -406,7 +536,7 @@
                 hasHierarchy = true;
             }
             
-            // Service
+            // SERVICE
             if (serviceId && elements.typeService && elements.typeService.checked && currentServices.length > 0) {
                 const service = currentServices.find(s => s.id == serviceId);
                 const serviceNom = service ? service.nom : 'Service';
@@ -423,12 +553,14 @@
             if (hasHierarchy) {
                 elements.hierarchyPath.innerHTML = path;
                 let description = '';
-                if (poleId && directionId && serviceId && elements.typeService && elements.typeService.checked) {
-                    description = 'Cartographie au niveau service, rattachée à une direction et un pôle.';
-                } else if (poleId && directionId) {
-                    description = 'Cartographie au niveau direction, rattachée à un pôle.';
-                } else if (poleId) {
-                    description = 'Cartographie au niveau pôle (vision macro).';
+                if (paysId && poleId && directionId && serviceId && elements.typeService && elements.typeService.checked) {
+                    description = 'Cartographie au niveau service, rattachée à une direction, un pôle et un pays.';
+                } else if (paysId && poleId && directionId) {
+                    description = 'Cartographie au niveau direction, rattachée à un pôle et un pays.';
+                } else if (paysId && poleId) {
+                    description = 'Cartographie au niveau pôle, rattachée à un pays.';
+                } else if (paysId) {
+                    description = 'Cartographie au niveau pays (vision macro).';
                 } else if (directionId) {
                     description = 'Cartographie au niveau direction.';
                 }
@@ -439,6 +571,9 @@
             }
         }
         
+        // ============================================
+        // Toggle champs Direction / Service
+        // ============================================
         function toggleFields() {
             if (!elements.directionField || !elements.serviceField) return;
             
@@ -463,7 +598,20 @@
             return div.innerHTML;
         }
         
-        // Écouteurs d'événements
+        // ============================================
+        // ÉCOUTEURS D'ÉVÉNEMENTS
+        // ============================================
+        
+        // 🔥 Pays → recharge les pôles + directions
+        if (elements.paysSelect) {
+            elements.paysSelect.addEventListener('change', async function() {
+                await loadPolesByPays(this.value, false);
+                await loadDirections();
+                updateHierarchyPreview();
+            });
+        }
+        
+        // Pôle → recharge les directions
         if (elements.poleSelect) {
             elements.poleSelect.addEventListener('change', function() {
                 loadDirections();
@@ -471,6 +619,7 @@
             });
         }
         
+        // Direction → recharge les services
         if (elements.directionSelect) {
             elements.directionSelect.addEventListener('change', function() {
                 if (elements.typeService && elements.typeService.checked) {
@@ -480,31 +629,56 @@
             });
         }
         
+        // Service → aperçu
         if (elements.serviceSelect) {
             elements.serviceSelect.addEventListener('change', updateHierarchyPreview);
         }
         
+        // Type → toggle champs
         if (elements.typeDirection) elements.typeDirection.addEventListener('change', toggleFields);
         if (elements.typeService) elements.typeService.addEventListener('change', toggleFields);
         
+        // Nom → aperçu
         if (elements.nomInput) {
             elements.nomInput.addEventListener('input', updateHierarchyPreview);
         }
         
-        // Initialisation
+        // ============================================
+        // INITIALISATION
+        // ============================================
         toggleFields();
         
-        // Chargement initial des directions (selon le pôle sélectionné ou toutes)
-        loadDirections().then(() => {
-            // Si une direction est pré-sélectionnée et que c'est un type service, charger les services
-            {% if form.direction_id.data and form.type_cartographie.data == 'service' %}
-            setTimeout(() => {
-                loadServices({{ form.direction_id.data }});
-            }, 500);
-            {% endif %}
-        });
+        // Charger les pôles (filtrés par pays si pré-sélectionné)
+        const initialPaysId = elements.paysSelect ? elements.paysSelect.value : '';
+        const initialPoleId = elements.poleSelect ? elements.poleSelect.value : '';
         
-        // Validation du formulaire
+        if (initialPaysId) {
+            // Un pays est pré-sélectionné → charger ses pôles
+            loadPolesByPays(initialPaysId, true).then(() => {
+                // Puis charger les directions
+                loadDirections().then(() => {
+                    // Puis les services si type=service
+                    {% if form.direction_id.data and form.type_cartographie.data == 'service' %}
+                    setTimeout(() => {
+                        loadServices({{ form.direction_id.data }});
+                    }, 500);
+                    {% endif %}
+                });
+            });
+        } else {
+            // Pas de pays pré-sélectionné → comportement normal
+            loadDirections().then(() => {
+                {% if form.direction_id.data and form.type_cartographie.data == 'service' %}
+                setTimeout(() => {
+                    loadServices({{ form.direction_id.data }});
+                }, 500);
+                {% endif %}
+            });
+        }
+        
+        // ============================================
+        // VALIDATION DU FORMULAIRE
+        // ============================================
         if (elements.form) {
             elements.form.addEventListener('submit', function(e) {
                 const typeCartographie = document.querySelector('input[name="type_cartographie"]:checked');
@@ -540,7 +714,7 @@
             });
         }
         
-        console.log('✅ Formulaire initialisé avec succès');
+        console.log('✅ Formulaire initialisé avec succès (Pays → Pôle → Direction → Service)');
     }
 })();
 </script>
