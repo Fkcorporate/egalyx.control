@@ -1677,9 +1677,38 @@ class EvaluationRisque(db.Model):
     campagne_date_fin = db.Column(db.Date)
     campagne_objectif = db.Column(db.Text)
     
-    # Résultats finaux
-    score_risque = db.Column(db.Integer)
+    # ============================================================
+    # 🔥 RÉSULTATS FINAUX — VERSION ENRICHIE ISO 31000
+    # ============================================================
+    
+    # Score principal (= score NET après application des contrôles)
+    score_risque = db.Column(db.Float)                    # ← passé en Float
     niveau_risque = db.Column(db.String(20))
+    
+    # Score BRUT (avant contrôles) = impact × probabilité
+    score_risque_brut = db.Column(db.Float, default=0)
+    niveau_risque_brut = db.Column(db.String(20), nullable=True)
+    
+    # Score NET (après réduction par la maîtrise)
+    score_risque_net = db.Column(db.Float, default=0)
+    niveau_risque_net = db.Column(db.String(20), nullable=True)
+    
+    # ============================================================
+    # 🔥 TRAÇABILITÉ DE LA MAÎTRISE (NOUVEAU)
+    # ============================================================
+    
+    # Probabilité ajustée = probabilité × (1 - taux_reduction)
+    probabilite_ajustee = db.Column(db.Float, nullable=True)
+    
+    # Taux de réduction appliqué (0.00 → 0.60)
+    taux_reduction_maitrise = db.Column(db.Float, default=0)
+    
+    # Niveau de maîtrise SUGGÉRÉ par les DMR (calculé automatiquement)
+    niveau_maitrise_dmr = db.Column(db.Float, nullable=True)
+    
+    # Écart entre le niveau saisi et celui suggéré par les DMR
+    ecart_maitrise = db.Column(db.Float, nullable=True)
+    
     type_evaluation = db.Column(db.String(50), default='pre_evaluation')
     client_id = db.Column(db.Integer, db.ForeignKey('clients.id'), nullable=True)
     
@@ -1711,10 +1740,9 @@ class EvaluationRisque(db.Model):
     updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
     
     # ============================================
-    # RELATIONS - CORRIGÉES SANS CONFLIT
+    # RELATIONS — INCHANGÉES
     # ============================================
     
-    # Relations existantes (inchangées)
     risque = db.relationship('Risque', back_populates='evaluations')
     campagne = db.relationship('CampagneEvaluation', back_populates='evaluations')
     referent_pre_evaluation = db.relationship('User', foreign_keys=[referent_pre_evaluation_id])
@@ -1722,30 +1750,21 @@ class EvaluationRisque(db.Model):
     evaluateur_final = db.relationship('User', foreign_keys=[evaluateur_final_id])
     createur = db.relationship('User', foreign_keys=[created_by])
     
-    # 🔥 RELATIONS CORRIGÉES - AVEC DES NOMS UNIQUES
-    
-    # Pour audit_id - backref unique
     audit_source = db.relationship('Audit', 
                                    foreign_keys=[audit_id], 
                                    backref='evaluations_issues_de_audit')
-    
-    # Pour constat_id - backref unique
     constat_source = db.relationship('Constatation', 
                                      foreign_keys=[constat_id], 
                                      backref='evaluations_issues_de_constat')
-    
-    # Pour demande_reevaluation_id - backref unique
     demande_reevaluation = db.relationship('DemandeReevaluation', 
                                            foreign_keys=[demande_reevaluation_id], 
                                            backref='evaluation_issue_de_la_demande')
-    
-    # Pour cartographie_id - backref unique
     cartographie = db.relationship('Cartographie', 
                                    foreign_keys=[cartographie_id], 
                                    backref='evaluations_risque_issues')
 
     # ============================================
-    # MÉTHODES
+    # MÉTHODES EXISTANTES (inchangées)
     # ============================================
     
     def get_valeurs_finales(self):
@@ -1762,11 +1781,9 @@ class EvaluationRisque(db.Model):
         }
     
     def est_complete(self):
-        """Vérifie si l'évaluation est complète (toutes les phases)"""
         return bool(self.date_confirmation)
 
     def marquer_origine_audit(self, audit_id, constat_id=None, justification=None):
-        """Marque l'évaluation comme issue d'un audit"""
         self.origine = 'audit'
         self.audit_id = audit_id
         self.constat_id = constat_id
@@ -1787,14 +1804,12 @@ class EvaluationRisque(db.Model):
         )
     
     def marquer_origine_campagne(self, campagne_id, campagne_nom):
-        """Marque l'évaluation comme issue d'une campagne"""
         self.origine = 'campagne'
         self.metadonnees['source'] = 'campagne'
         self.metadonnees['campagne_origine'] = campagne_nom
         self.updated_at = datetime.utcnow()
     
     def ajouter_historique_modification(self, action, details, user_id):
-        """Ajoute une entrée dans l'historique des modifications"""
         if not self.metadonnees:
             self.metadonnees = {}
         
@@ -1818,7 +1833,6 @@ class EvaluationRisque(db.Model):
         self.updated_at = datetime.utcnow()
     
     def get_origine_label(self):
-        """Retourne le libellé de l'origine"""
         labels = {
             'manuel': '📝 Manuel',
             'audit': '🔍 Audit',
@@ -1828,7 +1842,6 @@ class EvaluationRisque(db.Model):
         return labels.get(self.origine, self.origine)
     
     def get_origine_css(self):
-        """Retourne la classe CSS pour l'origine"""
         css = {
             'manuel': 'secondary',
             'audit': 'info',
@@ -1836,143 +1849,8 @@ class EvaluationRisque(db.Model):
             'campagne': 'success'
         }
         return css.get(self.origine, 'secondary')
-
-
-    # ============================================
-    # FONCTIONS D'ÉVALUATION TRIPHASE
-    # ============================================
-    
-    def get_impact_description(niveau):
-        """Retourne la description du niveau d'impact"""
-        descriptions = {
-            1: "Conséquences négligeables, sans impact significatif sur les objectifs",
-            2: "Conséquences mineures, impact limité et gérable",
-            3: "Conséquences modérées, impact notable nécessitant une attention",
-            4: "Conséquences importantes, impact significatif sur les objectifs",
-            5: "Conséquences critiques, menace grave pour l'organisation"
-        }
-        return descriptions.get(niveau, "Sélectionnez le niveau d'impact")
-    
-    def get_probabilite_description(niveau):
-        """Retourne la description du niveau de probabilité"""
-        descriptions = {
-            1: "Événement exceptionnel, quasiment impossible (moins de 1%)",
-            2: "Événement peu fréquent, peu probable (1-10%)",
-            3: "Événement possible, pourrait se produire (10-30%)",
-            4: "Événement probable, forte chance de se produire (30-60%)",
-            5: "Événement très probable, quasi certain (>60%)"
-        }
-        return descriptions.get(niveau, "Sélectionnez la probabilité")
-    
-    def get_maitrise_description(niveau):
-        """Retourne la description du niveau de maîtrise"""
-        descriptions = {
-            1: "Contrôle inexistant ou très insuffisant, risque non maîtrisé",
-            2: "Contrôle faible, efficacité limitée, nombreuses faiblesses",
-            3: "Contrôle modéré, partiellement efficace, quelques faiblesses",
-            4: "Contrôle bon, efficace, quelques améliorations possibles",
-            5: "Contrôle excellent, très efficace, robuste et documenté"
-        }
-        return descriptions.get(niveau, "Niveau de contrôle existant")
-    
-    def get_impact_color(niveau):
-        """Retourne la couleur du niveau d'impact"""
-        colors = {
-            1: '#28a745',
-            2: '#8bc34a',
-            3: '#ffc107',
-            4: '#ff9800',
-            5: '#dc3545'
-        }
-        return colors.get(niveau, '#6c757d')
-    
-    def get_probabilite_color(niveau):
-        """Retourne la couleur du niveau de probabilité"""
-        colors = {
-            1: '#28a745',
-            2: '#8bc34a',
-            3: '#ffc107',
-            4: '#ff9800',
-            5: '#dc3545'
-        }
-        return colors.get(niveau, '#6c757d')
-    
-    def get_maitrise_color(niveau):
-        """Retourne la couleur du niveau de maîtrise"""
-        colors = {
-            1: '#dc3545',
-            2: '#ff9800',
-            3: '#ffc107',
-            4: '#8bc34a',
-            5: '#28a745'
-        }
-        return colors.get(niveau, '#6c757d')
-    
-    def get_impact_label(niveau):
-        """Retourne le libellé du niveau d'impact"""
-        labels = {
-            1: 'Négligeable',
-            2: 'Mineur',
-            3: 'Modéré',
-            4: 'Important',
-            5: 'Critique'
-        }
-        return labels.get(niveau, 'Non défini')
-    
-    def get_probabilite_label(niveau):
-        """Retourne le libellé du niveau de probabilité"""
-        labels = {
-            1: 'Très rare',
-            2: 'Rare',
-            3: 'Possible',
-            4: 'Probable',
-            5: 'Très probable'
-        }
-        return labels.get(niveau, 'Non défini')
-    
-    def get_maitrise_label(niveau):
-        """Retourne le libellé du niveau de maîtrise"""
-        labels = {
-            1: 'Très faible',
-            2: 'Faible',
-            3: 'Moyenne',
-            4: 'Bonne',
-            5: 'Très bonne'
-        }
-        return labels.get(niveau, 'Non défini')
-    
-    def get_niveau_couleur(type_niveau, niveau):
-        """Retourne la couleur pour un type de niveau donné"""
-        if type_niveau == 'impact':
-            return get_impact_color(niveau)
-        elif type_niveau == 'probabilite':
-            return get_probabilite_color(niveau)
-        elif type_niveau == 'maitrise':
-            return get_maitrise_color(niveau)
-        return '#6c757d'
-    
-    def get_niveau_nom_court(type_niveau, niveau):
-        """Retourne le nom court pour un type de niveau donné"""
-        if type_niveau == 'impact':
-            return get_impact_label(niveau)
-        elif type_niveau == 'probabilite':
-            return get_probabilite_label(niveau)
-        elif type_niveau == 'maitrise':
-            return get_maitrise_label(niveau)
-        return 'Non défini'
-    
-    def get_niveau_description(type_niveau, niveau):
-        """Retourne la description pour un type de niveau donné"""
-        if type_niveau == 'impact':
-            return get_impact_description(niveau)
-        elif type_niveau == 'probabilite':
-            return get_probabilite_description(niveau)
-        elif type_niveau == 'maitrise':
-            return get_maitrise_description(niveau)
-        return 'Non défini'
     
     def get_historique_complet(self):
-        """Retourne l'historique complet formaté"""
         historique = []
         
         if self.created_at:
@@ -2018,6 +1896,117 @@ class EvaluationRisque(db.Model):
         historique.sort(key=lambda x: x['date'])
         return historique
 
+    # ============================================================
+    # 🔥 NOUVELLES MÉTHODES — COTATION ISO 31000
+    # ============================================================
+    
+    def get_scores_complets(self):
+        """
+        Retourne un dictionnaire complet des scores brut/net avec
+        toutes les métadonnées de calcul. Utilisable dans les templates.
+        """
+        impact = self.impact_conf or self.impact_val or self.impact_pre
+        proba = self.probabilite_conf or self.probabilite_val or self.probabilite_pre
+        maitrise = (self.niveau_maitrise_conf 
+                    or self.niveau_maitrise_val 
+                    or self.niveau_maitrise_pre)
+        
+        return {
+            # Brut
+            'score_brut': self.score_risque_brut or (impact * proba if impact and proba else 0),
+            'niveau_brut': self.niveau_risque_brut,
+            
+            # Net
+            'score_net': self.score_risque_net or self.score_risque or 0,
+            'niveau_net': self.niveau_risque_net or self.niveau_risque,
+            
+            # Détail du calcul
+            'impact': impact,
+            'probabilite': proba,
+            'niveau_maitrise': maitrise,
+            'probabilite_ajustee': self.probabilite_ajustee,
+            'taux_reduction': self.taux_reduction_maitrise or 0,
+            
+            # Cohérence
+            'niveau_maitrise_dmr': self.niveau_maitrise_dmr,
+            'ecart_maitrise': self.ecart_maitrise,
+            'est_coherent': (
+                self.ecart_maitrise is not None and self.ecart_maitrise <= 1.5
+            ),
+            'coherence_statut': self.get_coherence_statut(),
+            'coherence_message': self.get_coherence_message(),
+        }
+    
+    def get_coherence_statut(self):
+        """Retourne le statut de cohérence maîtrise saisi vs DMR"""
+        if self.niveau_maitrise_dmr is None:
+            return 'info'
+        if self.ecart_maitrise is None:
+            return 'info'
+        if self.ecart_maitrise <= 0.5:
+            return 'success'
+        if self.ecart_maitrise <= 1.5:
+            return 'warning'
+        return 'danger'
+    
+    def get_coherence_message(self):
+        """Retourne un message explicatif sur la cohérence maîtrise"""
+        if self.niveau_maitrise_dmr is None:
+            return "Aucun dispositif de maîtrise évalué."
+        
+        maitrise = (self.niveau_maitrise_conf 
+                    or self.niveau_maitrise_val 
+                    or self.niveau_maitrise_pre)
+        
+        if maitrise is None:
+            return f"Niveau suggéré par les DMR : {self.niveau_maitrise_dmr}/5"
+        
+        ecart = abs(maitrise - self.niveau_maitrise_dmr)
+        
+        if ecart <= 0.5:
+            return f"✅ Cohérent (écart : {ecart:.1f})"
+        elif ecart <= 1.5:
+            return f"⚠️ Léger écart ({ecart:.1f}) — à valider"
+        else:
+            return f"🚨 Écart important ({ecart:.1f}) — revoir la cotation"
+    
+    def get_pourcentage_reduction(self):
+        """Retourne le pourcentage de réduction sous forme lisible"""
+        return round((self.taux_reduction_maitrise or 0) * 100)
+    
+    def get_score_affichage(self):
+        """
+        Retourne une structure prête pour l'affichage :
+        - brut + net
+        - flèche de réduction
+        - couleurs
+        """
+        def couleur(niveau):
+            return {
+                'Faible': 'success',
+                'Moyen': 'warning',
+                'Élevé': 'danger',
+                'Critique': 'dark'
+            }.get(niveau, 'secondary')
+        
+        return {
+            'brut': {
+                'score': self.score_risque_brut or 0,
+                'niveau': self.niveau_risque_brut or 'Non évalué',
+                'couleur': couleur(self.niveau_risque_brut),
+            },
+            'net': {
+                'score': self.score_risque_net or self.score_risque or 0,
+                'niveau': self.niveau_risque_net or self.niveau_risque or 'Non évalué',
+                'couleur': couleur(self.niveau_risque_net or self.niveau_risque),
+            },
+            'reduction': {
+                'pourcentage': self.get_pourcentage_reduction(),
+                'taux': self.taux_reduction_maitrise or 0,
+            },
+            'probabilite_ajustee': self.probabilite_ajustee,
+        }
+    
     def __repr__(self):
         return f'<EvaluationRisque {self.id} pour risque {self.risque_id}>'
 
@@ -2068,6 +2057,7 @@ class CampagneEvaluation(db.Model):
             'is_archived': self.is_archived,
             'created_at': self.created_at.isoformat() if self.created_at else None
         }
+
 
 # -------------------- KRI (CORRIGÉ) --------------------
 class KRI(db.Model):
