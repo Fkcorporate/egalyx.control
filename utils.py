@@ -3137,50 +3137,222 @@ def calculer_tendance_kri_detaille(valeurs):
     else:
         return 'stable'
 
-def generer_graphique_kri(kri):
-    """Génère un graphique d'évolution du KRI"""
-    if not kri.mesures:
+
+def generer_graphique_kri(kri, mesures=None, format='base64'):
+    """
+    Génère un graphique d'évolution du KRI/KPI
+    
+    Args:
+        kri: Objet KRI ou KPI
+        mesures: Liste de mesures (si None, utilise kri.mesures)
+        format: 'base64' ou 'bytes'
+    """
+    # 🔥 CORRECTION : accepter les mesures en paramètre
+    if mesures is None:
+        mesures = kri.mesures if hasattr(kri, 'mesures') else []
+    
+    # 🔥 CORRECTION : accepter 1 seule mesure (avec juste un point)
+    if not mesures or len(mesures) < 1:
+        print(f"⚠️ Pas de mesures pour {kri.nom}")
         return None
     
-    mesures_triees = sorted(kri.mesures, key=lambda x: x.date_mesure)
-    dates = [m.date_mesure.strftime('%d/%m/%Y') for m in mesures_triees]
+    print(f"📊 Génération graphique pour {kri.nom} : {len(mesures)} mesures")
+    
+    # ============================================
+    # PRÉPARATION DES DONNÉES
+    # ============================================
+    mesures_triees = sorted(mesures, key=lambda x: x.date_mesure)
+    dates = [m.date_mesure.strftime('%d/%m') for m in mesures_triees]
     valeurs = [m.valeur for m in mesures_triees]
     
-    fig, ax = plt.subplots(figsize=(10, 6))
+    is_kri = getattr(kri, 'type_indicateur', 'kri') == 'kri'
+    couleur_principale = '#dc3545' if is_kri else '#28a745'
     
-    # Courbe principale
-    ax.plot(dates, valeurs, 'b-', linewidth=2, marker='o', markersize=4, label='Valeur KRI')
+    # ============================================
+    # STYLE MATPLOTLIB
+    # ============================================
+    plt.rcParams.update({
+        'font.family': 'DejaVu Sans',
+        'font.size': 10,
+        'axes.edgecolor': '#dee2e6',
+        'axes.linewidth': 0.8,
+        'axes.labelcolor': '#495057',
+        'axes.grid': True,
+        'grid.color': '#e9ecef',
+        'grid.linestyle': '-',
+        'grid.linewidth': 0.7,
+        'grid.alpha': 0.6,
+        'xtick.color': '#6c757d',
+        'ytick.color': '#6c757d',
+        'xtick.labelsize': 9,
+        'ytick.labelsize': 9,
+        'legend.fontsize': 9,
+    })
     
-    # Seuils d'alerte
-    if kri.seuil_alerte:
-        ax.axhline(y=kri.seuil_alerte, color='orange', linestyle='--', 
-                  label=f'Seuil alerte ({kri.seuil_alerte})')
+    # ============================================
+    # CRÉATION DE LA FIGURE
+    # ============================================
+    fig, ax = plt.subplots(figsize=(11, 5.5), dpi=130)
+    fig.patch.set_facecolor('white')
+    ax.set_facecolor('#ffffff')
     
-    if kri.seuil_critique:
-        ax.axhline(y=kri.seuil_critique, color='red', linestyle='--', 
-                  label=f'Seuil critique ({kri.seuil_critique})')
+    x_positions = list(range(len(dates)))
     
-    ax.set_xlabel('Date')
-    ax.set_ylabel(f'Valeur ({kri.unite_mesure})')
-    ax.set_title(f'Évolution du KRI - {kri.nom}')
-    ax.legend()
-    ax.grid(True, alpha=0.3)
+    # Zone remplie (seulement si >= 2 points)
+    if len(valeurs) >= 2:
+        ax.fill_between(
+            x_positions,
+            valeurs,
+            alpha=0.10,
+            color=couleur_principale,
+            zorder=2,
+            linewidth=0
+        )
     
-    # Rotation des dates pour meilleure lisibilité
-    plt.xticks(rotation=45)
+    # Ligne principale
+    ax.plot(
+        x_positions,
+        valeurs,
+        color=couleur_principale,
+        linewidth=2.5,
+        marker='o',
+        markersize=8 if len(valeurs) == 1 else 7,
+        markerfacecolor='white',
+        markeredgewidth=2,
+        markeredgecolor=couleur_principale,
+        label=f'{kri.nom}',
+        zorder=4,
+        solid_capstyle='round',
+        solid_joinstyle='round'
+    )
+    
+    # ============================================
+    # SEUILS
+    # ============================================
+    seuils_info = []
+    
+    if getattr(kri, 'seuil_alerte', None):
+        ax.axhline(
+            y=kri.seuil_alerte,
+            color='#ffc107',
+            linestyle='--',
+            linewidth=1.8,
+            alpha=0.85,
+            label=f'Seuil alerte ({kri.seuil_alerte})',
+            zorder=3
+        )
+        seuils_info.append(kri.seuil_alerte)
+    
+    if getattr(kri, 'seuil_critique', None):
+        ax.axhline(
+            y=kri.seuil_critique,
+            color='#dc3545',
+            linestyle='--',
+            linewidth=1.8,
+            alpha=0.85,
+            label=f'Seuil critique ({kri.seuil_critique})',
+            zorder=3
+        )
+        seuils_info.append(kri.seuil_critique)
+    
+    if not is_kri and getattr(kri, 'seuil_cible', None):
+        ax.axhline(
+            y=kri.seuil_cible,
+            color='#17a2b8',
+            linestyle=':',
+            linewidth=1.8,
+            alpha=0.85,
+            label=f'Cible ({kri.seuil_cible})',
+            zorder=3
+        )
+        seuils_info.append(kri.seuil_cible)
+    
+    # ============================================
+    # AXES
+    # ============================================
+    ax.set_xticks(x_positions)
+    ax.set_xticklabels(dates, rotation=45, ha='right', fontsize=9)
+    
+    ax.set_ylabel(
+        f'Valeur ({kri.unite_mesure or ""})',
+        fontsize=10,
+        fontweight='600',
+        color='#495057',
+        labelpad=10
+    )
+    
+    ax.set_title(
+        f'Évolution - {kri.nom}',
+        fontsize=13,
+        fontweight='bold',
+        color='#1e3c72',
+        pad=15,
+        loc='left'
+    )
+    
+    # Limites Y
+    toutes_valeurs = list(valeurs) + seuils_info
+    if toutes_valeurs:
+        min_val = min(toutes_valeurs)
+        max_val = max(toutes_valeurs)
+        amplitude = max_val - min_val if max_val != min_val else abs(max_val) * 0.2 or 1
+        
+        ax.set_ylim(
+            min_val - amplitude * 0.15,
+            max_val + amplitude * 0.15
+        )
+    
+    # Grille
+    ax.grid(True, which='major', axis='both', linestyle='-', linewidth=0.6, alpha=0.35, color='#dee2e6')
+    ax.set_axisbelow(True)
+    
+    # Bordures épurées
+    ax.spines['top'].set_visible(False)
+    ax.spines['right'].set_visible(False)
+    ax.spines['left'].set_color('#dee2e6')
+    ax.spines['bottom'].set_color('#dee2e6')
+    
+    # Légende en bas
+    legend = ax.legend(
+        loc='upper center',
+        bbox_to_anchor=(0.5, -0.22),
+        ncol=min(4, len(ax.get_legend_handles_labels()[0])),
+        frameon=True,
+        framealpha=0.95,
+        edgecolor='#dee2e6',
+        fontsize=9,
+        borderpad=0.8,
+        columnspacing=1.5,
+        handlelength=2
+    )
+    legend.get_frame().set_linewidth(0.8)
+    
     plt.tight_layout()
     
-    # Conversion en base64
+    # ============================================
+    # CONVERSION
+    # ============================================
     buffer = BytesIO()
-    plt.savefig(buffer, format='png', dpi=100, bbox_inches='tight')
+    plt.savefig(
+        buffer,
+        format='png',
+        dpi=130,
+        bbox_inches='tight',
+        facecolor='white',
+        edgecolor='none',
+        pad_inches=0.2
+    )
     buffer.seek(0)
     image_png = buffer.getvalue()
     buffer.close()
+    plt.close(fig)
     
-    graphic = base64.b64encode(image_png).decode('utf-8')
-    plt.close()
+    plt.rcdefaults()
     
-    return graphic
+    if format == 'base64':
+        return base64.b64encode(image_png).decode('utf-8')
+    return image_png
+
 def synchroniser_kri_automatique():
     """Synchronisation automatique des KRI"""
     from models import KRI, MesureKRI, Risque, db
