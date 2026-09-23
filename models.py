@@ -18488,15 +18488,15 @@ class PermissionOperateur(db.Model):
 # ============================================
 
 class ControleElementLogigramme(db.Model):
-    """Association entre un contrôle et un élément du logigramme"""
+    """Association entre un contrôle du référentiel et un élément du logigramme"""
     __tablename__ = 'controle_element_logigramme'
     
     id = db.Column(db.Integer, primary_key=True)
     
-    # Clés étrangères
-    controle_id = db.Column(
+    # 🔥 Utiliser referentiel_controles au lieu de controle_processus
+    referentiel_controle_id = db.Column(
         db.Integer, 
-        db.ForeignKey('controle_processus.id', ondelete='CASCADE'), 
+        db.ForeignKey('referentiel_controles.id', ondelete='CASCADE'), 
         nullable=False
     )
     element_logigramme_id = db.Column(
@@ -18507,12 +18507,12 @@ class ControleElementLogigramme(db.Model):
     
     # Métadonnées
     date_association = db.Column(db.DateTime, default=datetime.utcnow)
-    associe_par = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=True)
+    associe_par = db.Column(db.Integer, db.ForeignKey('user.id', ondelete='SET NULL'), nullable=True)
     
     # Contrainte d'unicité
     __table_args__ = (
         db.UniqueConstraint(
-            'controle_id', 
+            'referentiel_controle_id', 
             'element_logigramme_id', 
             name='uq_controle_element'
         ),
@@ -18522,8 +18522,8 @@ class ControleElementLogigramme(db.Model):
     # RELATIONS
     # ============================================
     controle = db.relationship(
-        'ControleProcessus',
-        foreign_keys=[controle_id],
+        'ReferentielControle',
+        foreign_keys=[referentiel_controle_id],
         backref=db.backref(
             'elements_logigramme_associes', 
             lazy='dynamic',
@@ -18548,16 +18548,15 @@ class ControleElementLogigramme(db.Model):
     )
     
     def to_dict(self):
-        """Convertit en dictionnaire pour l'API"""
         return {
             'id': self.id,
-            'controle_id': self.controle_id,
+            'referentiel_controle_id': self.referentiel_controle_id,
             'element_logigramme_id': self.element_logigramme_id,
             'date_association': self.date_association.isoformat() if self.date_association else None,
             'associe_par': self.associe_par,
             'controle': {
                 'id': self.controle.id if self.controle else None,
-                'reference': self.controle.reference if self.controle else None,
+                'reference': self.controle.code_controle if self.controle else None,
                 'nom': self.controle.nom if self.controle else None,
             } if self.controle else None,
             'element': {
@@ -18567,4 +18566,4 @@ class ControleElementLogigramme(db.Model):
         }
     
     def __repr__(self):
-        return f'<ControleElementLogigramme {self.controle_id} ↔ {self.element_logigramme_id}>'
+        return f'<ControleElementLogigramme {self.referentiel_controle_id} ↔ {self.element_logigramme_id}>'
