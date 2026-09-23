@@ -18483,3 +18483,88 @@ class PermissionOperateur(db.Model):
             'directions_autorisees': self.directions_autorisees,
             'services_autorises': self.services_autorises
         }
+# ============================================
+# MODÈLE ASSOCIATION CONTRÔLE ↔ ÉLÉMENT LOGIGRAMME
+# ============================================
+
+class ControleElementLogigramme(db.Model):
+    """Association entre un contrôle et un élément du logigramme"""
+    __tablename__ = 'controle_element_logigramme'
+    
+    id = db.Column(db.Integer, primary_key=True)
+    
+    # Clés étrangères
+    controle_id = db.Column(
+        db.Integer, 
+        db.ForeignKey('controle_processus.id', ondelete='CASCADE'), 
+        nullable=False
+    )
+    element_logigramme_id = db.Column(
+        db.Integer, 
+        db.ForeignKey('element_logigramme.id', ondelete='CASCADE'), 
+        nullable=False
+    )
+    
+    # Métadonnées
+    date_association = db.Column(db.DateTime, default=datetime.utcnow)
+    associe_par = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=True)
+    
+    # Contrainte d'unicité
+    __table_args__ = (
+        db.UniqueConstraint(
+            'controle_id', 
+            'element_logigramme_id', 
+            name='uq_controle_element'
+        ),
+    )
+    
+    # ============================================
+    # RELATIONS
+    # ============================================
+    controle = db.relationship(
+        'ControleProcessus',
+        foreign_keys=[controle_id],
+        backref=db.backref(
+            'elements_logigramme_associes', 
+            lazy='dynamic',
+            cascade='all, delete-orphan'
+        )
+    )
+    
+    element = db.relationship(
+        'ElementLogigramme',
+        foreign_keys=[element_logigramme_id],
+        backref=db.backref(
+            'controles_associes',
+            lazy='dynamic',
+            cascade='all, delete-orphan'
+        )
+    )
+    
+    associateur = db.relationship(
+        'User',
+        foreign_keys=[associe_par],
+        backref='associations_controle_element'
+    )
+    
+    def to_dict(self):
+        """Convertit en dictionnaire pour l'API"""
+        return {
+            'id': self.id,
+            'controle_id': self.controle_id,
+            'element_logigramme_id': self.element_logigramme_id,
+            'date_association': self.date_association.isoformat() if self.date_association else None,
+            'associe_par': self.associe_par,
+            'controle': {
+                'id': self.controle.id if self.controle else None,
+                'reference': self.controle.reference if self.controle else None,
+                'nom': self.controle.nom if self.controle else None,
+            } if self.controle else None,
+            'element': {
+                'id': self.element.id if self.element else None,
+                'libelle': self.element.libelle if self.element else None,
+            } if self.element else None
+        }
+    
+    def __repr__(self):
+        return f'<ControleElementLogigramme {self.controle_id} ↔ {self.element_logigramme_id}>'
