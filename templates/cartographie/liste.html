@@ -4,8 +4,9 @@
 
 {% block content %}
 <div class="container-fluid">
-    <!-- En-tête avec boutons d'action -->
-    <div class="d-flex justify-content-between align-items-center mb-4">
+
+    <!-- ============ EN-TÊTE ============ -->
+    <div class="d-flex justify-content-between align-items-center mb-4 flex-wrap gap-2">
         <div>
             <h2 class="h4 mb-2">
                 <i class="fas fa-map me-2 text-primary"></i>
@@ -18,8 +19,7 @@
                 </ol>
             </nav>
         </div>
-        <div class="d-flex gap-2 align-items-center">
-            <!-- ✅ BOUTONS DE BASCULE VUE -->
+        <div class="d-flex gap-2 align-items-center flex-wrap">
             <div class="btn-group me-2" role="group" aria-label="Options d'affichage">
                 <button type="button" class="btn btn-outline-primary active" id="btnGrille" onclick="changerVue('grille')" title="Vue en grille">
                     <i class="fas fa-th"></i>
@@ -37,34 +37,119 @@
         </div>
     </div>
 
-    <!-- FILTRES -->
+    <!-- ============ BANDEAU KPI ============ -->
+    {% set taux_eval = (stats.total_evalues / stats.total_risques * 100)|round|int if stats.total_risques > 0 else 0 %}
+    {% set niveau_colors = {'Critique': 'danger', 'Élevé': 'warning', 'Moyen': 'info', 'Faible': 'success'} %}
+    <div class="row g-3 mb-4">
+        <div class="col-6 col-lg-2-4 col-xl">
+            <div class="kpi-card">
+                <div class="kpi-icon bg-primary-subtle text-primary"><i class="fas fa-map-marked-alt"></i></div>
+                <div>
+                    <div class="kpi-value">{{ stats.total_cartographies }}</div>
+                    <div class="kpi-label">Cartographies</div>
+                </div>
+            </div>
+        </div>
+        <div class="col-6 col-lg-2-4 col-xl">
+            <div class="kpi-card">
+                <div class="kpi-icon bg-secondary-subtle text-secondary"><i class="fas fa-shield-halved"></i></div>
+                <div>
+                    <div class="kpi-value">{{ stats.total_risques }}</div>
+                    <div class="kpi-label">Risques suivis</div>
+                </div>
+            </div>
+        </div>
+        <div class="col-6 col-lg-2-4 col-xl">
+            <div class="kpi-card">
+                <div class="kpi-icon bg-success-subtle text-success"><i class="fas fa-chart-pie"></i></div>
+                <div>
+                    <div class="kpi-value">{{ taux_eval }}%</div>
+                    <div class="kpi-label">Taux d'évaluation</div>
+                </div>
+            </div>
+        </div>
+        <div class="col-6 col-lg-2-4 col-xl">
+            <div class="kpi-card">
+                <div class="kpi-icon bg-danger-subtle text-danger"><i class="fas fa-triangle-exclamation"></i></div>
+                <div>
+                    <div class="kpi-value">{{ stats.total_critiques }}</div>
+                    <div class="kpi-label">Risques critiques</div>
+                </div>
+            </div>
+        </div>
+        <div class="col-6 col-lg-2-4 col-xl">
+            <div class="kpi-card">
+                <div class="kpi-icon bg-{{ niveau_colors.get(stats.niveau_max, 'secondary') }}-subtle text-{{ niveau_colors.get(stats.niveau_max, 'secondary') }}">
+                    <i class="fas fa-gauge-high"></i>
+                </div>
+                <div>
+                    <div class="kpi-value" style="font-size:1.1rem;">
+                        <span class="badge text-bg-{{ niveau_colors.get(stats.niveau_max, 'secondary') }}">{{ stats.niveau_max }}</span>
+                    </div>
+                    <div class="kpi-label">Niveau global</div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- ============ FILTRES ============ -->
     <div class="card mb-4">
         <div class="card-body">
-            <div class="row">
+            <div class="row g-2 align-items-center mb-3">
+                <div class="col-auto">
+                    <span class="text-muted small fw-semibold me-1">Organiser par :</span>
+                </div>
+                <div class="col-auto">
+                    <div class="btn-group btn-group-sm" role="group">
+                        <button type="button" class="btn btn-outline-primary {% if mode_vue != 'pays' %}active{% endif %}" onclick="changerModeVue('poles')">
+                            <i class="fas fa-layer-group me-1"></i>Par pôle
+                        </button>
+                        <button type="button" class="btn btn-outline-primary {% if mode_vue == 'pays' %}active{% endif %}" onclick="changerModeVue('pays')">
+                            <i class="fas fa-earth-africa me-1"></i>Par pays
+                        </button>
+                    </div>
+                </div>
+            </div>
+            <div class="row g-2">
                 <div class="col-md-4">
                     <div class="input-group">
                         <span class="input-group-text bg-white">
                             <i class="fas fa-search text-muted"></i>
                         </span>
-                        <input type="text" class="form-control" id="searchCartographie" 
+                        <input type="text" class="form-control" id="searchCartographie"
                                placeholder="Rechercher une cartographie..." value="{{ search_query }}">
                     </div>
                 </div>
+
+                {% if mode_vue == 'pays' %}
+                <div class="col-md-3">
+                    <select class="form-select" id="filterPays" onchange="appliquerFiltres()">
+                        <option value="tous">Tous les pays</option>
+                        {% for pays in pays_list %}
+                        <option value="{{ pays.id }}" {% if pays_filter|string == pays.id|string %}selected{% endif %}>
+                            {{ pays.nom }}
+                        </option>
+                        {% endfor %}
+                    </select>
+                </div>
+                {% else %}
                 <div class="col-md-3">
                     <select class="form-select" id="filterPole" onchange="appliquerFiltres()">
                         <option value="tous">Tous les pôles</option>
                         {% for pole in poles %}
-                        <option value="{{ pole.id }}" {% if pole_filter|int == pole.id %}selected{% endif %}>
+                        <option value="{{ pole.id }}" {% if pole_filter|string == pole.id|string %}selected{% endif %}>
                             {{ pole.nom }}
                         </option>
                         {% endfor %}
                     </select>
                 </div>
+                {% endif %}
+
                 <div class="col-md-3">
                     <select class="form-select" id="filterDirection" onchange="appliquerFiltres()">
                         <option value="toutes">Toutes les directions</option>
                         {% for direction in directions %}
-                        <option value="{{ direction.id }}" {% if direction_filter|int == direction.id %}selected{% endif %}>
+                        <option value="{{ direction.id }}" {% if direction_filter|string == direction.id|string %}selected{% endif %}>
                             {{ direction.nom }}
                         </option>
                         {% endfor %}
@@ -84,22 +169,23 @@
         </div>
     </div>
 
-    <!-- ORGANISATION PAR PÔLES -->
+    <!-- ============ CONTENU ============ -->
     <div id="cartographieContainer">
-        {% if poles %}
-            {% for pole in poles %}
-                {% set cartos_pole = cartographies|selectattr('cartographie.pole_id', 'equalto', pole.id)|list %}
-                {% if cartos_pole %}
+
+        {% if mode_vue == 'pays' %}
+            {# ---------- GROUPEMENT PAR PAYS ---------- #}
+            {% for pays in pays_list %}
+                {% set cartos_pays = cartographies|selectattr('cartographie.pole')|selectattr('cartographie.pole.pays_id', 'equalto', pays.id)|list %}
+                {% if cartos_pays %}
                 <div class="mb-4">
-                    <h5 class="mb-3" style="border-left: 4px solid {{ pole.couleur }}; padding-left: 10px;">
-                        <i class="fas fa-layer-group me-2" style="color: {{ pole.couleur }};"></i>
-                        {{ pole.nom }}
-                        <small class="text-muted">({{ cartos_pole|length }} cartographie(s))</small>
+                    <h5 class="mb-3 groupe-titre">
+                        <i class="fas fa-earth-africa me-2 text-primary"></i>
+                        {{ pays.nom }}
+                        <small class="text-muted">({{ cartos_pays|length }} cartographie(s) · {{ (stats_pays.get(pays.id, {}) or {}).get('risques', 0) }} risque(s))</small>
                     </h5>
                     <div class="row g-3">
-                        {% for item in cartos_pole %}
+                        {% for item in cartos_pays %}
                         <div class="col-xl-4 col-lg-6 col-md-12 mb-4 cartographie-col">
-                            {# ✅ Passer explicitement la variable cartographie #}
                             {% with cartographie = item %}
                                 {% include 'cartographie/_carte_original.html' %}
                             {% endwith %}
@@ -109,32 +195,76 @@
                 </div>
                 {% endif %}
             {% endfor %}
-        {% endif %}
 
-        <!-- CARTOGRAPHIES SANS PÔLE -->
-        {% set cartos_sans_pole = cartographies|rejectattr('cartographie.pole_id')|list %}
-        {% if cartos_sans_pole %}
-        <div class="mb-4">
-            <h5 class="mb-3" style="border-left: 4px solid #6c757d; padding-left: 10px;">
-                <i class="fas fa-globe me-2 text-secondary"></i>
-                Cartographies sans pôle
-                <small class="text-muted">({{ cartos_sans_pole|length }} cartographie(s))</small>
-            </h5>
-            <div class="row g-3">
-                {% for item in cartos_sans_pole %}
-                <div class="col-xl-4 col-lg-6 col-md-12 mb-4 cartographie-col">
-                    {# ✅ Passer explicitement la variable cartographie #}
-                    {% with cartographie = item %}
-                        {% include 'cartographie/_carte_original.html' %}
-                    {% endwith %}
+            {% set cartos_sans_pays = cartographies|rejectattr('cartographie.pole')|list %}
+            {% if cartos_sans_pays %}
+            <div class="mb-4">
+                <h5 class="mb-3 groupe-titre groupe-titre-neutre">
+                    <i class="fas fa-globe me-2 text-secondary"></i>
+                    Non rattachées à un pays
+                    <small class="text-muted">({{ cartos_sans_pays|length }} cartographie(s))</small>
+                </h5>
+                <div class="row g-3">
+                    {% for item in cartos_sans_pays %}
+                    <div class="col-xl-4 col-lg-6 col-md-12 mb-4 cartographie-col">
+                        {% with cartographie = item %}
+                            {% include 'cartographie/_carte_original.html' %}
+                        {% endwith %}
+                    </div>
+                    {% endfor %}
                 </div>
-                {% endfor %}
             </div>
-        </div>
+            {% endif %}
+
+        {% else %}
+            {# ---------- GROUPEMENT PAR PÔLE (par défaut) ---------- #}
+            {% if poles %}
+                {% for pole in poles %}
+                    {% set cartos_pole = cartographies|selectattr('cartographie.pole_id', 'equalto', pole.id)|list %}
+                    {% if cartos_pole %}
+                    <div class="mb-4">
+                        <h5 class="mb-3 groupe-titre" style="border-left-color: {{ pole.couleur }};">
+                            <i class="fas fa-layer-group me-2" style="color: {{ pole.couleur }};"></i>
+                            {{ pole.nom }}
+                            <small class="text-muted">({{ cartos_pole|length }} cartographie(s))</small>
+                        </h5>
+                        <div class="row g-3">
+                            {% for item in cartos_pole %}
+                            <div class="col-xl-4 col-lg-6 col-md-12 mb-4 cartographie-col">
+                                {% with cartographie = item %}
+                                    {% include 'cartographie/_carte_original.html' %}
+                                {% endwith %}
+                            </div>
+                            {% endfor %}
+                        </div>
+                    </div>
+                    {% endif %}
+                {% endfor %}
+            {% endif %}
+
+            {% set cartos_sans_pole = cartographies|rejectattr('cartographie.pole_id')|list %}
+            {% if cartos_sans_pole %}
+            <div class="mb-4">
+                <h5 class="mb-3 groupe-titre groupe-titre-neutre">
+                    <i class="fas fa-globe me-2 text-secondary"></i>
+                    Cartographies sans pôle
+                    <small class="text-muted">({{ cartos_sans_pole|length }} cartographie(s))</small>
+                </h5>
+                <div class="row g-3">
+                    {% for item in cartos_sans_pole %}
+                    <div class="col-xl-4 col-lg-6 col-md-12 mb-4 cartographie-col">
+                        {% with cartographie = item %}
+                            {% include 'cartographie/_carte_original.html' %}
+                        {% endwith %}
+                    </div>
+                    {% endfor %}
+                </div>
+            </div>
+            {% endif %}
         {% endif %}
     </div>
 
-    <!-- État vide -->
+    <!-- ============ ÉTAT VIDE ============ -->
     {% if not cartographies %}
     <div class="col-12">
         <div class="fk-card">
@@ -144,12 +274,22 @@
                 </div>
                 <h4 class="mb-3">Aucune cartographie</h4>
                 <p class="text-muted mb-4">
-                    Commencez par créer votre première cartographie des risques pour votre organisation.
+                    {% if search_query or pole_filter != 'tous' or direction_filter != 'toutes' or pays_filter != 'tous' %}
+                        Aucun résultat ne correspond à vos filtres actuels.
+                    {% else %}
+                        Commencez par créer votre première cartographie des risques pour votre organisation.
+                    {% endif %}
                 </p>
+                {% if search_query or pole_filter != 'tous' or direction_filter != 'toutes' or pays_filter != 'tous' %}
+                <button class="fk-btn fk-btn-outline-secondary" onclick="reinitialiserFiltres()">
+                    <i class="fas fa-undo me-2"></i>Réinitialiser les filtres
+                </button>
+                {% else %}
                 <a href="{{ url_for('nouvelle_cartographie') }}" class="fk-btn fk-btn-primary">
                     <i class="fas fa-plus me-2"></i>
                     Créer ma première cartographie
                 </a>
+                {% endif %}
             </div>
         </div>
     </div>
@@ -161,122 +301,97 @@
 // BASCULE VUE GRILLE / VUE LISTE
 // ============================================
 function changerVue(vue) {
-    // Mettre à jour les boutons
     document.getElementById('btnGrille').classList.toggle('active', vue === 'grille');
     document.getElementById('btnListe').classList.toggle('active', vue === 'liste');
-    
-    // Sauvegarder la préférence
     localStorage.setItem('vueCartographie', vue);
-    
-    // Appliquer la vue
+
     const cols = document.querySelectorAll('.cartographie-col');
     const container = document.querySelector('#cartographieContainer');
-    
+
     if (vue === 'liste') {
         container?.classList.add('vue-liste');
-        cols.forEach(col => {
-            col.className = 'col-12 mb-3 cartographie-col';
-            const card = col.querySelector('.fk-card');
-            if (card) {
-                card.style.flexDirection = 'row';
-                card.style.alignItems = 'center';
-                const body = card.querySelector('.fk-card-body');
-                if (body) body.style.flex = '1';
-                const header = card.querySelector('.fk-card-header');
-                if (header) header.style.flex = '0 0 200px';
-                const footer = card.querySelector('.fk-card-footer');
-                if (footer) footer.style.flex = '0 0 auto';
-            }
-        });
+        cols.forEach(col => { col.className = 'col-12 mb-3 cartographie-col'; });
     } else {
         container?.classList.remove('vue-liste');
-        cols.forEach(col => {
-            col.className = 'col-xl-4 col-lg-6 col-md-12 mb-4 cartographie-col';
-            const card = col.querySelector('.fk-card');
-            if (card) {
-                card.style.flexDirection = '';
-                card.style.alignItems = '';
-                const body = card.querySelector('.fk-card-body');
-                if (body) body.style.flex = '';
-                const header = card.querySelector('.fk-card-header');
-                if (header) header.style.flex = '';
-                const footer = card.querySelector('.fk-card-footer');
-                if (footer) footer.style.flex = '';
-            }
-        });
+        cols.forEach(col => { col.className = 'col-xl-4 col-lg-6 col-md-12 mb-4 cartographie-col'; });
     }
 }
 
 // ============================================
-// FILTRES
+// BASCULE MODE (PAR PÔLE / PAR PAYS) — recharge côté serveur
+// ============================================
+function changerModeVue(mode) {
+    const url = new URL(window.location.href);
+    url.searchParams.set('mode', mode);
+    // on repart sur des filtres propres pour ce mode
+    url.searchParams.delete('pole');
+    url.searchParams.delete('pays');
+    window.location.href = url.toString();
+}
+
+// ============================================
+// RECHERCHE INSTANTANÉE (client, sans rechargement)
 // ============================================
 function filterCartographies() {
     const searchTerm = document.getElementById('searchCartographie')?.value.toLowerCase() || '';
-    const poleFilter = document.getElementById('filterPole').value;
-    const directionFilter = document.getElementById('filterDirection').value;
     const cards = document.querySelectorAll('.cartographie-card');
-    
     let visibleCount = 0;
-    
+
     cards.forEach(card => {
         const cardNom = card.dataset.nom || '';
-        const cardPoleId = card.dataset.poleId || '';
-        const cardDirectionId = card.dataset.directionId || '';
-        
-        let show = cardNom.includes(searchTerm);
-        if (show && poleFilter !== 'tous') {
-            show = cardPoleId === poleFilter;
-        }
-        if (show && directionFilter !== 'toutes') {
-            show = cardDirectionId === directionFilter;
-        }
-        
-        card.closest('.cartographie-col').style.display = show ? '' : 'none';
+        const show = cardNom.includes(searchTerm);
+        const col = card.closest('.cartographie-col');
+        if (col) col.style.display = show ? '' : 'none';
         if (show) visibleCount++;
     });
-    
+
+    // Masquer les groupes devenus vides
+    document.querySelectorAll('#cartographieContainer > div.mb-4').forEach(groupe => {
+        const visibles = groupe.querySelectorAll('.cartographie-col:not([style*="display: none"])');
+        groupe.style.display = visibles.length === 0 ? 'none' : '';
+    });
+
     document.getElementById('resultCount').textContent = `${visibleCount} cartographie(s) trouvée(s)`;
 }
 
 // ============================================
-// APPLIQUER FILTRES AVEC RECHARGEMENT
+// FILTRES SERVEUR (pôle / pays / direction) + recherche texte en repli
 // ============================================
 window.appliquerFiltres = function() {
-    const pole = document.getElementById('filterPole').value;
     const direction = document.getElementById('filterDirection').value;
     const search = document.getElementById('searchCartographie').value;
-    
-    let url = new URL(window.location.href);
-    url.searchParams.set('pole', pole);
+    const url = new URL(window.location.href);
+
+    const filterPole = document.getElementById('filterPole');
+    const filterPays = document.getElementById('filterPays');
+    if (filterPole) url.searchParams.set('pole', filterPole.value);
+    if (filterPays) url.searchParams.set('pays', filterPays.value);
+
     url.searchParams.set('direction', direction);
     url.searchParams.set('search', search);
-    
     window.location.href = url.toString();
 };
 
 window.reinitialiserFiltres = function() {
-    window.location.href = "{{ url_for('liste_cartographies') }}";
+    const url = new URL(window.location.href);
+    window.location.href = url.origin + url.pathname + '?mode=' + (new URLSearchParams(url.search).get('mode') || 'poles');
 };
 
 // ============================================
 // INITIALISATION
 // ============================================
 document.addEventListener('DOMContentLoaded', function() {
-    // Restaurer la préférence de vue
     const vuePreferee = localStorage.getItem('vueCartographie') || 'grille';
     changerVue(vuePreferee);
-    
-    // Recherche en temps réel
+
     const searchInput = document.getElementById('searchCartographie');
     if (searchInput) {
         searchInput.addEventListener('keyup', function(e) {
-            if (e.key === 'Enter') {
-                appliquerFiltres();
-            }
+            filterCartographies();
+            if (e.key === 'Enter') appliquerFiltres();
         });
     }
-    
-    // Confirmation pour les actions sensibles
+
     document.querySelectorAll('form[action*="archiver"]').forEach(form => {
         form.addEventListener('submit', function(e) {
             if (!confirm('Archiver cette cartographie ?\n\nCette action archivera également tous les risques associés.')) {
@@ -284,7 +399,7 @@ document.addEventListener('DOMContentLoaded', function() {
             }
         });
     });
-    
+
     document.querySelectorAll('form[action*="dupliquer"]').forEach(form => {
         form.addEventListener('submit', function(e) {
             if (!confirm('Dupliquer cette cartographie ?\n\nUne copie sera créée avec tous les risques non archivés.')) {
@@ -296,6 +411,41 @@ document.addEventListener('DOMContentLoaded', function() {
 </script>
 
 <style>
+/* ============ KPI ============ */
+.col-lg-2-4 { flex: 0 0 auto; width: 20%; }
+@media (max-width: 991px) { .col-lg-2-4 { width: 50%; } }
+
+.kpi-card {
+    display: flex;
+    align-items: center;
+    gap: 0.9rem;
+    background: white;
+    border: 1px solid #e2e8f0;
+    border-radius: 12px;
+    padding: 1rem 1.1rem;
+    height: 100%;
+    transition: box-shadow .2s, transform .2s;
+}
+.kpi-card:hover { box-shadow: 0 8px 18px rgba(0,0,0,.06); transform: translateY(-2px); }
+.kpi-icon {
+    width: 44px; height: 44px; border-radius: 10px;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 1.05rem; flex-shrink: 0;
+}
+.kpi-value { font-size: 1.5rem; font-weight: 700; line-height: 1.1; color: #1e293b; }
+.kpi-label { font-size: .75rem; color: #64748b; text-transform: uppercase; letter-spacing: .03em; }
+
+[data-bs-theme="dark"] .kpi-card { background: #1e293b; border-color: #334155; }
+[data-bs-theme="dark"] .kpi-value { color: #f1f5f9; }
+
+/* ============ Titres de groupe ============ */
+.groupe-titre {
+    border-left: 4px solid #3498db;
+    padding-left: 10px;
+}
+.groupe-titre-neutre { border-left-color: #6c757d; }
+
+/* ============ Cartes (existant, conservé) ============ */
 .fk-card {
     transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
     border: 1px solid #e2e8f0;
@@ -303,124 +453,18 @@ document.addEventListener('DOMContentLoaded', function() {
     overflow: hidden;
     background: white;
 }
+.fk-card-header { border-bottom: 1px solid #e2e8f0; padding: 1.25rem 1.5rem; background-color: #f8fafc; }
+.fk-card-body { padding: 1.5rem; }
+.fk-card-footer { padding: 1rem 1.5rem; background-color: #f8fafc; }
 
-.fk-card:hover {
-    transform: translateY(-5px);
-    box-shadow: 0 12px 24px rgba(0, 0, 0, 0.08);
-    border-color: #3498db;
-}
+.fk-btn { border-radius: 8px; padding: 0.5rem 1rem; font-weight: 500; transition: all 0.2s; display: inline-block; text-decoration: none; }
+.fk-btn-primary { background-color: #3498db; color: white; border: 2px solid #3498db; }
+.fk-btn-primary:hover { background-color: #2980b9; border-color: #2980b9; color: white; }
+.fk-btn-outline-primary { border: 2px solid #3498db; color: #3498db; background: transparent; }
+.fk-btn-outline-primary:hover { background-color: #3498db; color: white; }
+.fk-btn-outline-secondary { border: 2px solid #95a5a6; color: #7f8c8d; background: transparent; }
+.fk-btn-outline-secondary:hover { background-color: #95a5a6; color: white; }
 
-.fk-card-header {
-    border-bottom: 1px solid #e2e8f0;
-    padding: 1.25rem 1.5rem;
-    background-color: #f8fafc;
-}
-
-.fk-card-body {
-    padding: 1.5rem;
-}
-
-.fk-card-footer {
-    padding: 1rem 1.5rem;
-    background-color: #f8fafc;
-}
-
-.fk-btn {
-    border-radius: 8px;
-    padding: 0.5rem 1rem;
-    font-weight: 500;
-    transition: all 0.2s;
-    display: inline-block;
-    text-decoration: none;
-}
-
-.fk-btn-primary {
-    background-color: #3498db;
-    color: white;
-    border: 2px solid #3498db;
-}
-
-.fk-btn-primary:hover {
-    background-color: #2980b9;
-    border-color: #2980b9;
-    color: white;
-}
-
-.fk-btn-outline-primary {
-    border: 2px solid #3498db;
-    color: #3498db;
-    background: transparent;
-}
-
-.fk-btn-outline-primary:hover {
-    background-color: #3498db;
-    color: white;
-}
-
-.fk-btn-outline-secondary {
-    border: 2px solid #95a5a6;
-    color: #7f8c8d;
-    background: transparent;
-}
-
-.fk-btn-outline-secondary:hover {
-    background-color: #95a5a6;
-    color: white;
-}
-
-.risk-dot {
-    display: inline-block;
-    width: 10px;
-    height: 10px;
-    border-radius: 50%;
-    margin-right: 8px;
-}
-
-.risk-critique { background-color: #dc3545; }
-.risk-eleve { background-color: #fd7e14; }
-.risk-moyen { background-color: #ffc107; }
-.risk-faible { background-color: #198754; }
-
-/* Vue liste */
-.vue-liste .cartographie-col .fk-card {
-    flex-direction: row !important;
-    align-items: center !important;
-}
-
-.vue-liste .cartographie-col .fk-card .fk-card-header {
-    flex: 0 0 200px;
-    border-bottom: none;
-    border-right: 1px solid #e2e8f0;
-    margin-bottom: 0;
-}
-
-.vue-liste .cartographie-col .fk-card .fk-card-body {
-    flex: 1;
-    margin-bottom: 0;
-}
-
-.vue-liste .cartographie-col .fk-card .fk-card-footer {
-    flex: 0 0 auto;
-    border-top: none;
-    border-left: 1px solid #e2e8f0;
-}
-
-@media (max-width: 768px) {
-    .vue-liste .cartographie-col .fk-card {
-        flex-direction: column !important;
-        align-items: stretch !important;
-    }
-    .vue-liste .cartographie-col .fk-card .fk-card-header {
-        flex: none;
-        border-right: none;
-        border-bottom: 1px solid #e2e8f0;
-    }
-    .vue-liste .cartographie-col .fk-card .fk-card-footer {
-        border-left: none;
-        border-top: 1px solid #e2e8f0;
-    }
-}
-    /* ========== CARTE CARTOGRAPHIE ========== */
 .cartographie-card {
     transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
     border: 1px solid #e2e8f0;
@@ -431,87 +475,25 @@ document.addEventListener('DOMContentLoaded', function() {
     flex-direction: column;
     height: 100%;
 }
+.cartographie-card:hover { transform: translateY(-5px); box-shadow: 0 12px 24px rgba(0, 0, 0, 0.08); border-color: #3498db; }
+.cartographie-body { flex: 1; transition: background 0.2s ease; }
+.cartographie-body:hover { background: rgba(52, 152, 219, 0.02); }
+.cartographie-card .dropdown { position: relative; z-index: 10; }
+.fk-card-footer { position: relative; z-index: 10; }
 
-.cartographie-card:hover {
-    transform: translateY(-5px);
-    box-shadow: 0 12px 24px rgba(0, 0, 0, 0.08);
-    border-color: #3498db;
-}
+.vue-liste .cartographie-card { flex-direction: row; align-items: stretch; }
+.vue-liste .cartographie-card .fk-card-header { flex: 0 0 250px; border-right: 1px solid #e2e8f0; border-bottom: none; display: flex; align-items: center; }
+.vue-liste .cartographie-card .cartographie-body { flex: 1; }
+.vue-liste .cartographie-card .fk-card-footer { flex: 0 0 180px; border-left: 1px solid #e2e8f0; border-top: none; }
 
-/* Le corps cliquable prend tout l'espace disponible */
-.cartographie-body {
-    flex: 1;
-    transition: background 0.2s ease;
-}
-
-.cartographie-body:hover {
-    background: rgba(52, 152, 219, 0.02);
-}
-
-/* Dropdown bien au-dessus */
-.cartographie-card .dropdown {
-    position: relative;
-    z-index: 10;
-}
-
-/* Le pied de carte ne déclenche pas le clic */
-.fk-card-footer {
-    position: relative;
-    z-index: 10;
-}
-
-/* Vue liste */
-.vue-liste .cartographie-card {
-    flex-direction: row;
-    align-items: stretch;
-}
-
-.vue-liste .cartographie-card .fk-card-header {
-    flex: 0 0 250px;
-    border-right: 1px solid #e2e8f0;
-    border-bottom: none;
-    display: flex;
-    align-items: center;
-}
-
-.vue-liste .cartographie-card .cartographie-body {
-    flex: 1;
-}
-
-.vue-liste .cartographie-card .fk-card-footer {
-    flex: 0 0 180px;
-    border-left: 1px solid #e2e8f0;
-    border-top: none;
-}
-
-/* Mode sombre */
-[data-bs-theme="dark"] .cartographie-card {
-    background: #1e293b;
-    border-color: #334155;
-}
-
-[data-bs-theme="dark"] .cartographie-card:hover {
-    border-color: #3b82f6;
-}
-
-[data-bs-theme="dark"] .cartographie-body:hover {
-    background: rgba(59, 130, 246, 0.05);
-}
+[data-bs-theme="dark"] .cartographie-card { background: #1e293b; border-color: #334155; }
+[data-bs-theme="dark"] .cartographie-card:hover { border-color: #3b82f6; }
+[data-bs-theme="dark"] .cartographie-body:hover { background: rgba(59, 130, 246, 0.05); }
 
 @media (max-width: 768px) {
-    .vue-liste .cartographie-card {
-        flex-direction: column;
-    }
-    .vue-liste .cartographie-card .fk-card-header {
-        flex: none;
-        border-right: none;
-        border-bottom: 1px solid #e2e8f0;
-    }
-    .vue-liste .cartographie-card .fk-card-footer {
-        flex: none;
-        border-left: none;
-        border-top: 1px solid #e2e8f0;
-    }
+    .vue-liste .cartographie-card { flex-direction: column; }
+    .vue-liste .cartographie-card .fk-card-header { flex: none; border-right: none; border-bottom: 1px solid #e2e8f0; }
+    .vue-liste .cartographie-card .fk-card-footer { flex: none; border-left: none; border-top: 1px solid #e2e8f0; }
 }
 </style>
 {% endblock %}
