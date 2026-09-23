@@ -18567,3 +18567,92 @@ class ControleElementLogigramme(db.Model):
     
     def __repr__(self):
         return f'<ControleElementLogigramme {self.referentiel_controle_id} ↔ {self.element_logigramme_id}>'
+# ============================================
+# MODÈLE ASSOCIATION RISQUE ↔ ÉLÉMENT LOGIGRAMME
+# ============================================
+
+class RisqueElementLogigramme(db.Model):
+    """Association entre un risque et un élément du logigramme"""
+    __tablename__ = 'risque_element_logigramme'
+    
+    id = db.Column(db.Integer, primary_key=True)
+    
+    # Clés étrangères
+    risque_id = db.Column(
+        db.Integer, 
+        db.ForeignKey('risques.id', ondelete='CASCADE'), 
+        nullable=False
+    )
+    element_logigramme_id = db.Column(
+        db.Integer, 
+        db.ForeignKey('element_logigramme.id', ondelete='CASCADE'), 
+        nullable=False
+    )
+    
+    # Métadonnées
+    date_association = db.Column(db.DateTime, default=datetime.utcnow)
+    associe_par = db.Column(
+        db.Integer, 
+        db.ForeignKey('user.id', ondelete='SET NULL'), 
+        nullable=True
+    )
+    
+    # Contrainte d'unicité
+    __table_args__ = (
+        db.UniqueConstraint(
+            'risque_id', 
+            'element_logigramme_id', 
+            name='uq_risque_element'
+        ),
+    )
+    
+    # ============================================
+    # RELATIONS
+    # ============================================
+    risque = db.relationship(
+        'Risque',
+        foreign_keys=[risque_id],
+        backref=db.backref(
+            'elements_logigramme_associes',
+            lazy='dynamic',
+            cascade='all, delete-orphan'
+        )
+    )
+    
+    element = db.relationship(
+        'ElementLogigramme',
+        foreign_keys=[element_logigramme_id],
+        backref=db.backref(
+            'risques_associes',
+            lazy='dynamic',
+            cascade='all, delete-orphan'
+        )
+    )
+    
+    associateur = db.relationship(
+        'User',
+        foreign_keys=[associe_par],
+        backref='associations_risque_element'
+    )
+    
+    def to_dict(self):
+        """Convertit en dictionnaire pour l'API"""
+        return {
+            'id': self.id,
+            'risque_id': self.risque_id,
+            'element_logigramme_id': self.element_logigramme_id,
+            'date_association': self.date_association.isoformat() if self.date_association else None,
+            'associe_par': self.associe_par,
+            'risque': {
+                'id': self.risque.id if self.risque else None,
+                'reference': self.risque.reference if self.risque else None,
+                'intitule': self.risque.intitule if self.risque else None,
+            } if self.risque else None,
+            'element': {
+                'id': self.element.id if self.element else None,
+                'libelle': self.element.libelle if self.element else None,
+            } if self.element else None
+        }
+    
+    def __repr__(self):
+        return f'<RisqueElementLogigramme {self.risque_id} ↔ {self.element_logigramme_id}>'
