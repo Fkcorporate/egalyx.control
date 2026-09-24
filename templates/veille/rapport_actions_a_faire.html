@@ -1,207 +1,637 @@
-<!-- veille/rapport_actions_a_faire.html -->
 {% extends "base.html" %}
 
 {% block content %}
-<div class="d-flex justify-content-between flex-wrap flex-md-nowrap align-items-center pt-3 pb-2 mb-3 border-bottom">
-    <h1 class="h2">
-        <i class="fas fa-tasks"></i> Actions de Conformité - {{ titre_statut }}
-        <span class="badge bg-primary">{{ actions|length }}</span>
-    </h1>
-    <div class="btn-toolbar mb-2 mb-md-0">
-        <a href="{{ url_for('rapport_veille') }}" class="btn btn-secondary me-2">
-            <i class="fas fa-arrow-left"></i> Retour au rapport
-        </a>
-        <a href="{{ url_for('veille_reglementaire') }}" class="btn btn-outline-secondary">
-            <i class="fas fa-balance-scale"></i> Veille
-        </a>
-    </div>
-</div>
+<style>
+    /* ============================================
+       STYLES - RAPPORT ACTIONS À FAIRE
+       ============================================ */
+    
+    :root {
+        --primary: #1a2a5e;
+        --primary-light: #2a4a8a;
+        --primary-dark: #0f1a3a;
+        --gold: #c9a84c;
+        --gold-light: #f0d080;
+        --success: #10b981;
+        --warning: #f59e0b;
+        --danger: #ef4444;
+        --info: #3b82f6;
+        --gray: #6b7280;
+        --light: #f8f9fd;
+        --border: #e8ebf2;
+        --dark: #0a1628;
+        --shadow: 0 2px 12px rgba(10, 22, 40, 0.06);
+        --shadow-hover: 0 8px 24px rgba(10, 22, 40, 0.10);
+        --radius: 16px;
+        --radius-sm: 10px;
+    }
 
-<!-- Onglets de statut -->
-<div class="card mb-4">
-    <div class="card-header">
-        <h5 class="mb-0">Filtrer par statut</h5>
-    </div>
-    <div class="card-body">
-        <div class="btn-group" role="group">
-            <a href="{{ url_for('rapport_actions_a_faire') }}?statut=a_faire" 
-               class="btn btn-{% if statut_selected == 'a_faire' %}warning{% else %}outline-warning{% endif %}">
-                À faire
-            </a>
-            <a href="{{ url_for('rapport_actions_a_faire') }}?statut=en_cours" 
-               class="btn btn-{% if statut_selected == 'en_cours' %}info{% else %}outline-info{% endif %}">
-                En cours
-            </a>
-            <a href="{{ url_for('rapport_actions_a_faire') }}?statut=termine" 
-               class="btn btn-{% if statut_selected == 'termine' %}success{% else %}outline-success{% endif %}">
-                Terminées
-            </a>
-        </div>
-    </div>
-</div>
+    @keyframes fadeIn {
+        from { opacity: 0; transform: translateY(12px); }
+        to { opacity: 1; transform: translateY(0); }
+    }
 
-<!-- Filtres -->
-<div class="card mb-4">
-    <div class="card-body">
-        <div class="row">
-            <div class="col-md-6">
-                <div class="input-group">
-                    <span class="input-group-text"><i class="fas fa-search"></i></span>
-                    <input type="text" class="form-control" id="searchActions" placeholder="Rechercher une action...">
+    .animate-in {
+        animation: fadeIn 0.4s ease-out forwards;
+    }
+
+    /* ========== HEADER ========== */
+    .page-header {
+        background: linear-gradient(135deg, #0a1628 0%, #1a2a4a 50%, #2a4a8a 100%);
+        border-radius: var(--radius);
+        padding: 1.5rem 2rem;
+        margin-bottom: 2rem;
+        color: white;
+        box-shadow: 0 10px 30px rgba(10, 22, 40, 0.20);
+        position: relative;
+        overflow: hidden;
+        border-bottom: 4px solid var(--gold);
+    }
+
+    .page-header::before {
+        content: '';
+        position: absolute;
+        top: -50%;
+        right: -5%;
+        width: 300px;
+        height: 300px;
+        background: rgba(201, 168, 76, 0.05);
+        border-radius: 50%;
+        transform: rotate(25deg);
+        pointer-events: none;
+        z-index: 0;
+    }
+
+    .page-header::after {
+        content: '';
+        position: absolute;
+        bottom: -50%;
+        left: -5%;
+        width: 400px;
+        height: 400px;
+        background: rgba(201, 168, 76, 0.03);
+        border-radius: 50%;
+        transform: rotate(-15deg);
+        pointer-events: none;
+        z-index: 0;
+    }
+
+    .page-header-content {
+        position: relative;
+        z-index: 2;
+    }
+
+    .page-title {
+        font-size: 1.8rem;
+        font-weight: 700;
+        font-family: 'Georgia', serif;
+        margin-bottom: 0.25rem;
+    }
+
+    .page-title i {
+        color: var(--gold);
+    }
+
+    /* ========== BOUTONS ========== */
+    .btn-primary-custom {
+        background: var(--primary);
+        color: white;
+        border: none;
+        border-radius: 30px;
+        padding: 0.5rem 1.5rem;
+        font-weight: 500;
+        transition: all 0.25s ease;
+    }
+    .btn-primary-custom:hover {
+        background: var(--primary-light);
+        transform: translateY(-2px);
+        box-shadow: 0 4px 16px rgba(26, 42, 94, 0.25);
+        color: white;
+    }
+
+    .btn-secondary {
+        background: rgba(255, 255, 255, 0.10);
+        color: white;
+        border: 1px solid rgba(255, 255, 255, 0.20);
+        border-radius: 30px;
+        padding: 0.4rem 1.2rem;
+        font-weight: 500;
+        transition: all 0.2s ease;
+    }
+    .btn-secondary:hover {
+        background: rgba(255, 255, 255, 0.20);
+        transform: translateY(-1px);
+        color: white;
+    }
+
+    /* ========== STAT CARDS ========== */
+    .stat-card {
+        border-radius: var(--radius);
+        padding: 1.2rem 1.5rem;
+        color: white;
+        transition: all 0.3s ease;
+        position: relative;
+        overflow: hidden;
+        cursor: pointer;
+        border: none;
+        height: 100%;
+        text-decoration: none;
+        display: block;
+    }
+
+    .stat-card:hover {
+        transform: translateY(-4px);
+        box-shadow: 0 12px 28px rgba(0,0,0,0.15);
+        text-decoration: none;
+        color: white;
+    }
+
+    .stat-card .stat-value {
+        font-size: 2rem;
+        font-weight: 700;
+        font-family: 'Georgia', serif;
+        line-height: 1.2;
+        margin-bottom: 0.1rem;
+    }
+
+    .stat-card .stat-label {
+        font-size: 0.8rem;
+        opacity: 0.85;
+        font-weight: 400;
+        margin-bottom: 0.1rem;
+    }
+
+    .stat-card .stat-icon {
+        font-size: 2.5rem;
+        opacity: 0.15;
+    }
+
+    .stat-card-body {
+        position: relative;
+        z-index: 1;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+    }
+
+    .stat-card-success { background: linear-gradient(135deg, #0d9488, #065f46); }
+    .stat-card-warning { background: linear-gradient(135deg, #d97706, #92400e); }
+    .stat-card-danger { background: linear-gradient(135deg, #dc2626, #991b1b); }
+    .stat-card-info { background: linear-gradient(135deg, #2563eb, #1e3a8a); }
+
+    /* ========== BREADCRUMB ========== */
+    .breadcrumb {
+        background: transparent;
+        padding: 0;
+        margin-bottom: 0.3rem;
+    }
+
+    .breadcrumb-item a {
+        color: rgba(255, 255, 255, 0.7);
+        text-decoration: none;
+        transition: all 0.3s ease;
+    }
+
+    .breadcrumb-item a:hover {
+        color: var(--gold);
+    }
+
+    .breadcrumb-item.active {
+        color: white;
+    }
+
+    .breadcrumb-item + .breadcrumb-item::before {
+        color: rgba(255, 255, 255, 0.4);
+    }
+
+    /* ========== CARDS ========== */
+    .card {
+        border-radius: var(--radius);
+        border: 1px solid var(--border);
+        box-shadow: var(--shadow);
+        transition: all 0.3s ease;
+        background: white;
+    }
+
+    .card:hover {
+        box-shadow: var(--shadow-hover);
+        border-color: var(--gold);
+    }
+
+    .card-header {
+        background: var(--light);
+        border-bottom: 1px solid var(--border);
+        padding: 0.8rem 1.2rem;
+        font-weight: 600;
+        color: var(--dark);
+        border-radius: var(--radius) var(--radius) 0 0;
+    }
+
+    .card-header h5 {
+        font-family: 'Georgia', serif;
+        font-weight: 600;
+        color: var(--dark);
+        margin: 0;
+    }
+
+    .card-header h5 i {
+        color: var(--gold);
+    }
+
+    .card-body {
+        padding: 1.2rem;
+        color: var(--dark);
+    }
+
+    /* ========== TABLE ========== */
+    .table {
+        font-size: 0.85rem;
+        border-color: var(--border);
+    }
+
+    .table thead th {
+        background: var(--light);
+        border-bottom: 2px solid var(--border);
+        color: var(--gray);
+        font-weight: 600;
+        font-size: 0.7rem;
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+        padding: 0.6rem 0.6rem;
+    }
+
+    .table tbody td {
+        border-bottom: 1px solid var(--border);
+        color: var(--dark);
+        vertical-align: middle;
+        padding: 0.6rem 0.6rem;
+    }
+
+    .table tbody tr {
+        transition: all 0.2s ease;
+    }
+
+    .table tbody tr:hover {
+        background: var(--light);
+    }
+
+    .table-danger {
+        background-color: rgba(239, 68, 68, 0.06) !important;
+    }
+
+    .table-warning {
+        background-color: rgba(245, 158, 11, 0.06) !important;
+    }
+
+    /* ========== BADGES ========== */
+    .badge {
+        border-radius: 20px;
+        padding: 0.25rem 0.7rem;
+        font-weight: 600;
+        font-size: 0.7rem;
+    }
+
+    .badge.bg-success { background: var(--success) !important; color: white; }
+    .badge.bg-warning { background: var(--warning) !important; color: white; }
+    .badge.bg-danger { background: var(--danger) !important; color: white; }
+    .badge.bg-info { background: var(--info) !important; color: white; }
+    .badge.bg-secondary { background: var(--gray) !important; color: white; }
+    .badge.bg-primary { background: var(--primary) !important; color: white; }
+
+    /* ========== FILTRES ========== */
+    .filter-tabs .btn {
+        border-radius: 30px;
+        padding: 0.4rem 1.2rem;
+        font-weight: 500;
+        margin-right: 0.5rem;
+        transition: all 0.2s ease;
+    }
+
+    .filter-tabs .btn:hover {
+        transform: translateY(-1px);
+    }
+
+    /* ========== EMPTY STATE ========== */
+    .empty-state {
+        text-align: center;
+        padding: 2.5rem 1.5rem;
+    }
+
+    .empty-state .empty-icon {
+        font-size: 3rem;
+        color: var(--border);
+        margin-bottom: 1rem;
+    }
+
+    .empty-state .empty-title {
+        font-family: 'Georgia', serif;
+        color: var(--dark);
+        font-weight: 600;
+        font-size: 1.1rem;
+        margin-bottom: 0.3rem;
+    }
+
+    .empty-state .empty-text {
+        color: var(--gray);
+        margin-bottom: 1.2rem;
+        font-size: 0.9rem;
+    }
+
+    /* ========== RESPONSIVE ========== */
+    @media (max-width: 768px) {
+        .page-header { padding: 1.2rem; }
+        .page-title { font-size: 1.4rem; }
+        .stat-card .stat-value { font-size: 1.5rem; }
+        .stat-card .stat-icon { font-size: 2rem; }
+        .table { font-size: 0.75rem; }
+        .table thead th,
+        .table tbody td { padding: 0.3rem 0.4rem; }
+    }
+</style>
+
+<div class="container-fluid px-4 py-3">
+    <!-- ========== EN-TÊTE ========== -->
+    <div class="page-header animate-in">
+        <div class="page-header-content">
+            <div class="d-flex flex-wrap justify-content-between align-items-center">
+                <div>
+                    <nav aria-label="breadcrumb">
+                        <ol class="breadcrumb">
+                            <li class="breadcrumb-item"><a href="{{ url_for('dashboard') }}">Dashboard</a></li>
+                            <li class="breadcrumb-item"><a href="{{ url_for('veille_reglementaire') }}" style="color: rgba(255,255,255,0.7);">Veille réglementaire</a></li>
+                            <li class="breadcrumb-item"><a href="{{ url_for('rapport_veille') }}" style="color: rgba(255,255,255,0.7);">Rapport</a></li>
+                            <li class="breadcrumb-item active">{{ titre_statut }}</li>
+                        </ol>
+                    </nav>
+                    <h1 class="page-title">
+                        <i class="fas fa-tasks me-2"></i>Actions - {{ titre_statut }}
+                    </h1>
+                </div>
+                <div class="d-flex gap-2">
+                    <a href="{{ url_for('rapport_veille') }}" class="btn btn-secondary">
+                        <i class="fas fa-arrow-left me-2"></i>Retour au rapport
+                    </a>
                 </div>
             </div>
-            <div class="col-md-6">
-                <select class="form-select" id="filterRetard">
-                    <option value="all">Toutes les échéances</option>
-                    <option value="retard">En retard</option>
-                    <option value="semaine">Cette semaine</option>
-                    <option value="mois">Ce mois</option>
-                </select>
-            </div>
         </div>
     </div>
-</div>
 
-<!-- Liste des actions -->
-<div class="card">
-    <div class="card-header">
-        <h5 class="mb-0">
-            <i class="fas fa-list"></i> Liste des Actions
-            <span class="badge bg-primary">{{ actions|length }}</span>
-        </h5>
-    </div>
-    <div class="card-body">
-        {% if actions %}
-        <div class="table-responsive">
-            <table class="table table-hover" id="actionsTable">
-                <thead>
-                    <tr>
-                        <th>Description</th>
-                        <th>Réglementation</th>
-                        <th>Responsable</th>
-                        <th>Échéance</th>
-                        <th>Statut</th>
-                        <th>Jours restants</th>
-                        <th>Actions</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    {% for action in actions %}
-                    <tr data-statut="{{ action.statut }}" 
-                        data-date="{{ action.date_echeance.strftime('%Y-%m-%d') if action.date_echeance else '' }}">
-                        <td>{{ action.description }}</td>
-                        <td>
-                            <a href="{{ url_for('detail_veille', veille_id=action.veille.id) }}" 
-                               class="text-decoration-none">
-                                {{ action.veille.titre|truncate(30) }}
-                            </a>
-                        </td>
-                        <td>{{ action.responsable.username if action.responsable else 'Non assigné' }}</td>
-                        <td>
-                            {% if action.date_echeance %}
-                            {{ action.date_echeance.strftime('%d/%m/%Y') }}
-                            {% else %}
-                            <span class="text-muted">Non définie</span>
-                            {% endif %}
-                        </td>
-                        <td>
-                            <span class="badge bg-{% if action.statut == 'termine' %}success{% elif action.statut == 'en_cours' %}info{% else %}warning{% endif %}">
-                                {{ action.statut }}
-                            </span>
-                        </td>
-                        <td>
-                            {% if action.date_echeance %}
-                                {% set days_left = (action.date_echeance - datetime.now().date()).days %}
-                                {% if action.statut == 'termine' %}
-                                <span class="text-success">Terminé</span>
-                                {% elif days_left > 0 %}
-                                <span class="text-primary">J-{{ days_left }}</span>
-                                {% elif days_left == 0 %}
-                                <span class="text-warning">Aujourd'hui</span>
-                                {% else %}
-                                <span class="text-danger">J+{{ -days_left }}</span>
-                                {% endif %}
-                            {% else %}
-                            <span class="text-muted">-</span>
-                            {% endif %}
-                        </td>
-                        <td>
-                            <div class="btn-group btn-group-sm">
-                                <a href="{{ url_for('detail_veille', veille_id=action.veille.id) }}" 
-                                   class="btn btn-outline-primary"
-                                   title="Voir la veille">
-                                    <i class="fas fa-eye"></i>
-                                </a>
-                                {% if action.commentaire %}
-                                <button class="btn btn-outline-info"
-                                        data-bs-toggle="tooltip"
-                                        title="{{ action.commentaire }}">
-                                    <i class="fas fa-comment"></i>
-                                </button>
-                                {% endif %}
-                            </div>
-                        </td>
-                    </tr>
-                    {% endfor %}
-                </tbody>
-            </table>
+    <!-- ========== STATISTIQUES ========== -->
+    <div class="row g-3 mb-4 animate-in">
+        <div class="col-md-3 col-6">
+            <div class="stat-card stat-card-info">
+                <div class="stat-card-body">
+                    <div>
+                        <div class="stat-value">{{ actions|length }}</div>
+                        <div class="stat-label">Total actions</div>
+                    </div>
+                    <i class="fas fa-tasks stat-icon"></i>
+                </div>
+            </div>
         </div>
         
-        <!-- Statistiques -->
-        <div class="row mt-4">
-            <div class="col-md-4">
-                <div class="card border-primary">
-                    <div class="card-body text-center">
-                        <h5 class="card-title text-primary">
-                            {% set actions_retard = actions|selectattr('date_echeance', 'defined')|selectattr('statut', '!=', 'termine')|selectattr('date_echeance', '<', datetime.now().date())|list|length %}
-                            {{ actions_retard }}
-                        </h5>
-                        <p class="card-text text-danger">Actions en retard</p>
+        <div class="col-md-3 col-6">
+            <div class="stat-card stat-card-danger">
+                <div class="stat-card-body">
+                    <div>
+                        <div class="stat-value">{{ stats.actions_retard|default(0) }}</div>
+                        <div class="stat-label">En retard</div>
                     </div>
-                </div>
-            </div>
-            <div class="col-md-4">
-                <div class="card border-warning">
-                    <div class="card-body text-center">
-                        <h5 class="card-title text-warning">
-                            {% set date_semaine = datetime.now().date() + timedelta(days=7) %}
-                            {% set actions_semaine = actions|selectattr('date_echeance', 'defined')|selectattr('statut', '!=', 'termine')|selectattr('date_echeance', '<=', date_semaine)|list|length %}
-                            {{ actions_semaine }}
-                        </h5>
-                        <p class="card-text text-warning">Échéance cette semaine</p>
-                    </div>
-                </div>
-            </div>
-            <div class="col-md-4">
-                <div class="card border-success">
-                    <div class="card-body text-center">
-                        <h5 class="card-title text-success">
-                            {% set actions_terminees = actions|selectattr('statut', 'equalto', 'termine')|list|length %}
-                            {{ actions_terminees }}
-                        </h5>
-                        <p class="card-text text-success">Actions terminées</p>
-                    </div>
+                    <i class="fas fa-exclamation-triangle stat-icon"></i>
                 </div>
             </div>
         </div>
-        {% else %}
-        <div class="text-center py-5">
-            <i class="fas fa-tasks fa-4x text-muted mb-3"></i>
-            <h4>Aucune action trouvée</h4>
-            <p class="text-muted">Aucune action ne correspond aux critères de recherche.</p>
-            <a href="{{ url_for('veille_reglementaire') }}" class="btn btn-primary">
-                <i class="fas fa-balance-scale"></i> Retour aux veilles
-            </a>
+        
+        <div class="col-md-3 col-6">
+            <div class="stat-card stat-card-warning">
+                <div class="stat-card-body">
+                    <div>
+                        <div class="stat-value">{{ stats.actions_semaine|default(0) }}</div>
+                        <div class="stat-label">Cette semaine</div>
+                    </div>
+                    <i class="fas fa-clock stat-icon"></i>
+                </div>
+            </div>
         </div>
-        {% endif %}
+        
+        <div class="col-md-3 col-6">
+            <div class="stat-card stat-card-success">
+                <div class="stat-card-body">
+                    <div>
+                        <div class="stat-value">{{ stats.actions_terminees|default(0) }}</div>
+                        <div class="stat-label">Terminées</div>
+                    </div>
+                    <i class="fas fa-check-circle stat-icon"></i>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- ========== FILTRES PAR STATUT ========== -->
+    <div class="card mb-4 animate-in">
+        <div class="card-body">
+            <div class="d-flex flex-wrap align-items-center gap-3">
+                <strong style="color: var(--gray); font-size: 0.85rem;">Filtrer par statut :</strong>
+                <div class="filter-tabs">
+                    <a href="{{ url_for('rapport_actions_a_faire') }}?statut=a_faire" 
+                       class="btn btn-{% if statut_selected == 'a_faire' %}warning{% else %}outline-warning{% endif %}">
+                        <i class="fas fa-clock me-1"></i>À faire
+                    </a>
+                    <a href="{{ url_for('rapport_actions_a_faire') }}?statut=en_cours" 
+                       class="btn btn-{% if statut_selected == 'en_cours' %}info{% else %}outline-info{% endif %}">
+                        <i class="fas fa-spinner me-1"></i>En cours
+                    </a>
+                    <a href="{{ url_for('rapport_actions_a_faire') }}?statut=termine" 
+                       class="btn btn-{% if statut_selected == 'termine' %}success{% else %}outline-success{% endif %}">
+                        <i class="fas fa-check-circle me-1"></i>Terminées
+                    </a>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- ========== FILTRES RECHERCHE ========== -->
+    <div class="card mb-4 animate-in">
+        <div class="card-body">
+            <div class="row g-3">
+                <div class="col-md-6">
+                    <div class="input-group">
+                        <span class="input-group-text bg-light"><i class="fas fa-search text-muted"></i></span>
+                        <input type="text" class="form-control" id="searchActions" placeholder="Rechercher une action...">
+                    </div>
+                </div>
+                <div class="col-md-6">
+                    <select class="form-select" id="filterRetard">
+                        <option value="all">Toutes les échéances</option>
+                        <option value="retard">En retard</option>
+                        <option value="semaine">Cette semaine</option>
+                        <option value="mois">Ce mois</option>
+                    </select>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- ========== LISTE DES ACTIONS ========== -->
+    <div class="card animate-in">
+        <div class="card-header d-flex justify-content-between align-items-center">
+            <h5><i class="fas fa-list me-2"></i>Liste des Actions</h5>
+            <span class="badge" style="background: rgba(26,42,94,0.08); color: var(--primary); border-radius: 20px; padding: 0.3rem 0.8rem;">{{ actions|length }} actions</span>
+        </div>
+        <div class="card-body">
+            {% if actions %}
+            <div class="table-responsive">
+                <table class="table table-hover" id="actionsTable">
+                    <thead>
+                        <tr>
+                            <th>Description</th>
+                            <th>Réglementation</th>
+                            <th>Responsable</th>
+                            <th>Échéance</th>
+                            <th>Statut</th>
+                            <th>Jours restants</th>
+                            <th class="text-end">Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for action in actions %}
+                        <tr data-statut="{{ action.statut }}" 
+                            data-date="{{ action.date_echeance.strftime('%Y-%m-%d') if action.date_echeance else '' }}">
+                            <td>
+                                <strong style="color: var(--primary);">{{ action.description }}</strong>
+                            </td>
+                            <td>
+                                <a href="{{ url_for('detail_veille', veille_id=action.veille.id) }}" 
+                                   class="text-decoration-none" style="color: var(--primary);">
+                                    {{ action.veille.titre|truncate(30) }}
+                                </a>
+                            </td>
+                            <td>{{ action.responsable.username if action.responsable else 'Non assigné' }}</td>
+                            <td>
+                                {% if action.date_echeance %}
+                                {{ action.date_echeance.strftime('%d/%m/%Y') }}
+                                {% else %}
+                                <span class="text-muted">Non définie</span>
+                                {% endif %}
+                            </td>
+                            <td>
+                                <span class="badge bg-{% if action.statut == 'termine' %}success{% elif action.statut == 'en_cours' %}info{% else %}warning{% endif %}">
+                                    {{ action.statut }}
+                                </span>
+                            </td>
+                            <td>
+                                {% if action.date_echeance %}
+                                    {% set days_left = (action.date_echeance - datetime.now().date()).days %}
+                                    {% if action.statut == 'termine' %}
+                                    <span class="text-success">✓ Terminé</span>
+                                    {% elif days_left > 0 %}
+                                    <span class="text-primary">J-{{ days_left }}</span>
+                                    {% elif days_left == 0 %}
+                                    <span class="text-warning">Aujourd'hui</span>
+                                    {% else %}
+                                    <span class="text-danger">J+{{ -days_left }}</span>
+                                    {% endif %}
+                                {% else %}
+                                <span class="text-muted">-</span>
+                                {% endif %}
+                            </td>
+                            <td class="text-end">
+                                <div class="btn-group btn-group-sm">
+                                    <a href="{{ url_for('detail_veille', veille_id=action.veille.id) }}" 
+                                       class="btn btn-outline-primary"
+                                       title="Voir la veille">
+                                        <i class="fas fa-eye"></i>
+                                    </a>
+                                    <button class="btn btn-outline-{% if action.commentaire %}info{% else %}secondary{% endif %}"
+                                            data-bs-toggle="modal"
+                                            data-bs-target="#commentaireModal{{ action.id }}"
+                                            title="{% if action.commentaire %}Voir/modifier le commentaire{% else %}Ajouter un commentaire{% endif %}">
+                                        <i class="fas fa-comment"></i>
+                                    </button>
+                                </div>
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+            {% else %}
+            <div class="empty-state">
+                <div class="empty-icon">
+                    <i class="fas fa-tasks"></i>
+                </div>
+                <h4 class="empty-title">Aucune action trouvée</h4>
+                <p class="empty-text">Aucune action ne correspond aux critères de recherche.</p>
+                <a href="{{ url_for('veille_reglementaire') }}" class="btn btn-primary-custom">
+                    <i class="fas fa-balance-scale me-2"></i>Retour aux veilles
+                </a>
+            </div>
+            {% endif %}
+        </div>
     </div>
 </div>
+
+<!-- ============================================ -->
+<!-- MODALS DE COMMENTAIRE POUR CHAQUE ACTION    -->
+<!-- ============================================ -->
+{% for action in actions %}
+<div class="modal fade" id="commentaireModal{{ action.id }}" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header" style="background: linear-gradient(135deg, #0a1628 0%, #2a4a8a 100%); color: white;">
+                <h5 class="modal-title">
+                    <i class="fas fa-comment me-2"></i>
+                    Commentaire - {{ action.description|truncate(50) }}
+                </h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+            </div>
+            <form method="POST" action="{{ url_for('modifier_commentaire_action', action_id=action.id) }}">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                <div class="modal-body">
+                    <div class="mb-3">
+                        <label class="form-label fw-bold">Commentaire</label>
+                        <textarea name="commentaire" 
+                                  class="form-control" 
+                                  rows="5"
+                                  placeholder="Ajouter un commentaire sur cette action...">{{ action.commentaire or '' }}</textarea>
+                        <small class="text-muted">
+                            Ce commentaire sera visible par tous les utilisateurs concernés.
+                        </small>
+                    </div>
+                    
+                    <div class="alert alert-info mb-0" style="border-radius: var(--radius-sm);">
+                        <small>
+                            <strong>Action :</strong> {{ action.description }}<br>
+                            <strong>Statut :</strong> 
+                            <span class="badge bg-{% if action.statut == 'termine' %}success{% elif action.statut == 'en_cours' %}info{% else %}warning{% endif %}">
+                                {{ action.statut }}
+                            </span><br>
+                            <strong>Échéance :</strong> 
+                            {{ action.date_echeance.strftime('%d/%m/%Y') if action.date_echeance else 'Non définie' }}<br>
+                            <strong>Réglementation :</strong> 
+                            {{ action.veille.titre if action.veille else '-' }}
+                        </small>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal" style="color: var(--dark); background: var(--light); border: 1px solid var(--border);">Annuler</button>
+                    <button type="submit" class="btn btn-primary-custom">
+                        <i class="fas fa-save me-2"></i>Enregistrer
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+{% endfor %}
 {% endblock %}
 
 {% block scripts %}
 <script>
 $(document).ready(function() {
-    // Filtrage des actions
+    // ============================================
+    // FILTRAGE DES ACTIONS
+    // ============================================
     function filterActions() {
         const search = $('#searchActions').val().toLowerCase();
         const retardFilter = $('#filterRetard').val();
@@ -222,12 +652,10 @@ $(document).ready(function() {
             // Filtre retard
             if (retardFilter !== 'all' && dateEcheance) {
                 if (retardFilter === 'retard') {
-                    // En retard : date passée et statut != 'termine'
                     if (dateEcheance >= today || statut === 'termine') {
                         show = false;
                     }
                 } else if (retardFilter === 'semaine') {
-                    // Cette semaine : dans les 7 prochains jours
                     const oneWeekLater = new Date();
                     oneWeekLater.setDate(oneWeekLater.getDate() + 7);
                     const maxDate = oneWeekLater.toISOString().split('T')[0];
@@ -235,7 +663,6 @@ $(document).ready(function() {
                         show = false;
                     }
                 } else if (retardFilter === 'mois') {
-                    // Ce mois : dans les 30 prochains jours
                     const oneMonthLater = new Date();
                     oneMonthLater.setMonth(oneMonthLater.getMonth() + 1);
                     const maxDate = oneMonthLater.toISOString().split('T')[0];
@@ -244,7 +671,6 @@ $(document).ready(function() {
                     }
                 }
             } else if (retardFilter !== 'all' && !dateEcheance) {
-                // Si pas de date d'échéance et filtre activé, cacher
                 show = false;
             }
             
@@ -255,10 +681,14 @@ $(document).ready(function() {
     $('#searchActions').on('keyup', filterActions);
     $('#filterRetard').on('change', filterActions);
     
-    // Tooltips
+    // ============================================
+    // TOOLTIPS
+    // ============================================
     $('[data-bs-toggle="tooltip"]').tooltip();
     
-    // Mettre en évidence les lignes en retard
+    // ============================================
+    // MISE EN ÉVIDENCE DES LIGNES EN RETARD
+    // ============================================
     $('#actionsTable tbody tr').each(function() {
         const dateEcheance = $(this).data('date');
         const statut = $(this).data('statut');
@@ -274,28 +704,4 @@ $(document).ready(function() {
     });
 });
 </script>
-{% endblock %}
-
-{% block styles %}
-<style>
-.table-danger {
-    background-color: rgba(220, 53, 69, 0.1) !important;
-}
-
-.table-warning {
-    background-color: rgba(255, 193, 7, 0.1) !important;
-}
-
-.table-success {
-    background-color: rgba(25, 135, 84, 0.1) !important;
-}
-
-.btn-group .btn {
-    transition: all 0.3s;
-}
-
-.btn-group .btn:hover {
-    transform: translateY(-2px);
-}
-</style>
 {% endblock %}

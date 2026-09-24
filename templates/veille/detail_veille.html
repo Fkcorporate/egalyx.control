@@ -1,344 +1,1401 @@
-<!-- veille/detail_veille.html -->
 {% extends "base.html" %}
 
-{% block content %}
-<div class="d-flex justify-content-between flex-wrap flex-md-nowrap align-items-center pt-3 pb-2 mb-3 border-bottom">
-    <h1 class="h2">
-        <i class="fas fa-balance-scale"></i> {{ veille.titre }}
-    </h1>
-    <div class="btn-toolbar mb-2 mb-md-0">
-        <a href="{{ url_for('veille_reglementaire') }}" class="btn btn-secondary me-2">
-            <i class="fas fa-arrow-left"></i> Retour
-        </a>
-        <a href="{{ url_for('modifier_veille', id=veille.id) }}" class="btn btn-warning me-2">
-            <i class="fas fa-edit"></i> Modifier
-        </a>
-        <button class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#actionModal">
-            <i class="fas fa-tasks"></i> Gérer les actions
-        </button>
-    </div>
-</div>
+{% block title %}{{ veille.titre }} - Veille Réglementaire{% endblock %}
 
-<div class="row">
-    <!-- Informations principales -->
-    <div class="col-md-8">
-        <div class="card mb-4">
-            <div class="card-header">
-                <h5 class="mb-0"><i class="fas fa-info-circle"></i> Informations générales</h5>
-            </div>
-            <div class="card-body">
-                <div class="row">
-                    <div class="col-md-6">
-                        <p><strong>Référence :</strong> {{ veille.reference or '-' }}</p>
-                        <p><strong>Type :</strong> {{ veille.type_reglementation }}</p>
-                        <p><strong>Organisme émetteur :</strong> {{ veille.organisme_emetteur or '-' }}</p>
-                        <p><strong>Créée par :</strong> {{ veille.createur.username if veille.createur else '-' }}</p>
+{% block content %}
+<style>
+    /* ============================================
+       STYLES - DÉTAIL VEILLE RÉGLEMENTAIRE
+       ============================================ */
+    
+    :root {
+        --primary: #1a2a5e;
+        --primary-light: #2a4a8a;
+        --gold: #c9a84c;
+        --gold-light: #f0d080;
+        --success: #10b981;
+        --warning: #f59e0b;
+        --danger: #ef4444;
+        --info: #3b82f6;
+        --gray: #6b7280;
+        --light: #f8f9fd;
+        --border: #e8ebf2;
+        --dark: #0a1628;
+        --shadow: 0 2px 12px rgba(10, 22, 40, 0.06);
+        --shadow-hover: 0 8px 24px rgba(10, 22, 40, 0.10);
+        --radius: 16px;
+        --radius-sm: 10px;
+    }
+
+    @keyframes fadeIn {
+        from { opacity: 0; transform: translateY(12px); }
+        to { opacity: 1; transform: translateY(0); }
+    }
+
+    .animate-in {
+        animation: fadeIn 0.4s ease-out forwards;
+    }
+
+    /* ========== HEADER ========== */
+    .page-header {
+        background: linear-gradient(135deg, #0a1628 0%, #1a2a4a 50%, #2a4a8a 100%);
+        border-radius: var(--radius);
+        padding: 1.5rem 2rem;
+        margin-bottom: 2rem;
+        color: white;
+        box-shadow: 0 10px 30px rgba(10, 22, 40, 0.20);
+        position: relative;
+        overflow: hidden;
+        border-bottom: 4px solid var(--gold);
+    }
+
+    .page-header::before {
+        content: '';
+        position: absolute;
+        top: -50%;
+        right: -5%;
+        width: 300px;
+        height: 300px;
+        background: rgba(201, 168, 76, 0.05);
+        border-radius: 50%;
+        transform: rotate(25deg);
+        pointer-events: none;
+        z-index: 0;
+    }
+
+    .page-header-content { position: relative; z-index: 2; }
+
+    .page-title {
+        font-size: 1.6rem;
+        font-weight: 700;
+        font-family: 'Georgia', serif;
+        margin-bottom: 0.25rem;
+    }
+
+    .page-title i { color: var(--gold); }
+
+    /* ========== BOUTONS ========== */
+    .btn-primary-custom {
+        background: var(--primary);
+        color: white;
+        border: none;
+        border-radius: 30px;
+        padding: 0.5rem 1.5rem;
+        font-weight: 500;
+        transition: all 0.25s ease;
+    }
+    .btn-primary-custom:hover {
+        background: var(--primary-light);
+        transform: translateY(-2px);
+        box-shadow: 0 4px 16px rgba(26, 42, 94, 0.25);
+        color: white;
+    }
+
+    .btn-gold {
+        background: linear-gradient(135deg, var(--gold), var(--gold-light));
+        color: var(--dark);
+        border: none;
+        border-radius: 30px;
+        padding: 0.5rem 1.5rem;
+        font-weight: 600;
+        transition: all 0.25s ease;
+    }
+    .btn-gold:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 4px 16px rgba(201, 168, 76, 0.4);
+        color: var(--dark);
+    }
+
+    .btn-secondary {
+        background: rgba(255, 255, 255, 0.10);
+        color: white;
+        border: 1px solid rgba(255, 255, 255, 0.20);
+        border-radius: 30px;
+        padding: 0.4rem 1.2rem;
+        font-weight: 500;
+        transition: all 0.2s ease;
+    }
+    .btn-secondary:hover {
+        background: rgba(255, 255, 255, 0.20);
+        transform: translateY(-1px);
+        color: white;
+    }
+
+    /* ========== BREADCRUMB ========== */
+    .breadcrumb {
+        background: transparent;
+        padding: 0;
+        margin-bottom: 0.3rem;
+    }
+    .breadcrumb-item a {
+        color: rgba(255, 255, 255, 0.7);
+        text-decoration: none;
+        transition: all 0.3s ease;
+    }
+    .breadcrumb-item a:hover { color: var(--gold); }
+    .breadcrumb-item.active { color: white; }
+    .breadcrumb-item + .breadcrumb-item::before { color: rgba(255, 255, 255, 0.4); }
+
+    /* ========== CARDS ========== */
+    .card {
+        border-radius: var(--radius);
+        border: 1px solid var(--border);
+        box-shadow: var(--shadow);
+        transition: all 0.3s ease;
+        background: white;
+    }
+    .card:hover {
+        box-shadow: var(--shadow-hover);
+        border-color: var(--gold);
+    }
+    .card-header {
+        background: var(--light);
+        border-bottom: 1px solid var(--border);
+        padding: 0.8rem 1.2rem;
+        font-weight: 600;
+        color: var(--dark);
+        border-radius: var(--radius) var(--radius) 0 0;
+    }
+    .card-header h5 {
+        font-family: 'Georgia', serif;
+        font-weight: 600;
+        color: var(--dark);
+        margin: 0;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+    }
+    .card-header h5 i { color: var(--gold); }
+    .card-body { padding: 1.2rem; color: var(--dark); }
+
+    /* ========== BADGES ========== */
+    .badge {
+        border-radius: 20px;
+        padding: 0.25rem 0.7rem;
+        font-weight: 600;
+        font-size: 0.7rem;
+    }
+    .badge.bg-success { background: var(--success) !important; color: white; }
+    .badge.bg-warning { background: var(--warning) !important; color: white; }
+    .badge.bg-danger { background: var(--danger) !important; color: white; }
+    .badge.bg-info { background: var(--info) !important; color: white; }
+    .badge.bg-secondary { background: var(--gray) !important; color: white; }
+    .badge.bg-primary { background: var(--primary) !important; color: white; }
+
+    /* ========== INFO ITEMS ========== */
+    .info-item {
+        display: flex;
+        align-items: flex-start;
+        padding: 0.6rem 0;
+        border-bottom: 1px dashed var(--border);
+    }
+    .info-item:last-child { border-bottom: none; }
+    .info-label {
+        flex: 0 0 140px;
+        font-weight: 500;
+        color: var(--gray);
+        font-size: 0.8rem;
+        text-transform: uppercase;
+        letter-spacing: 0.3px;
+    }
+    .info-value {
+        flex: 1;
+        color: var(--dark);
+        font-weight: 500;
+    }
+
+    /* ========== STAT CARDS ========== */
+    .stat-card {
+        border-radius: var(--radius);
+        padding: 1.2rem 1.5rem;
+        color: white;
+        transition: all 0.3s ease;
+        position: relative;
+        overflow: hidden;
+        border: none;
+        height: 100%;
+        text-decoration: none;
+        display: block;
+    }
+    .stat-card:hover {
+        transform: translateY(-4px);
+        box-shadow: 0 12px 28px rgba(0,0,0,0.15);
+        text-decoration: none;
+        color: white;
+    }
+    .stat-card .stat-value {
+        font-size: 2rem;
+        font-weight: 700;
+        font-family: 'Georgia', serif;
+        line-height: 1.2;
+        margin-bottom: 0.1rem;
+    }
+    .stat-card .stat-label {
+        font-size: 0.8rem;
+        opacity: 0.85;
+        font-weight: 400;
+    }
+    .stat-card .stat-icon {
+        font-size: 2.5rem;
+        opacity: 0.15;
+    }
+    .stat-card-body {
+        position: relative;
+        z-index: 1;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+    }
+    .stat-card-primary { background: linear-gradient(135deg, #1a2a5e, #2a4a8a); }
+    .stat-card-success { background: linear-gradient(135deg, #0d9488, #065f46); }
+    .stat-card-warning { background: linear-gradient(135deg, #d97706, #92400e); }
+    .stat-card-info { background: linear-gradient(135deg, #2563eb, #1e3a8a); }
+
+    /* ========== TABLE ========== */
+    .table {
+        font-size: 0.85rem;
+        border-color: var(--border);
+        margin-bottom: 0;
+    }
+    .table thead th {
+        background: var(--light);
+        border-bottom: 2px solid var(--border);
+        color: var(--gray);
+        font-weight: 600;
+        font-size: 0.7rem;
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+        padding: 0.6rem 0.6rem;
+    }
+    .table tbody td {
+        border-bottom: 1px solid var(--border);
+        color: var(--dark);
+        vertical-align: middle;
+        padding: 0.6rem 0.6rem;
+    }
+    .table tbody tr:hover { background: var(--light); }
+
+    /* ========== PROGRESS ========== */
+    .progress {
+        height: 20px;
+        border-radius: 10px;
+        background: var(--border);
+        overflow: hidden;
+    }
+    .progress-bar {
+        border-radius: 10px;
+        transition: width 0.5s ease;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 0.7rem;
+        font-weight: 600;
+    }
+
+    /* ========== COMMENTAIRES ========== */
+    .commentaire-item {
+        transition: all 0.3s ease;
+    }
+    .commentaire-item:hover {
+        background: var(--light);
+        border-radius: var(--radius-sm);
+        padding: 0.5rem;
+        margin: -0.5rem;
+    }
+    .commentaire-item .btn-supprimer {
+        opacity: 0;
+        transition: opacity 0.2s ease;
+    }
+    .commentaire-item:hover .btn-supprimer {
+        opacity: 1;
+    }
+
+    /* ========== RESPONSIVE ========== */
+    @media (max-width: 768px) {
+        .page-header { padding: 1.2rem; }
+        .page-title { font-size: 1.2rem; }
+        .stat-card .stat-value { font-size: 1.5rem; }
+        .info-label { flex: 0 0 100px; font-size: 0.7rem; }
+        .commentaire-item .btn-supprimer { opacity: 1; }
+    }
+</style>
+
+<div class="container-fluid px-4 py-3">
+    
+    <!-- ============================================ -->
+    <!-- EN-TÊTE                                       -->
+    <!-- ============================================ -->
+    <div class="page-header animate-in">
+        <div class="page-header-content">
+            <div class="d-flex flex-wrap justify-content-between align-items-center">
+                <div>
+                    <nav aria-label="breadcrumb">
+                        <ol class="breadcrumb">
+                            <li class="breadcrumb-item">
+                                <a href="{{ url_for('dashboard') }}">Dashboard</a>
+                            </li>
+                            <li class="breadcrumb-item">
+                                <a href="{{ url_for('veille_reglementaire') }}" style="color: rgba(255,255,255,0.7);">
+                                    Veille réglementaire
+                                </a>
+                            </li>
+                            <li class="breadcrumb-item active">{{ veille.titre|truncate(40) }}</li>
+                        </ol>
+                    </nav>
+                    <h1 class="page-title">
+                        <i class="fas fa-balance-scale me-2"></i>{{ veille.titre }}
+                    </h1>
+                    {% if veille.reference %}
+                    <div style="color: rgba(255,255,255,0.7); font-size: 0.85rem;">
+                        <i class="fas fa-hashtag me-1"></i>{{ veille.reference }}
                     </div>
-                    <div class="col-md-6">
-                        <p><strong>Date publication :</strong> 
-                            {% if veille.date_publication %}
-                            {{ veille.date_publication.strftime('%d/%m/%Y') }}
-                            {% else %}-{% endif %}
-                        </p>
-                        <p><strong>Date application :</strong> 
-                            {% if veille.date_application %}
-                            {{ veille.date_application.strftime('%d/%m/%Y') }}
-                            {% set days_left = (veille.date_application - datetime.now().date()).days %}
-                            {% if days_left > 0 %}
-                            <span class="badge bg-info">J-{{ days_left }}</span>
-                            {% elif days_left == 0 %}
-                            <span class="badge bg-warning">Aujourd'hui</span>
-                            {% else %}
-                            <span class="badge bg-secondary">J+{{ -days_left }}</span>
-                            {% endif %}
-                            {% else %}-{% endif %}
-                        </p>
-                        <p><strong>Statut :</strong> 
-                            {% if veille.statut == 'en_vigueur' %}
-                            <span class="badge bg-success">En vigueur</span>
-                            {% elif veille.statut == 'projet' %}
-                            <span class="badge bg-warning">Projet</span>
-                            {% else %}
-                            <span class="badge bg-secondary">{{ veille.statut }}</span>
-                            {% endif %}
-                        </p>
-                        <p><strong>Impact estimé :</strong>
+                    {% endif %}
+                </div>
+                <div class="d-flex gap-2 flex-wrap">
+                    <button type="button" 
+                            class="btn btn-secondary"
+                            id="btnFavori"
+                            onclick="toggleFavori({{ veille.id }})"
+                            title="Ajouter/retirer des favoris">
+                        <i class="fas fa-star {% if is_favori %}text-warning{% endif %} me-2" id="favoriIcon"></i>
+                        <span id="favoriText">{% if is_favori %}Favori{% else %}Favoris{% endif %}</span>
+                    </button>
+                    
+                    <a href="{{ url_for('veille_reglementaire') }}" class="btn btn-secondary">
+                        <i class="fas fa-arrow-left me-2"></i>Retour
+                    </a>
+                    <a href="{{ url_for('modifier_veille', id=veille.id) }}" class="btn btn-gold">
+                        <i class="fas fa-edit me-2"></i>Modifier
+                    </a>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- ============================================ -->
+    <!-- STATISTIQUES RAPIDES                          -->
+    <!-- ============================================ -->
+    <div class="row g-3 mb-4 animate-in">
+        <div class="col-md-3 col-6">
+            <div class="stat-card stat-card-primary">
+                <div class="stat-card-body">
+                    <div>
+                        <div class="stat-value">{{ actions_actives|length }}</div>
+                        <div class="stat-label">Actions actives</div>
+                    </div>
+                    <i class="fas fa-tasks stat-icon"></i>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3 col-6">
+            <div class="stat-card stat-card-success">
+                <div class="stat-card-body">
+                    <div>
+                        <div class="stat-value">
+                            {{ actions_actives|selectattr('statut', 'equalto', 'termine')|list|length }}
+                        </div>
+                        <div class="stat-label">Terminées</div>
+                    </div>
+                    <i class="fas fa-check-circle stat-icon"></i>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3 col-6">
+            <div class="stat-card stat-card-warning">
+                <div class="stat-card-body">
+                    <div>
+                        <div class="stat-value">
+                            {{ actions_actives|selectattr('statut', 'equalto', 'en_cours')|list|length }}
+                        </div>
+                        <div class="stat-label">En cours</div>
+                    </div>
+                    <i class="fas fa-spinner stat-icon"></i>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3 col-6">
+            <div class="stat-card stat-card-info">
+                <div class="stat-card-body">
+                    <div>
+                        <div class="stat-value">{{ veille.documents.count() }}</div>
+                        <div class="stat-label">Documents</div>
+                    </div>
+                    <i class="fas fa-file stat-icon"></i>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="row g-3 animate-in">
+        
+        <!-- ============================================ -->
+        <!-- COLONNE PRINCIPALE                            -->
+        <!-- ============================================ -->
+        <div class="col-lg-8">
+            
+            <!-- ---------- Informations générales ---------- -->
+            <div class="card mb-3">
+                <div class="card-header">
+                    <h5><span><i class="fas fa-info-circle me-2"></i>Informations générales</span></h5>
+                </div>
+                <div class="card-body">
+                    <div class="row">
+                        <div class="col-md-6">
+                            <div class="info-item">
+                                <div class="info-label">Référence</div>
+                                <div class="info-value">{{ veille.reference or '-' }}</div>
+                            </div>
+                            <div class="info-item">
+                                <div class="info-label">Type</div>
+                                <div class="info-value">
+                                    <span class="badge bg-primary">{{ veille.type_reglementation }}</span>
+                                </div>
+                            </div>
+                            <div class="info-item">
+                                <div class="info-label">Organisme</div>
+                                <div class="info-value">{{ veille.organisme_emetteur or '-' }}</div>
+                            </div>
+                        </div>
+                        <div class="col-md-6">
+                            <div class="info-item">
+                                <div class="info-label">Publication</div>
+                                <div class="info-value">
+                                    {% if veille.date_publication %}
+                                    {{ veille.date_publication.strftime('%d/%m/%Y') }}
+                                    {% else %}-{% endif %}
+                                </div>
+                            </div>
+                            <div class="info-item">
+                                <div class="info-label">Application</div>
+                                <div class="info-value">
+                                    {% if veille.date_application %}
+                                    {{ veille.date_application.strftime('%d/%m/%Y') }}
+                                    {% set days_left = (veille.date_application - datetime.now().date()).days %}
+                                    {% if days_left > 0 %}
+                                    <span class="badge bg-info ms-1">J-{{ days_left }}</span>
+                                    {% elif days_left == 0 %}
+                                    <span class="badge bg-warning ms-1">Aujourd'hui</span>
+                                    {% else %}
+                                    <span class="badge bg-secondary ms-1">J+{{ -days_left }}</span>
+                                    {% endif %}
+                                    {% else %}-{% endif %}
+                                </div>
+                            </div>
+                            <div class="info-item">
+                                <div class="info-label">Statut</div>
+                                <div class="info-value">
+                                    {% if veille.statut == 'en_vigueur' %}
+                                    <span class="badge bg-success">✅ En vigueur</span>
+                                    {% elif veille.statut == 'projet' %}
+                                    <span class="badge bg-warning">📝 Projet</span>
+                                    {% elif veille.statut == 'abroge' %}
+                                    <span class="badge bg-danger">⛔ Abrogé</span>
+                                    {% elif veille.statut == 'suspendu' %}
+                                    <span class="badge bg-info">⏸️ Suspendu</span>
+                                    {% else %}
+                                    <span class="badge bg-secondary">{{ veille.statut }}</span>
+                                    {% endif %}
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="info-item mt-2">
+                        <div class="info-label">Impact estimé</div>
+                        <div class="info-value">
                             {% if veille.impact_estime == 'eleve' %}
-                            <span class="badge bg-danger">Élevé</span>
+                            <span class="badge bg-danger">🔴 Élevé</span>
                             {% elif veille.impact_estime == 'moyen' %}
-                            <span class="badge bg-warning">Moyen</span>
+                            <span class="badge bg-warning">🟡 Moyen</span>
                             {% elif veille.impact_estime == 'faible' %}
-                            <span class="badge bg-success">Faible</span>
+                            <span class="badge bg-success">🟢 Faible</span>
                             {% else %}
                             <span class="badge bg-secondary">Non évalué</span>
                             {% endif %}
-                        </p>
+                        </div>
+                    </div>
+                    <div class="info-item">
+                        <div class="info-label">Créée par</div>
+                        <div class="info-value">
+                            <i class="fas fa-user-circle me-1" style="color: var(--gray);"></i>
+                            {{ veille.createur.username if veille.createur else '-' }}
+                        </div>
                     </div>
                 </div>
             </div>
-        </div>
 
-        <!-- Description -->
-        <div class="card mb-4">
-            <div class="card-header">
-                <h5 class="mb-0"><i class="fas fa-align-left"></i> Description</h5>
-            </div>
-            <div class="card-body">
-                {% if veille.description %}
-                <div class="p-3 bg-light rounded" style="white-space: pre-line;">
-                    {{ veille.description }}
+            <!-- ---------- Périmètre d'application ---------- -->
+            <div class="card mb-3">
+                <div class="card-header">
+                    <h5>
+                        <span><i class="fas fa-sitemap me-2"></i>Périmètre d'application</span>
+                        <span class="badge bg-{{ veille.perimetre_couleur }}">
+                            {{ veille.perimetre_type|upper }}
+                        </span>
+                    </h5>
                 </div>
-                {% else %}
-                <p class="text-muted">Aucune description disponible</p>
-                {% endif %}
-            </div>
-        </div>
-        
-        <!-- Actions actives -->
-        <div class="card mb-4">
-            <div class="card-header d-flex justify-content-between align-items-center">
-                <h5 class="mb-0"><i class="fas fa-tasks"></i> Actions Actives</h5>
-                <span class="badge bg-primary">{{ actions_actives|length }}</span>
-            </div>
-            <div class="card-body">
-                {% if actions_actives %}
-                <div class="table-responsive">
-                    <table class="table table-sm">
-                        <thead>
-                            <tr>
-                                <th>Description</th>
-                                <th>Responsable</th>
-                                <th>Échéance</th>
-                                <th>Statut</th>
-                                <th>Jours restants</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            {% for action in actions_actives %}
-                            <tr>
-                                <td>{{ action.description }}</td>
-                                <td>{{ action.responsable.username if action.responsable else 'Non assigné' }}</td>
-                                <td>
-                                    {% if action.date_echeance %}
-                                    {{ action.date_echeance.strftime('%d/%m/%Y') }}
+                <div class="card-body">
+                    <div class="row">
+                        <div class="col-md-6">
+                            <div class="info-item">
+                                <div class="info-label">Niveau</div>
+                                <div class="info-value">
+                                    <strong>{{ veille.perimetre_applicable }}</strong>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-md-6">
+                            <div class="info-item">
+                                <div class="info-label">Pôles associés</div>
+                                <div class="info-value">
+                                    {% if veille.poles_associes %}
+                                    <div class="d-flex flex-wrap gap-1">
+                                        {% for pole in veille.poles_associes %}
+                                        <form method="POST" 
+                                              action="{{ url_for('veille_dissocier_pole', veille_id=veille.id, pole_id=pole.id) }}"
+                                              class="d-inline">
+                                            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                                            <span class="badge bg-warning text-dark">
+                                                {{ pole.nom }}
+                                                <button type="submit" 
+                                                        class="btn-close btn-close-sm ms-1" 
+                                                        style="font-size: 0.5rem;"
+                                                        title="Dissocier"></button>
+                                            </span>
+                                        </form>
+                                        {% endfor %}
+                                    </div>
                                     {% else %}
-                                    <span class="text-muted">Non définie</span>
+                                    <span class="text-muted small">Aucun pôle associé</span>
                                     {% endif %}
-                                </td>
-                                <td>
-                                    <span class="badge bg-{% if action.statut == 'termine' %}success{% elif action.statut == 'en_cours' %}info{% else %}warning{% endif %}">
-                                        {{ action.statut }}
-                                    </span>
-                                </td>
-                                <td>
-                                    {% if action.date_echeance %}
-                                        {% set days_left = (action.date_echeance - datetime.now().date()).days %}
-                                        {% if action.statut == 'termine' %}
-                                        <span class="text-success">Terminé</span>
-                                        {% elif days_left > 0 %}
-                                        <span class="text-primary">J-{{ days_left }}</span>
-                                        {% elif days_left == 0 %}
-                                        <span class="text-warning">Aujourd'hui</span>
-                                        {% else %}
-                                        <span class="text-danger">J+{{ -days_left }}</span>
-                                        {% endif %}
-                                    {% else %}
-                                    <span class="text-muted">-</span>
-                                    {% endif %}
-                                </td>
-                            </tr>
-                            {% endfor %}
-                        </tbody>
-                    </table>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="mt-3">
+                        <button class="btn btn-sm btn-outline-warning" 
+                                data-bs-toggle="modal" 
+                                data-bs-target="#modalAssocierPole">
+                            <i class="fas fa-plus me-1"></i>Associer des pôles
+                        </button>
+                    </div>
                 </div>
-                {% else %}
-                <p class="text-muted text-center">Aucune action active pour cette veille</p>
-                {% endif %}
             </div>
-        </div>
-    </div>
 
-    <!-- Statistiques latérales -->
-    <div class="col-md-4">
-        <!-- Statistiques actions -->
-        <div class="card mb-4">
-            <div class="card-header">
-                <h5 class="mb-0"><i class="fas fa-chart-pie"></i> Statistiques</h5>
+            <!-- ---------- Description ---------- -->
+            <div class="card mb-3">
+                <div class="card-header">
+                    <h5><span><i class="fas fa-align-left me-2"></i>Description</span></h5>
+                </div>
+                <div class="card-body">
+                    {% if veille.description %}
+                    <div style="white-space: pre-line; line-height: 1.7;">{{ veille.description }}</div>
+                    {% else %}
+                    <p class="text-muted mb-0">
+                        <i class="fas fa-info-circle me-2"></i>Aucune description disponible
+                    </p>
+                    {% endif %}
+                </div>
             </div>
-            <div class="card-body">
-                {% set actions_archivees = veille.actions|selectattr('is_archived', 'equalto', true)|list %}
-                {% set actions_total = actions_actives|length + actions_archivees|length %}
-                
-                <div class="mb-3">
-                    <h6>Répartition des actions</h6>
-                    <div class="progress" style="height: 20px;">
-                        {% if actions_total > 0 %}
-                            {% set terminees = actions_actives|selectattr('statut', 'equalto', 'termine')|list|length %}
-                            {% set en_cours = actions_actives|selectattr('statut', 'equalto', 'en_cours')|list|length %}
-                            {% set a_faire = actions_actives|selectattr('statut', 'equalto', 'a_faire')|list|length %}
-                            
-                            <div class="progress-bar bg-success" style="width: {{ (terminees/actions_total*100) }}%">
-                                {{ terminees }}
-                            </div>
-                            <div class="progress-bar bg-info" style="width: {{ (en_cours/actions_total*100) }}%">
-                                {{ en_cours }}
-                            </div>
-                            <div class="progress-bar bg-warning" style="width: {{ (a_faire/actions_total*100) }}%">
-                                {{ a_faire }}
-                            </div>
-                            {% if actions_archivees|length > 0 %}
-                            <div class="progress-bar bg-secondary" style="width: {{ (actions_archivees|length/actions_total*100) }}%">
-                                {{ actions_archivees|length }}
-                            </div>
+
+            <!-- ---------- Analyse IA ---------- -->
+            {% if veille.metadonnees and veille.metadonnees.get('analyse_ia') %}
+            {% set ia = veille.metadonnees['analyse_ia'] %}
+            <div class="card mb-3">
+                <div class="card-header" style="background: linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%); color: white;">
+                    <h5 style="color: white; margin: 0;">
+                        <span>
+                            <i class="fas fa-robot me-2"></i>Analyse IA
+                            {% if ia.mode == 'api' %}
+                            <span class="badge bg-light text-dark ms-2" style="font-size: 0.65rem;">
+                                <i class="fas fa-bolt me-1"></i>GPT-4o-mini
+                            </span>
+                            {% else %}
+                            <span class="badge bg-warning text-dark ms-2" style="font-size: 0.65rem;">
+                                <i class="fas fa-microchip me-1"></i>Moteur local
+                            </span>
                             {% endif %}
+                        </span>
+                        {% if veille.metadonnees.get('date_analyse') %}
+                        <small style="color: rgba(255,255,255,0.7); font-size: 0.7rem;">
+                            {{ veille.metadonnees['date_analyse'][:16]|replace('T', ' ') }}
+                        </small>
                         {% endif %}
-                    </div>
-                    <small class="text-muted d-block mt-2">
-                        <span class="text-success">● Terminées</span>
-                        <span class="text-info ms-2">● En cours</span>
-                        <span class="text-warning ms-2">● À faire</span>
-                        {% if actions_archivees|length > 0 %}
-                        <span class="text-secondary ms-2">● Archivées</span>
-                        {% endif %}
-                    </small>
+                    </h5>
                 </div>
-                
-                <div class="row text-center">
-                    <div class="col-6">
-                        <div class="border rounded p-2">
-                            <h5 class="mb-0 text-primary">{{ actions_actives|length }}</h5>
-                            <small class="text-muted">Actives</small>
+                <div class="card-body">
+                    <div class="row g-3 mb-3">
+                        <div class="col-md-3">
+                            <div class="text-center p-3" style="background: var(--light); border-radius: var(--radius-sm);">
+                                <div class="small text-muted text-uppercase mb-1">Criticité</div>
+                                <div style="font-size: 1.4rem; font-weight: 700; font-family: 'Georgia', serif;
+                                    color: {% if ia.criticite == 'critique' %}#dc2626
+                                           {% elif ia.criticite == 'eleve' %}#f59e0b
+                                           {% elif ia.criticite == 'moyen' %}#3b82f6
+                                           {% else %}#10b981{% endif %};">
+                                    {{ ia.criticite|upper }}
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-md-9">
+                            <div class="small text-muted text-uppercase mb-1">Résumé</div>
+                            <div style="line-height: 1.6;">{{ ia.resume }}</div>
                         </div>
                     </div>
-                    <div class="col-6">
-                        <div class="border rounded p-2">
-                            <h5 class="mb-0 text-secondary">{{ actions_archivees|length }}</h5>
-                            <small class="text-muted">Archivées</small>
-                        </div>
+
+                    {% if ia.justification_criticite %}
+                    <div class="alert alert-info mb-3" style="border-radius: var(--radius-sm);">
+                        <strong><i class="fas fa-info-circle me-2"></i>Justification :</strong>
+                        {{ ia.justification_criticite }}
                     </div>
+                    {% endif %}
+
+                    <div class="row g-3 mb-3">
+                        {% if ia.organismes %}
+                        <div class="col-md-4">
+                            <div class="small text-muted text-uppercase mb-2">
+                                <i class="fas fa-landmark me-1"></i>Organismes
+                            </div>
+                            <div class="d-flex flex-wrap gap-1">
+                                {% for org in ia.organismes %}
+                                <span class="badge bg-primary">{{ org }}</span>
+                                {% endfor %}
+                            </div>
+                        </div>
+                        {% endif %}
+                        {% if ia.secteurs_impactes %}
+                        <div class="col-md-4">
+                            <div class="small text-muted text-uppercase mb-2">
+                                <i class="fas fa-industry me-1"></i>Secteurs impactés
+                            </div>
+                            <div class="d-flex flex-wrap gap-1">
+                                {% for secteur in ia.secteurs_impactes %}
+                                <span class="badge bg-info">{{ secteur }}</span>
+                                {% endfor %}
+                            </div>
+                        </div>
+                        {% endif %}
+                        {% if ia.mots_cles %}
+                        <div class="col-md-4">
+                            <div class="small text-muted text-uppercase mb-2">
+                                <i class="fas fa-tags me-1"></i>Mots-clés
+                            </div>
+                            <div class="d-flex flex-wrap gap-1">
+                                {% for mot in ia.mots_cles %}
+                                <span class="badge bg-secondary">{{ mot }}</span>
+                                {% endfor %}
+                            </div>
+                        </div>
+                        {% endif %}
+                    </div>
+
+                    {% if ia.actions_recommandees %}
+                    <div class="small text-muted text-uppercase mb-2">
+                        <i class="fas fa-tasks me-1"></i>Actions recommandées par l'IA
+                    </div>
+                    <ul class="list-group mb-3">
+                        {% for action in ia.actions_recommandees %}
+                        <li class="list-group-item d-flex align-items-start">
+                            <i class="fas fa-check-circle text-success me-2 mt-1"></i>
+                            <span>{{ action }}</span>
+                        </li>
+                        {% endfor %}
+                    </ul>
+                    {% endif %}
+
+                    <div class="d-flex gap-2 justify-content-end">
+                        <form method="POST" action="{{ url_for('analyser_veille_ia', veille_id=veille.id) }}">
+                            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                            <button type="submit" class="btn btn-sm btn-outline-primary">
+                                <i class="fas fa-redo me-2"></i>Réanalyser
+                            </button>
+                        </form>
+                    </div>
+                </div>
+            </div>
+            {% else %}
+            <div class="card mb-3">
+                <div class="card-body text-center py-3">
+                    <i class="fas fa-robot fa-2x mb-2" style="color: var(--border);"></i>
+                    <p class="text-muted mb-2">Cette veille n'a pas encore été analysée par l'IA</p>
+                    <form method="POST" action="{{ url_for('analyser_veille_ia', veille_id=veille.id) }}">
+                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                        <button type="submit" class="btn btn-primary-custom">
+                            <i class="fas fa-magic me-2"></i>Lancer l'analyse IA
+                        </button>
+                    </form>
+                </div>
+            </div>
+            {% endif %}
+
+            <!-- ---------- Actions actives ---------- -->
+            <div class="card mb-3">
+                <div class="card-header">
+                    <h5>
+                        <span><i class="fas fa-tasks me-2"></i>Actions actives</span>
+                        <span class="badge bg-primary">{{ actions_actives|length }}</span>
+                    </h5>
+                </div>
+                <div class="card-body">
+                    {% if actions_actives %}
+                    <div class="table-responsive">
+                        <table class="table">
+                            <thead>
+                                <tr>
+                                    <th width="30%">Description</th>
+                                    <th width="18%">Responsable</th>
+                                    <th width="15%">Échéance</th>
+                                    <th width="15%">Statut</th>
+                                    <th width="22%" class="text-end">Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for action in actions_actives %}
+                                <tr>
+                                    <td><strong style="color: var(--primary);">{{ action.description }}</strong></td>
+                                    <td>
+                                        <i class="fas fa-user-circle me-1" style="color: var(--gray);"></i>
+                                        {{ action.responsable.username if action.responsable else 'Non assigné' }}
+                                    </td>
+                                    <td>
+                                        {% if action.date_echeance %}
+                                        {{ action.date_echeance.strftime('%d/%m/%Y') }}
+                                        {% set days_left = (action.date_echeance - datetime.now().date()).days %}
+                                        {% if action.statut != 'termine' %}
+                                            {% if days_left < 0 %}
+                                            <span class="badge bg-danger ms-1">J+{{ -days_left }}</span>
+                                            {% elif days_left == 0 %}
+                                            <span class="badge bg-warning ms-1">Auj.</span>
+                                            {% elif days_left <= 7 %}
+                                            <span class="badge bg-info ms-1">J-{{ days_left }}</span>
+                                            {% endif %}
+                                        {% endif %}
+                                        {% else %}
+                                        <span class="text-muted">-</span>
+                                        {% endif %}
+                                    </td>
+                                    <td>
+                                        <span class="badge bg-{% if action.statut == 'termine' %}success{% elif action.statut == 'en_cours' %}info{% else %}warning{% endif %}">
+                                            {{ action.statut }}
+                                        </span>
+                                    </td>
+                                    <td class="text-end">
+                                        <div class="btn-group btn-group-sm">
+                                            <form action="{{ url_for('modifier_statut_action', action_id=action.id) }}" 
+                                                  method="POST" 
+                                                  class="d-inline">
+                                                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                                                <select name="statut" 
+                                                        class="form-select form-select-sm" 
+                                                        style="width: 110px; display: inline-block;"
+                                                        onchange="this.form.submit()">
+                                                    <option value="a_faire" {% if action.statut == 'a_faire' %}selected{% endif %}>À faire</option>
+                                                    <option value="en_cours" {% if action.statut == 'en_cours' %}selected{% endif %}>En cours</option>
+                                                    <option value="termine" {% if action.statut == 'termine' %}selected{% endif %}>Terminé</option>
+                                                </select>
+                                            </form>
+
+                                            <button class="btn btn-sm btn-outline-{% if action.commentaire %}info{% else %}secondary{% endif %}"
+                                                    data-bs-toggle="modal"
+                                                    data-bs-target="#commentaireModal{{ action.id }}"
+                                                    title="{% if action.commentaire %}Voir/modifier le commentaire{% else %}Ajouter un commentaire{% endif %}">
+                                                <i class="fas fa-comment"></i>
+                                            </button>
+
+                                            <button class="btn btn-sm btn-outline-warning"
+                                                    onclick="archiverAction({{ action.id }}, '{{ action.description|truncate(30)|replace("'", "\\'") }}')"
+                                                    title="Archiver">
+                                                <i class="fas fa-archive"></i>
+                                            </button>
+                                        </div>
+                                    </td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                    {% else %}
+                    <div class="text-center py-4">
+                        <i class="fas fa-tasks fa-3x mb-3" style="color: var(--border);"></i>
+                        <p class="text-muted mb-0">Aucune action active</p>
+                    </div>
+                    {% endif %}
+
+                    <hr class="my-4">
+
+                    <h6 class="mb-3">
+                        <i class="fas fa-plus-circle me-2" style="color: var(--gold);"></i>Ajouter une nouvelle action
+                    </h6>
+                    <form action="{{ url_for('ajouter_action_conformite', veille_id=veille.id) }}" 
+                          method="POST" 
+                          class="needs-validation" 
+                          novalidate>
+                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                        <div class="row g-3">
+                            <div class="col-md-6">
+                                <label class="form-label small text-uppercase text-muted">Description *</label>
+                                <input type="text" name="description" class="form-control" 
+                                       placeholder="Description de l'action" required>
+                            </div>
+                            <div class="col-md-6">
+                                <label class="form-label small text-uppercase text-muted">Responsable *</label>
+                                <select name="responsable_id" class="form-select" required>
+                                    <option value="">Sélectionner...</option>
+                                    {% for user in users %}
+                                    <option value="{{ user.id }}">{{ user.username }} - {{ user.role }}</option>
+                                    {% endfor %}
+                                </select>
+                            </div>
+                            <div class="col-md-6">
+                                <label class="form-label small text-uppercase text-muted">Date d'échéance *</label>
+                                <input type="date" name="date_echeance" class="form-control" required>
+                            </div>
+                            <div class="col-md-6 d-flex align-items-end">
+                                <button type="submit" class="btn btn-primary-custom w-100">
+                                    <i class="fas fa-plus me-2"></i>Ajouter l'action
+                                </button>
+                            </div>
+                        </div>
+                    </form>
+                </div>
+            </div>
+
+            <!-- ---------- Lien vers archives ---------- -->
+            {% if actions_archivees %}
+            <div class="text-center mb-3">
+                <a href="{{ url_for('archives_actions') }}" 
+                   class="btn btn-sm btn-outline-secondary">
+                    <i class="fas fa-archive me-1"></i>
+                    Voir les {{ actions_archivees|length }} action(s) archivée(s)
+                </a>
+            </div>
+            {% endif %}
+
+            <!-- ============================================ -->
+            <!-- COMMENTAIRES COLLABORATIFS                    -->
+            <!-- ============================================ -->
+            <div class="card mb-3">
+                <div class="card-header">
+                    <h5>
+                        <span><i class="fas fa-comments me-2"></i>Commentaires</span>
+                        <span class="badge bg-secondary" id="commentairesCount">
+                            {{ veille.commentaires_collab|length if veille.commentaires_collab else 0 }}
+                        </span>
+                    </h5>
+                </div>
+                <div class="card-body">
+
+                    <form method="POST" 
+                          action="{{ url_for('ajouter_commentaire_veille', veille_id=veille.id) }}" 
+                          class="mb-4">
+                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                        <div class="input-group">
+                            <span class="input-group-text bg-light">
+                                <i class="fas fa-user-circle text-muted"></i>
+                            </span>
+                            <textarea name="contenu" 
+                                      class="form-control" 
+                                      rows="2" 
+                                      placeholder="Ajouter un commentaire... (@user pour mentionner)"
+                                      required></textarea>
+                        </div>
+                        <div class="d-flex justify-content-between align-items-center mt-2">
+                            <small class="text-muted">
+                                <i class="fas fa-info-circle me-1"></i>
+                                Utilisez @username pour mentionner un collègue
+                            </small>
+                            <button type="submit" class="btn btn-sm btn-primary">
+                                <i class="fas fa-paper-plane me-1"></i>Publier
+                            </button>
+                        </div>
+                    </form>
+
+                    {% if veille.commentaires_collab %}
+                    <div class="commentaires-list">
+                        {% for c in veille.commentaires_collab|sort(attribute='created_at', reverse=True) %}
+                        <div class="d-flex gap-3 pb-3 mb-3 commentaire-item" 
+                             data-commentaire-id="{{ c.id }}"
+                             style="border-bottom: 1px dashed #e8ebf2;">
+                            <div class="flex-shrink-0">
+                                <div class="rounded-circle bg-primary bg-opacity-10 d-flex align-items-center justify-content-center"
+                                     style="width: 40px; height: 40px;">
+                                    <i class="fas fa-user text-primary"></i>
+                                </div>
+                            </div>
+                            <div class="flex-grow-1">
+                                <div class="d-flex justify-content-between align-items-center mb-1">
+                                    <div>
+                                        <strong style="color: #1a2a5e;">
+                                            {{ c.utilisateur.username if c.utilisateur else 'Utilisateur' }}
+                                        </strong>
+                                        {% if c.utilisateur and c.utilisateur.role %}
+                                        <span class="badge bg-secondary ms-1" style="font-size: 0.65rem;">
+                                            {{ c.utilisateur.role }}
+                                        </span>
+                                        {% endif %}
+                                    </div>
+                                    <div class="d-flex align-items-center gap-2">
+                                        <small class="text-muted">
+                                            <i class="fas fa-clock me-1"></i>
+                                            {{ c.created_at.strftime('%d/%m/%Y à %H:%M') }}
+                                        </small>
+                                        
+                                        {% if c.utilisateur_id == current_user.id 
+                                              or current_user.role in ['super_admin', 'admin', 'manager']
+                                              or current_user.is_client_admin %}
+                                        <button type="button" 
+                                                class="btn btn-sm btn-link text-danger p-0 btn-supprimer"
+                                                onclick="supprimerCommentaire({{ c.id }})"
+                                                title="Supprimer ce commentaire">
+                                            <i class="fas fa-trash"></i>
+                                        </button>
+                                        {% endif %}
+                                    </div>
+                                </div>
+                                <p class="mb-0" style="white-space: pre-line; line-height: 1.6;">
+                                    {{ c.contenu }}
+                                </p>
+                                {% if c.mentions %}
+                                <div class="mt-1">
+                                    {% for mention in c.mentions %}
+                                    <span class="badge bg-info" style="font-size: 0.65rem;">
+                                        @{{ mention }}
+                                    </span>
+                                    {% endfor %}
+                                </div>
+                                {% endif %}
+                            </div>
+                        </div>
+                        {% endfor %}
+                    </div>
+                    {% else %}
+                    <div class="text-center py-4">
+                        <i class="fas fa-comments fa-3x mb-3" style="color: var(--border);"></i>
+                        <p class="text-muted mb-0">Aucun commentaire</p>
+                        <small class="text-muted">
+                            Soyez le premier à commenter cette veille
+                        </small>
+                    </div>
+                    {% endif %}
                 </div>
             </div>
         </div>
 
-        <!-- Documents -->
-        <div class="card mb-4">
-            <div class="card-header">
-                <h5 class="mb-0"><i class="fas fa-file"></i> Documents ({{ veille.documents|length }})</h5>
-            </div>
-            <div class="card-body">
-                {% if veille.documents %}
-                <ul class="list-group list-group-flush">
-                    {% for doc in veille.documents[:3] %}
-                    <li class="list-group-item d-flex justify-content-between align-items-center">
-                        <div class="text-truncate" style="max-width: 70%;">
-                            <i class="fas fa-file text-primary me-2"></i>
-                            <small>{{ doc.nom_original }}</small>
+        <!-- ============================================ -->
+        <!-- COLONNE LATÉRALE                              -->
+        <!-- ============================================ -->
+        <div class="col-lg-4">
+
+
+            <!-- ---------- Progression ---------- -->
+            <div class="card mb-3">
+                <div class="card-header">
+                    <h5><span><i class="fas fa-chart-pie me-2"></i>Progression</span></h5>
+                </div>
+                <div class="card-body">
+                    {% set actions_archivees_count = actions_archivees|length if actions_archivees else 0 %}
+                    {% set actions_total = actions_actives|length + actions_archivees_count %}
+                    {% if actions_total > 0 %}
+                        {% set terminees = actions_actives|selectattr('statut', 'equalto', 'termine')|list|length %}
+                        {% set en_cours = actions_actives|selectattr('statut', 'equalto', 'en_cours')|list|length %}
+                        {% set a_faire = actions_actives|selectattr('statut', 'equalto', 'a_faire')|list|length %}
+                        {% set progress_pct = (terminees / actions_total * 100) %}
+
+                        <div class="text-center mb-3">
+                            <div style="font-size: 2.5rem; font-weight: 700; font-family: 'Georgia', serif; color: var(--success);">
+                                {{ progress_pct|round(0)|int }}%
+                            </div>
+                            <div class="text-muted small">Taux de réalisation</div>
                         </div>
-                        <div>
+
+                        <div class="progress mb-3" style="height: 22px;">
+                            <div class="progress-bar bg-success" 
+                                 style="width: {{ (terminees/actions_total*100) }}%"
+                                 title="{{ terminees }} terminées">
+                                {% if (terminees/actions_total*100) >= 15 %}{{ terminees }}{% endif %}
+                            </div>
+                            <div class="progress-bar bg-info" 
+                                 style="width: {{ (en_cours/actions_total*100) }}%"
+                                 title="{{ en_cours }} en cours">
+                                {% if (en_cours/actions_total*100) >= 15 %}{{ en_cours }}{% endif %}
+                            </div>
+                            <div class="progress-bar bg-warning" 
+                                 style="width: {{ (a_faire/actions_total*100) }}%"
+                                 title="{{ a_faire }} à faire">
+                                {% if (a_faire/actions_total*100) >= 15 %}{{ a_faire }}{% endif %}
+                            </div>
+                            {% if actions_archivees_count > 0 %}
+                            <div class="progress-bar bg-secondary" 
+                                 style="width: {{ (actions_archivees_count/actions_total*100) }}%"
+                                 title="{{ actions_archivees_count }} archivées"></div>
+                            {% endif %}
+                        </div>
+
+                        <div class="small text-muted mb-2">
+                            <span class="me-3"><span style="color: var(--success);">●</span> Terminées ({{ terminees }})</span>
+                            <span class="me-3"><span style="color: var(--info);">●</span> En cours ({{ en_cours }})</span>
+                            <span><span style="color: var(--warning);">●</span> À faire ({{ a_faire }})</span>
+                        </div>
+
+                        <div class="row g-2 mt-3">
+                            <div class="col-6">
+                                <div class="text-center p-2" style="border: 1px solid var(--border); border-radius: var(--radius-sm);">
+                                    <div style="font-size: 1.3rem; font-weight: 700; color: var(--primary);">
+                                        {{ actions_actives|length }}
+                                    </div>
+                                    <div class="small text-muted">Actives</div>
+                                </div>
+                            </div>
+                            <div class="col-6">
+                                <div class="text-center p-2" style="border: 1px solid var(--border); border-radius: var(--radius-sm);">
+                                    <div style="font-size: 1.3rem; font-weight: 700; color: var(--gray);">
+                                        {{ actions_archivees_count }}
+                                    </div>
+                                    <div class="small text-muted">Archivées</div>
+                                </div>
+                            </div>
+                        </div>
+                    {% else %}
+                        <div class="text-center py-3">
+                            <i class="fas fa-chart-pie fa-2x mb-2" style="color: var(--border);"></i>
+                            <p class="text-muted small mb-0">Aucune action</p>
+                        </div>
+                    {% endif %}
+                </div>
+            </div>
+            <!-- ✅ WORKFLOW D'APPROBATION (déplacé ici) -->
+            {% include 'veille/_workflow_section.html' %}
+
+            <!-- ---------- Documents ---------- -->
+            <div class="card mb-3">
+                <div class="card-header">
+                    <h5>
+                        <span><i class="fas fa-file me-2"></i>Documents</span>
+                        <span class="badge bg-info">{{ veille.documents.count() }}</span>
+                    </h5>
+                </div>
+                <div class="card-body">
+                    {% if veille.documents.count() > 0 %}
+                    <ul class="list-unstyled mb-3">
+                        {% for doc in veille.documents.limit(5).all() %}
+                        <li class="d-flex justify-content-between align-items-center py-2" 
+                            style="border-bottom: 1px dashed var(--border);">
+                            <div class="text-truncate" style="max-width: 70%;">
+                                <i class="fas fa-file text-primary me-2"></i>
+                                <small title="{{ doc.nom_original }}">{{ doc.nom_original|truncate(25) }}</small>
+                            </div>
                             <a href="{{ url_for('telecharger_document_veille', doc_id=doc.id) }}" 
-                               class="btn btn-sm btn-success">
+                               class="btn btn-sm btn-outline-success" 
+                               title="Télécharger">
                                 <i class="fas fa-download"></i>
                             </a>
-                        </div>
-                    </li>
-                    {% endfor %}
-                </ul>
-                {% if veille.documents|length > 3 %}
-                <div class="text-center mt-2">
-                    <small class="text-muted">+ {{ veille.documents|length - 3 }} autres documents</small>
-                </div>
-                {% endif %}
-                {% else %}
-                <p class="text-muted small text-center">Aucun document</p>
-                {% endif %}
-                <button class="btn btn-sm btn-outline-primary w-100 mt-2" 
-                        data-bs-toggle="modal" 
-                        data-bs-target="#documentModal">
-                    <i class="fas fa-upload"></i> Ajouter un document
-                </button>
-            </div>
-        </div>
-
-        <!-- Actions rapides -->
-        <div class="card">
-            <div class="card-header">
-                <h5 class="mb-0"><i class="fas fa-bolt"></i> Actions rapides</h5>
-            </div>
-            <div class="card-body">
-                <div class="d-grid gap-2">
-                    <a href="{{ url_for('rapport_actions_a_faire') }}?veille={{ veille.id }}" 
-                       class="btn btn-outline-info">
-                        <i class="fas fa-list"></i> Voir toutes les actions
-                    </a>
-                    {% if veille.is_archived %}
-                    <a href="{{ url_for('restaurer_veille', id=veille.id) }}" 
-                       class="btn btn-outline-success"
-                       onclick="return confirm('Restaurer cette veille ?')">
-                        <i class="fas fa-undo"></i> Restaurer la veille
-                    </a>
-                    {% else %}
-                    <a href="{{ url_for('archiver_veille', id=veille.id) }}" 
-                       class="btn btn-outline-warning"
-                       onclick="return confirm('Archiver cette veille ?')">
-                        <i class="fas fa-archive"></i> Archiver la veille
-                    </a>
+                        </li>
+                        {% endfor %}
+                    </ul>
+                    {% if veille.documents.count() > 5 %}
+                    <div class="text-center mb-3">
+                        <small class="text-muted">+ {{ veille.documents.count() - 5 }} autres documents</small>
+                    </div>
                     {% endif %}
-                    <button class="btn btn-outline-primary" data-bs-toggle="modal" data-bs-target="#documentModal">
-                        <i class="fas fa-file-upload"></i> Ajouter un document
+                    {% else %}
+                    <div class="text-center py-3">
+                        <i class="fas fa-file fa-2x mb-2" style="color: var(--border);"></i>
+                        <p class="text-muted small mb-0">Aucun document</p>
+                    </div>
+                    {% endif %}
+
+                    <button class="btn btn-primary-custom w-100 mt-2" 
+                            data-bs-toggle="modal" 
+                            data-bs-target="#documentModal">
+                        <i class="fas fa-upload me-2"></i>Ajouter un document
                     </button>
                 </div>
             </div>
+
+            <!-- ---------- Risques liés ---------- -->
+            <div class="card mb-3">
+                <div class="card-header">
+                    <h5>
+                        <span><i class="fas fa-exclamation-triangle me-2"></i>Risques liés</span>
+                        <span class="badge bg-danger">{{ veille.risques_associes|count }}</span>
+                    </h5>
+                </div>
+                <div class="card-body">
+                    {% if veille.risques_associes %}
+                    <ul class="list-unstyled mb-3">
+                        {% for risque in veille.risques_associes %}
+                        <li class="d-flex justify-content-between align-items-start py-2" 
+                            style="border-bottom: 1px dashed var(--border);">
+                            <div>
+                                <a href="{{ url_for('detail_risque', id=risque.id) }}" 
+                                   class="text-decoration-none">
+                                    <strong>{{ risque.reference }}</strong>
+                                </a>
+                                <br>
+                                <small>{{ risque.intitule|truncate(40) }}</small>
+                                <br>
+                                <span class="badge bg-{% if risque.niveau_criticite == 'critique' %}danger{% elif risque.niveau_criticite == 'eleve' %}warning{% else %}info{% endif %}">
+                                    {{ risque.niveau_criticite or 'Non évalué' }}
+                                </span>
+                            </div>
+                            <form method="POST" 
+                                  action="{{ url_for('veille_delier_risque', veille_id=veille.id, risque_id=risque.id) }}"
+                                  onsubmit="return confirm('Délier ce risque ?')">
+                                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                                <button type="submit" class="btn btn-sm btn-outline-danger" title="Délier">
+                                    <i class="fas fa-unlink"></i>
+                                </button>
+                            </form>
+                        </li>
+                        {% endfor %}
+                    </ul>
+                    {% else %}
+                    <p class="text-muted small mb-3">Aucun risque lié à cette veille.</p>
+                    {% endif %}
+
+                    <div class="d-grid gap-2">
+                        <button class="btn btn-outline-primary btn-sm" 
+                                data-bs-toggle="modal" 
+                                data-bs-target="#modalLierRisque">
+                            <i class="fas fa-link me-2"></i>Lier un risque existant
+                        </button>
+                        <button class="btn btn-outline-danger btn-sm"
+                                data-bs-toggle="modal" 
+                                data-bs-target="#modalCreerRisque">
+                            <i class="fas fa-plus me-2"></i>Créer un nouveau risque
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- ---------- Actions rapides ---------- -->
+            <div class="card">
+                <div class="card-header">
+                    <h5><span><i class="fas fa-bolt me-2"></i>Actions rapides</span></h5>
+                </div>
+                <div class="card-body">
+                    <div class="d-grid gap-2">
+                        <a href="{{ url_for('rapport_actions_a_faire') }}" 
+                           class="btn btn-outline-info">
+                            <i class="fas fa-list me-2"></i>Voir toutes les actions
+                        </a>
+
+                        <form method="POST" 
+                              action="{{ url_for('analyser_veille_ia', veille_id=veille.id) }}">
+                            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                            <button type="submit" class="btn btn-outline-primary w-100">
+                                <i class="fas fa-robot me-2"></i>Analyser avec IA
+                            </button>
+                        </form>
+
+                        <a href="{{ url_for('veille_audit_trail', veille_id=veille.id) }}" 
+                           class="btn btn-outline-secondary">
+                            <i class="fas fa-history me-2"></i>Journal d'audit
+                        </a>
+
+                        {% if veille.is_archived %}
+                        <button class="btn btn-outline-success" 
+                                onclick="restaurerVeille({{ veille.id }})">
+                            <i class="fas fa-undo me-2"></i>Restaurer la veille
+                        </button>
+                        {% else %}
+                        <button class="btn btn-outline-warning" 
+                                onclick="archiverVeille({{ veille.id }}, '{{ veille.titre|replace("'", "\\'") }}')">
+                            <i class="fas fa-archive me-2"></i>Archiver la veille
+                        </button>
+                        {% endif %}
+                    </div>
+                </div>
+            </div>
         </div>
     </div>
 </div>
 
-<!-- Modal Actions (identique à celui de liste.html) -->
-<div class="modal fade" id="actionModal" tabindex="-1">
-    <div class="modal-dialog modal-lg">
+
+<!-- ============================================ -->
+<!-- MODALS                                        -->
+<!-- ============================================ -->
+
+<!-- Modal Associer Pôles -->
+<div class="modal fade" id="modalAssocierPole" tabindex="-1">
+    <div class="modal-dialog">
         <div class="modal-content">
-            <div class="modal-header">
-                <h5 class="modal-title">Actions - {{ veille.titre }}</h5>
-                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
-            </div>
-            <div class="modal-body">
-                <!-- Le même contenu que dans liste.html -->
-                <p class="text-center text-muted">
-                    <i class="fas fa-exclamation-circle"></i>
-                    Ouvrez cette veille depuis la liste principale pour gérer les actions
-                </p>
-            </div>
-            <div class="modal-footer">
-                <a href="{{ url_for('veille_reglementaire') }}" class="btn btn-primary">
-                    <i class="fas fa-external-link-alt"></i> Ouvrir dans la liste
-                </a>
-                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Fermer</button>
-            </div>
+            <form method="POST" action="{{ url_for('veille_associer_pole', veille_id=veille.id) }}">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                <div class="modal-header">
+                    <h5 class="modal-title">
+                        <i class="fas fa-link me-2"></i>Associer des pôles
+                    </h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <label class="form-label">Sélectionnez les pôles à associer :</label>
+                    <select name="pole_ids[]" class="form-select" multiple size="8" required>
+                        {% for pole in poles_disponibles %}
+                        {% if pole not in veille.poles_associes %}
+                        <option value="{{ pole.id }}">{{ pole.nom }}</option>
+                        {% endif %}
+                        {% endfor %}
+                    </select>
+                    <small class="text-muted">Maintenez Ctrl pour multi-sélection</small>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Annuler</button>
+                    <button type="submit" class="btn btn-primary">Associer</button>
+                </div>
+            </form>
         </div>
     </div>
 </div>
+
+<!-- Modals Commentaire (par action) -->
+{% for action in actions_actives %}
+<div class="modal fade" id="commentaireModal{{ action.id }}" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header" style="background: linear-gradient(135deg, #0a1628 0%, #2a4a8a 100%); color: white;">
+                <h5 class="modal-title">
+                    <i class="fas fa-comment me-2"></i>
+                    Commentaire - {{ action.description|truncate(40) }}
+                </h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+            </div>
+            <form method="POST" action="{{ url_for('modifier_commentaire_action', action_id=action.id) }}">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                <div class="modal-body">
+                    <div class="mb-3">
+                        <label class="form-label fw-bold">Commentaire</label>
+                        <textarea name="commentaire" 
+                                  class="form-control" 
+                                  rows="5"
+                                  placeholder="Ajouter un commentaire sur cette action...">{{ action.commentaire or '' }}</textarea>
+                        <small class="text-muted">
+                            Ce commentaire sera visible par tous les utilisateurs concernés.
+                        </small>
+                    </div>
+                    <div class="alert alert-info mb-0" style="border-radius: var(--radius-sm);">
+                        <small>
+                            <strong>Action :</strong> {{ action.description }}<br>
+                            <strong>Statut :</strong> 
+                            <span class="badge bg-{% if action.statut == 'termine' %}success{% elif action.statut == 'en_cours' %}info{% else %}warning{% endif %}">
+                                {{ action.statut }}
+                            </span><br>
+                            <strong>Échéance :</strong> 
+                            {{ action.date_echeance.strftime('%d/%m/%Y') if action.date_echeance else 'Non définie' }}
+                        </small>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal"
+                            style="color: var(--dark); background: var(--light); border: 1px solid var(--border);">
+                        Annuler
+                    </button>
+                    <button type="submit" class="btn btn-primary-custom">
+                        <i class="fas fa-save me-2"></i>Enregistrer
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+{% endfor %}
 
 <!-- Modal Documents -->
 <div class="modal fade" id="documentModal" tabindex="-1">
     <div class="modal-dialog">
         <div class="modal-content">
-            <div class="modal-header">
-                <h5 class="modal-title">Ajouter un document</h5>
-                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            <div class="modal-header" style="background: linear-gradient(135deg, #0a1628 0%, #2a4a8a 100%); color: white;">
+                <h5 class="modal-title">
+                    <i class="fas fa-upload me-2"></i>Ajouter un document
+                </h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
             </div>
-            <form action="{{ url_for('ajouter_document_veille', veille_id=veille.id) }}" method="POST" enctype="multipart/form-data">
+            <form action="{{ url_for('ajouter_document_veille', veille_id=veille.id) }}" 
+                  method="POST" 
+                  enctype="multipart/form-data">
                 <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                 <div class="modal-body">
                     <div class="mb-3">
-                        <label class="form-label">Sélectionner un fichier</label>
-                        <input type="file" name="document" class="form-control" required>
+                        <label class="form-label fw-bold">Sélectionner un fichier</label>
+                        <input type="file" name="document" class="form-control" 
+                               accept=".pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.jpg,.jpeg,.png" required>
                         <small class="text-muted">Formats autorisés: PDF, Word, Excel, PowerPoint, images (max 16MB)</small>
                     </div>
                 </div>
                 <div class="modal-footer">
-                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Annuler</button>
-                    <button type="submit" class="btn btn-primary">
-                        <i class="fas fa-upload"></i> Téléverser
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal"
+                            style="color: var(--dark); background: var(--light); border: 1px solid var(--border);">
+                        Annuler
                     </button>
+                    <button type="submit" class="btn btn-primary-custom">
+                        <i class="fas fa-upload me-2"></i>Téléverser
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<!-- Modal Lier Risque -->
+<div class="modal fade" id="modalLierRisque" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <form method="POST" action="{{ url_for('veille_lier_risque', veille_id=veille.id) }}">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                <div class="modal-header">
+                    <h5 class="modal-title">
+                        <i class="fas fa-link me-2"></i>Lier un risque existant
+                    </h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <label class="form-label">Sélectionner un risque</label>
+                    <select name="risque_id" class="form-select" required>
+                        <option value="">-- Choisir --</option>
+                        {% for risque in risques_disponibles %}
+                        <option value="{{ risque.id }}">
+                            {{ risque.reference }} - {{ risque.intitule|truncate(50) }}
+                        </option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Annuler</button>
+                    <button type="submit" class="btn btn-primary">Lier</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<!-- Modal Créer Risque -->
+<div class="modal fade" id="modalCreerRisque" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <form method="POST" action="{{ url_for('veille_creer_risque', veille_id=veille.id) }}">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                <div class="modal-header">
+                    <h5 class="modal-title">
+                        <i class="fas fa-plus-circle me-2"></i>Créer un risque depuis cette veille
+                    </h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="alert alert-info">
+                        <i class="fas fa-info-circle me-2"></i>
+                        Un risque sera créé automatiquement avec les informations de cette veille.
+                    </div>
+                    <label class="form-label">Cartographie (optionnel)</label>
+                    <select name="cartographie_id" class="form-select">
+                        <option value="">-- Aucune --</option>
+                        {% for carto in cartographies %}
+                        <option value="{{ carto.id }}">{{ carto.nom }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Annuler</button>
+                    <button type="submit" class="btn btn-danger">Créer le risque</button>
                 </div>
             </form>
         </div>
@@ -346,35 +1403,163 @@
 </div>
 {% endblock %}
 
-{% block styles %}
-<style>
-.hover-card:hover {
-    transform: translateY(-3px);
-    transition: transform 0.2s;
-}
-
-.progress-bar {
-    transition: width 0.5s ease-in-out;
-}
-
-.text-truncate {
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-}
-
-.list-group-item:hover {
-    background-color: #f8f9fa;
-}
-</style>
-{% endblock %}
 
 {% block scripts %}
 <script>
-// Initialiser les modals
+// ============================================
+// HELPERS
+// ============================================
+function getCsrfToken() {
+    return document.querySelector('meta[name="csrf-token"]')?.content 
+        || document.querySelector('input[name="csrf_token"]')?.value 
+        || '';
+}
+
+function submitPost(url, data = {}) {
+    const form = document.createElement('form');
+    form.method = 'POST';
+    form.action = url;
+    
+    const csrf = document.createElement('input');
+    csrf.type = 'hidden';
+    csrf.name = 'csrf_token';
+    csrf.value = getCsrfToken();
+    form.appendChild(csrf);
+    
+    Object.entries(data).forEach(([k, v]) => {
+        const input = document.createElement('input');
+        input.type = 'hidden';
+        input.name = k;
+        input.value = v;
+        form.appendChild(input);
+    });
+    
+    document.body.appendChild(form);
+    form.submit();
+}
+
+// ============================================
+// FAVORIS
+// ============================================
+async function toggleFavori(veilleId) {
+    try {
+        const response = await fetch(`/veille/${veilleId}/favori/toggle`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRFToken': getCsrfToken()
+            }
+        });
+        
+        const data = await response.json();
+        
+        if (data.success) {
+            const icon = document.getElementById('favoriIcon');
+            const text = document.getElementById('favoriText');
+            
+            if (data.favori) {
+                icon.classList.add('text-warning');
+                text.textContent = 'Favori';
+            } else {
+                icon.classList.remove('text-warning');
+                text.textContent = 'Favoris';
+            }
+        }
+    } catch (error) {
+        console.error('Erreur favori:', error);
+    }
+}
+
+// ============================================
+// SUPPRIMER UN COMMENTAIRE
+// ============================================
+async function supprimerCommentaire(commentaireId) {
+    if (!confirm('Supprimer ce commentaire ?\n\nCette action est irréversible.')) {
+        return;
+    }
+    
+    try {
+        const response = await fetch(`/veille/commentaire/${commentaireId}/supprimer`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRFToken': getCsrfToken()
+            }
+        });
+        
+        const data = await response.json();
+        
+        if (data.success) {
+            const commentEl = document.querySelector(`[data-commentaire-id="${commentaireId}"]`);
+            if (commentEl) {
+                commentEl.style.transition = 'opacity 0.3s';
+                commentEl.style.opacity = '0';
+                setTimeout(() => {
+                    commentEl.remove();
+                    updateCommentairesCount();
+                }, 300);
+            }
+        } else {
+            alert('Erreur: ' + (data.error || 'Inconnue'));
+        }
+    } catch (error) {
+        console.error('Erreur:', error);
+        alert('Erreur lors de la suppression');
+    }
+}
+
+function updateCommentairesCount() {
+    const count = document.querySelectorAll('[data-commentaire-id]').length;
+    const badge = document.getElementById('commentairesCount');
+    if (badge) badge.textContent = count;
+}
+
+// ============================================
+// ACTIONS SUR LES ACTIONS DE CONFORMITÉ
+// ============================================
+function archiverAction(actionId, description) {
+    if (confirm(`Archiver l'action "${description}" ?\n\nElle sera déplacée dans les archives.`)) {
+        submitPost(`/veille/action/archiver/${actionId}`);
+    }
+}
+
+function restaurerAction(actionId) {
+    if (confirm('Restaurer cette action ? Elle redeviendra active.')) {
+        submitPost(`/veille/action/restaurer/${actionId}`);
+    }
+}
+
+function supprimerAction(actionId) {
+    if (confirm('Supprimer DÉFINITIVEMENT cette action ?\n\nCette opération est irréversible.')) {
+        submitPost(`/veille/action/supprimer/${actionId}`);
+    }
+}
+
+// ============================================
+// ACTIONS SUR LA VEILLE
+// ============================================
+function archiverVeille(veilleId, titre) {
+    if (confirm(`Archiver la veille "${titre}" ?`)) {
+        submitPost(`/veille/archiver/${veilleId}`);
+    }
+}
+
+function restaurerVeille(veilleId) {
+    if (confirm('Restaurer cette veille ?')) {
+        submitPost(`/veille/restaurer/${veilleId}`);
+    }
+}
+
+// ============================================
+// INITIALISATION
+// ============================================
 document.addEventListener('DOMContentLoaded', function() {
-    // Tooltips
-    $('[data-bs-toggle="tooltip"]').tooltip();
+    const tooltipTriggerList = [].slice.call(document.querySelectorAll('[title]'));
+    tooltipTriggerList.forEach(function(el) {
+        if (!el.hasAttribute('data-bs-toggle')) {
+            new bootstrap.Tooltip(el);
+        }
+    });
 });
 </script>
 {% endblock %}

@@ -1,0 +1,145 @@
+{% extends "base.html" %}
+
+{% block title %}Dashboard Veille{% endblock %}
+
+{% block content %}
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+
+<div class="container-fluid px-4 py-3">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <div>
+            <h2 class="h4 mb-2"><i class="fas fa-chart-line me-2"></i>Dashboard Veille</h2>
+            <p class="text-muted mb-0 small">Analyse de {{ total }} veilles réglementaires</p>
+        </div>
+        <div class="d-flex gap-2">
+            <a href="{{ url_for('veille_reglementaire') }}" class="btn btn-outline-secondary">
+                <i class="fas fa-list me-2"></i>Liste
+            </a>
+            <a href="{{ url_for('veille_kanban') }}" class="btn btn-outline-secondary">
+                <i class="fas fa-columns me-2"></i>Kanban
+            </a>
+        </div>
+    </div>
+
+    <!-- STATS CARDS -->
+    <div class="row g-3 mb-4">
+        <div class="col-md-3">
+            <div class="card border-0 text-white" style="background: linear-gradient(135deg, #1a2a5e, #2a4a8a);">
+                <div class="card-body">
+                    <div style="font-size: 2rem; font-weight: 700;">{{ total }}</div>
+                    <div>Veilles actives</div>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card border-0 text-white" style="background: linear-gradient(135deg, #0d9488, #065f46);">
+                <div class="card-body">
+                    <div style="font-size: 2rem; font-weight: 700;">{{ par_statut.get('en_vigueur', 0) }}</div>
+                    <div>En vigueur</div>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card border-0 text-white" style="background: linear-gradient(135deg, #d97706, #92400e);">
+                <div class="card-body">
+                    <div style="font-size: 2rem; font-weight: 700;">{{ par_statut.get('projet', 0) }}</div>
+                    <div>En projet</div>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card border-0 text-white" style="background: linear-gradient(135deg, #dc2626, #991b1b);">
+                <div class="card-body">
+                    <div style="font-size: 2rem; font-weight: 700;">{{ par_impact.get('eleve', 0) }}</div>
+                    <div>Impact élevé</div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- GRAPHIQUES -->
+    <div class="row g-3 mb-4">
+        <div class="col-lg-6">
+            <div class="card">
+                <div class="card-header"><h6 class="mb-0">Répartition par statut</h6></div>
+                <div class="card-body"><canvas id="chartStatut"></canvas></div>
+            </div>
+        </div>
+        <div class="col-lg-6">
+            <div class="card">
+                <div class="card-header"><h6 class="mb-0">Répartition par impact</h6></div>
+                <div class="card-body"><canvas id="chartImpact"></canvas></div>
+            </div>
+        </div>
+        <div class="col-lg-8">
+            <div class="card">
+                <div class="card-header"><h6 class="mb-0">Évolution (6 mois)</h6></div>
+                <div class="card-body"><canvas id="chartEvolution"></canvas></div>
+            </div>
+        </div>
+        <div class="col-lg-4">
+            <div class="card">
+                <div class="card-header"><h6 class="mb-0">Top organismes</h6></div>
+                <div class="card-body">
+                    {% for org, count in top_organismes %}
+                    <div class="d-flex justify-content-between mb-2">
+                        <span>{{ org }}</span>
+                        <span class="badge bg-primary">{{ count }}</span>
+                    </div>
+                    {% endfor %}
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+// Données
+const dataStatut = {
+    labels: {{ par_statut.keys()|list|tojson }},
+    datasets: [{
+        data: {{ par_statut.values()|list|tojson }},
+        backgroundColor: ['#f59e0b', '#10b981', '#3b82f6', '#6b7280', '#dc2626']
+    }]
+};
+
+const dataImpact = {
+    labels: {{ par_impact.keys()|list|tojson }},
+    datasets: [{
+        data: {{ par_impact.values()|list|tojson }},
+        backgroundColor: ['#dc2626', '#f59e0b', '#10b981', '#6b7280']
+    }]
+};
+
+const dataEvolution = {
+    labels: {{ evolution|map(attribute='mois')|list|tojson }},
+    datasets: [{
+        label: 'Nouvelles veilles',
+        data: {{ evolution|map(attribute='count')|list|tojson }},
+        borderColor: '#3b82f6',
+        backgroundColor: 'rgba(59, 130, 246, 0.1)',
+        tension: 0.4,
+        fill: true
+    }]
+};
+
+// Charts
+new Chart(document.getElementById('chartStatut'), {
+    type: 'doughnut',
+    data: dataStatut,
+    options: { responsive: true, plugins: { legend: { position: 'bottom' } } }
+});
+
+new Chart(document.getElementById('chartImpact'), {
+    type: 'doughnut',
+    data: dataImpact,
+    options: { responsive: true, plugins: { legend: { position: 'bottom' } } }
+});
+
+new Chart(document.getElementById('chartEvolution'), {
+    type: 'line',
+    data: dataEvolution,
+    options: { responsive: true, plugins: { legend: { display: false } } }
+});
+</script>
+{% endblock %}

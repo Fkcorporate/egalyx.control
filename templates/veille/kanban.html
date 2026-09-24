@@ -1,0 +1,242 @@
+{% extends "base.html" %}
+
+{% block title %}Kanban Veille Réglementaire{% endblock %}
+
+{% block content %}
+<style>
+    .kanban-board {
+        display: flex;
+        gap: 1rem;
+        overflow-x: auto;
+        padding: 1rem 0;
+        min-height: calc(100vh - 250px);
+    }
+    .kanban-column {
+        flex: 1;
+        min-width: 280px;
+        background: #f8f9fd;
+        border-radius: 12px;
+        padding: 1rem;
+        display: flex;
+        flex-direction: column;
+        border: 2px dashed transparent;
+        transition: all 0.3s;
+    }
+    .kanban-column.drag-over {
+        border-color: #3b82f6;
+        background: #eff6ff;
+    }
+    .kanban-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-bottom: 1rem;
+        padding-bottom: 0.5rem;
+        border-bottom: 2px solid #e8ebf2;
+    }
+    .kanban-header h5 {
+        font-family: 'Georgia', serif;
+        font-weight: 700;
+        margin: 0;
+        color: #1a2a5e;
+    }
+    .kanban-count {
+        background: #1a2a5e;
+        color: white;
+        padding: 0.15rem 0.6rem;
+        border-radius: 20px;
+        font-size: 0.75rem;
+        font-weight: 700;
+    }
+    .kanban-items {
+        flex-grow: 1;
+        min-height: 100px;
+    }
+    .kanban-card {
+        background: white;
+        border-radius: 10px;
+        padding: 1rem;
+        margin-bottom: 0.75rem;
+        box-shadow: 0 2px 8px rgba(10, 22, 40, 0.06);
+        cursor: grab;
+        transition: all 0.2s;
+        border-left: 4px solid #3b82f6;
+        position: relative;
+    }
+    .kanban-card:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 4px 16px rgba(10, 22, 40, 0.12);
+    }
+    .kanban-card:active { cursor: grabbing; }
+    .kanban-card.dragging { opacity: 0.5; }
+    .kanban-card h6 {
+        font-size: 0.95rem;
+        margin-bottom: 0.5rem;
+        color: #0a1628;
+    }
+    .kanban-card .meta {
+        display: flex;
+        gap: 0.5rem;
+        font-size: 0.7rem;
+        color: #6b7280;
+        margin-top: 0.5rem;
+    }
+    .kanban-card .meta span {
+        display: flex;
+        align-items: center;
+        gap: 0.2rem;
+    }
+    .kanban-card[data-impact="eleve"] { border-left-color: #dc2626; }
+    .kanban-card[data-impact="moyen"] { border-left-color: #f59e0b; }
+    .kanban-card[data-impact="faible"] { border-left-color: #10b981; }
+</style>
+
+<div class="container-fluid px-4 py-3">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <div>
+            <h2 class="h4 mb-2">
+                <i class="fas fa-columns me-2"></i>Kanban - Veille Réglementaire
+            </h2>
+            <p class="text-muted mb-0 small">
+                Glissez-déposez les veilles pour changer leur statut
+            </p>
+        </div>
+        <div class="d-flex gap-2">
+            <a href="{{ url_for('veille_reglementaire') }}" class="btn btn-outline-secondary">
+                <i class="fas fa-list me-2"></i>Vue liste
+            </a>
+            <a href="{{ url_for('nouvelle_veille') }}" class="btn btn-primary">
+                <i class="fas fa-plus me-2"></i>Nouvelle veille
+            </a>
+        </div>
+    </div>
+
+    <div class="kanban-board">
+        {% set colonnes_info = {
+            'projet': {'label': '📝 Projets', 'color': '#f59e0b'},
+            'en_vigueur': {'label': '✅ En vigueur', 'color': '#10b981'},
+            'suspendu': {'label': '⏸️ Suspendues', 'color': '#3b82f6'},
+            'abroge': {'label': '⛔ Abrogées', 'color': '#6b7280'}
+        } %}
+        
+        {% for statut, veilles_col in colonnes.items() %}
+        {% set info = colonnes_info[statut] %}
+        <div class="kanban-column" data-statut="{{ statut }}">
+            <div class="kanban-header">
+                <h5>{{ info.label }}</h5>
+                <span class="kanban-count">{{ veilles_col|length }}</span>
+            </div>
+            <div class="kanban-items" data-statut="{{ statut }}">
+                {% for veille in veilles_col %}
+                <div class="kanban-card" 
+                     draggable="true"
+                     data-id="{{ veille.id }}"
+                     data-impact="{{ veille.impact_estime or '' }}"
+                     data-statut="{{ veille.statut }}">
+                    <h6>{{ veille.titre|truncate(60) }}</h6>
+                    {% if veille.reference %}
+                    <small class="text-muted">
+                        <i class="fas fa-hashtag me-1"></i>{{ veille.reference }}
+                    </small>
+                    {% endif %}
+                    
+                    <div class="meta">
+                        {% if veille._nb_actions %}
+                        <span><i class="fas fa-tasks"></i>{{ veille._nb_actions }}</span>
+                        {% endif %}
+                        {% if veille._nb_docs %}
+                        <span><i class="fas fa-file"></i>{{ veille._nb_docs }}</span>
+                        {% endif %}
+                        {% if veille.impact_estime %}
+                        <span style="margin-left: auto;">
+                            <span class="badge" style="background: 
+                                {% if veille.impact_estime == 'eleve' %}#dc2626
+                                {% elif veille.impact_estime == 'moyen' %}#f59e0b
+                                {% else %}#10b981{% endif %};">
+                                {{ veille.impact_estime|upper }}
+                            </span>
+                        </span>
+                        {% endif %}
+                    </div>
+                    
+                    <div class="mt-2 d-flex gap-1">
+                        <a href="{{ url_for('detail_veille', veille_id=veille.id) }}" 
+                           class="btn btn-sm btn-outline-info flex-grow-1"
+                           onclick="event.stopPropagation()">
+                            <i class="fas fa-eye"></i>
+                        </a>
+                        <a href="{{ url_for('modifier_veille', id=veille.id) }}" 
+                           class="btn btn-sm btn-outline-warning flex-grow-1"
+                           onclick="event.stopPropagation()">
+                            <i class="fas fa-edit"></i>
+                        </a>
+                    </div>
+                </div>
+                {% endfor %}
+            </div>
+        </div>
+        {% endfor %}
+    </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/sortablejs@1.15.0/Sortable.min.js"></script>
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    document.querySelectorAll('.kanban-items').forEach(container => {
+        new Sortable(container, {
+            group: 'kanban',
+            animation: 200,
+            ghostClass: 'dragging',
+            onEnd: function(evt) {
+                const veilleId = evt.item.dataset.id;
+                const nouveauStatut = evt.to.dataset.statut;
+                const ancienStatut = evt.item.dataset.statut;
+                
+                if (nouveauStatut === ancienStatut) return;
+                
+                evt.item.dataset.statut = nouveauStatut;
+                
+                fetch(`/api/veille/${veilleId}/statut`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'X-CSRFToken': '{{ csrf_token() }}'
+                    },
+                    body: JSON.stringify({statut: nouveauStatut})
+                })
+                .then(r => r.json())
+                .then(data => {
+                    if (data.success) {
+                        showToast('Statut mis à jour', 'success');
+                        updateCounts();
+                    } else {
+                        showToast('Erreur: ' + data.error, 'error');
+                        location.reload();
+                    }
+                })
+                .catch(() => {
+                    showToast('Erreur réseau', 'error');
+                    location.reload();
+                });
+            }
+        });
+    });
+    
+    function updateCounts() {
+        document.querySelectorAll('.kanban-column').forEach(col => {
+            const count = col.querySelectorAll('.kanban-card').length;
+            col.querySelector('.kanban-count').textContent = count;
+        });
+    }
+    
+    function showToast(msg, type) {
+        const toast = document.createElement('div');
+        toast.className = `position-fixed top-0 end-0 m-3 alert alert-${type === 'error' ? 'danger' : 'success'}`;
+        toast.style.zIndex = '9999';
+        toast.textContent = msg;
+        document.body.appendChild(toast);
+        setTimeout(() => toast.remove(), 3000);
+    }
+});
+</script>
+{% endblock %}
