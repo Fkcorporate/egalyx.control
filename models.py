@@ -276,9 +276,13 @@ class User(UserMixin, db.Model):
                                     lazy=True)
     
     # Veille
-    veilles_crees = db.relationship('VeilleReglementaire', 
-                                   back_populates='createur', 
-                                   lazy=True)
+    veilles_crees = db.relationship(
+        'VeilleReglementaire',
+        back_populates='createur',
+        foreign_keys='VeilleReglementaire.created_by',  # ✅ string OK seulement si la classe existe déjà
+        lazy=True,
+        primaryjoin='User.id == VeilleReglementaire.created_by'
+    )
     
     actions_conformite = db.relationship('ActionConformite', 
                                         back_populates='responsable', 
