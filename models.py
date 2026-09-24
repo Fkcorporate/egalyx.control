@@ -279,14 +279,16 @@ class User(UserMixin, db.Model):
     veilles_crees = db.relationship(
         'VeilleReglementaire',
         back_populates='createur',
-        foreign_keys='VeilleReglementaire.created_by',  # ✅ string OK seulement si la classe existe déjà
-        lazy=True,
-        primaryjoin='User.id == VeilleReglementaire.created_by'
+        foreign_keys='VeilleReglementaire.created_by',  # ✅ SUFFIT
+        lazy=True
     )
     
-    actions_conformite = db.relationship('ActionConformite', 
-                                        back_populates='responsable', 
-                                        lazy=True)
+    actions_conformite = db.relationship(
+        'ActionConformite', 
+        back_populates='responsable',
+        foreign_keys='ActionConformite.responsable_id',   # ← MANQUE PEUT-ÊTRE
+        lazy=True
+    )
     
     documents_veille = db.relationship('VeilleDocument', 
                                       back_populates='uploader', 
