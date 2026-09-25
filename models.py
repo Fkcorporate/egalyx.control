@@ -18906,7 +18906,121 @@ class PlanActionC2N(db.Model):
             'basse': 'success'
         }
         return css.get(self.priorite, 'secondary')
-    
+
+    def recalculer_avancement(self):
+        """Recalcule l'avancement global basé sur les sous-actions.
+ 
+        🔧 AVANT : cette méthode faisait `db.session.commit()` elle-même,
+        ce qui empêchait l'appelant de grouper les opérations dans une
+        seule transaction et pouvait valider partiellement une transaction
+        en cours en cas d'erreur ultérieure.
+ 
+        ✅ APRÈS : le commit est laissé à la charge de l'appelant.
+        Pensez à ajouter `db.session.commit()` juste après chaque appel
+        à `recalculer_avancement()` dans vos routes (voir
+        routes_c2n_corrections.py pour les routes concernées).
+        """
+        sous_actions = self.sous_actions_c2n if hasattr(self, 'sous_actions_c2n') else []
+ 
+        if not sous_actions:
+            return
+ 
+        total_avancement = sum(sa.taux_avancement for sa in sous_actions)
+        self.taux_avancement = total_avancement // len(sous_actions)
+ 
+        if self.taux_avancement == 100 and self.statut != 'terminee':
+            self.statut = 'terminee'
+            self.date_fin_reelle = datetime.utcnow().date()
+        elif self.taux_avancement > 0 and self.statut == 'a_faire':
+            self.statut = 'en_cours'
+        elif self.taux_avancement == 0 and self.statut == 'en_cours':
+            self.statut = 'a_faire'
+ 
+        self.updated_at = datetime.utcnow()
+    def recalculer_avancement(self):
+        """Recalcule l'avancement global basé sur les sous-actions.
+ 
+        🔧 AVANT : cette méthode faisait `db.session.commit()` elle-même,
+        ce qui empêchait l'appelant de grouper les opérations dans une
+        seule transaction et pouvait valider partiellement une transaction
+        en cours en cas d'erreur ultérieure.
+ 
+        ✅ APRÈS : le commit est laissé à la charge de l'appelant.
+        Pensez à ajouter `db.session.commit()` juste après chaque appel
+        à `recalculer_avancement()` dans vos routes (voir
+        routes_c2n_corrections.py pour les routes concernées).
+        """
+        sous_actions = self.sous_actions_c2n if hasattr(self, 'sous_actions_c2n') else []
+ 
+        if not sous_actions:
+            return
+ 
+        total_avancement = sum(sa.taux_avancement for sa in sous_actions)
+        self.taux_avancement = total_avancement // len(sous_actions)
+ 
+        if self.taux_avancement == 100 and self.statut != 'terminee':
+            self.statut = 'terminee'
+            self.date_fin_reelle = datetime.utcnow().date()
+        elif self.taux_avancement > 0 and self.statut == 'a_faire':
+            self.statut = 'en_cours'
+        elif self.taux_avancement == 0 and self.statut == 'en_cours':
+            self.statut = 'a_faire'
+ 
+        self.updated_at = datetime.utcnow()
+        # ❌ SUPPRIMÉ : db.session.commit()
+ 
+    @staticmethod  # ✅ AJOUT du décorateur (absent avant : risque de bug si appelée sur une instance)
+    def generer_reference_unique_plan_action(client_id, max_attempts=10):
+        """Génère une référence unique pour un plan d'action"""
+        from models import PlanActionC2N
+ 
+        count = PlanActionC2N.query.filter_by(client_id=client_id).count()
+ 
+        for attempt in range(max_attempts):
+            tentative_num = count + attempt + 1
+            reference = f"PA-{tentative_num:05d}"
+ 
+            existing = PlanActionC2N.query.filter_by(reference=reference).first()
+            if not existing:
+                return reference
+ 
+            continue
+ 
+        raise Exception("Impossible de générer une référence unique après plusieurs tentatives")
+ 
+    @staticmethod  # ✅ AJOUT du décorateur
+    def generer_reference_plan_action(client_id):
+        """Génère une référence unique basée sur un compteur atomique par client.
+ 
+        ⚠️ RECOMMANDATION : c'est la méthode la plus robuste des trois
+        générateurs de référence présents dans la classe (elle seule évite
+        vraiment la race condition grâce au compteur en DB). Envisagez de
+        migrer tous les appels `count() + 1` disséminés dans vos routes
+        vers cette méthode, et de supprimer les deux autres générateurs
+        pour éviter toute confusion.
+        """
+        from models import PlanActionC2N, ClientReferenceCounter
+ 
+        counter = ClientReferenceCounter.query.filter_by(
+            client_id=client_id,
+            type_reference='plan_action'
+        ).with_for_update().first()  # ✅ AJOUT with_for_update() pour verrouiller la ligne
+                                      # et éviter la race condition en concurrence
+ 
+        if not counter:
+            counter = ClientReferenceCounter(
+                client_id=client_id,
+                type_reference='plan_action',
+                derniere_valeur=0
+            )
+            db.session.add(counter)
+            db.session.flush()
+ 
+        counter.derniere_valeur += 1
+        db.session.commit()
+ 
+        return f"PA-{counter.derniere_valeur:05d}"
+
     @property
     def est_en_retard(self):
         if self.date_echeance and self.statut != 'terminee' and not self.is_archived:
@@ -19145,34 +19259,40 @@ class PlanActionC2N(db.Model):
         return f'<PlanActionC2N {self.reference}>'
 
 
+# ================================================================
+# 1. SousActionPlanC2N : ajouter client_id
+# ================================================================
 class SousActionPlanC2N(db.Model):
     """Sous-actions / tâches d'un plan d'action C2N"""
     __tablename__ = 'sous_actions_plan_c2n'
-    
+ 
     id = db.Column(db.Integer, primary_key=True)
     plan_action_id = db.Column(db.Integer, db.ForeignKey('plans_action_c2n.id'), nullable=False)
-    
+ 
     titre = db.Column(db.String(200), nullable=False)
     description = db.Column(db.Text)
-    
+ 
     taux_avancement = db.Column(db.Integer, default=0)
     statut = db.Column(db.String(20), default='a_faire')
-    
+ 
     date_echeance = db.Column(db.Date)
     date_debut = db.Column(db.Date)
     date_fin_reelle = db.Column(db.Date)
-    
+ 
     responsable_id = db.Column(db.Integer, db.ForeignKey('user.id'))
-    
+ 
+    # ✅ AJOUT : indispensable pour get_client_filter / get_client_object_or_404
+    client_id = db.Column(db.Integer, db.ForeignKey('clients.id'), nullable=False, index=True)
+ 
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
-    
-    # ✅ UNIQUE RELATION - le backref crée plan.sous_actions_c2n
-    plan_action = db.relationship('PlanActionC2N', 
-                                  foreign_keys=[plan_action_id], 
+ 
+    plan_action = db.relationship('PlanActionC2N',
+                                  foreign_keys=[plan_action_id],
                                   backref='sous_actions_c2n')
     responsable = db.relationship('User', foreign_keys=[responsable_id])
-    
+    client = db.relationship('Client', foreign_keys=[client_id])  # ✅ AJOUT (optionnel mais pratique)
+ 
     def get_statut_label(self):
         labels = {
             'a_faire': '📋 À faire',
@@ -19181,14 +19301,14 @@ class SousActionPlanC2N(db.Model):
             'bloquee': '⚠️ Bloquée'
         }
         return labels.get(self.statut, self.statut)
-    
+ 
     def mettre_a_jour(self, nouveau_taux=None, nouveau_statut=None):
         if nouveau_taux is not None:
             self.taux_avancement = min(100, max(0, nouveau_taux))
-        
+ 
         if nouveau_statut:
             self.statut = nouveau_statut
-        
+ 
         if self.taux_avancement == 100 and self.statut != 'terminee':
             self.statut = 'terminee'
             self.date_fin_reelle = datetime.utcnow().date()
@@ -19196,31 +19316,42 @@ class SousActionPlanC2N(db.Model):
             self.statut = 'en_cours'
         elif self.taux_avancement == 0 and self.statut == 'en_cours':
             self.statut = 'a_faire'
-        
+ 
         self.updated_at = datetime.utcnow()
-        
+ 
         if self.plan_action:
             self.plan_action.recalculer_avancement()
-        
+            # ✅ Le commit est maintenant à la charge de l'appelant
+            # (voir routes_c2n_corrections.py) car recalculer_avancement()
+            # ne commit plus lui-même.
+ 
         return True
-
+ 
+ 
+# ================================================================
+# 2. CommentairePlanActionC2N : ajouter client_id
+# ================================================================
 class CommentairePlanActionC2N(db.Model):
     """Commentaires généraux sur le plan d'action C2N"""
     __tablename__ = 'commentaires_plan_action_c2n'
-    
+ 
     id = db.Column(db.Integer, primary_key=True)
     plan_action_id = db.Column(db.Integer, db.ForeignKey('plans_action_c2n.id'), nullable=False)
-    
+ 
     contenu = db.Column(db.Text, nullable=False)
     auteur_id = db.Column(db.Integer, db.ForeignKey('user.id'))
+ 
+    # ✅ AJOUT
+    client_id = db.Column(db.Integer, db.ForeignKey('clients.id'), nullable=False, index=True)
+ 
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
-    
-    # ✅ UNIQUE RELATION - le backref crée plan.commentaires_c2n
-    plan_action = db.relationship('PlanActionC2N', 
-                                  foreign_keys=[plan_action_id], 
+ 
+    plan_action = db.relationship('PlanActionC2N',
+                                  foreign_keys=[plan_action_id],
                                   backref='commentaires_c2n')
     auteur = db.relationship('User')
-    
+    client = db.relationship('Client', foreign_keys=[client_id])  # ✅ AJOUT
+ 
     def to_dict(self):
         return {
             'id': self.id,
@@ -19228,24 +19359,32 @@ class CommentairePlanActionC2N(db.Model):
             'auteur': self.auteur.username if self.auteur else 'Anonyme',
             'created_at': self.created_at.strftime('%d/%m/%Y %H:%M')
         }
-
+ 
+ 
+# ================================================================
+# 3. CommentaireSousActionC2N : ajouter client_id
+# ================================================================
 class CommentaireSousActionC2N(db.Model):
     """Commentaires sur les sous-actions C2N"""
     __tablename__ = 'commentaires_sous_action_c2n'
-    
+ 
     id = db.Column(db.Integer, primary_key=True)
     sous_action_id = db.Column(db.Integer, db.ForeignKey('sous_actions_plan_c2n.id'), nullable=False)
-    
+ 
     contenu = db.Column(db.Text, nullable=False)
     auteur_id = db.Column(db.Integer, db.ForeignKey('user.id'))
+ 
+    # ✅ AJOUT
+    client_id = db.Column(db.Integer, db.ForeignKey('clients.id'), nullable=False, index=True)
+ 
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
-    
-    # Relations
+ 
     auteur = db.relationship('User')
-    sous_action = db.relationship('SousActionPlanC2N', 
-                                  foreign_keys=[sous_action_id], 
+    sous_action = db.relationship('SousActionPlanC2N',
+                                  foreign_keys=[sous_action_id],
                                   backref='commentaires_sous_action_c2n')
-    
+    client = db.relationship('Client', foreign_keys=[client_id])  # ✅ AJOUT
+ 
     def to_dict(self):
         return {
             'id': self.id,
@@ -19351,9 +19490,19 @@ class NonConformiteC2N(db.Model):
         self.updated_at = datetime.utcnow()
     
     def rouvrir(self):
-        """Rouvre une non-conformité fermée"""
-        self.statut = 'ouvert'
-        self.updated_at = datetime.utcnow()
+        """Rouvre une non-conformité fermée.
+ 
+        🔧 AVANT : cette méthode était définie DEUX FOIS dans la classe.
+        La première définition (sans condition) était silencieusement
+        écrasée par la seconde. Ne gardez que celle-ci et supprimez
+        l'autre `def rouvrir(self): self.statut = 'ouvert'; ...` qui
+        apparaissait plus haut dans la classe.
+        """
+        if self.statut == 'ferme':
+            self.statut = 'ouvert'
+            self.updated_at = datetime.utcnow()
+            return True
+        return False
     
     # ✅ CORRECTION : Supprimer la duplication de la propriété controle_nom
     @property
@@ -19388,13 +19537,6 @@ class NonConformiteC2N(db.Model):
             return 0
         except Exception:
             return 0
-    def rouvrir(self):
-        """Rouvre une non-conformité fermée"""
-        if self.statut == 'ferme':
-            self.statut = 'ouvert'
-            self.updated_at = datetime.utcnow()
-            return True
-        return False
     @property
     def jours_ouverts(self):
         """Retourne le nombre de jours depuis l'ouverture"""
@@ -19427,6 +19569,7 @@ class NonConformiteC2N(db.Model):
     
     def __repr__(self):
         return f'<NonConformiteC2N {self.reference}>'
+        
 class PermissionOperateur(db.Model):
     """Permissions spécifiques pour les opérateurs"""
     __tablename__ = 'permissions_operateur'
