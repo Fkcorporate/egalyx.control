@@ -18596,10 +18596,13 @@ class RecommandationC2N(db.Model):
                                   foreign_keys=[responsable_id], 
                                   backref='recommandations_c2n_responsable')  # ← Backref unique
     
-    # Relation vers PlanActionC2N
-    plan_action = db.relationship('PlanActionC2N', 
-                                  foreign_keys=[plan_action_id],
-                                  backref='recommandation_source')
+    plans_action = db.relationship(
+        'PlanActionC2N',
+        backref='recommandation',
+        foreign_keys='PlanActionC2N.recommandation_id',
+        cascade='all, delete-orphan',
+        passive_deletes=False,
+    )
     
     # ============================================
     # MÉTHODES
@@ -19287,9 +19290,11 @@ class SousActionPlanC2N(db.Model):
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
  
-    plan_action = db.relationship('PlanActionC2N',
-                                  foreign_keys=[plan_action_id],
-                                  backref='sous_actions_c2n')
+    plan_action = db.relationship(
+        'PlanActionC2N',
+        foreign_keys=[plan_action_id],
+        backref=db.backref('sous_actions_c2n', cascade='all, delete-orphan')
+    )
     responsable = db.relationship('User', foreign_keys=[responsable_id])
     client = db.relationship('Client', foreign_keys=[client_id])  # ✅ AJOUT (optionnel mais pratique)
  
@@ -19346,9 +19351,11 @@ class CommentairePlanActionC2N(db.Model):
  
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
  
-    plan_action = db.relationship('PlanActionC2N',
-                                  foreign_keys=[plan_action_id],
-                                  backref='commentaires_c2n')
+    plan_action = db.relationship(
+        'PlanActionC2N',
+        foreign_keys=[plan_action_id],
+        backref=db.backref('commentaires_c2n', cascade='all, delete-orphan')
+    )
     auteur = db.relationship('User')
     client = db.relationship('Client', foreign_keys=[client_id])  # ✅ AJOUT
  
@@ -19380,9 +19387,11 @@ class CommentaireSousActionC2N(db.Model):
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
  
     auteur = db.relationship('User')
-    sous_action = db.relationship('SousActionPlanC2N',
-                                  foreign_keys=[sous_action_id],
-                                  backref='commentaires_sous_action_c2n')
+    sous_action = db.relationship(
+        'SousActionPlanC2N',
+        foreign_keys=[sous_action_id],
+        backref=db.backref('commentaires_sous_action_c2n', cascade='all, delete-orphan')
+    )
     client = db.relationship('Client', foreign_keys=[client_id])  # ✅ AJOUT
  
     def to_dict(self):
