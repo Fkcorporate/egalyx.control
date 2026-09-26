@@ -18598,10 +18598,10 @@ class RecommandationC2N(db.Model):
     
     plans_action = db.relationship(
         'PlanActionC2N',
-        backref='recommandation',
         foreign_keys='PlanActionC2N.recommandation_id',
+        backref='recommandation',
         cascade='all, delete-orphan',
-        passive_deletes=False,
+        passive_deletes=True,   # ✅ Laisse PostgreSQL gérer le ON DELETE CASCADE
     )
     
     # ============================================
@@ -19290,10 +19290,15 @@ class SousActionPlanC2N(db.Model):
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
  
+    # Dans SousActionPlanC2N — REMPLACER
     plan_action = db.relationship(
         'PlanActionC2N',
         foreign_keys=[plan_action_id],
-        backref=db.backref('sous_actions_c2n', cascade='all, delete-orphan')
+        backref=db.backref(
+            'sous_actions_c2n',
+            cascade='all, delete-orphan',
+            passive_deletes=True,   # ✅ AJOUT
+        ),
     )
     responsable = db.relationship('User', foreign_keys=[responsable_id])
     client = db.relationship('Client', foreign_keys=[client_id])  # ✅ AJOUT (optionnel mais pratique)
@@ -19351,10 +19356,15 @@ class CommentairePlanActionC2N(db.Model):
  
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
  
+    # Dans CommentairePlanActionC2N — REMPLACER
     plan_action = db.relationship(
         'PlanActionC2N',
         foreign_keys=[plan_action_id],
-        backref=db.backref('commentaires_c2n', cascade='all, delete-orphan')
+        backref=db.backref(
+            'commentaires_c2n',
+            cascade='all, delete-orphan',
+            passive_deletes=True,   # ✅ AJOUT
+        ),
     )
     auteur = db.relationship('User')
     client = db.relationship('Client', foreign_keys=[client_id])  # ✅ AJOUT
@@ -19387,10 +19397,15 @@ class CommentaireSousActionC2N(db.Model):
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
  
     auteur = db.relationship('User')
+    # Dans CommentaireSousActionC2N — REMPLACER
     sous_action = db.relationship(
         'SousActionPlanC2N',
         foreign_keys=[sous_action_id],
-        backref=db.backref('commentaires_sous_action_c2n', cascade='all, delete-orphan')
+        backref=db.backref(
+            'commentaires_sous_action_c2n',
+            cascade='all, delete-orphan',
+            passive_deletes=True,   # ✅ AJOUT
+        ),
     )
     client = db.relationship('Client', foreign_keys=[client_id])  # ✅ AJOUT
  
