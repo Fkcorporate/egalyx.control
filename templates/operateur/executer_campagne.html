@@ -1,190 +1,259 @@
 {% extends "operateur/base_operateur.html" %}
 
-{% block title %}Exécuter la campagne - {{ campagne.reference }}{% endblock %}
+{% block title %}Exécution - {{ campagne.reference }} - Egalyx Control{% endblock %}
+
+{% block styles %}
+{{ super() }}
+<style>
+    .execution-card {
+        background: white;
+        border-radius: 16px;
+        padding: 1.5rem;
+        margin-bottom: 1.5rem;
+        border: 1px solid var(--border);
+        box-shadow: 0 2px 8px rgba(0,0,0,0.04);
+    }
+    
+    .taux-display {
+        font-size: 3rem;
+        font-weight: 700;
+        text-align: center;
+        padding: 1.5rem;
+        border-radius: 16px;
+        transition: all 0.3s ease;
+    }
+    
+    .taux-display.success {
+        background: linear-gradient(135deg, #d1fae5, #a7f3d0);
+        color: #065f46;
+    }
+    
+    .taux-display.warning {
+        background: linear-gradient(135deg, #fed7aa, #fdba74);
+        color: #9b2c1d;
+    }
+    
+    .taux-display.danger {
+        background: linear-gradient(135deg, #fee2e2, #fecaca);
+        color: #991b1b;
+    }
+    
+    [data-bs-theme="dark"] .execution-card {
+        background: #1e293b;
+        border-color: #334155;
+    }
+    
+    .motifs-container {
+        background: #fffbeb;
+        border-left: 4px solid #f59e0b;
+        border-radius: 12px;
+        padding: 1.25rem;
+        margin-top: 1rem;
+    }
+    
+    [data-bs-theme="dark"] .motifs-container {
+        background: #2d2419;
+    }
+</style>
+{% endblock %}
 
 {% block content %}
 <div class="container-fluid px-4">
-
+    
     <!-- En-tête -->
-    <div class="row mb-4 animate-in">
-        <div class="col-12">
-            <div class="fk-card">
-                <div class="fk-card-body">
-                    <div class="d-flex justify-content-between align-items-center flex-wrap">
-                        <div>
-                            <nav aria-label="breadcrumb">
-                                <ol class="breadcrumb bg-transparent mb-1">
-                                    <li class="breadcrumb-item"><a href="{{ url_for('operateur_dashboard') }}" class="text-decoration-none">Dashboard</a></li>
-                                    <li class="breadcrumb-item"><a href="{{ url_for('operateur_liste_campagnes') }}" class="text-decoration-none">Campagnes</a></li>
-                                    <li class="breadcrumb-item active">{{ campagne.reference }}</li>
-                                </ol>
-                            </nav>
-                            <h1 class="h3 mb-1" style="font-family: 'Georgia', serif; color: #0f172a;">
-                                <i class="fas fa-clipboard-list me-2" style="color: #f59e0b;"></i>
-                                {{ campagne.nom }}
-                            </h1>
-                            <p class="text-muted mb-0">{{ campagne.reference }}</p>
-                        </div>
-                        <div>
-                            <span class="badge bg-{{ 
-                                'warning' if campagne.statut == 'en_cours' 
-                                else 'secondary' 
-                            }} px-3 py-2">
-                                {{ {'en_preparation': 'À faire', 'en_cours': 'En cours', 'termine': 'Terminé'}[campagne.statut] }}
-                            </span>
-                            <a href="{{ url_for('operateur_liste_campagnes') }}" class="btn btn-outline-secondary btn-sm ms-2">
-                                <i class="fas fa-arrow-left me-2"></i>Retour
-                            </a>
-                        </div>
-                    </div>
-                </div>
-            </div>
-        </div>
-    </div>
-
-    <!-- Statistiques rapides -->
-    <div class="row g-3 mb-4">
-        <div class="col-md-3">
-            <div class="stat-card animate-in">
-                <div class="stat-number" style="color: #3b82f6;">{{ campagne.nb_dossiers_controles }}</div>
-                <div class="stat-label">Dossiers contrôlés</div>
-                <small class="text-muted">Prévus: {{ campagne.nb_dossiers_prevus }}</small>
-            </div>
-        </div>
-        <div class="col-md-3">
-            <div class="stat-card animate-in">
-                <div class="stat-number" style="color: #10b981;">{{ campagne.taux_conformite }}%</div>
-                <div class="stat-label">Conformité</div>
-                <small class="text-muted">Conformes: {{ campagne.nb_conformes }}</small>
-            </div>
-        </div>
-        <div class="col-md-3">
-            <div class="stat-card animate-in" style="border-top: 3px solid #dc3545;">
-                <div class="stat-number" style="color: #dc3545;">{{ campagne.nb_anomalies }}</div>
-                <div class="stat-label">Anomalies</div>
-                <small class="text-muted">{{ campagne.motifs_anomalie|length if campagne.motifs_anomalie else 0 }} motifs</small>
-            </div>
-        </div>
-        <div class="col-md-3">
-            <div class="stat-card animate-in">
-                <div class="stat-number" style="color: #f59e0b;">{{ campagne.get_avancement() }}%</div>
-                <div class="stat-label">Avancement</div>
-                <div class="progress mt-2" style="height: 4px;">
-                    <div class="progress-bar" style="width: {{ campagne.get_avancement() }}%; background: #f59e0b;"></div>
-                </div>
-            </div>
-        </div>
-    </div>
-
-    <!-- Formulaire -->
-    <form method="POST">
-        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-
-        <!-- Résultats -->
-        <div class="fk-card animate-in mb-3">
-            <div class="fk-card-header">
-                <i class="fas fa-chart-bar me-2" style="color: #3b82f6;"></i>Résultats du contrôle
-            </div>
-            <div class="fk-card-body">
-                <div class="row g-3">
-                    <div class="col-md-4">
-                        <label class="form-label fw-bold">Volume contrôlé</label>
-                        <input type="number" name="nb_dossiers_controles" class="form-control" 
-                               value="{{ campagne.nb_dossiers_controles }}" min="0">
-                    </div>
-                    <div class="col-md-4">
-                        <label class="form-label fw-bold">Dossiers conformes</label>
-                        <input type="number" name="nb_conformes" class="form-control" 
-                               value="{{ campagne.nb_conformes }}" min="0">
-                    </div>
-                    <div class="col-md-4">
-                        <label class="form-label fw-bold">Anomalies</label>
-                        <input type="number" name="nb_anomalies" class="form-control" 
-                               value="{{ campagne.nb_anomalies }}" min="0">
-                    </div>
-                </div>
-            </div>
-        </div>
-
-        <!-- Anomalies -->
-        <div class="fk-card animate-in mb-3">
-            <div class="fk-card-header d-flex justify-content-between align-items-center">
-                <span><i class="fas fa-exclamation-triangle me-2" style="color: #dc3545;"></i>Motifs d'anomalies</span>
-                <span class="badge bg-danger">{{ campagne.motifs_anomalie|length if campagne.motifs_anomalie else 0 }}</span>
-            </div>
-            <div class="fk-card-body">
-                {% if campagne.motifs_anomalie %}
-                    {% for anomalie in campagne.motifs_anomalie %}
-                    <div class="d-flex justify-content-between align-items-center p-2 bg-light rounded mb-1">
-                        <div>
-                            <div>{{ anomalie.motif }}</div>
-                            <small class="text-muted">
-                                <i class="far fa-calendar-alt me-1"></i>
-                                {{ anomalie.date|replace('T', ' ')|truncate(16, True, '') if anomalie.date else '' }}
-                                <span class="ms-2">par {{ anomalie.ajoute_par or 'Système' }}</span>
-                            </small>
-                        </div>
-                        <button type="button" class="btn btn-sm btn-outline-danger" onclick="supprimerAnomalie('{{ loop.index0 }}')">
-                            <i class="fas fa-times"></i>
-                        </button>
-                    </div>
-                    {% endfor %}
-                {% else %}
-                    <p class="text-muted text-center py-2">Aucune anomalie enregistrée</p>
-                {% endif %}
-
-                <div class="mt-3">
-                    <div class="input-group">
-                        <input type="text" id="nouvelleAnomalie" class="form-control" placeholder="Décrire l'anomalie...">
-                        <button type="button" class="btn btn-outline-danger" onclick="ajouterAnomalie()">
-                            <i class="fas fa-plus me-2"></i>Ajouter
-                        </button>
-                    </div>
-                    <small class="text-muted">Une anomalie sera ajoutée au rapport final</small>
-                </div>
-            </div>
-        </div>
-
-        <!-- Commentaires -->
-        <div class="fk-card animate-in mb-3">
-            <div class="fk-card-header">
-                <i class="fas fa-comment me-2" style="color: #f59e0b;"></i>Commentaires et conclusion
-            </div>
-            <div class="fk-card-body">
-                <div class="mb-3">
-                    <label class="form-label fw-bold">Commentaire général</label>
-                    <textarea name="commentaire_general" class="form-control" rows="2">{{ campagne.commentaire_general }}</textarea>
-                </div>
-                <div class="mb-3">
-                    <label class="form-label fw-bold">Conclusion</label>
-                    <textarea name="conclusion" class="form-control" rows="2">{{ campagne.conclusion }}</textarea>
-                </div>
-                <div class="mb-3">
-                    <label class="form-label fw-bold">Actions correctives proposées</label>
-                    <textarea name="actions_correctives" class="form-control" rows="2">{{ campagne.actions_correctives }}</textarea>
-                </div>
-            </div>
-        </div>
-
-        <!-- Boutons -->
-        <div class="fk-card animate-in">
-            <div class="fk-card-body">
-                <div class="d-flex justify-content-between align-items-center">
-                    <div>
-                        {% if campagne.updated_at %}
-                        <small class="text-muted">
-                            Dernière mise à jour: {{ campagne.updated_at.strftime('%d/%m/%Y %H:%M') }}
-                        </small>
-                        {% endif %}
-                    </div>
-                    <div class="d-flex gap-2">
-                        <a href="{{ url_for('operateur_liste_campagnes') }}" class="btn btn-outline-secondary">
-                            <i class="fas fa-times me-2"></i>Annuler
+    <div class="d-flex flex-wrap justify-content-between align-items-center mb-4">
+        <div>
+            <nav aria-label="breadcrumb">
+                <ol class="breadcrumb mb-2">
+                    <li class="breadcrumb-item">
+                        <a href="{{ url_for('operateur_liste_campagnes') }}">Mes campagnes</a>
+                    </li>
+                    <li class="breadcrumb-item">
+                        <a href="{{ url_for('operateur_detail_campagne', campagne_id=campagne.id) }}">
+                            {{ campagne.reference }}
                         </a>
-                        <button type="submit" class="btn btn-primary-custom">
-                            <i class="fas fa-save me-2"></i>Mettre à jour
-                        </button>
+                    </li>
+                    <li class="breadcrumb-item active">Exécution</li>
+                </ol>
+            </nav>
+            <h4 class="fw-bold mb-1">
+                <i class="fas fa-play-circle text-success me-2"></i>
+                Exécution du contrôle
+            </h4>
+            <p class="text-muted small mb-0">{{ campagne.nom }}</p>
+        </div>
+        <a href="{{ url_for('operateur_detail_campagne', campagne_id=campagne.id) }}" 
+           class="btn btn-outline-secondary rounded-pill">
+            <i class="fas fa-arrow-left me-1"></i>Retour
+        </a>
+    </div>
+
+    <form method="POST" id="executionForm">
+        {% if csrf_token is defined %}
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        {% endif %}
+        
+        <div class="row">
+            <div class="col-lg-8">
+                
+                <!-- ============================================ -->
+                <!-- VOLUMES -->
+                <!-- ============================================ -->
+                <div class="execution-card">
+                    <h6 class="fw-semibold mb-3">
+                        <i class="fas fa-chart-line text-primary me-2"></i>
+                        Volumes contrôlés
+                    </h6>
+                    
+                    <div class="row g-3">
+                        <div class="col-md-6">
+                            <label class="form-label">
+                                Dossiers contrôlés <span class="text-danger">*</span>
+                            </label>
+                            <input type="number" name="nb_dossiers_controles" 
+                                   class="form-control form-control-lg" 
+                                   value="{{ campagne.nb_dossiers_controles or 0 }}"
+                                   min="0" step="1" id="nbControles" required>
+                        </div>
+                        
+                        <div class="col-md-6">
+                            <label class="form-label text-success">
+                                <i class="fas fa-check-circle me-1"></i>
+                                Conformes <span class="text-danger">*</span>
+                            </label>
+                            <input type="number" name="nb_conformes" 
+                                   class="form-control form-control-lg" 
+                                   value="{{ campagne.nb_conformes or 0 }}"
+                                   min="0" step="1" id="nbConformes" required>
+                        </div>
+                        
+                        <div class="col-md-6">
+                            <label class="form-label text-danger">
+                                <i class="fas fa-exclamation-triangle me-1"></i>
+                                Anomalies
+                            </label>
+                            <input type="number" name="nb_anomalies" 
+                                   class="form-control form-control-lg" 
+                                   value="{{ campagne.nb_anomalies or 0 }}"
+                                   min="0" step="1" id="nbAnomalies" readonly>
+                            <div class="form-text">Calculé automatiquement</div>
+                        </div>
+                        
+                        <div class="col-md-6">
+                            <label class="form-label">Taux de conformité</label>
+                            <div class="taux-display" id="tauxDisplay">
+                                <span id="tauxValue">0</span>%
+                            </div>
+                        </div>
                     </div>
+                </div>
+                
+                <!-- ============================================ -->
+                <!-- MOTIFS D'ANOMALIES -->
+                <!-- ============================================ -->
+                <div class="execution-card">
+                    <h6 class="fw-semibold mb-3">
+                        <i class="fas fa-exclamation-triangle text-warning me-2"></i>
+                        Motifs des anomalies
+                    </h6>
+                    
+                    <div class="motifs-container">
+                        <textarea name="motifs_anomalie" 
+                                  class="form-control" 
+                                  rows="8"
+                                  placeholder="Un motif par ligne...&#10;&#10;Exemple :&#10;Facture sans bon de commande&#10;Délai de paiement dépassé&#10;Signature manquante">{{ campagne.motifs_anomalie|join('\n') if campagne.motifs_anomalie else '' }}</textarea>
+                        
+                        <div class="alert alert-warning small mt-3 mb-0">
+                            <i class="fas fa-info-circle me-1"></i>
+                            Chaque motif sera transformé en <strong>anomalie détectée</strong>.
+                            Vous pourrez ensuite les écarter ou les confirmer.
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- ============================================ -->
+                <!-- COMMENTAIRES -->
+                <!-- ============================================ -->
+                <div class="execution-card">
+                    <h6 class="fw-semibold mb-3">
+                        <i class="fas fa-comment-dots text-primary me-2"></i>
+                        Commentaires et conclusions
+                    </h6>
+                    
+                    <div class="mb-3">
+                        <label class="form-label">Commentaire général</label>
+                        <textarea name="commentaire_general" class="form-control" rows="3">{{ campagne.commentaire_general or '' }}</textarea>
+                    </div>
+                    
+                    <div class="mb-3">
+                        <label class="form-label">Conclusion</label>
+                        <textarea name="conclusion" class="form-control" rows="2">{{ campagne.conclusion or '' }}</textarea>
+                    </div>
+                    
+                    <div class="mb-3">
+                        <label class="form-label">Actions correctives proposées</label>
+                        <textarea name="actions_correctives" class="form-control" rows="3">{{ campagne.actions_correctives or '' }}</textarea>
+                    </div>
+                </div>
+                
+                <!-- ============================================ -->
+                <!-- BOUTONS -->
+                <!-- ============================================ -->
+                <div class="d-flex flex-wrap gap-2 mb-4">
+                    <button type="submit" name="action" value="save" 
+                            class="btn btn-info rounded-pill px-4">
+                        <i class="fas fa-save me-1"></i>Sauvegarder
+                    </button>
+                    
+                    <button type="submit" name="action" value="submit" 
+                            class="btn btn-success rounded-pill px-4"
+                            onclick="return confirm('Soumettre la campagne pour validation ?')">
+                        <i class="fas fa-paper-plane me-1"></i>Soumettre pour validation
+                    </button>
+                    
+                    <a href="{{ url_for('operateur_detail_campagne', campagne_id=campagne.id) }}" 
+                       class="btn btn-outline-secondary rounded-pill px-4">
+                        Annuler
+                    </a>
+                </div>
+            </div>
+            
+            <!-- ============================================ -->
+            <!-- COLONNE LATÉRALE : RAPPELS -->
+            <!-- ============================================ -->
+            <div class="col-lg-4">
+                <div class="execution-card">
+                    <h6 class="fw-semibold mb-3">
+                        <i class="fas fa-info-circle text-primary me-2"></i>
+                        Informations
+                    </h6>
+                    <div class="small">
+                        <div class="d-flex justify-content-between mb-2">
+                            <span class="text-muted">Référence</span>
+                            <strong>{{ campagne.reference }}</strong>
+                        </div>
+                        <div class="d-flex justify-content-between mb-2">
+                            <span class="text-muted">Période</span>
+                            <span>{{ campagne.date_debut.strftime('%d/%m/%Y') }} - {{ campagne.date_fin.strftime('%d/%m/%Y') }}</span>
+                        </div>
+                        <div class="d-flex justify-content-between">
+                            <span class="text-muted">Statut</span>
+                            <span class="badge bg-primary">{{ campagne.get_statut_label() }}</span>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="execution-card">
+                    <h6 class="fw-semibold mb-3">
+                        <i class="fas fa-lightbulb text-warning me-2"></i>
+                        Bonnes pratiques
+                    </h6>
+                    <ul class="small mb-0 ps-3">
+                        <li>Un motif par anomalie (ne pas grouper)</li>
+                        <li>Soyez factuel et précis</li>
+                        <li>Conformes + anomalies = contrôlés</li>
+                        <li>Vérifiez avant de soumettre</li>
+                    </ul>
                 </div>
             </div>
         </div>
@@ -192,59 +261,39 @@
 </div>
 
 <script>
-function ajouterAnomalie() {
-    const input = document.getElementById('nouvelleAnomalie');
-    const motif = input.value.trim();
-    if (!motif) {
-        alert('Veuillez décrire l\'anomalie');
-        return;
+document.addEventListener('DOMContentLoaded', function() {
+    const nbControles = document.getElementById('nbControles');
+    const nbConformes = document.getElementById('nbConformes');
+    const nbAnomalies = document.getElementById('nbAnomalies');
+    const tauxValue = document.getElementById('tauxValue');
+    const tauxDisplay = document.getElementById('tauxDisplay');
+    
+    function calculerTaux() {
+        const controles = parseInt(nbControles.value) || 0;
+        let conformes = parseInt(nbConformes.value) || 0;
+        
+        if (conformes > controles) {
+            conformes = controles;
+            nbConformes.value = controles;
+        }
+        
+        const anomalies = Math.max(0, controles - conformes);
+        nbAnomalies.value = anomalies;
+        
+        const taux = controles > 0 ? Math.round((conformes / controles) * 100 * 10) / 10 : 0;
+        tauxValue.textContent = taux;
+        
+        // Couleur
+        tauxDisplay.className = 'taux-display';
+        if (taux >= 80) tauxDisplay.classList.add('success');
+        else if (taux >= 60) tauxDisplay.classList.add('warning');
+        else tauxDisplay.classList.add('danger');
     }
-
-    fetch("{{ url_for('operateur_ajouter_anomalie', campagne_id=campagne.id) }}", {
-        method: 'POST',
-        headers: {
-            'X-CSRFToken': '{{ csrf_token() }}',
-            'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({ motif: motif })
-    })
-    .then(response => response.json())
-    .then(data => {
-        if (data.success) {
-            location.reload();
-        } else {
-            alert('Erreur: ' + (data.error || 'Inconnue'));
-        }
-    })
-    .catch(error => {
-        console.error('Error:', error);
-        alert('Erreur réseau');
-    });
-}
-
-function supprimerAnomalie(index) {
-    if (!confirm('Supprimer cette anomalie ?')) return;
-
-    fetch("{{ url_for('operateur_supprimer_anomalie', campagne_id=campagne.id) }}", {
-        method: 'POST',
-        headers: {
-            'X-CSRFToken': '{{ csrf_token() }}',
-            'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({ index: parseInt(index) })
-    })
-    .then(response => response.json())
-    .then(data => {
-        if (data.success) {
-            location.reload();
-        } else {
-            alert('Erreur: ' + (data.error || 'Inconnue'));
-        }
-    })
-    .catch(error => {
-        console.error('Error:', error);
-        alert('Erreur réseau');
-    });
-}
+    
+    nbControles.addEventListener('input', calculerTaux);
+    nbConformes.addEventListener('input', calculerTaux);
+    
+    calculerTaux();
+});
 </script>
 {% endblock %}

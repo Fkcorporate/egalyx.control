@@ -1,0 +1,416 @@
+{% extends "operateur/base_operateur.html" %}
+
+{% block title %}Statistiques - {{ campagne.reference }} - Egalyx Control{% endblock %}
+
+{% block styles %}
+{{ super() }}
+<style>
+    .stats-card {
+        background: white;
+        border-radius: var(--radius);
+        padding: 1.5rem;
+        transition: all 0.3s ease;
+        border: 1px solid var(--border);
+        position: relative;
+        overflow: hidden;
+        height: 100%;
+    }
+    
+    .stats-card::before {
+        content: '';
+        position: absolute;
+        top: 0;
+        left: 0;
+        right: 0;
+        height: 3px;
+        background: linear-gradient(90deg, #3b82f6, #10b981);
+    }
+    
+    .stats-card:hover {
+        transform: translateY(-4px);
+        box-shadow: 0 12px 40px rgba(0,0,0,0.08);
+    }
+    
+    .stats-value {
+        font-size: 2.5rem;
+        font-weight: 700;
+        line-height: 1.1;
+    }
+    
+    .stats-label {
+        font-size: 0.75rem;
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+        color: var(--text-secondary);
+        font-weight: 600;
+        margin-bottom: 0.5rem;
+    }
+    
+    [data-bs-theme="dark"] .stats-card {
+        background: #1e293b;
+        border-color: #334155;
+    }
+    
+    .chart-container {
+        position: relative;
+        height: 300px;
+        margin-bottom: 1rem;
+    }
+    
+    .progress-custom {
+        height: 12px;
+        border-radius: 6px;
+        background: var(--border);
+        overflow: hidden;
+    }
+    
+    .progress-custom-bar {
+        height: 100%;
+        border-radius: 6px;
+        transition: width 0.6s ease;
+    }
+    
+    .kpi-card {
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        color: white;
+        border-radius: var(--radius);
+        padding: 1.5rem;
+        text-align: center;
+        box-shadow: 0 8px 24px rgba(102, 126, 234, 0.25);
+    }
+    
+    .kpi-value {
+        font-size: 3rem;
+        font-weight: 800;
+        line-height: 1;
+        margin-bottom: 0.5rem;
+    }
+    
+    .kpi-label {
+        font-size: 0.85rem;
+        opacity: 0.9;
+        text-transform: uppercase;
+        letter-spacing: 1px;
+    }
+    
+    .empty-chart {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        height: 100%;
+        color: var(--text-secondary);
+        flex-direction: column;
+        gap: 0.5rem;
+    }
+    
+    .empty-chart i {
+        font-size: 3rem;
+        opacity: 0.3;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="container-fluid px-4">
+    
+    <!-- ============================================ -->
+    <!-- EN-TÊTE -->
+    <!-- ============================================ -->
+    <div class="d-flex flex-wrap justify-content-between align-items-center mb-4">
+        <div>
+            <nav aria-label="breadcrumb">
+                <ol class="breadcrumb mb-2">
+                    <li class="breadcrumb-item">
+                        <a href="{{ url_for('operateur_liste_campagnes') }}">Mes campagnes</a>
+                    </li>
+                    <li class="breadcrumb-item">
+                        <a href="{{ url_for('operateur_detail_campagne', campagne_id=campagne.id) }}">
+                            {{ campagne.reference }}
+                        </a>
+                    </li>
+                    <li class="breadcrumb-item active">Statistiques</li>
+                </ol>
+            </nav>
+            <h4 class="fw-bold mb-1">
+                <i class="fas fa-chart-bar text-primary me-2"></i>
+                Statistiques
+            </h4>
+            <p class="text-muted small mb-0">{{ campagne.nom }}</p>
+        </div>
+        <a href="{{ url_for('operateur_detail_campagne', campagne_id=campagne.id) }}" 
+           class="btn btn-outline-secondary rounded-pill">
+            <i class="fas fa-arrow-left me-1"></i>Retour à la campagne
+        </a>
+    </div>
+    
+    <!-- ============================================ -->
+    <!-- KPI CARD (Score global) -->
+    <!-- ============================================ -->
+    <div class="row g-3 mb-4">
+        <div class="col-lg-4">
+            <div class="kpi-card">
+                <div class="kpi-value">{{ stats.taux_conformite }}%</div>
+                <div class="kpi-label">Taux de conformité</div>
+                <div class="progress mt-3" style="height: 8px; background: rgba(255,255,255,0.2);">
+                    <div class="progress-bar bg-white" style="width: {{ stats.taux_conformite }}%"></div>
+                </div>
+                <small class="d-block mt-2">
+                    {{ stats.nb_conformes }} conformes / {{ stats.nb_dossiers_controles }} contrôlés
+                </small>
+            </div>
+        </div>
+        
+        <div class="col-lg-8">
+            <div class="row g-3">
+                <div class="col-md-4">
+                    <div class="stats-card">
+                        <div class="stats-label">Dossiers prévus</div>
+                        <div class="stats-value text-primary">{{ stats.nb_dossiers_prevus }}</div>
+                        <small class="text-muted">volume total</small>
+                    </div>
+                </div>
+                <div class="col-md-4">
+                    <div class="stats-card">
+                        <div class="stats-label">Dossiers contrôlés</div>
+                        <div class="stats-value text-info">{{ stats.nb_dossiers_controles }}</div>
+                        <div class="progress-custom mt-2">
+                            <div class="progress-custom-bar bg-info" style="width: {{ stats.avancement }}%"></div>
+                        </div>
+                        <small class="text-muted">{{ stats.avancement }}% d'avancement</small>
+                    </div>
+                </div>
+                <div class="col-md-4">
+                    <div class="stats-card">
+                        <div class="stats-label">Anomalies</div>
+                        <div class="stats-value text-danger">{{ stats.nb_anomalies }}</div>
+                        <small class="text-muted">à traiter</small>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- ============================================ -->
+    <!-- GRAPHIQUES -->
+    <!-- ============================================ -->
+    <div class="row g-3 mb-4">
+        <!-- Graphique conformité -->
+        <div class="col-lg-6">
+            <div class="stats-card">
+                <h6 class="fw-semibold mb-3">
+                    <i class="fas fa-chart-pie text-primary me-2"></i>
+                    Répartition des résultats
+                </h6>
+                <div class="chart-container">
+                    {% if stats.nb_dossiers_controles > 0 %}
+                    <canvas id="conformiteChart"></canvas>
+                    {% else %}
+                    <div class="empty-chart">
+                        <i class="fas fa-chart-pie"></i>
+                        <p class="mb-0 small">Aucune donnée disponible</p>
+                        <small class="text-muted">Commencez le contrôle pour voir les stats</small>
+                    </div>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+        
+        <!-- Graphique criticité anomalies -->
+        <div class="col-lg-6">
+            <div class="stats-card">
+                <h6 class="fw-semibold mb-3">
+                    <i class="fas fa-exclamation-triangle text-warning me-2"></i>
+                    Anomalies par criticité
+                </h6>
+                <div class="chart-container">
+                    {% if anomalies_stats.total > 0 %}
+                    <canvas id="criticiteChart"></canvas>
+                    {% else %}
+                    <div class="empty-chart">
+                        <i class="fas fa-check-circle text-success"></i>
+                        <p class="mb-0 small">Aucune anomalie</p>
+                        <small class="text-muted">Excellente nouvelle !</small>
+                    </div>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- ============================================ -->
+    <!-- STATS ANOMALIES -->
+    <!-- ============================================ -->
+    {% if anomalies_stats.total > 0 %}
+    <div class="stats-card mb-4">
+        <h6 class="fw-semibold mb-3">
+            <i class="fas fa-list text-warning me-2"></i>
+            Suivi des anomalies
+        </h6>
+        
+        <div class="row g-3">
+            <div class="col-md-3 col-6">
+                <div class="text-center p-3 rounded" style="background: #fef3c7;">
+                    <div class="h3 fw-bold text-warning mb-0">{{ anomalies_stats.a_traiter }}</div>
+                    <small class="text-muted">À traiter</small>
+                </div>
+            </div>
+            <div class="col-md-3 col-6">
+                <div class="text-center p-3 rounded" style="background: #d1fae5;">
+                    <div class="h3 fw-bold text-success mb-0">{{ anomalies_stats.converties }}</div>
+                    <small class="text-muted">Converties en NC</small>
+                </div>
+            </div>
+            <div class="col-md-3 col-6">
+                <div class="text-center p-3 rounded" style="background: #e5e7eb;">
+                    <div class="h3 fw-bold text-secondary mb-0">{{ anomalies_stats.ecartees }}</div>
+                    <small class="text-muted">Écartées</small>
+                </div>
+            </div>
+            <div class="col-md-3 col-6">
+                <div class="text-center p-3 rounded" style="background: #dbeafe;">
+                    <div class="h3 fw-bold text-primary mb-0">{{ anomalies_stats.total }}</div>
+                    <small class="text-muted">Total</small>
+                </div>
+            </div>
+        </div>
+    </div>
+    {% endif %}
+    
+    <!-- ============================================ -->
+    <!-- ACTIONS RAPIDES -->
+    <!-- ============================================ -->
+    <div class="d-flex flex-wrap gap-2 mb-4">
+        <a href="{{ url_for('operateur_detail_campagne', campagne_id=campagne.id) }}" 
+           class="btn btn-outline-primary rounded-pill px-4">
+            <i class="fas fa-arrow-left me-1"></i>Détail de la campagne
+        </a>
+        
+        {% if anomalies_stats.total > 0 %}
+        <a href="{{ url_for('operateur_gerer_anomalies', campagne_id=campagne.id) }}" 
+           class="btn btn-warning rounded-pill px-4">
+            <i class="fas fa-tasks me-1"></i>
+            Gérer les anomalies
+            {% if anomalies_stats.a_traiter > 0 %}
+            <span class="badge bg-danger ms-1">{{ anomalies_stats.a_traiter }}</span>
+            {% endif %}
+        </a>
+        {% endif %}
+        
+        {% if campagne.statut == 'en_cours' %}
+        <a href="{{ url_for('operateur_executer_campagne', campagne_id=campagne.id) }}" 
+           class="btn btn-success rounded-pill px-4">
+            <i class="fas fa-play-circle me-1"></i>Continuer le contrôle
+        </a>
+        {% endif %}
+    </div>
+</div>
+
+<!-- ============================================ -->
+<!-- SCRIPTS CHARTS -->
+<!-- ============================================ -->
+{% if stats.nb_dossiers_controles > 0 or anomalies_stats.total > 0 %}
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    
+    // ============================================
+    // GRAPHIQUE 1 : RÉPARTITION DES RÉSULTATS
+    // ============================================
+    {% if stats.nb_dossiers_controles > 0 %}
+    const conformiteCtx = document.getElementById('conformiteChart');
+    if (conformiteCtx) {
+        new Chart(conformiteCtx.getContext('2d'), {
+            type: 'doughnut',
+            data: {
+                labels: ['Conformes', 'Non conformes'],
+                datasets: [{
+                    data: [{{ stats.nb_conformes }}, {{ stats.non_conformes }}],
+                    backgroundColor: ['#10b981', '#ef4444'],
+                    borderWidth: 0,
+                    hoverOffset: 10
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                cutout: '65%',
+                plugins: {
+                    legend: {
+                        position: 'bottom',
+                        labels: {
+                            font: { size: 12, weight: '600' },
+                            padding: 15,
+                            usePointStyle: true,
+                            pointStyle: 'circle'
+                        }
+                    },
+                    tooltip: {
+                        callbacks: {
+                            label: function(context) {
+                                const total = context.dataset.data.reduce((a, b) => a + b, 0);
+                                const percentage = total > 0 ? Math.round((context.raw / total) * 100) : 0;
+                                return `${context.label}: ${context.raw} (${percentage}%)`;
+                            }
+                        }
+                    }
+                }
+            }
+        });
+    }
+    {% endif %}
+    
+    // ============================================
+    // GRAPHIQUE 2 : ANOMALIES PAR CRITICITÉ
+    // ============================================
+    {% if anomalies_stats.total > 0 %}
+    const criticiteCtx = document.getElementById('criticiteChart');
+    if (criticiteCtx) {
+        new Chart(criticiteCtx.getContext('2d'), {
+            type: 'bar',
+            data: {
+                labels: ['🟡 Mineur', '🟠 Majeur', '🔴 Critique'],
+                datasets: [{
+                    label: 'Nombre d\'anomalies',
+                    data: [
+                        {{ anomalies_stats.mineurs }},
+                        {{ anomalies_stats.majeurs }},
+                        {{ anomalies_stats.critiques }}
+                    ],
+                    backgroundColor: ['#fef3c7', '#fed7aa', '#fee2e2'],
+                    borderColor: ['#d97706', '#ea580c', '#dc2626'],
+                    borderWidth: 2,
+                    borderRadius: 8,
+                    barThickness: 60
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                    legend: { display: false },
+                    tooltip: {
+                        callbacks: {
+                            label: function(context) {
+                                return `${context.raw} anomalie(s)`;
+                            }
+                        }
+                    }
+                },
+                scales: {
+                    y: {
+                        beginAtZero: true,
+                        ticks: { stepSize: 1 },
+                        grid: { color: 'rgba(0,0,0,0.05)' }
+                    },
+                    x: {
+                        grid: { display: false }
+                    }
+                }
+            }
+        });
+    }
+    {% endif %}
+});
+</script>
+{% endif %}
+{% endblock %}

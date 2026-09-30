@@ -1,0 +1,969 @@
+{% extends "operateur/base_operateur.html" %}
+
+{% block title %}Anomalies - {{ campagne.reference }} - Egalyx Control{% endblock %}
+
+{% block styles %}
+{{ super() }}
+<style>
+    /* ============================================ */
+    /* CARTES STATISTIQUES */
+    /* ============================================ */
+    .stat-card-anomalie {
+        background: white;
+        border-radius: var(--radius);
+        padding: 1.25rem;
+        transition: all 0.3s ease;
+        border: 1px solid var(--border);
+        position: relative;
+        overflow: hidden;
+        height: 100%;
+        cursor: pointer;
+    }
+    
+    .stat-card-anomalie::before {
+        content: '';
+        position: absolute;
+        top: 0;
+        left: 0;
+        right: 0;
+        height: 3px;
+        background: linear-gradient(90deg, #f59e0b, #ea580c);
+    }
+    
+    .stat-card-anomalie:hover {
+        transform: translateY(-4px);
+        box-shadow: 0 12px 40px rgba(0,0,0,0.08);
+    }
+    
+    .stat-card-anomalie.active {
+        box-shadow: 0 0 0 2px #3b82f6;
+    }
+    
+    .stat-value-anomalie {
+        font-size: 2rem;
+        font-weight: 700;
+        line-height: 1.2;
+    }
+    
+    .stat-label-anomalie {
+        font-size: 0.75rem;
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+        color: var(--text-secondary);
+        font-weight: 600;
+    }
+    
+    [data-bs-theme="dark"] .stat-card-anomalie {
+        background: #1e293b;
+        border-color: #334155;
+    }
+    
+    /* ============================================ */
+    /* FILTRES */
+    /* ============================================ */
+    .filter-bar-anomalie {
+        background: white;
+        border-radius: var(--radius);
+        padding: 1rem 1.25rem;
+        box-shadow: 0 2px 8px rgba(0,0,0,0.04);
+        margin-bottom: 1.5rem;
+    }
+    
+    [data-bs-theme="dark"] .filter-bar-anomalie {
+        background: #1e293b;
+    }
+    
+    .filter-bar-anomalie .form-select,
+    .filter-bar-anomalie .form-control {
+        border-radius: 10px;
+        border: 2px solid var(--border);
+        font-size: 0.85rem;
+    }
+    
+    [data-bs-theme="dark"] .filter-bar-anomalie .form-select,
+    [data-bs-theme="dark"] .filter-bar-anomalie .form-control {
+        background: #0f172a;
+        border-color: #334155;
+        color: #f1f5f9;
+    }
+    
+    /* ============================================ */
+    /* TABLEAU */
+    /* ============================================ */
+    .anomalie-row {
+        transition: all 0.2s ease;
+        border-left: 3px solid transparent;
+    }
+    
+    .anomalie-row:hover {
+        background-color: rgba(59, 130, 246, 0.03);
+        border-left-color: #3b82f6;
+    }
+    
+    .anomalie-row.critique {
+        border-left-color: #dc2626;
+    }
+    
+    .anomalie-row.majeur {
+        border-left-color: #ea580c;
+    }
+    
+    .anomalie-row.mineur {
+        border-left-color: #f59e0b;
+    }
+    
+    .anomalie-row.ecartee {
+        opacity: 0.6;
+        background-color: rgba(107, 114, 128, 0.05);
+    }
+    
+    /* ============================================ */
+    /* BADGES */
+    /* ============================================ */
+    .badge-criticite-anomalie {
+        padding: 4px 10px;
+        border-radius: 20px;
+        font-size: 0.7rem;
+        font-weight: 600;
+        display: inline-flex;
+        align-items: center;
+        gap: 4px;
+    }
+    
+    .badge-criticite-anomalie.mineur {
+        background: #fef3c7;
+        color: #d97706;
+    }
+    
+    .badge-criticite-anomalie.majeur {
+        background: #fed7aa;
+        color: #ea580c;
+    }
+    
+    .badge-criticite-anomalie.critique {
+        background: #fee2e2;
+        color: #dc2626;
+    }
+    
+    [data-bs-theme="dark"] .badge-criticite-anomalie.mineur {
+        background: #78350f;
+        color: #fde68a;
+    }
+    
+    [data-bs-theme="dark"] .badge-criticite-anomalie.majeur {
+        background: #7c2d12;
+        color: #fdba74;
+    }
+    
+    [data-bs-theme="dark"] .badge-criticite-anomalie.critique {
+        background: #7f1d1d;
+        color: #fca5a5;
+    }
+    
+    .badge-statut-anomalie {
+        padding: 4px 10px;
+        border-radius: 20px;
+        font-size: 0.7rem;
+        font-weight: 600;
+        display: inline-flex;
+        align-items: center;
+        gap: 4px;
+    }
+    
+    .badge-statut-anomalie.a_traiter {
+        background: #fef3c7;
+        color: #92400e;
+    }
+    
+    .badge-statut-anomalie.confirmee {
+        background: #dbeafe;
+        color: #1e40af;
+    }
+    
+    .badge-statut-anomalie.ecartee {
+        background: #e5e7eb;
+        color: #4b5563;
+    }
+    
+    .badge-statut-anomalie.convertie_en_nc {
+        background: #d1fae5;
+        color: #065f46;
+    }
+    
+    [data-bs-theme="dark"] .badge-statut-anomalie.a_traiter {
+        background: #78350f;
+        color: #fde68a;
+    }
+    
+    [data-bs-theme="dark"] .badge-statut-anomalie.confirmee {
+        background: #1e3a8a;
+        color: #bfdbfe;
+    }
+    
+    [data-bs-theme="dark"] .badge-statut-anomalie.ecartee {
+        background: #374151;
+        color: #d1d5db;
+    }
+    
+    [data-bs-theme="dark"] .badge-statut-anomalie.convertie_en_nc {
+        background: #064e3b;
+        color: #a7f3d0;
+    }
+    
+    /* ============================================ */
+    /* BOUTONS */
+    /* ============================================ */
+    .btn-icon-anomalie {
+        width: 32px;
+        height: 32px;
+        padding: 0;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        border-radius: 8px;
+    }
+    
+    /* ============================================ */
+    /* ÉTAT VIDE */
+    /* ============================================ */
+    .empty-state-anomalie {
+        padding: 4rem 1rem;
+        text-align: center;
+    }
+    
+    .empty-state-icon-anomalie {
+        width: 100px;
+        height: 100px;
+        margin: 0 auto 1.5rem;
+        background: var(--light);
+        border-radius: 50%;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 3rem;
+        color: var(--text-secondary);
+    }
+    
+    [data-bs-theme="dark"] .empty-state-icon-anomalie {
+        background: #1e293b;
+    }
+    
+    /* ============================================ */
+    /* BANNIÈRE D'INFORMATION */
+    /* ============================================ */
+    .info-banner {
+        background: linear-gradient(135deg, #eff6ff 0%, #dbeafe 100%);
+        border-left: 4px solid #3b82f6;
+        border-radius: 12px;
+        padding: 1rem 1.25rem;
+        margin-bottom: 1.5rem;
+        display: flex;
+        align-items: flex-start;
+        gap: 1rem;
+    }
+    
+    [data-bs-theme="dark"] .info-banner {
+        background: linear-gradient(135deg, #1e3a5f 0%, #1e293b 100%);
+    }
+    
+    /* ============================================ */
+    /* ANIMATIONS */
+    /* ============================================ */
+    @keyframes fadeInUp {
+        from {
+            opacity: 0;
+            transform: translateY(20px);
+        }
+        to {
+            opacity: 1;
+            transform: translateY(0);
+        }
+    }
+    
+    .fade-in-up {
+        animation: fadeInUp 0.4s ease-out forwards;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="container-fluid px-4">
+
+    <!-- ============================================ -->
+    <!-- FIL D'ARIANE + EN-TÊTE -->
+    <!-- ============================================ -->
+    <div class="d-flex flex-wrap justify-content-between align-items-start mb-4">
+        <div>
+            <nav aria-label="breadcrumb">
+                <ol class="breadcrumb mb-2">
+                    <li class="breadcrumb-item">
+                        <a href="{{ url_for('operateur_dashboard') }}">Dashboard</a>
+                    </li>
+                    <li class="breadcrumb-item">
+                        <a href="{{ url_for('operateur_liste_campagnes') }}">Mes campagnes</a>
+                    </li>
+                    <li class="breadcrumb-item">
+                        <a href="{{ url_for('operateur_detail_campagne', campagne_id=campagne.id) }}">
+                            {{ campagne.reference }}
+                        </a>
+                    </li>
+                    <li class="breadcrumb-item active">Anomalies</li>
+                </ol>
+            </nav>
+            <h4 class="fw-bold mb-1">
+                <i class="fas fa-exclamation-triangle text-warning me-2"></i>
+                Gestion des anomalies
+            </h4>
+            <p class="text-muted small mb-0">
+                Campagne <strong>{{ campagne.reference }}</strong> — {{ campagne.nom }}
+            </p>
+        </div>
+        <div class="d-flex gap-2 mt-3 mt-md-0">
+            <a href="{{ url_for('operateur_executer_campagne', campagne_id=campagne.id) }}" 
+               class="btn btn-outline-primary rounded-pill px-3">
+                <i class="fas fa-edit me-1"></i>Saisir les résultats
+            </a>
+            <a href="{{ url_for('operateur_detail_campagne', campagne_id=campagne.id) }}" 
+               class="btn btn-outline-secondary rounded-pill px-3">
+                <i class="fas fa-arrow-left me-1"></i>Retour
+            </a>
+        </div>
+    </div>
+
+    <!-- ============================================ -->
+    <!-- BANNIÈRE D'INFORMATION -->
+    <!-- ============================================ -->
+    <div class="info-banner fade-in-up">
+        <div class="flex-shrink-0">
+            <i class="fas fa-info-circle fa-2x text-primary"></i>
+        </div>
+        <div class="flex-grow-1">
+            <strong>À quoi servent les anomalies ?</strong>
+            <p class="mb-0 small">
+                Les anomalies sont les écarts identifiés lors du contrôle.
+                Vous pouvez les <strong>modifier</strong> (criticité, description) ou les
+                <strong>écarter</strong> si elles ne sont pas pertinentes.
+                Les anomalies <strong>à traiter</strong> seront transformées en 
+                <strong>non-conformités C2N</strong> lors de la soumission de la campagne.
+            </p>
+        </div>
+    </div>
+
+    <!-- ============================================ -->
+    <!-- STATISTIQUES -->
+    <!-- ============================================ -->
+    <div class="row g-3 mb-4">
+        <div class="col-6 col-md-3 fade-in-up">
+            <div class="stat-card-anomalie h-100" onclick="filtrerParStatut('')">
+                <div class="stat-value-anomalie text-primary">{{ stats.total|default(0) }}</div>
+                <div class="stat-label-anomalie">Total</div>
+                <small class="text-muted">anomalie(s)</small>
+            </div>
+        </div>
+        
+        <div class="col-6 col-md-3 fade-in-up">
+            <div class="stat-card-anomalie h-100 {% if request.args.get('statut') == 'a_traiter' %}active{% endif %}" 
+                 onclick="filtrerParStatut('a_traiter')">
+                <div class="stat-value-anomalie text-warning">{{ stats.a_traiter|default(0) }}</div>
+                <div class="stat-label-anomalie">À traiter</div>
+                <small class="text-muted">en attente</small>
+            </div>
+        </div>
+        
+        <div class="col-6 col-md-3 fade-in-up">
+            <div class="stat-card-anomalie h-100 {% if request.args.get('statut') == 'ecartee' %}active{% endif %}" 
+                 onclick="filtrerParStatut('ecartee')">
+                <div class="stat-value-anomalie text-secondary">{{ stats.ecartees|default(0) }}</div>
+                <div class="stat-label-anomalie">Écartées</div>
+                <small class="text-muted">non retenues</small>
+            </div>
+        </div>
+        
+        <div class="col-6 col-md-3 fade-in-up">
+            <div class="stat-card-anomalie h-100 {% if request.args.get('statut') == 'convertie_en_nc' %}active{% endif %}" 
+                 onclick="filtrerParStatut('convertie_en_nc')">
+                <div class="stat-value-anomalie text-success">{{ stats.converties|default(0) }}</div>
+                <div class="stat-label-anomalie">Converties</div>
+                <small class="text-muted">en NC</small>
+            </div>
+        </div>
+    </div>
+
+    <!-- ============================================ -->
+    <!-- BARRE DE FILTRES -->
+    <!-- ============================================ -->
+    <div class="filter-bar-anomalie">
+        <form method="GET" id="filterForm">
+            <div class="row g-3 align-items-end">
+                <div class="col-md-3">
+                    <label class="form-label small fw-semibold text-muted mb-1">
+                        <i class="fas fa-filter me-1"></i>Statut
+                    </label>
+                    <select name="statut" class="form-select" onchange="this.form.submit()">
+                        <option value="">Tous les statuts</option>
+                        <option value="a_traiter" {% if request.args.get('statut') == 'a_traiter' %}selected{% endif %}>
+                            ⏳ À traiter
+                        </option>
+                        <option value="ecartee" {% if request.args.get('statut') == 'ecartee' %}selected{% endif %}>
+                            ❌ Écartée
+                        </option>
+                        <option value="convertie_en_nc" {% if request.args.get('statut') == 'convertie_en_nc' %}selected{% endif %}>
+                            🔗 Convertie en NC
+                        </option>
+                    </select>
+                </div>
+                
+                <div class="col-md-3">
+                    <label class="form-label small fw-semibold text-muted mb-1">
+                        <i class="fas fa-flag me-1"></i>Criticité
+                    </label>
+                    <select name="criticite" class="form-select" onchange="this.form.submit()">
+                        <option value="">Toutes les criticités</option>
+                        <option value="mineur" {% if request.args.get('criticite') == 'mineur' %}selected{% endif %}>
+                            🟡 Mineur
+                        </option>
+                        <option value="majeur" {% if request.args.get('criticite') == 'majeur' %}selected{% endif %}>
+                            🟠 Majeur
+                        </option>
+                        <option value="critique" {% if request.args.get('criticite') == 'critique' %}selected{% endif %}>
+                            🔴 Critique
+                        </option>
+                    </select>
+                </div>
+                
+                <div class="col-md-4">
+                    <label class="form-label small fw-semibold text-muted mb-1">
+                        <i class="fas fa-search me-1"></i>Recherche
+                    </label>
+                    <input type="text" name="recherche" class="form-control" 
+                           placeholder="Motif, description..."
+                           value="{{ request.args.get('recherche', '') }}">
+                </div>
+                
+                <div class="col-md-2">
+                    <button type="submit" class="btn btn-primary rounded-pill w-100">
+                        <i class="fas fa-search me-1"></i>Filtrer
+                    </button>
+                </div>
+            </div>
+            
+            {% if request.args.get('statut') or request.args.get('criticite') or request.args.get('recherche') %}
+            <div class="mt-3 pt-2 border-top">
+                <a href="{{ url_for('operateur_gerer_anomalies', campagne_id=campagne.id) }}" 
+                   class="btn btn-sm btn-link text-danger p-0">
+                    <i class="fas fa-times me-1"></i>Effacer les filtres
+                </a>
+            </div>
+            {% endif %}
+        </form>
+    </div>
+
+    <!-- ============================================ -->
+    <!-- TABLEAU DES ANOMALIES -->
+    <!-- ============================================ -->
+    <div class="fk-card">
+        <div class="fk-card-header">
+            <div class="d-flex justify-content-between align-items-center">
+                <h5 class="mb-0 fw-semibold">
+                    <i class="fas fa-list me-2 text-primary"></i>
+                    Liste des anomalies
+                </h5>
+                <span class="badge bg-primary bg-opacity-10 text-primary px-3 py-2 rounded-pill">
+                    <i class="fas fa-database me-1"></i>
+                    {{ anomalies|length }} anomalie(s)
+                </span>
+            </div>
+        </div>
+        <div class="fk-card-body p-0">
+            {% if anomalies %}
+            <div class="table-responsive">
+                <table class="table table-hover align-middle mb-0">
+                    <thead class="bg-light">
+                        <tr>
+                            <th class="ps-3 py-3 small fw-semibold text-muted" style="width: 40%;">Motif</th>
+                            <th class="py-3 small fw-semibold text-muted" style="width: 10%;">Écarts</th>
+                            <th class="py-3 small fw-semibold text-muted" style="width: 12%;">Criticité</th>
+                            <th class="py-3 small fw-semibold text-muted" style="width: 15%;">Statut</th>
+                            <th class="py-3 small fw-semibold text-muted" style="width: 10%;">Date</th>
+                            <th class="text-end pe-3 py-3 small fw-semibold text-muted" style="width: 13%;">Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for anomalie in anomalies %}
+                        <tr class="anomalie-row {{ anomalie.criticite }} {% if anomalie.statut == 'ecartee' %}ecartee{% endif %}"
+                            data-anomalie-id="{{ anomalie.id }}"
+                            data-statut="{{ anomalie.statut }}"
+                            data-criticite="{{ anomalie.criticite }}">
+                            
+                            <!-- Motif -->
+                            <td class="ps-3">
+                                <div class="fw-semibold">{{ anomalie.motif }}</div>
+                                {% if anomalie.description %}
+                                <small class="text-muted">{{ anomalie.description|truncate(150) }}</small>
+                                {% endif %}
+                                {% if anomalie.raison_ecartement %}
+                                <div class="small text-muted mt-1">
+                                    <i class="fas fa-ban me-1"></i>
+                                    <em>Écartée : {{ anomalie.raison_ecartement|truncate(80) }}</em>
+                                </div>
+                                {% endif %}
+                                {% if anomalie.non_conformite %}
+                                <div class="small text-success mt-1">
+                                    <i class="fas fa-link me-1"></i>
+                                    NC : {{ anomalie.non_conformite.reference }}
+                                </div>
+                                {% endif %}
+                            </td>
+                            
+                            <!-- Écarts -->
+                            <td>
+                                <span class="badge bg-secondary bg-opacity-10 text-secondary">
+                                    {{ anomalie.nombre_ecarts }}
+                                </span>
+                            </td>
+                            
+                            <!-- Criticité -->
+                            <td>
+                                <span class="badge-criticite-anomalie {{ anomalie.criticite }}">
+                                    {{ anomalie.get_criticite_label() if anomalie.get_criticite_label is defined else anomalie.criticite }}
+                                </span>
+                            </td>
+                            
+                            <!-- Statut -->
+                            <td>
+                                <span class="badge-statut-anomalie {{ anomalie.statut }}">
+                                    {{ anomalie.get_statut_label() if anomalie.get_statut_label is defined else anomalie.statut }}
+                                </span>
+                            </td>
+                            
+                            <!-- Date -->
+                            <td>
+                                <div class="small">
+                                    <div>{{ anomalie.created_at.strftime('%d/%m/%Y') if anomalie.created_at else '-' }}</div>
+                                    <div class="text-muted">{{ anomalie.created_at.strftime('%H:%M') if anomalie.created_at else '' }}</div>
+                                </div>
+                            </td>
+                            
+                            <!-- Actions -->
+                            <td class="text-end pe-3">
+                                <div class="btn-group">
+                                    {% if anomalie.statut in ['a_traiter', 'confirmee'] %}
+                                        <!-- Modifier -->
+                                        <button type="button" 
+                                                class="btn btn-sm btn-outline-primary btn-icon-anomalie"
+                                                onclick="ouvrirModalModifier({{ anomalie.id }})"
+                                                title="Modifier">
+                                            <i class="fas fa-edit"></i>
+                                        </button>
+                                        
+                                        <!-- Écarter -->
+                                        <button type="button" 
+                                                class="btn btn-sm btn-outline-danger btn-icon-anomalie"
+                                                onclick="ouvrirModalEcarter({{ anomalie.id }})"
+                                                title="Écarter">
+                                            <i class="fas fa-ban"></i>
+                                        </button>
+                                    
+                                    {% elif anomalie.statut == 'ecartee' %}
+                                        <!-- Réintégrer (repasser en 'a_traiter') -->
+                                        <button type="button" 
+                                                class="btn btn-sm btn-outline-success btn-icon-anomalie"
+                                                onclick="reintegrerAnomalie({{ anomalie.id }})"
+                                                title="Réintégrer">
+                                            <i class="fas fa-undo"></i>
+                                        </button>
+                                    
+                                    {% elif anomalie.statut == 'convertie_en_nc' %}
+                                        {% if anomalie.non_conformite %}
+                                        <a href="{{ url_for('c2n_detail_non_conformite', id=anomalie.non_conformite_id) }}" 
+                                           class="btn btn-sm btn-outline-success btn-icon-anomalie"
+                                           title="Voir la NC"
+                                           target="_blank">
+                                            <i class="fas fa-external-link-alt"></i>
+                                        </a>
+                                        {% endif %}
+                                    {% endif %}
+                                </div>
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+            {% else %}
+            <div class="empty-state-anomalie">
+                <div class="empty-state-icon-anomalie">
+                    <i class="fas fa-check-circle text-success"></i>
+                </div>
+                <h5 class="mb-2">Aucune anomalie</h5>
+                <p class="text-muted small mb-3">
+                    {% if request.args.get('statut') or request.args.get('criticite') or request.args.get('recherche') %}
+                    Aucun résultat ne correspond à vos critères de filtrage.
+                    {% else %}
+                    Cette campagne n'a aucune anomalie enregistrée pour le moment.
+                    {% endif %}
+                </p>
+                <a href="{{ url_for('operateur_executer_campagne', campagne_id=campagne.id) }}" 
+                   class="btn btn-primary rounded-pill px-4">
+                    <i class="fas fa-edit me-1"></i>Saisir les résultats
+                </a>
+            </div>
+            {% endif %}
+        </div>
+    </div>
+</div>
+
+<!-- ============================================ -->
+<!-- MODAL : MODIFIER ANOMALIE -->
+<!-- ============================================ -->
+<div class="modal fade" id="modalModifier" tabindex="-1">
+    <div class="modal-dialog modal-dialog-centered modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">
+                    <i class="fas fa-edit text-primary me-2"></i>
+                    Modifier l'anomalie
+                </h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <input type="hidden" id="modifierAnomalieId">
+                
+                <!-- Motif (lecture seule) -->
+                <div class="mb-3">
+                    <label class="form-label fw-semibold">Motif</label>
+                    <div class="form-control bg-light" id="modifierMotif" style="cursor: default;"></div>
+                    <small class="text-muted">
+                        <i class="fas fa-info-circle me-1"></i>
+                        Le motif ne peut pas être modifié. Écartez cette anomalie et créez-en une nouvelle si besoin.
+                    </small>
+                </div>
+                
+                <div class="row">
+                    <div class="col-md-6 mb-3">
+                        <label class="form-label fw-semibold">
+                            Criticité <span class="text-danger">*</span>
+                        </label>
+                        <select class="form-select" id="modifierCriticite">
+                            <option value="mineur">🟡 Mineur</option>
+                            <option value="majeur">🟠 Majeur</option>
+                            <option value="critique">🔴 Critique</option>
+                        </select>
+                    </div>
+                    
+                    <div class="col-md-6 mb-3">
+                        <label class="form-label fw-semibold">Nombre d'écarts</label>
+                        <input type="number" class="form-control" id="modifierEcarts" min="1" step="1" value="1">
+                    </div>
+                </div>
+                
+                <div class="mb-3">
+                    <label class="form-label fw-semibold">Description détaillée</label>
+                    <textarea class="form-control" id="modifierDescription" rows="4"
+                              placeholder="Détails complémentaires, contexte, conséquences..."></textarea>
+                    <small class="text-muted">
+                        <i class="fas fa-info-circle me-1"></i>
+                        Cette description sera utilisée comme impact dans la NC C2N.
+                    </small>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Annuler</button>
+                <button type="button" class="btn btn-primary" onclick="enregistrerModification()">
+                    <i class="fas fa-save me-1"></i>Enregistrer
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- ============================================ -->
+<!-- MODAL : ÉCARTER ANOMALIE -->
+<!-- ============================================ -->
+<div class="modal fade" id="modalEcarter" tabindex="-1">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">
+                    <i class="fas fa-ban text-danger me-2"></i>
+                    Écarter l'anomalie
+                </h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <input type="hidden" id="ecarterAnomalieId">
+                
+                <div class="alert alert-warning">
+                    <i class="fas fa-exclamation-triangle me-2"></i>
+                    <strong>Attention !</strong> Écarter une anomalie signifie qu'elle 
+                    <strong>ne sera PAS</strong> transformée en non-conformité C2N.
+                    Cette décision est <strong>tracée</strong> dans l'historique.
+                </div>
+                
+                <div class="mb-3">
+                    <label class="form-label fw-semibold">Motif de l'anomalie</label>
+                    <div class="form-control bg-light" id="ecarterMotif" style="cursor: default;"></div>
+                </div>
+                
+                <div class="mb-3">
+                    <label class="form-label fw-semibold text-danger">
+                        Raison de l'écartement <span class="text-danger">*</span>
+                    </label>
+                    <textarea class="form-control" id="ecarterRaison" rows="4" 
+                              placeholder="Expliquez pourquoi cette anomalie est écartée (min 5 caractères)..."
+                              required minlength="5"></textarea>
+                    <small class="text-muted">
+                        <i class="fas fa-info-circle me-1"></i>
+                        Exemples : "Seuil de tolérance non atteint", "Erreur déjà corrigée", etc.
+                    </small>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Annuler</button>
+                <button type="button" class="btn btn-danger" onclick="confirmerEcarter()">
+                    <i class="fas fa-ban me-1"></i>Écarter l'anomalie
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+// ============================================
+// DONNÉES DES ANOMALIES
+// ============================================
+const ANOMALIES_DATA = {
+    {% for anomalie in anomalies %}
+    {{ anomalie.id }}: {
+        id: {{ anomalie.id }},
+        motif: {{ anomalie.motif|tojson }},
+        description: {{ (anomalie.description or '')|tojson }},
+        criticite: {{ anomalie.criticite|tojson }},
+        nombre_ecarts: {{ anomalie.nombre_ecarts }},
+        statut: {{ anomalie.statut|tojson }}
+    }{% if not loop.last %},{% endif %}
+    {% endfor %}
+};
+
+// ============================================
+// FILTRES RAPIDES
+// ============================================
+function filtrerParStatut(statut) {
+    const url = new URL(window.location.href);
+    if (statut) {
+        url.searchParams.set('statut', statut);
+    } else {
+        url.searchParams.delete('statut');
+    }
+    window.location.href = url.toString();
+}
+
+// ============================================
+// TOAST DE NOTIFICATION
+// ============================================
+function showToast(message, type = 'info') {
+    // Conteneur de toasts (créé à la volée si absent)
+    let container = document.getElementById('toastContainer');
+    if (!container) {
+        container = document.createElement('div');
+        container.id = 'toastContainer';
+        container.className = 'toast-container position-fixed top-0 end-0 p-3';
+        container.style.zIndex = '1090';
+        document.body.appendChild(container);
+    }
+    
+    const bgClass = {
+        'success': 'bg-success',
+        'danger': 'bg-danger',
+        'warning': 'bg-warning text-dark',
+        'info': 'bg-info text-dark'
+    }[type] || 'bg-secondary';
+    
+    const iconClass = {
+        'success': 'fa-check-circle',
+        'danger': 'fa-times-circle',
+        'warning': 'fa-exclamation-triangle',
+        'info': 'fa-info-circle'
+    }[type] || 'fa-info-circle';
+    
+    const toastEl = document.createElement('div');
+    toastEl.className = `toast align-items-center text-white ${bgClass} border-0`;
+    toastEl.setAttribute('role', 'alert');
+    toastEl.innerHTML = `
+        <div class="d-flex">
+            <div class="toast-body">
+                <i class="fas ${iconClass} me-2"></i>${message}
+            </div>
+            <button type="button" class="btn-close btn-close-white me-2 m-auto" 
+                    data-bs-dismiss="toast"></button>
+        </div>
+    `;
+    container.appendChild(toastEl);
+    
+    const toast = new bootstrap.Toast(toastEl, { delay: 3500 });
+    toast.show();
+    
+    toastEl.addEventListener('hidden.bs.toast', () => toastEl.remove());
+}
+
+// ============================================
+// MODAL : MODIFIER ANOMALIE
+// ============================================
+function ouvrirModalModifier(anomalieId) {
+    const data = ANOMALIES_DATA[anomalieId];
+    if (!data) return;
+    
+    document.getElementById('modifierAnomalieId').value = anomalieId;
+    document.getElementById('modifierMotif').textContent = data.motif;
+    document.getElementById('modifierCriticite').value = data.criticite;
+    document.getElementById('modifierEcarts').value = data.nombre_ecarts;
+    document.getElementById('modifierDescription').value = data.description;
+    
+    new bootstrap.Modal(document.getElementById('modalModifier')).show();
+}
+
+async function enregistrerModification() {
+    const anomalieId = document.getElementById('modifierAnomalieId').value;
+    const criticite = document.getElementById('modifierCriticite').value;
+    const ecarts = parseInt(document.getElementById('modifierEcarts').value) || 1;
+    const description = document.getElementById('modifierDescription').value.trim();
+    
+    try {
+        const response = await fetch(`/operateur/anomalie/${anomalieId}/modifier`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRFToken': '{{ csrf_token() }}'
+            },
+            body: JSON.stringify({
+                criticite: criticite,
+                nombre_ecarts: ecarts,
+                description: description
+            })
+        });
+        
+        const result = await response.json();
+        
+        if (result.success) {
+            bootstrap.Modal.getInstance(document.getElementById('modalModifier')).hide();
+            showToast('Anomalie modifiée avec succès', 'success');
+            setTimeout(() => location.reload(), 800);
+        } else {
+            showToast(result.error || 'Erreur lors de la modification', 'danger');
+        }
+    } catch (error) {
+        console.error(error);
+        showToast('Erreur de communication avec le serveur', 'danger');
+    }
+}
+
+// ============================================
+// MODAL : ÉCARTER ANOMALIE
+// ============================================
+function ouvrirModalEcarter(anomalieId) {
+    const data = ANOMALIES_DATA[anomalieId];
+    if (!data) return;
+    
+    document.getElementById('ecarterAnomalieId').value = anomalieId;
+    document.getElementById('ecarterMotif').textContent = data.motif;
+    document.getElementById('ecarterRaison').value = '';
+    
+    new bootstrap.Modal(document.getElementById('modalEcarter')).show();
+}
+
+async function confirmerEcarter() {
+    const anomalieId = document.getElementById('ecarterAnomalieId').value;
+    const raison = document.getElementById('ecarterRaison').value.trim();
+    
+    if (!raison || raison.length < 5) {
+        showToast('Raison requise (minimum 5 caractères)', 'warning');
+        return;
+    }
+    
+    try {
+        const response = await fetch(`/operateur/anomalie/${anomalieId}/ecarter`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRFToken': '{{ csrf_token() }}'
+            },
+            body: JSON.stringify({ raison: raison })
+        });
+        
+        const result = await response.json();
+        
+        if (result.success) {
+            bootstrap.Modal.getInstance(document.getElementById('modalEcarter')).hide();
+            showToast('Anomalie écartée avec succès', 'success');
+            setTimeout(() => location.reload(), 800);
+        } else {
+            showToast(result.error || 'Erreur lors de l\'écartement', 'danger');
+        }
+    } catch (error) {
+        console.error(error);
+        showToast('Erreur de communication avec le serveur', 'danger');
+    }
+}
+
+// ============================================
+// RÉINTÉGRER UNE ANOMALIE ÉCARTÉE
+// ============================================
+async function reintegrerAnomalie(anomalieId) {
+    if (!confirm('Réintégrer cette anomalie ? Elle repassera au statut "À traiter" et pourra être convertie en NC.')) {
+        return;
+    }
+    
+    try {
+        const response = await fetch(`/operateur/anomalie/${anomalieId}/reintegrer`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRFToken': '{{ csrf_token() }}'
+            }
+        });
+        
+        const result = await response.json();
+        
+        if (result.success) {
+            showToast('Anomalie réintégrée avec succès', 'success');
+            setTimeout(() => location.reload(), 800);
+        } else {
+            showToast(result.error || 'Erreur lors de la réintégration', 'danger');
+        }
+    } catch (error) {
+        console.error(error);
+        showToast('Erreur de communication avec le serveur', 'danger');
+    }
+}
+
+// ============================================
+// INITIALISATION
+// ============================================
+document.addEventListener('DOMContentLoaded', function() {
+    // Tooltips
+    document.querySelectorAll('[title]').forEach(el => {
+        new bootstrap.Tooltip(el);
+    });
+    
+    // Animation des cartes
+    document.querySelectorAll('.fade-in-up').forEach((el, index) => {
+        el.style.opacity = '0';
+        setTimeout(() => {
+            el.style.opacity = '1';
+        }, index * 50);
+    });
+    
+    // Soumission auto du formulaire de recherche après 500ms d'inactivité
+    const searchInput = document.querySelector('input[name="recherche"]');
+    if (searchInput) {
+        let searchTimer;
+        searchInput.addEventListener('input', function() {
+            clearTimeout(searchTimer);
+            searchTimer = setTimeout(() => {
+                document.getElementById('filterForm').submit();
+            }, 800);
+        });
+    }
+});
+</script>
+{% endblock %}
