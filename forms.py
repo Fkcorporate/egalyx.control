@@ -336,6 +336,9 @@ class CartographieForm(FlaskForm):
     nom = StringField('Nom de la cartographie', validators=[DataRequired()])
     description = TextAreaField('Description', validators=[Optional()])
     
+    # 🔥 AJOUT : Pays (niveau le plus haut de la hiérarchie)
+    pays_id = SelectField('Pays', coerce=coerce_int_or_none, validators=[Optional()])
+    
     # Lien direct vers le pôle (optionnel)
     pole_id = SelectField('Pôle / Filiale', coerce=coerce_int_or_none, validators=[Optional()])
     
@@ -350,16 +353,85 @@ class CartographieForm(FlaskForm):
     
     def __init__(self, *args, **kwargs):
         super(CartographieForm, self).__init__(*args, **kwargs)
+        # 🔥 AJOUT : Pays
+        self.pays_id.choices = [(0, '--- Aucun pays ---')]
         self.pole_id.choices = [(0, '--- Aucun pôle ---')]
         self.direction_id.choices = [(0, '--- Sélectionner une direction ---')]
         self.service_id.choices = [(0, '--- Sélectionnez d\'abord une direction ---')]
+    
+    def update_pole_choices(self, pays_id=None):
+        """
+        Met à jour les choix des pôles en fonction du pays sélectionné.
+        Si pays_id est None ou 0, charge tous les pôles disponibles.
+        """
+        from models import Pole
+        from app import get_client_filter
+        
+        try:
+            query = get_client_filter(Pole).filter_by(is_archived=False)
+            
+            # Filtrer par pays si spécifié
+            if pays_id and pays_id != 0:
+                query = query.filter_by(pays_id=pays_id)
+            
+            poles = query.order_by(Pole.ordre, Pole.nom).all()
+            
+            if poles:
+                self.pole_id.choices = [(0, '--- Aucun pôle ---')] + [
+                    (p.id, p.nom) for p in poles
+                ]
+            else:
+                if pays_id and pays_id != 0:
+                    self.pole_id.choices = [(0, '--- Aucun pôle dans ce pays ---')]
+                else:
+                    self.pole_id.choices = [(0, '--- Aucun pôle disponible ---')]
+        except Exception as e:
+            print(f"Erreur chargement pôles: {e}")
+            self.pole_id.choices = [(0, '--- Erreur de chargement ---')]
+    
+    def update_direction_choices(self, pole_id=None, pays_id=None):
+        """
+        Met à jour les choix des directions en fonction du pôle (et/ou du pays).
+        Si pole_id est None ou 0, charge toutes les directions (filtrées par pays si fourni).
+        """
+        from models import Direction
+        from app import get_client_filter
+        
+        try:
+            query = get_client_filter(Direction).filter_by(
+                is_archived=False,
+                is_active=True
+            )
+            
+            # Filtrer par pôle si spécifié
+            if pole_id and pole_id != 0:
+                query = query.filter_by(pole_id=pole_id)
+            # Sinon, filtrer par pays via la relation Pole
+            elif pays_id and pays_id != 0:
+                from models import Pole
+                query = query.join(Pole).filter(Pole.pays_id == pays_id)
+            
+            directions = query.order_by(Direction.nom).all()
+            
+            if directions:
+                choices = [(0, '--- Sélectionner une direction ---')]
+                for d in directions:
+                    label = d.nom
+                    if d.pole:
+                        label += f" ({d.pole.nom})"
+                    choices.append((d.id, label))
+                self.direction_id.choices = choices
+            else:
+                self.direction_id.choices = [(0, '--- Aucune direction disponible ---')]
+        except Exception as e:
+            print(f"Erreur chargement directions: {e}")
+            self.direction_id.choices = [(0, '--- Erreur de chargement ---')]
     
     def update_service_choices(self, direction_id):
         """Met à jour les choix du service en fonction de la direction sélectionnée"""
         if direction_id and direction_id != 0:
             from models import Service
             from app import get_client_filter
-            from flask_login import current_user
             
             try:
                 services = get_client_filter(Service).filter_by(
@@ -369,7 +441,9 @@ class CartographieForm(FlaskForm):
                 ).order_by(Service.nom).all()
                 
                 if services:
-                    self.service_id.choices = [(0, '--- Sélectionner un service ---')] + [(s.id, s.nom) for s in services]
+                    self.service_id.choices = [(0, '--- Sélectionner un service ---')] + [
+                        (s.id, s.nom) for s in services
+                    ]
                 else:
                     self.service_id.choices = [(0, '--- Aucun service disponible ---')]
             except Exception as e:
@@ -379,18 +453,75 @@ class CartographieForm(FlaskForm):
             self.service_id.choices = [(0, '--- Sélectionnez d\'abord une direction ---')]
     
     def validate(self, extra_validators=None):
-        # Mettre à jour les choices du service AVANT la validation
-        if hasattr(self, 'direction_id') and self.direction_id.data:
-            self.update_service_choices(self.direction_id.data)
+        """
+        Validation personnalisée :
+        - Met à jour les choices AVANT la validation WTForms
+        - Valide la cohérence de la hiérarchie Pays → Pôle → Direction → Service
+        """
+        # 🔥 Récupérer les données du formulaire (avant validation)
+        pays_id = self.pays_id.data
+        pole_id = self.pole_id.data
+        direction_id = self.direction_id.data
         
+        # ============================================
+        # MISE À JOUR DES CHOICES AVANT VALIDATION
+        # ============================================
+        # 1. Pôles selon le pays
+        self.update_pole_choices(pays_id)
+        
+        # 2. Directions selon le pôle (ou le pays)
+        self.update_direction_choices(pole_id, pays_id)
+        
+        # 3. Services selon la direction
+        if direction_id and direction_id != 0:
+            self.update_service_choices(direction_id)
+        
+        # ============================================
+        # VALIDATION WTFORMS STANDARD
+        # ============================================
         if not super(CartographieForm, self).validate(extra_validators):
             return False
         
-        # Validation selon le type
+        # ============================================
+        # VALIDATIONS MÉTIER
+        # ============================================
+        
+        # 🔥 Validation cohérence Pays ↔ Pôle
+        if pays_id and pays_id != 0 and pole_id and pole_id != 0:
+            from models import Pole
+            pole = Pole.query.get(pole_id)
+            if pole and pole.pays_id and pole.pays_id != pays_id:
+                self.pole_id.errors.append(
+                    'Le pôle sélectionné n\'appartient pas au pays choisi'
+                )
+                return False
+        
+        # 🔥 Validation cohérence Pôle ↔ Direction
+        if pole_id and pole_id != 0 and direction_id and direction_id != 0:
+            from models import Direction
+            direction = Direction.query.get(direction_id)
+            if direction and direction.pole_id and direction.pole_id != pole_id:
+                self.direction_id.errors.append(
+                    'La direction sélectionnée n\'appartient pas au pôle choisi'
+                )
+                return False
+        
+        # Validation selon le type de cartographie
         if self.type_cartographie.data == 'service':
             if self.service_id.data in (0, None):
                 self.service_id.errors.append('Veuillez sélectionner un service')
                 return False
+            
+            # 🔥 Validation cohérence Direction ↔ Service
+            if direction_id and direction_id != 0:
+                from models import Service
+                service = Service.query.get(self.service_id.data)
+                if service and service.direction_id and service.direction_id != direction_id:
+                    self.service_id.errors.append(
+                        'Le service sélectionné n\'appartient pas à la direction choisie'
+                    )
+                    return False
+        
         elif self.type_cartographie.data == 'direction':
             if self.direction_id.data in (0, None):
                 self.direction_id.errors.append('Veuillez sélectionner une direction')
