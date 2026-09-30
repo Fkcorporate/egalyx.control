@@ -1,0 +1,197 @@
+{% extends "base.html" %}
+
+{% block title %}Programme {{ programme.reference }} - {{ programme.nom }}{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <!-- En-tête -->
+    <div class="d-flex justify-content-between align-items-start mb-4">
+        <div>
+            <nav aria-label="breadcrumb">
+                <ol class="breadcrumb">
+                    <li class="breadcrumb-item"><a href="{{ url_for('liste_programmes') }}">Programmes</a></li>
+                    <li class="breadcrumb-item active">{{ programme.reference }}</li>
+                </ol>
+            </nav>
+            <h1 class="h2 mb-1">{{ programme.nom }}</h1>
+            <p class="text-muted">{{ programme.reference }} • Année {{ programme.annee }}</p>
+        </div>
+        <div>
+            {% if programme.statut == 'brouillon' %}
+            <a href="{{ url_for('modifier_programme', id=programme.id) }}" class="btn btn-outline-primary">
+                <i class="fas fa-edit me-2"></i>Modifier
+            </a>
+            <button class="btn btn-success ms-2" onclick="activerProgramme()">
+                <i class="fas fa-play me-2"></i>Activer
+            </button>
+            {% endif %}
+        </div>
+    </div>
+
+    <div class="row">
+        <!-- Colonne gauche - Infos programme -->
+        <div class="col-md-4">
+            <div class="card shadow-sm mb-4">
+                <div class="card-header bg-white">
+                    <h5 class="mb-0"><i class="fas fa-info-circle me-2"></i>Informations</h5>
+                </div>
+                <div class="card-body">
+                    <div class="mb-3">
+                        <label class="text-muted small">Statut</label>
+                        <div>
+                            <span class="badge {% if programme.statut == 'actif' %}bg-success{% elif programme.statut == 'brouillon' %}bg-warning{% else %}bg-secondary{% endif %}">
+                                {% if programme.statut == 'actif' %}✅ Actif
+                                {% elif programme.statut == 'brouillon' %}📝 Brouillon
+                                {% else %}📦 Archivé{% endif %}
+                            </span>
+                        </div>
+                    </div>
+                    <div class="mb-3">
+                        <label class="text-muted small">Description</label>
+                        <div>{{ programme.description or 'Aucune description' }}</div>
+                    </div>
+                    <div class="mb-3">
+                        <label class="text-muted small">Date de création</label>
+                        <div>{{ programme.created_at.strftime('%d/%m/%Y') }}</div>
+                    </div>
+                    <div class="mb-3">
+                        <label class="text-muted small">Dernière modification</label>
+                        <div>{{ programme.updated_at.strftime('%d/%m/%Y') }}</div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Objectifs -->
+            {% if programme.objectifs %}
+            <div class="card shadow-sm mb-4">
+                <div class="card-header bg-white">
+                    <h5 class="mb-0"><i class="fas fa-bullseye me-2"></i>Objectifs stratégiques</h5>
+                </div>
+                <div class="card-body">
+                    <ul class="mb-0">
+                        {% for obj in programme.objectifs %}
+                        <li class="mb-2">{{ obj }}</li>
+                        {% endfor %}
+                    </ul>
+                </div>
+            </div>
+            {% endif %}
+
+            <!-- KPIs -->
+            <div class="card shadow-sm">
+                <div class="card-header bg-white">
+                    <h5 class="mb-0"><i class="fas fa-chart-line me-2"></i>Indicateurs clés</h5>
+                </div>
+                <div class="card-body">
+                    <div class="mb-3">
+                        <label class="text-muted small">Taux de réalisation global</label>
+                        <div class="d-flex align-items-center gap-2">
+                            <div class="progress flex-grow-1" style="height: 10px;">
+                                <div class="progress-bar bg-primary" style="width: {{ stats.taux_global }}%"></div>
+                            </div>
+                            <span class="fw-bold">{{ stats.taux_global }}%</span>
+                        </div>
+                    </div>
+                    <div class="row text-center">
+                        <div class="col-6">
+                            <div class="h3 mb-0 text-primary">{{ stats.total_missions }}</div>
+                            <small class="text-muted">Total missions</small>
+                        </div>
+                        <div class="col-6">
+                            <div class="h3 mb-0 text-success">{{ stats.missions_terminees }}</div>
+                            <small class="text-muted">Terminées</small>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Colonne droite - Liste des missions -->
+        <div class="col-md-8">
+            <div class="card shadow-sm">
+                <div class="card-header bg-white d-flex justify-content-between align-items-center">
+                    <h5 class="mb-0"><i class="fas fa-tasks me-2"></i>Missions du programme</h5>
+                    <a href="{{ url_for('nouvelle_mission', programme_id=programme.id) }}" class="btn btn-sm btn-primary">
+                        <i class="fas fa-plus me-1"></i>Ajouter une mission
+                    </a>
+                </div>
+                <div class="card-body">
+                    {% if missions %}
+                    <div class="table-responsive">
+                        <table class="table table-hover">
+                            <thead class="table-light">
+                                <tr>
+                                    <th>Référence</th>
+                                    <th>Intitulé</th>
+                                    <th>Direction</th>
+                                    <th>Période</th>
+                                    <th>Avancement</th>
+                                    <th>Statut</th>
+                                    <th></th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for mission in missions %}
+                                <tr>
+                                    <td><code>{{ mission.reference }}</code></td>
+                                    <td>
+                                        <a href="{{ url_for('detail_mission_controle', id=mission.id) }}" class="fw-bold">
+                                            {{ mission.intitule }}
+                                        </a>
+                                    </td>
+                                    <td>{{ mission.direction.nom if mission.direction else '-' }}</td>
+                                    <td>
+                                        <small>{{ mission.date_debut.strftime('%d/%m') }} → {{ mission.date_fin.strftime('%d/%m/%Y') }}</small>
+                                    </td>
+                                    <td style="min-width: 100px;">
+                                        <div class="d-flex align-items-center gap-1">
+                                            <div class="progress flex-grow-1" style="height: 5px;">
+                                                <div class="progress-bar {% if mission.taux_realisation >= 80 %}bg-success{% elif mission.taux_realisation >= 50 %}bg-warning{% else %}bg-danger{% endif %}" 
+                                                     style="width: {{ mission.taux_realisation }}%"></div>
+                                            </div>
+                                            <small>{{ mission.taux_realisation|round }}%</small>
+                                        </div>
+                                    </td>
+                                    <td>
+                                        <span class="badge {% if mission.statut == 'termine' %}bg-success{% elif mission.statut == 'en_cours' %}bg-primary{% elif mission.statut == 'soumis' %}bg-info{% elif mission.statut == 'rejete' %}bg-danger{% else %}bg-secondary{% endif %}">
+                                            {% if mission.statut == 'termine' %}✅ Terminé
+                                            {% elif mission.statut == 'en_cours' %}🔄 En cours
+                                            {% elif mission.statut == 'soumis' %}📨 Soumis
+                                            {% elif mission.statut == 'rejete' %}❌ Rejeté
+                                            {% else %}📝 Brouillon{% endif %}
+                                        </span>
+                                    </td>
+                                    <td>
+                                        <a href="{{ url_for('detail_mission_controle', id=mission.id) }}" class="btn btn-sm btn-outline-primary">
+                                            <i class="fas fa-eye"></i>
+                                        </a>
+                                    </td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                    {% else %}
+                    <div class="text-center py-5">
+                        <i class="fas fa-tasks fa-3x text-muted mb-3"></i>
+                        <p class="text-muted">Aucune mission dans ce programme</p>
+                        <a href="{{ url_for('nouvelle_mission', programme_id=programme.id) }}" class="btn btn-primary">
+                            <i class="fas fa-plus me-2"></i>Ajouter la première mission
+                        </a>
+                    </div>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+function activerProgramme() {
+    if (confirm('Activer ce programme ?')) {
+        fetch('/controle/programme/{{ programme.id }}/activer', { method: 'POST' })
+            .then(() => location.reload());
+    }
+}
+</script>
+{% endblock %}

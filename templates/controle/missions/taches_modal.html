@@ -1,0 +1,173 @@
+<!-- Modal réutilisable pour ajouter/modifier des tâches -->
+<div class="modal fade" id="tacheModal" tabindex="-1">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="tacheModalTitle">
+                    <i class="fas fa-plus-circle me-2"></i>
+                    <span id="modalTitle">{{ 'Ajouter' if not tache else 'Modifier' }} une tâche</span>
+                </h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <form method="POST" id="tacheForm" enctype="multipart/form-data">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                <input type="hidden" name="tache_id" id="tacheId" value="">
+                <div class="modal-body">
+                    <!-- Champs communs -->
+                    <div class="mb-3">
+                        <label class="form-label required">Intitulé</label>
+                        <input type="text" name="intitule" id="tacheIntitule" class="form-control" required>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Description</label>
+                        <textarea name="description" id="tacheDescription" class="form-control" rows="3"></textarea>
+                    </div>
+                    <div class="row">
+                        <div class="col-md-6">
+                            <div class="mb-3">
+                                <label class="form-label required">Type de tâche</label>
+                                <select name="type_tache" id="tacheType" class="form-select" required>
+                                    <option value="controle">🎯 Contrôle</option>
+                                    <option value="plan_action">📋 Plan d'action</option>
+                                    <option value="qualite">✨ Qualité</option>
+                                    <option value="reglementaire">⚖️ Suivi règlementaire</option>
+                                </select>
+                            </div>
+                        </div>
+                        <div class="col-md-6">
+                            <div class="mb-3">
+                                <label class="form-label required">Date prévue</label>
+                                <input type="date" name="date_prevue" id="tacheDatePrevue" class="form-control" required>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- Champs spécifiques dynamiques -->
+                    <div id="champsSpecifiquesModal"></div>
+                    
+                    <div class="mb-3">
+                        <label class="form-label">Responsable</label>
+                        <select name="responsable_id" id="tacheResponsable" class="form-select">
+                            <option value="">Non assigné</option>
+                            {% for user in users %}
+                            <option value="{{ user.id }}">{{ user.username }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    
+                    <div class="mb-3">
+                        <label class="form-label">Preuve / Fichier joint</label>
+                        <input type="file" name="preuve" class="form-control">
+                        <small class="text-muted">PDF, JPG, PNG (max 5 Mo)</small>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Annuler</button>
+                    <button type="submit" class="btn btn-primary" id="modalSubmitBtn">Ajouter</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<script>
+function openTacheModal(tacheData = null) {
+    const modal = new bootstrap.Modal(document.getElementById('tacheModal'));
+    const isEdit = tacheData !== null;
+    
+    if (isEdit) {
+        document.getElementById('modalTitle').innerText = 'Modifier une tâche';
+        document.getElementById('modalSubmitBtn').innerHTML = '<i class="fas fa-save me-2"></i>Enregistrer';
+        document.getElementById('tacheForm').action = `/controle/tache/${tacheData.id}/modifier`;
+        document.getElementById('tacheId').value = tacheData.id;
+        document.getElementById('tacheIntitule').value = tacheData.intitule;
+        document.getElementById('tacheDescription').value = tacheData.description || '';
+        document.getElementById('tacheType').value = tacheData.type_tache;
+        document.getElementById('tacheDatePrevue').value = tacheData.date_prevue;
+        document.getElementById('tacheResponsable').value = tacheData.responsable_id || '';
+    } else {
+        document.getElementById('modalTitle').innerText = 'Ajouter une tâche';
+        document.getElementById('modalSubmitBtn').innerHTML = '<i class="fas fa-plus me-2"></i>Ajouter';
+        document.getElementById('tacheForm').action = `/controle/mission/${missionId}/tache/nouvelle`;
+        document.getElementById('tacheForm').reset();
+        document.getElementById('tacheId').value = '';
+    }
+    
+    // Déclencher le changement de type pour afficher les champs spécifiques
+    document.getElementById('tacheType').dispatchEvent(new Event('change'));
+    modal.show();
+}
+
+document.getElementById('tacheType').addEventListener('change', function() {
+    const type = this.value;
+    const container = document.getElementById('champsSpecifiquesModal');
+    let html = '';
+    
+    if (type === 'plan_action') {
+        html = `
+            <div class="alert alert-light border">
+                <h6>📋 Plan d'action - Champs spécifiques</h6>
+                <div class="mb-2">
+                    <label class="form-label">Budget estimé</label>
+                    <input type="number" name="budget" class="form-control" step="0.01" id="budgetField">
+                </div>
+                <div class="mb-2">
+                    <label class="form-label">Ressources nécessaires</label>
+                    <textarea name="ressources" class="form-control" rows="2" id="ressourcesField"></textarea>
+                </div>
+            </div>
+        `;
+    } else if (type === 'qualite') {
+        html = `
+            <div class="alert alert-light border">
+                <h6>✨ Qualité - Champs spécifiques</h6>
+                <div class="mb-2">
+                    <label class="form-label">Norme applicable</label>
+                    <select name="norme" class="form-select" id="normeField">
+                        <option value="ISO 9001">ISO 9001</option>
+                        <option value="ISO 14001">ISO 14001</option>
+                        <option value="ISO 45001">ISO 45001</option>
+                        <option value="OHADA">OHADA</option>
+                    </select>
+                </div>
+            </div>
+        `;
+    } else if (type === 'reglementaire') {
+        html = `
+            <div class="alert alert-light border">
+                <h6>⚖️ Suivi règlementaire - Champs spécifiques</h6>
+                <div class="mb-2">
+                    <label class="form-label">Référence règlementaire</label>
+                    <input type="text" name="reference_reglementaire" class="form-control" id="refRegField" placeholder="Ex: RGPD, Loi Sapin II...">
+                </div>
+                <div class="mb-2">
+                    <label class="form-label">Date d'application</label>
+                    <input type="date" name="date_application" class="form-control" id="dateAppField">
+                </div>
+            </div>
+        `;
+    } else {
+        html = `
+            <div class="alert alert-light border">
+                <h6>🎯 Contrôle - Champs spécifiques</h6>
+                <div class="mb-2">
+                    <label class="form-label">Fréquence</label>
+                    <select name="frequence" class="form-select" id="frequenceField">
+                        <option value="ponctuel">Ponctuel</option>
+                        <option value="mensuel">Mensuel</option>
+                        <option value="trimestriel">Trimestriel</option>
+                        <option value="semestriel">Semestriel</option>
+                        <option value="annuel">Annuel</option>
+                    </select>
+                </div>
+                <div class="mb-2">
+                    <label class="form-label">Taille échantillon</label>
+                    <input type="number" name="echantillon" class="form-control" id="echantillonField" placeholder="Nombre d'éléments à contrôler">
+                </div>
+            </div>
+        `;
+    }
+    
+    container.innerHTML = html;
+});
+</script>

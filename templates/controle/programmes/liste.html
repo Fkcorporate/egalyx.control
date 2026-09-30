@@ -1,0 +1,201 @@
+{% extends "base.html" %}
+
+{% block title %}Programmes de Contrôle Interne - Egalyx Control{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <!-- En-tête -->
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <div>
+            <h1 class="h2 mb-1">
+                <i class="fas fa-calendar-alt text-primary me-2"></i>
+                Programmes de Contrôle Interne
+            </h1>
+            <p class="text-muted">Planification annuelle des missions de contrôle</p>
+        </div>
+        <div>
+            <a href="{{ url_for('nouveau_programme') }}" class="btn btn-primary">
+                <i class="fas fa-plus me-2"></i>Nouveau programme
+            </a>
+        </div>
+    </div>
+
+    <!-- Filtres -->
+    <div class="card shadow-sm mb-4">
+        <div class="card-body">
+            <div class="row g-3">
+                <div class="col-md-3">
+                    <label class="form-label">Année</label>
+                    <select class="form-select" id="filterAnnee">
+                        <option value="">Toutes</option>
+                        {% for annee in [2024, 2025, 2026] %}
+                        <option value="{{ annee }}">{{ annee }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="col-md-3">
+                    <label class="form-label">Statut</label>
+                    <select class="form-select" id="filterStatut">
+                        <option value="">Tous</option>
+                        <option value="brouillon">📝 Brouillon</option>
+                        <option value="actif">✅ Actif</option>
+                        <option value="archive">📦 Archivé</option>
+                    </select>
+                </div>
+                <div class="col-md-3 d-flex align-items-end">
+                    <button class="btn btn-outline-secondary" id="resetFilters">
+                        <i class="fas fa-undo-alt me-2"></i>Réinitialiser
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Cartes des programmes -->
+    <div class="row" id="programmesContainer">
+        {% for programme in programmes %}
+        <div class="col-md-6 col-lg-4 mb-4 programme-card" 
+             data-annee="{{ programme.annee }}" 
+             data-statut="{{ programme.statut }}">
+            <div class="card h-100 shadow-sm hover-shadow transition-all">
+                <div class="card-header bg-white border-0 pt-3">
+                    <div class="d-flex justify-content-between align-items-start">
+                        <div>
+                            <span class="badge {% if programme.statut == 'actif' %}bg-success{% elif programme.statut == 'brouillon' %}bg-warning{% else %}bg-secondary{% endif %} mb-2">
+                                {% if programme.statut == 'actif' %}✅ Actif
+                                {% elif programme.statut == 'brouillon' %}📝 Brouillon
+                                {% else %}📦 Archivé{% endif %}
+                            </span>
+                            <h5 class="card-title mb-0">{{ programme.nom }}</h5>
+                            <small class="text-muted">{{ programme.reference }}</small>
+                        </div>
+                        <div class="dropdown">
+                            <button class="btn btn-sm btn-link text-muted" data-bs-toggle="dropdown">
+                                <i class="fas fa-ellipsis-v"></i>
+                            </button>
+                            <ul class="dropdown-menu dropdown-menu-end">
+                                <li>
+                                    <a class="dropdown-item" href="{{ url_for('detail_programme', id=programme.id) }}">
+                                        <i class="fas fa-eye me-2"></i>Détail
+                                    </a>
+                                </li>
+                                <li>
+                                    <a class="dropdown-item" href="{{ url_for('planning_programme', id=programme.id) }}">
+                                        <i class="fas fa-calendar-week me-2"></i>Planning annuel
+                                    </a>
+                                </li>
+                                <li><hr class="dropdown-divider"></li>
+                                {% if programme.statut == 'brouillon' %}
+                                <li>
+                                    <button class="dropdown-item text-success" onclick="activerProgramme({{ programme.id }})">
+                                        <i class="fas fa-play me-2"></i>Activer
+                                    </button>
+                                </li>
+                                {% endif %}
+                                {% if programme.statut == 'actif' %}
+                                <li>
+                                    <button class="dropdown-item text-warning" onclick="archiverProgramme({{ programme.id }})">
+                                        <i class="fas fa-archive me-2"></i>Archiver
+                                    </button>
+                                </li>
+                                {% endif %}
+                            </ul>
+                        </div>
+                    </div>
+                </div>
+                <div class="card-body">
+                    <p class="card-text text-muted small">{{ programme.description or 'Aucune description' }}</p>
+                    
+                    <div class="mt-3">
+                        <div class="d-flex justify-content-between mb-1">
+                            <small class="text-muted">Missions</small>
+                            <small class="fw-bold">{{ programme.missions.count() }}</small>
+                        </div>
+                        <div class="progress mb-3" style="height: 6px;">
+                            {% set total_missions = programme.missions.count() %}
+                            {% set missions_terminees = programme.missions.filter_by(statut='termine').count() %}
+                            {% set pourcentage = (missions_terminees / total_missions * 100) if total_missions > 0 else 0 %}
+                            <div class="progress-bar bg-primary" style="width: {{ pourcentage|round }}%"></div>
+                        </div>
+                        
+                        <div class="d-flex justify-content-between align-items-center">
+                            <span class="text-muted small">
+                                <i class="far fa-calendar-alt me-1"></i>{{ programme.annee }}
+                            </span>
+                            <span class="text-muted small">
+                                <i class="far fa-clock me-1"></i>
+                                {{ programme.created_at.strftime('%d/%m/%Y') }}
+                            </span>
+                        </div>
+                    </div>
+                </div>
+                <div class="card-footer bg-white border-0 pb-3">
+                    <a href="{{ url_for('detail_programme', id=programme.id) }}" class="btn btn-outline-primary w-100">
+                        <i class="fas fa-chart-line me-2"></i>Voir les missions
+                    </a>
+                </div>
+            </div>
+        </div>
+        {% else %}
+        <div class="col-12">
+            <div class="alert alert-info text-center">
+                <i class="fas fa-info-circle fa-2x mb-2"></i>
+                <p>Aucun programme de contrôle trouvé.</p>
+                <a href="{{ url_for('nouveau_programme') }}" class="btn btn-primary">Créer le premier programme</a>
+            </div>
+        </div>
+        {% endfor %}
+    </div>
+</div>
+
+<script>
+// Filtres dynamiques
+document.getElementById('filterAnnee').addEventListener('change', filterProgrammes);
+document.getElementById('filterStatut').addEventListener('change', filterProgrammes);
+document.getElementById('resetFilters').addEventListener('click', resetFilters);
+
+function filterProgrammes() {
+    const annee = document.getElementById('filterAnnee').value;
+    const statut = document.getElementById('filterStatut').value;
+    
+    document.querySelectorAll('.programme-card').forEach(card => {
+        const cardAnnee = card.dataset.annee;
+        const cardStatut = card.dataset.statut;
+        
+        let visible = true;
+        if (annee && cardAnnee !== annee) visible = false;
+        if (statut && cardStatut !== statut) visible = false;
+        
+        card.style.display = visible ? 'block' : 'none';
+    });
+}
+
+function resetFilters() {
+    document.getElementById('filterAnnee').value = '';
+    document.getElementById('filterStatut').value = '';
+    filterProgrammes();
+}
+
+function activerProgramme(id) {
+    fetch(`/controle/programme/${id}/activer`, { method: 'POST' })
+        .then(() => location.reload());
+}
+
+function archiverProgramme(id) {
+    if (confirm('Archiver ce programme ?')) {
+        fetch(`/controle/programme/${id}/archiver`, { method: 'POST' })
+            .then(() => location.reload());
+    }
+}
+</script>
+
+<style>
+.hover-shadow:hover {
+    transform: translateY(-5px);
+    box-shadow: 0 0.5rem 1rem rgba(0,0,0,0.15) !important;
+}
+.transition-all {
+    transition: all 0.3s ease;
+}
+</style>
+{% endblock %}

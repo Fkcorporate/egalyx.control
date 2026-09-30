@@ -1,0 +1,316 @@
+{% extends "base.html" %}
+
+{% block title %}Mission {{ mission.reference }} - {{ mission.intitule }}{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <!-- En-tête -->
+    <div class="d-flex justify-content-between align-items-start mb-4">
+        <div>
+            <nav aria-label="breadcrumb">
+                <ol class="breadcrumb">
+                    <li class="breadcrumb-item"><a href="{{ url_for('liste_programmes') }}">Programmes</a></li>
+                    <li class="breadcrumb-item"><a href="{{ url_for('detail_programme', id=mission.programme_id) }}">{{ mission.programme.nom }}</a></li>
+                    <li class="breadcrumb-item active">{{ mission.reference }}</li>
+                </ol>
+            </nav>
+            <h1 class="h2 mb-1">{{ mission.intitule }}</h1>
+            <p class="text-muted">{{ mission.reference }}</p>
+        </div>
+        <div>
+            {% if mission.statut == 'brouillon' %}
+            <button class="btn btn-success" onclick="soumettreMission()">
+                <i class="fas fa-paper-plane me-2"></i>Soumettre à validation
+            </button>
+            {% elif mission.statut == 'soumis' and current_user.id == mission.responsable_n2_id %}
+            <div class="btn-group">
+                <button class="btn btn-success" onclick="validerMission('valider')">
+                    <i class="fas fa-check me-2"></i>Valider
+                </button>
+                <button class="btn btn-danger" onclick="validerMission('rejeter')">
+                    <i class="fas fa-times me-2"></i>Rejeter
+                </button>
+            </div>
+            {% endif %}
+        </div>
+    </div>
+
+    <div class="row">
+        <!-- Colonne gauche -->
+        <div class="col-md-4">
+            <div class="card shadow-sm mb-4">
+                <div class="card-header bg-white">
+                    <h5 class="mb-0"><i class="fas fa-info-circle me-2"></i>Informations</h5>
+                </div>
+                <div class="card-body">
+                    <div class="mb-3">
+                        <label class="text-muted small">Période</label>
+                        <div>{{ mission.date_debut.strftime('%d/%m/%Y') }} → {{ mission.date_fin.strftime('%d/%m/%Y') }}</div>
+                    </div>
+                    <div class="mb-3">
+                        <label class="text-muted small">Direction</label>
+                        <div>{{ mission.direction.nom if mission.direction else '-' }}</div>
+                    </div>
+                    <div class="mb-3">
+                        <label class="text-muted small">Service</label>
+                        <div>{{ mission.service.nom if mission.service else '-' }}</div>
+                    </div>
+                    <div class="mb-3">
+                        <label class="text-muted small">Responsable Niveau 1</label>
+                        <div>{{ mission.responsable_n1.username if mission.responsable_n1 else '-' }}</div>
+                    </div>
+                    <div class="mb-3">
+                        <label class="text-muted small">Validateur N+1</label>
+                        <div>{{ mission.responsable_n2.username if mission.responsable_n2 else '-' }}</div>
+                    </div>
+                    <div class="mb-3">
+                        <label class="text-muted small">Statut</label>
+                        <div>
+                            <span class="badge {% if mission.statut == 'termine' %}bg-success{% elif mission.statut == 'en_cours' %}bg-primary{% elif mission.statut == 'soumis' %}bg-info{% elif mission.statut == 'rejete' %}bg-danger{% else %}bg-secondary{% endif %}">
+                                {% if mission.statut == 'termine' %}✅ Terminé
+                                {% elif mission.statut == 'en_cours' %}🔄 En cours
+                                {% elif mission.statut == 'soumis' %}📨 Soumis
+                                {% elif mission.statut == 'rejete' %}❌ Rejeté
+                                {% else %}📝 Brouillon{% endif %}
+                            </span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Avancement -->
+            <div class="card shadow-sm">
+                <div class="card-header bg-white">
+                    <h5 class="mb-0"><i class="fas fa-chart-pie me-2"></i>Avancement</h5>
+                </div>
+                <div class="card-body text-center">
+                    <div class="position-relative mb-3">
+                        <canvas id="progressChart" width="200" height="200"></canvas>
+                        <div class="position-absolute top-50 start-50 translate-middle text-center">
+                            <h2 class="mb-0">{{ mission.taux_realisation|round }}%</h2>
+                            <small class="text-muted">réalisé</small>
+                        </div>
+                    </div>
+                    <div class="d-flex justify-content-between mb-2">
+                        <span>Tâches réalisées</span>
+                        <strong>{{ taches_terminees }}/{{ total_taches }}</strong>
+                    </div>
+                    <div class="progress mb-3">
+                        <div class="progress-bar bg-success" style="width: {{ (taches_terminees / total_taches * 100) if total_taches > 0 else 0 }}%"></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Colonne droite - Tâches -->
+        <div class="col-md-8">
+            <div class="card shadow-sm">
+                <div class="card-header bg-white d-flex justify-content-between align-items-center">
+                    <h5 class="mb-0"><i class="fas fa-check-square me-2"></i>Tâches de contrôle</h5>
+                    <button class="btn btn-sm btn-primary" data-bs-toggle="modal" data-bs-target="#ajouterTacheModal">
+                        <i class="fas fa-plus me-1"></i>Ajouter une tâche
+                    </button>
+                </div>
+                <div class="card-body">
+                    {% if taches %}
+                    <div class="list-group">
+                        {% for tache in taches %}
+                        <div class="list-group-item">
+                            <div class="d-flex justify-content-between align-items-start">
+                                <div class="flex-grow-1">
+                                    <div class="d-flex align-items-center gap-2 mb-2">
+                                        <span class="badge 
+                                            {% if tache.type_tache == 'controle' %}bg-primary
+                                            {% elif tache.type_tache == 'plan_action' %}bg-warning
+                                            {% elif tache.type_tache == 'qualite' %}bg-success
+                                            {% else %}bg-info{% endif %}">
+                                            {% if tache.type_tache == 'controle' %}🎯 Contrôle
+                                            {% elif tache.type_tache == 'plan_action' %}📋 Plan d'action
+                                            {% elif tache.type_tache == 'qualite' %}✨ Qualité
+                                            {% else %}⚖️ Règlementaire{% endif %}
+                                        </span>
+                                        <strong>{{ tache.intitule }}</strong>
+                                        <span class="badge {% if tache.statut == 'termine' %}bg-success{% elif tache.statut == 'en_cours' %}bg-warning{% else %}bg-secondary{% endif %}">
+                                            {% if tache.statut == 'termine' %}✅ Terminé
+                                            {% elif tache.statut == 'en_cours' %}🔄 En cours
+                                            {% else %}⏳ À faire{% endif %}
+                                        </span>
+                                    </div>
+                                    <p class="text-muted small mb-2">{{ tache.description }}</p>
+                                    <div class="row small text-muted">
+                                        <div class="col-md-4">
+                                            <i class="far fa-calendar me-1"></i>
+                                            Prévue: {{ tache.date_prevue.strftime('%d/%m/%Y') }}
+                                        </div>
+                                        <div class="col-md-4">
+                                            <i class="fas fa-user me-1"></i>
+                                            Responsable: {{ tache.responsable.username if tache.responsable else '-' }}
+                                        </div>
+                                    </div>
+                                </div>
+                                {% if tache.statut != 'termine' %}
+                                <button class="btn btn-sm btn-outline-success" onclick="realiserTache({{ tache.id }})">
+                                    <i class="fas fa-check"></i>
+                                </button>
+                                {% endif %}
+                            </div>
+                        </div>
+                        {% endfor %}
+                    </div>
+                    {% else %}
+                    <div class="text-center py-4">
+                        <i class="fas fa-tasks fa-3x text-muted mb-3"></i>
+                        <p class="text-muted">Aucune tâche pour cette mission</p>
+                    </div>
+                    {% endif %}
+                </div>
+            </div>
+
+            <!-- Historique des validations -->
+            {% if validations %}
+            <div class="card shadow-sm mt-4">
+                <div class="card-header bg-white">
+                    <h5 class="mb-0"><i class="fas fa-history me-2"></i>Historique</h5>
+                </div>
+                <div class="card-body">
+                    {% for trace in validations %}
+                    <div class="d-flex gap-3 mb-3">
+                        <div class="flex-shrink-0">
+                            {% if trace.action == 'soumission' %}
+                            <i class="fas fa-paper-plane text-info fa-lg"></i>
+                            {% elif 'valider' in trace.action %}
+                            <i class="fas fa-check-circle text-success fa-lg"></i>
+                            {% elif 'rejeter' in trace.action %}
+                            <i class="fas fa-times-circle text-danger fa-lg"></i>
+                            {% endif %}
+                        </div>
+                        <div>
+                            <div class="fw-bold">
+                                {{ trace.utilisateur.username }}
+                                <small class="text-muted ms-2">{{ trace.created_at.strftime('%d/%m/%Y %H:%M') }}</small>
+                            </div>
+                            <div class="text-muted small">
+                                {% if trace.action == 'soumission' %}A soumis la mission à validation
+                                {% elif trace.action == 'validation_valider' %}A validé la mission
+                                {% elif trace.action == 'validation_rejeter' %}A rejeté la mission
+                                {% endif %}
+                            </div>
+                            {% if trace.commentaire %}
+                            <div class="alert alert-light mt-1 mb-0 small">
+                                <i class="fas fa-quote-left me-1"></i> {{ trace.commentaire }}
+                            </div>
+                            {% endif %}
+                        </div>
+                    </div>
+                    {% endfor %}
+                </div>
+            </div>
+            {% endif %}
+        </div>
+    </div>
+</div>
+
+<!-- Modal Ajouter Tâche -->
+<div class="modal fade" id="ajouterTacheModal" tabindex="-1">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title"><i class="fas fa-plus-circle me-2"></i>Ajouter une tâche</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <form method="POST" action="{{ url_for('nouvelle_tache', mission_id=mission.id) }}">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                <div class="modal-body">
+                    <div class="mb-3">
+                        <label class="form-label required">Intitulé</label>
+                        <input type="text" name="intitule" class="form-control" required>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Description</label>
+                        <textarea name="description" class="form-control" rows="3"></textarea>
+                    </div>
+                    <div class="row">
+                        <div class="col-md-6">
+                            <div class="mb-3">
+                                <label class="form-label required">Type de tâche</label>
+                                <select name="type_tache" class="form-select" required>
+                                    <option value="controle">🎯 Contrôle</option>
+                                    <option value="plan_action">📋 Plan d'action</option>
+                                    <option value="qualite">✨ Qualité</option>
+                                    <option value="reglementaire">⚖️ Règlementaire</option>
+                                </select>
+                            </div>
+                        </div>
+                        <div class="col-md-6">
+                            <div class="mb-3">
+                                <label class="form-label required">Date prévue</label>
+                                <input type="date" name="date_prevue" class="form-control" required>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Responsable</label>
+                        <select name="responsable_id" class="form-select">
+                            <option value="">Non assigné</option>
+                            {% for user in users %}
+                            <option value="{{ user.id }}">{{ user.username }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Annuler</button>
+                    <button type="submit" class="btn btn-primary">Ajouter</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<script>
+// Graphique de progression
+const ctx = document.getElementById('progressChart').getContext('2d');
+new Chart(ctx, {
+    type: 'doughnut',
+    data: {
+        labels: ['Réalisé', 'Restant'],
+        datasets: [{
+            data: [{{ mission.taux_realisation }}, {{ 100 - mission.taux_realisation }}],
+            backgroundColor: ['#28a745', '#e9ecef'],
+            borderWidth: 0
+        }]
+    },
+    options: {
+        cutout: '70%',
+        plugins: { legend: { display: false } }
+    }
+});
+
+function soumettreMission() {
+    if (confirm('Soumettre cette mission à la validation du N+1 ?')) {
+        fetch('/controle/mission/{{ mission.id }}/soumettre', { method: 'POST' })
+            .then(() => location.reload());
+    }
+}
+
+function validerMission(action) {
+    const commentaire = prompt('Commentaire de validation (optionnel) :');
+    fetch('/controle/mission/{{ mission.id }}/valider', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+        body: `action=${action}&commentaire=${encodeURIComponent(commentaire || '')}`
+    }).then(() => location.reload());
+}
+
+function realiserTache(tacheId) {
+    const resultat = prompt('Résultat de la tâche :');
+    if (resultat) {
+        const formData = new FormData();
+        formData.append('resultat', resultat);
+        fetch(`/controle/tache/${tacheId}/realiser`, { method: 'POST', body: formData })
+            .then(() => location.reload());
+    }
+}
+</script>
+{% endblock %}
