@@ -99,6 +99,32 @@
     
     .rejet-raison { background: #fef2f2; border-left: 3px solid #dc2626; padding: 8px 12px; border-radius: 8px; margin-top: 8px; font-size: 0.75rem; }
     .rejet-raison i { color: #dc2626; margin-right: 6px; }
+    
+    /* ✅ Nouveau style : bouton "Saisir les résultats" */
+    .btn-executer {
+        background: linear-gradient(135deg, #0ea5e9 0%, #0284c7 100%);
+        border: none;
+        color: white;
+        font-weight: 600;
+        transition: all 0.3s ease;
+    }
+    .btn-executer:hover {
+        color: white;
+        transform: translateY(-2px);
+        box-shadow: 0 8px 20px rgba(14, 165, 233, 0.35);
+    }
+    
+    /* ✅ Badge pour alerter qu'il manque l'exécution */
+    .missing-execution-alert {
+        border-left: 4px solid #f59e0b;
+        background: linear-gradient(135deg, #fffbeb 0%, #fef3c7 100%);
+        padding: 12px 16px;
+        border-radius: 10px;
+        margin-bottom: 12px;
+    }
+    [data-bs-theme="dark"] .missing-execution-alert {
+        background: linear-gradient(135deg, #2d241a 0%, #1e293b 100%);
+    }
 </style>
 {% endblock %}
 
@@ -142,6 +168,28 @@
                     </div>
                 </div>
             </div>
+
+            <!-- ✅ ALERTE : Exécution manquante -->
+            {% if planification.statut in ['en_cours', 'soumis'] and not planification.execution_id %}
+            <div class="missing-execution-alert">
+                <div class="d-flex align-items-start gap-2">
+                    <i class="fas fa-exclamation-triangle text-warning fa-lg mt-1"></i>
+                    <div class="flex-grow-1">
+                        <strong class="text-warning">Aucune exécution enregistrée</strong>
+                        <p class="mb-2 small">
+                            Pour soumettre cette planification à validation, vous devez d'abord
+                            saisir les résultats du contrôle.
+                        </p>
+                        {% if planification.controleur_id == current_user.id or current_user.has_permission('can_manage_audit') %}
+                        <a href="{{ url_for('c2n_executer_planification', id=planification.id) }}"
+                           class="btn btn-sm btn-executer">
+                            <i class="fas fa-play-circle me-1"></i>Saisir les résultats maintenant
+                        </a>
+                        {% endif %}
+                    </div>
+                </div>
+            </div>
+            {% endif %}
 
             <!-- Cartes statistiques -->
             <div class="row g-3 mb-4">
@@ -287,6 +335,23 @@
                     <div class="info-value">
                         <i class="fas fa-user-circle me-1"></i>
                         {{ planification.controleur.username if planification.controleur else 'Non assigné' }}
+                    </div>
+                </div>
+                <!-- ✅ NOUVEAU : exécution_id pour diagnostic -->
+                <div class="info-row">
+                    <div class="info-label">Exécution liée</div>
+                    <div class="info-value">
+                        {% if planification.execution_id %}
+                        <span class="badge bg-success">
+                            <i class="fas fa-check-circle me-1"></i>
+                            Exécution #{{ planification.execution_id }} créée
+                        </span>
+                        {% else %}
+                        <span class="badge bg-warning text-dark">
+                            <i class="fas fa-exclamation-triangle me-1"></i>
+                            Aucune exécution
+                        </span>
+                        {% endif %}
                     </div>
                 </div>
                 <div class="info-row">
@@ -516,8 +581,24 @@
                         </form>
                         {% endif %}
                         
-                        <!-- SOUMETTRE -->
-                        {% if planification.statut == 'en_cours' and planification.controleur_id == current_user.id %}
+                        <!-- ✅ EXÉCUTER / SAISIR LES RÉSULTATS (NOUVEAU) -->
+                        {% if planification.statut in ['a_faire', 'en_cours'] 
+                            and (planification.controleur_id == current_user.id or current_user.has_permission('can_manage_audit')) %}
+                        <a href="{{ url_for('c2n_executer_planification', id=planification.id) }}" 
+                           class="btn btn-executer action-btn">
+                            <i class="fas fa-play-circle me-2"></i>
+                            {% if planification.execution_id %}
+                                Modifier les résultats
+                            {% else %}
+                                Saisir les résultats
+                            {% endif %}
+                        </a>
+                        {% endif %}
+                        
+                        <!-- SOUMETTRE (uniquement si exécution existe) -->
+                        {% if planification.statut == 'en_cours' 
+                            and planification.controleur_id == current_user.id 
+                            and planification.execution_id %}
                         <button type="button" class="btn btn-warning action-btn" data-bs-toggle="modal" data-bs-target="#soumettreModal">
                             <i class="fas fa-paper-plane me-2"></i>Soumettre à validation
                         </button>
@@ -538,7 +619,6 @@
                         {% endif %}
                         
                         <!-- ROUVRIR -->
-                        <!-- ROUVRIR - Pour admin sur planification validée OU rejetée -->
                         {% if (planification.statut == 'valide' or planification.statut == 'rejete') and current_user.has_permission('can_manage_audit') %}
                         <button type="button" class="btn btn-warning action-btn" data-bs-toggle="modal" data-bs-target="#rouvrirModal">
                             <i class="fas fa-undo-alt me-2"></i>Rouvrir la planification
@@ -558,11 +638,13 @@
                             <i class="fas fa-sync-alt me-2"></i>Synchroniser depuis campagne
                         </button>
                         {% endif %}
-                        <button type="button" class="btn btn-gradient-primary action-btn" onclick="genererRapportComplet()" style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); border: none; color: white;">
+                        
+                        <!-- RAPPORT COMPLET -->
+                        <button type="button" class="btn action-btn" onclick="genererRapportComplet(event)" style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); border: none; color: white;">
                             <i class="fas fa-file-alt me-2"></i>📊 Rapport Complet
                         </button>
                         
-                        <!-- Bouton Rapport Exécutif (optionnel) -->
+                        <!-- RAPPORT EXÉCUTIF -->
                         <button type="button" class="btn btn-outline-info action-btn" onclick="genererRapportExecutif()">
                             <i class="fas fa-chart-line me-2"></i>📈 Rapport Exécutif
                         </button>
@@ -583,22 +665,14 @@
                         <div class="text-muted small">Code</div>
                         <div><code>{{ planification.referentiel.code_controle }}</code></div>
                     </div>
-                    <!-- Dans la carte "Informations générales" -->
                     <div class="info-row">
                         <div class="info-label">Objectif</div>
                         <div class="info-value">
                             <div id="objectifComplet">
                                 {{ planification.referentiel.objectif or '-' }}
                             </div>
-                            {% if planification.referentiel.objectif and planification.referentiel.objectif|length > 200 %}
-                            <button type="button" class="btn btn-sm btn-link p-0 mt-1" onclick="voirObjectifComplet()">
-                                <i class="fas fa-expand me-1"></i>Voir tout
-                            </button>
-                            {% endif %}
                         </div>
                     </div>
-
-                    <!-- Dans la section "Risques couverts" -->
                     <div class="info-row">
                         <div class="info-label">Risques couverts</div>
                         <div class="info-value">
@@ -609,33 +683,11 @@
                                         <div class="small mb-1">• {{ risque }}</div>
                                     {% endfor %}
                                 </div>
-                                {% if risques|length > 5 %}
-                                <button type="button" class="btn btn-sm btn-link p-0 mt-1" onclick="voirTousLesRisques()">
-                                    <i class="fas fa-expand me-1"></i>Voir tous les risques ({{ risques|length }})
-                                </button>
-                                {% endif %}
                             {% else %}
                                 -
                             {% endif %}
                         </div>
                     </div>
-
-                    <!-- Script pour afficher les modals -->
-                    <script>
-                    function voirObjectifComplet() {
-                        const objectif = document.getElementById('objectifComplet').innerHTML;
-                        alert(objectif.replace(/<br>/g, '\n'));
-                    }
-
-                    function voirTousLesRisques() {
-                        const risquesDiv = document.getElementById('risquesCouverts');
-                        if (risquesDiv) {
-                            // Ouvrir un modal ou une alerte
-                            const risques = risquesDiv.innerText;
-                            alert(risques);
-                        }
-                    }
-                    </script>
                     <div>
                         <div class="text-muted small">Fréquence</div>
                         <div>
@@ -783,37 +835,7 @@
     </div>
 </div>
 
-<!-- Modal Réouverture -->
-<div class="modal fade" id="rouvrirModal" tabindex="-1">
-    <div class="modal-dialog modal-dialog-centered">
-        <div class="modal-content">
-            <form method="POST" action="{{ url_for('c2n_rouvrir_planification', id=planification.id) }}">
-                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                <div class="modal-header">
-                    <h5 class="modal-title text-warning">
-                        <i class="fas fa-undo-alt me-2"></i>Rouvrir la planification
-                    </h5>
-                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
-                </div>
-                <div class="modal-body">
-                    <div class="alert alert-info">
-                        <i class="fas fa-info-circle me-2"></i>
-                        La planification repassera en statut "À faire".
-                    </div>
-                    <div class="mb-3">
-                        <label class="form-label fw-semibold">Raison de la réouverture</label>
-                        <textarea name="raison" class="form-control" rows="3" placeholder="Pourquoi cette réouverture ?"></textarea>
-                    </div>
-                </div>
-                <div class="modal-footer">
-                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Annuler</button>
-                    <button type="submit" class="btn btn-warning">Rouvrir</button>
-                </div>
-            </form>
-        </div>
-    </div>
-</div>
-<!-- Modal Réouverture -->
+<!-- ✅ Modal Réouverture (UN SEUL, pas de doublon) -->
 <div class="modal fade" id="rouvrirModal" tabindex="-1">
     <div class="modal-dialog modal-dialog-centered">
         <div class="modal-content">
@@ -848,6 +870,7 @@
         </div>
     </div>
 </div>
+
 <!-- Modal Ajouter Recommandation -->
 <div class="modal fade" id="addRecommendationModal" tabindex="-1">
     <div class="modal-dialog modal-dialog-centered">
@@ -1038,32 +1061,101 @@
 </div>
 
 <script>
-// Variables globales
-const moisNoms = ['', 'Janvier', 'Février', 'Mars', 'Avril', 'Mai', 'Juin', 'Juillet', 'Août', 'Septembre', 'Octobre', 'Novembre', 'Décembre'];
+// ============================================
+// VARIABLES GLOBALES
+// ============================================
+const PLANIFICATION_ID = {{ planification.id }};
 let currentRecoId = null;
 let currentUpdateRecoId = null;
+
+// ============================================
+// UTILITAIRES (déclarés en haut pour éviter ReferenceError)
+// ============================================
+
+function getCsrfToken() {
+    const el = document.querySelector('input[name="csrf_token"]');
+    return el ? el.value : '';
+}
+
+function escapeHtml(text) {
+    if (!text) return '';
+    const div = document.createElement('div');
+    div.textContent = text;
+    return div.innerHTML;
+}
+
+function showToast(message, type) {
+    const toastContainer = document.getElementById('toast-container') || (() => {
+        const container = document.createElement('div');
+        container.id = 'toast-container';
+        container.className = 'toast-container position-fixed top-0 end-0 p-3';
+        container.style.zIndex = '1100';
+        document.body.appendChild(container);
+        return container;
+    })();
+    
+    const colorMap = {
+        'success': 'success',
+        'danger': 'danger',
+        'warning': 'warning',
+        'info': 'info'
+    };
+    const iconMap = {
+        'success': 'check-circle',
+        'danger': 'exclamation-circle',
+        'warning': 'exclamation-triangle',
+        'info': 'info-circle'
+    };
+    
+    const toast = document.createElement('div');
+    toast.className = `toast align-items-center text-bg-${colorMap[type] || 'info'} border-0 mb-2`;
+    toast.innerHTML = `
+        <div class="d-flex">
+            <div class="toast-body">
+                <i class="fas fa-${iconMap[type] || 'info-circle'} me-2"></i>${message}
+            </div>
+            <button type="button" class="btn-close btn-close-white me-2 m-auto" data-bs-dismiss="toast"></button>
+        </div>`;
+    toastContainer.appendChild(toast);
+    new bootstrap.Toast(toast, { delay: 3500 }).show();
+    toast.addEventListener('hidden.bs.toast', () => toast.remove());
+}
+
+async function apiCall(url, options = {}) {
+    try {
+        const response = await fetch(url, options);
+        if (!response.ok && response.status !== 400) {
+            throw new Error(`HTTP ${response.status}`);
+        }
+        return await response.json();
+    } catch (error) {
+        console.error(`Erreur API ${url}:`, error);
+        return { success: false, error: error.message };
+    }
+}
 
 // ============================================
 // RECOMMANDATIONS
 // ============================================
 
 async function chargerRecommandations() {
-    const planificationId = {{ planification.id }};
-    try {
-        const response = await fetch(`/c2n/recommandations/liste?planification_id=${planificationId}&_=${Date.now()}`);
-        const data = await response.json();
-        if (data.success) {
-            afficherRecommandations(data.recommandations);
-            document.getElementById('recommandationsCount').textContent = data.recommandations.length;
-        }
-    } catch (error) {
-        console.error('Erreur:', error);
-        document.getElementById('recommendationsList').innerHTML = '<div class="alert alert-danger">Erreur lors du chargement</div>';
+    const container = document.getElementById('recommendationsList');
+    if (!container) return;
+    
+    const data = await apiCall(`/c2n/recommandations/liste?planification_id=${PLANIFICATION_ID}&_=${Date.now()}`);
+    
+    if (data.success) {
+        afficherRecommandations(data.recommandations);
+        const countEl = document.getElementById('recommandationsCount');
+        if (countEl) countEl.textContent = data.recommandations.length;
+    } else {
+        container.innerHTML = '<div class="alert alert-danger">Erreur lors du chargement des recommandations</div>';
     }
 }
 
 function afficherRecommandations(recommandations) {
     const container = document.getElementById('recommendationsList');
+    if (!container) return;
     
     if (!recommandations || recommandations.length === 0) {
         container.innerHTML = `
@@ -1078,7 +1170,6 @@ function afficherRecommandations(recommandations) {
     
     container.innerHTML = recommandations.map(reco => {
         let actionsHtml = '';
-        let raisonRejetHtml = '';
         
         if (reco.statut === 'proposee') {
             actionsHtml = `
@@ -1127,27 +1218,28 @@ function afficherRecommandations(recommandations) {
     }).join('');
 }
 
-function escapeHtml(text) {
-    if (!text) return '';
-    const div = document.createElement('div');
-    div.textContent = text;
-    return div.innerHTML;
-}
+// ============================================
+// CRUD RECOMMANDATIONS
+// ============================================
 
-// Ajout recommandation
 document.getElementById('addRecommendationForm')?.addEventListener('submit', async function(e) {
     e.preventDefault();
     const formData = new FormData(this);
-    formData.append('planification_id', {{ planification.id }});
-    const response = await fetch('/c2n/recommandation/ajouter', { method: 'POST', body: formData, headers: { 'X-CSRFToken': document.querySelector('input[name="csrf_token"]').value } });
-    const data = await response.json();
+    formData.append('planification_id', PLANIFICATION_ID);
+    
+    const data = await apiCall('/c2n/recommandation/ajouter', {
+        method: 'POST',
+        body: formData,
+        headers: { 'X-CSRFToken': getCsrfToken() }
+    });
+    
     if (data.success) {
         bootstrap.Modal.getInstance(document.getElementById('addRecommendationModal')).hide();
         this.reset();
         chargerRecommandations();
         showToast('Recommandation ajoutée', 'success');
     } else {
-        showToast('Erreur: ' + data.error, 'danger');
+        showToast('Erreur: ' + (data.error || 'inconnue'), 'danger');
     }
 });
 
@@ -1164,12 +1256,21 @@ async function confirmAccepter() {
     const recoId = currentRecoId;
     const dateEcheance = document.getElementById('acceptDateEcheance').value;
     const responsableId = document.getElementById('acceptResponsableId').value;
-    if (!dateEcheance) { showToast('Veuillez sélectionner une date', 'warning'); return; }
-    const response = await fetch(`/c2n/recommandation/${recoId}/accepter`, {
-        method: 'POST', headers: { 'Content-Type': 'application/json', 'X-CSRFToken': document.querySelector('input[name="csrf_token"]').value },
+    
+    if (!dateEcheance) {
+        showToast('Veuillez sélectionner une date', 'warning');
+        return;
+    }
+    
+    const data = await apiCall(`/c2n/recommandation/${recoId}/accepter`, {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            'X-CSRFToken': getCsrfToken()
+        },
         body: JSON.stringify({ date_echeance: dateEcheance, responsable_id: responsableId || null })
     });
-    const data = await response.json();
+    
     if (data.success) {
         bootstrap.Modal.getInstance(document.getElementById('acceptRecommendationModal')).hide();
         chargerRecommandations();
@@ -1178,57 +1279,94 @@ async function confirmAccepter() {
             window.location.href = `/c2n/plan-action/${data.plan_action.id}`;
         }
     } else {
-        showToast('Erreur: ' + data.error, 'danger');
+        showToast('Erreur: ' + (data.error || 'inconnue'), 'danger');
     }
 }
 
 async function rejeterRecommandation(recoId) {
     const raison = prompt("Raison du rejet (optionnelle):", "");
-    const response = await fetch(`/c2n/recommandation/${recoId}/rejeter`, {
-        method: 'POST', headers: { 'Content-Type': 'application/json', 'X-CSRFToken': document.querySelector('input[name="csrf_token"]').value },
+    
+    const data = await apiCall(`/c2n/recommandation/${recoId}/rejeter`, {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            'X-CSRFToken': getCsrfToken()
+        },
         body: JSON.stringify({ raison: raison || "" })
     });
-    const data = await response.json();
+    
     if (data.success) {
         await chargerRecommandations();
         showToast(data.message, 'info');
     } else {
-        showToast('Erreur: ' + data.error, 'danger');
+        showToast('Erreur: ' + (data.error || 'inconnue'), 'danger');
     }
 }
 
 async function rouvrirRecommandation(recoId) {
     if (!confirm('Rouvrir cette recommandation ?')) return;
-    const response = await fetch(`/c2n/recommandation/${recoId}/rouvrir`, { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-CSRFToken': document.querySelector('input[name="csrf_token"]').value } });
-    const data = await response.json();
-    if (data.success) { chargerRecommandations(); showToast(data.message, 'success'); } 
-    else { showToast('Erreur: ' + data.error, 'danger'); }
+    
+    const data = await apiCall(`/c2n/recommandation/${recoId}/rouvrir`, {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            'X-CSRFToken': getCsrfToken()
+        }
+    });
+    
+    if (data.success) {
+        chargerRecommandations();
+        showToast(data.message, 'success');
+    } else {
+        showToast('Erreur: ' + (data.error || 'inconnue'), 'danger');
+    }
 }
 
 async function supprimerRecommandation(recoId) {
     if (!confirm('Supprimer cette recommandation ?')) return;
-    const response = await fetch(`/c2n/recommandation/${recoId}/supprimer`, { method: 'DELETE', headers: { 'X-CSRFToken': document.querySelector('input[name="csrf_token"]').value } });
-    const data = await response.json();
-    if (data.success) { chargerRecommandations(); showToast('Recommandation supprimée', 'success'); } 
-    else { showToast('Erreur: ' + data.error, 'danger'); }
+    
+    const data = await apiCall(`/c2n/recommandation/${recoId}/supprimer`, {
+        method: 'DELETE',
+        headers: { 'X-CSRFToken': getCsrfToken() }
+    });
+    
+    if (data.success) {
+        chargerRecommandations();
+        showToast('Recommandation supprimée', 'success');
+    } else {
+        showToast('Erreur: ' + (data.error || 'inconnue'), 'danger');
+    }
 }
 
 async function genererRecommandationsIA() {
-    const btn = event.target;
+    const btn = event.target.closest('button');
     const originalText = btn.innerHTML;
     btn.innerHTML = '<i class="fas fa-spinner fa-spin me-1"></i>Génération...';
     btn.disabled = true;
-    const response = await fetch('/c2n/recommandations/generer-ia', { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-CSRFToken': document.querySelector('input[name="csrf_token"]').value }, body: JSON.stringify({ planification_id: {{ planification.id }} }) });
-    const data = await response.json();
+    
+    const data = await apiCall('/c2n/recommandations/generer-ia', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            'X-CSRFToken': getCsrfToken()
+        },
+        body: JSON.stringify({ planification_id: PLANIFICATION_ID })
+    });
+    
     btn.innerHTML = originalText;
     btn.disabled = false;
-    if (data.success) { chargerRecommandations(); showToast(data.message, 'success'); } 
-    else { showToast('Erreur: ' + data.error, 'danger'); }
+    
+    if (data.success) {
+        chargerRecommandations();
+        showToast(data.message, 'success');
+    } else {
+        showToast('Erreur: ' + (data.error || 'inconnue'), 'danger');
+    }
 }
 
 async function modifierRecommandation(recoId) {
-    const response = await fetch(`/c2n/recommandation/${recoId}/detail`);
-    const data = await response.json();
+    const data = await apiCall(`/c2n/recommandation/${recoId}/detail`);
+    
     if (data.success) {
         const reco = data.recommandation;
         document.getElementById('editRecoId').value = reco.id;
@@ -1238,25 +1376,41 @@ async function modifierRecommandation(recoId) {
         document.getElementById('editCategorie').value = reco.categorie;
         document.getElementById('editDateEcheance').value = reco.date_echeance || '';
         document.getElementById('editResponsableId').value = reco.responsable_id || '';
+        
         const slider = document.getElementById('editProgression');
-        if (slider) { slider.value = reco.progression || 0; document.getElementById('editProgressionValue').textContent = (reco.progression || 0) + '%'; }
+        if (slider) {
+            slider.value = reco.progression || 0;
+            document.getElementById('editProgressionValue').textContent = (reco.progression || 0) + '%';
+        }
+        
         new bootstrap.Modal(document.getElementById('editRecommendationModal')).show();
-    } else { showToast('Erreur lors du chargement', 'danger'); }
+    } else {
+        showToast('Erreur lors du chargement', 'danger');
+    }
 }
 
 document.getElementById('editRecommendationForm')?.addEventListener('submit', async function(e) {
     e.preventDefault();
     const recoId = document.getElementById('editRecoId').value;
-    const response = await fetch(`/c2n/recommandation/${recoId}/modifier`, { method: 'PUT', body: new FormData(this), headers: { 'X-CSRFToken': document.querySelector('input[name="csrf_token"]').value } });
-    const data = await response.json();
+    
+    const data = await apiCall(`/c2n/recommandation/${recoId}/modifier`, {
+        method: 'PUT',
+        body: new FormData(this),
+        headers: { 'X-CSRFToken': getCsrfToken() }
+    });
+    
     if (data.success) {
         bootstrap.Modal.getInstance(document.getElementById('editRecommendationModal')).hide();
         chargerRecommandations();
         showToast('Recommandation modifiée', 'success');
-    } else { showToast('Erreur: ' + data.error, 'danger'); }
+    } else {
+        showToast('Erreur: ' + (data.error || 'inconnue'), 'danger');
+    }
 });
 
-document.getElementById('editProgression')?.addEventListener('input', function() { document.getElementById('editProgressionValue').textContent = this.value + '%'; });
+document.getElementById('editProgression')?.addEventListener('input', function() {
+    document.getElementById('editProgressionValue').textContent = this.value + '%';
+});
 
 function updateProgression(recoId, currentProgress) {
     currentUpdateRecoId = recoId;
@@ -1267,88 +1421,107 @@ function updateProgression(recoId, currentProgress) {
     new bootstrap.Modal(document.getElementById('updateProgressModal')).show();
 }
 
-document.getElementById('updateProgressSlider')?.addEventListener('input', function() { document.getElementById('updateProgressValue').textContent = this.value + '%'; });
+document.getElementById('updateProgressSlider')?.addEventListener('input', function() {
+    document.getElementById('updateProgressValue').textContent = this.value + '%';
+});
 
 async function confirmUpdateProgression() {
     const recoId = currentUpdateRecoId;
     const progression = document.getElementById('updateProgressSlider').value;
     const commentaire = document.getElementById('updateProgressComment').value;
-    const response = await fetch(`/c2n/recommandation/${recoId}/progression`, { method: 'PUT', headers: { 'Content-Type': 'application/json', 'X-CSRFToken': document.querySelector('input[name="csrf_token"]').value }, body: JSON.stringify({ progression: parseInt(progression), commentaire: commentaire }) });
-    const data = await response.json();
+    
+    const data = await apiCall(`/c2n/recommandation/${recoId}/progression`, {
+        method: 'PUT',
+        headers: {
+            'Content-Type': 'application/json',
+            'X-CSRFToken': getCsrfToken()
+        },
+        body: JSON.stringify({ progression: parseInt(progression), commentaire: commentaire })
+    });
+    
     if (data.success) {
         bootstrap.Modal.getInstance(document.getElementById('updateProgressModal')).hide();
         chargerRecommandations();
         showToast('Progression mise à jour', 'success');
-    } else { showToast('Erreur: ' + data.error, 'danger'); }
+    } else {
+        showToast('Erreur: ' + (data.error || 'inconnue'), 'danger');
+    }
 }
 
-// Synchronisation campagne
+// ============================================
+// SYNCHRONISATION CAMPAGNE
+// ============================================
+
 async function synchroniserCampagne() {
     if (!confirm('Synchroniser les données depuis la campagne associée ?')) return;
-    const response = await fetch(`/c2n/planification/{{ planification.id }}/synchroniser-campagne`, { method: 'POST', headers: { 'X-CSRFToken': document.querySelector('input[name="csrf_token"]').value } });
-    const data = await response.json();
-    if (data.success) { location.reload(); showToast('Données synchronisées', 'success'); } 
-    else { showToast('Erreur: ' + data.error, 'danger'); }
+    
+    const data = await apiCall(`/c2n/planification/${PLANIFICATION_ID}/synchroniser-campagne`, {
+        method: 'POST',
+        headers: { 'X-CSRFToken': getCsrfToken() }
+    });
+    
+    if (data.success) {
+        location.reload();
+    } else {
+        showToast('Erreur: ' + (data.error || 'inconnue'), 'danger');
+    }
 }
 
-function showToast(message, type) {
-    const toastContainer = document.getElementById('toast-container') || (() => {
-        const container = document.createElement('div');
-        container.id = 'toast-container';
-        container.className = 'toast-container position-fixed top-0 end-0 p-3';
-        container.style.zIndex = '1100';
-        document.body.appendChild(container);
-        return container;
-    })();
-    const toast = document.createElement('div');
-    toast.className = `toast align-items-center text-bg-${type === 'success' ? 'success' : type === 'danger' ? 'danger' : 'info'} border-0 mb-2`;
-    toast.innerHTML = `<div class="d-flex"><div class="toast-body"><i class="fas fa-${type === 'success' ? 'check-circle' : type === 'danger' ? 'exclamation-circle' : 'info-circle'} me-2"></i>${message}</div><button type="button" class="btn-close btn-close-white me-2 m-auto" data-bs-dismiss="toast"></button></div>`;
-    toastContainer.appendChild(toast);
-    new bootstrap.Toast(toast, { delay: 3000 }).show();
-    toast.addEventListener('hidden.bs.toast', () => toast.remove());
-}
+// ============================================
+// RAPPORTS
+// ============================================
 
-// Initialisation
-document.addEventListener('DOMContentLoaded', function() {
-    chargerRecommandations();
-    document.querySelectorAll('[title]').forEach(el => new bootstrap.Tooltip(el));
-});
-// Dans votre script, ajoutez une confirmation supplémentaire
-document.getElementById('rouvrirModal')?.addEventListener('submit', function(e) {
-    const raison = this.querySelector('textarea[name="raison"]').value.trim();
-    if (!raison) {
-        e.preventDefault();
-        showToast('Veuillez indiquer une raison pour la réouverture', 'warning');
-        return false;
-    }
-    if (!confirm('⚠️ Attention : Cette action va réinitialiser la validation. Continuer ?')) {
-        e.preventDefault();
-        return false;
-    }
-});
-// Génération du rapport complet
-function genererRapportComplet() {
-    const planificationId = {{ planification.id }};
-    // Afficher un indicateur de chargement
-    const btn = event.target.closest('button');
+function genererRapportComplet(evt) {
+    const btn = evt?.target?.closest('button');
+    if (!btn) return;
+    
     const originalText = btn.innerHTML;
-    btn.innerHTML = '<i class="fas fa-spinner fa-spin me-2"></i>Génération du rapport...';
+    btn.innerHTML = '<i class="fas fa-spinner fa-spin me-2"></i>Génération...';
     btn.disabled = true;
     
-    // Ouvrir dans un nouvel onglet
-    window.open(`/c2n/planification/${planificationId}/rapport-complet-pdf`, '_blank');
+    window.open(`/c2n/planification/${PLANIFICATION_ID}/rapport-complet-pdf`, '_blank');
     
-    // Restaurer le bouton après 2 secondes
     setTimeout(() => {
         btn.innerHTML = originalText;
         btn.disabled = false;
     }, 2000);
 }
 
-// Génération du rapport exécutif
 function genererRapportExecutif() {
-    const planificationId = {{ planification.id }};
-    window.open(`/c2n/planification/${planificationId}/rapport-executif-pdf`, '_blank');
+    window.open(`/c2n/planification/${PLANIFICATION_ID}/rapport-executif-pdf`, '_blank');
 }
+
+// ============================================
+// VALIDATION MODAL ROUVRIR
+// ============================================
+
+document.getElementById('rouvrirModal')?.addEventListener('submit', function(e) {
+    const raison = this.querySelector('textarea[name="raison"]').value.trim();
+    
+    if (raison.length < 5) {
+        e.preventDefault();
+        showToast('Veuillez indiquer une raison (min 5 caractères)', 'warning');
+        return false;
+    }
+    
+    if (!confirm('⚠️ Attention : Cette action va réinitialiser la validation. Continuer ?')) {
+        e.preventDefault();
+        return false;
+    }
+});
+
+// ============================================
+// INITIALISATION
+// ============================================
+
+document.addEventListener('DOMContentLoaded', function() {
+    // Charger les recommandations
+    chargerRecommandations();
+    
+    // Initialiser les tooltips (une seule fois)
+    document.querySelectorAll('[title]').forEach(el => {
+        new bootstrap.Tooltip(el);
+    });
+});
 </script>
 {% endblock %}

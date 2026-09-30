@@ -1,0 +1,220 @@
+{% extends "base.html" %}
+
+{% block title %}Journal d'audit C2N{% endblock %}
+
+{% block styles %}
+{{ super() }}
+<style>
+    .filter-bar {
+        background: white;
+        border-radius: 16px;
+        padding: 1rem 1.25rem;
+        box-shadow: 0 1px 3px rgba(0,0,0,0.05);
+        margin-bottom: 1.5rem;
+    }
+    [data-bs-theme="dark"] .filter-bar { background: #1e293b; }
+    
+    .journal-entry {
+        background: white;
+        border-radius: 12px;
+        padding: 1rem;
+        margin-bottom: 0.75rem;
+        border-left: 4px solid;
+        transition: all 0.15s ease;
+    }
+    [data-bs-theme="dark"] .journal-entry { background: #1e293b; }
+    .journal-entry:hover {
+        transform: translateX(4px);
+        box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+    }
+    
+    .journal-icon {
+        width: 40px;
+        height: 40px;
+        border-radius: 10px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 1.1rem;
+        flex-shrink: 0;
+    }
+    
+    .action-badge {
+        display: inline-block;
+        padding: 3px 10px;
+        border-radius: 20px;
+        font-size: 0.7rem;
+        font-weight: 600;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="container-fluid px-4">
+    
+    <!-- En-tête -->
+    <div class="d-flex flex-wrap justify-content-between align-items-center mb-4">
+        <div>
+            <h1 class="h3 mb-1">
+                <i class="fas fa-history text-primary me-2"></i>
+                Journal d'audit C2N
+            </h1>
+            <p class="text-muted mb-0">
+                Historique complet des actions sur le module C2N
+            </p>
+        </div>
+        <a href="{{ url_for('c2n_liste_planifications') }}" class="btn btn-outline-secondary rounded-pill">
+            <i class="fas fa-arrow-left me-1"></i>Retour
+        </a>
+    </div>
+    
+    <!-- Filtres -->
+    <div class="filter-bar">
+        <form method="GET" class="row g-3 align-items-end">
+            <div class="col-md-3">
+                <label class="form-label small fw-semibold text-muted mb-1">Utilisateur</label>
+                <select name="utilisateur_id" class="form-select">
+                    <option value="">Tous</option>
+                    {% for u in utilisateurs %}
+                    <option value="{{ u.id }}" {% if filters.utilisateur_id == u.id %}selected{% endif %}>
+                        {{ u.username }}
+                    </option>
+                    {% endfor %}
+                </select>
+            </div>
+            
+            <div class="col-md-3">
+                <label class="form-label small fw-semibold text-muted mb-1">Action</label>
+                <select name="action" class="form-select">
+                    <option value="">Toutes</option>
+                    {% for a in actions %}
+                    <option value="{{ a }}" {% if filters.action == a %}selected{% endif %}>
+                        {{ a }}
+                    </option>
+                    {% endfor %}
+                </select>
+            </div>
+            
+            <div class="col-md-3">
+                <label class="form-label small fw-semibold text-muted mb-1">Type d'entité</label>
+                <select name="entite_type" class="form-select">
+                    <option value="">Tous</option>
+                    <option value="planification" {% if filters.entite_type == 'planification' %}selected{% endif %}>Planification</option>
+                    <option value="execution" {% if filters.entite_type == 'execution' %}selected{% endif %}>Exécution</option>
+                    <option value="anomalie" {% if filters.entite_type == 'anomalie' %}selected{% endif %}>Anomalie</option>
+                    <option value="non_conformite" {% if filters.entite_type == 'non_conformite' %}selected{% endif %}>Non-conformité</option>
+                    <option value="recommandation" {% if filters.entite_type == 'recommandation' %}selected{% endif %}>Recommandation</option>
+                </select>
+            </div>
+            
+            <div class="col-md-3">
+                <button type="submit" class="btn btn-primary rounded-pill w-100">
+                    <i class="fas fa-filter me-1"></i>Filtrer
+                </button>
+            </div>
+        </form>
+    </div>
+    
+    <!-- Liste -->
+    <div class="card shadow-sm">
+        <div class="card-body">
+            {% if pagination.items %}
+                {% for entry in pagination.items %}
+                <div class="journal-entry border-{{ entry.get_action_color() }}">
+                    <div class="d-flex align-items-start gap-3">
+                        <div class="journal-icon bg-{{ entry.get_action_color() }} bg-opacity-10 text-{{ entry.get_action_color() }}">
+                            <i class="fas fa-circle"></i>
+                        </div>
+                        <div class="flex-grow-1">
+                            <div class="d-flex justify-content-between align-items-start mb-2">
+                                <div>
+                                    <span class="action-badge bg-{{ entry.get_action_color() }} text-white">
+                                        {{ entry.get_action_label() }}
+                                    </span>
+                                    {% if entry.ancien_statut and entry.nouveau_statut %}
+                                    <span class="small text-muted ms-2">
+                                        {{ entry.ancien_statut }} → {{ entry.nouveau_statut }}
+                                    </span>
+                                    {% endif %}
+                                </div>
+                                <small class="text-muted">
+                                    <i class="far fa-clock me-1"></i>
+                                    {{ entry.created_at.strftime('%d/%m/%Y %H:%M') }}
+                                </small>
+                            </div>
+                            
+                            <div class="mb-2">
+                                <strong>{{ entry.utilisateur_nom }}</strong>
+                                a effectué <strong>{{ entry.action }}</strong>
+                                sur <code>{{ entry.entite_type }}</code>
+                                {% if entry.entite_reference %}
+                                <strong>{{ entry.entite_reference }}</strong>
+                                {% else %}
+                                #{{ entry.entite_id }}
+                                {% endif %}
+                            </div>
+                            
+                            {% if entry.details %}
+                            <div class="small text-muted">
+                                {% for key, value in entry.details.items() %}
+                                <span class="badge bg-secondary bg-opacity-10 text-secondary me-1">
+                                    {{ key }}: {{ value|string|truncate(40) }}
+                                </span>
+                                {% endfor %}
+                            </div>
+                            {% endif %}
+                            
+                            <div class="mt-2">
+                                <a href="{{ entry.get_entite_url() }}" class="btn btn-sm btn-outline-primary rounded-pill">
+                                    <i class="fas fa-arrow-right me-1"></i>Voir
+                                </a>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                {% endfor %}
+                
+                <!-- Pagination -->
+                {% if pagination.pages > 1 %}
+                <nav class="mt-4">
+                    <ul class="pagination justify-content-center">
+                        {% if pagination.has_prev %}
+                        <li class="page-item">
+                            <a class="page-link" href="{{ url_for('c2n_journal_audit', page=pagination.prev_num, **filters) }}">
+                                <i class="fas fa-chevron-left"></i>
+                            </a>
+                        </li>
+                        {% endif %}
+                        
+                        {% for p in pagination.iter_pages(left_edge=1, right_edge=1, left_current=2, right_current=2) %}
+                            {% if p %}
+                                <li class="page-item {% if p == pagination.page %}active{% endif %}">
+                                    <a class="page-link" href="{{ url_for('c2n_journal_audit', page=p, **filters) }}">{{ p }}</a>
+                                </li>
+                            {% else %}
+                                <li class="page-item disabled"><span class="page-link">…</span></li>
+                            {% endif %}
+                        {% endfor %}
+                        
+                        {% if pagination.has_next %}
+                        <li class="page-item">
+                            <a class="page-link" href="{{ url_for('c2n_journal_audit', page=pagination.next_num, **filters) }}">
+                                <i class="fas fa-chevron-right"></i>
+                            </a>
+                        </li>
+                        {% endif %}
+                    </ul>
+                </nav>
+                {% endif %}
+                
+            {% else %}
+            <div class="text-center py-5">
+                <i class="fas fa-history fa-3x text-muted mb-3"></i>
+                <h6 class="text-muted">Aucune entrée trouvée</h6>
+                <p class="small text-muted">Aucune action ne correspond à vos filtres.</p>
+            </div>
+            {% endif %}
+        </div>
+    </div>
+</div>
+{% endblock %}

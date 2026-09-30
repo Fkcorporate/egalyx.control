@@ -1,0 +1,595 @@
+{% extends "base.html" %}
+
+{% block title %}Exécution - {{ planification.reference }}{% endblock %}
+
+{% block styles %}
+{{ super() }}
+<style>
+    .execution-section {
+        background: white;
+        border-radius: 16px;
+        padding: 1.5rem;
+        margin-bottom: 1.5rem;
+        box-shadow: 0 1px 3px rgba(0,0,0,0.05);
+    }
+    [data-bs-theme="dark"] .execution-section {
+        background: #1e293b;
+    }
+    .section-header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        margin-bottom: 1rem;
+        padding-bottom: 0.75rem;
+        border-bottom: 2px solid var(--fk-accent);
+    }
+    .section-header h5 {
+        margin: 0;
+        font-weight: 600;
+        font-size: 1.05rem;
+    }
+    
+    .taux-display {
+        font-size: 2.5rem;
+        font-weight: 800;
+        text-align: center;
+        padding: 1rem;
+        border-radius: 12px;
+        transition: all 0.3s ease;
+    }
+    .taux-display.success { background: linear-gradient(135deg, #d1fae5, #a7f3d0); color: #065f46; }
+    .taux-display.warning { background: linear-gradient(135deg, #fed7aa, #fdba74); color: #9b2c1d; }
+    .taux-display.danger { background: linear-gradient(135deg, #fee2e2, #fecaca); color: #991b1b; }
+    [data-bs-theme="dark"] .taux-display.success { background: linear-gradient(135deg, #064e3b, #047857); color: #a7f3d0; }
+    [data-bs-theme="dark"] .taux-display.warning { background: linear-gradient(135deg, #78350f, #92400e); color: #fde68a; }
+    [data-bs-theme="dark"] .taux-display.danger { background: linear-gradient(135deg, #7f1d1d, #991b1b); color: #fca5a5; }
+    
+    /* Anomalies */
+    .anomalie-row {
+        background: #f8fafc;
+        border-radius: 12px;
+        padding: 1rem;
+        margin-bottom: 0.75rem;
+        border-left: 4px solid #f59e0b;
+        transition: all 0.2s ease;
+        position: relative;
+    }
+    [data-bs-theme="dark"] .anomalie-row {
+        background: #0f172a;
+    }
+    .anomalie-row:hover {
+        box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+    }
+    .anomalie-row.critique { border-left-color: #dc2626; }
+    .anomalie-row.majeur { border-left-color: #ea580c; }
+    .anomalie-row.mineur { border-left-color: #f59e0b; }
+    
+    .anomalie-num {
+        position: absolute;
+        top: -8px;
+        left: -8px;
+        width: 26px;
+        height: 26px;
+        background: var(--fk-accent);
+        color: white;
+        border-radius: 50%;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 0.75rem;
+        font-weight: 700;
+    }
+    .anomalie-delete {
+        position: absolute;
+        top: 8px;
+        right: 8px;
+    }
+    
+    /* Badge criticité */
+    .criticite-selector {
+        display: flex;
+        gap: 0.25rem;
+    }
+    .criticite-option {
+        padding: 4px 10px;
+        border-radius: 20px;
+        border: 2px solid transparent;
+        font-size: 0.7rem;
+        font-weight: 600;
+        cursor: pointer;
+        transition: all 0.15s ease;
+    }
+    .criticite-option.mineur { background: #fef3c7; color: #d97706; }
+    .criticite-option.majeur { background: #fed7aa; color: #ea580c; }
+    .criticite-option.critique { background: #fee2e2; color: #dc2626; }
+    .criticite-option.selected {
+        border-color: currentColor;
+        transform: scale(1.05);
+    }
+    
+    .empty-anomalies {
+        text-align: center;
+        padding: 2rem 1rem;
+        color: #94a3b8;
+        background: #f8fafc;
+        border-radius: 12px;
+        border: 2px dashed #cbd5e1;
+    }
+    [data-bs-theme="dark"] .empty-anomalies {
+        background: #0f172a;
+        border-color: #334155;
+    }
+    
+    .anomalies-stats {
+        display: flex;
+        gap: 0.75rem;
+        flex-wrap: wrap;
+    }
+    .stat-pill {
+        padding: 4px 12px;
+        border-radius: 20px;
+        font-size: 0.75rem;
+        font-weight: 600;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="container-fluid px-4">
+    
+    <!-- En-tête -->
+    <div class="d-flex flex-wrap justify-content-between align-items-center mb-4">
+        <div>
+            <nav aria-label="breadcrumb">
+                <ol class="breadcrumb mb-2">
+                    <li class="breadcrumb-item">
+                        <a href="{{ url_for('c2n_liste_planifications') }}">Planifications</a>
+                    </li>
+                    <li class="breadcrumb-item">
+                        <a href="{{ url_for('c2n_detail_planification', id=planification.id) }}">
+                            {{ planification.reference }}
+                        </a>
+                    </li>
+                    <li class="breadcrumb-item active">Exécution</li>
+                </ol>
+            </nav>
+            <h1 class="h3 mb-1">
+                <i class="fas fa-play-circle text-primary me-2"></i>
+                Exécution du contrôle
+            </h1>
+            <p class="text-muted mb-0">
+                {{ planification.referentiel.nom }}
+                <code class="ms-2">{{ planification.referentiel.code_controle }}</code>
+            </p>
+        </div>
+        <a href="{{ url_for('c2n_detail_planification', id=planification.id) }}" 
+           class="btn btn-outline-secondary rounded-pill">
+            <i class="fas fa-arrow-left me-1"></i>Retour
+        </a>
+    </div>
+
+<form method="POST" id="executionForm">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <input type="hidden" name="version" value="{{ planification.version }}">
+        
+        <div class="row">
+            <div class="col-lg-8">
+                
+                <!-- VOLUMES -->
+                <div class="execution-section">
+                    <div class="section-header">
+                        <h5><i class="fas fa-chart-line text-primary me-2"></i>Volumes contrôlés</h5>
+                    </div>
+                    
+                    <div class="row g-3">
+                        <div class="col-md-6">
+                            <label class="form-label fw-semibold">Dossiers contrôlés <span class="text-danger">*</span></label>
+                            <input type="number" name="volume_controle" id="volume_controle"
+                                   class="form-control form-control-lg"
+                                   value="{{ execution.volume_controle or 0 }}" min="0" required>
+                        </div>
+                        
+                        <div class="col-md-6">
+                            <label class="form-label fw-semibold text-success">
+                                <i class="fas fa-check-circle me-1"></i>Conformes <span class="text-danger">*</span>
+                            </label>
+                            <input type="number" name="nb_conformes" id="nb_conformes"
+                                   class="form-control form-control-lg"
+                                   value="{{ execution.nb_conformes or 0 }}" min="0" required>
+                        </div>
+                        
+                        <div class="col-md-6">
+                            <label class="form-label fw-semibold text-danger">
+                                <i class="fas fa-exclamation-triangle me-1"></i>Anomalies
+                            </label>
+                            <input type="number" name="nb_anomalies" id="nb_anomalies"
+                                   class="form-control form-control-lg"
+                                   value="{{ execution.nb_anomalies or 0 }}" min="0" readonly>
+                            <div class="form-text">Calculé automatiquement</div>
+                        </div>
+                        
+                        <div class="col-md-6">
+                            <label class="form-label fw-semibold">Taux de conformité</label>
+                            <div class="taux-display" id="tauxDisplay">
+                                <span id="tauxValue">{{ "%.1f"|format(execution.taux_conformite or 0) }}</span>%
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- ⭐ ANOMALIES DÉTECTÉES ⭐ -->
+                <div class="execution-section">
+                    <div class="section-header">
+                        <h5>
+                            <i class="fas fa-exclamation-triangle text-warning me-2"></i>
+                            Anomalies détectées
+                        </h5>
+                        <button type="button" class="btn btn-sm btn-primary rounded-pill px-3"
+                                onclick="ajouterAnomalie()">
+                            <i class="fas fa-plus me-1"></i>Ajouter une anomalie
+                        </button>
+                    </div>
+                    
+                    {% if stats_anomalies.total > 0 %}
+                    <div class="anomalies-stats mb-3">
+                        <span class="stat-pill bg-secondary bg-opacity-10 text-secondary">
+                            <i class="fas fa-list me-1"></i>{{ stats_anomalies.total }} au total
+                        </span>
+                        {% if stats_anomalies.critiques > 0 %}
+                        <span class="stat-pill bg-danger bg-opacity-10 text-danger">
+                            🔴 {{ stats_anomalies.critiques }} critique(s)
+                        </span>
+                        {% endif %}
+                        {% if stats_anomalies.majeurs > 0 %}
+                        <span class="stat-pill bg-warning bg-opacity-10 text-warning">
+                            🟠 {{ stats_anomalies.majeurs }} majeur(s)
+                        </span>
+                        {% endif %}
+                        {% if stats_anomalies.mineurs > 0 %}
+                        <span class="stat-pill bg-warning bg-opacity-10 text-warning">
+                            🟡 {{ stats_anomalies.mineurs }} mineur(s)
+                        </span>
+                        {% endif %}
+                    </div>
+                    {% endif %}
+                    
+                    <div id="anomaliesContainer"></div>
+                    
+                    <div id="anomaliesEmpty" class="empty-anomalies" style="display: none;">
+                        <i class="fas fa-check-circle fa-2x text-success mb-2"></i>
+                        <p class="mb-2 fw-semibold">Aucune anomalie détectée</p>
+                        <small>Si vous trouvez des écarts, cliquez sur "Ajouter une anomalie"</small>
+                    </div>
+                    
+                    <div class="text-center mt-3">
+                        <button type="button" class="btn btn-outline-warning rounded-pill px-4"
+                                onclick="ajouterAnomalie()">
+                            <i class="fas fa-plus me-1"></i>Ajouter une anomalie
+                        </button>
+                    </div>
+                    
+                    <script id="anomaliesData" type="application/json">
+                    [
+                        {% for a in anomalies %}
+                        {
+                            "id": {{ a.id }},
+                            "motif": {{ a.motif|tojson }},
+                            "description": {{ (a.description or '')|tojson }},
+                            "element_concerne": {{ (a.element_concerne or '')|tojson }},
+                            "criticite": {{ a.criticite|tojson }},
+                            "nombre_ecarts": {{ a.nombre_ecarts }},
+                            "statut": {{ a.statut|tojson }}
+                        }{% if not loop.last %},{% endif %}
+                        {% endfor %}
+                    ]
+                    </script>
+                </div>
+                
+                <!-- RÉSULTATS -->
+                <div class="execution-section">
+                    <div class="section-header">
+                        <h5><i class="fas fa-clipboard-check text-primary me-2"></i>Résultats détaillés</h5>
+                    </div>
+                    
+                    <div class="mb-3">
+                        <label class="form-label fw-semibold">Résultats</label>
+                        <textarea name="resultats" class="form-control" rows="4"
+                                  placeholder="Détail des résultats...">{{ execution.resultats or '' }}</textarea>
+                    </div>
+                    
+                    <div class="mb-3">
+                        <label class="form-label fw-semibold">Commentaires</label>
+                        <textarea name="commentaires" class="form-control" rows="3"
+                                  placeholder="Observations...">{{ execution.commentaires or '' }}</textarea>
+                    </div>
+                    
+                    <div class="mb-3">
+                        <label class="form-label fw-semibold">Conclusion</label>
+                        <textarea name="conclusion" class="form-control" rows="3"
+                                  placeholder="Conclusion...">{{ execution.conclusion or '' }}</textarea>
+                    </div>
+                    
+                    <div class="mb-0">
+                        <label class="form-label fw-semibold">Pièces justificatives</label>
+                        <textarea name="pieces_justificatives" class="form-control" rows="2"
+                                  placeholder="Liste des pièces...">{{ execution.pieces_justificatives or '' }}</textarea>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- COLONNE DROITE -->
+            <div class="col-lg-4">
+                <div class="execution-section">
+                    <div class="section-header">
+                        <h5><i class="fas fa-cogs text-primary me-2"></i>Actions</h5>
+                    </div>
+                    
+                    <div class="d-grid gap-2">
+                        <button type="submit" name="action" value="save" class="btn btn-primary">
+                            <i class="fas fa-save me-1"></i>Sauvegarder
+                        </button>
+                        
+                        {% if execution.id %}
+                        <button type="submit" name="action" value="submit" class="btn btn-success"
+                                onclick="return confirm('Soumettre la planification pour validation ?');">
+                            <i class="fas fa-paper-plane me-1"></i>Soumettre à validation
+                        </button>
+                        {% endif %}
+                        
+                        <a href="{{ url_for('c2n_detail_planification', id=planification.id) }}" 
+                           class="btn btn-outline-secondary">
+                            <i class="fas fa-arrow-left me-1"></i>Retour au détail
+                        </a>
+                    </div>
+                </div>
+                
+                <div class="execution-section">
+                    <div class="section-header">
+                        <h5><i class="fas fa-info-circle text-primary me-2"></i>Informations</h5>
+                    </div>
+                    
+                    <div class="small">
+                        <div class="d-flex justify-content-between mb-2">
+                            <span class="text-muted">Référence</span>
+                            <strong>{{ planification.reference }}</strong>
+                        </div>
+                        <div class="d-flex justify-content-between mb-2">
+                            <span class="text-muted">Statut</span>
+                            <span class="badge bg-primary">{{ planification.get_statut_label() }}</span>
+                        </div>
+                        <div class="d-flex justify-content-between mb-2">
+                            <span class="text-muted">Période</span>
+                            <span>{{ planification.date_prevue.strftime('%d/%m/%Y') }}</span>
+                        </div>
+                        <div class="d-flex justify-content-between">
+                            <span class="text-muted">Contrôleur</span>
+                            <span>{{ planification.controleur.username if planification.controleur else '-' }}</span>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="execution-section">
+                    <div class="section-header">
+                        <h5><i class="fas fa-lightbulb text-warning me-2"></i>Bonnes pratiques</h5>
+                    </div>
+                    <ul class="small mb-0 ps-3">
+                        <li>Une anomalie = <strong>un motif</strong></li>
+                        <li>Utilisez <strong>critique</strong> pour les fraudes</li>
+                        <li>Renseignez l'<strong>élément concerné</strong></li>
+                        <li>Les anomalies deviennent des <strong>NC C2N</strong></li>
+                    </ul>
+                </div>
+            </div>
+        </div>
+    </form>
+</div>
+
+<script>
+// ============================================
+// DONNÉES INITIALES
+// ============================================
+const anomaliesInitiales = JSON.parse(document.getElementById('anomaliesData').textContent);
+let anomalies = [...anomaliesInitiales];
+
+// ============================================
+// RENDU DES ANOMALIES
+// ============================================
+function renderAnomalies() {
+    const container = document.getElementById('anomaliesContainer');
+    const empty = document.getElementById('anomaliesEmpty');
+    
+    if (anomalies.length === 0) {
+        container.innerHTML = '';
+        empty.style.display = 'block';
+        return;
+    }
+    
+    empty.style.display = 'none';
+    
+    container.innerHTML = anomalies.map((a, idx) => {
+        const idPart = a.id ? `value="${a.id}"` : `value=""`;
+        const isEditable = !a.statut || a.statut === 'a_traiter' || a.statut === 'confirmee';
+        
+        return `
+        <div class="anomalie-row ${a.criticite}" data-index="${idx}">
+            <div class="anomalie-num">${idx + 1}</div>
+            
+            ${isEditable ? `
+            <button type="button" class="btn btn-sm btn-outline-danger anomalie-delete" 
+                    onclick="supprimerAnomalie(${idx})" title="Supprimer">
+                <i class="fas fa-times"></i>
+            </button>
+            ` : `
+            <span class="badge bg-secondary anomalie-delete" title="Anomalie verrouillée">
+                <i class="fas fa-lock"></i>
+            </span>
+            `}
+            
+            <input type="hidden" name="anomalie_id[]" ${idPart}>
+            
+            <div class="row g-2">
+                <div class="col-12">
+                    <label class="form-label small fw-semibold mb-1">Motif <span class="text-danger">*</span></label>
+                    <input type="text" name="anomalie_motif[]" class="form-control"
+                           value="${escapeAttr(a.motif)}"
+                           placeholder="Ex: Facture sans bon de commande"
+                           ${isEditable ? '' : 'disabled'} required>
+                </div>
+                
+                <div class="col-md-6">
+                    <label class="form-label small fw-semibold mb-1">Élément concerné</label>
+                    <input type="text" name="anomalie_element[]" class="form-control form-control-sm"
+                           value="${escapeAttr(a.element_concerne || '')}"
+                           placeholder="Ex: FAC-2026-0042"
+                           ${isEditable ? '' : 'disabled'}>
+                </div>
+                
+                <div class="col-md-3">
+                    <label class="form-label small fw-semibold mb-1">Écarts</label>
+                    <input type="number" name="anomalie_ecarts[]" class="form-control form-control-sm"
+                           value="${a.nombre_ecarts || 1}" min="1"
+                           ${isEditable ? '' : 'disabled'}>
+                </div>
+                
+                <div class="col-md-3">
+                    <label class="form-label small fw-semibold mb-1 d-block">Criticité</label>
+                    <div class="criticite-selector">
+                        <span class="criticite-option mineur ${a.criticite === 'mineur' ? 'selected' : ''}"
+                              onclick="changerCriticite(${idx}, 'mineur')"
+                              ${isEditable ? '' : 'style="pointer-events:none;opacity:0.6"'}>
+                            🟡 Mineur
+                        </span>
+                        <span class="criticite-option majeur ${a.criticite === 'majeur' ? 'selected' : ''}"
+                              onclick="changerCriticite(${idx}, 'majeur')"
+                              ${isEditable ? '' : 'style="pointer-events:none;opacity:0.6"'}>
+                            🟠 Majeur
+                        </span>
+                        <span class="criticite-option critique ${a.criticite === 'critique' ? 'selected' : ''}"
+                              onclick="changerCriticite(${idx}, 'critique')"
+                              ${isEditable ? '' : 'style="pointer-events:none;opacity:0.6"'}>
+                            🔴 Critique
+                        </span>
+                    </div>
+                    <input type="hidden" name="anomalie_criticite[]" value="${a.criticite}">
+                </div>
+                
+                <div class="col-12">
+                    <label class="form-label small fw-semibold mb-1">Description</label>
+                    <textarea name="anomalie_description[]" class="form-control form-control-sm" rows="2"
+                              placeholder="Détails complémentaires..."
+                              ${isEditable ? '' : 'disabled'}>${escapeHtml(a.description || '')}</textarea>
+                </div>
+            </div>
+        </div>
+        `;
+    }).join('');
+    
+    document.getElementById('nb_anomalies').value = anomalies.length;
+}
+
+function ajouterAnomalie() {
+    anomalies.push({
+        id: null,
+        motif: '',
+        description: '',
+        element_concerne: '',
+        criticite: 'mineur',
+        nombre_ecarts: 1,
+        statut: 'a_traiter'
+    });
+    renderAnomalies();
+    
+    setTimeout(() => {
+        const rows = document.querySelectorAll('.anomalie-row');
+        if (rows.length > 0) {
+            rows[rows.length - 1].scrollIntoView({ behavior: 'smooth', block: 'center' });
+            const input = rows[rows.length - 1].querySelector('input[name="anomalie_motif[]"]');
+            if (input) input.focus();
+        }
+    }, 100);
+}
+
+function supprimerAnomalie(idx) {
+    if (!confirm('Supprimer cette anomalie ?')) return;
+    anomalies.splice(idx, 1);
+    renderAnomalies();
+}
+
+function changerCriticite(idx, criticite) {
+    anomalies[idx].criticite = criticite;
+    renderAnomalies();
+}
+
+function escapeHtml(text) {
+    if (!text) return '';
+    const div = document.createElement('div');
+    div.textContent = text;
+    return div.innerHTML;
+}
+
+function escapeAttr(text) {
+    if (!text) return '';
+    return String(text).replace(/&/g, '&amp;').replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+}
+
+// ============================================
+// CALCUL DU TAUX
+// ============================================
+document.addEventListener('DOMContentLoaded', function() {
+    const volumeCtrl = document.getElementById('volume_controle');
+    const nbConformes = document.getElementById('nb_conformes');
+    const nbAnomalies = document.getElementById('nb_anomalies');
+    const tauxValue = document.getElementById('tauxValue');
+    const tauxDisplay = document.getElementById('tauxDisplay');
+    
+    function recalculer() {
+        const volume = parseInt(volumeCtrl.value) || 0;
+        let conformes = parseInt(nbConformes.value) || 0;
+        
+        if (conformes > volume) {
+            conformes = volume;
+            nbConformes.value = volume;
+        }
+        
+        nbAnomalies.value = anomalies.length;
+        
+        const taux = volume > 0 ? (conformes / volume) * 100 : 0;
+        tauxValue.textContent = taux.toFixed(1);
+        
+        tauxDisplay.className = 'taux-display';
+        if (taux >= 80) tauxDisplay.classList.add('success');
+        else if (taux >= 60) tauxDisplay.classList.add('warning');
+        else tauxDisplay.classList.add('danger');
+    }
+    
+    volumeCtrl.addEventListener('input', recalculer);
+    nbConformes.addEventListener('input', recalculer);
+    
+    renderAnomalies();
+    recalculer();
+    
+    // Validation avant soumission
+    document.getElementById('executionForm')?.addEventListener('submit', function(e) {
+        const action = e.submitter ? e.submitter.value : 'save';
+        
+        if (action === 'submit' && anomalies.length > 0) {
+            const motifs = document.querySelectorAll('input[name="anomalie_motif[]"]');
+            for (let input of motifs) {
+                if (!input.value.trim()) {
+                    e.preventDefault();
+                    alert('Veuillez renseigner le motif de toutes les anomalies');
+                    input.focus();
+                    return false;
+                }
+            }
+            
+            if (!confirm(`Soumettre avec ${anomalies.length} anomalie(s) ?`)) {
+                e.preventDefault();
+                return false;
+            }
+        }
+    });
+});
+</script>
+{% endblock %}
