@@ -17660,35 +17660,73 @@ class ServiceAlerteApprobation:
     
     @staticmethod
     def _creer_alerte_approbation(
-        audit, 
-        destinataire, 
-        type_alerte, 
-        titre, 
-        message, 
-        workflow=None, 
-        date_echeance=None, 
-        jours_retard=None
+        audit, destinataire, type_alerte, titre, message, 
+        workflow=None, date_echeance=None, jours_retard=None
     ):
         """
-        Crée une alerte d'approbation et une notification associée.
+        Crée une alerte d'approbation ET une notification associée.
         
-        Args:
-            audit: Instance d'Audit
-            destinataire: Instance de User (destinataire)
-            type_alerte: 'approbation_niveau1' | 'approbation_niveau2' | 
-                        'echeance' | 'retard'
-            titre: Titre de l'alerte
-            message: Message détaillé
-            workflow: Instance de WorkflowApprobation (optionnel)
-            date_echeance: Date d'échéance (optionnel)
-            jours_retard: Nombre de jours de retard (optionnel)
-        
-        Returns:
-            AlerteApprobation: L'alerte créée
+        ✅ ANTI-DOUBLON : vérifie qu'une alerte non-lue identique n'existe pas déjà
+           pour éviter la prolifération à chaque passage du scheduler.
         """
+        from datetime import datetime, timedelta
         
         # ============================================
-        # 1. CRÉER L'ALERTE DANS LA BASE
+        # 1. VÉRIFICATION ANTI-DOUBLON (alerte)
+        # ============================================
+        # On considère qu'une alerte identique existe si :
+        #   - même audit
+        #   - même destinataire
+        #   - même type d'alerte
+        #   - non lue
+        #   - créée dans les dernières 24h (fenêtre de dédup)
+        seuil_dedup = datetime.utcnow() - timedelta(hours=24)
+        
+        alerte_existante = AlerteApprobation.query.filter(
+            AlerteApprobation.audit_id == audit.id,
+            AlerteApprobation.destinataire_id == destinataire.id,
+            AlerteApprobation.type_alerte == type_alerte,
+            AlerteApprobation.est_lue == False,
+            AlerteApprobation.date_creation >= seuil_dedup
+        ).first()
+        
+        if alerte_existante:
+            # Une alerte identique existe déjà → on ne crée rien
+            print(f"⏭️  Alerte déjà existante (id={alerte_existante.id}) "
+                  f"pour audit {audit.reference} / {destinataire.username} / {type_alerte}")
+            return alerte_existante
+        
+        # ============================================
+        # 2. VÉRIFICATION ANTI-DOUBLON (notification)
+        # ============================================
+        notification_existante = Notification.query.filter(
+            Notification.destinataire_id == destinataire.id,
+            Notification.entite_type == 'audit',
+            Notification.entite_id == audit.id,
+            Notification.type_notification == 'alerte_approbation',
+            Notification.est_lue == False,
+            Notification.created_at >= seuil_dedup
+        ).first()
+        
+        if notification_existante:
+            # Notification déjà présente → on crée juste l'alerte DB
+            print(f"⏭️  Notification déjà existante (id={notification_existante.id}) "
+                  f"pour audit {audit.reference}")
+            alerte = AlerteApprobation(
+                audit_id=audit.id,
+                destinataire_id=destinataire.id,
+                type_alerte=type_alerte,
+                titre=titre,
+                message=message,
+                client_id=audit.client_id,
+                date_echeance=date_echeance
+            )
+            db.session.add(alerte)
+            db.session.commit()
+            return alerte
+        
+        # ============================================
+        # 3. CRÉATION (aucun doublon détecté)
         # ============================================
         alerte = AlerteApprobation(
             audit_id=audit.id,
@@ -17701,11 +17739,7 @@ class ServiceAlerteApprobation:
         )
         db.session.add(alerte)
         
-        # ============================================
-        # 2. CRÉER UNE NOTIFICATION SYSTÈME
-        # ============================================
-        
-        # Déterminer le niveau d'urgence
+        # Niveau d'urgence
         if type_alerte in ['retard', 'approbation_niveau2']:
             niveau_urgence = 'urgent'
         elif type_alerte == 'approbation_niveau1':
@@ -17725,9 +17759,6 @@ class ServiceAlerteApprobation:
         )
         db.session.add(notification)
         
-        # ============================================
-        # 3. AJOUTER DES MÉTADONNÉES SUPPLÉMENTAIRES
-        # ============================================
         if workflow:
             notification.donnees_supplementaires = {
                 'workflow_etape': workflow.etape_actuelle,
@@ -17735,20 +17766,12 @@ class ServiceAlerteApprobation:
                 'audit_titre': audit.titre,
                 'type_alerte': type_alerte
             }
-            
             if date_echeance:
-                notification.donnees_supplementaires['date_echeance'] = (
-                    date_echeance.isoformat()
-                )
-            
+                notification.donnees_supplementaires['date_echeance'] = date_echeance.isoformat()
             if jours_retard:
                 notification.donnees_supplementaires['jours_retard'] = jours_retard
         
-        # ============================================
-        # 4. COMMIT
-        # ============================================
         db.session.commit()
-        
         return alerte
     
     # ============================================
