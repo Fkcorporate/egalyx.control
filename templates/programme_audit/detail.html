@@ -52,6 +52,11 @@
     .org-pole { background: #dcfce7; color: #166534; }
     .org-direction { background: #fed7aa; color: #9a3412; }
     
+    /* Aperçu risque */
+    #risqueApercu {
+        transition: all 0.3s ease;
+    }
+    
     @keyframes slideIn { from { opacity: 0; transform: translateY(20px); } to { opacity: 1; transform: translateY(0); } }
     .animate-in { animation: slideIn 0.5s ease forwards; }
     
@@ -203,6 +208,36 @@
                     </div>
                     <div class="progress mt-3" style="height: 6px; background: #e2e8f0;">
                         <div class="progress-bar" style="width: {{ programme.progression }}%; background: #059669;"></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <!-- ✅ CARTE : Risques critiques NET (utilise la variable de la route) -->
+        <div class="col-xl-3 col-md-6">
+            <div class="card border-0 shadow-sm h-100 animate-in" 
+                 style="border-left: 4px solid {% if nb_risques_net > 0 %}#dc2626{% else %}#10b981{% endif %};">
+                <div class="card-body p-4">
+                    <div class="d-flex align-items-center justify-content-between">
+                        <div>
+                            <span class="text-uppercase small fw-semibold mb-2 d-block" style="color: #64748b;">
+                                RISQUES CRITIQUES NET
+                            </span>
+                            <h2 class="fw-bold mb-0 {% if nb_risques_net > 0 %}text-danger{% else %}text-success{% endif %}">
+                                {{ nb_risques_net }}
+                            </h2>
+                            <div class="mt-2">
+                                <small style="color: #64748b;">
+                                    <i class="fas fa-{% if nb_risques_net > 0 %}fire{% else %}shield-alt{% endif %} me-1" 
+                                       style="color: {% if nb_risques_net > 0 %}#dc2626{% else %}#10b981{% endif %};"></i>
+                                    Risques critiques disponibles
+                                </small>
+                            </div>
+                        </div>
+                        <div class="rounded-circle p-3 d-flex align-items-center justify-content-center" 
+                            style="background: {% if nb_risques_net > 0 %}#fee2e2{% else %}#d1fae5{% endif %}; width: 64px; height: 64px;">
+                            <i class="fas fa-{% if nb_risques_net > 0 %}fire{% else %}shield-alt{% endif %} fa-2x" 
+                               style="color: {% if nb_risques_net > 0 %}#dc2626{% else %}#10b981{% endif %};"></i>
+                        </div>
                     </div>
                 </div>
             </div>
@@ -562,15 +597,63 @@
                             <label class="form-label fw-semibold small">DURÉE (jours)</label>
                             <input type="number" class="form-control border-0 bg-light" name="duree_estimee" value="{{ programme.duree_moyenne_mission or 5 }}" min="1" max="90">
                         </div>
+                        
+                        <!-- ============================================ -->
+                        <!-- SELECT DES RISQUES (VERSION NET)              -->
+                        <!-- ============================================ -->
                         <div class="col-md-6">
                             <label class="form-label fw-semibold small">RISQUE ASSOCIÉ</label>
-                            <select class="form-select border-0 bg-light" name="risque_id">
+                            
+                            <!-- Filtre rapide -->
+                            <div class="form-check form-switch mb-2">
+                                <input class="form-check-input" type="checkbox" 
+                                    id="filtreCritiqueRisque" 
+                                    onchange="filtrerRisquesCritiques()">
+                                <label class="form-check-label small fw-medium text-danger" for="filtreCritiqueRisque">
+                                    <i class="fas fa-fire me-1"></i>
+                                    Afficher uniquement les risques critiques NET
+                                </label>
+                            </div>
+                            
+                            <select class="form-select border-0 bg-light" name="risque_id" id="selectRisque">
                                 <option value="">Aucun</option>
                                 {% for risque in risques_disponibles %}
-                                <option value="{{ risque.id }}">{{ risque.reference }} - {{ risque.intitule|truncate(50) }}</option>
+                                <option value="{{ risque.id }}"
+                                        data-niveau="{{ risque.niveau_net }}"
+                                        data-score="{{ risque.score_net }}"
+                                        data-critique="{% if 'critique' in risque.niveau_net.lower() %}true{% else %}false{% endif %}"
+                                        {% if 'critique' in risque.niveau_net.lower() %}
+                                        style="font-weight: 700; color: #dc2626;"
+                                        {% elif 'élevé' in risque.niveau_net.lower() or 'eleve' in risque.niveau_net.lower() %}
+                                        style="font-weight: 600; color: #ea580c;"
+                                        {% elif 'moyen' in risque.niveau_net.lower() %}
+                                        style="color: #d97706;"
+                                        {% endif %}>
+                                    {{ risque.reference }} - {{ risque.intitule|truncate(40) }}
+                                    {% if risque.niveau_net != 'Non évalué' %}
+                                    [{{ risque.niveau_net }} - Score: {{ risque.score_net }}]
+                                    {% endif %}
+                                    {% if risque.est_revaluation %}⚠️ N-1{% endif %}
+                                </option>
                                 {% endfor %}
                             </select>
+                            
+                            <small class="d-block mt-2 text-muted">
+                                <i class="fas fa-info-circle me-1"></i>
+                                Le niveau affiché est le niveau <strong>NET</strong> (après maîtrise) de la campagne active
+                            </small>
+                            
+                            <!-- Aperçu du risque sélectionné -->
+                            <div id="risqueApercu" class="mt-3 p-3 rounded-2" 
+                                 style="background: #f8fafc; border: 1px solid #e2e8f0; display: none;">
+                                <div class="d-flex align-items-center gap-2 mb-2">
+                                    <i class="fas fa-exclamation-triangle text-warning"></i>
+                                    <strong style="font-size: 0.85rem;">Risque sélectionné</strong>
+                                </div>
+                                <div id="risqueApercuContent" class="small"></div>
+                            </div>
                         </div>
+                        
                         <div class="col-md-6">
                             <label class="form-label fw-semibold small">RESPONSABLE</label>
                             <select class="form-select border-0 bg-light" name="responsable_id">
@@ -709,7 +792,10 @@
                             <select class="form-select bg-light" name="risque_id">
                                 <option value="">Aucun</option>
                                 {% for risque in risques_disponibles %}
-                                <option value="{{ risque.id }}" {% if mission.risque and mission.risque.id == risque.id %}selected{% endif %}>{{ risque.reference }}</option>
+                                <option value="{{ risque.id }}" {% if mission.risque and mission.risque.id == risque.id %}selected{% endif %}>
+                                    {{ risque.reference }} - {{ risque.intitule|truncate(30) }}
+                                    {% if risque.niveau_net != 'Non évalué' %}[{{ risque.niveau_net }}]{% endif %}
+                                </option>
                                 {% endfor %}
                             </select>
                         </div>
@@ -842,6 +928,7 @@
     </div>
 </div>
 {% endfor %}
+
 <!-- Modal Modifier Programme -->
 {% for prog in [programme] %}
 <div class="modal fade" id="editProgrammeModal{{ prog.id }}" tabindex="-1">
@@ -1002,6 +1089,7 @@
     </div>
 </div>
 {% endfor %}
+
 <!-- Modal Suppression Bloc -->
 <div class="modal fade" id="supprimerBlocModal" tabindex="-1">
     <div class="modal-dialog modal-dialog-centered">
@@ -1042,23 +1130,32 @@
 {% block scripts %}
 <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 <script>
-// Variables globales
+// ============================================
+// VARIABLES GLOBALES
+// ============================================
 let selectedMissions = new Set();
 let missionsData = {{ missions_data|tojson|safe }};
 
-// Nettoyage modals
+// ============================================
+// NETTOYAGE DES MODALS
+// ============================================
 function cleanupModals() {
     document.querySelectorAll('.modal-backdrop').forEach(el => el.remove());
     document.body.classList.remove('modal-open');
 }
 
-// Ouverture modals
+// ============================================
+// OUVERTURE DES MODALS
+// ============================================
 function openApproveModal(id) { cleanupModals(); new bootstrap.Modal(document.getElementById('approuverModal' + id)).show(); }
 function openDesapprouverModal(id) { cleanupModals(); new bootstrap.Modal(document.getElementById('desapprouverModal' + id)).show(); }
 function openArchiveModal(id) { cleanupModals(); new bootstrap.Modal(document.getElementById('archiverModal' + id)).show(); }
 function openEditModal(id) { cleanupModals(); new bootstrap.Modal(document.getElementById('editProgrammeModal' + id)).show(); }
 function openSupprimerMissionModal(id) { cleanupModals(); new bootstrap.Modal(document.getElementById('supprimerMissionModal' + id)).show(); }
 
+// ============================================
+// ACTIONS PROGRAMME
+// ============================================
 function dupliquerProgramme(id) {
     if (confirm('Dupliquer ce programme ?')) {
         fetch(`/programme-audit/${id}/dupliquer`, { method: 'POST' })
@@ -1072,7 +1169,9 @@ function regenererMissions(id) {
         window.location.href = `/programme-audit/${id}/generer-auto`; 
 }
 
-// Gestion sélection missions
+// ============================================
+// SÉLECTION DES MISSIONS
+// ============================================
 function toggleMissionSelection(id, cb) { 
     cb.checked ? selectedMissions.add(id) : selectedMissions.delete(id); 
     updateSelectionUI(); 
@@ -1115,10 +1214,13 @@ function deselectAll() {
     updateSelectionUI(); 
 }
 
-// Suppression en bloc
+// ============================================
+// SUPPRESSION EN BLOC
+// ============================================
 function preparerSuppressionBloc() {
     if (selectedMissions.size === 0) return;
-    document.getElementById('selectedCountMessage').innerHTML = `<i class="fas fa-exclamation-triangle me-2"></i>${selectedMissions.size} mission(s) sélectionnée(s)`;
+    document.getElementById('selectedCountMessage').innerHTML = 
+        `<i class="fas fa-exclamation-triangle me-2"></i>${selectedMissions.size} mission(s) sélectionnée(s)`;
     new bootstrap.Modal(document.getElementById('supprimerBlocModal')).show();
 }
 
@@ -1139,17 +1241,77 @@ document.getElementById('confirmBlocDelete')?.addEventListener('click', function
     .then(data => { if (data.success) location.reload(); else alert(data.message); });
 });
 
-// Graphique priorité
+// ============================================
+// FILTRE DES RISQUES CRITIQUES NET
+// ============================================
+function filtrerRisquesCritiques() {
+    const filtre = document.getElementById('filtreCritiqueRisque').checked;
+    const select = document.getElementById('selectRisque');
+    const options = select.querySelectorAll('option');
+    
+    options.forEach(opt => {
+        if (opt.value === '') return; // Garder "Aucun"
+        const estCritique = opt.dataset.critique === 'true';
+        opt.style.display = (!filtre || estCritique) ? '' : 'none';
+    });
+    
+    // Reset si l'option sélectionnée est cachée
+    if (select.selectedOptions[0] && select.selectedOptions[0].style.display === 'none') {
+        select.value = '';
+    }
+}
+
+// ============================================
+// APERÇU DU RISQUE SÉLECTIONNÉ
+// ============================================
+document.getElementById('selectRisque')?.addEventListener('change', function() {
+    const option = this.selectedOptions[0];
+    const apercu = document.getElementById('risqueApercu');
+    const contenu = document.getElementById('risqueApercuContent');
+    
+    if (!option.value) {
+        apercu.style.display = 'none';
+        return;
+    }
+    
+    const niveau = option.dataset.niveau || 'Non évalué';
+    const score = option.dataset.score || '0';
+    
+    let couleur = '#10b981';
+    let icone = 'fa-shield-alt';
+    if (niveau.toLowerCase().includes('critique')) {
+        couleur = '#dc2626'; icone = 'fa-fire';
+    } else if (niveau.toLowerCase().includes('élevé') || niveau.toLowerCase().includes('eleve')) {
+        couleur = '#ea580c'; icone = 'fa-exclamation-triangle';
+    } else if (niveau.toLowerCase().includes('moyen')) {
+        couleur = '#f59e0b'; icone = 'fa-exclamation-circle';
+    }
+    
+    contenu.innerHTML = `
+        <div class="d-flex align-items-center gap-2">
+            <span class="badge" style="background: ${couleur}; color: white;">
+                <i class="fas ${icone} me-1"></i>${niveau}
+            </span>
+            <span class="text-muted">Score NET : <strong style="color: ${couleur};">${score}</strong></span>
+        </div>
+    `;
+    apercu.style.display = 'block';
+});
+
+// ============================================
+// GRAPHIQUE PRIORITÉ + INITIALISATION
+// ============================================
 document.addEventListener('DOMContentLoaded', function() {
     cleanupModals();
+    
     document.querySelectorAll('[data-bs-toggle="tooltip"]').forEach(el => new bootstrap.Tooltip(el));
     document.querySelectorAll('[data-bs-toggle="dropdown"]').forEach(el => new bootstrap.Dropdown(el));
-    $(document).on('hidden.bs.modal', '.modal', cleanupModals);
     
     const ctx = document.getElementById('prioriteChart');
     if (ctx) {
         const counts = { critique: 0, elevee: 0, moyenne: 0, faible: 0 };
         missionsData.forEach(m => { if (m.priorite && counts[m.priorite] !== undefined) counts[m.priorite]++; });
+        
         if (Object.values(counts).some(c => c > 0)) {
             const labels = [], data = [], colors = [];
             const map = { 
@@ -1158,11 +1320,31 @@ document.addEventListener('DOMContentLoaded', function() {
                 moyenne: { label: 'Moyenne', color: '#2563eb' }, 
                 faible: { label: 'Faible', color: '#64748b' } 
             };
-            Object.entries(counts).forEach(([k, v]) => { if (v > 0) { labels.push(map[k].label); data.push(v); colors.push(map[k].color); } });
+            
+            Object.entries(counts).forEach(([k, v]) => { 
+                if (v > 0) { 
+                    labels.push(map[k].label); 
+                    data.push(v); 
+                    colors.push(map[k].color); 
+                } 
+            });
+            
             new Chart(ctx, { 
                 type: 'doughnut', 
-                data: { labels: labels, datasets: [{ data: data, backgroundColor: colors, borderWidth: 2, borderColor: '#fff' }] }, 
-                options: { responsive: true, maintainAspectRatio: false, cutout: '60%' } 
+                data: { 
+                    labels: labels, 
+                    datasets: [{ 
+                        data: data, 
+                        backgroundColor: colors, 
+                        borderWidth: 2, 
+                        borderColor: '#fff' 
+                    }] 
+                }, 
+                options: { 
+                    responsive: true, 
+                    maintainAspectRatio: false, 
+                    cutout: '60%' 
+                } 
             });
         }
     }
