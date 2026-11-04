@@ -4235,7 +4235,7 @@ class VeilleDocument(db.Model):
     
     nom_fichier = db.Column(db.String(255), nullable=False)  # Nom unique sur disque
     nom_original = db.Column(db.String(255), nullable=False)  # Nom d'origine
-    type_fichier = db.Column(db.String(50))  # Extension
+    type_fichier = db.Column(db.String(255))  # Extension
     taille = db.Column(db.Integer)  # En octets
     
     # Traçabilité
@@ -5409,7 +5409,7 @@ class FichierMetadata(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     nom_fichier = db.Column(db.String(500), nullable=False)
     chemin = db.Column(db.String(1000), nullable=False)
-    type_fichier = db.Column(db.String(50))
+    type_fichier = db.Column(db.String(255))
     taille = db.Column(db.Integer)  # en octets
     commentaire = db.Column(db.Text)
     client_id = db.Column(db.Integer, db.ForeignKey('clients.id'), nullable=True)  # AJOUTÉ
@@ -8304,7 +8304,7 @@ class FichierRisque(db.Model):
     risque_id = db.Column(db.Integer, db.ForeignKey('risques.id'), nullable=False)
     nom_fichier = db.Column(db.String(255), nullable=False)
     chemin_fichier = db.Column(db.String(500), nullable=False)
-    type_fichier = db.Column(db.String(100))
+    type_fichier = db.Column(db.String(255))
     taille = db.Column(db.Integer)  # En octets
     categorie = db.Column(db.String(100))  # 'document', 'image', 'analyse', 'autre'
     description = db.Column(db.Text)
@@ -8326,7 +8326,7 @@ class FichierKRI(db.Model):
     kri_id = db.Column(db.Integer, db.ForeignKey('kri.id'))
     nom_fichier = db.Column(db.String(255), nullable=False)
     chemin_fichier = db.Column(db.String(500), nullable=False)
-    type_fichier = db.Column(db.String(100))
+    type_fichier = db.Column(db.String(255))
     taille = db.Column(db.Integer)  # Taille en octets
     categorie = db.Column(db.String(50), default='document')
     description = db.Column(db.Text)
@@ -9823,7 +9823,7 @@ class FichierRapport(db.Model):
     # Informations sur le fichier
     nom_fichier = db.Column(db.String(255), nullable=False)
     chemin = db.Column(db.String(500), nullable=False)
-    type_fichier = db.Column(db.String(50))
+    type_fichier = db.Column(db.String(255))
     taille = db.Column(db.Integer)  # en octets
     description = db.Column(db.Text)
     extension = db.Column(db.String(10))
@@ -11321,7 +11321,7 @@ class FichierPlanAction(db.Model):
     sous_action_id = db.Column(db.Integer, db.ForeignKey('sous_actions.id'), nullable=True)
     nom_fichier = db.Column(db.String(255), nullable=False)
     chemin = db.Column(db.String(500), nullable=False)
-    type_fichier = db.Column(db.String(50))
+    type_fichier = db.Column(db.String(255))
     taille = db.Column(db.Integer)  # en octets
     description = db.Column(db.Text)
     uploaded_by = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
@@ -12530,7 +12530,7 @@ class FichierPlanQualite(db.Model):
     nom_fichier = db.Column(db.String(255), nullable=False)
     nom_unique = db.Column(db.String(255), nullable=False, unique=True)
     chemin_fichier = db.Column(db.String(500), nullable=False)
-    type_fichier = db.Column(db.String(100), nullable=False)
+    type_fichier = db.Column(db.String(255), nullable=False)
     taille = db.Column(db.Integer, nullable=False)
     
     # Métadonnées
@@ -15148,7 +15148,7 @@ class FichierCampagneControle(db.Model):
     nom_fichier = db.Column(db.String(255), nullable=False)       # Nom original
     nom_unique = db.Column(db.String(255), nullable=False, unique=True)  # Nom sur disque
     chemin_fichier = db.Column(db.String(500), nullable=False)    # Chemin complet
-    type_fichier = db.Column(db.String(100), nullable=False)      # MIME type
+    type_fichier = db.Column(db.String(255), nullable=False)      # MIME type
     taille = db.Column(db.Integer, nullable=False)                # En octets
     
     categorie = db.Column(db.String(50), default='document')
@@ -15726,7 +15726,7 @@ class DocumentPCA(db.Model):
     nom_fichier = db.Column(db.String(255), nullable=False)
     nom_unique = db.Column(db.String(255), nullable=False, unique=True)
     chemin_fichier = db.Column(db.String(500), nullable=False)
-    type_fichier = db.Column(db.String(100), nullable=False)
+    type_fichier = db.Column(db.String(255), nullable=False)
     taille = db.Column(db.Integer, nullable=False)
     
     categorie = db.Column(db.String(50), default='document')  # document, procedure, schema, rapport
