@@ -17657,76 +17657,78 @@ class ServiceAlerteApprobation:
             User.is_active == True,
             User.role.in_(['admin', 'directeur', 'direction', 'dg'])
         ).all()
-    
+
     @staticmethod
     def _creer_alerte_approbation(
         audit, destinataire, type_alerte, titre, message, 
         workflow=None, date_echeance=None, jours_retard=None
     ):
         """
-        Crée une alerte d'approbation ET une notification associée.
+        Crée UNE SEULE alerte d'approbation par (audit, destinataire, type_alerte).
         
-        ✅ ANTI-DOUBLON : vérifie qu'une alerte non-lue identique n'existe pas déjà
-           pour éviter la prolifération à chaque passage du scheduler.
+        ✅ DÉDUPLICATION PERMANENTE :
+           - Pas de fenêtre temporelle
+           - Si une alerte NON LUE existe déjà → on ne crée RIEN
+           - Si l'étape du workflow a changé → on supprime les anciennes
+           - Si une alerte LUE existe pour la même étape → on la remet à "non lue"
+             au lieu d'en créer une nouvelle
         """
-        from datetime import datetime, timedelta
+        from datetime import datetime
         
         # ============================================
-        # 1. VÉRIFICATION ANTI-DOUBLON (alerte)
+        # 0. INVALIDATION SI LE WORKFLOW A CHANGÉ D'ÉTAPE
         # ============================================
-        # On considère qu'une alerte identique existe si :
-        #   - même audit
-        #   - même destinataire
-        #   - même type d'alerte
-        #   - non lue
-        #   - créée dans les dernières 24h (fenêtre de dédup)
-        seuil_dedup = datetime.utcnow() - timedelta(hours=24)
+        if workflow:
+            etape_attendue = {
+                'approbation_niveau1': 'en_relecture',
+                'approbation_niveau2': 'approuve',
+            }.get(type_alerte)
+            
+            if etape_attendue and workflow.etape_actuelle != etape_attendue:
+                # Le workflow n'est plus dans la bonne étape :
+                # on supprime TOUTES les alertes de ce type pour cet audit
+                AlerteApprobation.query.filter_by(
+                    audit_id=audit.id,
+                    type_alerte=type_alerte,
+                    est_lue=False
+                ).delete(synchronize_session=False)
+                Notification.query.filter_by(
+                    entite_type='audit',
+                    entite_id=audit.id,
+                    type_notification='alerte_approbation',
+                    est_lue=False
+                ).delete(synchronize_session=False)
+                db.session.commit()
+                return None
         
-        alerte_existante = AlerteApprobation.query.filter(
-            AlerteApprobation.audit_id == audit.id,
-            AlerteApprobation.destinataire_id == destinataire.id,
-            AlerteApprobation.type_alerte == type_alerte,
-            AlerteApprobation.est_lue == False,
-            AlerteApprobation.date_creation >= seuil_dedup
+        # ============================================
+        # 1. CHERCHER UNE ALERTE EXISTANTE (LUE OU NON)
+        # ============================================
+        alerte_existante = AlerteApprobation.query.filter_by(
+            audit_id=audit.id,
+            destinataire_id=destinataire.id,
+            type_alerte=type_alerte
         ).first()
         
         if alerte_existante:
-            # Une alerte identique existe déjà → on ne crée rien
-            print(f"⏭️  Alerte déjà existante (id={alerte_existante.id}) "
-                  f"pour audit {audit.reference} / {destinataire.username} / {type_alerte}")
+            if alerte_existante.est_lue:
+                # ✅ L'utilisateur l'avait lue, mais l'audit est toujours en attente :
+                # on la remet à "non lue" au lieu d'en créer une nouvelle
+                alerte_existante.est_lue = False
+                alerte_existante.date_creation = datetime.utcnow()
+                alerte_existante.titre = titre
+                alerte_existante.message = message
+                db.session.commit()
+                print(f"🔄 Alerte réactivée (id={alerte_existante.id}) "
+                      f"pour audit {audit.reference} / {destinataire.username} / {type_alerte}")
+            else:
+                # ✅ Déjà non lue → on ne fait RIEN
+                print(f"⏭️  Alerte déjà active (id={alerte_existante.id}) "
+                      f"pour audit {audit.reference} / {destinataire.username} / {type_alerte}")
             return alerte_existante
         
         # ============================================
-        # 2. VÉRIFICATION ANTI-DOUBLON (notification)
-        # ============================================
-        notification_existante = Notification.query.filter(
-            Notification.destinataire_id == destinataire.id,
-            Notification.entite_type == 'audit',
-            Notification.entite_id == audit.id,
-            Notification.type_notification == 'alerte_approbation',
-            Notification.est_lue == False,
-            Notification.created_at >= seuil_dedup
-        ).first()
-        
-        if notification_existante:
-            # Notification déjà présente → on crée juste l'alerte DB
-            print(f"⏭️  Notification déjà existante (id={notification_existante.id}) "
-                  f"pour audit {audit.reference}")
-            alerte = AlerteApprobation(
-                audit_id=audit.id,
-                destinataire_id=destinataire.id,
-                type_alerte=type_alerte,
-                titre=titre,
-                message=message,
-                client_id=audit.client_id,
-                date_echeance=date_echeance
-            )
-            db.session.add(alerte)
-            db.session.commit()
-            return alerte
-        
-        # ============================================
-        # 3. CRÉATION (aucun doublon détecté)
+        # 2. AUCUNE ALERTE EXISTANTE : CRÉATION
         # ============================================
         alerte = AlerteApprobation(
             audit_id=audit.id,
@@ -17747,29 +17749,33 @@ class ServiceAlerteApprobation:
         else:
             niveau_urgence = 'normal'
         
-        notification = Notification(
+        # Notification associée (une seule)
+        notification_existante = Notification.query.filter_by(
             destinataire_id=destinataire.id,
-            type_notification='alerte_approbation',
-            titre=titre,
-            message=message,
-            urgence=niveau_urgence,
             entite_type='audit',
             entite_id=audit.id,
-            client_id=audit.client_id
-        )
-        db.session.add(notification)
+            type_notification='alerte_approbation'
+        ).first()
         
-        if workflow:
-            notification.donnees_supplementaires = {
-                'workflow_etape': workflow.etape_actuelle,
-                'audit_reference': audit.reference,
-                'audit_titre': audit.titre,
-                'type_alerte': type_alerte
-            }
-            if date_echeance:
-                notification.donnees_supplementaires['date_echeance'] = date_echeance.isoformat()
-            if jours_retard:
-                notification.donnees_supplementaires['jours_retard'] = jours_retard
+        if notification_existante:
+            # Réactiver la notification existante
+            notification_existante.est_lue = False
+            notification_existante.titre = titre
+            notification_existante.message = message
+            notification_existante.urgence = niveau_urgence
+            notification_existante.created_at = datetime.utcnow()
+        else:
+            notification = Notification(
+                destinataire_id=destinataire.id,
+                type_notification='alerte_approbation',
+                titre=titre,
+                message=message,
+                urgence=niveau_urgence,
+                entite_type='audit',
+                entite_id=audit.id,
+                client_id=audit.client_id
+            )
+            db.session.add(notification)
         
         db.session.commit()
         return alerte
