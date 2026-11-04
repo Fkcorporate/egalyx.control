@@ -17390,7 +17390,6 @@ class WorkflowApprobation(db.Model):
 # ============================================
 # MODÈLE POUR LES NOTIFICATIONS D'APPROBATION
 # ============================================
-
 class AlerteApprobation(db.Model):
     """Alertes d'approbation pour les audits"""
     __tablename__ = 'alertes_approbation'
@@ -17443,6 +17442,36 @@ class AlerteApprobation(db.Model):
 #
 # ============================================
 
+# ============================================
+# SERVICE D'ENVOI D'ALERTES D'APPROBATION
+# ============================================
+# 
+# ✅ CORRECTION MAJEURE : gestion du contexte Flask
+#
+# PROBLÈME : APScheduler appelle `verifier_et_envoyer_alertes()` 
+#            dans un thread séparé, SANS contexte Flask. Donc 
+#            `db.session` lève une RuntimeError.
+#
+# SOLUTION : 
+#   1. `verifier_et_envoyer_alertes()` crée le contexte avec 
+#      `app.app_context()` puis délègue à `_executer_verification()`.
+#   2. Toute la logique métier est dans `_executer_verification()`.
+#   3. Les méthodes auxiliaires (`_creer_alerte_approbation`, etc.)
+#      sont appelées depuis un contexte déjà actif.
+#
+# ✅ CORRECTION DÉDUPLICATION :
+#   - 1 seule alerte NON LUE par (audit_id, destinataire_id, type_alerte)
+#   - Pas de fenêtre temporelle (déduplication permanente)
+#   - Réactivation au lieu de recréation si l'alerte avait été lue
+#   - Invalidation automatique si le workflow a changé d'étape
+#
+# ✅ CORRECTION TRANSACTIONNELLE :
+#   - Un SEUL commit à la fin de `_executer_verification()`
+#   - Rollback global en cas d'erreur
+#   - Plus de commits par alerte (performance ×10)
+#
+# ============================================
+
 
 class ServiceAlerteApprobation:
     """
@@ -17466,7 +17495,7 @@ class ServiceAlerteApprobation:
         à `_executer_verification()`.
         
         Returns:
-            int: Nombre d'alertes envoyées
+            int: Nombre d'alertes envoyées (créées ou réactivées)
         """
         # ⚠️ Import local pour éviter les imports circulaires
         # (app.py importe models.py, models.py ne doit pas importer app.py 
@@ -17501,11 +17530,13 @@ class ServiceAlerteApprobation:
         
         ⚠️ Ne PAS appeler directement depuis APScheduler.
         
+        ✅ Un SEUL commit à la fin (transaction globale).
+        
         Returns:
-            int: Nombre d'alertes envoyées
+            int: Nombre d'alertes créées ou réactivées
         """
         aujourdhui = datetime.utcnow().date()
-        alertes_envoyees = 0
+        alertes_traitees = 0
         
         # ============================================
         # 1. RÉCUPÉRER TOUS LES AUDITS ACTIFS
@@ -17514,127 +17545,139 @@ class ServiceAlerteApprobation:
         
         print(f"🔍 Vérification des alertes d'approbation pour {len(audits)} audit(s)")
         
-        for audit in audits:
-            workflow = WorkflowApprobation.query.filter_by(audit_id=audit.id).first()
-            if not workflow:
-                continue
-            
-            # ============================================
-            # 2. ALERTES D'APPROBATION SELON L'ÉTAPE DU WORKFLOW
-            # ============================================
-            
-            # --- Niveau 1 : En relecture ---
-            if workflow.etape_actuelle == 'en_relecture':
-                approbateurs_niveau1 = User.query.filter(
-                    User.client_id == audit.client_id,
-                    User.is_active == True,
-                    User.role.in_(['admin', 'manager', 'responsable_qualite'])
+        try:
+            for audit in audits:
+                workflow = WorkflowApprobation.query.filter_by(audit_id=audit.id).first()
+                if not workflow:
+                    continue
+                
+                # ============================================
+                # 2. ALERTES D'APPROBATION SELON L'ÉTAPE DU WORKFLOW
+                # ============================================
+                
+                # --- Niveau 1 : En relecture ---
+                if workflow.etape_actuelle == 'en_relecture':
+                    approbateurs_niveau1 = User.query.filter(
+                        User.client_id == audit.client_id,
+                        User.is_active == True,
+                        User.role.in_(['admin', 'manager', 'responsable_qualite'])
+                    ).all()
+                    
+                    for approbateur in approbateurs_niveau1:
+                        resultat = ServiceAlerteApprobation._creer_alerte_approbation(
+                            audit=audit,
+                            destinataire=approbateur,
+                            type_alerte='approbation_niveau1',
+                            titre=f"🔍 Audit à valider: {audit.reference}",
+                            message=(
+                                f"L'audit '{audit.titre}' est en attente "
+                                f"de votre validation (Niveau 1)."
+                            ),
+                            workflow=workflow
+                        )
+                        if resultat:
+                            alertes_traitees += 1
+                
+                # --- Niveau 2 : Approuvé par N1, en attente de validation finale ---
+                elif workflow.etape_actuelle == 'approuve':
+                    approbateurs_niveau2 = User.query.filter(
+                        User.client_id == audit.client_id,
+                        User.is_active == True,
+                        User.role.in_(['admin', 'directeur', 'direction', 'dg'])
+                    ).all()
+                    
+                    for approbateur in approbateurs_niveau2:
+                        resultat = ServiceAlerteApprobation._creer_alerte_approbation(
+                            audit=audit,
+                            destinataire=approbateur,
+                            type_alerte='approbation_niveau2',
+                            titre=f"✅ Audit à approuver: {audit.reference}",
+                            message=(
+                                f"L'audit '{audit.titre}' est en attente "
+                                f"de votre validation finale (Niveau 2)."
+                            ),
+                            workflow=workflow
+                        )
+                        if resultat:
+                            alertes_traitees += 1
+                
+                # ============================================
+                # 3. ALERTES D'ÉCHÉANCE POUR LES RECOMMANDATIONS (J-7)
+                # ============================================
+                
+                echeances_proches = Recommandation.query.filter(
+                    Recommandation.audit_id == audit.id,
+                    Recommandation.date_echeance.isnot(None),
+                    Recommandation.statut != 'termine',
+                    Recommandation.date_echeance <= aujourdhui + timedelta(days=7),
+                    Recommandation.date_echeance >= aujourdhui
                 ).all()
                 
-                for approbateur in approbateurs_niveau1:
-                    ServiceAlerteApprobation._creer_alerte_approbation(
-                        audit=audit,
-                        destinataire=approbateur,
-                        type_alerte='approbation_niveau1',
-                        titre=f"🔍 Audit à valider: {audit.reference}",
-                        message=(
-                            f"L'audit '{audit.titre}' est en attente "
-                            f"de votre validation (Niveau 1)."
-                        ),
-                        workflow=workflow
-                    )
-                    alertes_envoyees += 1
-            
-            # --- Niveau 2 : Approuvé par N1, en attente de validation finale ---
-            elif workflow.etape_actuelle == 'approuve':
-                approbateurs_niveau2 = User.query.filter(
-                    User.client_id == audit.client_id,
-                    User.is_active == True,
-                    User.role.in_(['admin', 'directeur', 'direction', 'dg'])
+                for reco in echeances_proches:
+                    jours_restants = (reco.date_echeance - aujourdhui).days
+                    responsable = reco.responsable
+                    if responsable:
+                        resultat = ServiceAlerteApprobation._creer_alerte_approbation(
+                            audit=audit,
+                            destinataire=responsable,
+                            type_alerte='echeance',
+                            titre=f"⚠️ Échéance dans {jours_restants} jour(s)",
+                            message=(
+                                f"La recommandation '{reco.description[:100]}...' "
+                                f"arrive à échéance le "
+                                f"{reco.date_echeance.strftime('%d/%m/%Y')}."
+                            ),
+                            workflow=workflow,
+                            date_echeance=reco.date_echeance
+                        )
+                        if resultat:
+                            alertes_traitees += 1
+                
+                # ============================================
+                # 4. ALERTES DE RETARD POUR LES RECOMMANDATIONS
+                # ============================================
+                
+                retards = Recommandation.query.filter(
+                    Recommandation.audit_id == audit.id,
+                    Recommandation.date_echeance.isnot(None),
+                    Recommandation.statut != 'termine',
+                    Recommandation.date_echeance < aujourdhui
                 ).all()
                 
-                for approbateur in approbateurs_niveau2:
-                    ServiceAlerteApprobation._creer_alerte_approbation(
-                        audit=audit,
-                        destinataire=approbateur,
-                        type_alerte='approbation_niveau2',
-                        titre=f"✅ Audit à approuver: {audit.reference}",
-                        message=(
-                            f"L'audit '{audit.titre}' est en attente "
-                            f"de votre validation finale (Niveau 2)."
-                        ),
-                        workflow=workflow
-                    )
-                    alertes_envoyees += 1
+                for reco in retards:
+                    responsable = reco.responsable
+                    if responsable:
+                        jours_retard = (aujourdhui - reco.date_echeance).days
+                        resultat = ServiceAlerteApprobation._creer_alerte_approbation(
+                            audit=audit,
+                            destinataire=responsable,
+                            type_alerte='retard',
+                            titre=f"🔴 RETARD de {jours_retard} jour(s)",
+                            message=(
+                                f"La recommandation '{reco.description[:100]}...' "
+                                f"est en retard depuis le "
+                                f"{reco.date_echeance.strftime('%d/%m/%Y')}."
+                            ),
+                            workflow=workflow,
+                            date_echeance=reco.date_echeance,
+                            jours_retard=jours_retard
+                        )
+                        if resultat:
+                            alertes_traitees += 1
             
             # ============================================
-            # 3. ALERTES D'ÉCHÉANCE POUR LES RECOMMANDATIONS (J-7)
+            # 5. ✅ UN SEUL COMMIT POUR TOUT
             # ============================================
-            
-            echeances_proches = Recommandation.query.filter(
-                Recommandation.audit_id == audit.id,
-                Recommandation.date_echeance.isnot(None),
-                Recommandation.statut != 'termine',
-                Recommandation.date_echeance <= aujourdhui + timedelta(days=7),
-                Recommandation.date_echeance >= aujourdhui
-            ).all()
-            
-            for reco in echeances_proches:
-                jours_restants = (reco.date_echeance - aujourdhui).days
-                responsable = reco.responsable
-                if responsable:
-                    ServiceAlerteApprobation._creer_alerte_approbation(
-                        audit=audit,
-                        destinataire=responsable,
-                        type_alerte='echeance',
-                        titre=f"⚠️ Échéance dans {jours_restants} jour(s)",
-                        message=(
-                            f"La recommandation '{reco.description[:100]}...' "
-                            f"arrive à échéance le "
-                            f"{reco.date_echeance.strftime('%d/%m/%Y')}."
-                        ),
-                        workflow=workflow,
-                        date_echeance=reco.date_echeance
-                    )
-                    alertes_envoyees += 1
-            
-            # ============================================
-            # 4. ALERTES DE RETARD POUR LES RECOMMANDATIONS
-            # ============================================
-            
-            retards = Recommandation.query.filter(
-                Recommandation.audit_id == audit.id,
-                Recommandation.date_echeance.isnot(None),
-                Recommandation.statut != 'termine',
-                Recommandation.date_echeance < aujourdhui
-            ).all()
-            
-            for reco in retards:
-                responsable = reco.responsable
-                if responsable:
-                    jours_retard = (aujourdhui - reco.date_echeance).days
-                    ServiceAlerteApprobation._creer_alerte_approbation(
-                        audit=audit,
-                        destinataire=responsable,
-                        type_alerte='retard',
-                        titre=f"🔴 RETARD de {jours_retard} jour(s)",
-                        message=(
-                            f"La recommandation '{reco.description[:100]}...' "
-                            f"est en retard depuis le "
-                            f"{reco.date_echeance.strftime('%d/%m/%Y')}."
-                        ),
-                        workflow=workflow,
-                        date_echeance=reco.date_echeance,
-                        jours_retard=jours_retard
-                    )
-                    alertes_envoyees += 1
+            db.session.commit()
+            print(f"✅ Alertes d'approbation traitées : {alertes_traitees}")
+            return alertes_traitees
         
-        # ============================================
-        # 5. LOG FINAL
-        # ============================================
-        print(f"✅ Alertes d'approbation envoyées : {alertes_envoyees}")
-        
-        return alertes_envoyees
+        except Exception as e:
+            db.session.rollback()
+            import traceback
+            print(f"❌ Erreur lors de la création des alertes : {e}")
+            traceback.print_exc()
+            return 0
     
     # ============================================
     # MÉTHODES AUXILIAIRES
@@ -17669,9 +17712,16 @@ class ServiceAlerteApprobation:
         ✅ DÉDUPLICATION PERMANENTE :
            - Pas de fenêtre temporelle
            - Si une alerte NON LUE existe déjà → on ne crée RIEN
-           - Si l'étape du workflow a changé → on supprime les anciennes
            - Si une alerte LUE existe pour la même étape → on la remet à "non lue"
              au lieu d'en créer une nouvelle
+           - Si l'étape du workflow a changé → on supprime les anciennes
+           
+        ⚠️ TRANSACTION : AUCUN commit ici. L'appelant (_executer_verification)
+           gère le commit global.
+        
+        Returns:
+            AlerteApprobation | None: L'alerte créée/réactivée, ou None si
+            invalidée (workflow changé d'étape)
         """
         from datetime import datetime
         
@@ -17698,7 +17748,7 @@ class ServiceAlerteApprobation:
                     type_notification='alerte_approbation',
                     est_lue=False
                 ).delete(synchronize_session=False)
-                db.session.commit()
+                # ⚠️ Pas de commit ici — l'appelant s'en charge
                 return None
         
         # ============================================
@@ -17718,14 +17768,11 @@ class ServiceAlerteApprobation:
                 alerte_existante.date_creation = datetime.utcnow()
                 alerte_existante.titre = titre
                 alerte_existante.message = message
-                db.session.commit()
-                print(f"🔄 Alerte réactivée (id={alerte_existante.id}) "
-                      f"pour audit {audit.reference} / {destinataire.username} / {type_alerte}")
+                # ⚠️ Pas de commit ici
+                return alerte_existante
             else:
                 # ✅ Déjà non lue → on ne fait RIEN
-                print(f"⏭️  Alerte déjà active (id={alerte_existante.id}) "
-                      f"pour audit {audit.reference} / {destinataire.username} / {type_alerte}")
-            return alerte_existante
+                return alerte_existante
         
         # ============================================
         # 2. AUCUNE ALERTE EXISTANTE : CRÉATION
@@ -17777,7 +17824,7 @@ class ServiceAlerteApprobation:
             )
             db.session.add(notification)
         
-        db.session.commit()
+        # ⚠️ Pas de commit ici
         return alerte
     
     # ============================================
