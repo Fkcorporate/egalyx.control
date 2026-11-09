@@ -1,0 +1,591 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Logigramme - {{ activite.nom }}</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Inter', system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+            background: white;
+            padding: 30px;
+        }
+
+        /* Conteneur principal pour l'impression */
+        .print-container {
+            max-width: 100%;
+            margin: 0 auto;
+            background: white;
+        }
+
+        /* En-tête */
+        .print-header {
+            text-align: center;
+            margin-bottom: 30px;
+            padding: 20px;
+            background: linear-gradient(135deg, #f8fafc 0%, #f1f5f9 100%);
+            border-radius: 12px;
+            page-break-after: avoid;
+        }
+
+        .print-header h1 {
+            color: #1e293b;
+            font-size: 24px;
+            margin-bottom: 10px;
+            font-weight: 700;
+        }
+
+        .print-header p {
+            color: #64748b;
+            font-size: 14px;
+            margin-bottom: 15px;
+        }
+
+        .print-meta {
+            display: flex;
+            justify-content: center;
+            gap: 30px;
+            flex-wrap: wrap;
+            font-size: 12px;
+            color: #94a3b8;
+        }
+
+        /* Zone du diagramme */
+        .diagram-container {
+            margin: 20px 0;
+            border: 2px solid #e2e8f0;
+            border-radius: 12px;
+            background: white;
+            overflow: auto;
+            position: relative;
+            page-break-inside: avoid;
+            break-inside: avoid;
+        }
+
+        #diagram-svg {
+            display: block;
+            width: 100%;
+            height: auto;
+            background: white;
+        }
+
+        /* Pied de page */
+        .print-footer {
+            margin-top: 40px;
+            text-align: center;
+            padding-top: 20px;
+            border-top: 1px solid #e2e8f0;
+            color: #94a3b8;
+            font-size: 10px;
+        }
+
+        /* Styles pour l'impression */
+        @media print {
+            body {
+                padding: 0;
+                margin: 0;
+            }
+            
+            .print-container {
+                padding: 20px;
+            }
+            
+            .diagram-container {
+                break-inside: avoid;
+                page-break-inside: avoid;
+                border: 1px solid #ccc;
+            }
+            
+            .no-break {
+                break-inside: avoid;
+                page-break-inside: avoid;
+            }
+        }
+
+        /* Bouton d'impression */
+        .print-button {
+            position: fixed;
+            bottom: 30px;
+            right: 30px;
+            background: #3b82f6;
+            color: white;
+            border: none;
+            border-radius: 50px;
+            padding: 12px 24px;
+            font-size: 14px;
+            font-weight: 600;
+            cursor: pointer;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+            z-index: 1000;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            transition: all 0.3s ease;
+        }
+
+        .print-button:hover {
+            background: #2563eb;
+            transform: translateY(-2px);
+            box-shadow: 0 6px 16px rgba(0,0,0,0.2);
+        }
+
+        @media print {
+            .print-button {
+                display: none;
+            }
+        }
+
+        /* Loader */
+        .loader {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0,0,0,0.7);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            z-index: 9999;
+            visibility: hidden;
+        }
+
+        .loader.active {
+            visibility: visible;
+        }
+
+        .loader-content {
+            background: white;
+            padding: 30px;
+            border-radius: 12px;
+            text-align: center;
+        }
+
+        .spinner {
+            width: 40px;
+            height: 40px;
+            border: 4px solid #e2e8f0;
+            border-top-color: #3b82f6;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+            margin: 0 auto 15px;
+        }
+
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+    </style>
+</head>
+<body>
+    <div id="loader" class="loader">
+        <div class="loader-content">
+            <div class="spinner"></div>
+            <p>Génération du logigramme en cours...</p>
+        </div>
+    </div>
+
+    <div id="printContainer" class="print-container">
+        <!-- L'en-tête sera inséré dynamiquement -->
+        <!-- Le diagramme SVG sera inséré dynamiquement -->
+        <!-- Le pied de page sera inséré dynamiquement -->
+    </div>
+
+    <button class="print-button" onclick="printDocument()">
+        <span>🖨️</span>
+        Imprimer / Exporter PDF
+    </button>
+
+    <script>
+        // Données du logigramme (à remplacer par les données réelles)
+        const logigrammeData = {
+            nom: {{ activite.nom|tojson }},
+            description: {{ (activite.description or '')|tojson }},
+            elements: {{ elements|tojson }},
+            liens: {{ liens|tojson }},
+            stats: {
+                total_elements: {{ elements|length }},
+                total_liens: {{ liens|length }}
+            }
+        };
+
+        // Fonction pour échapper le HTML
+        function escapeHtml(text) {
+            if (!text) return '';
+            const div = document.createElement('div');
+            div.textContent = text;
+            return div.innerHTML;
+        }
+
+        // Obtenir la couleur d'un élément
+        function getElementColor(type) {
+            const colors = {
+                'debut': '#10b981',
+                'action': '#3b82f6',
+                'decision': '#0284c7',
+                'controle': '#f59e0b',
+                'risque': '#ef4444',
+                'fin': '#6b7280',
+                'titre': '#ffffff',
+                'organisation': '#1e293b'
+            };
+            return colors[type] || '#94a3b8';
+        }
+
+        // Obtenir le label d'un type
+        function getTypeLabel(type) {
+            const labels = {
+                'debut': 'Début',
+                'action': 'Action',
+                'decision': 'Décision',
+                'controle': 'Contrôle',
+                'risque': 'Risque',
+                'fin': 'Fin',
+                'titre': 'Titre',
+                'organisation': 'Séparateur'
+            };
+            return labels[type] || type;
+        }
+
+        // Calculer les points de connexion entre deux éléments
+        function calculateConnectionPoints(sourceRect, targetRect) {
+            const sourceCenterX = sourceRect.x + sourceRect.width / 2;
+            const sourceCenterY = sourceRect.y + sourceRect.height / 2;
+            const targetCenterX = targetRect.x + targetRect.width / 2;
+            const targetCenterY = targetRect.y + targetRect.height / 2;
+            
+            const dx = targetCenterX - sourceCenterX;
+            const dy = targetCenterY - sourceCenterY;
+            
+            let x1, y1, x2, y2;
+            
+            if (Math.abs(dx) > Math.abs(dy)) {
+                if (dx > 0) {
+                    x1 = sourceRect.x + sourceRect.width;
+                    y1 = sourceCenterY;
+                    x2 = targetRect.x;
+                    y2 = targetCenterY;
+                } else {
+                    x1 = sourceRect.x;
+                    y1 = sourceCenterY;
+                    x2 = targetRect.x + targetRect.width;
+                    y2 = targetCenterY;
+                }
+            } else {
+                if (dy > 0) {
+                    x1 = sourceCenterX;
+                    y1 = sourceRect.y + sourceRect.height;
+                    x2 = targetCenterX;
+                    y2 = targetRect.y;
+                } else {
+                    x1 = sourceCenterX;
+                    y1 = sourceRect.y;
+                    x2 = targetCenterX;
+                    y2 = targetRect.y + targetRect.height;
+                }
+            }
+            
+            return { x1, y1, x2, y2 };
+        }
+
+        // Générer le SVG complet du logigramme
+        function generateLogigrammeSVG() {
+            if (!logigrammeData.elements || logigrammeData.elements.length === 0) {
+                return '<div style="text-align: center; padding: 100px;">Aucun élément à afficher</div>';
+            }
+
+            // Calculer les dimensions totales
+            let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+            
+            logigrammeData.elements.forEach(element => {
+                const w = element.style?.width || (element.type === 'organisation' ? 4 : 120);
+                const h = element.style?.height || (element.type === 'organisation' ? 200 : 70);
+                minX = Math.min(minX, element.position_x);
+                minY = Math.min(minY, element.position_y);
+                maxX = Math.max(maxX, element.position_x + w);
+                maxY = Math.max(maxY, element.position_y + h);
+            });
+            
+            const padding = 50;
+            const width = maxX - minX + 2 * padding;
+            const height = maxY - minY + 2 * padding;
+            
+            // Créer l'élément SVG
+            const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+            svg.setAttribute('width', '100%');
+            svg.setAttribute('height', 'auto');
+            svg.setAttribute('viewBox', `${minX - padding} ${minY - padding} ${width} ${height}`);
+            svg.setAttribute('style', 'background: white; font-family: "Inter", system-ui, sans-serif;');
+            
+            // Définitions pour les flèches
+            const defs = document.createElementNS('http://www.w3.org/2000/svg', 'defs');
+            
+            const markers = [
+                { id: 'arrow-normal', color: '#94a3b8' },
+                { id: 'arrow-oui', color: '#10b981' },
+                { id: 'arrow-non', color: '#ef4444' }
+            ];
+            
+            markers.forEach(marker => {
+                const markerElem = document.createElementNS('http://www.w3.org/2000/svg', 'marker');
+                markerElem.setAttribute('id', marker.id);
+                markerElem.setAttribute('markerWidth', '12');
+                markerElem.setAttribute('markerHeight', '12');
+                markerElem.setAttribute('refX', '10');
+                markerElem.setAttribute('refY', '6');
+                markerElem.setAttribute('orient', 'auto');
+                
+                const polygon = document.createElementNS('http://www.w3.org/2000/svg', 'polygon');
+                polygon.setAttribute('points', '0 0, 12 6, 0 12');
+                polygon.setAttribute('fill', marker.color);
+                
+                markerElem.appendChild(polygon);
+                defs.appendChild(markerElem);
+            });
+            
+            svg.appendChild(defs);
+            
+            // Dessiner les liens
+            if (logigrammeData.liens) {
+                logigrammeData.liens.forEach(link => {
+                    const source = logigrammeData.elements.find(e => e.id === link.source_id);
+                    const target = logigrammeData.elements.find(e => e.id === link.cible_id);
+                    
+                    if (source && target) {
+                        const sourceRect = {
+                            x: source.position_x,
+                            y: source.position_y,
+                            width: source.style?.width || (source.type === 'organisation' ? 4 : 120),
+                            height: source.style?.height || (source.type === 'organisation' ? 200 : 70)
+                        };
+                        
+                        const targetRect = {
+                            x: target.position_x,
+                            y: target.position_y,
+                            width: target.style?.width || (target.type === 'organisation' ? 4 : 120),
+                            height: target.style?.height || (target.type === 'organisation' ? 200 : 70)
+                        };
+                        
+                        const points = calculateConnectionPoints(sourceRect, targetRect);
+                        const type = link.type || 'normal';
+                        
+                        const line = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+                        line.setAttribute('x1', points.x1);
+                        line.setAttribute('y1', points.y1);
+                        line.setAttribute('x2', points.x2);
+                        line.setAttribute('y2', points.y2);
+                        line.setAttribute('stroke', type === 'oui' ? '#10b981' : (type === 'non' ? '#ef4444' : '#94a3b8'));
+                        line.setAttribute('stroke-width', '2.5');
+                        line.setAttribute('marker-end', `url(#arrow-${type})`);
+                        
+                        if (type === 'non') {
+                            line.setAttribute('stroke-dasharray', '8 4');
+                        }
+                        
+                        svg.appendChild(line);
+                        
+                        // Ajouter le label pour Oui/Non
+                        if (type === 'oui' || type === 'non') {
+                            const midX = (points.x1 + points.x2) / 2;
+                            const midY = (points.y1 + points.y2) / 2;
+                            
+                            const text = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+                            text.setAttribute('x', midX);
+                            text.setAttribute('y', midY - 8);
+                            text.setAttribute('fill', type === 'oui' ? '#10b981' : '#ef4444');
+                            text.setAttribute('font-size', '11');
+                            text.setAttribute('font-weight', 'bold');
+                            text.setAttribute('text-anchor', 'middle');
+                            text.textContent = type === 'oui' ? '✓ OUI' : '✗ NON';
+                            
+                            svg.appendChild(text);
+                        }
+                    }
+                });
+            }
+            
+            // Dessiner les éléments
+            logigrammeData.elements.forEach(element => {
+                const isSeparator = element.type === 'organisation';
+                const w = element.style?.width || (isSeparator ? 4 : 120);
+                const h = element.style?.height || (isSeparator ? 200 : 70);
+                const x = element.position_x;
+                const y = element.position_y;
+                
+                const g = document.createElementNS('http://www.w3.org/2000/svg', 'g');
+                
+                if (isSeparator) {
+                    // Ligne séparatrice
+                    const rect = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
+                    rect.setAttribute('x', x);
+                    rect.setAttribute('y', y);
+                    rect.setAttribute('width', w);
+                    rect.setAttribute('height', h);
+                    rect.setAttribute('fill', '#1e293b');
+                    rect.setAttribute('rx', '3');
+                    g.appendChild(rect);
+                    
+                    // Label du séparateur
+                    if (element.libelle) {
+                        const text = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+                        text.setAttribute('x', x + w + 12);
+                        text.setAttribute('y', y + h / 2);
+                        text.setAttribute('fill', '#1e293b');
+                        text.setAttribute('font-size', '12');
+                        text.setAttribute('font-weight', '600');
+                        text.setAttribute('dominant-baseline', 'middle');
+                        text.textContent = element.libelle;
+                        g.appendChild(text);
+                    }
+                } else {
+                    // Forme de l'élément
+                    const rect = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
+                    rect.setAttribute('x', x);
+                    rect.setAttribute('y', y);
+                    rect.setAttribute('width', w);
+                    rect.setAttribute('height', h);
+                    rect.setAttribute('fill', getElementColor(element.type));
+                    rect.setAttribute('rx', (element.type === 'debut' || element.type === 'fin') ? String(Math.min(w, h) / 2) : '8');
+                    rect.setAttribute('stroke', '#cbd5e1');
+                    rect.setAttribute('stroke-width', '1.5');
+                    g.appendChild(rect);
+                    
+                    // Texte de l'élément
+                    const text = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+                    text.setAttribute('x', x + w / 2);
+                    text.setAttribute('y', y + h / 2);
+                    text.setAttribute('fill', element.type === 'titre' ? '#1e293b' : 'white');
+                    text.setAttribute('font-size', element.type === 'titre' ? '14' : '12');
+                    text.setAttribute('font-weight', '600');
+                    text.setAttribute('text-anchor', 'middle');
+                    text.setAttribute('dominant-baseline', 'middle');
+                    
+                    // Troncature du texte si trop long
+                    let label = element.libelle || '';
+                    const maxChars = Math.floor(w / 8);
+                    if (label.length > maxChars) {
+                        label = label.substring(0, maxChars - 3) + '...';
+                    }
+                    text.textContent = label;
+                    
+                    g.appendChild(text);
+                    
+                    // Ajouter la description en tooltip (optionnel)
+                    if (element.description) {
+                        const title = document.createElementNS('http://www.w3.org/2000/svg', 'title');
+                        title.textContent = element.description;
+                        g.appendChild(title);
+                    }
+                }
+                
+                svg.appendChild(g);
+            });
+            
+            return svg;
+        }
+
+        // Générer l'en-tête
+        function generateHeader() {
+            const header = document.createElement('div');
+            header.className = 'print-header';
+            header.innerHTML = `
+                <h1>${escapeHtml(logigrammeData.nom)}</h1>
+                ${logigrammeData.description ? `<p>${escapeHtml(logigrammeData.description)}</p>` : ''}
+                <div class="print-meta">
+                    <span>📅 Généré le ${new Date().toLocaleDateString('fr-FR')}</span>
+                    <span>⏰ ${new Date().toLocaleTimeString('fr-FR')}</span>
+                    <span>📊 ${logigrammeData.elements.length} éléments</span>
+                    <span>🔗 ${logigrammeData.liens?.length || 0} connexions</span>
+                </div>
+            `;
+            return header;
+        }
+
+        // Générer le pied de page
+        function generateFooter() {
+            const footer = document.createElement('div');
+            footer.className = 'print-footer';
+            
+            // Compter les types d'éléments
+            const actions = logigrammeData.elements.filter(e => e.type === 'action').length;
+            const controles = logigrammeData.elements.filter(e => e.type === 'controle').length;
+            const risques = logigrammeData.elements.filter(e => e.type === 'risque').length;
+            
+            footer.innerHTML = `
+                <div style="display: flex; justify-content: space-between; flex-wrap: wrap; gap: 15px; margin-bottom: 15px;">
+                    <div><strong>Légende :</strong></div>
+                    <div>🔵 Actions: ${actions}</div>
+                    <div>🟠 Contrôles: ${controles}</div>
+                    <div>🔴 Risques: ${risques}</div>
+                    <div>🟢 Début/Fin: ${logigrammeData.elements.filter(e => e.type === 'debut' || e.type === 'fin').length}</div>
+                </div>
+                <div>Document généré automatiquement par l'application de gestion des processus</div>
+                <div>Tous droits réservés - ${new Date().getFullYear()}</div>
+            `;
+            return footer;
+        }
+
+        // Afficher le logigramme
+        async function renderLogigramme() {
+            const loader = document.getElementById('loader');
+            loader.classList.add('active');
+            
+            try {
+                const container = document.getElementById('printContainer');
+                container.innerHTML = '';
+                
+                // Ajouter l'en-tête
+                container.appendChild(generateHeader());
+                
+                // Ajouter le diagramme
+                const diagramContainer = document.createElement('div');
+                diagramContainer.className = 'diagram-container';
+                const svg = generateLogigrammeSVG();
+                diagramContainer.appendChild(svg);
+                container.appendChild(diagramContainer);
+                
+                // Ajouter le pied de page
+                container.appendChild(generateFooter());
+                
+            } catch (error) {
+                console.error('Erreur lors du rendu:', error);
+                document.getElementById('printContainer').innerHTML = `
+                    <div style="text-align: center; padding: 100px; color: red;">
+                        <h3>Erreur lors de la génération du logigramme</h3>
+                        <p>${error.message}</p>
+                    </div>
+                `;
+            } finally {
+                setTimeout(() => {
+                    loader.classList.remove('active');
+                }, 500);
+            }
+        }
+
+        // Imprimer / exporter en PDF
+        function printDocument() {
+            // Sauvegarder le style actuel
+            const originalTitle = document.title;
+            document.title = `Logigramme_${logigrammeData.nom}`;
+            
+            // Lancer l'impression
+            window.print();
+            
+            // Restaurer le titre
+            setTimeout(() => {
+                document.title = originalTitle;
+            }, 1000);
+        }
+
+        // Rendu au chargement
+        document.addEventListener('DOMContentLoaded', () => {
+            renderLogigramme();
+        });
+    </script>
+</body>
+</html>

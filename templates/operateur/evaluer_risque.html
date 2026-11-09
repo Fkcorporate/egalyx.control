@@ -1,4 +1,5 @@
 {% extends "operateur/base_operateur.html" %}
+{% import "_macros/cotation.html" as cot %}
 
 {% block title %}Évaluer le risque - {{ risque.reference }}{% endblock %}
 
@@ -175,6 +176,7 @@
 {% endblock %}
 
 {% block content %}
+{% set c_e = cotation_evaluation(evaluation) %}
 <div class="container-fluid px-4">
 
     <!-- ========== EN-TÊTE ========== -->
@@ -348,11 +350,11 @@
                                         <i class="fas fa-fire me-1"></i>Risque BRUT
                                     </div>
                                     <div class="iso-value" id="previewBrutScore">
-                                        {{ evaluation.score_risque_brut|round(1) if evaluation and evaluation.score_risque_brut else 0 }}<span class="fs-6 text-muted">/25</span>
+                                        {{ cot.fmt(c_e.score_brut) if c_e.evalue else 0 }}<span class="fs-6 text-muted">/25</span>
                                     </div>
-                                    <span class="badge bg-{{ 'success' if evaluation and evaluation.niveau_risque_brut == 'Faible' else 'warning' if evaluation and evaluation.niveau_risque_brut == 'Moyen' else 'danger' if evaluation and evaluation.niveau_risque_brut == 'Élevé' else 'dark' if evaluation and evaluation.niveau_risque_brut else 'secondary' }}"
+                                    <span class="cot-badge cot-{{ cot.cle(c_e.niveau_brut) }}"
                                           id="previewBrutNiveau">
-                                        {{ evaluation.niveau_risque_brut if evaluation and evaluation.niveau_risque_brut else 'Non évalué' }}
+                                        {{ c_e.niveau_brut }}
                                     </span>
                                     <div class="iso-sublabel">Impact × Probabilité</div>
                                 </div>
@@ -385,11 +387,11 @@
                                         <i class="fas fa-check-circle me-1"></i>Risque NET
                                     </div>
                                     <div class="iso-value" id="previewNetScore" style="color: #1A3C6B;">
-                                        {{ evaluation.score_risque_net|round(1) if evaluation and evaluation.score_risque_net else 0 }}<span class="fs-6 text-muted">/25</span>
+                                        {{ cot.fmt(c_e.score_net) if c_e.evalue else 0 }}<span class="fs-6 text-muted">/25</span>
                                     </div>
-                                    <span class="badge bg-{{ 'success' if evaluation and evaluation.niveau_risque_net == 'Faible' else 'warning' if evaluation and evaluation.niveau_risque_net == 'Moyen' else 'danger' if evaluation and evaluation.niveau_risque_net == 'Élevé' else 'dark' if evaluation and evaluation.niveau_risque_net else 'secondary' }}"
+                                    <span class="cot-badge cot-{{ cot.cle(c_e.niveau_net) }}"
                                           id="previewNetNiveau">
-                                        {{ evaluation.niveau_risque_net if evaluation and evaluation.niveau_risque_net else 'Non évalué' }}
+                                        {{ c_e.niveau_net }}
                                     </span>
                                     <div class="iso-sublabel">Après contrôles</div>
                                 </div>
@@ -530,7 +532,7 @@
                                              data-value="{{ i }}" data-type="maitrise"
                                              onclick="selectEchelle('maitrise', {{ i }})">
                                             <div class="echelle-valeur">{{ i }}</div>
-                                            <div class="color-dot" style="background: {{ get_niveau_couleur('maitrise', maitrise_order) }};"></div>
+                                            <div class="color-dot" style="background: {{ (couleur_maitrise(i) if couleur_maitrise is defined else get_niveau_couleur('maitrise', i)) }};"></div>
                                             <div class="echelle-label">{{ get_niveau_nom_court('maitrise', i) }}</div>
                                         </div>
                                     </div>
@@ -563,13 +565,13 @@
                                         <div class="text-center">
                                             <div class="display-4 fw-bold" id="scoreDisplay"
                                                  style="color: #1A3C6B; font-family: 'Georgia', serif;">
-                                                {{ evaluation.score_risque_net|round(1) if evaluation and evaluation.score_risque_net else 0 }}
+                                                {{ cot.fmt(c_e.score_net) if c_e.evalue else 0 }}
                                             </div>
                                             <div class="text-muted small">Score NET</div>
                                             <div>
-                                                <span class="badge bg-{{ 'success' if evaluation and evaluation.niveau_risque_net == 'Faible' else 'warning' if evaluation and evaluation.niveau_risque_net == 'Moyen' else 'danger' if evaluation and evaluation.niveau_risque_net == 'Élevé' else 'dark' if evaluation and evaluation.niveau_risque_net else 'secondary' }}"
+                                                <span class="cot-badge cot-{{ cot.cle(c_e.niveau_net) }}"
                                                       id="niveauDisplay">
-                                                    {{ evaluation.niveau_risque_net if evaluation and evaluation.niveau_risque_net else 'Non évalué' }}
+                                                    {{ c_e.niveau_net }}
                                                 </span>
                                             </div>
                                         </div>
@@ -592,7 +594,22 @@
                 <!-- ============================================ -->
                 <!-- PHASE 2 : INFO ADMIN (pas de formulaire opérateur) -->
                 <!-- ============================================ -->
-                {% if evaluation and evaluation.date_pre_evaluation %}
+                {% set je_suis_valideur = valideur_designe and valideur_designe.id == current_user.id %}
+                {% if evaluation and evaluation.date_pre_evaluation and valideur_designe and not je_suis_valideur %}
+                <div class="fk-card animate-in mb-3">
+                    <div class="fk-card-header"><i class="fas fa-user-check me-2" style="color: #f59e0b;"></i>Phase 2 - Validation</div>
+                    <div class="fk-card-body">
+                        {% if evaluation.statut_validation == 'a_revoir' %}
+                        <div class="alert alert-warning mb-0"><i class="fas fa-rotate-left me-2"></i>{{ valideur_designe.username }} demande de revoir la pré-évaluation{% if evaluation.commentaire_validation %} : {{ evaluation.commentaire_validation }}{% endif %}. Corrigez la phase 1 puis enregistrez.</div>
+                        {% elif evaluation.statut_validation in ['en_attente_admin', 'valide'] %}
+                        <div class="alert alert-success mb-0"><i class="fas fa-check me-2"></i>Validée par {{ valideur_designe.username }} — en attente de confirmation par l'administrateur.</div>
+                        {% else %}
+                        <div class="alert alert-info mb-0"><i class="fas fa-hourglass-half me-2"></i>Votre pré-évaluation est transmise à <strong>{{ valideur_designe.username }}</strong>, valideur désigné par votre organisation.</div>
+                        {% endif %}
+                    </div>
+                </div>
+                {% endif %}
+                {% if evaluation and evaluation.date_pre_evaluation and (not valideur_designe or je_suis_valideur) %}
                 <div id="phase2Section" class="fk-card animate-in mb-3">
                     <div class="fk-card-header d-flex justify-content-between align-items-center">
                         <div>
@@ -618,6 +635,13 @@
                         {% endif %}
                     </div>
                     <div class="fk-card-body">
+
+                        {% if je_suis_valideur %}
+                        <div class="alert alert-secondary small">
+                            <i class="fas fa-user-check me-2"></i>Vous êtes le <strong>valideur désigné</strong> des évaluations des opérateurs.
+                            {% if referent_pre %}Pré-évaluation faite par <strong>{{ referent_pre.username }}</strong>{% if evaluation.date_pre_evaluation %} le {{ evaluation.date_pre_evaluation.strftime('%d/%m/%Y') }}{% endif %}.{% endif %}
+                        </div>
+                        {% endif %}
 
                         {# Bandeau "à revoir" #}
                         {% if evaluation.statut_validation == 'a_revoir' %}
@@ -721,6 +745,9 @@
                                     </div>
                                 </div>
                             {% else %}
+                                {% if je_suis_valideur and evaluation.statut_validation == 'a_revoir' and referent_pre and referent_pre.id != current_user.id %}
+                                <div class="alert alert-warning mb-0"><i class="fas fa-hourglass-half me-2"></i>Renvoyée à revoir : en attente de la correction de {{ referent_pre.username }}.</div>
+                                {% else %}
                                 <button type="submit" name="action" value="phase2" class="btn btn-warning w-100">
                                     <i class="fas fa-check-double me-2"></i>
                                     {% if evaluation.statut_validation == 'a_revoir' %}
@@ -729,6 +756,12 @@
                                         Valider et transmettre à l'administrateur
                                     {% endif %}
                                 </button>
+                                {% if je_suis_valideur and referent_pre and referent_pre.id != current_user.id %}
+                                <button type="submit" name="action" value="a_revoir" class="btn btn-outline-danger w-100 mt-2" formnovalidate>
+                                    <i class="fas fa-rotate-left me-2"></i>Renvoyer à {{ referent_pre.username }} pour correction (commentaire obligatoire)
+                                </button>
+                                {% endif %}
+                                {% endif %}
                             {% endif %}
                         </div>
 
@@ -992,7 +1025,7 @@
 // ============================================
 // CONFIGURATION
 // ============================================
-const TAUX_REDUCTION_MAITRISE = {1: 0.00, 2: 0.10, 3: 0.25, 4: 0.40, 5: 0.60};
+const TAUX_REDUCTION_MAITRISE = EgalyxCotation.tauxReduction;   // règle unique (cotation.py)
 
 const niveauMaitriseDMR = {{ niveau_maitrise_dmr if niveau_maitrise_dmr else 'null' }};
 
@@ -1018,18 +1051,17 @@ const maitriseDescriptions = {
 // UTILITAIRES DE CALCUL
 // ============================================
 function qualifierScore(score) {
-    if (score <= 4)  return { nom: 'Faible', couleur: 'success' };
-    if (score <= 10) return { nom: 'Moyen', couleur: 'warning' };
-    if (score <= 16) return { nom: 'Élevé', couleur: 'danger' };
-    return { nom: 'Critique', couleur: 'dark' };
+    // Règle unique : seuils et couleurs viennent de cotation.py via EgalyxCotation
+    const nom = EgalyxCotation.niveau(score);
+    return { nom: nom, couleur: EgalyxCotation.cle(nom) };
 }
 
 function calculerScores(impact, proba, maitrise) {
     if (!impact || !proba) {
         return {
             brut: 0, net: 0, taux: 0,
-            niveauBrut: { nom: 'Non évalué', couleur: 'secondary' },
-            niveauNet: { nom: 'Non évalué', couleur: 'secondary' }
+            niveauBrut: { nom: 'Non évalué', couleur: 'na' },
+            niveauNet: { nom: 'Non évalué', couleur: 'na' }
         };
     }
 
@@ -1090,7 +1122,7 @@ function calculerScore() {
     const brutNiveauEl = document.getElementById('previewBrutNiveau');
     if (brutNiveauEl) {
         brutNiveauEl.textContent = scores.niveauBrut.nom;
-        brutNiveauEl.className = `badge bg-${scores.niveauBrut.couleur}`;
+        brutNiveauEl.className = `cot-badge cot-${scores.niveauBrut.couleur}`;
     }
 
     const netScoreEl = document.getElementById('previewNetScore');
@@ -1099,7 +1131,7 @@ function calculerScore() {
     const netNiveauEl = document.getElementById('previewNetNiveau');
     if (netNiveauEl) {
         netNiveauEl.textContent = scores.niveauNet.nom;
-        netNiveauEl.className = `badge bg-${scores.niveauNet.couleur}`;
+        netNiveauEl.className = `cot-badge cot-${scores.niveauNet.couleur}`;
     }
 
     const reductionEl = document.getElementById('previewReduction');
@@ -1115,7 +1147,7 @@ function calculerScore() {
     const niveauDisplay = document.getElementById('niveauDisplay');
     if (niveauDisplay) {
         niveauDisplay.textContent = scores.niveauNet.nom;
-        niveauDisplay.className = `badge bg-${scores.niveauNet.couleur}`;
+        niveauDisplay.className = `cot-badge cot-${scores.niveauNet.couleur}`;
     }
 }
 
@@ -1138,11 +1170,7 @@ function dessinerMatrice() {
     for (let i = 0; i < 5; i++) {
         for (let j = 0; j < 5; j++) {
             const scoreCell = (5 - i) * (j + 1);
-            let couleur;
-            if (scoreCell <= 4) couleur = '#28a745';
-            else if (scoreCell <= 10) couleur = '#ffc107';
-            else if (scoreCell <= 16) couleur = '#ff8c00';
-            else couleur = '#dc3545';
+            const couleur = EgalyxCotation.couleur(EgalyxCotation.niveau(scoreCell));
 
             ctx.fillStyle = couleur;
             ctx.fillRect(j * cellSize, i * cellSize, cellSize, cellSize);
@@ -1151,7 +1179,7 @@ function dessinerMatrice() {
             ctx.lineWidth = 1;
             ctx.strokeRect(j * cellSize, i * cellSize, cellSize, cellSize);
 
-            ctx.fillStyle = scoreCell > 12 ? 'white' : 'black';
+            ctx.fillStyle = EgalyxCotation.style(EgalyxCotation.niveau(scoreCell)).texte;
             ctx.font = '10px Arial';
             ctx.textAlign = 'center';
             ctx.textBaseline = 'middle';

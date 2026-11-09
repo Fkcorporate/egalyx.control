@@ -265,6 +265,13 @@
     border: 1px solid rgba(0, 0, 0, 0.05);
     position: relative;
 }
+#couloirs-layer { position: absolute; top: 0; left: 0; width: 4000px; pointer-events: none; z-index: 0; transform-origin: 0 0; }
+#couloirs-layer .couloir { position: absolute; left: 0; width: 100%; border-bottom: 1px dashed #94a3b8; }
+#couloirs-layer .couloir:nth-child(odd) { background: rgba(148, 163, 184, 0.10); }
+#couloirs-layer .couloir-nom { position: sticky; left: 0; display: inline-block; font-size: .75rem; font-weight: 700; color: #334155;
+                               background: rgba(255,255,255,.85); padding: 2px 8px; border-radius: 0 0 6px 0; }
+.element-processus.verif-erreur { outline: 3px solid #dc2626; outline-offset: 3px; }
+.element-processus.verif-avert { outline: 3px dashed #f59e0b; outline-offset: 3px; }
 #editeur-logigramme {
     position: relative;
     width: 100%;
@@ -321,6 +328,10 @@
 .element-debut { background: linear-gradient(135deg, #10b981, #059669); color: white; border-radius: 40px; }
 .element-action { background: linear-gradient(135deg, #3b82f6, #2563eb); color: white; }
 .element-controle { background: linear-gradient(135deg, #f59e0b, #d97706); color: white; }
+/* Décision (losange) : une question, plusieurs sorties libellées (Oui / Non…) */
+.element-decision { background: linear-gradient(135deg, #0ea5e9, #0369a1); color: white; min-width: 150px; min-height: 96px;
+                    padding: 1.4rem 2.2rem; clip-path: polygon(50% 0, 100% 50%, 50% 100%, 0 50%); border-radius: 0; }
+.element-decision.selected { filter: drop-shadow(0 0 3px rgba(59, 130, 246, .9)); }
 .element-risque { background: linear-gradient(135deg, #ef4444, #dc2626); color: white; }
 .element-fin { background: linear-gradient(135deg, #6b7280, #4b5563); color: white; border-radius: 40px; }
 .element-titre { background: white; color: var(--gray-800); border: 2px solid var(--gray-200); font-weight: 700; font-size: 1rem; text-align: center; }
@@ -602,6 +613,7 @@
                     <div class="palette-grid">
                         <div class="palette-item" data-type="debut" draggable="true"><i class="fas fa-play-circle"></i><span>Début</span></div>
                         <div class="palette-item" data-type="action" draggable="true"><i class="fas fa-cogs"></i><span>Action</span></div>
+                        <div class="palette-item" data-type="decision" draggable="true"><i class="fas fa-code-branch"></i><span>Décision</span></div>
                         <div class="palette-item" data-type="controle" draggable="true"><i class="fas fa-check-double"></i><span>Contrôle</span></div>
                         <div class="palette-item" data-type="risque" draggable="true"><i class="fas fa-exclamation-triangle"></i><span>Risque</span></div>
                         <div class="palette-item" data-type="fin" draggable="true"><i class="fas fa-flag-checkered"></i><span>Fin</span></div>
@@ -652,8 +664,10 @@
 
         <!-- CANVAS -->
         <div class="col-lg-10">
+            {% include "egalyx/_logigramme_barre.html" %}
             <div class="canvas-wrapper">
                 <div id="editeur-logigramme">
+                    <div id="couloirs-layer" aria-hidden="true"></div>
                     <svg id="svg-liens"></svg>
                     <div id="conteneur-elements"></div>
                 </div>
@@ -1788,7 +1802,8 @@ class LogigrammeEditor {
             });
             this.svgContainer.appendChild(line);
             
-            if (link.type === 'oui' || link.type === 'non') {
+            const libre = (link.libelle || '').trim();
+            if (link.type === 'oui' || link.type === 'non' || libre) {
                 const midX = (points.x1 + points.x2) / 2;
                 const midY = (points.y1 + points.y2) / 2;
                 const text = document.createElementNS('http://www.w3.org/2000/svg', 'text');
@@ -1797,7 +1812,7 @@ class LogigrammeEditor {
                 text.setAttribute('class', 'lien-label');
                 text.setAttribute('text-anchor', 'middle');
                 text.setAttribute('dy', '-0.5em');
-                text.textContent = link.type === 'oui' ? 'OUI' : 'NON';
+                text.textContent = link.type === 'oui' ? 'OUI' : link.type === 'non' ? 'NON' : libre;
                 this.svgContainer.appendChild(text);
             }
         });
@@ -2009,7 +2024,7 @@ class LogigrammeEditor {
     }
 
     async createElement(type, x, y) {
-        const labels = { 'debut': 'Début', 'action': 'Action', 'controle': 'Contrôle', 'risque': 'Risque', 'fin': 'Fin', 'titre': 'Titre', 'organisation': 'Séparateur' };
+        const labels = { 'debut': 'Début', 'action': 'Action', 'decision': 'Décision', 'controle': 'Contrôle', 'risque': 'Risque', 'fin': 'Fin', 'titre': 'Titre', 'organisation': 'Séparateur' };
         const libelle = prompt('Libellé :', labels[type]);
         if (!libelle) return;
         
@@ -2140,7 +2155,7 @@ class LogigrammeEditor {
             this.separatorWidthGroup.style.display = 'none';
         }
         
-        const typesAvecAssociations = ['action', 'controle', 'risque'];
+        const typesAvecAssociations = ['action', 'decision', 'controle', 'risque'];
         const showSections = typesAvecAssociations.includes(el.type);
         
         document.getElementById('risques-section').style.display = showSections ? 'block' : 'none';
@@ -2337,6 +2352,8 @@ class LogigrammeEditor {
     resetZoom() { this.zoom = 1; this.applyZoom(); }
 
     applyZoom() {
+        const couloirs = document.getElementById('couloirs-layer');
+        if (couloirs) couloirs.style.transform = `scale(${this.zoom})`;
         this.elementsContainer.style.transform = `scale(${this.zoom})`;
         this.elementsContainer.style.transformOrigin = '0 0';
         this.svgContainer.style.transform = `scale(${this.zoom})`;
@@ -2529,6 +2546,28 @@ async exportPDFVueExacte() {
             </marker>
         `;
         svg.appendChild(defs);
+
+        // Couloirs d'acteurs (mêmes bandes qu'à l'écran)
+        (window.EGALYX_COULOIRS || []).forEach((nom, i) => {
+            const H = window.EGALYX_HAUTEUR_COULOIR || 170;
+            const band = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
+            band.setAttribute('x', bounds.minX - padding);
+            band.setAttribute('y', i * H);
+            band.setAttribute('width', width);
+            band.setAttribute('height', H);
+            band.setAttribute('fill', i % 2 === 0 ? '#f1f5f9' : '#ffffff');
+            band.setAttribute('stroke', '#cbd5e1');
+            svg.appendChild(band);
+            const t = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+            t.setAttribute('x', bounds.minX - padding + 8);
+            t.setAttribute('y', i * H + 16);
+            t.setAttribute('font-size', '12');
+            t.setAttribute('font-weight', '700');
+            t.setAttribute('fill', '#334155');
+            t.setAttribute('font-family', 'Arial, sans-serif');
+            t.textContent = nom;
+            svg.appendChild(t);
+        });
         
         this.links.forEach(link => {
             const source = this.elements.find(e => e.id === link.source_id);
@@ -2614,13 +2653,22 @@ async exportPDFVueExacte() {
                 gradient.appendChild(stop2);
                 g.appendChild(gradient);
                 
-                const rect = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
+                let rect;
+                if (el.type === 'decision') {
+                    // Losange à l'export, comme à l'écran
+                    rect = document.createElementNS('http://www.w3.org/2000/svg', 'polygon');
+                    const x = el.position_x, y = el.position_y;
+                    rect.setAttribute('points', `${x + w / 2},${y} ${x + w},${y + h / 2} ${x + w / 2},${y + h} ${x},${y + h / 2}`);
+                    rect.setAttribute('fill', `url(#${gradientId})`);
+                } else {
+                rect = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
                 rect.setAttribute('x', el.position_x);
                 rect.setAttribute('y', el.position_y);
                 rect.setAttribute('width', w);
                 rect.setAttribute('height', h);
                 rect.setAttribute('fill', `url(#${gradientId})`);
                 rect.setAttribute('rx', el.type === 'debut' || el.type === 'fin' ? '35' : '8');
+                }
                 if (el.type === 'titre') {
                     rect.setAttribute('stroke', '#e2e8f0');
                     rect.setAttribute('stroke-width', '2');
@@ -2651,6 +2699,7 @@ async exportPDFVueExacte() {
             'debut': { c1: '#10b981', c2: '#059669' },
             'action': { c1: '#3b82f6', c2: '#2563eb' },
             'controle': { c1: '#f59e0b', c2: '#d97706' },
+            'decision': { c1: '#0ea5e9', c2: '#0369a1' },
             'risque': { c1: '#ef4444', c2: '#dc2626' },
             'fin': { c1: '#6b7280', c2: '#4b5563' },
             'titre': { c1: '#ffffff', c2: '#f8fafc' }
@@ -2782,11 +2831,11 @@ async exportPDFVueExacte() {
     }
 
     getElementColor(type) {
-        return { 'debut': '#10b981', 'action': '#3b82f6', 'controle': '#f59e0b', 'risque': '#ef4444', 'fin': '#6b7280', 'titre': '#8b5cf6', 'organisation': '#1e293b' }[type] || '#9ca3af';
+        return { 'debut': '#10b981', 'action': '#3b82f6', 'decision': '#0284c7', 'controle': '#f59e0b', 'risque': '#ef4444', 'fin': '#6b7280', 'titre': '#8b5cf6', 'organisation': '#1e293b' }[type] || '#9ca3af';
     }
 
     getTypeLabel(type) {
-        return { 'debut': 'Début', 'action': 'Action', 'controle': 'Contrôle', 'risque': 'Risque', 'fin': 'Fin', 'titre': 'Titre', 'organisation': 'Séparateur' }[type] || type;
+        return { 'debut': 'Début', 'action': 'Action', 'decision': 'Décision', 'controle': 'Contrôle', 'risque': 'Risque', 'fin': 'Fin', 'titre': 'Titre', 'organisation': 'Séparateur' }[type] || type;
     }
 
     filtrerListe(type, terme) {
@@ -2824,5 +2873,67 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     }, 2000);
 });
+</script>
+
+<script>
+/* Gouvernance du logigramme : couloirs d'acteurs et vérification du dessin (egalyx/logigrammes.py) */
+(function () {
+    const id = {{ activite.id }};
+    function dessinerCouloirs(acteurs, H) {
+        const couche = document.getElementById('couloirs-layer');
+        if (!couche) return;
+        couche.innerHTML = '';
+        couche.style.height = (acteurs.length * H) + 'px';
+        acteurs.forEach((nom, i) => {
+            const b = document.createElement('div');
+            b.className = 'couloir';
+            b.style.top = (i * H) + 'px';
+            b.style.height = H + 'px';
+            const n = document.createElement('span');
+            n.className = 'couloir-nom';
+            n.textContent = nom;
+            b.appendChild(n);
+            couche.appendChild(b);
+        });
+    }
+    fetch(`/logigrammes-suivi/${id}/acteurs`, { headers: { 'X-Requested-With': 'XMLHttpRequest' } })
+        .then(r => r.ok ? r.json() : null)
+        .then(d => {
+            if (!d) return;
+            window.EGALYX_COULOIRS = d.acteurs || [];
+            window.EGALYX_HAUTEUR_COULOIR = d.hauteur || 170;
+            dessinerCouloirs(window.EGALYX_COULOIRS, window.EGALYX_HAUTEUR_COULOIR);
+        }).catch(() => {});
+    const bouton = document.getElementById('btn-verifier-logigramme');
+    const zone = document.getElementById('resultat-verification');
+    if (bouton && zone) bouton.addEventListener('click', async () => {
+        document.querySelectorAll('.verif-erreur, .verif-avert').forEach(e => e.classList.remove('verif-erreur', 'verif-avert'));
+        try {
+            const r = await fetch(`/logigrammes-suivi/${id}/verification`, { headers: { 'X-Requested-With': 'XMLHttpRequest' } });
+            const v = await r.json();
+            const ligne = (x, cls, icone, couleur) => {
+                (x.elements || []).forEach(eid => {
+                    const el = document.querySelector(`.element-processus[data-id="${eid}"]`);
+                    if (el) el.classList.add(cls);
+                });
+                const d = document.createElement('div');
+                d.style.color = couleur;
+                d.innerHTML = `<i class="fas fa-${icone} me-1"></i>`;
+                d.appendChild(document.createTextNode(x.message));
+                return d;
+            };
+            zone.innerHTML = '';
+            v.erreurs.forEach(x => zone.appendChild(ligne(x, 'verif-erreur', 'circle-xmark', '#b42318')));
+            v.avertissements.forEach(x => zone.appendChild(ligne(x, 'verif-avert', 'triangle-exclamation', '#b54708')));
+            if (!v.erreurs.length && !v.avertissements.length) {
+                zone.innerHTML = '<span style="color:#067647"><i class="fas fa-circle-check me-1"></i>Aucun problème détecté.</span>';
+            }
+            zone.hidden = false;
+        } catch (e) {
+            zone.textContent = 'Vérification impossible pour le moment.';
+            zone.hidden = false;
+        }
+    });
+})();
 </script>
 {% endblock %}
