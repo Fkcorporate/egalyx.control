@@ -22578,11 +22578,9 @@ def utility_processor():
     
     return dict(get_file_size=get_file_size)
 
-
 # ========================
 # OPTIMISATIONS PERFORMANCE
 # ========================
-
 # Middleware pour les performances
 @app.after_request
 def add_header(response):
@@ -22590,14 +22588,16 @@ def add_header(response):
     response.headers['X-Content-Type-Options'] = 'nosniff'
     response.headers['X-Frame-Options'] = 'SAMEORIGIN'
     response.headers['X-XSS-Protection'] = '1; mode=block'
-    
+
     # Cache pour les assets statiques
     if 'Cache-Control' not in response.headers:
-        if response.mimetype in ['text/css', 'application/javascript', 'image/', 'font/']:
+        mimetype = response.mimetype or ''
+        if (mimetype in ('text/css', 'application/javascript', 'text/javascript')
+                or mimetype.startswith(('image/', 'font/'))):
             response.headers['Cache-Control'] = 'public, max-age=31536000'  # 1 an
         else:
             response.headers['Cache-Control'] = 'no-store, no-cache, must-revalidate, max-age=0'
-    
+
     return response
 
 # Compression Gzip (si possible)
@@ -22612,20 +22612,26 @@ except ImportError:
 try:
     from flask_limiter import Limiter
     from flask_limiter.util import get_remote_address
-    
+
     limiter = Limiter(
         app=app,
         key_func=get_remote_address,
-        default_limits=["200 per hour", "50 per minute"]
+        default_limits=["200 per hour", "50 per minute"],
+        # storage_uri="redis://..."  # recommandé en prod (sinon stockage en mémoire, par worker)
     )
-    
-    # Exceptions pour les pages importantes
-    limiter.exempt("static")
-    limiter.exempt("login")
-    limiter.exempt("health")
+
+    # Exceptions pour les pages importantes (évalué à chaque requête,
+    # donc peu importe que login/health_check soient définies plus bas)
+    @limiter.request_filter
+    def exempt_routes():
+        return request.endpoint in ("static", "login", "health_check")
+
     print("✅ Rate limiting activé")
 except ImportError:
     print("⚠️ Flask-Limiter non disponible")
+except Exception as e:
+    # Un souci de config du limiter ne doit pas empêcher l'app de démarrer
+    print(f"⚠️ Rate limiting non activé: {e}")
 
 # Endpoint de santé pour Render
 @app.route('/health')
