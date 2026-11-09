@@ -18,7 +18,7 @@
                     <h5 class="mb-0">Nouveau Client</h5>
                 </div>
                 <div class="fk-card-body">
-                    <form method="POST" action="">
+                    <form method="POST" action="" id="clientForm">
                         {{ form.hidden_tag() }}
                         
                         <!-- Informations client -->
@@ -26,7 +26,7 @@
                         <div class="row mb-3">
                             <div class="col-md-6">
                                 <label class="form-label">{{ form.nom.label }}</label>
-                                {{ form.nom(class="form-control") }}
+                                {{ form.nom(class="form-control", id="client_nom") }}
                                 {% if form.nom.errors %}
                                 <div class="text-danger">
                                     {% for error in form.nom.errors %}
@@ -37,7 +37,7 @@
                             </div>
                             <div class="col-md-6">
                                 <label class="form-label">{{ form.reference.label }}</label>
-                                {{ form.reference(class="form-control") }}
+                                {{ form.reference(class="form-control", id="client_reference") }}
                                 <small class="text-muted">Identifiant unique (ex: client_001)</small>
                             </div>
                         </div>
@@ -70,11 +70,11 @@
                         <div class="row mb-3">
                             <div class="col-md-6">
                                 <label class="form-label">{{ form.plan.label }}</label>
-                                {{ form.plan(class="form-select") }}
+                                {{ form.plan(class="form-select", id="client_plan") }}
                             </div>
                             <div class="col-md-6">
                                 <label class="form-label">{{ form.domaine.label }}</label>
-                                {{ form.domaine(class="form-control") }}
+                                {{ form.domaine(class="form-control", placeholder="client.votredomaine.com") }}
                                 <small class="text-muted">Optionnel (ex: client.votresociete.com)</small>
                             </div>
                         </div>
@@ -95,10 +95,54 @@
                             </div>
                         </div>
 
+                        <!-- ========== NOUVELLE SECTION : CONFIGURATION SOUS-DOMAINE ========== -->
+                        <div class="card border-primary mb-4 mt-4">
+                            <div class="card-header bg-primary text-white">
+                                <h6 class="mb-0">
+                                    <i class="fas fa-globe me-2"></i>Configuration du sous-domaine
+                                </h6>
+                            </div>
+                            <div class="card-body">
+                                <div class="row">
+                                    <div class="col-md-8">
+                                        <label class="form-label fw-bold">Sous-domaine généré automatiquement</label>
+                                        <div class="input-group">
+                                            <span class="input-group-text bg-light" id="subdomain_prefix">https://</span>
+                                            <input type="text" class="form-control" 
+                                                   name="sous_domaine" 
+                                                   id="sous_domaine" 
+                                                   placeholder="client-demo"
+                                                   value="{{ form.sous_domaine.data or '' }}">
+                                            <span class="input-group-text bg-light" id="subdomain_suffix">.egalyx.com</span>
+                                            <button class="btn btn-outline-secondary" 
+                                                    type="button" 
+                                                    onclick="regenerateSubdomain()"
+                                                    title="Régénérer automatiquement">
+                                                <i class="fas fa-sync-alt"></i>
+                                            </button>
+                                        </div>
+                                        <small class="text-muted">
+                                            <i class="fas fa-info-circle me-1"></i>
+                                            Laissez vide pour génération automatique à partir du nom
+                                        </small>
+                                    </div>
+                                    <div class="col-md-4">
+                                        <div class="alert alert-info mt-2 mt-md-0">
+                                            <i class="fas fa-link me-2"></i>
+                                            <strong>URL finale :</strong>
+                                            <div id="preview_url" class="small text-primary mt-1">
+                                                https://client-demo.egalyx.com
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
                         <!-- Serveur -->
                         <h6 class="mb-3 text-primary mt-4">Serveur</h6>
                         <div class="mb-3 form-check">
-                            {{ form.provisionner_serveur(class="form-check-input") }}
+                            {{ form.provisionner_serveur(class="form-check-input", id="provisionner_serveur") }}
                             <label class="form-check-label">{{ form.provisionner_serveur.label.text }}</label>
                             <small class="text-muted d-block">Cocher pour provisionner un serveur dédié</small>
                         </div>
@@ -107,10 +151,6 @@
                             <div class="col-md-6">
                                 <label class="form-label">{{ form.environnement_nom.label }}</label>
                                 {{ form.environnement_nom(class="form-control") }}
-                            </div>
-                            <div class="col-md-6">
-                                <label class="form-label">{{ form.sous_domaine.label }}</label>
-                                {{ form.sous_domaine(class="form-control") }}
                             </div>
                         </div>
 
@@ -151,9 +191,19 @@
                     <ul class="small">
                         <li>Un administrateur client sera créé automatiquement</li>
                         <li>Les identifiants seront envoyés par email</li>
-                        <li>Le client pourra créer ses propres utilisateurs</li>
-                        <li>Vous pourrez suivre l'utilisation via le dashboard</li>
+                        <li>Le client pourra accéder via son sous-domaine</li>
+                        <li>Le sous-domaine sera <code>*.egalyx.com</code> (déjà configuré)</li>
                     </ul>
+
+                    <!-- Nouveau bloc d'information sur les sous-domaines -->
+                    <div class="alert alert-success mt-3">
+                        <i class="fas fa-check-circle me-2"></i>
+                        <strong>Sous-domaines prêts !</strong>
+                        <p class="small mt-2 mb-0">
+                            Le wildcard <code>*.egalyx.com</code> est déjà configuré.<br>
+                            Tout sous-domaine fonctionnera automatiquement.
+                        </p>
+                    </div>
                 </div>
             </div>
         </div>
@@ -161,23 +211,166 @@
 </div>
 
 <script>
-// Afficher/masquer la configuration serveur
-document.addEventListener('DOMContentLoaded', function() {
-    const checkbox = document.querySelector('#provisionner_serveur');
-    const configDiv = document.getElementById('serveur-config');
+// Fonction pour générer un slug à partir d'un texte
+function slugify(text) {
+    if (!text) return '';
     
-    checkbox.addEventListener('change', function() {
-        if (this.checked) {
-            configDiv.style.display = 'block';
-        } else {
-            configDiv.style.display = 'none';
+    return text.toString().toLowerCase()
+        .normalize('NFD')                 // Normaliser les caractères accentués
+        .replace(/[\u0300-\u036f]/g, '')  // Supprimer les diacritiques
+        .replace(/[^a-z0-9\s-]/g, '')     // Supprimer les caractères spéciaux
+        .trim()                            // Supprimer les espaces début/fin
+        .replace(/\s+/g, '-')              // Remplacer espaces par tirets
+        .replace(/-+/g, '-');              // Éviter les tirets multiples
+}
+
+// Fonction pour générer et mettre à jour le sous-domaine
+function generateSubdomain() {
+    const nom = document.getElementById('client_nom').value;
+    const reference = document.getElementById('client_reference').value;
+    const plan = document.getElementById('client_plan').value;
+    const subdomainInput = document.getElementById('sous_domaine');
+    
+    // Stratégie de génération intelligente
+    let base = '';
+    
+    if (reference && reference.trim() !== '') {
+        // Priorité à la référence (souvent plus courte et unique)
+        base = slugify(reference);
+    } else if (nom && nom.trim() !== '') {
+        // Sinon utiliser le nom du client
+        base = slugify(nom);
+        
+        // Ajouter un suffixe selon le plan pour éviter les collisions
+        if (plan === 'premium') {
+            base = base + '-premium';
+        } else if (plan === 'enterprise') {
+            base = base + '-ent';
+        }
+    } else {
+        // Si rien n'est rempli, suggestion par défaut
+        base = 'client-' + Math.random().toString(36).substring(2, 8);
+    }
+    
+    // Nettoyer et définir la valeur
+    subdomainInput.value = base;
+    
+    // Mettre à jour l'aperçu
+    updatePreview();
+}
+
+// Fonction pour régénérer manuellement (ajouter un suffixe aléatoire)
+function regenerateSubdomain() {
+    const subdomainInput = document.getElementById('sous_domaine');
+    let current = subdomainInput.value;
+    
+    if (!current || current === '') {
+        generateSubdomain();
+        return;
+    }
+    
+    // Supprimer un éventuel suffixe aléatoire existant
+    current = current.replace(/-\d+$/, '');
+    
+    // Ajouter un suffixe numérique aléatoire
+    const randomSuffix = Math.floor(Math.random() * 1000);
+    subdomainInput.value = current + '-' + randomSuffix;
+    
+    updatePreview();
+}
+
+// Mettre à jour l'aperçu de l'URL
+function updatePreview() {
+    const subdomain = document.getElementById('sous_domaine').value;
+    const preview = document.getElementById('preview_url');
+    
+    if (subdomain && subdomain.trim() !== '') {
+        preview.textContent = 'https://' + subdomain + '.egalyx.com';
+        preview.className = 'small text-success mt-1 fw-bold';
+    } else {
+        preview.textContent = 'https://[sous-domaine].egalyx.com';
+        preview.className = 'small text-muted mt-1';
+    }
+}
+
+// Écouter les changements sur les champs
+document.addEventListener('DOMContentLoaded', function() {
+    const nomInput = document.getElementById('client_nom');
+    const refInput = document.getElementById('client_reference');
+    const planSelect = document.getElementById('client_plan');
+    const subdomainInput = document.getElementById('sous_domaine');
+    
+    // Générer initialement si vide
+    if (!subdomainInput.value || subdomainInput.value === '') {
+        generateSubdomain();
+    }
+    
+    // Mettre à jour quand l'utilisateur tape
+    nomInput.addEventListener('input', function() {
+        // Ne générer que si le sous-domaine est vide ou a été généré automatiquement
+        if (!subdomainInput.value || subdomainInput.value === '' || 
+            subdomainInput.value === slugify(nomInput.value) || 
+            subdomainInput.value === slugify(document.getElementById('client_reference').value)) {
+            generateSubdomain();
         }
     });
     
-    // Initialiser l'état
-    if (checkbox.checked) {
-        configDiv.style.display = 'block';
+    refInput.addEventListener('input', function() {
+        if (!subdomainInput.value || subdomainInput.value === '' || 
+            subdomainInput.value === slugify(refInput.value) || 
+            subdomainInput.value === slugify(nomInput.value)) {
+            generateSubdomain();
+        }
+    });
+    
+    planSelect.addEventListener('change', function() {
+        if (!subdomainInput.value || subdomainInput.value === '' || 
+            subdomainInput.value.includes('-premium') || 
+            subdomainInput.value.includes('-ent')) {
+            generateSubdomain();
+        }
+    });
+    
+    // Mettre à jour l'aperçu à chaque frappe
+    subdomainInput.addEventListener('input', updatePreview);
+    
+    // Initialiser l'aperçu
+    updatePreview();
+    
+    // Gérer l'affichage de la configuration serveur
+    const checkbox = document.querySelector('#provisionner_serveur');
+    const configDiv = document.getElementById('serveur-config');
+    
+    if (checkbox) {
+        checkbox.addEventListener('change', function() {
+            configDiv.style.display = this.checked ? 'block' : 'none';
+        });
+        
+        // Initialiser l'état
+        configDiv.style.display = checkbox.checked ? 'block' : 'none';
     }
+});
+
+// Validation côté client pour s'assurer que le sous-domaine est valide
+document.getElementById('clientForm').addEventListener('submit', function(e) {
+    const subdomain = document.getElementById('sous_domaine').value;
+    
+    // Validation basique
+    if (!subdomain || subdomain.trim() === '') {
+        alert('Veuillez générer un sous-domaine pour le client');
+        e.preventDefault();
+        return false;
+    }
+    
+    // Vérifier le format (lettres, chiffres, tirets uniquement)
+    const validPattern = /^[a-z0-9][a-z0-9-]*[a-z0-9]$/;
+    if (!validPattern.test(subdomain)) {
+        alert('Le sous-domaine ne peut contenir que des lettres minuscules, des chiffres et des tirets (pas de tiret au début ou à la fin)');
+        e.preventDefault();
+        return false;
+    }
+    
+    return true;
 });
 </script>
 {% endblock %}

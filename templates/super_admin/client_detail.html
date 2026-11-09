@@ -34,17 +34,24 @@
                     </div>
                 </div>
                 <div class="col-md-4 text-md-end">
+                    {% if url_exists('modules_client.page') %}
+                    <a href="{{ url_for('modules_client.page', client_id=client.id) }}" class="btn btn-primary me-2">
+                        <i class="fas fa-puzzle-piece me-2"></i>Modules
+                        {% set _m = modules_du_client(client) if modules_du_client is defined else none %}
+                        <span class="badge text-bg-light ms-1">{{ (_m|length ~ ' actifs') if _m is not none else 'tous' }}</span>
+                    </a>
+                    {% endif %}
                     <div class="btn-group">
                         {% if client.is_active %}
                         <a href="{{ url_for('super_admin_suspendre_client', id=client.id) }}" 
                            class="btn btn-warning"
-                           onclick="return confirm('Suspendre le client {{ client.nom }} ?')">
+                           onclick="return confirm({{ ('Suspendre le client ' ~ client.nom ~ ' ?')|tojson|forceescape }})">
                             <i class="fas fa-pause me-2"></i>Suspendre
                         </a>
                         {% else %}
                         <a href="{{ url_for('super_admin_reactiver_client', id=client.id) }}" 
                            class="btn btn-success"
-                           onclick="return confirm('Réactiver le client {{ client.nom }} ?')">
+                           onclick="return confirm({{ ('Réactiver le client ' ~ client.nom ~ ' ?')|tojson|forceescape }})">
                             <i class="fas fa-play me-2"></i>Réactiver
                         </a>
                         {% endif %}
@@ -78,6 +85,17 @@
                                     <i class="fas fa-globe me-2 text-info"></i>Tester sous-domaine
                                 </a>
                             </li>
+                            <li><hr class="dropdown-divider"></li>
+                            <li>
+                                <a class="dropdown-item" href="{{ url_for('super_admin_upgrade_client', client_id=client.id) }}">
+                                    <i class="fas fa-level-up-alt me-2 text-warning"></i>Changer formule
+                                </a>
+                            </li>
+                            <li>
+                                <a class="dropdown-item" href="#" onclick="syncClientPermissions({{ client.id }})">
+                                    <i class="fas fa-sync-alt me-2 text-info"></i>Synchroniser permissions
+                                </a>
+                            </li>
                         </ul>
                     </div>
                 </div>
@@ -96,6 +114,9 @@
                 </span>
                 <span class="badge bg-secondary fs-6 p-2">
                     <i class="fas fa-exclamation-triangle me-1"></i>{{ client.nb_risques|default(0) }}/{{ client.max_risques|default('∞') }} risques
+                </span>
+                <span class="badge bg-secondary fs-6 p-2">
+                    <i class="fas fa-clipboard-check me-1"></i>{{ client.nb_audits|default(0) }}/{{ client.max_audits|default('∞') }} audits
                 </span>
                 {% if client.sous_domaine %}
                 <span class="badge bg-info fs-6 p-2">
@@ -138,11 +159,21 @@
                 <i class="fas fa-cog me-1"></i>Configuration
             </button>
         </li>
+        <li class="nav-item" role="presentation">
+            <button class="nav-link" id="permissions-tab" data-bs-toggle="tab" data-bs-target="#permissions" 
+                    type="button" role="tab">
+                <i class="fas fa-key me-1"></i>Permissions
+                <span class="badge bg-primary ms-1">{{ utilisateurs|length }}</span>
+            </button>
+        </li>
     </ul>
 
     <!-- Contenu des onglets -->
     <div class="tab-content" id="clientTabsContent">
-        <!-- Onglet 1: Vue d'ensemble -->
+        
+        <!-- ============================================ -->
+        <!-- ONGLET 1: VUE D'ENSEMBLE                     -->
+        <!-- ============================================ -->
         <div class="tab-pane fade show active" id="overview" role="tabpanel">
             <div class="row">
                 <div class="col-lg-6">
@@ -170,16 +201,6 @@
                                     {% endif %}
                                 </dd>
                                 
-                                <dt class="col-sm-4">Description</dt>
-                                <dd class="col-sm-8">{{ client.description or 'Non spécifiée' }}</dd>
-                                
-                                <dt class="col-sm-4">Contact</dt>
-                                <dd class="col-sm-8">
-                                    {{ client.contact_nom }}<br>
-                                    {{ client.contact_email }}<br>
-                                    {{ client.contact_telephone or 'Non spécifié' }}
-                                </dd>
-                                
                                 <dt class="col-sm-4">Formule</dt>
                                 <dd class="col-sm-8">
                                     {% if client.formule %}
@@ -189,6 +210,16 @@
                                     {% else %}
                                     <span class="text-muted">Aucune formule</span>
                                     {% endif %}
+                                </dd>
+                                
+                                <dt class="col-sm-4">Description</dt>
+                                <dd class="col-sm-8">{{ client.description or 'Non spécifiée' }}</dd>
+                                
+                                <dt class="col-sm-4">Contact</dt>
+                                <dd class="col-sm-8">
+                                    {{ client.contact_nom or 'Non spécifié' }}<br>
+                                    {{ client.contact_email }}<br>
+                                    {{ client.contact_telephone or 'Non spécifié' }}
                                 </dd>
                                 
                                 <dt class="col-sm-4">Date création</dt>
@@ -222,9 +253,8 @@
                                 <div class="progress" style="height: 10px;">
                                     {% set nb_users = client.nb_utilisateurs if client.nb_utilisateurs is not none else 0 %}
                                     {% set max_users = client.max_utilisateurs if client.max_utilisateurs and client.max_utilisateurs > 0 else 1 %}
-                                    {% set user_percentage = (nb_users / max_users * 100) %}
+                                    {% set user_percentage = (nb_users / max_users * 100) if max_users > 0 else 0 %}
                                     {% if user_percentage > 100 %}{% set user_percentage = 100 %}{% endif %}
-                                    <div class="progress-bar" role="progressbar" style="width: {{ user_percentage }}%"></div>
                                     <div class="progress-bar bg-{{ 'danger' if user_percentage >= 100 else 'success' }}" 
                                          style="width: {{ user_percentage|round }}%"></div>
                                 </div>
@@ -238,9 +268,8 @@
                                     <span>{{ client.nb_risques|default(0) }} / {{ client.max_risques|default('∞') }}</span>
                                 </div>
                                 <div class="progress" style="height: 10px;">
-                                    {% set nb_risques = client.nb_risques if client.nb_risques is not none else 0 %}
                                     {% set max_risques = client.max_risques if client.max_risques and client.max_risques > 0 else 1 %}
-                                    {% set risque_percentage = (nb_risques / max_risques * 100) %}
+                                    {% set risque_percentage = (client.nb_risques|default(0) / max_risques * 100) if max_risques > 0 else 0 %}
                                     {% if risque_percentage > 100 %}{% set risque_percentage = 100 %}{% endif %}
                                     <div class="progress-bar bg-{{ 'danger' if risque_percentage >= 100 else 'warning' }}" 
                                          style="width: {{ risque_percentage|round }}%"></div>
@@ -254,9 +283,8 @@
                                     <span>{{ client.nb_audits|default(0) }} / {{ client.max_audits|default('∞') }}</span>
                                 </div>
                                 <div class="progress" style="height: 10px;">
-                                    {% set nb_audits = client.nb_audits if client.nb_audits is not none else 0 %}
                                     {% set max_audits = client.max_audits if client.max_audits and client.max_audits > 0 else 1 %}
-                                    {% set audit_percentage = (nb_audits / max_audits * 100) %}
+                                    {% set audit_percentage = (client.nb_audits|default(0) / max_audits * 100) if max_audits > 0 else 0 %}
                                     {% if audit_percentage > 100 %}{% set audit_percentage = 100 %}{% endif %}
                                     <div class="progress-bar bg-{{ 'danger' if audit_percentage >= 100 else 'info' }}" 
                                          style="width: {{ audit_percentage|round }}%"></div>
@@ -270,7 +298,8 @@
                                     <span>{{ (client.espace_utilise|default(0) / 1048576)|round(1) }} MB / {{ (client.espace_max|default(10485760) / 1048576)|round }} MB</span>
                                 </div>
                                 <div class="progress" style="height: 10px;">
-                                    {% set espace_percentage = (client.espace_utilise|default(0) / client.espace_max * 100) if client.espace_max else 0 %}
+                                    {% set espace_percentage = (client.espace_utilise|default(0) / client.espace_max * 100) if client.espace_max and client.espace_max > 0 else 0 %}
+                                    {% if espace_percentage > 100 %}{% set espace_percentage = 100 %}{% endif %}
                                     <div class="progress-bar bg-primary" style="width: {{ espace_percentage|round }}%"></div>
                                 </div>
                             </div>
@@ -297,7 +326,9 @@
             </div>
         </div>
 
-        <!-- Onglet 2: Environnements -->
+        <!-- ============================================ -->
+        <!-- ONGLET 2: ENVIRONNEMENTS                     -->
+        <!-- ============================================ -->
         <div class="tab-pane fade" id="environnements" role="tabpanel">
             <div class="card">
                 <div class="card-header bg-white d-flex justify-content-between align-items-center">
@@ -411,24 +442,30 @@
             </div>
         </div>
 
-        <!-- Onglet 3: Utilisateurs -->
+        <!-- ============================================ -->
+        <!-- ONGLET 3: UTILISATEURS                       -->
+        <!-- ============================================ -->
         <div class="tab-pane fade" id="utilisateurs" role="tabpanel">
             <div class="card">
                 <div class="card-header bg-white d-flex justify-content-between align-items-center">
                     <h5 class="mb-0">Utilisateurs du client</h5>
-                    <button class="btn btn-primary btn-sm" data-bs-toggle="modal" data-bs-target="#addUserModal">
-                        <i class="fas fa-user-plus me-2"></i>Ajouter un utilisateur
-                    </button>
+                    <div>
+                        <span class="badge bg-secondary me-2">{{ utilisateurs|length }} utilisateurs</span>
+                        <button class="btn btn-primary btn-sm" data-bs-toggle="modal" data-bs-target="#addUserModal">
+                            <i class="fas fa-user-plus me-2"></i>Ajouter un utilisateur
+                        </button>
+                    </div>
                 </div>
                 <div class="card-body">
                     {% if utilisateurs %}
                     <div class="table-responsive">
-                        <table class="table table-hover">
+                        <table class="table table-hover" id="usersTable">
                             <thead class="table-light">
                                 <tr>
                                     <th>Utilisateur</th>
                                     <th>Rôle</th>
                                     <th>Email</th>
+                                    <th>Permissions</th>
                                     <th>Statut</th>
                                     <th>Dernière connexion</th>
                                     <th>Actions</th>
@@ -464,6 +501,15 @@
                                     </td>
                                     <td>{{ user.email }}</td>
                                     <td>
+                                        <span class="badge bg-{{ 'success' if user.permissions|length > 0 else 'secondary' }}">
+                                            {{ user.permissions|length }}
+                                        </span>
+                                        <button class="btn btn-sm btn-link" 
+                                                onclick="viewUserPermissions({{ user.id }}, '{{ user.username }}')">
+                                            <i class="fas fa-eye"></i>
+                                        </button>
+                                    </td>
+                                    <td>
                                         {% if user.is_active %}
                                         <span class="badge bg-success">Actif</span>
                                         {% else %}
@@ -484,6 +530,11 @@
                                                     title="Modifier">
                                                 <i class="fas fa-edit"></i>
                                             </button>
+                                            <button class="btn btn-outline-secondary"
+                                                    onclick="openResetPassword({{ user.id }}, '{{ user.username }}')"
+                                                    title="Réinitialiser mot de passe">
+                                                <i class="fas fa-key"></i>
+                                            </button>
                                             {% if user.is_active %}
                                             <button class="btn btn-outline-warning"
                                                     onclick="toggleUserStatus({{ user.id }}, false)"
@@ -497,7 +548,7 @@
                                                 <i class="fas fa-check"></i>
                                             </button>
                                             {% endif %}
-                                            {% if not user.is_client_admin %}
+                                            {% if not user.is_client_admin and user.id != current_user.id %}
                                             <button class="btn btn-outline-danger"
                                                     onclick="deleteUser({{ user.id }}, '{{ user.username }}')"
                                                     title="Supprimer">
@@ -525,18 +576,22 @@
             </div>
         </div>
 
-        <!-- Onglet 4: Activités -->
+        <!-- ============================================ -->
+        <!-- ONGLET 4: ACTIVITÉS                          -->
+        <!-- ============================================ -->
         <div class="tab-pane fade" id="activites" role="tabpanel">
             <div class="card">
-                <div class="card-header bg-white">
+                <div class="card-header bg-white d-flex justify-content-between align-items-center">
                     <h5 class="mb-0">Journal d'activités</h5>
+                    <button class="btn btn-sm btn-outline-secondary" onclick="refreshActivities()">
+                        <i class="fas fa-sync-alt me-1"></i>Rafraîchir
+                    </button>
                 </div>
                 <div class="card-body">
                     {% if activites %}
                     <div class="timeline">
                         {% for activite in activites %}
-                        <div class="timeline-item">
-                            <div class="timeline-marker"></div>
+                        <div class="timeline-item mb-3">
                             <div class="timeline-content">
                                 <div class="d-flex justify-content-between">
                                     <h6 class="mb-1">
@@ -545,6 +600,7 @@
                                             else 'user-edit' if 'modification' in activite.action|lower
                                             else 'building' if 'client' in activite.action|lower
                                             else 'server' if 'environnement' in activite.action|lower
+                                            else 'key' if 'password' in activite.action|lower
                                             else 'bell'
                                         }} text-primary me-2"></i>
                                         {{ activite.action }}
@@ -554,7 +610,7 @@
                                 <div class="d-flex justify-content-between align-items-center">
                                     <small class="text-muted">
                                         {% if activite.utilisateur %}
-                                        Par {{ activite.utilisateur.username }}
+                                        Par <strong>{{ activite.utilisateur.username }}</strong>
                                         {% else %}
                                         Système
                                         {% endif %}
@@ -581,7 +637,9 @@
             </div>
         </div>
 
-        <!-- Onglet 5: Configuration -->
+        <!-- ============================================ -->
+        <!-- ONGLET 5: CONFIGURATION                      -->
+        <!-- ============================================ -->
         <div class="tab-pane fade" id="configuration" role="tabpanel">
             <div class="row">
                 <div class="col-lg-6">
@@ -687,8 +745,8 @@
                                 </button>
                                 
                                 <button class="btn btn-outline-primary"
-                                        onclick="testSubdomain('{{ client.sous_domaine }}')">
-                                    <i class="fas fa-globe me-2"></i>Tester le sous-domaine
+                                        onclick="syncClientPermissions({{ client.id }})">
+                                    <i class="fas fa-sync-alt me-2"></i>Synchroniser les permissions
                                 </button>
                                 
                                 {% if client.is_active %}
@@ -730,11 +788,106 @@
                 </div>
             </div>
         </div>
+
+        <!-- ============================================ -->
+        <!-- ONGLET 6: PERMISSIONS                        -->
+        <!-- ============================================ -->
+        <div class="tab-pane fade" id="permissions" role="tabpanel">
+            <div class="card">
+                <div class="card-header bg-white d-flex justify-content-between align-items-center">
+                    <h5 class="mb-0">Permissions des utilisateurs</h5>
+                    <div>
+                        <button class="btn btn-sm btn-outline-info" onclick="syncClientPermissions({{ client.id }})">
+                            <i class="fas fa-sync-alt me-1"></i>Synchroniser tout
+                        </button>
+                    </div>
+                </div>
+                <div class="card-body">
+                    {% if utilisateurs %}
+                    <div class="table-responsive">
+                        <table class="table table-hover">
+                            <thead class="table-light">
+                                <tr>
+                                    <th>Utilisateur</th>
+                                    <th>Rôle</th>
+                                    <th>Permissions actives</th>
+                                    <th>Statut</th>
+                                    <th>Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for user in utilisateurs %}
+                                <tr>
+                                    <td>
+                                        <strong>{{ user.username }}</strong>
+                                        {% if user.is_client_admin %}
+                                        <span class="badge bg-warning ms-1">Admin</span>
+                                        {% endif %}
+                                    </td>
+                                    <td>
+                                        <span class="badge bg-{{ 
+                                            'danger' if user.role == 'admin' 
+                                            else 'warning' if user.role == 'manager' 
+                                            else 'info' if user.role == 'auditeur'
+                                            else 'secondary' 
+                                        }}">
+                                            {{ user.role|upper }}
+                                        </span>
+                                    </td>
+                                    <td>
+                                        {% set active_perms = user.permissions.items()|selectattr('1', 'equalto', true)|list %}
+                                        <span class="badge bg-{{ 'success' if active_perms|length > 0 else 'secondary' }}">
+                                            {{ active_perms|length }}
+                                        </span>
+                                        {% if active_perms|length > 0 %}
+                                        <button class="btn btn-sm btn-link" 
+                                                onclick="viewUserPermissions({{ user.id }}, '{{ user.username }}')">
+                                            <i class="fas fa-eye"></i> Voir
+                                        </button>
+                                        {% endif %}
+                                    </td>
+                                    <td>
+                                        {% if user.is_active %}
+                                        <span class="badge bg-success">Actif</span>
+                                        {% else %}
+                                        <span class="badge bg-danger">Inactif</span>
+                                        {% endif %}
+                                    </td>
+                                    <td>
+                                        <div class="btn-group btn-group-sm">
+                                            <button class="btn btn-outline-primary"
+                                                    onclick="editUserPermissions({{ user.id }})">
+                                                <i class="fas fa-key me-1"></i>Gérer
+                                            </button>
+                                            <button class="btn btn-outline-info"
+                                                    onclick="syncUserPermissions({{ user.id }})">
+                                                <i class="fas fa-sync-alt"></i>
+                                            </button>
+                                        </div>
+                                    </td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                    {% else %}
+                    <div class="text-center py-5">
+                        <i class="fas fa-key fa-3x text-muted mb-3"></i>
+                        <h5>Aucun utilisateur</h5>
+                        <p class="text-muted">Aucun utilisateur trouvé pour ce client.</p>
+                    </div>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
     </div>
 </div>
 
-<!-- MODALS -->
-<!-- Modal de réinitialisation du mot de passe -->
+<!-- ============================================ -->
+<!-- MODALS                                       -->
+<!-- ============================================ -->
+
+<!-- Modal Réinitialiser mot de passe -->
 <div class="modal fade" id="resetPasswordModal" tabindex="-1" aria-hidden="true">
     <div class="modal-dialog modal-dialog-centered">
         <div class="modal-content">
@@ -746,7 +899,7 @@
             </div>
             <div class="modal-body">
                 <div id="resetPasswordContent">
-                    <p>Réinitialiser le mot de passe de l'utilisateur :</p>
+                    <p>Réinitialiser le mot de passe de l'utilisateur : <strong id="resetUserName"></strong></p>
                     <div class="alert alert-info">
                         <i class="fas fa-info-circle me-2"></i>
                         Un nouveau mot de passe sera généré automatiquement.
@@ -795,6 +948,7 @@
         </div>
     </div>
 </div>
+
 <!-- Modal Ajouter Environnement -->
 <div class="modal fade" id="addEnvironmentModal" tabindex="-1">
     <div class="modal-dialog modal-lg">
@@ -977,7 +1131,6 @@
                         <i class="fas fa-external-link-alt"></i> Ouvrir
                     </a>
                 </div>
-                
                 <div class="alert alert-info">
                     <h6><i class="fas fa-info-circle me-2"></i>Configuration locale</h6>
                     <p class="small mb-2">Pour tester en local, ajoutez cette ligne dans votre fichier hosts :</p>
@@ -998,167 +1151,35 @@
         </div>
     </div>
 </div>
-<!-- Dans l'onglet Configuration, ajoutez cette carte -->
-<!-- Configuration du sous-domaine - VERSION CORRIGÉE -->
-<div class="col-lg-6">
-    <div class="card h-100">
-        <div class="card-header bg-white">
-            <h5 class="mb-0">
-                <i class="fas fa-globe me-2 text-primary"></i>
-                Configuration du sous-domaine
-            </h5>
-        </div>
-        <div class="card-body">
-            {# Récupérer le premier environnement du client #}
-            {% set env = environnements|first if environnements else None %}
-            
-            <div class="mb-3">
-                <label class="form-label fw-bold">Sous-domaine actuel</label>
-                <div class="input-group">
-                    <span class="input-group-text">https://</span>
-                    <input type="text" class="form-control" 
-                           value="{{ env.sous_domaine if env else 'Non configuré' }}" 
-                           readonly
-                           id="current_subdomain">
-                    <span class="input-group-text">.egalyx.com</span>
-                </div>
-                {% if not env %}
-                <small class="text-danger">
-                    <i class="fas fa-exclamation-circle me-1"></i>
-                    Aucun environnement trouvé pour ce client
-                </small>
-                {% endif %}
-            </div>
-            
-            <div class="mb-3">
-                <label class="form-label fw-bold">URL d'accès complète</label>
-                <div class="input-group">
-                    <input type="text" class="form-control" 
-                           value="https://{{ env.sous_domaine if env else '[sous-domaine]' }}.egalyx.com" 
-                           readonly
-                           id="full_url">
-                    {% if env and env.sous_domaine %}
-                    <button class="btn btn-outline-primary" 
-                            type="button"
-                            onclick="copyToClipboard('https://{{ env.sous_domaine }}.egalyx.com')">
-                        <i class="fas fa-copy"></i>
-                    </button>
-                    <a href="https://{{ env.sous_domaine }}.egalyx.com" 
-                       target="_blank" 
-                       class="btn btn-success">
-                        <i class="fas fa-external-link-alt me-1"></i>Tester
-                    </a>
-                    {% endif %}
-                </div>
-            </div>
 
-            <!-- Formulaire pour modifier le sous-domaine -->
-            <form method="POST" action="{{ url_for('super_admin_update_client_subdomain', id=client.id) }}" 
-                  class="mt-4 border-top pt-3">
-                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                
-                <h6 class="mb-3">Modifier le sous-domaine</h6>
-                
-                <div class="mb-3">
-                    <label class="form-label">Nouveau sous-domaine</label>
-                    <div class="input-group">
-                        <span class="input-group-text">https://</span>
-                        <input type="text" class="form-control" 
-                               name="sous_domaine" 
-                               value="{{ env.sous_domaine if env else '' }}"
-                               placeholder="client-demo"
-                               id="new_subdomain">
-                        <span class="input-group-text">.egalyx.com</span>
-                        <button class="btn btn-outline-secondary" 
-                                type="button"
-                                onclick="suggestSubdomain()">
-                            <i class="fas fa-magic"></i> Suggérer
-                        </button>
+<!-- Modal Voir Permissions Utilisateur -->
+<div class="modal fade" id="viewPermissionsModal" tabindex="-1">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header bg-primary text-white">
+                <h5 class="modal-title">
+                    <i class="fas fa-key me-2"></i>Permissions de <span id="permsUserName"></span>
+                </h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body" id="permissionsContent">
+                <div class="text-center py-4">
+                    <div class="spinner-border text-primary" role="status">
+                        <span class="visually-hidden">Chargement...</span>
                     </div>
+                    <p class="mt-2">Chargement des permissions...</p>
                 </div>
-                
-                <button type="submit" class="btn btn-primary">
-                    <i class="fas fa-save me-2"></i>Mettre à jour
-                </button>
-                {% if env and env.sous_domaine %}
-                <button type="button" class="btn btn-info" onclick="testSubdomain()">
-                    <i class="fas fa-stethoscope me-2"></i>Tester
-                </button>
-                {% endif %}
-            </form>
-            
-            <!-- Debug info (optionnel - à retirer après correction) -->
-            {% if environnements %}
-            <div class="mt-3 small text-muted">
-                <i class="fas fa-database me-1"></i>
-                Environnements trouvés : {{ environnements|length }}
-                {% for e in environnements %}
-                <br>- {{ e.nom }} : {{ e.sous_domaine }}.egalyx.com
-                {% endfor %}
             </div>
-            {% else %}
-            <div class="mt-3 alert alert-warning small">
-                <i class="fas fa-exclamation-triangle me-1"></i>
-                Aucun environnement en base de données pour ce client
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Fermer</button>
+                <button type="button" class="btn btn-primary" onclick="editUserPermissionsFromModal()">
+                    <i class="fas fa-edit me-2"></i>Éditer les permissions
+                </button>
             </div>
-            {% endif %}
         </div>
     </div>
 </div>
 
-<!-- Ajoutez ce script -->
-<script>
-function copyToClipboard(text) {
-    navigator.clipboard.writeText(text).then(() => {
-        showToast('URL copiée dans le presse-papier', 'success');
-    });
-}
-
-function suggestSubdomain() {
-    const clientName = "{{ client.nom }}";
-    const clientRef = "{{ client.reference }}";
-    
-    let suggestion = clientRef || slugify(clientName) || 'client';
-    
-    // Ajouter un suffixe pour éviter les collisions
-    suggestion = suggestion + '-' + Math.random().toString(36).substring(2, 6);
-    
-    document.getElementById('new_subdomain').value = suggestion;
-    showToast('Suggestion générée : ' + suggestion, 'info');
-}
-
-function testSubdomain() {
-    const newSubdomain = document.getElementById('new_subdomain').value;
-    if (!newSubdomain) {
-        showToast('Veuillez entrer un sous-domaine à tester', 'warning');
-        return;
-    }
-    
-    const testUrl = `https://${newSubdomain}.egalyx.com`;
-    
-    // Ouvrir dans un nouvel onglet pour tester
-    window.open(testUrl, '_blank');
-    
-    showToast(`Test de ${testUrl} en cours...`, 'info');
-}
-
-function slugify(text) {
-    if (!text) return '';
-    
-    return text.toString().toLowerCase()
-        .normalize('NFD')
-        .replace(/[\u0300-\u036f]/g, '')
-        .replace(/[^a-z0-9\s-]/g, '')
-        .trim()
-        .replace(/\s+/g, '-')
-        .replace(/-+/g, '-');
-}
-
-function showToast(message, type) {
-    // Utilisez votre système de toast existant
-    alert(message); // Remplacer par votre vrai système
-}
-</script>
 <!-- Toast container -->
 <div class="toast-container position-fixed bottom-0 end-0 p-3"></div>
 
@@ -1202,6 +1223,154 @@ function showToast(message, type) {
 </style>
 
 <script>
+// ==================== VARIABLES GLOBALES ====================
+let currentResetUserId = null;
+let currentViewUserId = null;
+
+// ==================== GESTION DES PERMISSIONS UTILISATEUR ====================
+
+function viewUserPermissions(userId, userName) {
+    currentViewUserId = userId;
+    document.getElementById('permsUserName').textContent = userName;
+    
+    const modal = new bootstrap.Modal(document.getElementById('viewPermissionsModal'));
+    modal.show();
+    
+    // Charger les permissions
+    fetch(`/api/user/${userId}/permissions`)
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                displayPermissions(data.permissions);
+            } else {
+                document.getElementById('permissionsContent').innerHTML = `
+                    <div class="alert alert-danger">
+                        <i class="fas fa-exclamation-circle me-2"></i>
+                        ${data.error || 'Erreur de chargement'}
+                    </div>
+                `;
+            }
+        })
+        .catch(error => {
+            document.getElementById('permissionsContent').innerHTML = `
+                <div class="alert alert-danger">
+                    <i class="fas fa-exclamation-circle me-2"></i>
+                    Erreur réseau : ${error}
+                </div>
+            `;
+        });
+}
+
+function displayPermissions(permissions) {
+    if (!permissions || Object.keys(permissions).length === 0) {
+        document.getElementById('permissionsContent').innerHTML = `
+            <div class="alert alert-info">
+                <i class="fas fa-info-circle me-2"></i>
+                Aucune permission définie.
+            </div>
+        `;
+        return;
+    }
+    
+    let html = `
+        <div class="table-responsive">
+            <table class="table table-sm">
+                <thead>
+                    <tr>
+                        <th>Permission</th>
+                        <th>Statut</th>
+                    </tr>
+                </thead>
+                <tbody>
+    `;
+    
+    // Trier les permissions par nom
+    const sortedPerms = Object.keys(permissions).sort();
+    for (const perm of sortedPerms) {
+        const isActive = permissions[perm];
+        html += `
+            <tr>
+                <td><code>${perm}</code></td>
+                <td>
+                    <span class="badge bg-${isActive ? 'success' : 'secondary'}">
+                        ${isActive ? '✅ Activée' : '❌ Désactivée'}
+                    </span>
+                </td>
+            </tr>
+        `;
+    }
+    
+    html += `
+                </tbody>
+            </table>
+        </div>
+        <div class="mt-3">
+            <small class="text-muted">
+                Total : ${Object.keys(permissions).length} permissions
+                (${Object.values(permissions).filter(v => v).length} actives)
+            </small>
+        </div>
+    `;
+    
+    document.getElementById('permissionsContent').innerHTML = html;
+}
+
+function editUserPermissionsFromModal() {
+    if (currentViewUserId) {
+        window.location.href = `/super-admin/user/${currentViewUserId}/edit`;
+    }
+}
+
+function editUserPermissions(userId) {
+    window.location.href = `/super-admin/user/${userId}/edit`;
+}
+
+function syncUserPermissions(userId) {
+    if (!confirm('Synchroniser les permissions de cet utilisateur avec sa formule ?')) return;
+    
+    fetch(`/api/user/${userId}/sync-permissions`, {
+        method: 'POST',
+        headers: {
+            'X-CSRFToken': document.querySelector('meta[name="csrf-token"]').content
+        }
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            showToast(data.message, 'success');
+            setTimeout(() => location.reload(), 1500);
+        } else {
+            showToast(data.error, 'error');
+        }
+    })
+    .catch(error => {
+        showToast('Erreur réseau', 'error');
+    });
+}
+
+function syncClientPermissions(clientId) {
+    if (!confirm('Synchroniser les permissions de TOUS les utilisateurs de ce client ?')) return;
+    
+    fetch(`/api/client/${clientId}/sync-permissions`, {
+        method: 'POST',
+        headers: {
+            'X-CSRFToken': document.querySelector('meta[name="csrf-token"]').content
+        }
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            showToast(data.message, 'success');
+            setTimeout(() => location.reload(), 1500);
+        } else {
+            showToast(data.error, 'error');
+        }
+    })
+    .catch(error => {
+        showToast('Erreur réseau', 'error');
+    });
+}
+
 // ==================== GESTION DES ENVIRONNEMENTS ====================
 
 function createEnvironment() {
@@ -1380,365 +1549,14 @@ function deleteUser(userId, username) {
 }
 
 function editUser(userId) {
-    // Rediriger vers la page d'édition ou ouvrir un modal
     window.location.href = `/super-admin/user/${userId}/edit`;
 }
 
-// ==================== GESTION DES IDENTIFIANTS ====================
+// ==================== RÉINITIALISATION MOT DE PASSE ====================
 
-async function loadClientCredentials(clientId) {
-    try {
-        const response = await fetch(`/api/client/${clientId}/show-credentials`);
-        const data = await response.json();
-        
-        if (data.success) {
-            const content = document.getElementById('credentialsContent');
-            content.innerHTML = `
-                <div class="row">
-                    <div class="col-md-6">
-                        <div class="card mb-3">
-                            <div class="card-header bg-primary text-white">
-                                <h6 class="mb-0">Client</h6>
-                            </div>
-                            <div class="card-body">
-                                <dl class="mb-0">
-                                    <dt>Nom</dt>
-                                    <dd><strong>${data.client.nom}</strong></dd>
-                                    
-                                    <dt>Référence</dt>
-                                    <dd><code>${data.client.reference}</code></dd>
-                                    
-                                    <dt>Sous-domaine</dt>
-                                    <dd><code>${data.client.sous_domaine || 'Non configuré'}</code></dd>
-                                    
-                                    <dt>API Key</dt>
-                                    <dd>
-                                        <code class="user-select-all">${data.client.api_key || 'Non générée'}</code>
-                                        <button class="btn btn-sm btn-link" onclick="copyToClipboard('${data.client.api_key}')">
-                                            <i class="fas fa-copy"></i>
-                                        </button>
-                                    </dd>
-                                </dl>
-                            </div>
-                        </div>
-                    </div>
-                    
-                    <div class="col-md-6">
-                        <div class="card mb-3">
-                            <div class="card-header bg-success text-white">
-                                <h6 class="mb-0">Admin Client</h6>
-                            </div>
-                            <div class="card-body">
-                                <dl class="mb-0">
-                                    <dt>Username</dt>
-                                    <dd><code>${data.admin.username}</code></dd>
-                                    
-                                    <dt>Email</dt>
-                                    <dd>${data.admin.email}</dd>
-                                    
-                                    <dt>Rôle</dt>
-                                    <dd><span class="badge bg-danger">${data.admin.role}</span></dd>
-                                    
-                                    <dt>Mot de passe</dt>
-                                    <dd>
-                                        <span class="text-muted">••••••••</span>
-                                        <button class="btn btn-sm btn-warning ms-2" onclick="resetAdminPassword(${clientId})">
-                                            <i class="fas fa-redo me-1"></i>Réinitialiser
-                                        </button>
-                                    </dd>
-                                </dl>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-                
-                <div class="alert alert-info">
-                    <h6><i class="fas fa-link me-2"></i>URL d'accès :</h6>
-                    <div class="input-group">
-                        <input type="text" class="form-control" value="${data.access_url}" readonly id="accessUrl">
-                        <button class="btn btn-outline-secondary" onclick="copyToClipboard('${data.access_url}')">
-                            <i class="fas fa-copy"></i>
-                        </button>
-                    </div>
-                    <small class="text-muted mt-2 d-block">
-                        Le client peut se connecter via cette URL avec les identifiants ci-dessus
-                    </small>
-                </div>
-            `;
-        } else {
-            document.getElementById('credentialsContent').innerHTML = `
-                <div class="alert alert-danger">
-                    <i class="fas fa-exclamation-circle me-2"></i>
-                    ${data.error}
-                </div>
-            `;
-        }
-    } catch (error) {
-        console.error('Error:', error);
-        document.getElementById('credentialsContent').innerHTML = `
-            <div class="alert alert-danger">
-                <i class="fas fa-exclamation-circle me-2"></i>
-                Erreur de chargement : ${error}
-            </div>
-        `;
-    }
-}
-
-async function resetAdminPassword(clientId) {
-    if (!confirm('Générer un nouveau mot de passe pour l\'admin client ?')) return;
-    
-    try {
-        const response = await fetch(`/api/client/${clientId}/reset-admin-password`, {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-                'X-CSRFToken': document.querySelector('meta[name="csrf-token"]').content
-            }
-        });
-        
-        const data = await response.json();
-        
-        if (data.success) {
-            const alertDiv = document.createElement('div');
-            alertDiv.className = 'alert alert-success mt-3';
-            alertDiv.innerHTML = `
-                <h6><i class="fas fa-check-circle me-2"></i>Nouveau mot de passe généré :</h6>
-                <div class="d-flex align-items-center">
-                    <code class="fs-5 me-3 user-select-all">${data.password}</code>
-                    <button class="btn btn-sm btn-outline-secondary" onclick="copyToClipboard('${data.password}')">
-                        <i class="fas fa-copy"></i>
-                    </button>
-                </div>
-                <small class="text-danger d-block mt-2">
-                    <i class="fas fa-exclamation-circle"></i>
-                    Copiez ce mot de passe immédiatement !
-                </small>
-            `;
-            document.getElementById('credentialsContent').appendChild(alertDiv);
-            
-            showToast('Mot de passe réinitialisé', 'success');
-        } else {
-            showToast(data.error, 'error');
-        }
-    } catch (error) {
-        console.error('Error:', error);
-        showToast('Erreur réseau', 'error');
-    }
-}
-
-// ==================== ACTIONS CLIENT ====================
-
-function testSubdomain(subdomain) {
-    if (!subdomain) {
-        showToast('Aucun sous-domaine configuré', 'warning');
-        return;
-    }
-    window.open(`http://${subdomain}:5000`, '_blank');
-}
-
-function resetClientData(clientId) {
-    if (!confirm('⚠️ Réinitialiser TOUTES les données du client ?\nCette action est irréversible.')) return;
-    
-    fetch(`/api/client/${clientId}/reset-data`, {
-        method: 'POST',
-        headers: {
-            'X-CSRFToken': document.querySelector('meta[name="csrf-token"]').content
-        }
-    })
-    .then(response => response.json())
-    .then(data => {
-        if (data.success) {
-            showToast('Données réinitialisées', 'success');
-            setTimeout(() => location.reload(), 2000);
-        }
-    });
-}
-
-function exportClientData(clientId) {
-    window.open(`/api/client/${clientId}/export-data`, '_blank');
-}
-
-function showApiUsage(clientId) {
-    window.open(`/super-admin/client/${clientId}/api-usage`, '_blank');
-}
-
-function terminateClient(clientId, clientName) {
-    if (!confirm(`⚠️ RÉSILIER DÉFINITIVEMENT le client "${clientName}" ?\n\nCette action supprimera TOUTES les données et ne peut pas être annulée.`)) return;
-    
-    if (!confirm('Dernière confirmation : Êtes-vous absolument sûr ?')) return;
-    
-    fetch(`/api/client/${clientId}/terminate`, {
-        method: 'POST',
-        headers: {
-            'X-CSRFToken': document.querySelector('meta[name="csrf-token"]').content
-        }
-    })
-    .then(response => response.json())
-    .then(data => {
-        if (data.success) {
-            showToast('Client résilié', 'success');
-            setTimeout(() => window.location.href = '/super-admin/clients', 2000);
-        }
-    });
-}
-
-// ==================== UTILITAIRES ====================
-
-function copyToClipboard(text) {
-    if (!text) {
-        showToast('Rien à copier', 'warning');
-        return;
-    }
-    navigator.clipboard.writeText(text).then(() => {
-        showToast('Copié dans le presse-papier', 'success');
-    }).catch(() => {
-        showToast('Erreur de copie', 'error');
-    });
-}
-
-function showToast(message, type = 'success') {
-    const toastContainer = document.querySelector('.toast-container');
-    const toast = document.createElement('div');
-    toast.className = `toast align-items-center text-white bg-${type} border-0 show`;
-    toast.setAttribute('role', 'alert');
-    toast.innerHTML = `
-        <div class="d-flex">
-            <div class="toast-body">
-                <i class="fas fa-${type === 'success' ? 'check-circle' : 'exclamation-circle'} me-2"></i>
-                ${message}
-            </div>
-            <button type="button" class="btn-close btn-close-white me-2 m-auto" data-bs-dismiss="toast"></button>
-        </div>
-    `;
-    toastContainer.appendChild(toast);
-    
-    setTimeout(() => {
-        toast.remove();
-    }, 3000);
-}
-
-function printCredentials() {
-    const content = document.getElementById('credentialsContent').innerHTML;
-    const printWindow = window.open('', '_blank');
-    printWindow.document.write(`
-        <html>
-        <head>
-            <title>Identifiants Client</title>
-            <style>
-                body { font-family: Arial; padding: 20px; }
-                .card { border: 1px solid #ddd; margin-bottom: 20px; padding: 15px; border-radius: 5px; }
-                .badge { padding: 3px 8px; border-radius: 3px; }
-                @media print { .no-print { display: none; } }
-            </style>
-        </head>
-        <body>
-            <h1>Identifiants Client - ${document.querySelector('h1.h3').textContent}</h1>
-            ${content}
-            <p class="no-print">Imprimé le ${new Date().toLocaleDateString()}</p>
-        </body>
-        </html>
-    `);
-    printWindow.document.close();
-    setTimeout(() => printWindow.print(), 500);
-}
-function resetAdminPassword(clientId) {
-    if (!confirm('Générer un nouveau mot de passe pour l\'admin client ?')) return;
-    
-    fetch(`/api/client/${clientId}/reset-admin-password`, {
-        method: 'POST',
-        headers: {
-            'Content-Type': 'application/json',
-            'X-CSRFToken': getCsrfToken()
-        },
-        credentials: 'same-origin'
-    })
-    .then(async response => {
-        if (!response.ok) {
-            const error = await response.json();
-            throw new Error(error.error || 'Erreur serveur');
-        }
-        return response.json();
-    })
-    .then(data => {
-        if (data.success) {
-            // Créer un modal pour afficher le nouveau mot de passe
-            const modalHtml = `
-                <div class="modal fade" id="newPasswordModal" tabindex="-1">
-                    <div class="modal-dialog">
-                        <div class="modal-content">
-                            <div class="modal-header bg-success text-white">
-                                <h5 class="modal-title">
-                                    <i class="fas fa-key me-2"></i>Nouveau mot de passe
-                                </h5>
-                                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
-                            </div>
-                            <div class="modal-body">
-                                <div class="alert alert-success">
-                                    <i class="fas fa-check-circle me-2"></i>
-                                    Mot de passe réinitialisé avec succès !
-                                </div>
-                                
-                                <div class="mb-3">
-                                    <label class="form-label fw-bold">Utilisateur</label>
-                                    <input type="text" class="form-control" value="${data.username}" readonly>
-                                </div>
-                                
-                                <div class="mb-3">
-                                    <label class="form-label fw-bold">Email</label>
-                                    <input type="text" class="form-control" value="${data.email}" readonly>
-                                </div>
-                                
-                                <div class="mb-3">
-                                    <label class="form-label fw-bold">Nouveau mot de passe</label>
-                                    <div class="input-group">
-                                        <input type="text" class="form-control fw-bold text-primary" 
-                                               value="${data.password}" readonly id="newPassword">
-                                        <button class="btn btn-outline-secondary" onclick="copyToClipboard('${data.password}')">
-                                            <i class="fas fa-copy"></i>
-                                        </button>
-                                    </div>
-                                </div>
-                                
-                                <div class="alert alert-warning mt-3">
-                                    <i class="fas fa-exclamation-triangle me-2"></i>
-                                    <strong>Important !</strong> Copiez ce mot de passe maintenant. 
-                                    Il ne sera plus jamais affiché.
-                                </div>
-                            </div>
-                            <div class="modal-footer">
-                                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Fermer</button>
-                                <button type="button" class="btn btn-primary" onclick="copyToClipboard('${data.password}')">
-                                    <i class="fas fa-copy me-2"></i>Copier
-                                </button>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-            `;
-            
-            // Supprimer l'ancien modal
-            const oldModal = document.getElementById('newPasswordModal');
-            if (oldModal) oldModal.remove();
-            
-            // Ajouter et afficher
-            document.body.insertAdjacentHTML('beforeend', modalHtml);
-            const modal = new bootstrap.Modal(document.getElementById('newPasswordModal'));
-            modal.show();
-            
-            showToast('Mot de passe réinitialisé', 'success');
-        }
-    })
-    .catch(error => {
-        console.error('Error:', error);
-        showToast(error.message, 'error');
-    });
-}
-    // Variables pour stocker l'ID de l'utilisateur à réinitialiser
-let currentResetUserId = null;
-
-// Fonction pour ouvrir le modal de réinitialisation
-function ouvrirResetPassword(userId, userName) {
+function openResetPassword(userId, userName) {
     currentResetUserId = userId;
+    document.getElementById('resetUserName').textContent = userName;
     document.getElementById('resetPasswordContent').style.display = 'block';
     document.getElementById('resetPasswordResult').style.display = 'none';
     
@@ -1746,7 +1564,6 @@ function ouvrirResetPassword(userId, userName) {
     modal.show();
 }
 
-// Fonction pour générer un mot de passe sécurisé
 function genererMotDePasse() {
     const length = parseInt(document.getElementById('passwordLength').value);
     const useUppercase = document.getElementById('includeUppercase').checked;
@@ -1758,28 +1575,14 @@ function genererMotDePasse() {
     const numbers = '0123456789';
     const special = '!@#$%^&*()_+-=[]{}|;:,.<>?';
     
-    // Garantir au moins un caractère de chaque type requis
     let password = '';
     
-    // Ajouter au moins une minuscule
+    // Garantir au moins un caractère de chaque type requis
     password += lowercase.charAt(Math.floor(Math.random() * lowercase.length));
+    if (useUppercase) password += uppercase.charAt(Math.floor(Math.random() * uppercase.length));
+    if (useNumbers) password += numbers.charAt(Math.floor(Math.random() * numbers.length));
+    if (useSpecial) password += special.charAt(Math.floor(Math.random() * special.length));
     
-    // Ajouter au moins une majuscule si demandé
-    if (useUppercase) {
-        password += uppercase.charAt(Math.floor(Math.random() * uppercase.length));
-    }
-    
-    // Ajouter au moins un chiffre si demandé
-    if (useNumbers) {
-        password += numbers.charAt(Math.floor(Math.random() * numbers.length));
-    }
-    
-    // Ajouter au moins un caractère spécial si demandé
-    if (useSpecial) {
-        password += special.charAt(Math.floor(Math.random() * special.length));
-    }
-    
-    // Remplir le reste avec des caractères aléatoires
     let chars = lowercase;
     if (useUppercase) chars += uppercase;
     if (useNumbers) chars += numbers;
@@ -1789,13 +1592,12 @@ function genererMotDePasse() {
         password += chars.charAt(Math.floor(Math.random() * chars.length));
     }
     
-    // Mélanger le mot de passe
+    // Mélanger
     password = password.split('').sort(() => 0.5 - Math.random()).join('');
     
     return password;
 }
 
-// Fonction pour générer et envoyer le mot de passe
 function genererEtEnvoyerMotDePasse() {
     if (!currentResetUserId) {
         showToast('Erreur: utilisateur non sélectionné', 'error');
@@ -1804,7 +1606,6 @@ function genererEtEnvoyerMotDePasse() {
     
     const newPassword = genererMotDePasse();
     
-    // Afficher le résultat
     document.getElementById('newPasswordValue').value = newPassword;
     document.getElementById('resetPasswordMessage').innerHTML = `
         <i class="fas fa-check-circle me-2"></i>
@@ -1815,12 +1616,11 @@ function genererEtEnvoyerMotDePasse() {
     document.getElementById('resetPasswordContent').style.display = 'none';
     document.getElementById('resetPasswordResult').style.display = 'block';
     
-    // Envoyer la requête au serveur
     fetch(`/api/client/user/${currentResetUserId}/reset-password`, {
         method: 'POST',
         headers: {
             'Content-Type': 'application/json',
-            'X-CSRFToken': document.querySelector('input[name="csrf_token"]')?.value || '{{ csrf_token() }}'
+            'X-CSRFToken': document.querySelector('meta[name="csrf-token"]').content
         },
         body: JSON.stringify({ password: newPassword })
     })
@@ -1838,7 +1638,6 @@ function genererEtEnvoyerMotDePasse() {
     });
 }
 
-// Fonction pour copier le mot de passe
 function copierMotDePasse() {
     const passwordInput = document.getElementById('newPasswordValue');
     passwordInput.select();
@@ -1847,51 +1646,19 @@ function copierMotDePasse() {
     showToast('✅ Mot de passe copié dans le presse-papier', 'success');
 }
 
-// Réinitialiser le modal à la fermeture
 document.getElementById('closeResetModal')?.addEventListener('click', function() {
     document.getElementById('resetPasswordContent').style.display = 'block';
     document.getElementById('resetPasswordResult').style.display = 'none';
     currentResetUserId = null;
 });
 
-// Fonction toast
-function showToast(message, type = 'info') {
-    const toastContainer = document.getElementById('toast-container') || (() => {
-        const container = document.createElement('div');
-        container.id = 'toast-container';
-        container.className = 'toast-container position-fixed bottom-0 end-0 p-3';
-        container.style.zIndex = '9999';
-        document.body.appendChild(container);
-        return container;
-    })();
-    
-    const toast = document.createElement('div');
-    toast.className = `toast align-items-center text-bg-${type} border-0 mb-2`;
-    toast.setAttribute('role', 'alert');
-    toast.innerHTML = `
-        <div class="d-flex">
-            <div class="toast-body">
-                <i class="fas fa-${type === 'success' ? 'check-circle' : type === 'error' ? 'exclamation-circle' : 'info-circle'} me-2"></i>
-                ${message}
-            </div>
-            <button type="button" class="btn-close btn-close-white me-2 m-auto" data-bs-dismiss="toast"></button>
-        </div>
-    `;
-    
-    toastContainer.appendChild(toast);
-    const bsToast = new bootstrap.Toast(toast, { delay: 3000 });
-    bsToast.show();
-    toast.addEventListener('hidden.bs.toast', () => toast.remove());
-}
-    // ==================== GESTION DES CLÉS API ====================
+// ==================== GESTION DES CLÉS API ====================
 
 function viewApiKeys(clientId) {
-    const csrfToken = getCsrfToken();
-    
     fetch(`/api/client/${clientId}/api-keys`, {
         method: 'GET',
         headers: {
-            'X-CSRFToken': csrfToken
+            'X-CSRFToken': document.querySelector('meta[name="csrf-token"]').content
         }
     })
     .then(response => response.json())
@@ -1928,11 +1695,11 @@ function viewApiKeys(clientId) {
                                     <label class="form-label fw-bold">Secret Key</label>
                                     <div class="input-group">
                                         <input type="password" class="form-control font-monospace" 
-                                               value="${data.api_secret}" readonly id="apiSecretInput">
+                                               value="${data.api_secret || 'Non défini'}" readonly id="apiSecretInput">
                                         <button class="btn btn-outline-secondary" onclick="toggleSecretVisibility()">
                                             <i class="fas fa-eye" id="eyeIcon"></i>
                                         </button>
-                                        <button class="btn btn-outline-secondary" onclick="copyToClipboard('${data.api_secret}')">
+                                        <button class="btn btn-outline-secondary" onclick="copyToClipboard('${data.api_secret || ''}')">
                                             <i class="fas fa-copy"></i>
                                         </button>
                                     </div>
@@ -1991,17 +1758,14 @@ function regenerateApiKeys(clientId) {
     fetch(`/api/client/${clientId}/regenerate-api-keys`, {
         method: 'POST',
         headers: {
-            'X-CSRFToken': getCsrfToken()
+            'X-CSRFToken': document.querySelector('meta[name="csrf-token"]').content
         }
     })
     .then(response => response.json())
     .then(data => {
         if (data.success) {
-            // Fermer l'ancien modal
             const modal = bootstrap.Modal.getInstance(document.getElementById('apiKeysModal'));
             if (modal) modal.hide();
-            
-            // Rouvrir avec les nouvelles clés
             setTimeout(() => viewApiKeys(clientId), 500);
             showToast('Clés API régénérées avec succès', 'success');
         } else {
@@ -2014,7 +1778,81 @@ function regenerateApiKeys(clientId) {
     });
 }
 
-// ==================== RÉINITIALISATION MOT DE PASSE ADMIN ====================
+// ==================== IDENTIFIANTS CLIENT ====================
+
+function loadClientCredentials(clientId) {
+    fetch(`/api/client/${clientId}/show-credentials`)
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                const content = document.getElementById('credentialsContent');
+                content.innerHTML = `
+                    <div class="row">
+                        <div class="col-md-6">
+                            <div class="card mb-3">
+                                <div class="card-header bg-primary text-white">
+                                    <h6 class="mb-0">Client</h6>
+                                </div>
+                                <div class="card-body">
+                                    <dl class="mb-0">
+                                        <dt>Nom</dt>
+                                        <dd><strong>${data.client.nom}</strong></dd>
+                                        <dt>Référence</dt>
+                                        <dd><code>${data.client.reference}</code></dd>
+                                        <dt>API Key</dt>
+                                        <dd>
+                                            <code class="user-select-all">${data.client.api_key || 'Non générée'}</code>
+                                            <button class="btn btn-sm btn-link" onclick="copyToClipboard('${data.client.api_key}')">
+                                                <i class="fas fa-copy"></i>
+                                            </button>
+                                        </dd>
+                                    </dl>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-md-6">
+                            <div class="card mb-3">
+                                <div class="card-header bg-success text-white">
+                                    <h6 class="mb-0">Admin Client</h6>
+                                </div>
+                                <div class="card-body">
+                                    <dl class="mb-0">
+                                        <dt>Username</dt>
+                                        <dd><code>${data.admin.username}</code></dd>
+                                        <dt>Email</dt>
+                                        <dd>${data.admin.email}</dd>
+                                        <dt>Mot de passe</dt>
+                                        <dd>
+                                            <span class="text-muted">••••••••</span>
+                                            <button class="btn btn-sm btn-warning ms-2" onclick="resetAdminPassword(${clientId})">
+                                                <i class="fas fa-redo me-1"></i>Réinitialiser
+                                            </button>
+                                        </dd>
+                                    </dl>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                `;
+            } else {
+                document.getElementById('credentialsContent').innerHTML = `
+                    <div class="alert alert-danger">
+                        <i class="fas fa-exclamation-circle me-2"></i>
+                        ${data.error}
+                    </div>
+                `;
+            }
+        })
+        .catch(error => {
+            console.error('Error:', error);
+            document.getElementById('credentialsContent').innerHTML = `
+                <div class="alert alert-danger">
+                    <i class="fas fa-exclamation-circle me-2"></i>
+                    Erreur de chargement : ${error}
+                </div>
+            `;
+        });
+}
 
 function resetAdminPassword(clientId) {
     if (!confirm('⚠️ Générer un nouveau mot de passe pour l\'administrateur client ?')) return;
@@ -2022,7 +1860,8 @@ function resetAdminPassword(clientId) {
     fetch(`/api/client/${clientId}/reset-admin-password`, {
         method: 'POST',
         headers: {
-            'X-CSRFToken': getCsrfToken()
+            'Content-Type': 'application/json',
+            'X-CSRFToken': document.querySelector('meta[name="csrf-token"]').content
         }
     })
     .then(response => response.json())
@@ -2043,17 +1882,14 @@ function resetAdminPassword(clientId) {
                                     <i class="fas fa-check-circle me-2"></i>
                                     Mot de passe réinitialisé avec succès !
                                 </div>
-                                
                                 <div class="mb-3">
                                     <label class="form-label fw-bold">Utilisateur</label>
                                     <input type="text" class="form-control" value="${data.username}" readonly>
                                 </div>
-                                
                                 <div class="mb-3">
                                     <label class="form-label fw-bold">Email</label>
                                     <input type="text" class="form-control" value="${data.email}" readonly>
                                 </div>
-                                
                                 <div class="mb-3">
                                     <label class="form-label fw-bold">Nouveau mot de passe</label>
                                     <div class="input-group">
@@ -2064,7 +1900,6 @@ function resetAdminPassword(clientId) {
                                         </button>
                                     </div>
                                 </div>
-                                
                                 <div class="alert alert-warning mt-3">
                                     <i class="fas fa-exclamation-triangle me-2"></i>
                                     <strong>Important !</strong> Copiez ce mot de passe maintenant. 
@@ -2082,11 +1917,9 @@ function resetAdminPassword(clientId) {
                 </div>
             `;
             
-            // Supprimer l'ancien modal
             const oldModal = document.getElementById('newPasswordModal');
             if (oldModal) oldModal.remove();
             
-            // Ajouter et afficher
             document.body.insertAdjacentHTML('beforeend', modalHtml);
             const modal = new bootstrap.Modal(document.getElementById('newPasswordModal'));
             modal.show();
@@ -2102,23 +1935,83 @@ function resetAdminPassword(clientId) {
     });
 }
 
-// ==================== UTILITAIRES ====================
-
-function getCsrfToken() {
-    // Essayer plusieurs méthodes pour récupérer le token CSRF
-    const metaToken = document.querySelector('meta[name="csrf-token"]')?.content;
-    if (metaToken) return metaToken;
-    
-    const inputToken = document.querySelector('input[name="csrf_token"]')?.value;
-    if (inputToken) return inputToken;
-    
-    // Chercher dans les formulaires
-    const csrfInput = document.querySelector('[name="csrf_token"]')?.value;
-    if (csrfInput) return csrfInput;
-    
-    console.warn('CSRF token non trouvé');
-    return '';
+function printCredentials() {
+    const content = document.getElementById('credentialsContent').innerHTML;
+    const printWindow = window.open('', '_blank');
+    printWindow.document.write(`
+        <html>
+        <head>
+            <title>Identifiants Client</title>
+            <style>
+                body { font-family: Arial; padding: 20px; }
+                .card { border: 1px solid #ddd; margin-bottom: 20px; padding: 15px; border-radius: 5px; }
+                .badge { padding: 3px 8px; border-radius: 3px; }
+                @media print { .no-print { display: none; } }
+            </style>
+        </head>
+        <body>
+            <h1>Identifiants Client - {{ client.nom }}</h1>
+            ${content}
+            <p class="no-print">Imprimé le ${new Date().toLocaleDateString()}</p>
+        </body>
+        </html>
+    `);
+    printWindow.document.close();
+    setTimeout(() => printWindow.print(), 500);
 }
+
+// ==================== ACTIONS CLIENT ====================
+
+function resetClientData(clientId) {
+    if (!confirm('⚠️ Réinitialiser TOUTES les données du client ?\nCette action est irréversible.')) return;
+    
+    fetch(`/api/client/${clientId}/reset-data`, {
+        method: 'POST',
+        headers: {
+            'X-CSRFToken': document.querySelector('meta[name="csrf-token"]').content
+        }
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            showToast('Données réinitialisées', 'success');
+            setTimeout(() => location.reload(), 2000);
+        }
+    });
+}
+
+function exportClientData(clientId) {
+    window.open(`/api/client/${clientId}/export-data`, '_blank');
+}
+
+function showApiUsage(clientId) {
+    window.open(`/super-admin/client/${clientId}/api-usage`, '_blank');
+}
+
+function terminateClient(clientId, clientName) {
+    if (!confirm(`⚠️ RÉSILIER DÉFINITIVEMENT le client "${clientName}" ?\n\nCette action supprimera TOUTES les données et ne peut pas être annulée.`)) return;
+    if (!confirm('Dernière confirmation : Êtes-vous absolument sûr ?')) return;
+    
+    fetch(`/api/client/${clientId}/terminate`, {
+        method: 'POST',
+        headers: {
+            'X-CSRFToken': document.querySelector('meta[name="csrf-token"]').content
+        }
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            showToast('Client résilié', 'success');
+            setTimeout(() => window.location.href = '/super-admin/clients', 2000);
+        }
+    });
+}
+
+function refreshActivities() {
+    location.reload();
+}
+
+// ==================== UTILITAIRES ====================
 
 function copyToClipboard(text) {
     if (!text) {
@@ -2155,7 +2048,7 @@ function showToast(message, type = 'success') {
     toast.innerHTML = `
         <div class="d-flex">
             <div class="toast-body">
-                <i class="fas fa-${type === 'success' ? 'check-circle' : 'exclamation-circle'} me-2"></i>
+                <i class="fas fa-${type === 'success' ? 'check-circle' : type === 'error' ? 'exclamation-circle' : 'info-circle'} me-2"></i>
                 ${message}
             </div>
             <button type="button" class="btn-close btn-close-white me-2 m-auto" data-bs-dismiss="toast"></button>
@@ -2168,5 +2061,35 @@ function showToast(message, type = 'success') {
         toast.remove();
     }, 3000);
 }
+
+function getCsrfToken() {
+    const metaToken = document.querySelector('meta[name="csrf-token"]')?.content;
+    if (metaToken) return metaToken;
+    const inputToken = document.querySelector('input[name="csrf_token"]')?.value;
+    if (inputToken) return inputToken;
+    return '';
+}
+
+// Initialisation DataTable
+document.addEventListener('DOMContentLoaded', function() {
+    if (document.getElementById('usersTable')) {
+        try {
+            const table = new DataTable('#usersTable', {
+                language: {
+                    url: '//cdn.datatables.net/plug-ins/1.13.6/i18n/fr-FR.json'
+                },
+                pageLength: 25,
+                responsive: true
+            });
+        } catch(e) {
+            console.log('DataTable non disponible');
+        }
+    }
+});
 </script>
+
+<!-- Inclusion DataTables si disponible -->
+<script src="https://cdn.datatables.net/1.13.6/js/jquery.dataTables.min.js"></script>
+<script src="https://cdn.datatables.net/1.13.6/js/dataTables.bootstrap5.min.js"></script>
+
 {% endblock %}
