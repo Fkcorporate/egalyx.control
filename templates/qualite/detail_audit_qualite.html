@@ -49,9 +49,6 @@
         justify-content: center;
         background: white;
     }
-    .section-card {
-        margin-bottom: 1.5rem;
-    }
     .member-badge {
         background: #e9ecef;
         border-radius: 50px;
@@ -60,16 +57,16 @@
         align-items: center;
         gap: 0.5rem;
     }
-    .rec-list {
-        list-style: none;
-        padding-left: 0;
+    .action-buttons {
+        display: flex;
+        gap: 10px;
+        flex-wrap: wrap;
     }
-    .rec-list li {
-        padding: 0.5rem;
-        border-bottom: 1px solid #e2e8f0;
+    .reponse-table {
+        font-size: 0.85rem;
     }
-    .rec-list li:last-child {
-        border-bottom: none;
+    .reponse-table td {
+        vertical-align: middle;
     }
 </style>
 {% endblock %}
@@ -87,7 +84,7 @@
                     <li class="breadcrumb-item active">{{ audit.reference }}</li>
                 </ol>
             </nav>
-            <div class="d-flex align-items-center gap-3">
+            <div class="d-flex align-items-center gap-3 flex-wrap">
                 <h1 class="h2 mb-0">
                     <i class="fas fa-clipboard-list me-2 text-primary"></i>
                     {{ audit.titre }}
@@ -105,14 +102,46 @@
                 Plan: {{ plan.reference }} - {{ plan.titre }}
             </p>
         </div>
-        <div>
+        <div class="action-buttons">
+            <!-- Bouton Modifier - Toujours visible -->
             <a href="{{ url_for('modifier_audit_qualite', audit_id=audit.id) }}" class="btn btn-warning">
                 <i class="fas fa-edit me-1"></i>Modifier
             </a>
+            
+            <!-- Bouton Voir/Modifier les réponses (si des réponses existent ou audit réalisé) -->
+            {% if reponses and reponses|length > 0 or audit.statut == 'realise' %}
+            <a href="{{ url_for('repondre_audit_qualite', audit_id=audit.id) }}" class="btn btn-info">
+                <i class="fas fa-eye me-1"></i>Voir/Modifier les réponses
+            </a>
+            {% endif %}
+            
+            <!-- Bouton Répondre (visible si non réalisé et pas encore de réponses) -->
+            {% if audit.statut != 'realise' and (not reponses or reponses|length == 0) %}
+            <a href="{{ url_for('repondre_audit_qualite', audit_id=audit.id) }}" class="btn btn-success">
+                <i class="fas fa-edit me-1"></i>Répondre
+            </a>
+            {% endif %}
+            
+            <!-- Bouton Rapport PDF - Toujours visible -->
+            <a href="{{ url_for('rapport_audit_qualite', audit_id=audit.id) }}" class="btn btn-danger" target="_blank">
+                <i class="fas fa-file-pdf me-1"></i>Rapport PDF
+            </a>
+            
+            <!-- Bouton Retour - Toujours visible -->
             <a href="{{ url_for('liste_audits_qualite', plan_id=plan.id) }}" class="btn btn-secondary">
                 <i class="fas fa-arrow-left me-1"></i>Retour
             </a>
         </div>
+    </div>
+    <div class="col-md-3">
+        <a href="{{ url_for('liste_grilles_audit_qualite') }}" 
+           class="btn btn-outline-secondary w-100 py-3 text-start">
+            <i class="fas fa-table fa-lg me-2"></i>
+            <div>
+                <strong>Grilles d'audit</strong>
+                <small class="d-block text-muted">Bibliothèque de questions</small>
+            </div>
+        </a>
     </div>
 
     <div class="row">
@@ -130,11 +159,28 @@
                             <div class="col-7"><code>{{ audit.reference }}</code></div>
                         </div>
                         <div class="row mb-3">
+                            <div class="col-5 fw-semibold">Type d'audit:</div>
+                            <div class="col-7">
+                                <span class="badge bg-info">{{ audit.type_audit|title if audit.type_audit else 'Interne' }}</span>
+                            </div>
+                        </div>
+                        <div class="row mb-3">
                             <div class="col-5 fw-semibold">Auditeur principal:</div>
                             <div class="col-7">
                                 {% if audit.auditeur_principal %}
                                     <i class="fas fa-user-circle me-1 text-primary"></i>
                                     {{ audit.auditeur_principal.username }}
+                                {% else %}
+                                    <span class="text-muted">Non assigné</span>
+                                {% endif %}
+                            </div>
+                        </div>
+                        <div class="row mb-3">
+                            <div class="col-5 fw-semibold">Expert technique:</div>
+                            <div class="col-7">
+                                {% if audit.expert_technique %}
+                                    <i class="fas fa-user-check me-1 text-info"></i>
+                                    {{ audit.expert_technique.username }}
                                 {% else %}
                                     <span class="text-muted">Non assigné</span>
                                 {% endif %}
@@ -185,6 +231,18 @@
                             </div>
                         </div>
                         <div class="row mb-3">
+                            <div class="col-5 fw-semibold">Grille utilisée:</div>
+                            <div class="col-7">
+                                {% if audit.grille_id %}
+                                    <span class="badge bg-primary">
+                                        <i class="fas fa-table me-1"></i>Grille #{{ audit.grille_id }}
+                                    </span>
+                                {% else %}
+                                    <span class="text-muted">Aucune grille</span>
+                                {% endif %}
+                            </div>
+                        </div>
+                        <div class="row mb-3">
                             <div class="col-5 fw-semibold">Créé le:</div>
                             <div class="col-7">
                                 {{ audit.created_at.strftime('%d/%m/%Y') if audit.created_at else '-' }}
@@ -202,9 +260,9 @@
                 <div class="card-body text-center">
                     <!-- Taux de conformité -->
                     <div class="mb-4">
-                        <div class="conformity-circle" style="background: {% if stats.progression.taux_conformite >= 80 %}#d4edda{% elif stats.progression.taux_conformite >= 60 %}#fff3cd{% else %}#f8d7da{% endif %}">
-                            <span style="color: {% if stats.progression.taux_conformite >= 80 %}#155724{% elif stats.progression.taux_conformite >= 60 %}#856404{% else %}#721c24{% endif %}">
-                                {{ "%.0f"|format(stats.progression.taux_conformite) }}%
+                        <div class="conformity-circle" style="background: {% if audit.taux_conformite >= 80 %}#d4edda{% elif audit.taux_conformite >= 60 %}#fff3cd{% else %}#f8d7da{% endif %}">
+                            <span style="color: {% if audit.taux_conformite >= 80 %}#155724{% elif audit.taux_conformite >= 60 %}#856404{% else %}#721c24{% endif %}">
+                                {{ "%.0f"|format(audit.taux_conformite) if audit.taux_conformite else 0 }}%
                             </span>
                         </div>
                         <div class="mt-2 fw-semibold">Taux de conformité</div>
@@ -213,13 +271,13 @@
                     <div class="row">
                         <div class="col-6">
                             <div class="info-card text-center">
-                                <div class="h3 mb-0 text-info">{{ stats.progression.nb_observations }}</div>
+                                <div class="h3 mb-0 text-info">{{ audit.nb_observations or 0 }}</div>
                                 <small class="text-muted">Observations</small>
                             </div>
                         </div>
                         <div class="col-6">
                             <div class="info-card text-center">
-                                <div class="h3 mb-0 text-success">{{ stats.progression.nb_points_forts }}</div>
+                                <div class="h3 mb-0 text-success">{{ audit.nb_points_forts or 0 }}</div>
                                 <small class="text-muted">Points forts</small>
                             </div>
                         </div>
@@ -274,6 +332,56 @@
                 </div>
             </div>
 
+            <!-- Section Résumé des réponses (si existantes) -->
+            {% if reponses and reponses|length > 0 %}
+            <div class="card shadow-sm mb-4">
+                <div class="card-header bg-white d-flex justify-content-between align-items-center">
+                    <h5 class="mb-0"><i class="fas fa-question-circle me-2 text-info"></i>Résumé des réponses</h5>
+                    <a href="{{ url_for('repondre_audit_qualite', audit_id=audit.id) }}" class="btn btn-sm btn-outline-info">
+                        <i class="fas fa-edit me-1"></i>Modifier les réponses
+                    </a>
+                </div>
+                <div class="card-body p-0">
+                    <div class="table-responsive">
+                        <table class="table table-sm mb-0 reponse-table">
+                            <thead class="table-light">
+                                <tr>
+                                    <th style="width: 5%">#</th>
+                                    <th style="width: 50%">Question</th>
+                                    <th style="width: 15%">Conformité</th>
+                                    <th style="width: 30%">Preuve</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for r in reponses %}
+                                <tr>
+                                    <td class="text-center">{{ loop.index }}</td>
+                                    <td class="small">{{ r.question|truncate(80) }}</td>
+                                    <td class="text-center">
+                                        {% if r.conforme %}
+                                            <span class="badge bg-success">✅ Conforme</span>
+                                        {% else %}
+                                            <span class="badge bg-danger">❌ Non conforme</span>
+                                        {% endif %}
+                                    </td>
+                                    <td>
+                                        {% if r.preuve %}
+                                            <a href="{{ r.preuve }}" target="_blank" class="small">
+                                                <i class="fas fa-file-pdf me-1 text-danger"></i>Voir la preuve
+                                            </a>
+                                        {% else %}
+                                            <span class="text-muted">-</span>
+                                        {% endif %}
+                                    </td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+            {% endif %}
+
             <!-- Non-conformités -->
             <div class="card shadow-sm mb-4">
                 <div class="card-header bg-white d-flex justify-content-between align-items-center">
@@ -306,14 +414,16 @@
                                             </span>
                                         </td>
                                         <td>
-                                            <span class="badge {% if nc.statut == 'close' %}bg-success{% else %}bg-secondary{% endif %}">
+                                            <span class="badge {% if nc.statut == 'close' %}bg-success{% elif nc.statut == 'en_traitement' %}bg-warning{% else %}bg-secondary{% endif %}">
                                                 {{ nc.statut|title }}
                                             </span>
                                         </td>
                                         <td>
-                                            <button class="btn btn-sm btn-outline-primary" onclick="voirNonConformite({{ nc.id }})">
-                                                <i class="fas fa-eye"></i>
-                                            </button>
+                                            <div class="btn-group btn-group-sm">
+                                                <a href="{{ url_for('detail_non_conformite', nc_id=nc.id) }}" class="btn btn-outline-primary" title="Voir">
+                                                    <i class="fas fa-eye"></i>
+                                                </a>
+                                            </div>
                                         </td>
                                     </tr>
                                     {% endfor %}
@@ -336,11 +446,9 @@
                 </div>
                 <div class="card-body">
                     {% if audit.recommandations and audit.recommandations|length > 0 %}
-                        <ul class="rec-list">
+                        <ul class="mb-0">
                             {% for rec in audit.recommandations %}
-                            <li>
-                                <i class="fas fa-arrow-right me-2 text-warning"></i>{{ rec }}
-                            </li>
+                            <li class="mb-2">{{ rec }}</li>
                             {% endfor %}
                         </ul>
                     {% else %}
@@ -474,14 +582,4 @@
         </div>
     </div>
 </div>
-
-<script>
-function voirNonConformite(id) {
-    window.location.href = `/qualite/non-conformite/${id}`;
-}
-
-function exporterAudit(id) {
-    window.open(`/qualite/audit/${id}/export-pdf`, '_blank');
-}
-</script>
 {% endblock %}

@@ -1,0 +1,183 @@
+{% extends "base.html" %}
+{% import "_macros/page.html" as pg %}
+{% import "_macros/cotation.html" as cot %}
+
+{% import "_macros/organigramme.html" as orga %}
+{% block title %}{{ processus.nom }} — Processus{% endblock %}
+{% block styles %}{{ pg.styles() }}<style>
+  .orga-cadre { overflow: auto; border: 1px solid var(--bs-border-color); border-radius: 10px; background:
+                radial-gradient(circle, var(--bs-border-color) 1px, transparent 1px) 0 0 / 20px 20px; color: var(--bs-secondary-color); }
+  .orga-cadre svg { display: block; }
+  .orga-lien { stroke: currentColor; stroke-width: 1.6; }
+  .orga-lib-lien { font-size: 11px; fill: var(--bs-body-color); paint-order: stroke; stroke: var(--bs-body-bg); stroke-width: 3px; }
+  .orga-texte { font-size: 12px; font-weight: 600; fill: #fff; pointer-events: none; }
+</style>{% endblock %}
+{% block content %}
+<div class="alert alert-info d-flex flex-wrap align-items-center gap-2 small no-print" style="margin: 0 0 1rem;">
+  <i class="fas fa-circle-info"></i>
+  <span>Pour dessiner et faire valider la procédure (versions, couloirs d'acteurs, risques et contrôles par étape), utilisez les <strong>logigrammes</strong>.</span>
+  {% if logigramme_resume is defined and current_user.has_permission('can_manage_logigram') %}
+  <form method="post" action="{{ url_for('logigrammes.convertir', processus_id=processus.id) }}" class="ms-auto">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <button class="btn btn-sm btn-primary"><i class="fas fa-wand-magic-sparkles me-1"></i>Convertir ce processus en logigramme</button>
+  </form>
+  {% endif %}
+</div>
+<div class="container-fluid">
+  {% call pg.entete(processus.nom, 'fa-diagram-project', (processus.direction.nom if processus.direction else 'Processus') ~ (' · ' ~ processus.service.nom if processus.service else '') ~ (' · version ' ~ processus.version if processus.version else ''), retour=url_for('liste_processus_metier'), libelle_retour='Processus') %}
+    <a class="btn btn-sm btn-primary" href="{{ url_for('organigramme_avance', id=processus.id) }}"><i class="fas fa-sitemap me-1"></i>Organigramme</a>
+    {% if url_exists('organigramme_editeur.editeur') and has_permission('can_manage_logigram') %}
+    <a class="btn btn-sm btn-outline-primary" href="{{ url_for('organigramme_editeur.editeur', pid=processus.id) }}"><i class="fas fa-pen-ruler me-1"></i>Modifier l’organigramme</a>
+    {% endif %}
+  {% endcall %}
+
+  <div class="pg-kpis">
+    {{ pg.kpi('Étapes', stats_organigramme.total_etapes) }}
+    {{ pg.kpi('Liens', stats_organigramme.total_liens) }}
+    {{ pg.kpi('Zones de risque', zones|length + stats_organigramme.total_zones_risque) }}
+    {{ pg.kpi('Organigramme complété', stats_organigramme.completude ~ ' %') }}
+  </div>
+
+  <div class="row g-3">
+    <div class="col-xl-8">
+      {% call pg.carte('Étapes du processus', aide=etapes|length ~ ' étape(s)') %}
+        {% if etapes %}
+        <div class="table-responsive"><table class="pg-table">
+          <thead><tr><th class="pg-num">#</th><th>Étape</th><th>Type</th><th>Responsable</th><th>Durée</th><th>Entrées → sorties</th></tr></thead>
+          <tbody>
+          {% for e in etapes %}
+            <tr>
+              <td class="pg-num"><span class="badge" style="background: {{ e.couleur or '#1A3C6B' }};">{{ e.ordre }}</span></td>
+              <td><strong>{{ e.nom }}</strong>{% if e.description %}<div class="pg-second">{{ e.description|truncate(140) }}</div>{% endif %}</td>
+              <td>{{ (e.type_etape or 'action')|capitalize }}</td>
+              <td>{{ e.responsable.username if e.responsable else '—' }}</td>
+              <td>{{ e.duree_estimee or '—' }}</td>
+              <td class="pg-second">{{ e.inputs or '—' }} <i class="fas fa-arrow-right mx-1"></i> {{ e.outputs or '—' }}</td>
+            </tr>
+          {% endfor %}
+          </tbody>
+        </table></div>
+        {% else %}{{ pg.vide('Aucune étape. Ajoutez la première ci-dessous.', 'fa-list-ol') }}{% endif %}
+        <details class="mt-3" {% if not etapes %}open{% endif %}>
+          <summary class="fw-semibold"><i class="fas fa-plus me-1"></i>Ajouter une étape</summary>
+          <form method="post" action="{{ url_for('ajouter_etape_processus', processus_id=processus.id) }}" class="row g-2 mt-1">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            <div class="col-md-2"><label class="form-label small">Ordre</label><input class="form-control form-control-sm" type="number" min="1" name="ordre" value="{{ (etapes|map(attribute='ordre')|max if etapes else 0) + 1 }}" required></div>
+            <div class="col-md-6"><label class="form-label small">Nom</label><input class="form-control form-control-sm" name="nom" required></div>
+            <div class="col-md-4"><label class="form-label small">Type</label>
+              <select class="form-select form-select-sm" name="type_etape">
+                {% for v, lib in [('action', 'Action'), ('decision', 'Décision'), ('debut', 'Début'), ('fin', 'Fin'), ('controle', 'Contrôle')] %}<option value="{{ v }}">{{ lib }}</option>{% endfor %}
+              </select></div>
+            <div class="col-12"><label class="form-label small">Description</label><textarea class="form-control form-control-sm" name="description" rows="2"></textarea></div>
+            <div class="col-md-4"><label class="form-label small">Responsable</label>
+              <select class="form-select form-select-sm" name="responsable_id"><option value="">—</option>{% for u in users %}<option value="{{ u.id }}">{{ u.username }}</option>{% endfor %}</select></div>
+            <div class="col-md-3"><label class="form-label small">Durée estimée</label><input class="form-control form-control-sm" name="duree_estimee" placeholder="ex. 2 jours"></div>
+            <div class="col-md-3"><label class="form-label small">Couleur</label><input class="form-control form-control-sm form-control-color" type="color" name="couleur" value="#1A3C6B"></div>
+            <div class="col-md-6"><label class="form-label small">Entrées</label><input class="form-control form-control-sm" name="inputs"></div>
+            <div class="col-md-6"><label class="form-label small">Sorties</label><input class="form-control form-control-sm" name="outputs"></div>
+            <div class="col-12"><button class="btn btn-sm btn-primary" type="submit"><i class="fas fa-plus me-1"></i>Ajouter l’étape</button></div>
+          </form>
+        </details>
+      {% endcall %}
+
+      {% call pg.carte('Contrôles du processus', aide=(controles|default([]))|length ~ ' contrôle(s)') %}
+        {% if controles %}
+        <div class="table-responsive"><table class="pg-table">
+          <thead><tr><th>Réf.</th><th>Contrôle</th><th>Risque couvert</th><th>Étape</th><th>Type / fréquence</th><th>Responsable</th></tr></thead>
+          <tbody>
+          {% for c in controles %}
+            <tr>
+              <td class="pg-ref">{{ c.reference }}</td>
+              <td><strong>{{ c.nom }}</strong>{% if c.description %}<div class="pg-second">{{ c.description|truncate(120) }}</div>{% endif %}</td>
+              <td>{% if c.risque %}<a href="{{ url_for('detail_risque', id=c.risque.id) }}">{{ c.risque.reference }}</a>
+                  <div class="pg-second">{{ c.risque.intitule|truncate(50) }}</div>{% else %}—{% endif %}</td>
+              <td>{% set et = (etapes|selectattr('id', 'equalto', c.etape_id)|list) %}{{ (et[0].ordre ~ '. ' ~ et[0].nom)|truncate(30) if et else '—' }}</td>
+              <td>{{ (c.type_controle or '—')|capitalize }}<div class="pg-second">{{ (c.frequence or '')|capitalize }}</div></td>
+              <td>{{ c.responsable.username if c.responsable else '—' }}</td>
+            </tr>
+          {% endfor %}
+          </tbody>
+        </table></div>
+        {% else %}{{ pg.vide('Aucun contrôle rattaché à ce processus.', 'fa-shield-halved') }}{% endif %}
+        <details class="mt-3">
+          <summary class="fw-semibold"><i class="fas fa-plus me-1"></i>Ajouter un contrôle</summary>
+          {% if risques_client %}
+          <form method="post" action="{{ url_for('ajouter_controle_processus', processus_id=processus.id) }}" class="row g-2 mt-1">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            <div class="col-md-6"><label class="form-label small">Nom du contrôle</label><input class="form-control form-control-sm" name="nom" maxlength="200" required></div>
+            <div class="col-md-6"><label class="form-label small">Risque couvert</label>
+              <select class="form-select form-select-sm" name="risque_id" required><option value="">— choisir —</option>
+                {% for r in risques_client %}<option value="{{ r.id }}">{{ r.reference }} — {{ r.intitule|truncate(60) }}</option>{% endfor %}</select></div>
+            <div class="col-12"><label class="form-label small">Description (ce qui est vérifié, comment, preuve conservée)</label><textarea class="form-control form-control-sm" name="description" rows="2"></textarea></div>
+            <div class="col-md-3"><label class="form-label small">Type</label>
+              <select class="form-select form-select-sm" name="type_controle">{% for v, lib in [('preventif', 'Préventif'), ('detectif', 'Détectif'), ('correctif', 'Correctif')] %}<option value="{{ v }}">{{ lib }}</option>{% endfor %}</select></div>
+            <div class="col-md-3"><label class="form-label small">Fréquence</label>
+              <select class="form-select form-select-sm" name="frequence">{% for v, lib in [('permanent', 'Permanent'), ('quotidien', 'Quotidien'), ('hebdomadaire', 'Hebdomadaire'), ('mensuel', 'Mensuel'), ('trimestriel', 'Trimestriel'), ('annuel', 'Annuel'), ('ponctuel', 'Ponctuel')] %}<option value="{{ v }}">{{ lib }}</option>{% endfor %}</select></div>
+            <div class="col-md-3"><label class="form-label small">Étape</label>
+              <select class="form-select form-select-sm" name="etape_id"><option value="">—</option>{% for e in etapes %}<option value="{{ e.id }}">{{ e.ordre }}. {{ e.nom|truncate(30) }}</option>{% endfor %}</select></div>
+            <div class="col-md-3"><label class="form-label small">Responsable</label>
+              <select class="form-select form-select-sm" name="responsable_id"><option value="">—</option>{% for u in users %}<option value="{{ u.id }}">{{ u.username }}</option>{% endfor %}</select></div>
+            <div class="col-12"><button class="btn btn-sm btn-primary" type="submit"><i class="fas fa-plus me-1"></i>Ajouter le contrôle</button></div>
+          </form>
+          {% else %}
+          <p class="small text-secondary mt-2 mb-0">Un contrôle couvre un risque : créez d'abord les risques dans une cartographie.</p>
+          {% endif %}
+        </details>
+      {% endcall %}
+
+      {% if etapes %}
+      {% call pg.carte('Organigramme', lien=url_for('organigramme_avance', id=processus.id), libelle_lien='Plein écran') %}
+        {{ orga.organigramme(processus, etapes, liens, 380) }}
+      {% endcall %}
+      {% endif %}
+    </div>
+
+    <div class="col-xl-4">
+      {% call pg.carte('Informations') %}
+        <dl class="pg-dl">
+          <dt>Statut</dt><dd>{{ pg.statut(processus.statut) }}</dd>
+          <dt>Responsable</dt><dd>{{ processus.responsable.username if processus.responsable else '—' }}</dd>
+          <dt>Direction</dt><dd>{{ processus.direction.nom if processus.direction else '—' }}</dd>
+          <dt>Service</dt><dd>{{ processus.service.nom if processus.service else '—' }}</dd>
+          <dt>Mis à jour</dt><dd>{{ pg.date(processus.updated_at) }}</dd>
+        </dl>
+        {% if processus.description %}<p class="small mt-3 mb-0">{{ processus.description }}</p>{% endif %}
+      {% endcall %}
+
+      {% call pg.carte('Zones de risque', aide=(zones|length + zones_organigramme|length) ~ ' zone(s)') %}
+        {% if zones or zones_organigramme %}
+        <table class="pg-table"><tbody>
+          {% for z in zones %}
+          <tr><td><strong>{{ z.nom }}</strong>
+                  <div class="pg-second">{{ (z.type_risque or '')|replace('_', ' ')|capitalize }}{% if z.etape_source %} · étape {{ z.etape_source.ordre }}{% endif %}</div>
+                  {% if z.mesures_controle %}<div class="small mt-1"><i class="fas fa-shield-halved me-1 text-secondary"></i>{{ z.mesures_controle|truncate(120) }}</div>{% endif %}</td>
+              <td class="text-end">{{ cot.badge(z.niveau_risque, petit=True) }}</td></tr>
+          {% endfor %}
+          {% for z in zones_organigramme %}
+          <tr><td><strong>{{ z.nom }}</strong><div class="pg-second">Organigramme · {{ (z.type_risque or '')|replace('_', ' ')|capitalize }}</div></td>
+              <td class="text-end">{{ cot.badge(z.niveau_risque, petit=True) }}</td></tr>
+          {% endfor %}
+        </tbody></table>
+        {% else %}{{ pg.vide('Aucune zone de risque identifiée.', 'fa-triangle-exclamation') }}{% endif %}
+        <details class="mt-3">
+          <summary class="fw-semibold"><i class="fas fa-plus me-1"></i>Ajouter une zone de risque</summary>
+          <form method="post" action="{{ url_for('ajouter_zone_risque_processus', processus_id=processus.id) }}" class="row g-2 mt-1">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            <div class="col-12"><label class="form-label small">Nom</label><input class="form-control form-control-sm" name="nom" required></div>
+            <div class="col-6"><label class="form-label small">Type</label>
+              <select class="form-select form-select-sm" name="type_risque">{% for v in ['operationnel', 'financier', 'conformite', 'strategique', 'informatique', 'reputationnel'] %}<option value="{{ v }}">{{ v|capitalize }}</option>{% endfor %}</select></div>
+            <div class="col-6"><label class="form-label small">Niveau</label>
+              <select class="form-select form-select-sm" name="niveau_risque">{% for v, lib in [('faible', 'Faible'), ('moyen', 'Moyen'), ('eleve', 'Élevé'), ('critique', 'Critique')] %}<option value="{{ v }}" {% if v == 'moyen' %}selected{% endif %}>{{ lib }}</option>{% endfor %}</select></div>
+            <div class="col-12"><label class="form-label small">Description</label><textarea class="form-control form-control-sm" name="description" rows="2"></textarea></div>
+            <div class="col-12"><label class="form-label small">Impact</label><input class="form-control form-control-sm" name="impact"></div>
+            <div class="col-12"><label class="form-label small">Mesures de contrôle</label><textarea class="form-control form-control-sm" name="mesures_controle" rows="2"></textarea></div>
+            <div class="col-12"><label class="form-label small">Responsable</label>
+              <select class="form-select form-select-sm" name="responsable_id"><option value="">—</option>{% for u in users %}<option value="{{ u.id }}">{{ u.username }}</option>{% endfor %}</select></div>
+            <div class="col-12"><button class="btn btn-sm btn-primary" type="submit"><i class="fas fa-plus me-1"></i>Ajouter la zone</button></div>
+          </form>
+        </details>
+      {% endcall %}
+    </div>
+  </div>
+</div>
+{% endblock %}

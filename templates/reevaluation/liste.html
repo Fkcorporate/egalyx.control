@@ -1,53 +1,63 @@
 <!-- templates/reevaluation/liste.html -->
-
 {% extends "base.html" %}
+{% import "_macros/cotation.html" as cot %}
 
 {% block content %}
 <div class="container-fluid">
     <div class="row">
         <div class="col-12">
             <div class="page-header">
-                <h1><i class="fas fa-sync-alt me-2"></i>Demandes de réévaluation</h1>
-                <p class="text-muted">Gestion des demandes de réévaluation des risques issues des audits</p>
+                <div class="d-flex justify-content-between align-items-center">
+                    <div>
+                        <h1><i class="fas fa-sync-alt me-2"></i>Demandes de réévaluation</h1>
+                        <p class="text-muted">Gestion des demandes de réévaluation des risques issues des audits</p>
+                    </div>
+                    <div>
+                        <button class="btn btn-outline-primary btn-sm" onclick="rafraichirDonnees()">
+                            <i class="fas fa-sync-alt me-1"></i> Rafraîchir
+                        </button>
+                        <span class="text-muted small ms-2" id="dernierRefresh">Dernière mise à jour: à l'instant</span>
+                    </div>
+                </div>
             </div>
         </div>
     </div>
 
     <!-- Statistiques -->
-    <div class="row mb-4">
+    <div class="row mb-4" id="statsContainer">
         <div class="col-md-2">
             <div class="stat-card">
-                <div class="stat-value">{{ stats.total }}</div>
+                <div class="stat-value" id="statTotal">{{ stats.total }}</div>
                 <div class="stat-label">Total</div>
             </div>
         </div>
         <div class="col-md-2">
             <div class="stat-card bg-warning bg-opacity-10">
-                <div class="stat-value text-warning">{{ stats.en_attente }}</div>
+                <div class="stat-value text-warning" id="statEnAttente">{{ stats.en_attente }}</div>
                 <div class="stat-label">⏳ En attente</div>
             </div>
         </div>
         <div class="col-md-2">
             <div class="stat-card bg-success bg-opacity-10">
-                <div class="stat-value text-success">{{ stats.validees }}</div>
+                <div class="stat-value text-success" id="statValidees">{{ stats.validees }}</div>
                 <div class="stat-label">✅ Validées</div>
             </div>
         </div>
         <div class="col-md-2">
             <div class="stat-card bg-danger bg-opacity-10">
-                <div class="stat-value text-danger">{{ stats.rejetees }}</div>
+                <div class="stat-value text-danger" id="statRejetees">{{ stats.rejetees }}</div>
                 <div class="stat-label">❌ Rejetées</div>
             </div>
         </div>
         <div class="col-md-2">
             <div class="stat-card bg-secondary bg-opacity-10">
-                <div class="stat-value text-secondary">{{ stats.annulees }}</div>
+                <div class="stat-value text-secondary" id="statAnnulees">{{ stats.annulees }}</div>
                 <div class="stat-label">⛔ Annulées</div>
             </div>
         </div>
         <div class="col-md-2">
             <div class="stat-card bg-info bg-opacity-10">
-                <div class="stat-value text-info">{{ temps_moyen }}</div>
+                <div class="stat-value text-info" id="statTempsMoyen">{{ temps_moyen }}</div>
                 <div class="stat-label">⏱️ Temps moyen (h)</div>
             </div>
         </div>
@@ -56,7 +66,7 @@
     <!-- Filtres -->
     <div class="card mb-4">
         <div class="card-body">
-            <form method="GET" class="row g-3">
+            <form method="GET" class="row g-3" id="filtresForm">
                 <div class="col-md-4">
                     <label class="form-label">Statut</label>
                     <select name="statut" class="form-select" onchange="this.form.submit()">
@@ -70,7 +80,7 @@
                 </div>
                 <div class="col-md-6">
                     <label class="form-label">Recherche</label>
-                    <input type="text" name="recherche" class="form-control" placeholder="Référence, titre, justification..." value="{{ recherche }}">
+                    <input type="text" name="recherche" class="form-control" placeholder="Référence, titre, justification..." value="{{ recherche }}" id="rechercheInput">
                 </div>
                 <div class="col-md-2 d-flex align-items-end">
                     <button type="submit" class="btn btn-primary w-100">
@@ -84,87 +94,85 @@
     <!-- Liste des demandes -->
     <div class="card">
         <div class="card-body">
-            {% if demandes %}
-            <div class="table-responsive">
-                <table class="table table-hover">
-                    <thead>
-                        <tr>
-                            <th>Référence</th>
-                            <th>Titre</th>
-                            <th>Risque</th>
-                            <th>Statut</th>
-                            <th>Proposition</th>
-                            <th>Demandeur</th>
-                            <th>Date</th>
-                            <th>Actions</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        {% for demande in demandes %}
-                        <tr>
-                            <td><strong>{{ demande.reference }}</strong></td>
-                            <td>{{ demande.titre|truncate(40) }}</td>
-                            <td>
-                                <span class="badge bg-info">
-                                    {{ demande.risque.reference if demande.risque else 'N/A' }}
-                                </span>
-                            </td>
-                            <td>
-                                <span class="badge bg-{{ demande.get_statut_css() }}">
-                                    {{ demande.get_statut_label() }}
-                                </span>
-                            </td>
-                            <td>
-                                <small>
-                                    I: {{ demande.impact_propose }}/5
-                                    P: {{ demande.probabilite_propose }}/5
-                                    <br>
-                                    <span class="fw-bold">Score: {{ demande.score_propose }}</span>
-                                    <span class="badge 
-                                        {% if demande.niveau_risque_propose == 'Critique' %}bg-danger
-                                        {% elif demande.niveau_risque_propose == 'Élevé' %}bg-warning
-                                        {% elif demande.niveau_risque_propose == 'Moyen' %}bg-info
-                                        {% else %}bg-success{% endif %}">
-                                        {{ demande.niveau_risque_propose }}
+            <div id="tableauContainer">
+                {% if demandes %}
+                <div class="table-responsive">
+                    <table class="table table-hover" id="tableDemandes">
+                        <thead>
+                            <tr>
+                                <th>Référence</th>
+                                <th>Titre</th>
+                                <th>Risque</th>
+                                <th>Statut</th>
+                                <th>Proposition</th>
+                                <th>Demandeur</th>
+                                <th>Date</th>
+                                <th>Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody id="tableDemandesBody">
+                            {% for demande in demandes %}
+                            <tr data-demande-id="{{ demande.id }}" data-statut="{{ demande.statut }}">
+                                <td><strong>{{ demande.reference }}</strong></td>
+                                <td>{{ demande.titre|truncate(40) }}</td>
+                                <td>
+                                    <span class="badge bg-info">
+                                        {{ demande.risque.reference if demande.risque else 'N/A' }}
                                     </span>
-                                </small>
-                            </td>
-                            <td>{{ demande.demandeur.username if demande.demandeur else 'N/A' }}</td>
-                            <td>
-                                <small>{{ demande.date_demande.strftime('%d/%m/%Y %H:%M') }}</small>
-                            </td>
-                            <td>
-                                <div class="btn-group btn-group-sm">
-                                    <a href="{{ url_for('detail_demande_reevaluation', demande_id=demande.id) }}" 
-                                       class="btn btn-outline-primary">
-                                        <i class="fas fa-eye"></i>
-                                    </a>
-                                    {% if demande.statut == 'en_attente' and current_user.role in ['admin', 'responsable_risques', 'manager'] %}
-                                    <button class="btn btn-outline-success" onclick="validerDemande({{ demande.id }})">
-                                        <i class="fas fa-check"></i>
-                                    </button>
-                                    <button class="btn btn-outline-danger" onclick="rejeterDemande({{ demande.id }})">
-                                        <i class="fas fa-times"></i>
-                                    </button>
-                                    {% endif %}
-                                </div>
-                            </td>
-                        </tr>
-                        {% endfor %}
-                    </tbody>
-                </table>
+                                </td>
+                                <td>
+                                    <span class="badge bg-{{ demande.get_statut_css() }}">
+                                        {{ demande.get_statut_label() }}
+                                    </span>
+                                </td>
+                                <td>
+                                    <small>
+                                        I: {{ demande.impact_propose }}/5
+                                        P: {{ demande.probabilite_propose }}/5
+                                        <br>
+                                        {% set c_prop = cotation_scores(demande.impact_propose, demande.probabilite_propose, demande.niveau_maitrise_propose) %}
+                                        {{ cot.brut_net(c_prop.score_brut, c_prop.score_net, c_prop.taux_reduction, compact=True) }}
+                                        {{ cot.badge(c_prop.niveau_net, petit=True) }}
+                                    </small>
+                                </td>
+                                <td>{{ demande.demandeur.username if demande.demandeur else 'N/A' }}</td>
+                                <td>
+                                    <small>{{ demande.date_demande.strftime('%d/%m/%Y %H:%M') }}</small>
+                                </td>
+                                <td>
+                                    <div class="btn-group btn-group-sm">
+                                        <a href="{{ url_for('detail_demande_reevaluation', demande_id=demande.id) }}" 
+                                           class="btn btn-outline-primary">
+                                            <i class="fas fa-eye"></i>
+                                        </a>
+                                        {% if demande.statut == 'en_attente' and current_user.role in ['admin', 'responsable_risques', 'manager'] %}
+                                        <button class="btn btn-outline-success" onclick="validerDemande({{ demande.id }})">
+                                            <i class="fas fa-check"></i>
+                                        </button>
+                                        <button class="btn btn-outline-danger" onclick="rejeterDemande({{ demande.id }})">
+                                            <i class="fas fa-times"></i>
+                                        </button>
+                                        {% endif %}
+                                    </div>
+                                </td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+                {% else %}
+                <div class="text-center py-5" id="emptyMessage">
+                    <i class="fas fa-inbox fa-3x text-muted mb-3"></i>
+                    <h5>Aucune demande de réévaluation</h5>
+                    <p class="text-muted">Les demandes de réévaluation issues des audits apparaîtront ici.</p>
+                </div>
+                {% endif %}
             </div>
-            {% else %}
-            <div class="text-center py-5">
-                <i class="fas fa-inbox fa-3x text-muted mb-3"></i>
-                <h5>Aucune demande de réévaluation</h5>
-                <p class="text-muted">Les demandes de réévaluation issues des audits apparaîtront ici.</p>
-            </div>
-            {% endif %}
         </div>
     </div>
 </div>
 
+<!-- Modals -->
 <!-- Modal de validation -->
 <div class="modal fade" id="modalValiderDemande" tabindex="-1">
     <div class="modal-dialog">
@@ -222,6 +230,122 @@
 </div>
 
 <script>
+// ============================================
+// FONCTIONS DE RAFRAÎCHISSEMENT DYNAMIQUE
+// ============================================
+
+let refreshInterval = null;
+
+function rafraichirDonnees() {
+    console.log('🔄 Rafraîchissement des données...');
+    
+    // Rafraîchir les statistiques
+    fetch('/api/demandes-reevaluation/stats')
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                const stats = data.stats;
+                document.getElementById('statTotal').textContent = stats.total;
+                document.getElementById('statEnAttente').textContent = stats.en_attente;
+                document.getElementById('statValidees').textContent = stats.validees;
+                document.getElementById('statRejetees').textContent = stats.rejetees;
+                document.getElementById('statAnnulees').textContent = stats.annulees;
+                document.getElementById('statTempsMoyen').textContent = stats.temps_moyen;
+                
+                document.getElementById('dernierRefresh').textContent = 'Dernière mise à jour: ' + new Date().toLocaleTimeString();
+                console.log('✅ Statistiques mises à jour');
+            }
+        })
+        .catch(error => console.error('❌ Erreur stats:', error));
+    
+    // Rafraîchir la liste
+    const statut = document.querySelector('select[name="statut"]')?.value || '';
+    const recherche = document.getElementById('rechercheInput')?.value || '';
+    
+    fetch(`/api/demandes-reevaluation/liste?statut=${encodeURIComponent(statut)}&recherche=${encodeURIComponent(recherche)}`)
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                mettreAJourTableau(data.demandes);
+                console.log('✅ Liste mise à jour');
+            }
+        })
+        .catch(error => console.error('❌ Erreur liste:', error));
+}
+
+function mettreAJourTableau(demandes) {
+    const tbody = document.getElementById('tableDemandesBody');
+    const emptyMessage = document.getElementById('emptyMessage');
+    const container = document.getElementById('tableauContainer');
+    
+    if (!tbody) return;
+    
+    // Vider le tbody
+    tbody.innerHTML = '';
+    
+    if (demandes && demandes.length > 0) {
+        // Supprimer le message vide s'il existe
+        const emptyDiv = container.querySelector('#emptyMessage');
+        if (emptyDiv) emptyDiv.remove();
+        
+        demandes.forEach(d => {
+            const row = document.createElement('tr');
+            row.setAttribute('data-demande-id', d.id);
+            row.setAttribute('data-statut', d.statut);
+            row.innerHTML = `
+                <td><strong>${d.reference}</strong></td>
+                <td>${d.titre ? d.titre.substring(0, 40) + (d.titre.length > 40 ? '...' : '') : ''}</td>
+                <td>
+                    <span class="badge bg-info">${d.risque_reference}</span>
+                </td>
+                <td>
+                    <span class="badge bg-${d.statut_css}">${d.statut_label}</span>
+                </td>
+                <td>
+                    <small>
+                        I: ${d.impact_propose}/5
+                        P: ${d.probabilite_propose}/5
+                        <br>
+                        ${(() => { const c = EgalyxCotation.scores(d.impact_propose, d.probabilite_propose, d.niveau_maitrise_propose);
+                                   return EgalyxCotation.brutNet(c.score_brut, c.score_net, c.taux_reduction); })()}
+                    </small>
+                </td>
+                <td>${d.demandeur}</td>
+                <td><small>${d.date_demande}</small></td>
+                <td>
+                    <div class="btn-group btn-group-sm">
+                        <a href="/demande-reevaluation/${d.id}" class="btn btn-outline-primary">
+                            <i class="fas fa-eye"></i>
+                        </a>
+                        ${d.peut_valider ? `
+                        <button class="btn btn-outline-success" onclick="validerDemande(${d.id})">
+                            <i class="fas fa-check"></i>
+                        </button>
+                        <button class="btn btn-outline-danger" onclick="rejeterDemande(${d.id})">
+                            <i class="fas fa-times"></i>
+                        </button>
+                        ` : ''}
+                    </div>
+                </td>
+            `;
+            tbody.appendChild(row);
+        });
+    } else {
+        // Afficher le message vide
+        if (!document.getElementById('emptyMessage')) {
+            const emptyDiv = document.createElement('div');
+            emptyDiv.id = 'emptyMessage';
+            emptyDiv.className = 'text-center py-5';
+            emptyDiv.innerHTML = `
+                <i class="fas fa-inbox fa-3x text-muted mb-3"></i>
+                <h5>Aucune demande de réévaluation</h5>
+                <p class="text-muted">Les demandes de réévaluation issues des audits apparaîtront ici.</p>
+            `;
+            container.appendChild(emptyDiv);
+        }
+    }
+}
+
 function validerDemande(demandeId) {
     document.getElementById('validerDemandeId').value = demandeId;
     document.getElementById('formValiderDemande').action = `/demande-reevaluation/${demandeId}/valider`;
@@ -233,6 +357,54 @@ function rejeterDemande(demandeId) {
     document.getElementById('formRejeterDemande').action = `/demande-reevaluation/${demandeId}/rejeter`;
     new bootstrap.Modal(document.getElementById('modalRejeterDemande')).show();
 }
+
+// Démarrer le rafraîchissement automatique
+function demarrerAutoRefresh() {
+    if (refreshInterval) clearInterval(refreshInterval);
+    refreshInterval = setInterval(rafraichirDonnees, 30000); // 30 secondes
+}
+
+function arreterAutoRefresh() {
+    if (refreshInterval) {
+        clearInterval(refreshInterval);
+        refreshInterval = null;
+    }
+}
+
+// Initialisation
+document.addEventListener('DOMContentLoaded', function() {
+    // Démarrer le rafraîchissement automatique
+    demarrerAutoRefresh();
+    
+    // Arrêter quand la page est cachée
+    document.addEventListener('visibilitychange', function() {
+        if (document.hidden) {
+            arreterAutoRefresh();
+        } else {
+            demarrerAutoRefresh();
+            rafraichirDonnees(); // Rafraîchir immédiatement
+        }
+    });
+    
+    // Rafraîchir après une action (validation/rejet)
+    document.querySelectorAll('form').forEach(form => {
+        form.addEventListener('submit', function() {
+            // Attendre que la soumission soit terminée
+            setTimeout(rafraichirDonnees, 1000);
+        });
+    });
+    
+    // Rafraîchir après changement de filtre
+    document.getElementById('filtresForm')?.addEventListener('submit', function(e) {
+        e.preventDefault();
+        rafraichirDonnees();
+    });
+});
+
+// Nettoyage avant de quitter la page
+window.addEventListener('beforeunload', function() {
+    arreterAutoRefresh();
+});
 </script>
 
 <style>
@@ -242,15 +414,33 @@ function rejeterDemande(demandeId) {
     padding: 1rem;
     text-align: center;
     box-shadow: 0 2px 8px rgba(0,0,0,0.06);
+    transition: all 0.3s ease;
+}
+.stat-card:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 16px rgba(0,0,0,0.1);
 }
 .stat-value {
     font-size: 1.8rem;
     font-weight: 700;
     font-family: 'Georgia', serif;
+    transition: all 0.3s ease;
 }
 .stat-label {
     font-size: 0.8rem;
     color: var(--gray);
+}
+.stat-card .stat-value {
+    transition: all 0.3s ease;
+}
+/* Animation pour les mises à jour */
+@keyframes flashUpdate {
+    0% { transform: scale(1); }
+    50% { transform: scale(1.2); }
+    100% { transform: scale(1); }
+}
+.stat-value.updated {
+    animation: flashUpdate 0.3s ease;
 }
 </style>
 {% endblock %}

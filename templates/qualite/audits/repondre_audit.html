@@ -1,0 +1,267 @@
+{% extends "base.html" %}
+
+{% block title %}Répondre à l'audit - {{ audit.reference }}{% endblock %}
+
+{% block styles %}
+{{ super() }}
+<style>
+    .question-card {
+        border-left: 4px solid #dee2e6;
+        transition: all 0.2s;
+        margin-bottom: 1.5rem;
+    }
+    .question-card.conforme {
+        border-left-color: #198754;
+        background-color: #d1e7dd20;
+    }
+    .question-card.non-conforme {
+        border-left-color: #dc3545;
+        background-color: #f8d7da20;
+    }
+    .progress-step {
+        width: 30px;
+        height: 30px;
+        border-radius: 50%;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 12px;
+        font-weight: bold;
+    }
+    .progress-step.completed {
+        background: #198754;
+        color: white;
+    }
+    .progress-step.current {
+        background: #0d6efd;
+        color: white;
+    }
+    .progress-step.pending {
+        background: #e9ecef;
+        color: #6c757d;
+    }
+    .preuve-preview {
+        margin-top: 0.5rem;
+        padding: 0.5rem;
+        background: #f8f9fa;
+        border-radius: 6px;
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+    }
+    .preuve-preview a {
+        text-decoration: none;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="container-fluid px-4">
+    <div class="row mb-4">
+        <div class="col">
+            <nav aria-label="breadcrumb">
+                <ol class="breadcrumb">
+                    <li class="breadcrumb-item"><a href="{{ url_for('liste_plans_qualite') }}">Plans qualité</a></li>
+                    <li class="breadcrumb-item"><a href="{{ url_for('detail_plan_qualite', plan_id=plan.id) }}">{{ plan.reference }}</a></li>
+                    <li class="breadcrumb-item"><a href="{{ url_for('liste_audits_qualite', plan_id=plan.id) }}">Audits</a></li>
+                    <li class="breadcrumb-item"><a href="{{ url_for('detail_audit_qualite', audit_id=audit.id) }}">{{ audit.reference }}</a></li>
+                    <li class="breadcrumb-item active">Répondre</li>
+                </ol>
+            </nav>
+            <h1 class="h2">
+                <i class="fas fa-edit me-2 text-primary"></i>
+                Questionnaire d'audit
+            </h1>
+            <p class="text-muted">{{ audit.titre }} ({{ audit.reference }})</p>
+        </div>
+    </div>
+
+    <div class="row">
+        <div class="col-lg-3">
+            <div class="card shadow-sm mb-4 sticky-top" style="top: 80px;">
+                <div class="card-header bg-white">
+                    <h6 class="mb-0"><i class="fas fa-list me-2"></i>Progression</h6>
+                </div>
+                <div class="card-body">
+                    <div class="d-flex justify-content-between mb-2">
+                        <span class="small">Questions</span>
+                        <span class="small fw-bold" id="progressCount">0/{{ questions|length }}</span>
+                    </div>
+                    <div class="progress mb-3" style="height: 8px;">
+                        <div class="progress-bar bg-success" id="progressBar" style="width: 0%"></div>
+                    </div>
+                    
+                    <div class="list-group list-group-flush">
+                        {% for q in questions %}
+                        <a href="#question-{{ q.id }}" class="list-group-item list-group-item-action d-flex justify-content-between align-items-center py-2" data-question="{{ q.id }}">
+                            <small>Q{{ loop.index }}</small>
+                            <span class="question-status-badge" data-q="{{ q.id }}">
+                                <i class="fas fa-circle text-secondary" style="font-size: 8px;"></i>
+                            </span>
+                        </a>
+                        {% endfor %}
+                    </div>
+                    
+                    <hr>
+                    <div class="alert alert-info small">
+                        <i class="fas fa-info-circle me-1"></i>
+                        Pour chaque question, indiquez si le critère est conforme et ajoutez une preuve si possible.
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="col-lg-9">
+            <form method="POST" enctype="multipart/form-data" id="auditForm">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                
+                {% for q in questions %}
+                {% set reponse_existante = reponses_existantes.get(q.id|string) %}
+                <div class="card shadow-sm question-card" id="question-{{ q.id }}" data-id="{{ q.id }}">
+                    <div class="card-header bg-white">
+                        <div class="d-flex justify-content-between align-items-center flex-wrap gap-2">
+                            <div>
+                                <span class="badge bg-secondary me-2">Q{{ loop.index }}</span>
+                                <strong>{{ q.question }}</strong>
+                            </div>
+                            <div class="btn-group btn-group-sm">
+                                <button type="button" class="btn btn-outline-success btn-sm" onclick="setConforme(this, true, {{ q.id }})">
+                                    <i class="fas fa-check me-1"></i>Conforme
+                                </button>
+                                <button type="button" class="btn btn-outline-danger btn-sm" onclick="setConforme(this, false, {{ q.id }})">
+                                    <i class="fas fa-times me-1"></i>Non conforme
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="card-body">
+                        <input type="hidden" name="conforme_{{ q.id }}" id="conforme_{{ q.id }}" value="{{ 'true' if reponse_existante and reponse_existante.conforme else 'false' }}">
+                        
+                        <div class="mb-3">
+                            <label class="form-label fw-semibold">Réponse</label>
+                            <textarea name="reponse_{{ q.id }}" class="form-control" rows="2" placeholder="Votre réponse...">{{ reponse_existante.reponse if reponse_existante else '' }}</textarea>
+                        </div>
+                        
+                        <div class="mb-3">
+                            <label class="form-label fw-semibold">Commentaire / Justification</label>
+                            <textarea name="commentaire_{{ q.id }}" class="form-control" rows="2" placeholder="Détaillez votre justification...">{{ reponse_existante.commentaire if reponse_existante else '' }}</textarea>
+                        </div>
+                        
+                        <div class="mb-3">
+                            <label class="form-label fw-semibold">
+                                <i class="fas fa-paperclip me-1"></i>Preuve / Justificatif
+                            </label>
+                            <input type="file" name="preuve_{{ q.id }}" class="form-control" accept=".pdf,.doc,.docx,.jpg,.jpeg,.png">
+                            <small class="text-muted">Format acceptés: PDF, DOC, JPG, PNG (Max 5 Mo)</small>
+                            
+                            {% if reponse_existante and reponse_existante.preuve %}
+                            <div class="preuve-preview">
+                                <i class="fas fa-file-pdf text-danger"></i>
+                                <a href="{{ reponse_existante.preuve }}" target="_blank">Voir la preuve actuelle</a>
+                                <span class="text-muted small ms-2">(remplacez par un nouveau fichier si besoin)</span>
+                            </div>
+                            <input type="hidden" name="preuve_existante_{{ q.id }}" value="{{ reponse_existante.preuve }}">
+                            {% endif %}
+                        </div>
+                        
+                        <div class="alert alert-light small mb-0">
+                            <i class="fas fa-info-circle me-1 text-primary"></i>
+                            <strong>Critère attendu :</strong> {{ q.critere }}
+                        </div>
+                    </div>
+                </div>
+                {% endfor %}
+                
+                <div class="d-flex justify-content-between mt-3 mb-4">
+                    <a href="{{ url_for('detail_audit_qualite', audit_id=audit.id) }}" class="btn btn-secondary">
+                        <i class="fas fa-arrow-left me-1"></i>Sauvegarder et quitter
+                    </a>
+                    <button type="submit" class="btn btn-primary">
+                        <i class="fas fa-save me-1"></i>Enregistrer et finaliser
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<script>
+function setConforme(btn, conforme, questionId) {
+    const questionCard = btn.closest('.question-card');
+    const conformeInput = document.getElementById(`conforme_${questionId}`);
+    
+    conformeInput.value = conforme;
+    
+    if (conforme) {
+        questionCard.classList.add('conforme');
+        questionCard.classList.remove('non-conforme');
+    } else {
+        questionCard.classList.add('non-conforme');
+        questionCard.classList.remove('conforme');
+    }
+    
+    updateProgress();
+}
+
+function updateProgress() {
+    const total = {{ questions|length }};
+    let completed = 0;
+    
+    for (let i = 1; i <= total; i++) {
+        const conformeInput = document.getElementById(`conforme_${i}`);
+        if (conformeInput && conformeInput.value !== 'false') {
+            completed++;
+        }
+    }
+    
+    const percent = (completed / total) * 100;
+    document.getElementById('progressBar').style.width = percent + '%';
+    document.getElementById('progressCount').innerText = completed + '/' + total;
+    
+    // Mettre à jour les indicateurs de navigation
+    document.querySelectorAll('.question-status-badge').forEach((badge, index) => {
+        const qNum = index + 1;
+        const conformeInput = document.getElementById(`conforme_${qNum}`);
+        if (conformeInput && conformeInput.value === 'true') {
+            badge.innerHTML = '<i class="fas fa-check-circle text-success"></i>';
+        } else if (conformeInput && conformeInput.value === 'false') {
+            badge.innerHTML = '<i class="fas fa-times-circle text-danger"></i>';
+        } else {
+            badge.innerHTML = '<i class="fas fa-circle text-secondary" style="font-size: 8px;"></i>';
+        }
+    });
+}
+
+// Charger les réponses existantes
+document.addEventListener('DOMContentLoaded', function() {
+    // Appliquer les classes CSS aux questions déjà répondues
+    for (let i = 1; i <= {{ questions|length }}; i++) {
+        const conformeInput = document.getElementById(`conforme_${i}`);
+        if (conformeInput && conformeInput.value === 'true') {
+            const questionCard = document.getElementById(`question-${i}`);
+            if (questionCard) {
+                questionCard.classList.add('conforme');
+            }
+        } else if (conformeInput && conformeInput.value === 'false') {
+            const questionCard = document.getElementById(`question-${i}`);
+            if (questionCard) {
+                questionCard.classList.add('non-conforme');
+            }
+        }
+    }
+    
+    updateProgress();
+    
+    // Smooth scroll
+    document.querySelectorAll('.list-group-item').forEach(link => {
+        link.addEventListener('click', function(e) {
+            e.preventDefault();
+            const target = document.querySelector(this.getAttribute('href'));
+            if (target) {
+                target.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            }
+        });
+    });
+});
+</script>
+{% endblock %}
