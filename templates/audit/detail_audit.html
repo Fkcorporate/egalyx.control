@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% import "_macros/cotation.html" as cot %}
 
 {% block content %}
 <style>
@@ -582,6 +583,7 @@
 </style>
 
 <div class="detail-container">
+{% with type_doc='audit', doc_id=audit.id %}{% include "_partials/bandeau_signature.html" %}{% endwith %}
     <!-- En-tête de page -->
     <div class="page-header animate-in">
         <div class="page-header-content">
@@ -617,6 +619,8 @@
             {% endfor %}
         {% endif %}
     {% endwith %}
+
+    {% include "egalyx/_audit_suivi.html" %}
 
     <!-- Statistiques -->
     <div class="stats-grid">
@@ -1503,6 +1507,11 @@
                         <!-- ========================================== -->
                         <!-- STATISTIQUES DES RISQUES -->
                         <!-- ========================================== -->
+                        {% set ns_cot = namespace(critiques=0, eleves=0) %}
+                        {% for rd in risques_associes %}
+                            {% set n_net = cotation_evaluation(rd.derniere_evaluation).niveau_net %}
+                            {% if n_net == 'Critique' %}{% set ns_cot.critiques = ns_cot.critiques + 1 %}{% elif n_net == 'Élevé' %}{% set ns_cot.eleves = ns_cot.eleves + 1 %}{% endif %}
+                        {% endfor %}
                         <div class="row g-3 mb-4">
                             <div class="col-md-3">
                                 <div class="stat-card text-center p-2">
@@ -1512,14 +1521,14 @@
                             </div>
                             <div class="col-md-3">
                                 <div class="stat-card text-center p-2">
-                                    <h4 class="text-danger">{{ risques_associes|selectattr('risque.niveau_criticite', 'equalto', 'Critique')|list|length }}</h4>
-                                    <small class="text-muted">{{ t("Critiques") }}</small>
+                                    <h4 class="cot-texte-critique">{{ ns_cot.critiques }}</h4>
+                                    <small class="text-muted">{{ t("Critiques") }} (net)</small>
                                 </div>
                             </div>
                             <div class="col-md-3">
                                 <div class="stat-card text-center p-2">
-                                    <h4 class="text-warning">{{ risques_associes|selectattr('risque.niveau_criticite', 'equalto', 'Élevé')|list|length }}</h4>
-                                    <small class="text-muted">{{ t("Élevés") }}</small>
+                                    <h4 class="cot-texte-eleve">{{ ns_cot.eleves }}</h4>
+                                    <small class="text-muted">{{ t("Élevés") }} (net)</small>
                                 </div>
                             </div>
                             <div class="col-md-3">
@@ -1543,27 +1552,19 @@
                         {% set constats_risque = constatations|selectattr('risque_id', 'equalto', risque.id)|list %}
                         {% set nb_constats = constats_risque|length %}
                         
-                        <div class="card mb-4 border-{{ 'danger' if risque.niveau_criticite == 'Critique' else 'warning' if risque.niveau_criticite == 'Élevé' else 'info' if risque.niveau_criticite == 'Moyen' else 'success' }}">
+                        {% set c_ev = cotation_evaluation(derniere_eval) %}
+                        <div class="card mb-4" style="border: 1px solid {{ cot.hex(c_ev.niveau_net) }};">
                             <!-- ===== EN-TÊTE ===== -->
-                            <div class="card-header d-flex justify-content-between align-items-center flex-wrap gap-2"
-                                style="background: {% if risque.niveau_criticite == 'Critique' %}rgba(239,68,68,0.06){% elif risque.niveau_criticite == 'Élevé' %}rgba(245,158,11,0.06){% elif risque.niveau_criticite == 'Moyen' %}rgba(59,130,246,0.06){% else %}rgba(16,185,129,0.06){% endif %};">
+                            <div class="card-header d-flex justify-content-between align-items-center flex-wrap gap-2 cot-fond-{{ cot.cle(c_ev.niveau_net) }}">
                                 <div class="d-flex align-items-center gap-3 flex-wrap">
                                     <!-- Référence -->
                                     <a href="{{ url_for('detail_risque', id=risque.id) }}" target="_blank" class="text-decoration-none fw-bold">
                                         {{ risque.reference }}
                                     </a>
                                     <!-- Niveau -->
-                                    <span class="badge 
-                                        {% if risque.niveau_criticite == 'Critique' %}bg-danger
-                                        {% elif risque.niveau_criticite == 'Élevé' %}bg-warning
-                                        {% elif risque.niveau_criticite == 'Moyen' %}bg-info
-                                        {% else %}bg-success{% endif %}">
-                                        {{ risque.niveau_criticite }}
-                                    </span>
-                                    <!-- Score -->
-                                    {% if derniere_eval %}
-                                    <span class="badge bg-secondary">Score: {{ derniere_eval.score_risque }}</span>
-                                    {% endif %}
+                                    {{ cot.badge(c_ev.niveau_net) }}
+                                    <!-- Score brut → net -->
+                                    {% if c_ev.evalue %}{{ cot.brut_net(c_ev.score_brut, c_ev.score_net, c_ev.taux_reduction, compact=True) }}{% endif %}
                                     <!-- Catégorie -->
                                     <span class="badge bg-secondary">{{ risque.categorie or 'Non classé' }}</span>
                                     <!-- Nombre de constats -->
@@ -2793,11 +2794,11 @@
                                         data-reference="{{ risque.reference }}"
                                         data-intitule="{{ risque.intitule }}"
                                         data-categorie="{{ risque.categorie }}"
-                                        data-niveau="{% if risque.evaluations %}{% set derniere_eval = risque.evaluations|sort(attribute='created_at')|last %}{{ derniere_eval.niveau_risque }}{% else %}Non évalué{% endif %}">
+                                        data-niveau="{% if risque.evaluations %}{% set derniere_eval = risque.evaluations|sort(attribute='created_at')|last %}{{ cotation_evaluation(derniere_eval).niveau_net }}{% else %}Non évalué{% endif %}">
                                     {{ risque.reference }} - {{ risque.intitule }} 
                                     {% if risque.evaluations %}
                                         {% set derniere_eval = risque.evaluations|sort(attribute='created_at')|last %}
-                                        - {{ derniere_eval.niveau_risque }} (Score: {{ derniere_eval.score_risque }})
+                                        {% set c_opt = cotation_evaluation(derniere_eval) %}- {{ c_opt.niveau_net }} (brut {{ cot.fmt(c_opt.score_brut) }} → net {{ cot.fmt(c_opt.score_net) }})
                                     {% endif %}
                                     - {{ risque.cartographie.nom }}
                                 </option>
@@ -3044,11 +3045,11 @@
                                         data-reference="{{ risque.reference }}"
                                         data-intitule="{{ risque.intitule }}"
                                         data-categorie="{{ risque.categorie }}"
-                                        data-niveau="{% if risque.evaluations %}{% set derniere_eval = risque.evaluations|sort(attribute='created_at')|last %}{{ derniere_eval.niveau_risque }}{% else %}Non évalué{% endif %}">
+                                        data-niveau="{% if risque.evaluations %}{% set derniere_eval = risque.evaluations|sort(attribute='created_at')|last %}{{ cotation_evaluation(derniere_eval).niveau_net }}{% else %}Non évalué{% endif %}">
                                     {{ risque.reference }} - {{ risque.intitule }} 
                                     {% if risque.evaluations %}
                                         {% set derniere_eval = risque.evaluations|sort(attribute='created_at')|last %}
-                                        - {{ derniere_eval.niveau_risque }} (Score: {{ derniere_eval.score_risque }})
+                                        {% set c_opt = cotation_evaluation(derniere_eval) %}- {{ c_opt.niveau_net }} (brut {{ cot.fmt(c_opt.score_brut) }} → net {{ cot.fmt(c_opt.score_net) }})
                                     {% endif %}
                                     - {{ risque.cartographie.nom }}
                                 </option>
@@ -3153,11 +3154,11 @@
                                         data-reference="{{ risque.reference }}"
                                         data-intitule="{{ risque.intitule }}"
                                         data-categorie="{{ risque.categorie }}"
-                                        data-niveau="{% if risque.evaluations %}{% set derniere_eval = risque.evaluations|sort(attribute='created_at')|last %}{{ derniere_eval.niveau_risque }}{% else %}Non évalué{% endif %}">
+                                        data-niveau="{% if risque.evaluations %}{% set derniere_eval = risque.evaluations|sort(attribute='created_at')|last %}{{ cotation_evaluation(derniere_eval).niveau_net }}{% else %}Non évalué{% endif %}">
                                     {{ risque.reference }} - {{ risque.intitule }} 
                                     {% if risque.evaluations %}
                                         {% set derniere_eval = risque.evaluations|sort(attribute='created_at')|last %}
-                                        - {{ derniere_eval.niveau_risque }} (Score: {{ derniere_eval.score_risque }})
+                                        {% set c_opt = cotation_evaluation(derniere_eval) %}- {{ c_opt.niveau_net }} (brut {{ cot.fmt(c_opt.score_brut) }} → net {{ cot.fmt(c_opt.score_net) }})
                                     {% endif %}
                                     - {{ risque.cartographie.nom }}
                                 </option>
@@ -3718,12 +3719,12 @@
                                         data-reference="{{ risque.reference }}"
                                         data-intitule="{{ risque.intitule }}"
                                         data-categorie="{{ risque.categorie }}"
-                                        data-niveau="{% if risque.evaluations %}{% set derniere_eval = risque.evaluations|sort(attribute='created_at')|last %}{{ derniere_eval.niveau_risque }}{% else %}Non évalué{% endif %}"
+                                        data-niveau="{% if risque.evaluations %}{% set derniere_eval = risque.evaluations|sort(attribute='created_at')|last %}{{ cotation_evaluation(derniere_eval).niveau_net }}{% else %}Non évalué{% endif %}"
                                         {% if recommandation.risque_id == risque.id %}selected{% endif %}>
                                     {{ risque.reference }} - {{ risque.intitule }} 
                                     {% if risque.evaluations %}
                                         {% set derniere_eval = risque.evaluations|sort(attribute='created_at')|last %}
-                                        - {{ derniere_eval.niveau_risque }} (Score: {{ derniere_eval.score_risque }})
+                                        {% set c_opt = cotation_evaluation(derniere_eval) %}- {{ c_opt.niveau_net }} (brut {{ cot.fmt(c_opt.score_brut) }} → net {{ cot.fmt(c_opt.score_net) }})
                                     {% endif %}
                                     - {{ risque.cartographie.nom }}
                                 </option>
@@ -3746,7 +3747,7 @@
                                 <span id="risqueNiveauModif{{ recommandation.id }}" class="risque-niveau">
                                     {% if recommandation.risque and recommandation.risque.evaluations %}
                                         {% set derniere_eval = recommandation.risque.evaluations|sort(attribute='created_at')|last %}
-                                        {{ derniere_eval.niveau_risque }}
+                                        {{ cotation_evaluation(derniere_eval).niveau_net }}
                                     {% endif %}
                                 </span>
                             </small>
@@ -4425,13 +4426,8 @@ function showToast(type, message) {
     }
     
     function getClasseNiveau(niveau) {
-        switch(niveau) {
-            case 'Critique': return 'risque-critique';
-            case 'Élevé': return 'risque-eleve';
-            case 'Moyen': return 'risque-moyen';
-            case 'Faible': return 'risque-faible';
-            default: return 'risque-non-evalue';
-        }
+        // Couleurs de la règle unique (EgalyxCotation, voir base.html)
+        return 'cot-badge cot-' + EgalyxCotation.cle(niveau);
     }
 
     // ===========================

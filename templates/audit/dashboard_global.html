@@ -1,0 +1,743 @@
+{% extends "base.html" %}
+
+{% block title %}Dashboard Global des Audits{% endblock %}
+
+{% block styles %}
+{{ super() }}
+<style>
+    /* ============================================
+       STYLES POUR LE DASHBOARD GLOBAL
+       ============================================ */
+    
+    :root {
+        --primary: #1e3a8a;
+        --primary-light: #2563eb;
+        --primary-soft: #3b82f6;
+        --primary-pale: #dbeafe;
+        --success: #10b981;
+        --warning: #f59e0b;
+        --danger: #ef4444;
+        --info: #3b82f6;
+        --dark: #1e293b;
+        --gray: #64748b;
+        --light: #f8fafc;
+        --border: #e2e8f0;
+    }
+
+    /* Cartes de statistiques */
+    .stat-card {
+        background: white;
+        border-radius: 20px;
+        padding: 20px;
+        box-shadow: 0 10px 30px rgba(0, 0, 0, 0.05);
+        border: 1px solid var(--border);
+        transition: all 0.3s ease;
+        position: relative;
+        overflow: hidden;
+    }
+
+    .stat-card:hover {
+        transform: translateY(-5px);
+        box-shadow: 0 20px 40px rgba(37, 99, 235, 0.15);
+    }
+
+    .stat-card::before {
+        content: '';
+        position: absolute;
+        top: 0;
+        left: 0;
+        right: 0;
+        height: 4px;
+        background: linear-gradient(90deg, var(--primary-light), var(--primary-soft));
+    }
+
+    .stat-value {
+        font-size: 32px;
+        font-weight: 700;
+        color: var(--dark);
+        line-height: 1.2;
+        margin-bottom: 5px;
+    }
+
+    .stat-label {
+        color: var(--gray);
+        font-size: 14px;
+        font-weight: 500;
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+    }
+
+    .stat-trend {
+        font-size: 13px;
+        color: var(--gray);
+        margin-top: 10px;
+        display: flex;
+        align-items: center;
+        gap: 5px;
+    }
+
+    /* Cartes d'alerte */
+    .alerte-card {
+        border-radius: 16px;
+        padding: 15px;
+        margin-bottom: 12px;
+        transition: all 0.2s ease;
+        cursor: pointer;
+    }
+
+    .alerte-card:hover {
+        transform: translateX(5px);
+    }
+
+    .alerte-card.approbation {
+        background: linear-gradient(135deg, #dbeafe, #eff6ff);
+        border-left: 4px solid #3b82f6;
+    }
+
+    .alerte-card.echeance {
+        background: linear-gradient(135deg, #fef3c7, #fffbeb);
+        border-left: 4px solid #f59e0b;
+    }
+
+    .alerte-card.retard {
+        background: linear-gradient(135deg, #fee2e2, #fef2f2);
+        border-left: 4px solid #ef4444;
+    }
+
+    .alerte-card .alerte-titre {
+        font-weight: 600;
+        font-size: 14px;
+        display: flex;
+        align-items: center;
+        gap: 8px;
+    }
+
+    .alerte-card .alerte-message {
+        font-size: 13px;
+        color: #4b5563;
+        margin-top: 5px;
+    }
+
+    .alerte-card .alerte-date {
+        font-size: 11px;
+        color: #6b7280;
+        margin-top: 8px;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+    }
+
+    /* Timeline pour les audits en attente */
+    .audit-item {
+        background: white;
+        border-radius: 12px;
+        padding: 15px;
+        margin-bottom: 12px;
+        border: 1px solid var(--border);
+        transition: all 0.2s ease;
+    }
+
+    .audit-item:hover {
+        box-shadow: 0 5px 15px rgba(0, 0, 0, 0.05);
+        transform: translateX(5px);
+    }
+
+    .audit-priorite {
+        width: 8px;
+        height: 8px;
+        border-radius: 50%;
+        display: inline-block;
+        margin-right: 8px;
+    }
+
+    .audit-priorite.critique { background: #ef4444; box-shadow: 0 0 0 2px rgba(239, 68, 68, 0.2); }
+    .audit-priorite.eleve { background: #f59e0b; box-shadow: 0 0 0 2px rgba(245, 158, 11, 0.2); }
+    .audit-priorite.moyen { background: #3b82f6; box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.2); }
+    .audit-priorite.faible { background: #10b981; box-shadow: 0 0 0 2px rgba(16, 185, 129, 0.2); }
+
+    /* Badges */
+    .badge-approbation {
+        background: #dbeafe;
+        color: #1e40af;
+        padding: 4px 10px;
+        border-radius: 20px;
+        font-size: 11px;
+        font-weight: 600;
+    }
+
+    .badge-echeance {
+        background: #fef3c7;
+        color: #92400e;
+        padding: 4px 10px;
+        border-radius: 20px;
+        font-size: 11px;
+        font-weight: 600;
+    }
+
+    .badge-retard {
+        background: #fee2e2;
+        color: #991b1b;
+        padding: 4px 10px;
+        border-radius: 20px;
+        font-size: 11px;
+        font-weight: 600;
+    }
+
+    /* Section headers */
+    .section-header-dashboard {
+        background: linear-gradient(135deg, var(--primary-bg) 0%, white 100%);
+        padding: 20px 25px;
+        border-radius: 20px 20px 0 0;
+        border-bottom: 1px solid var(--border);
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        flex-wrap: wrap;
+        gap: 15px;
+    }
+
+    .section-title-dashboard {
+        display: flex;
+        align-items: center;
+        gap: 15px;
+    }
+
+    .section-title-icon {
+        width: 45px;
+        height: 45px;
+        background: var(--primary);
+        border-radius: 12px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        color: white;
+        font-size: 20px;
+    }
+
+    /* Animation */
+    @keyframes pulse {
+        0% { transform: scale(1); opacity: 1; }
+        50% { transform: scale(1.05); opacity: 0.8; }
+        100% { transform: scale(1); opacity: 1; }
+    }
+
+    .pulse {
+        animation: pulse 1.5s infinite;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <div class="row mb-4">
+        <div class="col-12">
+            <div class="page-header" style="background: linear-gradient(135deg, #1e3a8a 0%, #2563eb 100%); border-radius: 20px; padding: 30px; color: white;">
+                <div class="d-flex justify-content-between align-items-center">
+                    <div>
+                        <h1 class="mb-2"><i class="fas fa-chart-line me-2"></i>Dashboard des Audits</h1>
+                        <p class="mb-0 opacity-75">Vision globale des audits, alertes d'approbation et échéances</p>
+                    </div>
+                    <div>
+                        <span class="badge bg-white text-primary px-3 py-2">
+                            <i class="fas fa-calendar me-1"></i> {{ now.strftime('%d/%m/%Y') if now is not none else '' }}
+                        </span>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Statistiques -->
+    <div class="row mb-4">
+        <div class="col-md-3">
+            <div class="stat-card">
+                <div class="stat-value">{{ stats.total }}</div>
+                <div class="stat-label">Audits totaux</div>
+                <div class="stat-trend">
+                    <i class="fas fa-chart-line text-primary"></i>
+                    <span>{{ stats.termines }} terminés</span>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="stat-card">
+                <div class="stat-value">{{ stats.en_cours }}</div>
+                <div class="stat-label">Audits en cours</div>
+                <div class="stat-trend">
+                    <i class="fas fa-play-circle text-warning"></i>
+                    <span>{{ stats.planifies }} planifiés</span>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="stat-card">
+                <div class="stat-value">{{ stats.en_attente_approbation }}</div>
+                <div class="stat-label">En attente d'approbation</div>
+                <div class="stat-trend">
+                    <i class="fas fa-clock text-warning"></i>
+                    <span>Action requise</span>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="stat-card">
+                <div class="stat-value">{{ stats.taux_conformite_moyen }}%</div>
+                <div class="stat-label">Taux de conformité moyen</div>
+                <div class="progress mt-2" style="height: 6px;">
+                    <div class="progress-bar bg-success" style="width: {{ stats.taux_conformite_moyen }}%"></div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Alertes d'approbation -->
+    {% if alertes %}
+    <div class="row mb-4">
+        <div class="col-12">
+            <div class="card">
+                <div class="section-header-dashboard">
+                    <div class="section-title-dashboard">
+                        <div class="section-title-icon" style="background: #f59e0b;">
+                            <i class="fas fa-bell"></i>
+                        </div>
+                        <div>
+                            <h3 class="mb-0">Alertes d'approbation</h3>
+                            <p class="mb-0 small text-muted">Actions nécessaires</p>
+                        </div>
+                    </div>
+                    <span class="badge bg-warning text-dark pulse">{{ alertes|length }} non lues</span>
+                </div>
+                <div class="card-body p-0">
+                    {% for alerte in alertes %}
+                    <div class="alerte-card approbation" onclick="location.href='{{ url_for('detail_audit', id=alerte.audit_id) }}'">
+                        <div class="alerte-titre">
+                            <i class="fas fa-{{ 'check-circle' if alerte.type_alerte == 'approbation_niveau2' else 'eye' }}"></i>
+                            <strong>{{ alerte.titre }}</strong>
+                            <span class="badge-approbation ms-auto">
+                                {% if alerte.type_alerte == 'approbation_niveau1' %}Niveau 1{% else %}Niveau 2{% endif %}
+                            </span>
+                        </div>
+                        <div class="alerte-message">{{ alerte.message }}</div>
+                        <div class="alerte-date">
+                            <span><i class="far fa-clock me-1"></i> {{ alerte.date_creation.strftime('%d/%m/%Y %H:%M') }}</span>
+                            <button class="btn btn-sm btn-outline-primary" onclick="event.stopPropagation(); marquerAlerteLue({{ alerte.id }})">
+                                <i class="fas fa-check me-1"></i> Marquer comme lue
+                            </button>
+                        </div>
+                    </div>
+                    {% endfor %}
+                </div>
+            </div>
+        </div>
+    </div>
+    {% endif %}
+
+    <div class="row">
+        <!-- Audits en attente d'approbation -->
+        <div class="col-md-6">
+            <div class="card mb-4">
+                <div class="section-header-dashboard">
+                    <div class="section-title-dashboard">
+                        <div class="section-title-icon" style="background: #3b82f6;">
+                            <i class="fas fa-clipboard-check"></i>
+                        </div>
+                        <div>
+                            <h3 class="mb-0">Audits en attente</h3>
+                            <p class="mb-0 small text-muted">À valider par niveau</p>
+                        </div>
+                    </div>
+                    <span class="badge bg-primary">{{ audits_en_attente|length }}</span>
+                </div>
+                <div class="card-body p-0">
+                    {% if audits_en_attente %}
+                        {% for item in audits_en_attente %}
+                        <div class="audit-item" onclick="location.href='{{ url_for('detail_audit', id=item.audit.id) }}'">
+                            <div class="d-flex justify-content-between align-items-start">
+                                <div>
+                                    <div class="mb-1">
+                                        <span class="audit-priorite {{ item.audit.priorite or 'moyen' }}"></span>
+                                        <strong class="text-primary">{{ item.audit.reference }}</strong>
+                                    </div>
+                                    <div class="fw-bold">{{ item.audit.titre }}</div>
+                                    <div class="small text-muted mt-1">
+                                        <i class="fas fa-calendar me-1"></i> Échéance: {{ item.audit.date_fin_prevue.strftime('%d/%m/%Y') if item.audit.date_fin_prevue else 'Non définie' }}
+                                    </div>
+                                </div>
+                                <div class="text-end">
+                                    <span class="badge-approbation">
+                                        <i class="fas fa-{{ 'eye' if item.niveau == 'Niveau 1' else 'stamp' }} me-1"></i>
+                                        {{ item.niveau }}
+                                    </span>
+                                    <div class="text-muted small mt-2">
+                                        <i class="fas fa-hourglass-half me-1"></i> 
+                                        En attente depuis 
+                                        {% if now and item.workflow.date_envoi_relecture %}
+                                            {{ (now - item.workflow.date_envoi_relecture).days }}
+                                        {% else %}
+                                            0
+                                        {% endif %} 
+                                        jours
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="mt-2">
+                                <div class="progress" style="height: 4px;">
+                                    <div class="progress-bar bg-info" style="width: {{ item.audit.progression_globale }}%"></div>
+                                </div>
+                                <small class="text-muted">Progression: {{ item.audit.progression_globale }}%</small>
+                            </div>
+                        </div>
+                        {% endfor %}
+                    {% else %}
+                        <div class="text-center py-5">
+                            <i class="fas fa-check-circle fa-3x text-success mb-3"></i>
+                            <p>Aucun audit en attente d'approbation</p>
+                        </div>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+
+        <!-- Échéances et retards -->
+        <div class="col-md-6">
+            <div class="card mb-4">
+                <div class="section-header-dashboard">
+                    <div class="section-title-dashboard">
+                        <div class="section-title-icon" style="background: #f59e0b;">
+                            <i class="fas fa-calendar-exclamation"></i>
+                        </div>
+                        <div>
+                            <h3 class="mb-0">Échéances & Retards</h3>
+                            <p class="mb-0 small text-muted">Recommandations à surveiller</p>
+                        </div>
+                    </div>
+                    <span class="badge bg-warning">{{ echeances_proches|length + retards|length }}</span>
+                </div>
+                <div class="card-body p-0" style="max-height: 400px; overflow-y: auto;">
+                    {% if retards %}
+                    <div class="p-3 bg-danger bg-opacity-10">
+                        <h6 class="text-danger mb-2"><i class="fas fa-exclamation-triangle me-2"></i>En retard ({{ retards|length }})</h6>
+                        {% for item in retards %}
+                        <div class="audit-item bg-white mb-2" onclick="location.href='{{ url_for('detail_audit', id=item.audit.id) }}'">
+                            <div class="d-flex justify-content-between">
+                                <div>
+                                    <span class="badge-retard"><i class="fas fa-clock me-1"></i> {{ item.jours_retard }} jours de retard</span>
+                                    <div class="mt-1"><strong>{{ item.audit.reference }}</strong></div>
+                                    <div class="small">{{ item.recommandation.description[:80] }}...</div>
+                                </div>
+                                <div class="text-end">
+                                    <small class="text-muted">Échéance: {{ item.recommandation.date_echeance.strftime('%d/%m/%Y') }}</small>
+                                </div>
+                            </div>
+                        </div>
+                        {% endfor %}
+                    </div>
+                    {% endif %}
+
+                    {% if echeances_proches %}
+                    <div class="p-3 bg-warning bg-opacity-10">
+                        <h6 class="text-warning mb-2"><i class="fas fa-hourglass-half me-2"></i>Échéances proches ({{ echeances_proches|length }})</h6>
+                        {% for item in echeances_proches %}
+                        <div class="audit-item bg-white mb-2" onclick="location.href='{{ url_for('detail_audit', id=item.audit.id) }}'">
+                            <div class="d-flex justify-content-between">
+                                <div>
+                                    <span class="badge-echeance"><i class="fas fa-calendar me-1"></i> J+{{ item.jours_restants }}</span>
+                                    <div class="mt-1"><strong>{{ item.audit.reference }}</strong></div>
+                                    <div class="small">{{ item.recommandation.description[:80] }}...</div>
+                                </div>
+                                <div class="text-end">
+                                    <small class="text-muted">Échéance: {{ item.recommandation.date_echeance.strftime('%d/%m/%Y') }}</small>
+                                </div>
+                            </div>
+                        </div>
+                        {% endfor %}
+                    </div>
+                    {% endif %}
+
+                    {% if not retards and not echeances_proches %}
+                    <div class="text-center py-5">
+                        <i class="fas fa-check-circle fa-3x text-success mb-3"></i>
+                        <p>Aucune échéance imminente ou retard</p>
+                    </div>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="row">
+        <!-- Évolution mensuelle -->
+        <div class="col-md-6">
+            <div class="card">
+                <div class="section-header-dashboard">
+                    <div class="section-title-dashboard">
+                        <div class="section-title-icon" style="background: #10b981;">
+                            <i class="fas fa-chart-line"></i>
+                        </div>
+                        <div>
+                            <h3 class="mb-0">Évolution des audits</h3>
+                            <p class="mb-0 small text-muted">Créations et réalisations par mois</p>
+                        </div>
+                    </div>
+                </div>
+                <div class="card-body">
+                    <canvas id="evolutionChart" height="250"></canvas>
+                </div>
+            </div>
+        </div>
+
+        <!-- Répartition par type -->
+        <div class="col-md-6">
+            <div class="card">
+                <div class="section-header-dashboard">
+                    <div class="section-title-dashboard">
+                        <div class="section-title-icon" style="background: #8b5cf6;">
+                            <i class="fas fa-chart-pie"></i>
+                        </div>
+                        <div>
+                            <h3 class="mb-0">Répartition par type</h3>
+                            <p class="mb-0 small text-muted">Types d'audits réalisés</p>
+                        </div>
+                    </div>
+                </div>
+                <div class="card-body">
+                    <canvas id="typeChart" height="250"></canvas>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Liste des audits récents -->
+    <div class="row mt-4">
+        <div class="col-12">
+            <div class="card">
+                <div class="section-header-dashboard">
+                    <div class="section-title-dashboard">
+                        <div class="section-title-icon" style="background: #6b7280;">
+                            <i class="fas fa-list"></i>
+                        </div>
+                        <div>
+                            <h3 class="mb-0">Audits récents</h3>
+                            <p class="mb-0 small text-muted">Les 10 derniers audits</p>
+                        </div>
+                    </div>
+                    <a href="{{ url_for('liste_audits') }}" class="btn-elegant btn-outline">
+                        <i class="fas fa-arrow-right me-1"></i> Voir tous
+                    </a>
+                </div>
+                <div class="card-body p-0">
+                    <div class="table-responsive">
+                        <table class="elegant-table">
+                            <thead>
+                                <tr>
+                                    <th>Référence</th>
+                                    <th>Titre</th>
+                                    <th>Type</th>
+                                    <th>Statut</th>
+                                    <th>Progression</th>
+                                    <th>Approbation</th>
+                                    <th>Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for audit in audits[:10] %}
+                                {% set workflow = audit.workflow_approbation %}
+                                <tr>
+                                    <td><code class="text-primary">{{ audit.reference }}</code></td>
+                                    <td><strong>{{ audit.titre[:40] }}{% if audit.titre|length > 40 %}...{% endif %}</strong></td>
+                                    <td><span class="badge-modern">{{ audit.type_audit or 'Non spécifié' }}</span></td>
+                                    <td>
+                                        {% if audit.statut == 'planifie' %}
+                                        <span class="badge bg-secondary">📋 Planifié</span>
+                                        {% elif audit.statut == 'en_cours' %}
+                                        <span class="badge bg-info">🔄 En cours</span>
+                                        {% elif audit.statut == 'termine' %}
+                                        <span class="badge bg-success">✅ Terminé</span>
+                                        {% else %}
+                                        <span class="badge bg-secondary">{{ audit.statut }}</span>
+                                        {% endif %}
+                                    </td>
+                                    <td>
+                                        <div class="progress" style="width: 100px;">
+                                            <div class="progress-bar bg-success" style="width: {{ audit.progression_globale }}%"></div>
+                                        </div>
+                                        <small>{{ audit.progression_globale }}%</small>
+                                    </td>
+                                    <td>
+                                        {% if workflow %}
+                                            {% set etape = workflow.etape_actuelle %}
+                                            {% if etape == 'brouillon' %}
+                                            <span class="badge bg-secondary">📝 Brouillon</span>
+                                            {% elif etape == 'en_relecture' %}
+                                            <span class="badge bg-warning">🔍 En relecture</span>
+                                            {% elif etape == 'approuve' %}
+                                            <span class="badge bg-info">✅ Approuvé N1</span>
+                                            {% elif etape == 'valide' %}
+                                            <span class="badge bg-success">✓ Validé</span>
+                                            {% elif etape == 'rejete' %}
+                                            <span class="badge bg-danger">❌ Rejeté</span>
+                                            {% endif %}
+                                        {% else %}
+                                        <span class="badge bg-secondary">Non démarré</span>
+                                        {% endif %}
+                                     </td>
+                                    <td>
+                                        <a href="{{ url_for('detail_audit', id=audit.id) }}" class="btn btn-sm btn-outline-primary">
+                                            <i class="fas fa-eye"></i>
+                                        </a>
+                                     </td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<script>
+    // Graphique d'évolution
+    const evolutionCtx = document.getElementById('evolutionChart').getContext('2d');
+    const evolutionData = {{ evolution_mensuelle|tojson|safe }};
+    const mois = Object.keys(evolutionData).sort();
+    const crees = mois.map(m => evolutionData[m].crees);
+    const termines = mois.map(m => evolutionData[m].termines);
+    
+    new Chart(evolutionCtx, {
+        type: 'line',
+        data: {
+            labels: mois,
+            datasets: [
+                {
+                    label: 'Audits créés',
+                    data: crees,
+                    borderColor: '#3b82f6',
+                    backgroundColor: 'rgba(59, 130, 246, 0.1)',
+                    borderWidth: 2,
+                    fill: true,
+                    tension: 0.3
+                },
+                {
+                    label: 'Audits terminés',
+                    data: termines,
+                    borderColor: '#10b981',
+                    backgroundColor: 'rgba(16, 185, 129, 0.1)',
+                    borderWidth: 2,
+                    fill: true,
+                    tension: 0.3
+                }
+            ]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: true,
+            plugins: {
+                legend: { position: 'top' }
+            }
+        }
+    });
+    
+    // Graphique par type
+    const typeCtx = document.getElementById('typeChart').getContext('2d');
+    const typesData = {{ audits_par_type|tojson|safe }};
+    const typesKeys = Object.keys(typesData);
+    const typesValues = typesKeys.map(k => typesData[k]);
+    
+    new Chart(typeCtx, {
+        type: 'doughnut',
+        data: {
+            labels: typesKeys.map(k => k.replace('_', ' ').toUpperCase()),
+            datasets: [{
+                data: typesValues,
+                backgroundColor: ['#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#ec4899'],
+                borderWidth: 0
+            }]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: true,
+            plugins: {
+                legend: { position: 'bottom' }
+            }
+        }
+    });
+    
+    // Marquer alerte comme lue
+    function marquerAlerteLue(alerteId) {
+        fetch(`/api/alertes-approbation/${alerteId}/marquer-lue`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRFToken': document.querySelector('input[name="csrf_token"]')?.value || ''
+            }
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                location.reload();
+            }
+        })
+        .catch(error => console.error('Erreur:', error));
+    }
+</script>
+
+<style>
+    /* Styles supplémentaires */
+    .badge-modern {
+        display: inline-block;
+        padding: 4px 12px;
+        border-radius: 20px;
+        font-size: 12px;
+        font-weight: 500;
+    }
+    
+    .elegant-table {
+        width: 100%;
+        border-collapse: separate;
+        border-spacing: 0 8px;
+    }
+    
+    .elegant-table tbody tr {
+        background: white;
+        border-radius: 12px;
+        transition: all 0.2s ease;
+    }
+    
+    .elegant-table tbody tr:hover {
+        box-shadow: 0 5px 20px rgba(0, 0, 0, 0.05);
+        transform: scale(1.01);
+    }
+    
+    .elegant-table tbody td {
+        padding: 12px 15px;
+        border: none;
+    }
+    
+    .btn-elegant {
+        padding: 8px 16px;
+        border-radius: 10px;
+        font-weight: 500;
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+        transition: all 0.2s ease;
+        text-decoration: none;
+    }
+    
+    .btn-elegant.btn-outline {
+        background: transparent;
+        border: 2px solid var(--border);
+        color: var(--dark);
+    }
+    
+    .btn-elegant.btn-outline:hover {
+        border-color: var(--primary);
+        color: var(--primary);
+        background: var(--primary-bg);
+        transform: translateY(-2px);
+    }
+</style>
+{% endblock %}

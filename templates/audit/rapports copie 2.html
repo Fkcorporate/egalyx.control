@@ -1,0 +1,975 @@
+
+{% extends "base.html" %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <h2><i class="fas fa-file-pdf me-2"></i> {{ t("Audit Reports") }} </h2>
+    <div>
+        {% if current_user.has_permission('can_manage_audit') %}
+        <a href="{{ url_for('liste_audits') }}" class="btn btn-outline-primary">
+            <i class="fas fa-list me-1"></i> {{ t("See all audits") }} </a>
+        {% endif %}
+    </div>
+</div>
+
+<div class="row mb-4">
+    <div class="col-md-3">
+        <div class="card text-center">
+            <div class="card-body">
+                <h3 class="text-primary">{{ audits|length }}</h3>
+                <p class="text-muted mb-0"> {{ t("Total Audits") }} </p>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card text-center">
+            <div class="card-body">
+                <h3 class="text-info">{{ constatations_total }}</h3>
+                <p class="text-muted mb-0"> {{ t("Findings") }} </p>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card text-center">
+            <div class="card-body">
+                <h3 class="text-warning">{{ recommandations_total }}</h3>
+                <p class="text-muted mb-0"> {{ t("Recommendations") }} </p>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card text-center">
+            <div class="card-body">
+                <h3 class="text-success">{{ plans_action_total }}</h3>
+                <p class="text-muted mb-0"> {{ t("Action Plans") }} </p>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="row">
+    
+    <div class="col-md-8">
+        <div class="card">
+            <div class="card-header">
+                <h5 class="card-title mb-0"> {{ t("Audits Available") }} </h5>
+            </div>
+            <div class="card-body">
+                {% if audits %}
+                <div class="table-responsive">
+                    <table class="table table-striped">
+                        <thead>
+                            <tr>
+                                <th> {{ t("Référence") }} </th>
+                                <th> {{ t("Titre") }} </th>
+                                <th> {{ t("Type") }} </th>
+                                <th> {{ t("Statut") }} </th>
+                                <th> {{ t("Rapport") }} </th>
+                                <th> {{ t("Fichiers") }} </th>
+                                {% if current_user.has_permission('can_manage_audit') %}
+                                <th> {{ t("Actions") }} </th>
+                                {% endif %}
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for audit in audits %}
+                            <tr>
+                                <td><strong>{{ audit.reference }}</strong></td>
+                                <td>{{ audit.titre }}</td>
+                                <td>{{ audit.type_audit }}</td>
+                                <td>
+                                    {% if audit.statut == 'planifie' %}
+                                    <span class="badge bg-secondary"> {{ t("Planifié") }} </span>
+                                    {% elif audit.statut == 'en_cours' %}
+                                    <span class="badge bg-warning"> {{ t("En cours") }} </span>
+                                    {% elif audit.statut == 'termine' %}
+                                    <span class="badge bg-success"> {{ t("Terminé") }} </span>
+                                    {% elif audit.statut == 'annule' %}
+                                    <span class="badge bg-danger"> {{ t("Annulé") }} </span>
+                                    {% endif %}
+                                </td>
+                                <td>
+                                    <a href="{{ url_for('rapport_audit_complet', audit_id=audit.id) }}" 
+                                       class="btn btn-sm btn-outline-success" title="{{ t("View the report") }}">
+                                        <i class="fas fa-eye"></i> {{ t("Voir") }} </a>
+                                    <a href="{{ url_for('export_rapport_audit_pdf', audit_id=audit.id) }}" 
+                                       class="btn btn-sm btn-outline-primary" title="{{ t("Export to PDF") }}">
+                                        <i class="fas fa-download"></i> {{ t("PDF") }} </a>
+                                </td>
+                                    
+                                    <td>
+                                        {% set fichiers_count = fichiers_par_audit.get(audit.id, [])|length %}
+                                        <span class="badge bg-info" title="{{ fichiers_count }} fichier(s)">
+                                            <i class="fas fa-paperclip me-1"></i>{{ fichiers_count }}
+                                        </span>
+                                        {% if fichiers_count > 0 %}
+                                        <button type="button" class="btn btn-sm btn-outline-info ms-1 view-files-btn"
+                                                data-audit-id="{{ audit.id }}"
+                                                data-audit-ref="{{ audit.reference }}"
+                                                title="{{ t("View files") }}">
+                                            <i class="fas fa-eye"></i>
+                                        </button>
+                                        {% endif %}
+                                    </td>
+                                    {% if current_user.has_permission('can_manage_audit') %}
+                                    <td>
+                                        <button type="button" class="btn btn-sm btn-outline-primary add-file-btn"
+                                                data-audit-id="{{ audit.id }}"
+                                                data-audit-ref="{{ audit.reference }}"
+                                                title="{{ t("Add a file") }}">
+                                            <i class="fas fa-plus"></i>
+                                        </button>
+                                    </td>
+                                    {% endif %}
+                                {% if current_user.has_permission('can_manage_audit') %}
+                                <td>
+                                    <button type="button" class="btn btn-sm btn-outline-primary add-file-btn"
+                                            data-audit-id="{{ audit.id }}"
+                                            data-audit-ref="{{ audit.reference }}"
+                                            title="{{ t("Add a file") }}">
+                                        <i class="fas fa-plus"></i>
+                                    </button>
+                                </td>
+                                {% endif %}
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+                {% else %}
+                <div class="text-center py-4">
+                    <i class="fas fa-file-pdf fa-3x text-muted mb-3"></i>
+                    <p class="text-muted"> {{ t("No audits available at this time.") }} </p>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+
+    <div class="col-md-4">
+        <div class="card mb-4">
+            <div class="card-header">
+                <h5 class="card-title mb-0"> {{ t("Types of Audit") }} </h5>
+            </div>
+            <div class="card-body">
+                <canvas id="chartTypesAudit" width="400" height="300"></canvas>
+            </div>
+        </div>
+
+        <div class="card">
+            <div class="card-header">
+                <h5 class="card-title mb-0"> {{ t("Audit Statuses") }} </h5>
+            </div>
+            <div class="card-body">
+                <canvas id="chartStatutsAudit" width="400" height="300"></canvas>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="row mt-4">
+    <div class="col-12">
+        <div class="card">
+            <div class="card-header d-flex justify-content-between align-items-center">
+                <h5 class="card-title mb-0">
+                    <i class="fas fa-paperclip me-2"></i> {{ t("Files attached to reports") }} <span class="badge bg-primary ms-2">
+                        {{ total_fichiers_rapport if total_fichiers_rapport is defined else 0 }}
+                    </span>
+                </h5>
+                {% if current_user.has_permission('can_manage_audit') %}
+                <div>
+                    <button type="button" class="btn btn-sm btn-primary" 
+                            data-bs-toggle="modal" data-bs-target="#uploadModal">
+                        <i class="fas fa-upload me-1"></i> {{ t("Ajouter un fichier") }} </button>
+                </div>
+                {% endif %}
+            </div>
+            <div class="card-body">
+                {% if fichiers_par_audit and fichiers_par_audit|length > 0 %}
+                <div class="table-responsive">
+                    <table class="table table-hover">
+                        <thead>
+                            <tr>
+                                <th> {{ t("Audit") }} </th>
+                                <th> {{ t("File name") }} </th>
+                                <th> {{ t("Type") }} </th>
+                                <th> {{ t("Taille") }} </th>
+                                <th> {{ t("Description") }} </th>
+                                <th> {{ t("Ajouté par") }} </th>
+                                <th> {{ t("Date") }} </th>
+                                <th> {{ t("Actions") }} </th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for audit_id, fichiers in fichiers_par_audit.items() %}
+                                {% set audit_info = audits_dict.get(audit_id) %}
+                                {% for fichier in fichiers %}
+                                <tr>
+                                    <td>
+                                        {% if audit_info %}
+                                        <span class="badge bg-light text-dark" title="{{ audit_info.titre }}">
+                                            {{ audit_info.reference }}
+                                        </span>
+                                        {% else %}
+                                        <span class="text-muted">Audit #{{ audit_id }}</span>
+                                        {% endif %}
+                                    </td>
+                                    <td>
+                                        <i class="fas {{ 
+                                            'fa-file-pdf text-danger' if fichier.type_fichier == 'pdf' 
+                                            else 'fa-file-word text-primary' if fichier.type_fichier in ['doc', 'docx'] 
+                                            else 'fa-file-excel text-success' if fichier.type_fichier in ['xls', 'xlsx'] 
+                                            else 'fa-file-powerpoint text-warning' if fichier.type_fichier in ['ppt', 'pptx']
+                                            else 'fa-file-image text-info' if fichier.type_fichier in ['jpg', 'jpeg', 'png', 'gif']
+                                            else 'fa-file-alt text-secondary' 
+                                        }} me-2"></i>
+                                        <span class="fw-medium">{{ fichier.nom_fichier[:30] }}{% if fichier.nom_fichier|length > 30 %}...{% endif %}</span>
+                                    </td>
+                                    <td>
+                                        <span class="badge bg-secondary text-uppercase">
+                                            {{ fichier.type_fichier }}
+                                        </span>
+                                    </td>
+                                    <td>{{ fichier.taille_formatee if fichier.taille_formatee else 'N/A' }}</td>
+                                    <td>
+                                        <small class="text-muted">
+                                            {{ fichier.description[:50] if fichier.description else 'Aucune description' }}{% if fichier.description and fichier.description|length > 50 %}...{% endif %}
+                                        </small>
+                                    </td>
+                                    <td>
+                                        <span class="badge bg-light text-dark">
+                                            {{ fichier.uploader.username if fichier.uploader else 'Système' }}
+                                        </span>
+                                    </td>
+                                    <td>
+                                        <small>{{ fichier.created_at|format_datetime if fichier.created_at else '' }}</small>
+                                    </td>
+                                    
+                                    <td>
+                                        <div class="btn-group btn-group-sm" role="group">
+                                            <a href="{{ url_for('telecharger_fichier_rapport_audit', fichier_id=fichier.id) }}" 
+                                            class="btn btn-outline-success" 
+                                            title="{{ t("Télécharger") }}"
+                                            target="_blank">
+                                                <i class="fas fa-download"></i>
+                                            </a>
+                                            {% if current_user.has_permission('can_manage_audit') or 
+                                                current_user.id == fichier.uploaded_by or
+                                                (audit_info and (current_user.id == audit_info.created_by or current_user.id == audit_info.responsable_id)) %}
+                                            <button type="button" 
+                                                    class="btn btn-outline-danger delete-file-btn"
+                                                    data-file-id="{{ fichier.id }}"
+                                                    data-file-name="{{ fichier.nom_fichier }}"
+                                                    title="{{ t("Supprimer") }}">
+                                                <i class="fas fa-trash"></i>
+                                            </button>
+                                            {% endif %}
+                                        </div>
+                                    </td>
+                                </tr>
+                                {% endfor %}
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+                {% else %}
+                <div class="text-center py-5">
+                    <i class="fas fa-file-upload fa-3x text-muted mb-3"></i>
+                    <p class="text-muted"> {{ t("No files attached to reports") }} </p>
+                    {% if current_user.has_permission('can_manage_audit') %}
+                    <p class="text-muted small"> {{ t("Cliquez sur \"Add a file\" pour joindre des documents aux rapports d'audit") }} </p>
+                    {% endif %}
+                </div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="modal fade" id="uploadModal" tabindex="-1" aria-labelledby="uploadModalLabel" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="uploadModalLabel">
+                    <i class="fas fa-upload me-2"></i> {{ t("Add a file to a report") }} </h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="{{ t("Close") }}"></button>
+            </div>
+            <form id="uploadForm" action="{{ url_for('upload_fichier_rapport_global') }}" method="POST" enctype="multipart/form-data">
+                {{ csrf_token() if csrf_token else '' }}
+                
+                <div class="modal-body">
+                    <div class="mb-3">
+                        <label for="auditSelect" class="form-label"> {{ t("Select audit *") }} </label>
+                        <select class="form-select" id="auditSelect" name="audit_id" required>
+                            <option value=""> {{ t("-- Choose an audit --") }} </option>
+                            {% for audit in audits %}
+                            <option value="{{ audit.id }}">{{ audit.reference }} - {{ audit.titre }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div class="mb-3">
+                        <label for="fichier" class="form-label"> {{ t("Select file *") }} </label>
+                        <input type="file" class="form-control" id="fichier" name="fichier" required
+                               accept=".pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.jpg,.jpeg,.png,.txt">
+                        <div class="form-text">{{ t("Formats acceptés : PDF, Word (.doc, .docx), Excel (.xls, .xlsx), 
+                            PowerPoint (.ppt, .pptx), images (.jpg, .jpeg, .png), texte (.txt)") }}</div>
+                    </div>
+                    <div class="mb-3">
+                        <label for="description" class="form-label"> {{ t("Description (optional)") }} </label>
+                        <textarea class="form-control" id="description" name="description" 
+                                  rows="3" placeholder="{{ t("File description...") }}"></textarea>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal"> {{ t("Annuler") }} </button>
+                    <button type="submit" class="btn btn-primary">
+                        <i class="fas fa-upload me-1"></i> {{ t("Uploader") }} </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<div class="modal fade" id="quickUploadModal" tabindex="-1" aria-labelledby="quickUploadModalLabel" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="quickUploadModalLabel">
+                    <i class="fas fa-upload me-2"></i> {{ t("Add a file to") }} <span id="auditRef"></span>
+                </h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="{{ t("Close") }}"></button>
+            </div>
+            
+            <form id="quickUploadForm" action="{{ url_for('upload_fichier_rapport_global') }}" method="POST" enctype="multipart/form-data">
+                {{ csrf_token() if csrf_token else '' }}
+                <input type="hidden" id="quickAuditId" name="audit_id">
+                
+                <div class="modal-body">
+                    <div class="mb-3">
+                        <label for="quickFichier" class="form-label"> {{ t("Select file *") }} </label>
+                        <input type="file" class="form-control" id="quickFichier" name="fichier" required
+                               accept=".pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.jpg,.jpeg,.png,.txt">
+                        <div class="form-text"> {{ t("Formats accepted: PDF, Word, Excel, PowerPoint, images, text") }} </div>
+                    </div>
+                    
+                    <div class="mb-3">
+                        <label for="quickDescription" class="form-label"> {{ t("Description (optional)") }} </label>
+                        <textarea class="form-control" id="quickDescription" name="description" 
+                                  rows="3" placeholder="{{ t("File description...") }}"></textarea>
+                    </div>
+                </div>
+                
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal"> {{ t("Annuler") }} </button>
+                    <button type="submit" class="btn btn-primary">
+                        <i class="fas fa-upload me-1"></i> {{ t("Upload file") }} </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<div class="modal fade" id="confirmDeleteModal" tabindex="-1" aria-labelledby="confirmDeleteModalLabel" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="confirmDeleteModalLabel"> {{ t("Confirm deletion") }} </h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="{{ t("Close") }}"></button>
+            </div>
+            <div class="modal-body"> {{ t("Are you sure you want to delete le fichier \"") }} <span id="fileNameToDelete"></span> {{ t("\" ?") }} <div class="alert alert-warning mt-2">
+                    <i class="fas fa-exclamation-triangle me-2"></i> {{ t("This action is irreversible.") }} </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal"> {{ t("Annuler") }} </button>
+                <button type="button" class="btn btn-danger" id="confirmDeleteBtn">
+                    <i class="fas fa-trash me-1"></i> {{ t("Supprimer") }} </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+    // Graphique des types d'audit
+    document.addEventListener('DOMContentLoaded', function() {
+        // Initialiser les graphiques
+        initCharts();
+        
+        // Initialiser tous les événements
+        initEventListeners();
+        
+        // Valider les fichiers
+        setupFileValidation();
+    });
+    
+    function initCharts() {
+        // Graphique des types d'audit
+        const ctxTypes = document.getElementById('chartTypesAudit');
+        if (ctxTypes) {
+            new Chart(ctxTypes.getContext('2d'), {
+                type: 'doughnut',
+                data: {
+                    labels: {{ types_audit.labels|tojson if types_audit and types_audit.labels else [] }},
+                    datasets: [{
+                        data: {{ types_audit.data|tojson if types_audit and types_audit.data else [] }},
+                        backgroundColor: {{ types_audit.colors|tojson if types_audit and types_audit.colors else [
+                            '#007bff', '#6f42c1', '#e83e8c', '#fd7e14', '#20c997', '#6610f2'
+                        ] }}
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    plugins: {
+                        legend: {
+                            position: 'bottom'
+                        }
+                    }
+                }
+            });
+        }
+    
+        // Graphique des statuts
+        const ctxStatuts = document.getElementById('chartStatutsAudit');
+        if (ctxStatuts) {
+            new Chart(ctxStatuts.getContext('2d'), {
+                type: 'pie',
+                data: {
+                    labels: {{ statuts_audit.labels|tojson if statuts_audit and statuts_audit.labels else [] }},
+                    datasets: [{
+                        data: {{ statuts_audit.data|tojson if statuts_audit and statuts_audit.data else [] }},
+                        backgroundColor: {{ statuts_audit.colors|tojson if statuts_audit and statuts_audit.colors else [
+                            '#6c757d', '#ffc107', '#28a745', '#dc3545'
+                        ] }}
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    plugins: {
+                        legend: {
+                            position: 'bottom'
+                        }
+                    }
+                }
+            });
+        }
+    }
+    
+    function initEventListeners() {
+        // Gestion de l'upload global - DÉLÉGATION
+        const uploadForm = document.getElementById('uploadForm');
+        if (uploadForm) {
+            uploadForm.addEventListener('submit', handleUploadSubmit);
+        }
+        
+        // Gestion de l'upload rapide
+        const quickUploadForm = document.getElementById('quickUploadForm');
+        if (quickUploadForm) {
+            quickUploadForm.addEventListener('submit', handleQuickUploadSubmit);
+        }
+        
+        // DÉLÉGATION D'ÉVÉNEMENTS pour les boutons dynamiques
+        document.addEventListener('click', function(e) {
+            // Bouton "Ajouter un fichier" dans le tableau
+            if (e.target.closest('.add-file-btn')) {
+                const button = e.target.closest('.add-file-btn');
+                const auditId = button.getAttribute('data-audit-id');
+                const auditRef = button.getAttribute('data-audit-ref');
+                
+                // Remplir les champs du modal rapide
+                document.getElementById('quickAuditId').value = auditId;
+                document.getElementById('auditRef').textContent = auditRef;
+                
+                // Réinitialiser le formulaire
+                document.getElementById('quickUploadForm').reset();
+                
+                // Afficher le modal
+                const modal = new bootstrap.Modal(document.getElementById('quickUploadModal'));
+                modal.show();
+            }
+            
+            // Bouton "Voir les fichiers"
+            if (e.target.closest('.view-files-btn')) {
+                const button = e.target.closest('.view-files-btn');
+                const auditId = button.getAttribute('data-audit-id');
+                scrollToAuditFiles(auditId);
+            }
+            
+            // Bouton "Supprimer"
+            if (e.target.closest('.delete-file-btn')) {
+                const button = e.target.closest('.delete-file-btn');
+                const fileId = button.getAttribute('data-file-id');
+                const fileName = button.getAttribute('data-file-name');
+                
+                showDeleteConfirmation(fileId, fileName);
+            }
+        });
+        
+        // Confirmation de suppression
+        const confirmDeleteBtn = document.getElementById('confirmDeleteBtn');
+        if (confirmDeleteBtn) {
+            confirmDeleteBtn.addEventListener('click', handleDeleteConfirmation);
+        }
+    }
+    
+    function handleUploadSubmit(e) {
+        const auditId = document.getElementById('auditSelect').value;
+        const fileInput = document.getElementById('fichier');
+        
+        if (!auditId) {
+            e.preventDefault();
+            alert('Veuillez sélectionner un audit');
+            return;
+        }
+        
+        if (!fileInput.files[0]) {
+            e.preventDefault();
+            alert('Veuillez sélectionner un fichier');
+            return;
+        }
+        
+        // Validation de la taille du fichier (10MB max)
+        const maxSize = 10 * 1024 * 1024;
+        if (fileInput.files[0].size > maxSize) {
+            e.preventDefault();
+            alert('Fichier trop volumineux. Taille maximum : 10MB');
+            return;
+        }
+        
+        // Afficher un indicateur de chargement
+        const submitBtn = e.target.querySelector('button[type="submit"]');
+        if (submitBtn) {
+            const originalText = submitBtn.innerHTML;
+            submitBtn.innerHTML = '<i class="fas fa-spinner fa-spin me-1"></i>Upload en cours...';
+            submitBtn.disabled = true;
+            
+            // Réactiver le bouton après 10 secondes au cas où
+            setTimeout(() => {
+                submitBtn.innerHTML = originalText;
+                submitBtn.disabled = false;
+            }, 10000);
+        }
+    }
+    
+    function handleQuickUploadSubmit(e) {
+        const auditId = document.getElementById('quickAuditId').value;
+        const fileInput = document.getElementById('quickFichier');
+        
+        if (!auditId) {
+            e.preventDefault();
+            alert('Erreur: Audit non spécifié');
+            return;
+        }
+        
+        if (!fileInput.files[0]) {
+            e.preventDefault();
+            alert('Veuillez sélectionner un fichier');
+            return;
+        }
+        
+        // Validation de la taille du fichier
+        const maxSize = 10 * 1024 * 1024;
+        if (fileInput.files[0].size > maxSize) {
+            e.preventDefault();
+            alert('Fichier trop volumineux. Taille maximum : 10MB');
+            return;
+        }
+        
+        // Afficher un indicateur de chargement
+        const submitBtn = e.target.querySelector('button[type="submit"]');
+        if (submitBtn) {
+            const originalText = submitBtn.innerHTML;
+            submitBtn.innerHTML = '<i class="fas fa-spinner fa-spin me-1"></i>Upload en cours...';
+            submitBtn.disabled = true;
+            
+            setTimeout(() => {
+                submitBtn.innerHTML = originalText;
+                submitBtn.disabled = false;
+            }, 10000);
+        }
+    }
+    
+    function scrollToAuditFiles(auditId) {
+    console.log(`Recherche fichiers pour audit ID: ${auditId}`);
+    
+    // Convertir l'ID en string pour la comparaison
+    const auditIdStr = auditId.toString();
+    
+    // Trouver toutes les lignes du tableau des fichiers
+    const fileRows = document.querySelectorAll('.table-hover tbody tr');
+    let foundRow = null;
+    let rowIndex = -1;
+    
+    // Première passe : chercher par ID exact dans le badge
+    for (let i = 0; i < fileRows.length; i++) {
+        const row = fileRows[i];
+        const badge = row.querySelector('.badge.bg-light');
+        
+        if (badge) {
+            // Essayer de trouver l'ID de l'audit dans le badge
+            const badgeText = badge.textContent.trim();
+            
+            // Méthode 1: Chercher AUD-000X où X est l'ID
+            if (badgeText.includes('AUD-')) {
+                // Extraire la référence depuis le badge
+                const refMatch = badgeText.match(/AUD-\d+/);
+                if (refMatch) {
+                    // Trouver l'audit correspondant à cette référence
+                    const auditRef = refMatch[0];
+                    // Vous devrez peut-être mapper la référence à l'ID
+                    // Pour l'instant, on cherche juste la première ligne de cet audit
+                    foundRow = row;
+                    rowIndex = i;
+                    console.log(`Trouvé ligne avec référence: ${auditRef}`);
+                    break;
+                }
+            }
+            
+            // Méthode 2: Chercher directement l'ID
+            if (badgeText.includes(`Audit #${auditIdStr}`)) {
+                foundRow = row;
+                rowIndex = i;
+                console.log(`Trouvé ligne avec "Audit #${auditIdStr}"`);
+                break;
+            }
+        }
+    }
+    
+    // Deuxième passe : si non trouvé, chercher par référence dans les data-attributs
+    if (!foundRow) {
+        // Regarder dans le tableau principal pour trouver la référence
+        const mainTableRows = document.querySelectorAll('.table-striped tbody tr');
+        let auditRef = '';
+        
+        for (const row of mainTableRows) {
+            const refCell = row.querySelector('td:first-child strong');
+            if (refCell && row.querySelector(`[data-audit-id="${auditIdStr}"]`)) {
+                auditRef = refCell.textContent.trim();
+                console.log(`Référence trouvée: ${auditRef} pour audit ID: ${auditIdStr}`);
+                break;
+            }
+        }
+        
+        // Maintenant chercher cette référence dans le tableau des fichiers
+        if (auditRef) {
+            for (let i = 0; i < fileRows.length; i++) {
+                const row = fileRows[i];
+                const badge = row.querySelector('.badge.bg-light');
+                
+                if (badge && badge.textContent.includes(auditRef)) {
+                    foundRow = row;
+                    rowIndex = i;
+                    console.log(`Trouvé ligne avec référence ${auditRef}`);
+                    break;
+                }
+            }
+        }
+    }
+    
+    // Scroll vers la section des fichiers
+    const filesSection = document.querySelector('.card:has(.fa-paperclip)');
+    if (filesSection) {
+        filesSection.scrollIntoView({ 
+            behavior: 'smooth', 
+            block: 'start' 
+        });
+        
+        // Surligner la ligne trouvée
+        if (foundRow) {
+            // Retirer tout surlignement existant
+            document.querySelectorAll('.table-info').forEach(row => {
+                row.classList.remove('table-info');
+            });
+            
+            // Ajouter le surlignement
+            foundRow.classList.add('table-info');
+            
+            // Optionnel: scroll vers la ligne spécifique
+            setTimeout(() => {
+                foundRow.scrollIntoView({ 
+                    behavior: 'smooth', 
+                    block: 'center',
+                    inline: 'nearest' 
+                });
+            }, 500);
+            
+            // Enlever le surlignement après 3 secondes
+            setTimeout(() => {
+                foundRow.classList.remove('table-info');
+            }, 3000);
+        } else {
+            console.log(`Aucun fichier trouvé pour l'audit ID: ${auditIdStr}`);
+            showToast('info', `Aucun fichier trouvé pour cet audit`);
+        }
+    } else {
+        console.error('Section fichiers non trouvée');
+    }
+}
+    
+    function showDeleteConfirmation(fileId, fileName) {
+        fileToDelete = { id: fileId, name: fileName };
+        
+        // Mettre à jour le modal de confirmation
+        document.getElementById('fileNameToDelete').textContent = fileName;
+        
+        // Afficher le modal
+        const modal = new bootstrap.Modal(document.getElementById('confirmDeleteModal'));
+        modal.show();
+    }
+    
+    function handleDeleteConfirmation() {
+        if (!fileToDelete) return;
+        
+        const deleteBtn = document.getElementById('confirmDeleteBtn');
+        const originalText = deleteBtn.innerHTML;
+        deleteBtn.innerHTML = '<i class="fas fa-spinner fa-spin me-1"></i>Suppression...';
+        deleteBtn.disabled = true;
+        
+        // Récupérer le token CSRF
+        let csrfToken = '';
+        const metaTag = document.querySelector('meta[name="csrf-token"]');
+        if (metaTag) {
+            csrfToken = metaTag.getAttribute('content');
+        } else {
+            const inputTag = document.querySelector('input[name="csrf_token"]');
+            if (inputTag) {
+                csrfToken = inputTag.value;
+            }
+        }
+        
+        const headers = {
+            'Content-Type': 'application/json'
+        };
+        
+        if (csrfToken) {
+            headers['X-CSRFToken'] = csrfToken;
+        }
+        
+        fetch(`/fichier-rapport-audit/${fileToDelete.id}/supprimer`, {
+            method: 'POST',
+            headers: headers,
+            body: JSON.stringify({ confirm: true })
+        })
+        .then(response => {
+            if (!response.ok) {
+                throw new Error(`Erreur HTTP: ${response.status}`);
+            }
+            return response.json();
+        })
+        .then(data => {
+            const modal = bootstrap.Modal.getInstance(document.getElementById('confirmDeleteModal'));
+            if (modal) modal.hide();
+            
+            if (data.success) {
+                // Afficher un message de succès
+                showToast('success', data.message || 'Fichier supprimé avec succès');
+                
+                // Rafraîchir la page après 1 seconde
+                setTimeout(() => {
+                    location.reload();
+                }, 1000);
+            } else {
+                showToast('error', data.message || 'Erreur lors de la suppression');
+            }
+        })
+        .catch(error => {
+            console.error('Erreur:', error);
+            showToast('error', 'Une erreur est survenue lors de la suppression');
+        })
+        .finally(() => {
+            deleteBtn.innerHTML = originalText;
+            deleteBtn.disabled = false;
+            fileToDelete = null;
+        });
+    }
+    
+    function setupFileValidation() {
+        // Validation des types de fichiers pour les deux formulaires
+        ['fichier', 'quickFichier'].forEach(inputId => {
+            const fileInput = document.getElementById(inputId);
+            if (fileInput) {
+                fileInput.addEventListener('change', function() {
+                    const allowedExt = ['pdf', 'doc', 'docx', 'xls', 'xlsx', 'ppt', 'pptx', 'jpg', 'jpeg', 'png', 'txt'];
+                    const file = this.files[0];
+                    
+                    if (file) {
+                        const ext = file.name.split('.').pop().toLowerCase();
+                        
+                        if (!allowedExt.includes(ext)) {
+                            alert('Type de fichier non autorisé. Formats acceptés : PDF, Word, Excel, PowerPoint, images, texte.');
+                            this.value = '';
+                        }
+                    }
+                });
+            }
+        });
+    }
+    
+    // Fonction pour afficher des toasts
+    function showToast(type, message) {
+        // Créer un toast Bootstrap
+        let toastContainer = document.getElementById('toastContainer');
+        if (!toastContainer) {
+            toastContainer = document.createElement('div');
+            toastContainer.id = 'toastContainer';
+            toastContainer.className = 'toast-container position-fixed top-0 end-0 p-3';
+            toastContainer.style.zIndex = '1060';
+            document.body.appendChild(toastContainer);
+        }
+        
+        const toastId = 'toast-' + Date.now();
+        const icon = type === 'success' ? 'fa-check-circle' : 
+                     type === 'error' ? 'fa-exclamation-circle' : 
+                     type === 'warning' ? 'fa-exclamation-triangle' : 'fa-info-circle';
+        
+        const toastHTML = `
+            <div id="${toastId}" class="toast align-items-center text-bg-${type} border-0" role="alert">
+                <div class="d-flex">
+                    <div class="toast-body">
+                        <i class="fas ${icon} me-2"></i>
+                        ${message}
+                    </div>
+                    <button type="button" class="btn-close btn-close-white me-2 m-auto" data-bs-dismiss="toast"></button>
+                </div>
+            </div>
+        `;
+        
+        toastContainer.insertAdjacentHTML('beforeend', toastHTML);
+        const toastElement = document.getElementById(toastId);
+        const toast = new bootstrap.Toast(toastElement, { delay: 3000 });
+        toast.show();
+        
+        // Nettoyer après fermeture
+        toastElement.addEventListener('hidden.bs.toast', function () {
+            this.remove();
+        });
+    }
+    
+    // Debug: Vérifier que les boutons sont bien détectés
+    console.log('Initialisation rapports.js');
+    console.log('Boutons Ajouter:', document.querySelectorAll('.add-file-btn').length);
+    console.log('Boutons Voir:', document.querySelectorAll('.view-files-btn').length);
+    console.log('Boutons Supprimer:', document.querySelectorAll('.delete-file-btn').length);
+    // Script de débogage
+setTimeout(function() {
+    console.log('=== DEBUG RAPPORTS ===');
+    
+    // Vérifier les boutons
+    const addButtons = document.querySelectorAll('.add-file-btn');
+    const viewButtons = document.querySelectorAll('.view-files-btn');
+    const deleteButtons = document.querySelectorAll('.delete-file-btn');
+    
+    console.log(`Boutons Ajouter: ${addButtons.length}`);
+    console.log(`Boutons Voir: ${viewButtons.length}`);
+    console.log(`Boutons Supprimer: ${deleteButtons.length}`);
+    
+    // Vérifier les attributs data
+    addButtons.forEach((btn, i) => {
+        console.log(`Add button ${i}: audit-id=${btn.getAttribute('data-audit-id')}, audit-ref=${btn.getAttribute('data-audit-ref')}`);
+    });
+    
+    deleteButtons.forEach((btn, i) => {
+        console.log(`Delete button ${i}: file-id=${btn.getAttribute('data-file-id')}, file-name=${btn.getAttribute('data-file-name')}`);
+    });
+    
+    // Vérifier si Bootstrap est chargé
+    console.log('Bootstrap Modal disponible:', typeof bootstrap !== 'undefined' && bootstrap.Modal);
+    
+    console.log('=== FIN DEBUG ===');
+}, 1000);
+    </script>
+
+<style>
+/* Styles pour les icônes de fichiers */
+.fa-file-pdf { color: #dc3545; }
+.fa-file-word { color: #2b579a; }
+.fa-file-excel { color: #217346; }
+.fa-file-powerpoint { color: #d24726; }
+.fa-file-image { color: #17a2b8; }
+.fa-file-alt { color: #6c757d; }
+
+/* Animation pour le chargement */
+@keyframes fadeIn {
+    from { opacity: 0; }
+    to { opacity: 1; }
+}
+
+.table tr {
+    animation: fadeIn 0.3s ease-in;
+}
+
+/* Styles pour les badges */
+.badge {
+    font-size: 0.75em;
+}
+
+.badge.bg-info {
+    min-width: 2em;
+    text-align: center;
+    padding: 0.25em 0.6em;
+}
+
+/* Surlignement pour la ligne sélectionnée */
+.table-info {
+    background-color: #d1ecf1 !important;
+    transition: background-color 0.3s ease;
+}
+
+/* Boutons d'action */
+.add-file-btn, .view-files-btn {
+    padding: 0.15rem 0.4rem;
+    font-size: 0.8rem;
+}
+
+.view-files-btn {
+    padding: 0.1rem 0.3rem;
+}
+
+/* Animation pour les nouvelles lignes */
+@keyframes highlightNew {
+    0% { background-color: #d4edda; }
+    100% { background-color: transparent; }
+}
+
+.new-file {
+    animation: highlightNew 2s ease-out;
+}
+
+/* Responsive table */
+@media (max-width: 768px) {
+    .table-responsive {
+        font-size: 0.85em;
+    }
+    
+    .btn-group-sm {
+        flex-wrap: wrap;
+    }
+    
+    .btn-group-sm .btn {
+        margin-bottom: 2px;
+        font-size: 0.75rem;
+        padding: 0.15rem 0.3rem;
+    }
+    
+    /* Masquer certaines colonnes sur mobile */
+    .table th:nth-child(3),
+    .table td:nth-child(3) {
+        display: none;
+    }
+    
+    .table th:nth-child(6),
+    .table td:nth-child(6) {
+        display: none;
+    }
+}
+
+/* Styles pour les modals sur mobile */
+@media (max-width: 576px) {
+    .modal-dialog {
+        margin: 0.5rem;
+    }
+    
+    .modal-content {
+        border-radius: 0.5rem;
+    }
+}
+</style>
+{% endblock %}

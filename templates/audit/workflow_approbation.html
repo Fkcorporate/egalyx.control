@@ -1,0 +1,252 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="container-fluid">
+    <div class="row">
+        <div class="col-12">
+            <div class="card">
+                <div class="card-header bg-primary text-white">
+                    <h4><i class="fas fa-check-circle me-2"></i>Workflow d'approbation - {{ audit.reference }}</h4>
+                </div>
+                <div class="card-body">
+                    <!-- Timeline -->
+                    <div class="timeline-wrapper">
+                        <div class="timeline">
+                            <div class="timeline-item">
+                                <div class="timeline-marker {% if workflow.etape_actuelle == 'brouillon' %}active{% else %}completed{% endif %}"></div>
+                                <div class="timeline-content">
+                                    <h5>📝 Brouillon</h5>
+                                    <p>Audit en cours de rédaction</p>
+                                </div>
+                            </div>
+                            <div class="timeline-item">
+                                <div class="timeline-marker {% if workflow.etape_actuelle == 'en_relecture' %}active{% else %}{% if workflow.etape_actuelle in ['approuve', 'rejete', 'valide'] %}completed{% endif %}{% endif %}"></div>
+                                <div class="timeline-content">
+                                    <h5>🔍 Relecture</h5>
+                                    <p>En attente de validation niveau 1</p>
+                                    {% if workflow.commentaire_relecture %}
+                                    <small class="text-muted">Commentaire: {{ workflow.commentaire_relecture }}</small>
+                                    {% endif %}
+                                </div>
+                            </div>
+                            <div class="timeline-item">
+                                <div class="timeline-marker {% if workflow.etape_actuelle == 'approuve' %}active{% else %}{% if workflow.etape_actuelle == 'valide' %}completed{% endif %}{% endif %}"></div>
+                                <div class="timeline-content">
+                                    <h5>✅ Approbation finale</h5>
+                                    <p>Validation direction</p>
+                                </div>
+                            </div>
+                            <div class="timeline-item">
+                                <div class="timeline-marker {% if workflow.etape_actuelle == 'valide' %}active{% endif %}"></div>
+                                <div class="timeline-content">
+                                    <h5>🎉 Validé</h5>
+                                    <p>Audit finalisé</p>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- Actions -->
+                    <div class="mt-4">
+                        {% if workflow.etape_actuelle == 'brouillon' %}
+                        <button class="btn btn-primary" onclick="envoyerRelecture()">
+                            <i class="fas fa-paper-plane me-2"></i>Envoyer en relecture
+                        </button>
+                        {% elif workflow.etape_actuelle == 'en_relecture' and workflow.peut_approuver_niveau1(current_user) %}
+                        <div class="btn-group">
+                            <button class="btn btn-success" onclick="approuverNiveau1()">
+                                <i class="fas fa-check me-2"></i>Approuver (Niveau 1)
+                            </button>
+                            <button class="btn btn-danger" onclick="rejeter()">
+                                <i class="fas fa-times me-2"></i>Rejeter
+                            </button>
+                        </div>
+                        {% elif workflow.etape_actuelle == 'approuve' and workflow.peut_approuver_niveau2(current_user) %}
+                        <div class="btn-group">
+                            <button class="btn btn-success" onclick="approuverNiveau2()">
+                                <i class="fas fa-check-double me-2"></i>Approuver (Niveau 2)
+                            </button>
+                            <button class="btn btn-danger" onclick="rejeter()">
+                                <i class="fas fa-times me-2"></i>Rejeter
+                            </button>
+                        </div>
+                        {% elif workflow.etape_actuelle == 'rejete' %}
+                        <div class="alert alert-danger">
+                            <i class="fas fa-info-circle me-2"></i>
+                            Audit rejeté. Raison: {{ workflow.commentaire_rejet }}
+                        </div>
+                        <button class="btn btn-warning" onclick="envoyerRelecture()">
+                            <i class="fas fa-sync me-2"></i>Corriger et renvoyer
+                        </button>
+                        {% endif %}
+                    </div>
+                    
+                    <!-- Historique -->
+                    <div class="mt-5">
+                        <h5>📜 Historique des étapes</h5>
+                        <div class="table-responsive">
+                            <table class="table table-sm">
+                                <thead>
+                                    <tr>
+                                        <th>Date</th>
+                                        <th>Action</th>
+                                        <th>Utilisateur</th>
+                                        <th>Commentaire</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {% for etape in workflow.historique_etapes %}
+                                    <tr>
+                                        <td>{{ etape.date|datetime }}</td>
+                                        <td>{{ etape.ancienne_etape }} → {{ etape.nouvelle_etape }}</td>
+                                        <td>{{ etape.utilisateur_nom }}</td>
+                                        <td>{{ etape.commentaire or '-' }}</td>
+                                    </tr>
+                                    {% endfor %}
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+function envoyerRelecture() {
+    const commentaire = prompt("Commentaire pour la relecture (optionnel):");
+    
+    fetch(`/api/audit/{{ audit.id }}/workflow/envoyer-relecture`, {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            'X-CSRFToken': '{{ csrf_token() }}'
+        },
+        body: JSON.stringify({commentaire: commentaire || ''})
+    })
+    .then(r => r.json())
+    .then(data => {
+        if (data.success) {
+            location.reload();
+        } else {
+            alert('Erreur: ' + data.error);
+        }
+    });
+}
+
+function approuverNiveau1() {
+    const commentaire = prompt("Commentaire d'approbation (optionnel):");
+    
+    fetch(`/api/audit/{{ audit.id }}/workflow/approuver-niveau1`, {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            'X-CSRFToken': '{{ csrf_token() }}'
+        },
+        body: JSON.stringify({commentaire: commentaire || ''})
+    })
+    .then(r => r.json())
+    .then(data => {
+        if (data.success) {
+            location.reload();
+        } else {
+            alert('Erreur: ' + data.error);
+        }
+    });
+}
+
+function approuverNiveau2() {
+    const commentaire = prompt("Commentaire d'approbation finale (optionnel):");
+    
+    fetch(`/api/audit/{{ audit.id }}/workflow/approuver-niveau2`, {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            'X-CSRFToken': '{{ csrf_token() }}'
+        },
+        body: JSON.stringify({commentaire: commentaire || ''})
+    })
+    .then(r => r.json())
+    .then(data => {
+        if (data.success) {
+            location.reload();
+        } else {
+            alert('Erreur: ' + data.error);
+        }
+    });
+}
+
+function rejeter() {
+    const raison = prompt("Raison du rejet (obligatoire):");
+    if (!raison) return;
+    
+    fetch(`/api/audit/{{ audit.id }}/workflow/rejeter`, {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            'X-CSRFToken': '{{ csrf_token() }}'
+        },
+        body: JSON.stringify({raison: raison})
+    })
+    .then(r => r.json())
+    .then(data => {
+        if (data.success) {
+            location.reload();
+        } else {
+            alert('Erreur: ' + data.error);
+        }
+    });
+}
+</script>
+
+<style>
+.timeline-wrapper {
+    padding: 20px;
+    background: #f8f9fa;
+    border-radius: 10px;
+}
+.timeline {
+    display: flex;
+    justify-content: space-between;
+    position: relative;
+}
+.timeline-item {
+    flex: 1;
+    text-align: center;
+    position: relative;
+}
+.timeline-marker {
+    width: 20px;
+    height: 20px;
+    background: #dee2e6;
+    border-radius: 50%;
+    margin: 0 auto 10px;
+    position: relative;
+    z-index: 2;
+}
+.timeline-marker.active {
+    background: #0d6efd;
+    box-shadow: 0 0 0 3px rgba(13,110,253,0.3);
+    animation: pulse 1.5s infinite;
+}
+.timeline-marker.completed {
+    background: #198754;
+}
+@keyframes pulse {
+    0% { box-shadow: 0 0 0 0 rgba(13,110,253,0.4); }
+    70% { box-shadow: 0 0 0 10px rgba(13,110,253,0); }
+    100% { box-shadow: 0 0 0 0 rgba(13,110,253,0); }
+}
+.timeline:before {
+    content: '';
+    position: absolute;
+    top: 10px;
+    left: 0;
+    right: 0;
+    height: 2px;
+    background: #dee2e6;
+    z-index: 1;
+}
+</style>
+{% endblock %}

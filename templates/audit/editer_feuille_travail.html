@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% import "_macros/cotation.html" as cot %}
 
 {% block title %}Éditeur - {{ feuille.reference }} {{ feuille.titre }}{% endblock %}
 
@@ -216,7 +217,7 @@
                     <div class="info-item-modern"><div class="info-item-label"><i class="fas fa-text-width"></i> Intitulé</div><div class="info-item-value">{{ risque.intitule }}</div></div>
                     <div class="info-item-modern"><div class="info-item-label"><i class="fas fa-building"></i> Processus</div><div class="info-item-value">{{ risque.processus_concerne or 'Non spécifié' }}</div></div>
                     <div class="info-item-modern"><div class="info-item-label"><i class="fas fa-user"></i> Propriétaire</div><div class="info-item-value">{{ risque.proprietaire.username if risque.proprietaire else 'Non assigné' }}</div></div>
-                    <div class="info-item-modern"><div class="info-item-label"><i class="fas fa-chart-bar"></i> Criticité</div><div class="info-item-value"><span class="badge {% if risque.niveau_criticite == 'Critique' %}bg-danger{% elif risque.niveau_criticite == 'Élevé' %}bg-warning{% elif risque.niveau_criticite == 'Moyen' %}bg-info{% else %}bg-success{% endif %}">{{ risque.niveau_criticite or 'Non défini' }}</span>{% if risque.score_risque %}<span class="badge bg-secondary ms-1">Score: {{ risque.score_risque }}</span>{% endif %}</div></div>
+                    <div class="info-item-modern"><div class="info-item-label"><i class="fas fa-chart-bar"></i> Criticité</div><div class="info-item-value">{% set ev_r = (risque.evaluations|sort(attribute='created_at')|last) if risque.evaluations else none %}{% if ev_r %}{{ cot.badge_eval(ev_r) }} <span class="ms-1">{{ cot.brut_net_eval(ev_r, compact=True) }}</span>{% else %}{{ cot.badge(risque.niveau_criticite) }}{% endif %}</div></div>
                     <div class="info-item-modern"><div class="info-item-label"><i class="fas fa-clock"></i> Dernière évaluation</div><div class="info-item-value">{% if risque.derniere_evaluation %}{{ risque.derniere_evaluation.created_at.strftime('%d/%m/%Y') }}<small class="text-muted d-block">Par: {{ risque.derniere_evaluation.createur.username if risque.derniere_evaluation.createur else 'Système' }}</small>{% else %}<span class="text-muted">Non évalué</span>{% endif %}</div></div>
                 </div>
             </div>
@@ -384,7 +385,7 @@
                                                    else 'moyen' if 'moyen' in (risque.niveau_net_libelle|lower)
                                                    else 'faible') -%}
           {%- set libelle_affichage = risque.niveau_net_libelle if risque.niveau_net_libelle is defined else risque.niveau_criticite -%}
-          {%- set couleur_affichage = risque.couleur if risque.couleur is defined else '#6b7280' -%}
+          {%- set couleur_affichage = cotation_style(libelle_affichage).hex -%}
           <span class="risque-badge {{ niveau_risque_canonique }}"
                 title="{{ risque.reference }} - {{ risque.intitule }}"
                 style="background:{{ couleur_affichage }};">
@@ -563,11 +564,7 @@
       <div class="row g-2" id="risquesCheckboxList">
         {% for risque in risques_disponibles %}
         {% set niveau_lower = risque.niveau_net|lower %}
-        {% set couleur = '#dc2626' if 'critique' in niveau_lower
-                         else '#ea580c' if 'élevé' in niveau_lower or 'eleve' in niveau_lower
-                         else '#f59e0b' if 'moyen' in niveau_lower
-                         else '#10b981' if 'faible' in niveau_lower
-                         else '#6b7280' %}
+        {% set couleur = cotation_style(risque.niveau_net).hex %}
         {% set icone = 'fa-fire' if 'critique' in niveau_lower
                        else 'fa-exclamation-triangle' if 'élevé' in niveau_lower or 'eleve' in niveau_lower
                        else 'fa-exclamation-circle' if 'moyen' in niveau_lower
@@ -595,7 +592,7 @@
                 {% if risque.est_revaluation %}<span class="badge bg-warning text-dark" style="font-size:.6rem;"><i class="fas fa-clock me-1"></i>N-1</span>{% endif %}
               </div>
               <div class="small text-truncate" title="{{ risque.intitule }}">{{ risque.intitule }}</div>
-              <div class="small text-muted">Score NET : <strong style="color:{{ couleur }};">{{ risque.score_net }}</strong>{% if risque.campagne_nom %} • <i class="fas fa-clipboard-list"></i> {{ risque.campagne_nom|truncate(20) }}{% endif %}</div>
+              <div class="small text-muted">Net <strong style="color:{{ couleur }};">{{ cot.fmt(risque.score_net) }}</strong>{% if risque.score_risque_brut %} · brut {{ cot.fmt(risque.score_risque_brut) }}{% endif %}{% if risque.campagne_nom %} • <i class="fas fa-clipboard-list"></i> {{ risque.campagne_nom|truncate(20) }}{% endif %}</div>
             </div>
           </label>
         </div>
@@ -1050,7 +1047,7 @@ function editTest(testId){
           niveau_criticite: r.niveau_net || r.niveau_criticite || 'moyen',
           score_risque: parseFloat(r.score_net || r.score_risque) || 0,
           niveau_brut: r.niveau_criticite || '',
-          score_brut: parseFloat(r.score_risque) || 0,
+          score_brut: parseFloat(r.score_risque_brut || r.score_brut) || 0,
           impact: r.impact || 'modere',
           probabilite: r.probabilite || 'possible',
           couleur: r.couleur || '#6b7280',
@@ -1096,7 +1093,7 @@ function voirDetailTest(testId){
       t.risques_associes.forEach(r=>{
         const niveauLibelle = r.niveau_net || r.niveau_criticite || '';
         const n=normaliserNiveau(niveauLibelle);
-        const couleur=r.couleur || {faible:'#10b981',moyen:'#f59e0b',eleve:'#ef4444',critique:'#dc2626'}[n] || '#6b7280';
+        const couleur={faible:EgalyxCotation.couleur('Faible'),moyen:EgalyxCotation.couleur('Moyen'),eleve:EgalyxCotation.couleur('Élevé'),critique:EgalyxCotation.couleur('Critique')}[n] || EgalyxCotation.couleur('Non évalué');
         risquesHtml+=`<span class="risque-badge ${n}" style="background:${couleur};">
           ${escapeHtml(r.reference)}
           <span class="badge bg-white text-dark ms-1">${escapeHtml(niveauLibelle).toUpperCase()}</span>
@@ -1236,12 +1233,12 @@ function afficherRisquesSelectionnes(){
     el.innerHTML='<div class="text-muted text-center py-3"><i class="fas fa-info-circle me-2"></i>Aucun risque sélectionné</div>';
     return;
   }
-  const couleurs={faible:'#10b981',moyen:'#f59e0b',eleve:'#ef4444',critique:'#dc2626'};
+  const couleurs={faible:EgalyxCotation.couleur('Faible'),moyen:EgalyxCotation.couleur('Moyen'),eleve:EgalyxCotation.couleur('Élevé'),critique:EgalyxCotation.couleur('Critique')};   // règle unique
   const labels={faible:'FAIBLE',moyen:'MOYEN',eleve:'ÉLEVÉ',critique:'CRITIQUE'};
   let html='<div class="row g-2">';
   risquesSelectionnes.forEach((r,i)=>{
     const niveauNorm=normaliserNiveau(r.niveau_criticite);
-    const c=r.couleur||couleurs[niveauNorm];
+    const c=couleurs[niveauNorm];
     const label=labels[niveauNorm];
     html+=`<div class="col-md-6 col-lg-4">
       <div class="d-flex justify-content-between align-items-center p-2 border rounded" style="border-left:4px solid ${c}!important">
@@ -1249,7 +1246,7 @@ function afficherRisquesSelectionnes(){
           <strong class="small">${escapeHtml(r.reference)}</strong>
           <div class="text-truncate small" style="max-width:180px;" title="${escapeHtml(r.intitule)}">${escapeHtml(r.intitule)}</div>
           <span class="badge" style="background-color:${c};">${label}</span>
-          <span class="badge bg-secondary ms-1">Score: ${(parseFloat(r.score_risque)||0).toFixed(2)}</span>
+          <span class="badge bg-secondary ms-1">Net ${EgalyxCotation.fmt(r.score_risque)}${r.score_brut ? ' · brut ' + EgalyxCotation.fmt(r.score_brut) : ''}</span>
           ${r.est_revaluation ? '<span class="badge bg-warning text-dark ms-1">N-1</span>' : ''}
         </div>
         <button class="btn btn-sm btn-outline-danger" onclick="retirerRisqueSelectionne(${i})"><i class="fas fa-times"></i></button>
@@ -1275,7 +1272,7 @@ function calculerCriticiteGlobale(){
   const maxItem=items.reduce((a,b)=>b.scoreNiveau>a.scoreNiveau?b:a,items[0]);
   const niveau=maxItem.niveauNorm;
   const labels={faible:'🟢 Faible',moyen:'🟡 Moyen',eleve:'🟠 Élevé',critique:'🔴 Critique'};
-  const couleurs={faible:'bg-success',moyen:'bg-warning',eleve:'bg-danger',critique:'bg-dark'};
+  const couleurs={faible:'cot-faible',moyen:'cot-moyen',eleve:'cot-eleve',critique:'cot-critique'};   // règle unique
 
   const cb=document.getElementById('criticiteBadge');
   if(cb){cb.className=`badge ${couleurs[niveau]}`;cb.textContent=labels[niveau]}
@@ -1287,9 +1284,8 @@ function calculerCriticiteGlobale(){
   if(ng){ng.className=`badge ${couleurs[niveau]}`;ng.textContent=labels[niveau]}
 
   const maxScore=Math.max(...risquesSelectionnes.map(r=>parseFloat(r.score_risque)||0));
-  const echelle=maxScore>16?25:16;
   const sc=document.getElementById('scoreRisqueGlobal');
-  if(sc)sc.textContent=`Score: ${maxScore.toFixed(2)}/${echelle}`;
+  if(sc)sc.textContent=`Score NET max : ${EgalyxCotation.fmt(maxScore)}/25`;
 
   const recommandations={critique:'🔴 Action IMMÉDIATE requise !',eleve:'🟠 Action RAPIDE nécessaire. Surveillance renforcée.',moyen:'🟡 Plan d\'action à programmer.',faible:'🟢 Surveillance courante.'};
   const rec=document.getElementById('recommandationRisqueGlobal');
@@ -1305,12 +1301,12 @@ function afficherAnalyseDetaillee(){
   if(!list||!wrap)return;
   if(risquesSelectionnes.length===0){wrap.style.display='none';return}
   wrap.style.display='block';
-  const couleurs={faible:'#10b981',moyen:'#f59e0b',eleve:'#ef4444',critique:'#dc2626'};
+  const couleurs={faible:EgalyxCotation.couleur('Faible'),moyen:EgalyxCotation.couleur('Moyen'),eleve:EgalyxCotation.couleur('Élevé'),critique:EgalyxCotation.couleur('Critique')};   // règle unique
   const labels={faible:'🟢 Faible',moyen:'🟡 Moyen',eleve:'🟠 Élevé',critique:'🔴 Critique'};
   let html='';
   risquesSelectionnes.forEach(r=>{
     const niveauNorm=normaliserNiveau(r.niveau_criticite);
-    const c=r.couleur||couleurs[niveauNorm];
+    const c=couleurs[niveauNorm];
     const label=labels[niveauNorm];
     html+=`<div class="col-md-6"><div class="card p-2" style="border-left:4px solid ${c};">
       <div class="d-flex justify-content-between align-items-center">

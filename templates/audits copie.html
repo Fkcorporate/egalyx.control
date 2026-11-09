@@ -1,0 +1,838 @@
+{% extends "base.html" %}
+
+{% block title %}Gestion des Audits - FabriceKonan Corporate{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <div>
+            <h1 class="h3 mb-2">
+                <i class="fas fa-clipboard-check me-2" style="color: var(--fk-warning);"></i> {{ t("Audit Management") }} </h1>
+            <nav aria-label="{{ t("breadcrumb") }}">
+                <ol class="breadcrumb mb-0">
+                    <li class="breadcrumb-item"><a href="{{ url_for('dashboard') }}"> {{ t("Dashboard") }} </a></li>
+                    <li class="breadcrumb-item active"> {{ t("Audits") }} </li>
+                </ol>
+            </nav>
+        </div>
+        <div class="btn-toolbar">
+            {% if current_user.has_permission('can_manage_settings') %}
+            <div class="btn-group me-2">
+                <a href="{{ url_for('configurations_audit') }}" class="fk-btn fk-btn-outline">
+                    <i class="fas fa-cogs me-2"></i> {{ t("Configurations") }} </a>
+            </div>
+            {% endif %}
+            
+            <div class="btn-group me-2">
+                {% if show_archived %}
+                    <a href="{{ url_for('liste_audits') }}" class="fk-btn fk-btn-outline">
+                        <i class="fas fa-box-open me-2"></i> {{ t("Active Audits") }} </a>
+                {% else %}
+                    <a href="{{ url_for('liste_audits', show_archived='true') }}" class="fk-btn fk-btn-outline">
+                        <i class="fas fa-archive me-2"></i>
+                        Archives ({{ stats.archives }})
+                    </a>
+                {% endif %}
+            </div>
+            
+            <div class="btn-group">
+                <a href="{{ url_for('nouvel_audit') }}" class="fk-btn fk-btn-primary">
+                    <i class="fas fa-plus me-2"></i> {{ t("New Audit") }} </a>
+            </div>
+        </div>
+    </div>
+
+    <div class="fk-card mb-4" style="background: linear-gradient(135deg, rgba(251, 191, 36, 0.1) 0%, rgba(251, 191, 36, 0.05) 100%); border-left: 4px solid var(--fk-warning);">
+        <div class="fk-card-body d-flex align-items-center">
+            <div class="flex-shrink-0 me-3">
+                <i class="fas fa-info-circle fa-2x" style="color: var(--fk-warning);"></i>
+            </div>
+            <div class="flex-grow-1">
+                <h5 class="mb-1"> {{ t("Audit Management Portal") }} </h5>
+                <p class="mb-0 text-muted"> {{ t("Manage the entire audit cycle: from planning to closing, including analysis and monitoring of corrective actions.") }} </p>
+            </div>
+        </div>
+    </div>
+
+    <div class="row mb-4">
+        {% set total_audits = audits|length %}
+        {% set en_preparation = audits|selectattr("sous_statut", "equalto", "preparation")|list|length %}
+        {% set en_analyse = audits|selectattr("sous_statut", "equalto", "analyse")|list|length %}
+        {% set en_cours = audits|selectattr("statut", "equalto", "en_cours")|list|length %}
+        {% set clos = audits|selectattr("statut", "equalto", "clos")|list|length %}
+        
+        <div class="col-xl-2 col-lg-4 col-md-6 col-sm-6 mb-4">
+            <div class="fk-card h-100 text-center hover-lift">
+                <div class="fk-card-body p-4">
+                    <div class="mb-3">
+                        <div class="rounded-circle bg-primary bg-opacity-10 d-inline-flex align-items-center justify-content-center" 
+                             style="width: 70px; height: 70px;">
+                            <i class="fas fa-clipboard-list fa-2x text-primary"></i>
+                        </div>
+                    </div>
+                    <h2 class="mb-1">{{ total_audits }}</h2>
+                    <p class="text-muted mb-0"> {{ t("Total Audits") }} </p>
+                </div>
+            </div>
+        </div>
+        
+        <div class="col-xl-2 col-lg-4 col-md-6 col-sm-6 mb-4">
+            <div class="fk-card h-100 text-center hover-lift">
+                <div class="fk-card-body p-4">
+                    <div class="mb-3">
+                        <div class="rounded-circle bg-info bg-opacity-10 d-inline-flex align-items-center justify-content-center" 
+                             style="width: 70px; height: 70px;">
+                            <i class="fas fa-tasks fa-2x text-info"></i>
+                        </div>
+                    </div>
+                    <h2 class="mb-1">{{ en_preparation }}</h2>
+                    <p class="text-muted mb-0"> {{ t("In preparation") }} </p>
+                </div>
+            </div>
+        </div>
+        
+        <div class="col-xl-2 col-lg-4 col-md-6 col-sm-6 mb-4">
+            <div class="fk-card h-100 text-center hover-lift">
+                <div class="fk-card-body p-4">
+                    <div class="mb-3">
+                        <div class="rounded-circle bg-warning bg-opacity-10 d-inline-flex align-items-center justify-content-center" 
+                             style="width: 70px; height: 70px;">
+                            <i class="fas fa-chart-bar fa-2x text-warning"></i>
+                        </div>
+                    </div>
+                    <h2 class="mb-1">{{ en_analyse }}</h2>
+                    <p class="text-muted mb-0"> {{ t("En Analyse") }} </p>
+                </div>
+            </div>
+        </div>
+        
+        <div class="col-xl-2 col-lg-4 col-md-6 col-sm-6 mb-4">
+            <div class="fk-card h-100 text-center hover-lift">
+                <div class="fk-card-body p-4">
+                    <div class="mb-3">
+                        <div class="rounded-circle bg-purple bg-opacity-10 d-inline-flex align-items-center justify-content-center" 
+                             style="width: 70px; height: 70px;">
+                            <i class="fas fa-play-circle fa-2x text-purple"></i>
+                        </div>
+                    </div>
+                    <h2 class="mb-1">{{ en_cours }}</h2>
+                    <p class="text-muted mb-0"> {{ t("En Cours") }} </p>
+                </div>
+            </div>
+        </div>
+        
+        <div class="col-xl-2 col-lg-4 col-md-6 col-sm-6 mb-4">
+            <div class="fk-card h-100 text-center hover-lift">
+                <div class="fk-card-body p-4">
+                    <div class="mb-3">
+                        <div class="rounded-circle bg-success bg-opacity-10 d-inline-flex align-items-center justify-content-center" 
+                             style="width: 70px; height: 70px;">
+                            <i class="fas fa-check-circle fa-2x text-success"></i>
+                        </div>
+                    </div>
+                    <h2 class="mb-1">{{ clos }}</h2>
+                    <p class="text-muted mb-0"> {{ t("Clôturés") }} </p>
+                </div>
+            </div>
+        </div>
+        
+        <div class="col-xl-2 col-lg-4 col-md-6 col-sm-6 mb-4">
+            <div class="fk-card h-100 text-center hover-lift">
+                <div class="fk-card-body p-4">
+                    <div class="mb-3">
+                        <div class="rounded-circle bg-secondary bg-opacity-10 d-inline-flex align-items-center justify-content-center" 
+                             style="width: 70px; height: 70px;">
+                            <i class="fas fa-archive fa-2x text-secondary"></i>
+                        </div>
+                    </div>
+                    <h2 class="mb-1">{{ stats.archives }}</h2>
+                    <p class="text-muted mb-0"> {{ t("Archivés") }} </p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="fk-card">
+        <div class="fk-card-header d-flex justify-content-between align-items-center">
+            <div>
+                <h5 class="mb-0">
+                    <i class="fas fa-list me-2"></i>
+                    {% if show_archived %}
+                    Audits Archivés
+                    {% else %}
+                    Liste des Audits
+                    {% endif %}
+                </h5>
+                <small class="text-muted"> {{ t("View and manage all of your audit programs") }} </small>
+            </div>
+            <div class="d-flex align-items-center">
+                <div class="input-group input-group-sm me-3" style="width: 250px;">
+                    <span class="input-group-text">
+                        <i class="fas fa-search"></i>
+                    </span>
+                    <input type="text" class="form-control form-control-sm" placeholder="{{ t("Search for an audit...") }}" id="searchAudit">
+                </div>
+                <div class="dropdown">
+                    <button class="btn btn-sm btn-outline-secondary dropdown-toggle" type="button" data-bs-toggle="dropdown">
+                        <i class="fas fa-filter me-1"></i> {{ t("Filtrer") }} </button>
+                    <ul class="dropdown-menu dropdown-menu-end">
+                        <li><a class="dropdown-item" href="{{ url_for('liste_audits') }}"> {{ t("All audits") }} </a></li>
+                        <li><a class="dropdown-item" href="{{ url_for('liste_audits', statut='en_cours') }}"> {{ t("Audits in progress") }} </a></li>
+                        <li><a class="dropdown-item" href="{{ url_for('liste_audits', statut='clos') }}"> {{ t("Audits closed") }} </a></li>
+                        <li><a class="dropdown-item" href="{{ url_for('liste_audits', statut='planifie') }}"> {{ t("Planned audits") }} </a></li>
+                        <li><hr class="dropdown-divider"></li>
+                        <li><a class="dropdown-item" href="{{ url_for('liste_audits', type='interne') }}"> {{ t("Internal audits") }} </a></li>
+                        <li><a class="dropdown-item" href="{{ url_for('liste_audits', type='externe') }}"> {{ t("External audits") }} </a></li>
+                    </ul>
+                </div>
+            </div>
+        </div>
+        
+        <div class="fk-card-body p-0">
+            {% if audits %}
+            <div class="table-responsive">
+                <table class="table table-hover align-middle mb-0">
+                    <thead class="table-light">
+                        <tr>
+                            <th class="ps-4" width="120"> {{ t("RÉFÉRENCE") }} </th>
+                            <th> {{ t("TITLE & DESCRIPTION") }} </th>
+                            <th width="120"> {{ t("TYPE") }} </th>
+                            <th width="110"> {{ t("STATUT") }} </th>
+                            <th width="130"> {{ t("SOUS-STATUT") }} </th>
+                            <th width="160"> {{ t("PROGRESSION") }} </th>
+                            <th width="140"> {{ t("DATES") }} </th>
+                            <th width="160" class="text-center pe-4"> {{ t("ACTIONS") }} </th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for audit in audits %}
+                        <tr class="audit-row">
+                            <td class="ps-4">
+                                <div class="d-flex align-items-center">
+                                    <div class="bg-primary bg-opacity-10 rounded p-2 me-3">
+                                        <i class="fas fa-file-contract text-primary"></i>
+                                    </div>
+                                    <div>
+                                        <strong class="font-monospace d-block">{{ audit.reference }}</strong>
+                                        <small class="text-muted">ID: {{ audit.id }}</small>
+                                    </div>
+                                </div>
+                            </td>
+                            <td>
+                                <div>
+                                    <strong class="d-block mb-1">{{ audit.titre }}</strong>
+                                    {% if audit.description %}
+                                    <p class="text-muted mb-0 small text-truncate" style="max-width: 400px;">
+                                        {{ audit.description }}
+                                    </p>
+                                    {% else %}
+                                    <small class="text-muted fst-italic"> {{ t("No description") }} </small>
+                                    {% endif %}
+                                </div>
+                            </td>
+                            <td>
+                                <span class="badge bg-light text-dark border">
+                                    {{ audit.type_audit|default('Non spécifié', true)|title }}
+                                </span>
+                            </td>
+                            <td>
+                                {% if audit.statut == 'clos' %}
+                                <span class="badge bg-success bg-opacity-10 text-success border border-success">
+                                    <i class="fas fa-check-circle me-1"></i> {{ t("Clos") }} </span>
+                                {% elif audit.statut == 'en_cours' %}
+                                <span class="badge bg-warning bg-opacity-10 text-warning border border-warning">
+                                    <i class="fas fa-play-circle me-1"></i> {{ t("En cours") }} </span>
+                                {% elif audit.statut == 'planifie' %}
+                                <span class="badge bg-info bg-opacity-10 text-info border border-info">
+                                    <i class="fas fa-clock me-1"></i> {{ t("Planifié") }} </span>
+                                {% else %}
+                                <span class="badge bg-secondary bg-opacity-10 text-secondary border border-secondary">
+                                    {{ audit.statut|default('Non défini', true)|title }}
+                                </span>
+                                {% endif %}
+                            </td>
+                            <td>
+                                {% if audit.sous_statut %}
+                                <span class="badge bg-light text-dark border">
+                                    <i class="fas fa-layer-group me-1"></i>
+                                    {{ audit.sous_statut|title }}
+                                </span>
+                                {% else %}
+                                <span class="text-muted fst-italic">-</span>
+                                {% endif %}
+                            </td>
+                            <td>
+                                <div class="d-flex align-items-center">
+                                    <div class="flex-grow-1 me-3">
+                                        <div class="d-flex justify-content-between small mb-1">
+                                            <span> {{ t("Progression") }} </span>
+                                            <span class="fw-bold">{{ audit.score_global|default(0) }}%</span>
+                                        </div>
+                                        <div class="progress" style="height: 6px;">
+                                            <div class="progress-bar bg-{{ audit.couleur_progression|default('primary') }}" 
+                                                 style="width: {{ audit.score_global|default(0) }}%"
+                                                 role="progressbar">
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </td>
+                            <td>
+                                {% if audit.date_debut_prevue %}
+                                <div class="small">
+                                    <div class="d-flex align-items-center mb-1">
+                                        <i class="fas fa-calendar-alt text-muted me-2" style="width: 16px;"></i>
+                                        <span>{{ audit.date_debut_prevue.strftime('%d/%m/%Y') }}</span>
+                                    </div>
+                                    {% if audit.date_fin_prevue %}
+                                    <div class="d-flex align-items-center">
+                                        <i class="fas fa-calendar-check text-muted me-2" style="width: 16px;"></i>
+                                        <span>{{ audit.date_fin_prevue.strftime('%d/%m/%Y') }}</span>
+                                    </div>
+                                    {% endif %}
+                                </div>
+                                {% else %}
+                                <span class="text-muted fst-italic"> {{ t("Dates not defined") }} </span>
+                                {% endif %}
+                            </td>
+                            <td class="pe-4">
+                                <div class="d-flex justify-content-center">
+                                    {% if audit.is_archived %}
+                                        <!-- AUDITS ARCHIVÉS - BOUTONS CORRIGÉS -->
+                                        <div class="btn-group btn-group-sm" role="group">
+                                            <a href="{{ url_for('detail_audit', id=audit.id) }}" 
+                                               class="btn btn-outline-secondary" 
+                                               title="{{ t("See details") }}">
+                                                <i class="fas fa-eye"></i>
+                                            </a>
+                                            
+                                            <!-- BOUTON RESTAURER - CORRIGÉ AVEC CSRF -->
+                                            <form action="{{ url_for('restaurer_audit', id=audit.id) }}" 
+                                                  method="POST" 
+                                                  class="d-inline"
+                                                  onsubmit="return confirm('{{ t("Restaurer cet audit ?\\n\\nIl sera déplacé dans la liste active.") }}');">
+                                                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                                                <button type="submit" 
+                                                        class="btn btn-outline-success" 
+                                                        title="{{ t("Restaurer l") }}'audit">
+                                                    <i class="fas fa-redo"></i>
+                                                </button>
+                                            </form>
+                                            
+                                            <!-- BOUTON SUPPRIMER - CORRIGÉ AVEC CSRF -->
+                                            <form action="{{ url_for('supprimer_audit', id=audit.id) }}" 
+                                                  method="POST" 
+                                                  class="d-inline"
+                                                  onsubmit="return confirm('{{ t("ATTENTION : Cette action est irréversible.\\n\\nÊtes-vous sûr de vouloir supprimer définitivement cet audit ?") }}');">
+                                                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                                                <button type="submit" 
+                                                        class="btn btn-outline-danger" 
+                                                        title="{{ t("Permanently delete") }}">
+                                                    <i class="fas fa-trash"></i>
+                                                </button>
+                                            </form>
+                                        </div>
+                                    {% else %}
+                                        <!-- AUDITS ACTIFS - BOUTONS CORRIGÉS -->
+                                        <div class="btn-group btn-group-sm" role="group">
+                                            <a href="{{ url_for('detail_audit', id=audit.id) }}" 
+                                               class="btn btn-outline-primary" 
+                                               title="{{ t("View details") }}">
+                                                <i class="fas fa-eye"></i>
+                                            </a>
+                                            
+                                            <a href="{{ url_for('edit_audit', id=audit.id) }}" 
+                                               class="btn btn-outline-warning" 
+                                               title="{{ t("Modifier l") }}'audit">
+                                                <i class="fas fa-edit"></i>
+                                            </a>
+                                            
+                                            <a href="{{ url_for('dashboard_audit', audit_id=audit.id) }}" 
+                                               class="btn btn-outline-info" 
+                                               title="{{ t("Dashboard") }}">
+                                                <i class="fas fa-chart-line"></i>
+                                            </a>
+                                            
+                                            <!-- BOUTON ARCHIVER - CORRIGÉ AVEC CSRF -->
+                                            <form action="{{ url_for('archive_audit', id=audit.id) }}" 
+                                                  method="POST" 
+                                                  class="d-inline"
+                                                  onsubmit="return confirm('{{ t("Archiver cet audit ?\\n\\nIl sera déplacé dans les archives.") }}');">
+                                                
+                                                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                                                
+                                                <button type="submit" 
+                                                        class="btn btn-outline-secondary" 
+                                                        title="{{ t("Archiver l") }}'audit">
+                                                    <i class="fas fa-archive"></i>
+                                                </button>
+                                            </form>
+                                        </div>
+                                    {% endif %}
+                                </div>
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+            {% else %}
+            <div class="text-center py-5">
+                <div class="mb-4">
+                    <i class="fas fa-clipboard-list fa-5x text-muted opacity-10"></i>
+                </div>
+                <h4 class="mb-3">
+                    {% if show_archived %}
+                    Aucun audit archivé pour le moment
+                    {% else %}
+                    Aucun audit créé pour le moment
+                    {% endif %}
+                </h4>
+                <p class="text-muted mb-4" style="max-width: 500px; margin: 0 auto;">
+                    {% if show_archived %}
+                    Les audits que vous archivez apparaîtront dans cette section pour consultation historique.
+                    {% else %}
+                    Commencez par créer votre premier audit pour initier le processus de contrôle et d'amélioration continue.
+                    {% endif %}
+                </p>
+                {% if not show_archived %}
+                <a href="{{ url_for('nouvel_audit') }}" class="fk-btn fk-btn-primary px-4">
+                    <i class="fas fa-plus-circle me-2"></i> {{ t("Create my first audit") }} </a>
+                {% else %}
+                <a href="{{ url_for('liste_audits') }}" class="fk-btn fk-btn-outline px-4">
+                    <i class="fas fa-arrow-left me-2"></i> {{ t("Return to active audits") }} </a>
+                {% endif %}
+            </div>
+            {% endif %}
+        </div>
+
+        {% if audits and audits|length > 0 %}
+        <div class="fk-card-footer">
+            <div class="d-flex justify-content-between align-items-center">
+                <div>
+                    <small class="text-muted">
+                        <i class="fas fa-info-circle me-1"></i>
+                        Affichage de 1 à {{ audits|length }} audit{% if audits|length > 1 %}s{% endif %}
+                        {% if stats.total %}sur {{ stats.total }} au total{% endif %}
+                    </small>
+                </div>
+                <div>
+                    <small class="text-muted">
+                        <i class="fas fa-clock me-1"></i>
+                        Dernière mise à jour : {{ now.strftime('%d/%m/%Y %H:%M') if now else 'Aujourd\'hui' }}
+                    </small>
+                </div>
+            </div>
+        </div>
+        {% endif %}
+    </div>
+
+    {% if not show_archived %}
+    <div class="row mt-4">
+        <div class="col-lg-4 mb-4">
+            <div class="fk-card h-100">
+                <div class="fk-card-header">
+                    <h6 class="mb-0">
+                        <i class="fas fa-question-circle me-2 text-info"></i> {{ t("Guide rapide") }} </h6>
+                </div>
+                <div class="fk-card-body">
+                    <div class="mb-3">
+                        <h6 class="text-primary"> {{ t("1. Création") }} </h6>
+                        <p class="small text-muted mb-0"> {{ t("Cliquez sur \"New Audit\" pour initier un nouveau programme d'audit.") }} </p>
+                    </div>
+                    <div class="mb-3">
+                        <h6 class="text-primary"> {{ t("2. Planning") }} </h6>
+                        <p class="small text-muted mb-0"> {{ t("Define the scope, objectives and audit team.") }} </p>
+                    </div>
+                    <div class="mb-3">
+                        <h6 class="text-primary"> {{ t("3. Exécution") }} </h6>
+                        <p class="small text-muted mb-0"> {{ t("Collect audit evidence and identify discrepancies.") }} </p>
+                    </div>
+                    <div class="mb-3">
+                        <h6 class="text-primary"> {{ t("4. Clôture") }} </h6>
+                        <p class="small text-muted mb-0"> {{ t("Write the report and archive it once the actions are completed.") }} </p>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <div class="col-lg-8 mb-4">
+            <div class="fk-card h-100">
+                <div class="fk-card-header d-flex justify-content-between align-items-center">
+                    <h6 class="mb-0">
+                        <i class="fas fa-bell me-2 text-warning"></i> {{ t("Next deadlines") }} </h6>
+                    <a href="{{ url_for('liste_audits') }}" class="small">
+                        <i class="fas fa-calendar-alt me-1"></i> {{ t("See the list") }} </a>
+                </div>
+                <div class="fk-card-body">
+                    <div class="table-responsive">
+                        <table class="table table-sm table-borderless">
+                            <tbody>
+                                {% for audit in audits if audit.date_fin_prevue and audit.statut != 'clos' %}
+                                {% set jours_restants = (audit.date_fin_prevue.date() - now.date()).days if now else 0 %}
+                                {% if jours_restants <= 7 and jours_restants >= 0 %}
+                                <tr>
+                                    <td width="40">
+                                        <div class="bg-warning bg-opacity-10 rounded p-2 text-center">
+                                            <i class="fas fa-exclamation text-warning"></i>
+                                        </div>
+                                    </td>
+                                    <td>
+                                        <strong>{{ audit.reference }}</strong>
+                                        <div class="small text-muted">{{ audit.titre|truncate(50) }}</div>
+                                    </td>
+                                    <td class="text-end">
+                                        <div class="small">
+                                            <div>Échéance : {{ audit.date_fin_prevue.strftime('%d/%m/%Y') }}</div>
+                                            <div class="text-warning">
+                                                <i class="fas fa-clock me-1"></i>
+                                                {{ jours_restants }} jour{% if jours_restants > 1 %}s{% endif %} restant{% if jours_restants > 1 %}s{% endif %}
+                                            </div>
+                                        </div>
+                                    </td>
+                                    <td width="80" class="text-end">
+                                        <a href="{{ url_for('detail_audit', id=audit.id) }}" class="btn btn-sm btn-outline-warning">
+                                            <i class="fas fa-arrow-right"></i>
+                                        </a>
+                                    </td>
+                                </tr>
+                                {% endif %}
+                                {% else %}
+                                <tr>
+                                    <td colspan="4" class="text-center text-muted py-3">
+                                        <i class="fas fa-check-circle me-2"></i> {{ t("No imminent deadline") }} </td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    {% endif %}
+</div>
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    console.log("✅ audits.html chargé - version corrigée");
+    
+    // Debug: Log tous les formulaires
+    const allForms = document.querySelectorAll('form');
+    console.log(`📋 Trouvé ${allForms.length} formulaires`);
+    
+    allForms.forEach((form, index) => {
+        const action = form.getAttribute('action') || 'no-action';
+        const csrfInput = form.querySelector('input[name="csrf_token"]');
+        const hasCSRF = csrfInput ? '✅' : '❌';
+        
+        console.log(`  Form ${index + 1}: ${action} - CSRF: ${hasCSRF}`);
+        
+        // Ajouter un listener pour debug
+        form.addEventListener('submit', function(e) {
+            console.log(`🔍 Form submit: ${action}`);
+            console.log(`🔍 CSRF token présent: ${!!csrfInput}`);
+            
+            if (!csrfInput) {
+                console.error('❌ ERREUR: Pas de CSRF token!');
+                // Ne pas empêcher l'envoi pour voir l'erreur côté serveur
+            }
+        });
+    });
+    
+    // Animation des lignes du tableau
+    const tableRows = document.querySelectorAll('tbody tr.audit-row');
+    tableRows.forEach((row, index) => {
+        row.style.opacity = '0';
+        row.style.transform = 'translateY(20px)';
+        row.style.transition = 'all 0.4s ease-out';
+        
+        setTimeout(() => {
+            row.style.opacity = '1';
+            row.style.transform = 'translateY(0)';
+        }, 50 * index);
+    });
+    
+    // Recherche en temps réel
+    const searchInput = document.getElementById('searchAudit');
+    if (searchInput) {
+        searchInput.addEventListener('keyup', function() {
+            const searchTerm = this.value.toLowerCase();
+            const rows = document.querySelectorAll('tbody tr.audit-row');
+            
+            rows.forEach(row => {
+                const rowText = row.textContent.toLowerCase();
+                if (rowText.includes(searchTerm)) {
+                    row.style.display = '';
+                    row.style.opacity = '1';
+                } else {
+                    row.style.opacity = '0.3';
+                    setTimeout(() => {
+                        row.style.display = 'none';
+                    }, 300);
+                }
+            });
+        });
+    }
+    
+    // Gestion améliorée des confirmations
+    const confirmButtons = document.querySelectorAll('button[onclick*="confirm"], form[onsubmit*="confirm"]');
+    confirmButtons.forEach(element => {
+        if (element.tagName === 'BUTTON') {
+            element.addEventListener('click', function(e) {
+                const form = this.closest('form');
+                if (form) {
+                    const csrf = form.querySelector('input[name="csrf_token"]');
+                    if (!csrf || !csrf.value) {
+                        console.error('❌ CSRF token manquant!');
+                        alert('Erreur de sécurité: CSRF token manquant. Rechargez la page.');
+                        e.preventDefault();
+                        return false;
+                    }
+                }
+            });
+        }
+    });
+    
+    // Effet de survol sur les cartes de statistiques
+    const statCards = document.querySelectorAll('.hover-lift');
+    statCards.forEach(card => {
+        card.addEventListener('mouseenter', function() {
+            this.style.transform = 'translateY(-5px)';
+        });
+        
+        card.addEventListener('mouseleave', function() {
+            this.style.transform = 'translateY(0)';
+        });
+    });
+    
+    // Tooltips
+    const tooltipTriggerList = [].slice.call(document.querySelectorAll('[title]'));
+    const tooltipList = tooltipTriggerList.map(function (tooltipTriggerEl) {
+        return new bootstrap.Tooltip(tooltipTriggerEl);
+    });
+    
+    // Survol des lignes avec effet subtil
+    tableRows.forEach(row => {
+        row.addEventListener('mouseenter', function() {
+            this.style.backgroundColor = 'rgba(251, 191, 36, 0.03)';
+            this.style.boxShadow = '0 2px 8px rgba(0,0,0,0.05)';
+        });
+        
+        row.addEventListener('mouseleave', function() {
+            this.style.backgroundColor = '';
+            this.style.boxShadow = '';
+        });
+    });
+    
+    // Vérification CSRF globale
+    function checkAllCSRFTokens() {
+        const formsWithoutCSRF = [];
+        document.querySelectorAll('form').forEach(form => {
+            if (!form.querySelector('input[name="csrf_token"]')) {
+                formsWithoutCSRF.push(form.getAttribute('action'));
+            }
+        });
+        
+        if (formsWithoutCSRF.length > 0) {
+            console.warn('⚠️ Formulaires sans CSRF token:', formsWithoutCSRF);
+        } else {
+            console.log('✅ Tous les formulaires ont un CSRF token');
+        }
+    }
+    
+    // Exécuter la vérification
+    setTimeout(checkAllCSRFTokens, 1000);
+});
+</script>
+
+<style>
+/* Variables supplémentaires */
+:root {
+    --fk-purple: #8B5CF6;
+    --border-color: #e2e8f0;
+}
+
+/* Styles spécifiques pour cette page */
+.fk-card.hover-lift {
+    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    cursor: pointer;
+}
+
+.fk-card.hover-lift:hover {
+    transform: translateY(-5px);
+    box-shadow: 0 8px 25px rgba(0, 0, 0, 0.1);
+}
+
+.table-hover tbody tr {
+    transition: all 0.3s ease;
+    border-bottom: 1px solid var(--border-color);
+}
+
+.table-hover tbody tr:hover {
+    background-color: rgba(251, 191, 36, 0.03) !important;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.05);
+}
+
+.table thead th {
+    font-weight: 600;
+    text-transform: uppercase;
+    font-size: 0.75rem;
+    letter-spacing: 0.5px;
+    color: #64748b;
+    border-bottom: 2px solid var(--border-color);
+    background-color: #f8fafc;
+}
+
+.table tbody td {
+    padding: 1rem 0.75rem;
+    vertical-align: middle;
+}
+
+.badge.bg-light {
+    background-color: #f1f5f9 !important;
+    border: 1px solid #cbd5e1;
+}
+
+.bg-purple {
+    background-color: var(--fk-purple) !important;
+}
+
+.text-purple {
+    color: var(--fk-purple) !important;
+}
+
+.progress {
+    border-radius: 10px;
+    overflow: hidden;
+    background-color: #e2e8f0;
+}
+
+.progress-bar {
+    border-radius: 10px;
+}
+
+/* Styles pour les formulaires dans les boutons */
+.btn-group form {
+    display: inline;
+    margin: 0;
+    padding: 0;
+}
+
+.btn-group form button {
+    border-radius: 0 !important;
+    margin-left: -1px;
+}
+
+.btn-group > :first-child:not(.dropdown-toggle) {
+    border-top-left-radius: 6px !important;
+    border-bottom-left-radius: 6px !important;
+}
+
+.btn-group > :last-child:not(.dropdown-toggle) {
+    border-top-right-radius: 6px !important;
+    border-bottom-right-radius: 6px !important;
+}
+
+/* Responsive */
+@media (max-width: 1200px) {
+    .table-responsive {
+        font-size: 0.875rem;
+    }
+}
+
+@media (max-width: 992px) {
+    .d-flex.justify-content-between {
+        flex-direction: column;
+        align-items: flex-start !important;
+    }
+    
+    .btn-toolbar {
+        margin-top: 1rem;
+        width: 100%;
+        justify-content: flex-start;
+        flex-wrap: wrap;
+    }
+    
+    .btn-group {
+        margin-bottom: 0.5rem;
+    }
+    
+    .fk-card-header .d-flex {
+        flex-direction: column;
+        align-items: flex-start !important;
+    }
+    
+    .fk-card-header .input-group,
+    .fk-card-header .dropdown {
+        margin-top: 1rem;
+        width: 100%;
+    }
+}
+
+@media (max-width: 768px) {
+    .table th,
+    .table td {
+        padding: 0.75rem 0.5rem;
+    }
+    
+    .btn-group {
+        flex-wrap: wrap;
+    }
+    
+    .btn-group form {
+        margin-bottom: 2px;
+    }
+    
+    h1.h3 {
+        font-size: 1.25rem;
+    }
+    
+    .breadcrumb {
+        font-size: 0.875rem;
+    }
+}
+
+/* Animation pour le contenu */
+@keyframes fadeInUp {
+    from {
+        opacity: 0;
+        transform: translateY(20px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+.container-fluid > * {
+    animation: fadeInUp 0.5s ease-out;
+}
+
+/* Amélioration du badge progression dans le tableau */
+.progress-bar {
+    position: relative;
+    overflow: visible;
+}
+
+.progress-bar::after {
+    content: '';
+    position: absolute;
+    right: -6px;
+    top: 50%;
+    transform: translateY(-50%);
+    width: 12px;
+    height: 12px;
+    background-color: currentColor;
+    border-radius: 50%;
+    border: 2px solid white;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.2);
+}
+
+/* Style pour les formulaires invisibles mais fonctionnels */
+form.d-inline {
+    display: inline !important;
+}
+</style>
+{% endblock %}
