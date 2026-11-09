@@ -1,0 +1,2221 @@
+Only in tplzip/templates: _macros
+diff -ru -x '*.pdf' tpl_orig/templates/audit/detail_audit.html tplzip/templates/audit/detail_audit.html
+--- tpl_orig/templates/audit/detail_audit.html	2026-07-21 02:35:55.000000000 +0200
++++ tplzip/templates/audit/detail_audit.html	2026-11-04 16:54:35.149192822 +0100
+@@ -1,4 +1,5 @@
+ {% extends "base.html" %}
++{% import "_macros/cotation.html" as cot %}
+ 
+ {% block content %}
+ <style>
+@@ -1503,6 +1504,11 @@
+                         <!-- ========================================== -->
+                         <!-- STATISTIQUES DES RISQUES -->
+                         <!-- ========================================== -->
++                        {% set ns_cot = namespace(critiques=0, eleves=0) %}
++                        {% for rd in risques_associes %}
++                            {% set n_net = cotation_evaluation(rd.derniere_evaluation).niveau_net %}
++                            {% if n_net == 'Critique' %}{% set ns_cot.critiques = ns_cot.critiques + 1 %}{% elif n_net == 'Élevé' %}{% set ns_cot.eleves = ns_cot.eleves + 1 %}{% endif %}
++                        {% endfor %}
+                         <div class="row g-3 mb-4">
+                             <div class="col-md-3">
+                                 <div class="stat-card text-center p-2">
+@@ -1512,14 +1518,14 @@
+                             </div>
+                             <div class="col-md-3">
+                                 <div class="stat-card text-center p-2">
+-                                    <h4 class="text-danger">{{ risques_associes|selectattr('risque.niveau_criticite', 'equalto', 'Critique')|list|length }}</h4>
+-                                    <small class="text-muted">{{ t("Critiques") }}</small>
++                                    <h4 class="cot-texte-critique">{{ ns_cot.critiques }}</h4>
++                                    <small class="text-muted">{{ t("Critiques") }} (net)</small>
+                                 </div>
+                             </div>
+                             <div class="col-md-3">
+                                 <div class="stat-card text-center p-2">
+-                                    <h4 class="text-warning">{{ risques_associes|selectattr('risque.niveau_criticite', 'equalto', 'Élevé')|list|length }}</h4>
+-                                    <small class="text-muted">{{ t("Élevés") }}</small>
++                                    <h4 class="cot-texte-eleve">{{ ns_cot.eleves }}</h4>
++                                    <small class="text-muted">{{ t("Élevés") }} (net)</small>
+                                 </div>
+                             </div>
+                             <div class="col-md-3">
+@@ -1543,27 +1549,19 @@
+                         {% set constats_risque = constatations|selectattr('risque_id', 'equalto', risque.id)|list %}
+                         {% set nb_constats = constats_risque|length %}
+                         
+-                        <div class="card mb-4 border-{{ 'danger' if risque.niveau_criticite == 'Critique' else 'warning' if risque.niveau_criticite == 'Élevé' else 'info' if risque.niveau_criticite == 'Moyen' else 'success' }}">
++                        {% set c_ev = cotation_evaluation(derniere_eval) %}
++                        <div class="card mb-4" style="border: 1px solid {{ cot.hex(c_ev.niveau_net) }};">
+                             <!-- ===== EN-TÊTE ===== -->
+-                            <div class="card-header d-flex justify-content-between align-items-center flex-wrap gap-2"
+-                                style="background: {% if risque.niveau_criticite == 'Critique' %}rgba(239,68,68,0.06){% elif risque.niveau_criticite == 'Élevé' %}rgba(245,158,11,0.06){% elif risque.niveau_criticite == 'Moyen' %}rgba(59,130,246,0.06){% else %}rgba(16,185,129,0.06){% endif %};">
++                            <div class="card-header d-flex justify-content-between align-items-center flex-wrap gap-2 cot-fond-{{ cot.cle(c_ev.niveau_net) }}">
+                                 <div class="d-flex align-items-center gap-3 flex-wrap">
+                                     <!-- Référence -->
+                                     <a href="{{ url_for('detail_risque', id=risque.id) }}" target="_blank" class="text-decoration-none fw-bold">
+                                         {{ risque.reference }}
+                                     </a>
+                                     <!-- Niveau -->
+-                                    <span class="badge 
+-                                        {% if risque.niveau_criticite == 'Critique' %}bg-danger
+-                                        {% elif risque.niveau_criticite == 'Élevé' %}bg-warning
+-                                        {% elif risque.niveau_criticite == 'Moyen' %}bg-info
+-                                        {% else %}bg-success{% endif %}">
+-                                        {{ risque.niveau_criticite }}
+-                                    </span>
+-                                    <!-- Score -->
+-                                    {% if derniere_eval %}
+-                                    <span class="badge bg-secondary">Score: {{ derniere_eval.score_risque }}</span>
+-                                    {% endif %}
++                                    {{ cot.badge(c_ev.niveau_net) }}
++                                    <!-- Score brut → net -->
++                                    {% if c_ev.evalue %}{{ cot.brut_net(c_ev.score_brut, c_ev.score_net, c_ev.taux_reduction, compact=True) }}{% endif %}
+                                     <!-- Catégorie -->
+                                     <span class="badge bg-secondary">{{ risque.categorie or 'Non classé' }}</span>
+                                     <!-- Nombre de constats -->
+@@ -2793,11 +2791,11 @@
+                                         data-reference="{{ risque.reference }}"
+                                         data-intitule="{{ risque.intitule }}"
+                                         data-categorie="{{ risque.categorie }}"
+-                                        data-niveau="{% if risque.evaluations %}{% set derniere_eval = risque.evaluations|sort(attribute='created_at')|last %}{{ derniere_eval.niveau_risque }}{% else %}Non évalué{% endif %}">
++                                        data-niveau="{% if risque.evaluations %}{% set derniere_eval = risque.evaluations|sort(attribute='created_at')|last %}{{ cotation_evaluation(derniere_eval).niveau_net }}{% else %}Non évalué{% endif %}">
+                                     {{ risque.reference }} - {{ risque.intitule }} 
+                                     {% if risque.evaluations %}
+                                         {% set derniere_eval = risque.evaluations|sort(attribute='created_at')|last %}
+-                                        - {{ derniere_eval.niveau_risque }} (Score: {{ derniere_eval.score_risque }})
++                                        {% set c_opt = cotation_evaluation(derniere_eval) %}- {{ c_opt.niveau_net }} (brut {{ cot.fmt(c_opt.score_brut) }} → net {{ cot.fmt(c_opt.score_net) }})
+                                     {% endif %}
+                                     - {{ risque.cartographie.nom }}
+                                 </option>
+@@ -3044,11 +3042,11 @@
+                                         data-reference="{{ risque.reference }}"
+                                         data-intitule="{{ risque.intitule }}"
+                                         data-categorie="{{ risque.categorie }}"
+-                                        data-niveau="{% if risque.evaluations %}{% set derniere_eval = risque.evaluations|sort(attribute='created_at')|last %}{{ derniere_eval.niveau_risque }}{% else %}Non évalué{% endif %}">
++                                        data-niveau="{% if risque.evaluations %}{% set derniere_eval = risque.evaluations|sort(attribute='created_at')|last %}{{ cotation_evaluation(derniere_eval).niveau_net }}{% else %}Non évalué{% endif %}">
+                                     {{ risque.reference }} - {{ risque.intitule }} 
+                                     {% if risque.evaluations %}
+                                         {% set derniere_eval = risque.evaluations|sort(attribute='created_at')|last %}
+-                                        - {{ derniere_eval.niveau_risque }} (Score: {{ derniere_eval.score_risque }})
++                                        {% set c_opt = cotation_evaluation(derniere_eval) %}- {{ c_opt.niveau_net }} (brut {{ cot.fmt(c_opt.score_brut) }} → net {{ cot.fmt(c_opt.score_net) }})
+                                     {% endif %}
+                                     - {{ risque.cartographie.nom }}
+                                 </option>
+@@ -3153,11 +3151,11 @@
+                                         data-reference="{{ risque.reference }}"
+                                         data-intitule="{{ risque.intitule }}"
+                                         data-categorie="{{ risque.categorie }}"
+-                                        data-niveau="{% if risque.evaluations %}{% set derniere_eval = risque.evaluations|sort(attribute='created_at')|last %}{{ derniere_eval.niveau_risque }}{% else %}Non évalué{% endif %}">
++                                        data-niveau="{% if risque.evaluations %}{% set derniere_eval = risque.evaluations|sort(attribute='created_at')|last %}{{ cotation_evaluation(derniere_eval).niveau_net }}{% else %}Non évalué{% endif %}">
+                                     {{ risque.reference }} - {{ risque.intitule }} 
+                                     {% if risque.evaluations %}
+                                         {% set derniere_eval = risque.evaluations|sort(attribute='created_at')|last %}
+-                                        - {{ derniere_eval.niveau_risque }} (Score: {{ derniere_eval.score_risque }})
++                                        {% set c_opt = cotation_evaluation(derniere_eval) %}- {{ c_opt.niveau_net }} (brut {{ cot.fmt(c_opt.score_brut) }} → net {{ cot.fmt(c_opt.score_net) }})
+                                     {% endif %}
+                                     - {{ risque.cartographie.nom }}
+                                 </option>
+@@ -3718,12 +3716,12 @@
+                                         data-reference="{{ risque.reference }}"
+                                         data-intitule="{{ risque.intitule }}"
+                                         data-categorie="{{ risque.categorie }}"
+-                                        data-niveau="{% if risque.evaluations %}{% set derniere_eval = risque.evaluations|sort(attribute='created_at')|last %}{{ derniere_eval.niveau_risque }}{% else %}Non évalué{% endif %}"
++                                        data-niveau="{% if risque.evaluations %}{% set derniere_eval = risque.evaluations|sort(attribute='created_at')|last %}{{ cotation_evaluation(derniere_eval).niveau_net }}{% else %}Non évalué{% endif %}"
+                                         {% if recommandation.risque_id == risque.id %}selected{% endif %}>
+                                     {{ risque.reference }} - {{ risque.intitule }} 
+                                     {% if risque.evaluations %}
+                                         {% set derniere_eval = risque.evaluations|sort(attribute='created_at')|last %}
+-                                        - {{ derniere_eval.niveau_risque }} (Score: {{ derniere_eval.score_risque }})
++                                        {% set c_opt = cotation_evaluation(derniere_eval) %}- {{ c_opt.niveau_net }} (brut {{ cot.fmt(c_opt.score_brut) }} → net {{ cot.fmt(c_opt.score_net) }})
+                                     {% endif %}
+                                     - {{ risque.cartographie.nom }}
+                                 </option>
+@@ -3746,7 +3744,7 @@
+                                 <span id="risqueNiveauModif{{ recommandation.id }}" class="risque-niveau">
+                                     {% if recommandation.risque and recommandation.risque.evaluations %}
+                                         {% set derniere_eval = recommandation.risque.evaluations|sort(attribute='created_at')|last %}
+-                                        {{ derniere_eval.niveau_risque }}
++                                        {{ cotation_evaluation(derniere_eval).niveau_net }}
+                                     {% endif %}
+                                 </span>
+                             </small>
+@@ -4425,13 +4423,8 @@
+     }
+     
+     function getClasseNiveau(niveau) {
+-        switch(niveau) {
+-            case 'Critique': return 'risque-critique';
+-            case 'Élevé': return 'risque-eleve';
+-            case 'Moyen': return 'risque-moyen';
+-            case 'Faible': return 'risque-faible';
+-            default: return 'risque-non-evalue';
+-        }
++        // Couleurs de la règle unique (EgalyxCotation, voir base.html)
++        return 'cot-badge cot-' + EgalyxCotation.cle(niveau);
+     }
+ 
+     // ===========================
+diff -ru -x '*.pdf' tpl_orig/templates/audit/editer_feuille_travail.html tplzip/templates/audit/editer_feuille_travail.html
+--- tpl_orig/templates/audit/editer_feuille_travail.html	2026-10-21 01:28:09.000000000 +0200
++++ tplzip/templates/audit/editer_feuille_travail.html	2026-11-04 17:00:52.254474345 +0100
+@@ -1,4 +1,5 @@
+ {% extends "base.html" %}
++{% import "_macros/cotation.html" as cot %}
+ 
+ {% block title %}Éditeur - {{ feuille.reference }} {{ feuille.titre }}{% endblock %}
+ 
+@@ -216,7 +217,7 @@
+                     <div class="info-item-modern"><div class="info-item-label"><i class="fas fa-text-width"></i> Intitulé</div><div class="info-item-value">{{ risque.intitule }}</div></div>
+                     <div class="info-item-modern"><div class="info-item-label"><i class="fas fa-building"></i> Processus</div><div class="info-item-value">{{ risque.processus_concerne or 'Non spécifié' }}</div></div>
+                     <div class="info-item-modern"><div class="info-item-label"><i class="fas fa-user"></i> Propriétaire</div><div class="info-item-value">{{ risque.proprietaire.username if risque.proprietaire else 'Non assigné' }}</div></div>
+-                    <div class="info-item-modern"><div class="info-item-label"><i class="fas fa-chart-bar"></i> Criticité</div><div class="info-item-value"><span class="badge {% if risque.niveau_criticite == 'Critique' %}bg-danger{% elif risque.niveau_criticite == 'Élevé' %}bg-warning{% elif risque.niveau_criticite == 'Moyen' %}bg-info{% else %}bg-success{% endif %}">{{ risque.niveau_criticite or 'Non défini' }}</span>{% if risque.score_risque %}<span class="badge bg-secondary ms-1">Score: {{ risque.score_risque }}</span>{% endif %}</div></div>
++                    <div class="info-item-modern"><div class="info-item-label"><i class="fas fa-chart-bar"></i> Criticité</div><div class="info-item-value">{% set ev_r = (risque.evaluations|sort(attribute='created_at')|last) if risque.evaluations else none %}{% if ev_r %}{{ cot.badge_eval(ev_r) }} <span class="ms-1">{{ cot.brut_net_eval(ev_r, compact=True) }}</span>{% else %}{{ cot.badge(risque.niveau_criticite) }}{% endif %}</div></div>
+                     <div class="info-item-modern"><div class="info-item-label"><i class="fas fa-clock"></i> Dernière évaluation</div><div class="info-item-value">{% if risque.derniere_evaluation %}{{ risque.derniere_evaluation.created_at.strftime('%d/%m/%Y') }}<small class="text-muted d-block">Par: {{ risque.derniere_evaluation.createur.username if risque.derniere_evaluation.createur else 'Système' }}</small>{% else %}<span class="text-muted">Non évalué</span>{% endif %}</div></div>
+                 </div>
+             </div>
+@@ -384,7 +385,7 @@
+                                                    else 'moyen' if 'moyen' in (risque.niveau_net_libelle|lower)
+                                                    else 'faible') -%}
+           {%- set libelle_affichage = risque.niveau_net_libelle if risque.niveau_net_libelle is defined else risque.niveau_criticite -%}
+-          {%- set couleur_affichage = risque.couleur if risque.couleur is defined else '#6b7280' -%}
++          {%- set couleur_affichage = cotation_style(libelle_affichage).hex -%}
+           <span class="risque-badge {{ niveau_risque_canonique }}"
+                 title="{{ risque.reference }} - {{ risque.intitule }}"
+                 style="background:{{ couleur_affichage }};">
+@@ -563,11 +564,7 @@
+       <div class="row g-2" id="risquesCheckboxList">
+         {% for risque in risques_disponibles %}
+         {% set niveau_lower = risque.niveau_net|lower %}
+-        {% set couleur = '#dc2626' if 'critique' in niveau_lower
+-                         else '#ea580c' if 'élevé' in niveau_lower or 'eleve' in niveau_lower
+-                         else '#f59e0b' if 'moyen' in niveau_lower
+-                         else '#10b981' if 'faible' in niveau_lower
+-                         else '#6b7280' %}
++        {% set couleur = cotation_style(risque.niveau_net).hex %}
+         {% set icone = 'fa-fire' if 'critique' in niveau_lower
+                        else 'fa-exclamation-triangle' if 'élevé' in niveau_lower or 'eleve' in niveau_lower
+                        else 'fa-exclamation-circle' if 'moyen' in niveau_lower
+@@ -595,7 +592,7 @@
+                 {% if risque.est_revaluation %}<span class="badge bg-warning text-dark" style="font-size:.6rem;"><i class="fas fa-clock me-1"></i>N-1</span>{% endif %}
+               </div>
+               <div class="small text-truncate" title="{{ risque.intitule }}">{{ risque.intitule }}</div>
+-              <div class="small text-muted">Score NET : <strong style="color:{{ couleur }};">{{ risque.score_net }}</strong>{% if risque.campagne_nom %} • <i class="fas fa-clipboard-list"></i> {{ risque.campagne_nom|truncate(20) }}{% endif %}</div>
++              <div class="small text-muted">Net <strong style="color:{{ couleur }};">{{ cot.fmt(risque.score_net) }}</strong>{% if risque.score_risque_brut %} · brut {{ cot.fmt(risque.score_risque_brut) }}{% endif %}{% if risque.campagne_nom %} • <i class="fas fa-clipboard-list"></i> {{ risque.campagne_nom|truncate(20) }}{% endif %}</div>
+             </div>
+           </label>
+         </div>
+@@ -1050,7 +1047,7 @@
+           niveau_criticite: r.niveau_net || r.niveau_criticite || 'moyen',
+           score_risque: parseFloat(r.score_net || r.score_risque) || 0,
+           niveau_brut: r.niveau_criticite || '',
+-          score_brut: parseFloat(r.score_risque) || 0,
++          score_brut: parseFloat(r.score_risque_brut || r.score_brut) || 0,
+           impact: r.impact || 'modere',
+           probabilite: r.probabilite || 'possible',
+           couleur: r.couleur || '#6b7280',
+@@ -1096,7 +1093,7 @@
+       t.risques_associes.forEach(r=>{
+         const niveauLibelle = r.niveau_net || r.niveau_criticite || '';
+         const n=normaliserNiveau(niveauLibelle);
+-        const couleur=r.couleur || {faible:'#10b981',moyen:'#f59e0b',eleve:'#ef4444',critique:'#dc2626'}[n] || '#6b7280';
++        const couleur={faible:EgalyxCotation.couleur('Faible'),moyen:EgalyxCotation.couleur('Moyen'),eleve:EgalyxCotation.couleur('Élevé'),critique:EgalyxCotation.couleur('Critique')}[n] || EgalyxCotation.couleur('Non évalué');
+         risquesHtml+=`<span class="risque-badge ${n}" style="background:${couleur};">
+           ${escapeHtml(r.reference)}
+           <span class="badge bg-white text-dark ms-1">${escapeHtml(niveauLibelle).toUpperCase()}</span>
+@@ -1236,12 +1233,12 @@
+     el.innerHTML='<div class="text-muted text-center py-3"><i class="fas fa-info-circle me-2"></i>Aucun risque sélectionné</div>';
+     return;
+   }
+-  const couleurs={faible:'#10b981',moyen:'#f59e0b',eleve:'#ef4444',critique:'#dc2626'};
++  const couleurs={faible:EgalyxCotation.couleur('Faible'),moyen:EgalyxCotation.couleur('Moyen'),eleve:EgalyxCotation.couleur('Élevé'),critique:EgalyxCotation.couleur('Critique')};   // règle unique
+   const labels={faible:'FAIBLE',moyen:'MOYEN',eleve:'ÉLEVÉ',critique:'CRITIQUE'};
+   let html='<div class="row g-2">';
+   risquesSelectionnes.forEach((r,i)=>{
+     const niveauNorm=normaliserNiveau(r.niveau_criticite);
+-    const c=r.couleur||couleurs[niveauNorm];
++    const c=couleurs[niveauNorm];
+     const label=labels[niveauNorm];
+     html+=`<div class="col-md-6 col-lg-4">
+       <div class="d-flex justify-content-between align-items-center p-2 border rounded" style="border-left:4px solid ${c}!important">
+@@ -1249,7 +1246,7 @@
+           <strong class="small">${escapeHtml(r.reference)}</strong>
+           <div class="text-truncate small" style="max-width:180px;" title="${escapeHtml(r.intitule)}">${escapeHtml(r.intitule)}</div>
+           <span class="badge" style="background-color:${c};">${label}</span>
+-          <span class="badge bg-secondary ms-1">Score: ${(parseFloat(r.score_risque)||0).toFixed(2)}</span>
++          <span class="badge bg-secondary ms-1">Net ${EgalyxCotation.fmt(r.score_risque)}${r.score_brut ? ' · brut ' + EgalyxCotation.fmt(r.score_brut) : ''}</span>
+           ${r.est_revaluation ? '<span class="badge bg-warning text-dark ms-1">N-1</span>' : ''}
+         </div>
+         <button class="btn btn-sm btn-outline-danger" onclick="retirerRisqueSelectionne(${i})"><i class="fas fa-times"></i></button>
+@@ -1275,7 +1272,7 @@
+   const maxItem=items.reduce((a,b)=>b.scoreNiveau>a.scoreNiveau?b:a,items[0]);
+   const niveau=maxItem.niveauNorm;
+   const labels={faible:'🟢 Faible',moyen:'🟡 Moyen',eleve:'🟠 Élevé',critique:'🔴 Critique'};
+-  const couleurs={faible:'bg-success',moyen:'bg-warning',eleve:'bg-danger',critique:'bg-dark'};
++  const couleurs={faible:'cot-faible',moyen:'cot-moyen',eleve:'cot-eleve',critique:'cot-critique'};   // règle unique
+ 
+   const cb=document.getElementById('criticiteBadge');
+   if(cb){cb.className=`badge ${couleurs[niveau]}`;cb.textContent=labels[niveau]}
+@@ -1287,9 +1284,8 @@
+   if(ng){ng.className=`badge ${couleurs[niveau]}`;ng.textContent=labels[niveau]}
+ 
+   const maxScore=Math.max(...risquesSelectionnes.map(r=>parseFloat(r.score_risque)||0));
+-  const echelle=maxScore>16?25:16;
+   const sc=document.getElementById('scoreRisqueGlobal');
+-  if(sc)sc.textContent=`Score: ${maxScore.toFixed(2)}/${echelle}`;
++  if(sc)sc.textContent=`Score NET max : ${EgalyxCotation.fmt(maxScore)}/25`;
+ 
+   const recommandations={critique:'🔴 Action IMMÉDIATE requise !',eleve:'🟠 Action RAPIDE nécessaire. Surveillance renforcée.',moyen:'🟡 Plan d\'action à programmer.',faible:'🟢 Surveillance courante.'};
+   const rec=document.getElementById('recommandationRisqueGlobal');
+@@ -1305,12 +1301,12 @@
+   if(!list||!wrap)return;
+   if(risquesSelectionnes.length===0){wrap.style.display='none';return}
+   wrap.style.display='block';
+-  const couleurs={faible:'#10b981',moyen:'#f59e0b',eleve:'#ef4444',critique:'#dc2626'};
++  const couleurs={faible:EgalyxCotation.couleur('Faible'),moyen:EgalyxCotation.couleur('Moyen'),eleve:EgalyxCotation.couleur('Élevé'),critique:EgalyxCotation.couleur('Critique')};   // règle unique
+   const labels={faible:'🟢 Faible',moyen:'🟡 Moyen',eleve:'🟠 Élevé',critique:'🔴 Critique'};
+   let html='';
+   risquesSelectionnes.forEach(r=>{
+     const niveauNorm=normaliserNiveau(r.niveau_criticite);
+-    const c=r.couleur||couleurs[niveauNorm];
++    const c=couleurs[niveauNorm];
+     const label=labels[niveauNorm];
+     html+=`<div class="col-md-6"><div class="card p-2" style="border-left:4px solid ${c};">
+       <div class="d-flex justify-content-between align-items-center">
+diff -ru -x '*.pdf' tpl_orig/templates/audit/rapport_complet.html tplzip/templates/audit/rapport_complet.html
+--- tpl_orig/templates/audit/rapport_complet.html	2026-07-14 05:06:48.000000000 +0200
++++ tplzip/templates/audit/rapport_complet.html	2026-11-04 16:54:09.355054629 +0100
+@@ -1,4 +1,5 @@
+ {% extends "base.html" %}
++{% import "_macros/cotation.html" as cot %}
+ 
+ {% block title %}Rapport Complet - {{ audit.reference }}{% endblock %}
+ 
+@@ -549,11 +550,11 @@
+             <div class="risque-grid">
+                 {% for risque_data in risques_associes %}
+                 {% set risque = risque_data.risque %}{% set derniere_eval = risque_data.derniere_evaluation %}
+-                {% set niveau_class = 'risque-critique' if derniere_eval and derniere_eval.niveau_risque == 'Critique' else 'risque-eleve' if derniere_eval and derniere_eval.niveau_risque == 'Élevé' else 'risque-moyen' if derniere_eval and derniere_eval.niveau_risque == 'Moyen' else 'risque-faible' %}
+-                <div class="risque-card {{ niveau_class }}">
+-                    <div class="risque-header"><span class="risque-reference">{{ risque.reference }}</span>{% if derniere_eval %}<span class="risque-niveau">{{ derniere_eval.niveau_risque }}</span>{% endif %}</div>
++                {% set c_ev = cotation_evaluation(derniere_eval) %}
++                <div class="risque-card cot-bord-{{ cot.cle(c_ev.niveau_net) }}">
++                    <div class="risque-header"><span class="risque-reference">{{ risque.reference }}</span>{{ cot.badge(c_ev.niveau_net, petit=True) }}</div>
+                     <div class="risque-intitule">{{ risque.intitule }}</div>
+-                    <div class="risque-score"><i class="fas fa-chart-bar"></i>{% if derniere_eval %}Score: {{ derniere_eval.score_risque }}{% else %}Non évalué{% endif %}</div>
++                    <div class="risque-score"><i class="fas fa-chart-bar"></i>{{ cot.brut_net_eval(derniere_eval, compact=True) }}</div>
+                     <div class="risque-meta mt-2"><small class="text-muted"><i class="fas fa-tag me-1"></i> {{ risque.categorie }}</small><small class="text-muted ms-3"><i class="fas fa-link me-1"></i> {{ risque_data.types_association|join(', ') }}</small></div>
+                 </div>
+                 {% endfor %}
+diff -ru -x '*.pdf' tpl_orig/templates/base.html tplzip/templates/base.html
+--- tpl_orig/templates/base.html	2026-11-04 16:29:06.000000000 +0100
++++ tplzip/templates/base.html	2026-11-04 16:52:50.950953863 +0100
+@@ -602,6 +602,10 @@
+         }
+     </style>
+ 
++    {# Cotation des risques : styles + EgalyxCotation (règle unique, voir cotation.py) #}
++    {% import "_macros/cotation.html" as _cotation %}
++    {{ _cotation.styles() }}
++    {{ _cotation.script() }}
+     {% block styles %}{% endblock %}
+ </head>
+ <body class="{% if not current_user.is_authenticated %}no-sidebar{% endif %}">
+diff -ru -x '*.pdf' tpl_orig/templates/bibliotheque_risques/categorie.html tplzip/templates/bibliotheque_risques/categorie.html
+--- tpl_orig/templates/bibliotheque_risques/categorie.html	2026-05-08 18:24:26.000000000 +0200
++++ tplzip/templates/bibliotheque_risques/categorie.html	2026-11-04 17:00:31.962848932 +0100
+@@ -1,4 +1,5 @@
+ {% extends "base.html" %}
++{% import "_macros/cotation.html" as cot %}
+ 
+ {% block title %}Bibliothèque - {{ categorie|replace('_', ' ')|title }}{% endblock %}
+ 
+@@ -33,9 +34,7 @@
+                 <div class="card-body">
+                     <div class="d-flex justify-content-between align-items-start mb-2">
+                         <span class="badge bg-primary">{{ risque.categorie|replace('_', ' ')|title }}</span>
+-                        <span class="badge {{ 'bg-danger' if risque.niveau_criticite_defaut == 'critique' else 'bg-warning' if risque.niveau_criticite_defaut == 'eleve' else 'bg-info' if risque.niveau_criticite_defaut == 'moyen' else 'bg-success' }}">
+-                            {{ risque.niveau_criticite_defaut or 'moyen'|upper }}
+-                        </span>
++                        {{ cot.badge(risque.niveau_criticite_defaut or 'moyen') }}
+                     </div>
+                     <h5 class="card-title">{{ risque.intitule }}</h5>
+                     <p class="card-text text-muted">{{ risque.description|truncate(100) }}</p>
+diff -ru -x '*.pdf' tpl_orig/templates/bibliotheque_risques/index.html tplzip/templates/bibliotheque_risques/index.html
+--- tpl_orig/templates/bibliotheque_risques/index.html	2026-05-09 08:13:54.000000000 +0200
++++ tplzip/templates/bibliotheque_risques/index.html	2026-11-04 17:00:37.412738202 +0100
+@@ -97,10 +97,11 @@
+         font-size: 11px;
+         font-weight: 600;
+     }
+-    .level-critical { background: #ef4444; color: white; }
+-    .level-high { background: #f59e0b; color: white; }
+-    .level-medium { background: #3b82f6; color: white; }
+-    .level-low { background: #10b981; color: white; }
++    /* Couleurs de la règle unique (variables --cot-* de base.html) ; les valeurs stockées sont critique/eleve/moyen/faible */
++    .level-critical, .level-critique { background: var(--cot-critique); color: white; }
++    .level-high, .level-eleve { background: var(--cot-eleve); color: white; }
++    .level-medium, .level-moyen { background: var(--cot-moyen); color: white; }
++    .level-low, .level-faible { background: var(--cot-faible); color: white; }
+ </style>
+ {% endblock %}
+ 
+diff -ru -x '*.pdf' tpl_orig/templates/cartographie/_carte_original.html tplzip/templates/cartographie/_carte_original.html
+--- tpl_orig/templates/cartographie/_carte_original.html	2026-09-23 01:02:44.000000000 +0200
++++ tplzip/templates/cartographie/_carte_original.html	2026-11-04 16:54:53.244207574 +0100
+@@ -375,10 +375,10 @@
+     border-radius: 999px;
+     font-weight: 600;
+ }
+-.carto-card__niveau--critique   { background: rgba(220,38,38,.1);  color: #dc2626; }
+-.carto-card__niveau--eleve      { background: rgba(245,158,11,.1); color: #d97706; }
+-.carto-card__niveau--moyen      { background: rgba(59,130,246,.1); color: #2563eb; }
+-.carto-card__niveau--faible     { background: rgba(16,185,129,.1); color: #059669; }
++.carto-card__niveau--critique   { background: color-mix(in srgb, var(--cot-critique) 12%, transparent); color: var(--cot-critique); }
++.carto-card__niveau--eleve      { background: color-mix(in srgb, var(--cot-eleve) 12%, transparent);    color: var(--cot-eleve); }
++.carto-card__niveau--moyen      { background: color-mix(in srgb, var(--cot-moyen) 15%, transparent);    color: #a16207; }
++.carto-card__niveau--faible     { background: color-mix(in srgb, var(--cot-faible) 12%, transparent);   color: var(--cot-faible); }
+ .carto-card__niveau--non-evalue { background: rgba(100,116,139,.1);color: #475569; }
+ 
+ /* Badge réévaluation */
+diff -ru -x '*.pdf' tpl_orig/templates/cartographie/analyse_ia.html tplzip/templates/cartographie/analyse_ia.html
+--- tpl_orig/templates/cartographie/analyse_ia.html	2026-08-04 17:18:25.000000000 +0200
++++ tplzip/templates/cartographie/analyse_ia.html	2026-11-04 16:55:03.507004049 +0100
+@@ -1,4 +1,5 @@
+ {% extends "base.html" %}
++{% import "_macros/cotation.html" as cot %}
+ 
+ {% block styles %}
+ {{ super() }}
+@@ -495,28 +496,16 @@
+                     <div class="row">
+                         <!-- Distribution par niveau -->
+                         <div class="col-md-6">
+-                            <h6 class="fw-bold mb-3" style="font-family: 'Georgia', serif;">Distribution par niveau de risque</h6>
++                            <h6 class="fw-bold mb-3" style="font-family: 'Georgia', serif;">Distribution par niveau de risque net</h6>
+                             {% if distribution_niveaux and distribution_niveaux|length > 0 %}
+                                 {% for niveau, count in distribution_niveaux.items() %}
+                                 <div class="mb-2">
+                                     <div class="d-flex justify-content-between">
+-                                        <span>
+-                                            <span class="badge-modern 
+-                                                {% if niveau == 'Critique' %}badge-danger
+-                                                {% elif niveau == 'Élevé' %}badge-warning
+-                                                {% elif niveau == 'Moyen' %}badge-info
+-                                                {% else %}badge-success{% endif %}">
+-                                                {{ niveau }}
+-                                            </span>
+-                                        </span>
++                                        <span>{{ cot.badge(niveau) }}</span>
+                                         <span>{{ count }} risques</span>
+                                     </div>
+                                     <div class="progress-modern mt-1">
+-                                        <div class="progress-modern-bar 
+-                                            {% if niveau == 'Critique' %}danger
+-                                            {% elif niveau == 'Élevé' %}warning
+-                                            {% elif niveau == 'Moyen' %}primary
+-                                            {% else %}success{% endif %}" 
++                                        <div class="progress-modern-bar cot-{{ cot.cle(niveau) }}"
+                                             style="width: {{ (count / total_risques * 100) if total_risques > 0 else 0 }}%;">
+                                         </div>
+                                     </div>
+@@ -542,7 +531,7 @@
+                                         </a>
+                                         <div class="small text-muted">{{ risque.intitule|truncate(50) }}</div>
+                                     </div>
+-                                    <span class="badge-modern badge-danger">Critique</span>
++                                    {{ cot.badge('Critique', petit=True) }}
+                                 </div>
+                                 {% endfor %}
+                             {% else %}
+diff -ru -x '*.pdf' tpl_orig/templates/cartographie/detail.html tplzip/templates/cartographie/detail.html
+--- tpl_orig/templates/cartographie/detail.html	2026-09-20 00:46:11.000000000 +0200
++++ tplzip/templates/cartographie/detail.html	2026-11-04 16:56:51.731030646 +0100
+@@ -1,4 +1,5 @@
+ {% extends "base.html" %}
++{% import "_macros/cotation.html" as cot %}
+ 
+ {# ============================================ #}
+ {# BLOC STYLES - CSS LÉGER ET CIBLÉ            #}
+@@ -389,10 +390,10 @@
+         transform: translateY(-4px);
+         box-shadow: var(--shadow-hover);
+     }
+-    .bordeaux-card.critical { border-top: 4px solid var(--danger); }
+-    .bordeaux-card.high { border-top: 4px solid var(--warning); }
+-    .bordeaux-card.medium { border-top: 4px solid var(--info); }
+-    .bordeaux-card.low { border-top: 4px solid var(--success); }
++    .bordeaux-card.critical { border-top: 4px solid var(--cot-critique); }
++    .bordeaux-card.high { border-top: 4px solid var(--cot-eleve); }
++    .bordeaux-card.medium { border-top: 4px solid var(--cot-moyen); }
++    .bordeaux-card.low { border-top: 4px solid var(--cot-faible); }
+     .bordeaux-header {
+         padding: 1rem 1.25rem;
+         border-bottom: 1px solid var(--border);
+@@ -409,10 +410,10 @@
+         color: white;
+         flex-shrink: 0;
+     }
+-    .bordeaux-card.critical .bordeaux-icon { background: var(--danger); }
+-    .bordeaux-card.high .bordeaux-icon { background: var(--warning); }
+-    .bordeaux-card.medium .bordeaux-icon { background: var(--info); }
+-    .bordeaux-card.low .bordeaux-icon { background: var(--success); }
++    .bordeaux-card.critical .bordeaux-icon { background: var(--cot-critique); }
++    .bordeaux-card.high .bordeaux-icon { background: var(--cot-eleve); }
++    .bordeaux-card.medium .bordeaux-icon { background: var(--cot-moyen); }
++    .bordeaux-card.low .bordeaux-icon { background: var(--cot-faible); }
+     .bordeaux-count {
+         background: white;
+         padding: 0.2rem 0.7rem;
+@@ -420,10 +421,10 @@
+         font-weight: 600;
+         font-size: 0.85rem;
+     }
+-    .bordeaux-card.critical .bordeaux-count { color: var(--danger); }
+-    .bordeaux-card.high .bordeaux-count { color: var(--warning); }
+-    .bordeaux-card.medium .bordeaux-count { color: var(--info); }
+-    .bordeaux-card.low .bordeaux-count { color: var(--success); }
++    .bordeaux-card.critical .bordeaux-count { color: var(--cot-critique); }
++    .bordeaux-card.high .bordeaux-count { color: var(--cot-eleve); }
++    .bordeaux-card.medium .bordeaux-count { color: var(--cot-moyen); }
++    .bordeaux-card.low .bordeaux-count { color: var(--cot-faible); }
+     .bordeaux-body {
+         padding: 1rem 1.25rem;
+         background: white;
+@@ -470,10 +471,10 @@
+         white-space: nowrap;
+         color: white;
+     }
+-    .risk-badge-modern.critical { background: var(--danger); }
+-    .risk-badge-modern.high { background: var(--warning); }
+-    .risk-badge-modern.medium { background: var(--info); }
+-    .risk-badge-modern.low { background: var(--success); }
++    .risk-badge-modern.critical { background: var(--cot-critique); }
++    .risk-badge-modern.high { background: var(--cot-eleve); }
++    .risk-badge-modern.medium { background: var(--cot-moyen); }
++    .risk-badge-modern.low { background: var(--cot-faible); }
+     .risk-description-modern {
+         color: var(--gray);
+         margin-bottom: 0.5rem;
+@@ -587,10 +588,10 @@
+         white-space: nowrap;
+         color: white;
+     }
+-    .level-badge.critical { background: var(--danger); }
+-    .level-badge.high { background: var(--warning); }
+-    .level-badge.medium { background: var(--info); }
+-    .level-badge.low { background: var(--success); }
++    .level-badge.critical { background: var(--cot-critique); }
++    .level-badge.high { background: var(--cot-eleve); }
++    .level-badge.medium { background: var(--cot-moyen); }
++    .level-badge.low { background: var(--cot-faible); }
+     .level-badge.bg-secondary { background: var(--gray); }
+ 
+     /* ACTION BUTTONS */
+@@ -1512,7 +1513,7 @@
+                                     <div class="bordeaux-body">
+                                         {% if tableau_bordeaux.actions_prioritaires %}
+                                             {% for item in tableau_bordeaux.actions_prioritaires %}
+-                                            <div class="risk-card-modern" style="border-left-color: var(--danger);">
++                                            <div class="risk-card-modern" style="border-left-color: var(--cot-critique);">
+                                                 <div class="risk-header-modern">
+                                                     <a href="{{ url_for('matrice_risque_specifique', cartographie_id=cartographie.id, risque_id=item.risque.id) }}?campagne={{ campagne_active.id }}" 
+                                                        class="risk-reference-modern">
+@@ -1522,20 +1523,7 @@
+                                                 </div>
+                                                 <p class="risk-description-modern">{{ item.risque.intitule }}</p>
+                                                 <div class="risk-footer-modern">
+-                                                    <div class="risk-score-modern">
+-                                                        <i class="fas fa-shield-alt me-1" style="color: var(--gold); font-size: 0.7rem;"></i>
+-                                                        <strong>{{ item.score }}</strong>
+-                                                        {% if item.score_brut and item.score_brut != item.score %}
+-                                                        <small class="text-muted" style="font-size: 0.65rem;">
+-                                                            (brut: {{ item.score_brut|round(2) }})
+-                                                            {% if item.taux_reduction > 0 %}
+-                                                            <span class="badge-modern badge-success" style="font-size: 0.55rem; padding: 0px 4px;">
+-                                                                −{{ (item.taux_reduction * 100)|int }}%
+-                                                            </span>
+-                                                            {% endif %}
+-                                                        </small>
+-                                                        {% endif %}
+-                                                    </div>
++                                                    <div class="risk-score-modern">{{ cot.brut_net(item.score_brut, item.score, item.taux_reduction, compact=True) }}</div>
+                                                     <div class="risk-actions-modern">
+                                                         <a href="{{ url_for('detail_risque', id=item.risque.id) }}" class="risk-action-modern">
+                                                             <i class="fas fa-eye"></i>
+@@ -1574,7 +1562,7 @@
+                                     <div class="bordeaux-body">
+                                         {% if tableau_bordeaux.surveillance_renforcee %}
+                                             {% for item in tableau_bordeaux.surveillance_renforcee %}
+-                                            <div class="risk-card-modern" style="border-left-color: var(--warning);">
++                                            <div class="risk-card-modern" style="border-left-color: var(--cot-eleve);">
+                                                 <div class="risk-header-modern">
+                                                     <a href="{{ url_for('matrice_risque_specifique', cartographie_id=cartographie.id, risque_id=item.risque.id) }}?campagne={{ campagne_active.id }}" 
+                                                        class="risk-reference-modern">
+@@ -1584,7 +1572,7 @@
+                                                 </div>
+                                                 <p class="risk-description-modern">{{ item.risque.intitule }}</p>
+                                                 <div class="risk-footer-modern">
+-                                                    <span class="risk-score-modern">Score: {{ item.score }}</span>
++                                                    <span class="risk-score-modern">{{ cot.brut_net(item.score_brut, item.score, item.taux_reduction, compact=True) }}</span>
+                                                     <div class="risk-actions-modern">
+                                                         <a href="{{ url_for('detail_risque', id=item.risque.id) }}" class="risk-action-modern">
+                                                             <i class="fas fa-eye"></i>
+@@ -1623,7 +1611,7 @@
+                                     <div class="bordeaux-body">
+                                         {% if tableau_bordeaux.surveillance_courante %}
+                                             {% for item in tableau_bordeaux.surveillance_courante %}
+-                                            <div class="risk-card-modern" style="border-left-color: var(--info);">
++                                            <div class="risk-card-modern" style="border-left-color: var(--cot-moyen);">
+                                                 <div class="risk-header-modern">
+                                                     <a href="{{ url_for('matrice_risque_specifique', cartographie_id=cartographie.id, risque_id=item.risque.id) }}?campagne={{ campagne_active.id }}" 
+                                                        class="risk-reference-modern">
+@@ -1633,7 +1621,7 @@
+                                                 </div>
+                                                 <p class="risk-description-modern">{{ item.risque.intitule }}</p>
+                                                 <div class="risk-footer-modern">
+-                                                    <span class="risk-score-modern">Score: {{ item.score }}</span>
++                                                    <span class="risk-score-modern">{{ cot.brut_net(item.score_brut, item.score, item.taux_reduction, compact=True) }}</span>
+                                                     <div class="risk-actions-modern">
+                                                         <a href="{{ url_for('detail_risque', id=item.risque.id) }}" class="risk-action-modern">
+                                                             <i class="fas fa-eye"></i>
+@@ -1672,7 +1660,7 @@
+                                     <div class="bordeaux-body">
+                                         {% if tableau_bordeaux.actions_limitees %}
+                                             {% for item in tableau_bordeaux.actions_limitees %}
+-                                            <div class="risk-card-modern" style="border-left-color: var(--success);">
++                                            <div class="risk-card-modern" style="border-left-color: var(--cot-faible);">
+                                                 <div class="risk-header-modern">
+                                                     <a href="{{ url_for('matrice_risque_specifique', cartographie_id=cartographie.id, risque_id=item.risque.id) }}?campagne={{ campagne_active.id }}" 
+                                                        class="risk-reference-modern">
+@@ -1682,7 +1670,7 @@
+                                                 </div>
+                                                 <p class="risk-description-modern">{{ item.risque.intitule }}</p>
+                                                 <div class="risk-footer-modern">
+-                                                    <span class="risk-score-modern">Score: {{ item.score }}</span>
++                                                    <span class="risk-score-modern">{{ cot.brut_net(item.score_brut, item.score, item.taux_reduction, compact=True) }}</span>
+                                                     <div class="risk-actions-modern">
+                                                         <a href="{{ url_for('detail_risque', id=item.risque.id) }}" class="risk-action-modern">
+                                                             <i class="fas fa-eye"></i>
+@@ -1807,13 +1795,7 @@
+                                                     class="risk-ref fw-semibold text-primary text-decoration-none">
+                                                         {{ risque.risque.reference }}
+                                                     </a>
+-                                                    <span class="badge-modern 
+-                                                        {% if risque.evaluation and risque.evaluation.niveau_risque == 'Critique' %}badge-danger
+-                                                        {% elif risque.evaluation and risque.evaluation.niveau_risque == 'Élevé' %}badge-warning
+-                                                        {% elif risque.evaluation and risque.evaluation.niveau_risque == 'Moyen' %}badge-info
+-                                                        {% else %}badge-success{% endif %} ms-2">
+-                                                        {{ risque.evaluation.niveau_risque if risque.evaluation else 'Non évalué' }}
+-                                                    </span>
++                                                    <span class="ms-2">{{ cot.badge_eval(risque.evaluation, petit=True) }}</span>
+                                                 </div>
+                                                 <a href="{{ url_for('liste_dispositifs_risque', risque_id=risque.risque.id) }}" 
+                                                 class="btn-action" style="width: 28px; height: 28px;">
+@@ -1952,14 +1934,14 @@
+         {# ========== SUGGESTION DISPOSITIFS ========== #}
+         {% set risques_a_suggérer = [] %}
+         {% for item in risques_avec_evaluation %}
+-            {% set niveau = item.evaluation.niveau_risque if item.evaluation else None %}
++            {% set niveau = item.niveau_net if item.est_evalue else None %}
+             {% if niveau in ['Moyen', 'Élevé', 'Critique'] %}
+                 {% set dispositifs_existants = item.risque.dispositifs_maitrise|list|length %}
+                 {% if dispositifs_existants == 0 %}
+                     {% set _ = risques_a_suggérer.append({
+                         'risque': item.risque,
+                         'niveau': niveau,
+-                        'score': item.evaluation.score_risque if item.evaluation else 0
++                        'score': item.score_net if item.est_evalue else 0
+                     }) %}
+                 {% endif %}
+             {% endif %}
+@@ -2006,7 +1988,7 @@
+                                                 {% else %}badge-info{% endif %}">
+                                                 {{ suggestion.niveau }}
+                                             </span>
+-                                            <div class="mt-1"><small class="text-muted">Score: {{ suggestion.score }}</small></div>
++                                            <div class="mt-1">{{ cot.badge_score(suggestion.score, prefixe='Net', petit=True) }}</div>
+                                         </div>
+                                     </div>
+                                     <div class="mt-3">
+@@ -2134,7 +2116,7 @@
+                                     {% set evaluation = item.evaluation %}
+                                     {% set nb_dispositifs = risque.dispositifs_maitrise_list|length %}
+                                     <tr class="risk-row-modern {% if not item.est_evalue %}table-warning{% endif %}" 
+-                                        data-niveau="{{ evaluation.niveau_risque if evaluation else 'Non évalué' }}" 
++                                        data-niveau="{{ item.niveau_net if item.est_evalue else 'Non évalué' }}" 
+                                         data-categorie="{{ risque.categorie }}"
+                                         onclick="highlightRisk('{{ risque.id }}')">
+                                         <td><div class="risk-ref">{{ risque.reference }}</div></td>
+@@ -2195,17 +2177,7 @@
+                                         {# ====== ✅ NOUVELLE COLONNE : SCORE BRUT / NET ====== #}
+                                         <td>
+                                             {% if item.est_evalue %}
+-                                                <div style="font-size: 0.7rem; color: var(--gray);">
+-                                                    <i class="fas fa-fire me-1"></i>Brut: <strong>{{ item.score_brut|round(2) }}</strong>
+-                                                </div>
+-                                                <div class="fw-bold" style="color: var(--primary); font-size: 0.95rem;">
+-                                                    <i class="fas fa-shield-alt me-1"></i>Net: {{ item.score }}
+-                                                </div>
+-                                                {% if item.taux_reduction > 0 %}
+-                                                <small class="badge-modern badge-success" style="font-size: 0.6rem; padding: 1px 6px;">
+-                                                    −{{ (item.taux_reduction * 100)|int }}%
+-                                                </small>
+-                                                {% endif %}
++                                                {{ cot.brut_net(item.score_brut, item.score, item.taux_reduction) }}
+                                             {% else %}
+                                                 <span class="text-muted">-</span>
+                                             {% endif %}
+@@ -2214,20 +2186,12 @@
+                                         {# ====== COLONNE NIVEAU (utilise NET) ====== #}
+                                         <td>
+                                             {% if item.est_evalue and item.niveau %}
+-                                                <span class="level-badge 
+-                                                    {% if item.niveau == 'Critique' %}critical
+-                                                    {% elif item.niveau == 'Élevé' %}high
+-                                                    {% elif item.niveau == 'Moyen' %}medium
+-                                                    {% else %}low{% endif %}">
+-                                                    {{ item.niveau }}
+-                                                </span>
++                                                {{ cot.badge(item.niveau) }}
+                                                 {% if item.niveau_brut and item.niveau_brut != item.niveau %}
+-                                                <div class="small text-muted" style="font-size: 0.65rem;">
+-                                                    (brut: {{ item.niveau_brut }})
+-                                                </div>
++                                                <div class="small text-muted mt-1" style="font-size: 0.65rem;">brut : {{ cot.badge(item.niveau_brut, petit=True) }}</div>
+                                                 {% endif %}
+                                             {% else %}
+-                                                <span class="level-badge bg-secondary">Non évalué</span>
++                                                {{ cot.badge(none) }}
+                                             {% endif %}
+                                         </td>
+ 
+diff -ru -x '*.pdf' tpl_orig/templates/cartographie/evaluation.html tplzip/templates/cartographie/evaluation.html
+--- tpl_orig/templates/cartographie/evaluation.html	2025-10-24 04:31:46.000000000 +0200
++++ tplzip/templates/cartographie/evaluation.html	2026-11-04 16:55:14.308793059 +0100
+@@ -137,37 +137,25 @@
+     const probabiliteSelect = document.getElementById('probabilite');
+     const scorePreview = document.getElementById('scorePreview');
+     
++    const maitriseSelect = document.getElementById('niveau_maitrise');
++
+     function updateScorePreview() {
+         const impact = parseInt(impactSelect.value);
+         const probabilite = parseInt(probabiliteSelect.value);
+-        
++        const maitrise = maitriseSelect ? parseInt(maitriseSelect.value) : null;
++
+         if (impact && probabilite) {
+-            const score = impact * probabilite;
+-            let niveau = '';
+-            let couleur = '';
+-            
+-            if (score <= 4) {
+-                niveau = 'Faible';
+-                couleur = 'success';
+-            } else if (score <= 10) {
+-                niveau = 'Moyen';
+-                couleur = 'warning';
+-            } else if (score <= 16) {
+-                niveau = 'Élevé';
+-                couleur = 'danger';
+-            } else {
+-                niveau = 'Critique';
+-                couleur = 'dark';
+-            }
+-            
++            // Règle unique (EgalyxCotation, chargé par base.html)
++            const c = EgalyxCotation.scores(impact, probabilite, maitrise);
+             scorePreview.innerHTML = `
+-                <h3 class="text-${couleur}">Score: ${score}</h3>
+-                <span class="badge bg-${couleur}">${niveau}</span>
+-                <p class="small text-muted mt-2">Impact (${impact}) × Probabilité (${probabilite})</p>
++                ${EgalyxCotation.brutNet(c.score_brut, c.score_net, c.taux_reduction)}
++                <p class="small text-muted mt-2 mb-0">Brut : impact (${impact}) × probabilité (${probabilite})<br>
++                Net : probabilité réduite à ${c.probabilite_ajustee} par la maîtrise</p>
+             `;
+         }
+     }
+-    
++
++    if (maitriseSelect) maitriseSelect.addEventListener('change', updateScorePreview);
+     impactSelect.addEventListener('change', updateScorePreview);
+     probabiliteSelect.addEventListener('change', updateScorePreview);
+ });
+diff -ru -x '*.pdf' tpl_orig/templates/cartographie/evaluation_triphase.html tplzip/templates/cartographie/evaluation_triphase.html
+--- tpl_orig/templates/cartographie/evaluation_triphase.html	2026-09-19 23:11:55.000000000 +0200
++++ tplzip/templates/cartographie/evaluation_triphase.html	2026-11-04 16:57:13.679336793 +0100
+@@ -1,4 +1,5 @@
+ {% extends "base.html" %}
++{% import "_macros/cotation.html" as cot %}
+ 
+ {% block styles %}
+ {{ super() }}
+@@ -1227,18 +1228,8 @@
+                     </tbody>
+                 </table>
+ 
+-                <h6 class="mt-4 border-bottom pb-2" style="color: var(--dark);">📈 Interprétation des scores</h6>
+-                <table class="table table-sm table-bordered">
+-                    <thead style="background: var(--light);">
+-                        <tr><th>Score</th><th>Niveau</th><th>Action</th></tr>
+-                    </thead>
+-                    <tbody>
+-                        <tr><td>1-4</td><td><span class="badge-modern badge-success">Faible</span></td><td>Surveillance standard</td></tr>
+-                        <tr><td>5-10</td><td><span class="badge-modern badge-warning">Moyen</span></td><td>Plan d'action recommandé</td></tr>
+-                        <tr><td>11-16</td><td><span class="badge-modern badge-danger">Élevé</span></td><td>Actions correctives immédiates</td></tr>
+-                        <tr><td>17-25</td><td><span class="badge-modern badge-dark">Critique</span></td><td>Escalade direction</td></tr>
+-                    </tbody>
+-                </table>
++                <h6 class="mt-4 border-bottom pb-2" style="color: var(--dark);">📈 Interprétation des scores (brut et net)</h6>
++                {{ cot.tableau_regles() }}
+             </div>
+             <div class="modal-footer">
+                 <button type="button" class="btn-modern-secondary" data-bs-dismiss="modal">Fermer</button>
+@@ -1255,7 +1246,7 @@
+ // ============================================
+ // CONFIGURATION
+ // ============================================
+-const TAUX_REDUCTION_MAITRISE = {1: 0.00, 2: 0.10, 3: 0.25, 4: 0.40, 5: 0.60};
++const TAUX_REDUCTION_MAITRISE = EgalyxCotation.tauxReduction;   // règle unique (cotation.py)
+ 
+ const niveauMaitriseDMR = {{ niveau_maitrise_dmr if niveau_maitrise_dmr else 'null' }};
+ const phaseActuelle = "{{ phase_actuelle }}";
+@@ -1280,17 +1271,16 @@
+ // UTILITAIRES DE CALCUL
+ // ============================================
+ function qualifierScore(score) {
+-    if (score <= 4) return { nom: 'Faible', couleur: 'success' };
+-    if (score <= 10) return { nom: 'Moyen', couleur: 'warning' };
+-    if (score <= 16) return { nom: 'Élevé', couleur: 'danger' };
+-    return { nom: 'Critique', couleur: 'dark' };
++    // Règle unique : seuils et couleurs viennent de cotation.py via EgalyxCotation
++    const nom = EgalyxCotation.niveau(score);
++    return { nom: nom, couleur: EgalyxCotation.cle(nom) };
+ }
+ 
+ function calculerScores(impact, proba, maitrise) {
+     if (!impact || !proba) {
+         return { brut: 0, net: 0, reduction: 0, probaAjustee: 0, taux: 0,
+-                 niveauBrut: {nom: '—', couleur: 'secondary'},
+-                 niveauNet: {nom: '—', couleur: 'secondary'} };
++                 niveauBrut: {nom: '—', couleur: 'na'},
++                 niveauNet: {nom: '—', couleur: 'na'} };
+     }
+     const scoreBrut = impact * proba;
+     const taux = TAUX_REDUCTION_MAITRISE[maitrise] || 0;
+@@ -1422,11 +1412,11 @@
+ 
+     const brutBadge = document.getElementById('preview-brut-niveau');
+     brutBadge.textContent = scores.niveauBrut.nom;
+-    brutBadge.className = `cotation-item-badge badge-modern badge-${scores.niveauBrut.couleur}`;
++    brutBadge.className = `cotation-item-badge cot-badge cot-${scores.niveauBrut.couleur}`;
+ 
+     const netBadge = document.getElementById('preview-net-niveau');
+     netBadge.textContent = scores.niveauNet.nom;
+-    netBadge.className = `cotation-item-badge badge-modern badge-${scores.niveauNet.couleur}`;
++    netBadge.className = `cotation-item-badge cot-badge cot-${scores.niveauNet.couleur}`;
+ 
+     document.getElementById('preview-reduction').textContent =
+         scores.taux > 0 ? `−${Math.round(scores.taux * 100)}%` : '0%';
+@@ -1436,7 +1426,7 @@
+         document.getElementById('scoreAffiche').textContent = scores.net;
+         const na = document.getElementById('niveauAffiche');
+         na.textContent = scores.niveauNet.nom;
+-        na.className = `badge-modern badge-${scores.niveauNet.couleur} fs-6`;
++        na.className = `cot-badge cot-${scores.niveauNet.couleur} fs-6`;
+     }
+ 
+     afficherCoherence(maitrise);
+@@ -1515,7 +1505,7 @@
+             ctx.strokeStyle = '#ddd';
+             ctx.strokeRect(j * cellSize, i * cellSize, cellSize, cellSize);
+ 
+-            ctx.fillStyle = scoreCell > 12 ? 'white' : 'black';
++            ctx.fillStyle = EgalyxCotation.style(EgalyxCotation.niveau(scoreCell)).texte;
+             ctx.font = '10px Arial';
+             ctx.textAlign = 'center';
+             ctx.textBaseline = 'middle';
+@@ -1539,10 +1529,7 @@
+ }
+ 
+ function getCouleurCellule(score) {
+-    if (score <= 4) return '#28a745';
+-    if (score <= 10) return '#ffc107';
+-    if (score <= 16) return '#ff8c00';
+-    return '#dc3545';
++    return EgalyxCotation.couleur(EgalyxCotation.niveau(score));
+ }
+ 
+ // ============================================
+diff -ru -x '*.pdf' tpl_orig/templates/cartographie/liste.html tplzip/templates/cartographie/liste.html
+--- tpl_orig/templates/cartographie/liste.html	2026-09-23 00:45:41.000000000 +0200
++++ tplzip/templates/cartographie/liste.html	2026-11-04 16:54:53.247395768 +0100
+@@ -1,4 +1,5 @@
+ {% extends "base.html" %}
++{% import "_macros/cotation.html" as cot %}
+ 
+ {% block title %}Cartographie des Risques{% endblock %}
+ 
+@@ -39,7 +40,6 @@
+ 
+     <!-- ============ BANDEAU KPI ============ -->
+     {% set taux_eval = (stats.total_evalues / stats.total_risques * 100)|round|int if stats.total_risques > 0 else 0 %}
+-    {% set niveau_colors = {'Critique': 'danger', 'Élevé': 'warning', 'Moyen': 'info', 'Faible': 'success'} %}
+     <div class="row g-3 mb-4">
+         <div class="col-6 col-lg-2-4 col-xl">
+             <div class="kpi-card">
+@@ -73,20 +73,20 @@
+                 <div class="kpi-icon bg-danger-subtle text-danger"><i class="fas fa-triangle-exclamation"></i></div>
+                 <div>
+                     <div class="kpi-value">{{ stats.total_critiques }}</div>
+-                    <div class="kpi-label">Risques critiques</div>
++                    <div class="kpi-label">Risques critiques (net)</div>
+                 </div>
+             </div>
+         </div>
+         <div class="col-6 col-lg-2-4 col-xl">
+             <div class="kpi-card">
+-                <div class="kpi-icon bg-{{ niveau_colors.get(stats.niveau_max, 'secondary') }}-subtle text-{{ niveau_colors.get(stats.niveau_max, 'secondary') }}">
++                <div class="kpi-icon cot-fond-{{ cot.cle(stats.niveau_max) }} cot-texte-{{ cot.cle(stats.niveau_max) }}">
+                     <i class="fas fa-gauge-high"></i>
+                 </div>
+                 <div>
+                     <div class="kpi-value" style="font-size:1.1rem;">
+-                        <span class="badge text-bg-{{ niveau_colors.get(stats.niveau_max, 'secondary') }}">{{ stats.niveau_max }}</span>
++                        {{ cot.badge(stats.niveau_max) }}
+                     </div>
+-                    <div class="kpi-label">Niveau global</div>
++                    <div class="kpi-label">Niveau global (net)</div>
+                 </div>
+             </div>
+         </div>
+diff -ru -x '*.pdf' tpl_orig/templates/cartographie/matrice_risque.html tplzip/templates/cartographie/matrice_risque.html
+--- tpl_orig/templates/cartographie/matrice_risque.html	2026-09-22 22:58:28.000000000 +0200
++++ tplzip/templates/cartographie/matrice_risque.html	2026-11-04 16:58:08.060061226 +0100
+@@ -1,4 +1,5 @@
+ {% extends "base.html" %}
++{% import "_macros/cotation.html" as cot %}
+ 
+ {% block title %}Matrice — {{ risque_cible.reference }}{% endblock %}
+ 
+@@ -418,21 +419,13 @@
+                                                 or derniere_evaluation_cible.niveau_maitrise_val 
+                                                 or derniere_evaluation_cible.niveau_maitrise_pre %}
+ 
+-                        {% if impact_final is not none and probabilite_final is not none %}
+-                            {% set score_brut = impact_final * probabilite_final %}
+-                            {% set score_net = derniere_evaluation_cible.score_risque_net 
+-                                               or derniere_evaluation_cible.score_risque 
+-                                               or score_brut %}
+-                            {% set niveau_net = derniere_evaluation_cible.niveau_risque_net 
+-                                                or derniere_evaluation_cible.niveau_risque 
+-                                                or 'Non évalué' %}
+-                            {% set taux_reduction = derniere_evaluation_cible.taux_reduction_maitrise or 0 %}
+-                        {% else %}
+-                            {% set score_brut = none %}
+-                            {% set score_net = none %}
+-                            {% set niveau_net = 'Non évalué' %}
+-                            {% set taux_reduction = 0 %}
+-                        {% endif %}
++                        {# ✅ Règle unique (cotation.py) #}
++                        {% set c_cible = cotation_evaluation(derniere_evaluation_cible) %}
++                        {% set score_brut = c_cible.score_brut if c_cible.evalue else none %}
++                        {% set score_net = c_cible.score_net if c_cible.evalue else none %}
++                        {% set niveau_brut = c_cible.niveau_brut %}
++                        {% set niveau_net = c_cible.niveau_net %}
++                        {% set taux_reduction = c_cible.taux_reduction or 0 %}
+ 
+                         <div class="row text-center g-2">
+                             <div class="col-4">
+@@ -483,24 +476,17 @@
+                         <div class="row text-center g-2">
+                             <div class="col-6">
+                                 <div class="small text-muted">Score BRUT</div>
+-                                <div class="h4 mb-0" style="color: var(--danger);">
+-                                    {{ score_brut if score_brut is not none else '—' }}/25
++                                <div class="h4 mb-0 cot-texte-{{ cot.cle(niveau_brut) }}">
++                                    {{ cot.fmt(score_brut) }}/25
+                                 </div>
++                                {{ cot.badge(niveau_brut, petit=True) }}
+                             </div>
+                             <div class="col-6">
+                                 <div class="small text-muted">Score NET</div>
+-                                <div class="h4 mb-0" style="color: var(--primary);">
+-                                    {{ score_net if score_net is not none else '—' }}/25
++                                <div class="h4 mb-0 cot-texte-{{ cot.cle(niveau_net) }}">
++                                    {{ cot.fmt(score_net) }}/25
+                                 </div>
+-                                <span class="badge-modern
+-                                    {% if niveau_net == 'Critique' %}badge-danger
+-                                    {% elif niveau_net == 'Élevé' %}badge-warning
+-                                    {% elif niveau_net == 'Moyen' %}badge-info
+-                                    {% elif niveau_net == 'Faible' %}badge-success
+-                                    {% else %}badge-secondary{% endif %}"
+-                                    style="font-size: 0.7rem;">
+-                                    {{ niveau_net }}
+-                                </span>
++                                {{ cot.badge(niveau_net, petit=True) }}
+                             </div>
+                         </div>
+ 
+diff -ru -x '*.pdf' tpl_orig/templates/cartographie/risque_detail.html tplzip/templates/cartographie/risque_detail.html
+--- tpl_orig/templates/cartographie/risque_detail.html	2026-09-23 13:33:47.000000000 +0200
++++ tplzip/templates/cartographie/risque_detail.html	2026-11-04 16:57:55.752258019 +0100
+@@ -1,4 +1,5 @@
+ {% extends "base.html" %}
++{% import "_macros/cotation.html" as cot %}
+ 
+ {% block styles %}
+ {{ super() }}
+@@ -1385,27 +1386,14 @@
+                         {% set probabilite_final = derniere_evaluation.probabilite_conf or derniere_evaluation.probabilite_val or derniere_evaluation.probabilite_pre %}
+                         {% set niveau_maitrise_final = derniere_evaluation.niveau_maitrise_conf or derniere_evaluation.niveau_maitrise_val or derniere_evaluation.niveau_maitrise_pre %}
+ 
+-                        {# ✅ NOUVEAU : Récupérer les scores brut/net #}
+-                        {% set score_brut = derniere_evaluation.score_risque_brut %}
+-                        {% set niveau_brut = derniere_evaluation.niveau_risque_brut %}
+-                        {% set score_net = derniere_evaluation.score_risque_net %}
+-                        {% set niveau_net = derniere_evaluation.niveau_risque_net %}
+-                        {% set taux_reduction = derniere_evaluation.taux_reduction_maitrise or 0 %}
+-                        {% set probabilite_ajustee = derniere_evaluation.probabilite_ajustee %}
+-
+-                        {# ✅ FALLBACK : si les colonnes brut/net ne sont pas encore remplies #}
+-                        {% if not score_brut and impact_final and probabilite_final %}
+-                            {% set score_brut = impact_final * probabilite_final %}
+-                            {% if score_brut <= 4 %}{% set niveau_brut = 'Faible' %}
+-                            {% elif score_brut <= 10 %}{% set niveau_brut = 'Moyen' %}
+-                            {% elif score_brut <= 16 %}{% set niveau_brut = 'Élevé' %}
+-                            {% else %}{% set niveau_brut = 'Critique' %}{% endif %}
+-                        {% endif %}
+-
+-                        {% if not score_net and score_brut %}
+-                            {% set score_net = score_brut %}
+-                            {% set niveau_net = niveau_brut %}
+-                        {% endif %}
++                        {# ✅ Cotation recalculée selon la règle unique (cotation.py) #}
++                        {% set c_ev = cotation_evaluation(derniere_evaluation) %}
++                        {% set score_brut = c_ev.score_brut %}{% set niveau_brut = c_ev.niveau_brut %}
++                        {% set score_net = c_ev.score_net %}{% set niveau_net = c_ev.niveau_net %}
++                        {% set taux_reduction = c_ev.taux_reduction %}{% set probabilite_ajustee = c_ev.probabilite_ajustee %}
++                        {% set score_brut_final = score_brut %}{% set niveau_brut_final = niveau_brut %}
++                        {% set score_net_final = score_net %}{% set niveau_net_final = niveau_net %}
++                        {% set taux_reduction_final = taux_reduction %}{% set probabilite_ajustee_final = probabilite_ajustee %}
+ 
+                         {% if impact_final and probabilite_final and impact_final > 0 and probabilite_final > 0 %}
+ 
+@@ -1422,15 +1410,9 @@
+                                     <i class="fas fa-fire me-1"></i>Risque BRUT
+                                 </div>
+                                 <div class="cotation-score">
+-                                    {{ score_brut_final|round(1) if score_brut_final else 0 }}/25
++                                    {{ cot.fmt(score_brut_final) if score_brut_final else 0 }}/25
+                                 </div>
+-                                <span class="badge-modern mt-1
+-                                    {% if niveau_brut_final == 'Critique' %}badge-danger
+-                                    {% elif niveau_brut_final == 'Élevé' %}badge-warning
+-                                    {% elif niveau_brut_final == 'Moyen' %}badge-info
+-                                    {% else %}badge-success{% endif %}">
+-                                    {{ niveau_brut_final or '—' }}
+-                                </span>
++                                <div class="mt-1">{{ cot.badge(niveau_brut_final) }}</div>
+                                 <div class="mt-2" style="font-size: 0.7rem; color: var(--gray);">
+                                     Impact {{ impact_final or '?' }} × Proba {{ probabilite_final or '?' }}
+                                 </div>
+@@ -1455,15 +1437,9 @@
+                                     <i class="fas fa-shield-alt me-1"></i>Risque NET
+                                 </div>
+                                 <div class="cotation-score">
+-                                    {{ score_net_final|round(1) if score_net_final else 0 }}/25
++                                    {{ cot.fmt(score_net_final) if score_net_final else 0 }}/25
+                                 </div>
+-                                <span class="badge-modern mt-1
+-                                    {% if niveau_net_final == 'Critique' %}badge-danger
+-                                    {% elif niveau_net_final == 'Élevé' %}badge-warning
+-                                    {% elif niveau_net_final == 'Moyen' %}badge-info
+-                                    {% else %}badge-success{% endif %}">
+-                                    {{ niveau_net_final or '—' }}
+-                                </span>
++                                <div class="mt-1">{{ cot.badge(niveau_net_final) }}</div>
+                                 <div class="mt-2" style="font-size: 0.7rem; color: var(--gray);">
+                                     Proba ajustée : {{ probabilite_ajustee_final or probabilite_final or '?' }}
+                                 </div>
+@@ -2181,7 +2157,7 @@
+                                 <th>Maîtrise</th>
+                                 <th>Brut</th>
+                                 <th>Net</th>
+-                                <th>Niveau</th>
++                                <th>Niveau net</th>
+                                 <th>Évaluateur</th>
+                                 <th>Évolution</th>
+                                 <th class="text-end">Actions</th>
+@@ -2189,58 +2165,16 @@
+                             </thead>
+                             <tbody>
+                                 {% for eval in historique_evaluations %}
+-                                {% set impact = eval.impact_conf or eval.impact_val or eval.impact_pre %}
+-                                {% set probabilite = eval.probabilite_conf or eval.probabilite_val or eval.probabilite_pre %}
+-                                {% set niveau_maitrise = eval.niveau_maitrise_conf or eval.niveau_maitrise_val or eval.niveau_maitrise_pre %}
+-                                {% set impact = eval.impact_conf or eval.impact_val or eval.impact_pre %}
+-                                {% set probabilite = eval.probabilite_conf or eval.probabilite_val or eval.probabilite_pre %}
+-                                {% set niveau_maitrise = eval.niveau_maitrise_conf or eval.niveau_maitrise_val or eval.niveau_maitrise_pre %}
+-
+-                                {# ✅ Scores brut / net #}
+-                                {% set score_brut = eval.score_risque_brut %}
+-                                {% set score_net = eval.score_risque_net %}
+-
+-                                {# Fallback si colonnes non remplies #}
+-                                {% if not score_brut and impact and probabilite and impact > 0 and probabilite > 0 %}
+-                                    {% set score_brut = impact * probabilite %}
+-                                {% endif %}
+-                                {% if not score_net %}
+-                                    {% set score_net = score_brut %}
+-                                {% endif %}
++                                {# ✅ Cotation de chaque évaluation : règle unique (cotation.py) #}
++                                {% set c_h = cotation_evaluation(eval) %}
++                                {% set impact = c_h.impact|int if c_h.impact else none %}
++                                {% set probabilite = c_h.probabilite|int if c_h.probabilite else none %}
++                                {% set niveau_maitrise = c_h.niveau_maitrise|int if c_h.niveau_maitrise else none %}
++                                {% set score_brut = c_h.score_brut %}
++                                {% set score_net = c_h.score_net %}
++                                {% set score = score_net %}
++                                {% set niveau_display = c_h.niveau_net %}
+ 
+-                                {# Niveau #}
+-                                {% if score_net and score_net > 0 %}
+-                                    {% if score_net <= 4 %}
+-                                        {% set niveau_display = 'Faible' %}
+-                                    {% elif score_net <= 10 %}
+-                                        {% set niveau_display = 'Moyen' %}
+-                                    {% elif score_net <= 16 %}
+-                                        {% set niveau_display = 'Élevé' %}
+-                                    {% else %}
+-                                        {% set niveau_display = 'Critique' %}
+-                                    {% endif %}
+-                                {% else %}
+-                                    {% set niveau_display = 'Non défini' %}
+-                                {% endif %}
+-                                {% if impact and probabilite and impact > 0 and probabilite > 0 %}
+-                                    {% set score = impact * probabilite %}
+-                                {% endif %}
+-                                
+-                                {# ✅ RECALCULER LE NIVEAU #}
+-                                {% if score and score > 0 %}
+-                                    {% if score <= 4 %}
+-                                        {% set niveau_display = 'Faible' %}
+-                                    {% elif score <= 10 %}
+-                                        {% set niveau_display = 'Moyen' %}
+-                                    {% elif score <= 16 %}
+-                                        {% set niveau_display = 'Élevé' %}
+-                                    {% else %}
+-                                        {% set niveau_display = 'Critique' %}
+-                                    {% endif %}
+-                                {% else %}
+-                                    {% set niveau_display = 'Non défini' %}
+-                                {% endif %}
+-                                
+                                 <tr {% if eval.id == derniere_evaluation.id %}style="background: rgba(201, 168, 76, 0.08); border-left: 3px solid var(--gold);"{% endif %}>
+                                     <td>
+                                         <small>{{ eval.created_at.strftime('%d/%m/%Y') }}</small>
+@@ -2287,16 +2221,13 @@
+                                     <td>{% if probabilite %}<span class="badge-modern badge-warning">{{ probabilite }}/5</span>{% else %}<span class="text-muted">-</span>{% endif %}</td>
+                                     <td>{% if niveau_maitrise %}<span class="badge-modern badge-success">{{ niveau_maitrise }}/5</span>{% else %}<span class="text-muted">-</span>{% endif %}</td>
+                                     <td>
+-                                        <span class="badge-modern badge-secondary" title="Risque brut">{{ score_brut or '—' }}</span>
++                                        {% if score_brut %}{{ cot.badge_score(score_brut, petit=True) }}{% else %}<span class="text-muted">—</span>{% endif %}
+                                     </td>
+                                     <td>
+-                                        <span class="badge-modern badge-primary" title="Risque net" style="font-weight: 700;">{{ score_net or '—' }}</span>
++                                        {% if score_net %}{{ cot.badge_score(score_net, petit=True) }}{% else %}<span class="text-muted">—</span>{% endif %}
+                                     </td>
+                                     <td>
+-                                        <span class="badge-modern" 
+-                                            style="background: {% if niveau_display == 'Critique' %}rgba(239,68,68,0.12); color: var(--danger);{% elif niveau_display == 'Élevé' %}rgba(245,158,11,0.12); color: var(--warning);{% elif niveau_display == 'Moyen' %}rgba(59,130,246,0.12); color: var(--info);{% else %}rgba(16,185,129,0.12); color: var(--success);{% endif %}">
+-                                            {{ niveau_display }}
+-                                        </span>
++                                        {{ cot.badge(niveau_display) }}
+                                     </td>
+                                     <td>
+                                         {% if eval.evaluateur_final %}
+@@ -2315,7 +2246,7 @@
+                                     <td>
+                                         {% if loop.index0 < historique_evaluations|length - 1 %}
+                                             {% set prev = historique_evaluations[loop.index0 + 1] %}
+-                                            {% set prev_score = prev.score_risque or 0 %}
++                                            {% set prev_score = cotation_evaluation(prev).score_net or 0 %}
+                                             {% set current_score = score or 0 %}
+                                             {% if current_score == 0 and prev_score == 0 %}
+                                                 <span class="text-muted">-</span>
+@@ -2324,9 +2255,9 @@
+                                             {% else %}
+                                                 {% set diff = current_score - prev_score %}
+                                                 {% if diff > 0 %}
+-                                                    <span class="badge-modern badge-danger"><i class="fas fa-arrow-up me-1"></i>+{{ diff }}</span>
++                                                    <span class="badge-modern badge-danger"><i class="fas fa-arrow-up me-1"></i>+{{ cot.fmt(diff) }}</span>
+                                                 {% else %}
+-                                                    <span class="badge-modern badge-success"><i class="fas fa-arrow-down me-1"></i>{{ diff }}</span>
++                                                    <span class="badge-modern badge-success"><i class="fas fa-arrow-down me-1"></i>−{{ cot.fmt(-diff) }}</span>
+                                                 {% endif %}
+                                             {% endif %}
+                                         {% else %}
+@@ -2835,13 +2766,15 @@
+             const probaFinale = data.probabilite_conf || data.probabilite_val || data.probabilite_pre;
+             const maitriseFinale = data.niveau_maitrise_conf || data.niveau_maitrise_val || data.niveau_maitrise_pre;
+             
+-            // Scores brut / net
+-            const scoreBrut = data.score_risque_brut || (impactFinal && probaFinale ? impactFinal * probaFinale : 0);
+-            const scoreNet = data.score_risque_net || data.score_risque || scoreBrut;
+-            const tauxReduction = data.taux_reduction_maitrise || 0;
+-            const probaAjustee = data.probabilite_ajustee || probaFinale;
+-            const niveauBrut = data.niveau_risque_brut || _qualifierScoreJS(scoreBrut);
+-            const niveauNet = data.niveau_risque_net || data.niveau_risque || _qualifierScoreJS(scoreNet);
++            // Scores brut / net : recalculés selon la règle unique (EgalyxCotation)
++            const cRecalc = EgalyxCotation.scores(impactFinal, probaFinale, maitriseFinale);
++            const avecCotation = impactFinal && probaFinale;
++            const scoreBrut = avecCotation ? cRecalc.score_brut : (data.score_risque_brut || 0);
++            const scoreNet = avecCotation ? cRecalc.score_net : (data.score_risque_net || data.score_risque || scoreBrut);
++            const tauxReduction = avecCotation ? cRecalc.taux_reduction : (data.taux_reduction_maitrise || 0);
++            const probaAjustee = avecCotation ? cRecalc.probabilite_ajustee : (data.probabilite_ajustee || probaFinale);
++            const niveauBrut = _qualifierScoreJS(scoreBrut);
++            const niveauNet = _qualifierScoreJS(scoreNet);
+             
+             const clsBrut = _badgeClsJS(niveauBrut);
+             const clsNet = _badgeClsJS(niveauNet);
+@@ -3006,18 +2939,10 @@
+ 
+ // Utilitaires internes
+ function _qualifierScoreJS(score) {
+-    if (!score || score <= 0) return 'Non évalué';
+-    if (score <= 4) return 'Faible';
+-    if (score <= 10) return 'Moyen';
+-    if (score <= 16) return 'Élevé';
+-    return 'Critique';
++    return EgalyxCotation.niveau(score);            // règle unique (cotation.py)
+ }
+ function _badgeClsJS(niveau) {
+-    if (niveau === 'Critique') return 'badge-danger';
+-    if (niveau === 'Élevé') return 'badge-warning';
+-    if (niveau === 'Moyen') return 'badge-info';
+-    if (niveau === 'Faible') return 'badge-success';
+-    return 'badge-secondary';
++    return 'cot-badge cot-' + EgalyxCotation.cle(niveau);
+ }
+ </script>
+ {% endblock %}
+\ No newline at end of file
+diff -ru -x '*.pdf' tpl_orig/templates/client_admin/dashboard.html tplzip/templates/client_admin/dashboard.html
+--- tpl_orig/templates/client_admin/dashboard.html	2026-10-14 16:10:52.000000000 +0200
++++ tplzip/templates/client_admin/dashboard.html	2026-11-04 16:55:35.817740021 +0100
+@@ -1,6 +1,7 @@
+ {# templates/client_admin/dashboard.html #}
+ 
+ {% extends "base.html" %}
++{% import "_macros/cotation.html" as cot %}
+ 
+ {% block title %}Dashboard Admin Client - Egalyx Control{% endblock %}
+ 
+@@ -796,22 +797,12 @@
+                             <i class="fas fa-chart-line"></i>
+                         </div>
+                         <div>
+-                            <div class="stat-value 
+-                                {% if stats.score_risque_moyen|default(0) < 8 %}text-success
+-                                {% elif stats.score_risque_moyen|default(0) < 16 %}text-warning
+-                                {% else %}text-danger{% endif %}">
+-                                {{ stats.score_risque_moyen|default(0) }}
++                            {% set sm = stats.score_risque_moyen|default(0) %}
++                            <div class="stat-value cot-texte-{{ cot.cle(cotation_niveau(sm)) if sm else 'na' }}">
++                                {{ cot.fmt(sm) if sm else 0 }}
+                             </div>
+                             <p class="stat-label">Score NET moyen</p>
+-                            <div class="stat-sub">
+-                                {% if stats.score_risque_moyen|default(0) < 8 %}
+-                                <i class="fas fa-arrow-down text-success me-1"></i>Risque faible
+-                                {% elif stats.score_risque_moyen|default(0) < 16 %}
+-                                <i class="fas fa-minus text-warning me-1"></i>Risque modéré
+-                                {% else %}
+-                                <i class="fas fa-arrow-up text-danger me-1"></i>Risque élevé
+-                                {% endif %}
+-                            </div>
++                            <div class="stat-sub">{% if sm %}{{ cot.badge_score(sm, afficher_score=False, petit=True) }}{% else %}{{ cot.badge(none, petit=True) }}{% endif %}</div>
+                             {% if stats.reevaluations_attente is defined and stats.reevaluations_attente > 0 %}
+                             <div class="stat-sub text-info mt-1">
+                                 <i class="fas fa-sync me-1"></i>
+@@ -881,18 +872,7 @@
+                                 
+                                 <!-- Score -->
+                                 <div class="text-end flex-shrink-0">
+-                                    <div class="fw-bold text-danger" style="font-size: 1.1rem;">
+-                                        {{ item.score_net }}
+-                                    </div>
+-                                    <div class="small text-muted">
+-                                        Brut : {{ item.score_brut }}
+-                                    </div>
+-                                    {% if item.taux_reduction and item.taux_reduction > 0 %}
+-                                    <div class="small text-success">
+-                                        <i class="fas fa-arrow-down me-1"></i>
+-                                        -{{ (item.taux_reduction * 100)|round }}%
+-                                    </div>
+-                                    {% endif %}
++                                    {{ cot.brut_net(item.score_brut, item.score_net, item.taux_reduction) }}
+                                 </div>
+                                 
+                                 <!-- Action -->
+diff -ru -x '*.pdf' tpl_orig/templates/dashboard.html tplzip/templates/dashboard.html
+--- tpl_orig/templates/dashboard.html	2026-11-04 13:43:05.000000000 +0100
++++ tplzip/templates/dashboard.html	2026-11-04 16:55:48.685912902 +0100
+@@ -1,4 +1,5 @@
+ {% extends "base.html" %}
++{% import "_macros/cotation.html" as cot %}
+ 
+ {% block title %}Tableau de Bord - Egalyx Control{% endblock %}
+ 
+@@ -247,10 +248,10 @@
+                 <div class="fk-card-body">
+                     <div class="d-flex justify-content-between mb-1">
+                         <small class="text-muted">Niveau résiduel</small>
+-                        <small class="fw-semibold">{{ data.score_risque_moyen }}/25</small>
++                        <small class="fw-semibold">{{ data.score_risque_moyen }}/25 {{ cot.badge_score(data.score_risque_moyen, afficher_score=False, petit=True) }}</small>
+                     </div>
+                     <div class="progress" style="height: 8px;">
+-                        <div class="progress-bar bg-gradient-info"
++                        <div class="progress-bar cot-{{ cot.cle(cotation_niveau(data.score_risque_moyen)) }}"
+                              style="width: {{ (data.score_risque_moyen / 25 * 100)|round(1) }}%;"></div>
+                     </div>
+                     <div class="mt-3 d-flex justify-content-between align-items-center">
+@@ -304,7 +305,7 @@
+                         <div class="row g-2">
+                             <div class="col-6 col-md-3">
+                                 <div class="d-flex align-items-center justify-content-center">
+-                                    <div class="legend-dot me-2" style="background: #10b981;"></div>
++                                    <div class="legend-dot me-2 cot-faible"></div>
+                                     <small class="text-muted">
+                                         Faible: <strong>{{ data.risques_faibles|default(0) }}</strong>
+                                     </small>
+@@ -312,7 +313,7 @@
+                             </div>
+                             <div class="col-6 col-md-3">
+                                 <div class="d-flex align-items-center justify-content-center">
+-                                    <div class="legend-dot me-2" style="background: #f59e0b;"></div>
++                                    <div class="legend-dot me-2 cot-moyen"></div>
+                                     <small class="text-muted">
+                                         Moyen: <strong>{{ data.risques_moyens|default(0) }}</strong>
+                                     </small>
+@@ -320,7 +321,7 @@
+                             </div>
+                             <div class="col-6 col-md-3">
+                                 <div class="d-flex align-items-center justify-content-center">
+-                                    <div class="legend-dot me-2" style="background: #ef4444;"></div>
++                                    <div class="legend-dot me-2 cot-eleve"></div>
+                                     <small class="text-muted">
+                                         Élevé: <strong>{{ data.risques_eleves|default(0) }}</strong>
+                                     </small>
+@@ -328,7 +329,7 @@
+                             </div>
+                             <div class="col-6 col-md-3">
+                                 <div class="d-flex align-items-center justify-content-center">
+-                                    <div class="legend-dot me-2" style="background: #dc2626;"></div>
++                                    <div class="legend-dot me-2 cot-critique"></div>
+                                     <small class="text-danger fw-bold">
+                                         Critique: <strong>{{ data.risques_critiques_count|default(0) }}</strong>
+                                     </small>
+@@ -439,20 +440,7 @@
+                                         </div>
+ 
+                                         <div class="text-end">
+-                                            <span class="badge {% if item.est_revaluation %}bg-warning text-dark{% else %}bg-danger{% endif %}">
+-                                                NET {{ '%.1f'|format(item.score_net) }}
+-                                            </span>
+-                                            {% if item.score_brut and item.score_brut != item.score_net %}
+-                                            <div class="small text-muted mt-1"
+-                                                 style="font-size: 0.65rem;">
+-                                                BRUT {{ '%.1f'|format(item.score_brut) }}
+-                                                {% if item.taux_reduction and item.taux_reduction > 0 %}
+-                                                <span class="text-success">
+-                                                    (−{{ (item.taux_reduction * 100)|int }}%)
+-                                                </span>
+-                                                {% endif %}
+-                                            </div>
+-                                            {% endif %}
++                                            {{ cot.brut_net(item.score_brut, item.score_net, item.taux_reduction) }}
+                                         </div>
+                                     </div>
+                                 </div>
+@@ -644,12 +632,13 @@
+         riskData.critique_n_moins_1
+     ];
+ 
++    // Couleurs de la règle unique (EgalyxCotation)
+     const colors = [
+-        '#10b981',
+-        '#f59e0b',
+-        '#ef4444',
+-        '#dc2626',
+-        '#f59e0b'
++        EgalyxCotation.couleur('Faible'),
++        EgalyxCotation.couleur('Moyen'),
++        EgalyxCotation.couleur('Élevé'),
++        EgalyxCotation.couleur('Critique'),
++        EgalyxCotation.couleur('Critique') + '80'   // N-1 : même rouge, atténué
+     ];
+ 
+     const borders = [
+diff -ru -x '*.pdf' tpl_orig/templates/dashboard_risques.html tplzip/templates/dashboard_risques.html
+--- tpl_orig/templates/dashboard_risques.html	2026-09-21 00:20:17.000000000 +0200
++++ tplzip/templates/dashboard_risques.html	2026-11-04 16:56:05.348451184 +0100
+@@ -1,4 +1,5 @@
+ {% extends "base.html" %}
++{% import "_macros/cotation.html" as cot %}
+ 
+ {% block title %}Tableau de bord des risques{% endblock %}
+ 
+@@ -142,6 +143,8 @@
+         font-weight: 600;
+     }
+ 
++    .legend-dot { display: inline-block; width: 10px; height: 10px; border-radius: 50%; margin-right: 4px; vertical-align: middle; }
++
+     /* Ligne N-1 */
+     .risk-row-n1 {
+         background: rgba(245, 158, 11, 0.04) !important;
+@@ -216,7 +219,7 @@
+                             {{ total_critiques }} Risque(s) Critique(s) NET
+                         </h5>
+                         <p class="mb-0 text-muted small">
+-                            Score NET ≥ 17/25 après application des contrôles
++                            Score NET &gt; {{ COTATION_SEUILS[2] }}/25 après application des contrôles
+                         </p>
+                     </div>
+ 
+@@ -419,9 +422,9 @@
+                         Basé sur le niveau NET (après contrôles)
+                     </small>
+                     <div class="d-flex justify-content-center gap-3 flex-wrap small">
+-                        <span><span class="legend-dot" style="background: #7f1d1d;"></span> Critique active: <strong>{{ risques_critiques_count|default(0) }}</strong></span>
++                        <span><span class="legend-dot cot-critique"></span> Critique active: <strong>{{ risques_critiques_count|default(0) }}</strong></span>
+                         {% if risques_critiques_n_moins_1 and risques_critiques_n_moins_1 > 0 %}
+-                        <span><span class="legend-dot" style="background: #f59e0b;"></span> Critique N-1: <strong>{{ risques_critiques_n_moins_1 }}</strong></span>
++                        <span><span class="legend-dot cot-critique" style="opacity:.5"></span> Critique N-1: <strong>{{ risques_critiques_n_moins_1 }}</strong></span>
+                         {% endif %}
+                     </div>
+                 </div>
+@@ -464,9 +467,7 @@
+                                 </td>
+                                 <td class="text-center">
+                                     {% if item.score_moyen %}
+-                                    <span class="fw-bold {% if item.score_moyen >= 16 %}text-danger{% elif item.score_moyen >= 10 %}text-warning{% else %}text-success{% endif %}">
+-                                        {{ item.score_moyen }}/25
+-                                    </span>
++                                    {{ cot.badge_score(item.score_moyen, petit=True) }}
+                                     {% else %}
+                                     <span class="text-muted">-</span>
+                                     {% endif %}
+@@ -581,55 +582,21 @@
+                                 </div>
+                                 {% endif %}
+ 
+-                                {% if item.niveau_net == 'Critique' %}
+-                                    {% if item.est_revaluation %}
+-                                    <span class="risk-badge risk-critical-n1">
+-                                        🔄 Critique N-1
+-                                    </span>
+-                                    {% else %}
+-                                    <span class="risk-badge risk-critical">🔴 Critique</span>
+-                                    {% endif %}
+-                                {% elif item.niveau_net == 'Élevé' %}
+-                                    <span class="risk-badge risk-high">🟠 Élevé</span>
+-                                {% elif item.niveau_net == 'Moyen' %}
+-                                    <span class="risk-badge risk-medium">🟡 Moyen</span>
+-                                {% elif item.niveau_net == 'Faible' %}
+-                                    <span class="risk-badge risk-low">🟢 Faible</span>
+-                                {% else %}
+-                                    <span class="risk-badge risk-none">⚪ —</span>
+-                                {% endif %}
++                                {{ cot.badge(item.niveau_net, n1=(item.est_revaluation and item.niveau_net == 'Critique')) }}
+                             {% else %}
+-                                <span class="risk-badge risk-none">⚪ Non évalué</span>
++                                {{ cot.badge(none) }}
+                             {% endif %}
+                         </td>
+ 
+                         {# ===== SCORES BRUT / NET ===== #}
+                         <td class="text-center">
+                             {% if item.score_brut or item.score_net %}
+-                            <div class="score-block">
+-                                <div class="score-line score-brut">
+-                                    <span class="label">Brut</span>
+-                                    <span class="value">
+-                                        {{ '%.1f'|format(item.score_brut) if item.score_brut else 0 }}
+-                                    </span>
+-                                </div>
+-                                <div class="score-line score-net">
+-                                    <span class="label">Net</span>
+-                                    <span class="value">
+-                                        {{ '%.1f'|format(item.score_net) if item.score_net else 0 }}
+-                                    </span>
+-                                    {% if statut == 'termine' %}
+-                                    <i class="fas fa-lock text-success" title="Score officiel" style="font-size: 0.65rem;"></i>
+-                                    {% elif item.est_revaluation %}
+-                                    <i class="fas fa-redo text-warning" title="Score N-1" style="font-size: 0.65rem;"></i>
+-                                    {% endif %}
+-                                </div>
+-                                {% if item.taux_reduction and item.taux_reduction > 0 %}
+-                                <div class="score-reduction">
+-                                    <i class="fas fa-arrow-down me-1"></i>−{{ (item.taux_reduction * 100)|int }}%
+-                                </div>
+-                                {% endif %}
+-                            </div>
++                            {{ cot.brut_net(item.score_brut, item.score_net, item.taux_reduction) }}
++                            {% if statut == 'termine' %}
++                            <i class="fas fa-lock text-success ms-1" title="Score officiel" style="font-size: 0.65rem;"></i>
++                            {% elif item.est_revaluation %}
++                            <i class="fas fa-redo text-warning ms-1" title="Score N-1" style="font-size: 0.65rem;"></i>
++                            {% endif %}
+                             {% else %}
+                             <span class="text-muted">—</span>
+                             {% endif %}
+@@ -709,13 +676,14 @@
+         niveaux.faible || 0,
+         niveaux.non_evalue || 0
+     ];
++    // Couleurs de la règle unique (EgalyxCotation)
+     const colors = [
+-        '#7f1d1d',      // Critique active (rouge foncé)
+-        '#f59e0b',      // Critique N-1 (orange)
+-        '#ef4444',      // Élevé (rouge)
+-        '#3b82f6',      // Moyen (bleu)
+-        '#10b981',      // Faible (vert)
+-        '#94a3b8'       // Non évalué (gris)
++        EgalyxCotation.couleur('Critique'),          // Critique active
++        EgalyxCotation.couleur('Critique') + '80',   // Critique N-1 (même rouge, atténué)
++        EgalyxCotation.couleur('Élevé'),
++        EgalyxCotation.couleur('Moyen'),
++        EgalyxCotation.couleur('Faible'),
++        EgalyxCotation.couleur('Non évalué')
+     ];
+ 
+     const ctx = document.getElementById('niveauChart').getContext('2d');
+diff -ru -x '*.pdf' tpl_orig/templates/dashboard_strategique.html tplzip/templates/dashboard_strategique.html
+--- tpl_orig/templates/dashboard_strategique.html	2026-07-23 14:16:36.000000000 +0200
++++ tplzip/templates/dashboard_strategique.html	2026-11-04 16:56:34.588830073 +0100
+@@ -515,8 +515,8 @@
+         transform: translateX(4px);
+         box-shadow: var(--shadow);
+     }
+-    .risk-item.critique { border-left-color: var(--danger); background: var(--danger-light); }
+-    .risk-item.eleve { border-left-color: var(--warning); background: var(--warning-light); }
++    .risk-item.critique { border-left-color: var(--cot-critique); background: var(--danger-light); }
++    .risk-item.eleve { border-left-color: var(--cot-eleve); background: var(--warning-light); }
+     .risk-item.moyen { border-left-color: var(--info); background: var(--info-light); }
+     .risk-item.faible { border-left-color: var(--success); background: var(--success-light); }
+     .risk-item .risk-ref {
+@@ -536,10 +536,11 @@
+         border-radius: 14px;
+         font-weight: 600;
+     }
+-    .risk-item .risk-badge.critique { background: var(--danger); color: white; }
+-    .risk-item .risk-badge.eleve { background: var(--warning); color: white; }
+-    .risk-item .risk-badge.moyen { background: var(--info); color: white; }
+-    .risk-item .risk-badge.faible { background: var(--success); color: white; }
++    /* Couleurs de niveau : règle unique (variables --cot-* définies dans base.html) */
++    .risk-item .risk-badge.critique { background: var(--cot-critique); color: white; }
++    .risk-item .risk-badge.eleve { background: var(--cot-eleve); color: white; }
++    .risk-item .risk-badge.moyen { background: var(--cot-moyen); color: white; }
++    .risk-item .risk-badge.faible { background: var(--cot-faible); color: white; }
+     .risk-item .risk-direction {
+         font-size: 0.55rem;
+         color: var(--gray);
+diff -ru -x '*.pdf' tpl_orig/templates/includes/niveau_badge.html tplzip/templates/includes/niveau_badge.html
+--- tpl_orig/templates/includes/niveau_badge.html	2026-02-18 06:03:14.000000000 +0100
++++ tplzip/templates/includes/niveau_badge.html	2026-11-04 16:53:13.813690613 +0100
+@@ -1,11 +1,8 @@
+-{% if niveau == 'Critique' %}
+-<span class="badge bg-danger">{{ niveau }}</span>
+-{% elif niveau == 'Élevé' %}
+-<span class="badge bg-warning">{{ niveau }}</span>
+-{% elif niveau == 'Moyen' %}
+-<span class="badge bg-info">{{ niveau }}</span>
+-{% elif niveau == 'Faible' %}
+-<span class="badge bg-success">{{ niveau }}</span>
+-{% else %}
+-<span class="badge bg-secondary">{{ niveau }}</span>
+-{% endif %}
+\ No newline at end of file
++{# Badge de niveau de risque — délègue à la macro unique (_macros/cotation.html).
++   Variables acceptées : niveau (texte) ou score (nombre). #}
++{% import "_macros/cotation.html" as _cot %}
++{%- if score is defined and score is not none and (niveau is not defined or not niveau) -%}
++{{ _cot.badge_score(score, afficher_score=False) }}
++{%- else -%}
++{{ _cot.badge(niveau if niveau is defined else none) }}
++{%- endif -%}
+diff -ru -x '*.pdf' tpl_orig/templates/operateur/base_operateur.html tplzip/templates/operateur/base_operateur.html
+--- tpl_orig/templates/operateur/base_operateur.html	2026-07-25 18:03:21.000000000 +0200
++++ tplzip/templates/operateur/base_operateur.html	2026-11-04 17:03:04.602073803 +0100
+@@ -689,6 +689,10 @@
+         }
+     </style>
+ 
++    {# Cotation des risques : styles + EgalyxCotation (règle unique, voir cotation.py) #}
++    {% import "_macros/cotation.html" as _cotation %}
++    {{ _cotation.styles() }}
++    {{ _cotation.script() }}
+     {% block styles %}{% endblock %}
+ </head>
+ <body>
+diff -ru -x '*.pdf' tpl_orig/templates/operateur/dashboard.html tplzip/templates/operateur/dashboard.html
+--- tpl_orig/templates/operateur/dashboard.html	2026-07-24 16:18:15.000000000 +0200
++++ tplzip/templates/operateur/dashboard.html	2026-11-04 17:00:31.962191076 +0100
+@@ -1,4 +1,5 @@
+ {% extends "operateur/base_operateur.html" %}
++{% import "_macros/cotation.html" as cot %}
+ 
+ {% block title %}Dashboard Opérationnel{% endblock %}
+ 
+@@ -109,9 +110,7 @@
+                                 <div class="fw-semibold">{{ risque.reference }}</div>
+                                 <div class="text-muted small">{{ risque.intitule|truncate(50) }}</div>
+                             </div>
+-                            <span class="badge bg-{{ 'danger' if risque.niveau_criticite == 'critique' else 'warning' if risque.niveau_criticite == 'eleve' else 'info' }}">
+-                                {{ risque.niveau_criticite or 'Non évalué' }}
+-                            </span>
++                            {{ cot.badge(risque.niveau_criticite) }}
+                         </a>
+                         {% endfor %}
+                         {% if data.risques.a_evaluer|length > 5 %}
+diff -ru -x '*.pdf' tpl_orig/templates/operateur/detail_risque.html tplzip/templates/operateur/detail_risque.html
+--- tpl_orig/templates/operateur/detail_risque.html	2026-09-20 00:24:14.000000000 +0200
++++ tplzip/templates/operateur/detail_risque.html	2026-11-04 16:58:43.645513931 +0100
+@@ -1,4 +1,5 @@
+ {% extends "operateur/base_operateur.html" %}
++{% import "_macros/cotation.html" as cot %}
+ 
+ {% block title %}{{ risque.reference }} — Détail{% endblock %}
+ 
+@@ -169,10 +170,8 @@
+                 <div class="col-md-4">
+                     <div class="iso-card brut">
+                         <div class="iso-label"><i class="fas fa-fire me-1"></i>BRUT</div>
+-                        <div class="iso-value">{{ score_brut_final|round(1) }}<span class="fs-6">/25</span></div>
+-                        <span class="badge bg-{{ 'success' if niveau_brut_final == 'Faible' else 'warning' if niveau_brut_final == 'Moyen' else 'danger' if niveau_brut_final == 'Élevé' else 'dark' }}">
+-                            {{ niveau_brut_final }}
+-                        </span>
++                        <div class="iso-value">{{ cot.fmt(score_brut_final) }}<span class="fs-6">/25</span></div>
++                        {{ cot.badge_score(score_brut_final, afficher_score=False) }}
+                     </div>
+                 </div>
+                 <div class="col-md-4">
+@@ -185,10 +184,8 @@
+                 <div class="col-md-4">
+                     <div class="iso-card net">
+                         <div class="iso-label"><i class="fas fa-check-circle me-1"></i>NET</div>
+-                        <div class="iso-value" style="color: #1A3C6B;">{{ score_net_final|round(1) }}<span class="fs-6">/25</span></div>
+-                        <span class="badge bg-{{ 'success' if niveau_net_final == 'Faible' else 'warning' if niveau_net_final == 'Moyen' else 'danger' if niveau_net_final == 'Élevé' else 'dark' }}">
+-                            {{ niveau_net_final }}
+-                        </span>
++                        <div class="iso-value" style="color: #1A3C6B;">{{ cot.fmt(score_net_final) }}<span class="fs-6">/25</span></div>
++                        {{ cot.badge_score(score_net_final, afficher_score=False) }}
+                     </div>
+                 </div>
+             </div>
+diff -ru -x '*.pdf' tpl_orig/templates/operateur/evaluer_risque.html tplzip/templates/operateur/evaluer_risque.html
+--- tpl_orig/templates/operateur/evaluer_risque.html	2026-09-20 10:58:23.000000000 +0200
++++ tplzip/templates/operateur/evaluer_risque.html	2026-11-04 16:58:30.909946114 +0100
+@@ -1,4 +1,5 @@
+ {% extends "operateur/base_operateur.html" %}
++{% import "_macros/cotation.html" as cot %}
+ 
+ {% block title %}Évaluer le risque - {{ risque.reference }}{% endblock %}
+ 
+@@ -175,6 +176,7 @@
+ {% endblock %}
+ 
+ {% block content %}
++{% set c_e = cotation_evaluation(evaluation) %}
+ <div class="container-fluid px-4">
+ 
+     <!-- ========== EN-TÊTE ========== -->
+@@ -348,11 +350,11 @@
+                                         <i class="fas fa-fire me-1"></i>Risque BRUT
+                                     </div>
+                                     <div class="iso-value" id="previewBrutScore">
+-                                        {{ evaluation.score_risque_brut|round(1) if evaluation and evaluation.score_risque_brut else 0 }}<span class="fs-6 text-muted">/25</span>
++                                        {{ cot.fmt(c_e.score_brut) if c_e.evalue else 0 }}<span class="fs-6 text-muted">/25</span>
+                                     </div>
+-                                    <span class="badge bg-{{ 'success' if evaluation and evaluation.niveau_risque_brut == 'Faible' else 'warning' if evaluation and evaluation.niveau_risque_brut == 'Moyen' else 'danger' if evaluation and evaluation.niveau_risque_brut == 'Élevé' else 'dark' if evaluation and evaluation.niveau_risque_brut else 'secondary' }}"
++                                    <span class="cot-badge cot-{{ cot.cle(c_e.niveau_brut) }}"
+                                           id="previewBrutNiveau">
+-                                        {{ evaluation.niveau_risque_brut if evaluation and evaluation.niveau_risque_brut else 'Non évalué' }}
++                                        {{ c_e.niveau_brut }}
+                                     </span>
+                                     <div class="iso-sublabel">Impact × Probabilité</div>
+                                 </div>
+@@ -385,11 +387,11 @@
+                                         <i class="fas fa-check-circle me-1"></i>Risque NET
+                                     </div>
+                                     <div class="iso-value" id="previewNetScore" style="color: #1A3C6B;">
+-                                        {{ evaluation.score_risque_net|round(1) if evaluation and evaluation.score_risque_net else 0 }}<span class="fs-6 text-muted">/25</span>
++                                        {{ cot.fmt(c_e.score_net) if c_e.evalue else 0 }}<span class="fs-6 text-muted">/25</span>
+                                     </div>
+-                                    <span class="badge bg-{{ 'success' if evaluation and evaluation.niveau_risque_net == 'Faible' else 'warning' if evaluation and evaluation.niveau_risque_net == 'Moyen' else 'danger' if evaluation and evaluation.niveau_risque_net == 'Élevé' else 'dark' if evaluation and evaluation.niveau_risque_net else 'secondary' }}"
++                                    <span class="cot-badge cot-{{ cot.cle(c_e.niveau_net) }}"
+                                           id="previewNetNiveau">
+-                                        {{ evaluation.niveau_risque_net if evaluation and evaluation.niveau_risque_net else 'Non évalué' }}
++                                        {{ c_e.niveau_net }}
+                                     </span>
+                                     <div class="iso-sublabel">Après contrôles</div>
+                                 </div>
+@@ -563,13 +565,13 @@
+                                         <div class="text-center">
+                                             <div class="display-4 fw-bold" id="scoreDisplay"
+                                                  style="color: #1A3C6B; font-family: 'Georgia', serif;">
+-                                                {{ evaluation.score_risque_net|round(1) if evaluation and evaluation.score_risque_net else 0 }}
++                                                {{ cot.fmt(c_e.score_net) if c_e.evalue else 0 }}
+                                             </div>
+                                             <div class="text-muted small">Score NET</div>
+                                             <div>
+-                                                <span class="badge bg-{{ 'success' if evaluation and evaluation.niveau_risque_net == 'Faible' else 'warning' if evaluation and evaluation.niveau_risque_net == 'Moyen' else 'danger' if evaluation and evaluation.niveau_risque_net == 'Élevé' else 'dark' if evaluation and evaluation.niveau_risque_net else 'secondary' }}"
++                                                <span class="cot-badge cot-{{ cot.cle(c_e.niveau_net) }}"
+                                                       id="niveauDisplay">
+-                                                    {{ evaluation.niveau_risque_net if evaluation and evaluation.niveau_risque_net else 'Non évalué' }}
++                                                    {{ c_e.niveau_net }}
+                                                 </span>
+                                             </div>
+                                         </div>
+@@ -992,7 +994,7 @@
+ // ============================================
+ // CONFIGURATION
+ // ============================================
+-const TAUX_REDUCTION_MAITRISE = {1: 0.00, 2: 0.10, 3: 0.25, 4: 0.40, 5: 0.60};
++const TAUX_REDUCTION_MAITRISE = EgalyxCotation.tauxReduction;   // règle unique (cotation.py)
+ 
+ const niveauMaitriseDMR = {{ niveau_maitrise_dmr if niveau_maitrise_dmr else 'null' }};
+ 
+@@ -1018,18 +1020,17 @@
+ // UTILITAIRES DE CALCUL
+ // ============================================
+ function qualifierScore(score) {
+-    if (score <= 4)  return { nom: 'Faible', couleur: 'success' };
+-    if (score <= 10) return { nom: 'Moyen', couleur: 'warning' };
+-    if (score <= 16) return { nom: 'Élevé', couleur: 'danger' };
+-    return { nom: 'Critique', couleur: 'dark' };
++    // Règle unique : seuils et couleurs viennent de cotation.py via EgalyxCotation
++    const nom = EgalyxCotation.niveau(score);
++    return { nom: nom, couleur: EgalyxCotation.cle(nom) };
+ }
+ 
+ function calculerScores(impact, proba, maitrise) {
+     if (!impact || !proba) {
+         return {
+             brut: 0, net: 0, taux: 0,
+-            niveauBrut: { nom: 'Non évalué', couleur: 'secondary' },
+-            niveauNet: { nom: 'Non évalué', couleur: 'secondary' }
++            niveauBrut: { nom: 'Non évalué', couleur: 'na' },
++            niveauNet: { nom: 'Non évalué', couleur: 'na' }
+         };
+     }
+ 
+@@ -1090,7 +1091,7 @@
+     const brutNiveauEl = document.getElementById('previewBrutNiveau');
+     if (brutNiveauEl) {
+         brutNiveauEl.textContent = scores.niveauBrut.nom;
+-        brutNiveauEl.className = `badge bg-${scores.niveauBrut.couleur}`;
++        brutNiveauEl.className = `cot-badge cot-${scores.niveauBrut.couleur}`;
+     }
+ 
+     const netScoreEl = document.getElementById('previewNetScore');
+@@ -1099,7 +1100,7 @@
+     const netNiveauEl = document.getElementById('previewNetNiveau');
+     if (netNiveauEl) {
+         netNiveauEl.textContent = scores.niveauNet.nom;
+-        netNiveauEl.className = `badge bg-${scores.niveauNet.couleur}`;
++        netNiveauEl.className = `cot-badge cot-${scores.niveauNet.couleur}`;
+     }
+ 
+     const reductionEl = document.getElementById('previewReduction');
+@@ -1115,7 +1116,7 @@
+     const niveauDisplay = document.getElementById('niveauDisplay');
+     if (niveauDisplay) {
+         niveauDisplay.textContent = scores.niveauNet.nom;
+-        niveauDisplay.className = `badge bg-${scores.niveauNet.couleur}`;
++        niveauDisplay.className = `cot-badge cot-${scores.niveauNet.couleur}`;
+     }
+ }
+ 
+@@ -1138,11 +1139,7 @@
+     for (let i = 0; i < 5; i++) {
+         for (let j = 0; j < 5; j++) {
+             const scoreCell = (5 - i) * (j + 1);
+-            let couleur;
+-            if (scoreCell <= 4) couleur = '#28a745';
+-            else if (scoreCell <= 10) couleur = '#ffc107';
+-            else if (scoreCell <= 16) couleur = '#ff8c00';
+-            else couleur = '#dc3545';
++            const couleur = EgalyxCotation.couleur(EgalyxCotation.niveau(scoreCell));
+ 
+             ctx.fillStyle = couleur;
+             ctx.fillRect(j * cellSize, i * cellSize, cellSize, cellSize);
+@@ -1151,7 +1148,7 @@
+             ctx.lineWidth = 1;
+             ctx.strokeRect(j * cellSize, i * cellSize, cellSize, cellSize);
+ 
+-            ctx.fillStyle = scoreCell > 12 ? 'white' : 'black';
++            ctx.fillStyle = EgalyxCotation.style(EgalyxCotation.niveau(scoreCell)).texte;
+             ctx.font = '10px Arial';
+             ctx.textAlign = 'center';
+             ctx.textBaseline = 'middle';
+diff -ru -x '*.pdf' tpl_orig/templates/operateur/tous_risques.html tplzip/templates/operateur/tous_risques.html
+--- tpl_orig/templates/operateur/tous_risques.html	2026-09-20 10:48:52.000000000 +0200
++++ tplzip/templates/operateur/tous_risques.html	2026-11-04 16:58:43.647742858 +0100
+@@ -1,4 +1,5 @@
+ {% extends "operateur/base_operateur.html" %}
++{% import "_macros/cotation.html" as cot %}
+ 
+ {% block title %}Mes risques{% endblock %}
+ 
+@@ -285,14 +286,7 @@
+                             {# ===== NIVEAU DÉDIÉ (Amélioration 1) ===== #}
+                             <td class="text-center">
+                                 {% if item.niveau_net %}
+-                                <span class="niveau-badge
+-                                    {% if item.niveau_net == 'Critique' %}bg-dark text-white
+-                                    {% elif item.niveau_net == 'Élevé' %}bg-danger text-white
+-                                    {% elif item.niveau_net == 'Moyen' %}bg-warning text-dark
+-                                    {% elif item.niveau_net == 'Faible' %}bg-success text-white
+-                                    {% else %}bg-secondary text-white{% endif %}">
+-                                    {{ item.niveau_net }}
+-                                </span>
++                                {{ cot.badge(item.niveau_net) }}
+                                 {% else %}
+                                 <span class="text-muted small">—</span>
+                                 {% endif %}
+@@ -356,30 +350,12 @@
+                             {# ===== SCORES BRUT / NET (Amélioration 5) ===== #}
+                             <td class="text-center">
+                                 {% if item.score_brut or item.score_net %}
+-                                <div class="score-block">
+-                                    <div class="score-line score-brut">
+-                                        <span class="label">Brut</span>
+-                                        <span class="value">{{ '%.1f'|format(item.score_brut) if item.score_brut else 0 }}</span>
+-                                    </div>
+-                                    <div class="score-line score-net">
+-                                        <span class="label">Net</span>
+-                                        <span class="value">{{ '%.1f'|format(item.score_net) if item.score_net else 0 }}</span>
+-                                        {% if statut == 'termine' %}
+-                                        <i class="fas fa-lock text-success" 
+-                                           title="Score officiel (confirmé)"
+-                                           style="font-size: 0.65rem;"></i>
+-                                        {% elif statut in ('en_cours', 'en_attente_admin') %}
+-                                        <i class="fas fa-pencil text-muted" 
+-                                           title="Score provisoire"
+-                                           style="font-size: 0.65rem;"></i>
+-                                        {% endif %}
+-                                    </div>
+-                                    {% if item.taux_reduction and item.taux_reduction > 0 %}
+-                                    <div class="score-reduction">
+-                                        <i class="fas fa-arrow-down me-1"></i>−{{ (item.taux_reduction * 100)|int }}%
+-                                    </div>
+-                                    {% endif %}
+-                                </div>
++                                {{ cot.brut_net(item.score_brut, item.score_net, item.taux_reduction) }}
++                                {% if statut == 'termine' %}
++                                <i class="fas fa-lock text-success ms-1" title="Score officiel (confirmé)" style="font-size: 0.65rem;"></i>
++                                {% elif statut in ('en_cours', 'en_attente_admin') %}
++                                <i class="fas fa-pencil text-muted ms-1" title="Score provisoire" style="font-size: 0.65rem;"></i>
++                                {% endif %}
+                                 {% else %}
+                                 <span class="text-muted small">—</span>
+                                 {% endif %}
+diff -ru -x '*.pdf' tpl_orig/templates/processus/detail_processus.html tplzip/templates/processus/detail_processus.html
+--- tpl_orig/templates/processus/detail_processus.html	2026-06-21 02:11:18.000000000 +0200
++++ tplzip/templates/processus/detail_processus.html	2026-11-04 16:53:53.857317068 +0100
+@@ -1,5 +1,6 @@
+ <!-- templates/processus/detail_processus.html -->
+ {% extends "base.html" %}
++{% import "_macros/cotation.html" as cot %}
+ 
+ {% block title %}Processus {{ processus.reference }} - {{ processus.nom }}{% endblock %}
+ 
+@@ -467,26 +468,9 @@
+                                         </a>
+                                     </td>
+                                     <td>{{ risque.categorie or 'Non catégorisé' }}</td>
+-                                    <td>
+-                                        {% set niveau = 'Non évalué' %}
+-                                        {% set couleur = 'secondary' %}
+-                                        {% if risque.evaluations %}
+-                                            {% set derniere_eval = risque.evaluations|sort(attribute='created_at', reverse=True)|first %}
+-                                            {% if derniere_eval.niveau_risque %}
+-                                                {% set niveau = derniere_eval.niveau_risque %}
+-                                                {% set couleur = {'Critique': 'danger', 'Élevé': 'warning', 'Moyen': 'info', 'Faible': 'success'}.get(niveau, 'secondary') %}
+-                                            {% endif %}
+-                                        {% endif %}
+-                                        <span class="badge bg-{{ couleur }} risk-badge">{{ niveau }}</span>
+-                                    </td>
+-                                    <td>
+-                                        {% if risque.evaluations %}
+-                                            {% set derniere_eval = risque.evaluations|sort(attribute='created_at', reverse=True)|first %}
+-                                            <strong>{{ derniere_eval.score_risque or 0 }}</strong>
+-                                        {% else %}
+-                                            <span class="text-muted">-</span>
+-                                        {% endif %}
+-                                    </td>
++                                    {% set derniere_eval = (risque.evaluations|sort(attribute='created_at', reverse=True)|first) if risque.evaluations else none %}
++                                    <td>{{ cot.badge_eval(derniere_eval) }}</td>
++                                    <td>{{ cot.brut_net_eval(derniere_eval, compact=True) }}</td>
+                                     <td>
+                                         <span class="badge bg-{{ 'success' if risque.is_archived == False else 'danger' }}">
+                                             {{ 'Actif' if risque.is_archived == False else 'Archivé' }}
+diff -ru -x '*.pdf' tpl_orig/templates/processus/vue_transversale.html tplzip/templates/processus/vue_transversale.html
+--- tpl_orig/templates/processus/vue_transversale.html	2026-06-20 10:45:10.000000000 +0200
++++ tplzip/templates/processus/vue_transversale.html	2026-11-04 17:00:31.961445302 +0100
+@@ -1,5 +1,6 @@
+ <!-- templates/processus/vue_transversale.html -->
+ {% extends "base.html" %}
++{% import "_macros/cotation.html" as cot %}
+ 
+ {% block title %}Vue Transversale - Processus & Risques{% endblock %}
+ 
+@@ -173,9 +174,7 @@
+                                 <td class="text-center">
+                                     {% set assoc = processus|attr('risques_associes')|selectattr('id', 'equalto', risque.id)|first %}
+                                     {% if assoc %}
+-                                    <span class="badge bg-{{ 'danger' if assoc.niveau == 'critique' else 'warning' if assoc.niveau == 'eleve' else 'info' if assoc.niveau == 'moyen' else 'success' }}">
+-                                        {{ assoc.niveau|capitalize }}
+-                                    </span>
++                                    {{ cot.badge(assoc.niveau, petit=True) }}
+                                     {% else %}
+                                     <span class="text-muted">-</span>
+                                     {% endif %}
+diff -ru -x '*.pdf' tpl_orig/templates/programme_audit/detail.html tplzip/templates/programme_audit/detail.html
+--- tpl_orig/templates/programme_audit/detail.html	2026-10-14 17:11:38.000000000 +0200
++++ tplzip/templates/programme_audit/detail.html	2026-11-04 16:59:50.534625089 +0100
+@@ -1,4 +1,5 @@
+ {% extends "base.html" %}
++{% import "_macros/cotation.html" as cot %}
+ 
+ {% block title %}{{ programme.nom }} - Programme d'Audit - Egalyx{% endblock %}
+ 
+@@ -621,17 +622,12 @@
+                                 <option value="{{ risque.id }}"
+                                         data-niveau="{{ risque.niveau_net }}"
+                                         data-score="{{ risque.score_net }}"
+-                                        data-critique="{% if 'critique' in risque.niveau_net.lower() %}true{% else %}false{% endif %}"
+-                                        {% if 'critique' in risque.niveau_net.lower() %}
+-                                        style="font-weight: 700; color: #dc2626;"
+-                                        {% elif 'élevé' in risque.niveau_net.lower() or 'eleve' in risque.niveau_net.lower() %}
+-                                        style="font-weight: 600; color: #ea580c;"
+-                                        {% elif 'moyen' in risque.niveau_net.lower() %}
+-                                        style="color: #d97706;"
+-                                        {% endif %}>
++                                        {% set n_opt = cotation_normaliser(risque.niveau_net) %}
++                                        data-critique="{{ 'true' if n_opt == 'Critique' else 'false' }}"
++                                        {% if n_opt in ('Critique', 'Élevé', 'Moyen') %}style="font-weight: {{ 700 if n_opt == 'Critique' else 600 }}; color: {{ cot.hex(n_opt) }};"{% endif %}>
+                                     {{ risque.reference }} - {{ risque.intitule|truncate(40) }}
+                                     {% if risque.niveau_net != 'Non évalué' %}
+-                                    [{{ risque.niveau_net }} - Score: {{ risque.score_net }}]
++                                    [{{ risque.niveau_net }} - net {{ cot.fmt(risque.score_net) }}{% if risque.score_brut %} / brut {{ cot.fmt(risque.score_brut) }}{% endif %}]
+                                     {% endif %}
+                                     {% if risque.est_revaluation %}⚠️ N-1{% endif %}
+                                 </option>
+diff -ru -x '*.pdf' tpl_orig/templates/rapports/cartographie_pdf.html tplzip/templates/rapports/cartographie_pdf.html
+--- tpl_orig/templates/rapports/cartographie_pdf.html	2026-09-23 13:07:34.000000000 +0200
++++ tplzip/templates/rapports/cartographie_pdf.html	2026-11-04 16:59:02.099895974 +0100
+@@ -19,11 +19,12 @@
+             --muted: #6B7280;
+             --line: #E4E0D6;
+ 
+-            --critical: #B3261E;
+-            --high: #B8620A;
+-            --medium: #2361A8;
+-            --low: #1E7A4C;
+-            --na: #8A8F98;
++            /* Couleurs de niveau : règle unique (cotation.py) */
++            --critical: {{ cotation_style('Critique').hex }};
++            --high: {{ cotation_style('Élevé').hex }};
++            --medium: {{ cotation_style('Moyen').hex }};
++            --low: {{ cotation_style('Faible').hex }};
++            --na: {{ cotation_style('Non évalué').hex }};
+         }
+ 
+         @page {
+@@ -181,10 +182,10 @@
+             border-top: 2.5pt solid var(--stat-color, var(--gold));
+         }
+         .cover-net-item:last-child { margin-right: 0; }
+-        .cover-net-item.critical { --stat-color: #E27C74; }
+-        .cover-net-item.high     { --stat-color: #E3A75C; }
+-        .cover-net-item.medium   { --stat-color: #7FA8D9; }
+-        .cover-net-item.low      { --stat-color: #7FC79B; }
++        .cover-net-item.critical { --stat-color: color-mix(in srgb, var(--critical) 70%, white); }
++        .cover-net-item.high     { --stat-color: color-mix(in srgb, var(--high) 70%, white); }
++        .cover-net-item.medium   { --stat-color: color-mix(in srgb, var(--medium) 70%, white); }
++        .cover-net-item.low      { --stat-color: color-mix(in srgb, var(--low) 70%, white); }
+         .cover-net-value { font-size: 18pt; font-weight: 700; color: #F5F1E6; }
+         .cover-net-label { font-size: 7.3pt; text-transform: uppercase; letter-spacing: 0.05em; color: #C9C2AC; margin-top: 3pt; }
+         .cover-footer {
+@@ -972,7 +973,7 @@
+                 <p class="sub" style="margin-bottom: 8pt;">
+                     Niveau de risque :
+                     {% if risque.est_evalue %}
+-                        <span class="badge {{ niveau_class.get(risque.evaluation.niveau_risque, 'na') }}">{{ risque.evaluation.niveau_risque }}</span>
++                        <span class="badge {{ niveau_class.get(risque.niveau_net, 'na') }}">{{ risque.niveau_net }}</span> <span class="sub">(brut {{ '%.1f'|format(risque.score_brut or 0) }} → net {{ '%.1f'|format(risque.score_net or 0) }})</span>
+                     {% else %}<span class="badge na">Non évalué</span>{% endif %}
+                 </p>
+ 
+@@ -1034,7 +1035,7 @@
+                     <td>{{ item.risque.categorie or '—' }}</td>
+                     <td>
+                         {% if item.est_evalue %}
+-                        <span class="badge {{ niveau_class.get(item.evaluation.niveau_risque, 'na') }}">{{ item.evaluation.niveau_risque }}</span>
++                        <span class="badge {{ niveau_class.get(item.niveau_net, 'na') }}">{{ item.niveau_net }}</span>
+                         {% else %}<span class="badge na">Non évalué</span>{% endif %}
+                     </td>
+                     <td>{% if item.est_evalue %}{{ item.evaluation.impact_conf or item.evaluation.impact_val or item.evaluation.impact_pre }}/5{% else %}—{% endif %}</td>
+diff -ru -x '*.pdf' tpl_orig/templates/rapports/index.html tplzip/templates/rapports/index.html
+--- tpl_orig/templates/rapports/index.html	2025-10-25 12:01:34.000000000 +0200
++++ tplzip/templates/rapports/index.html	2026-11-04 16:55:25.711719485 +0100
+@@ -1,4 +1,5 @@
+ {% extends "base.html" %}
++{% import "_macros/cotation.html" as cot %}
+ 
+ {% block content %}
+ <div class="d-flex justify-content-between flex-wrap flex-md-nowrap align-items-center pt-3 pb-2 mb-3 border-bottom">
+@@ -136,7 +137,7 @@
+                     <div class="list-group-item">
+                         <div class="d-flex w-100 justify-content-between">
+                             <h6 class="mb-1">{{ risque.reference }}</h6>
+-                            <span class="badge bg-danger">{{ risque.score }}</span>
++                            {{ cot.badge_score(risque.score, prefixe='Net') }}
+                         </div>
+                         <p class="mb-1 small">{{ risque.intitule }}</p>
+                         <small class="text-muted">{{ risque.cartographie_nom }}</small>
+@@ -177,9 +178,7 @@
+                                         <td>{{ stat.nom }}</td>
+                                         <td>{{ stat.nb_risques }}</td>
+                                         <td>
+-                                            <span class="badge bg-{% if stat.moyenne_score >= 16 %}danger{% elif stat.moyenne_score >= 10 %}warning{% else %}success{% endif %}">
+-                                                {{ "%.1f"|format(stat.moyenne_score) }}
+-                                            </span>
++                                            {{ cot.badge_score(stat.moyenne_score) }}
+                                         </td>
+                                         <td>{{ stat.nb_critiques }}</td>
+                                     </tr>
+diff -ru -x '*.pdf' tpl_orig/templates/recherche_risques.html tplzip/templates/recherche_risques.html
+--- tpl_orig/templates/recherche_risques.html	2026-05-17 14:42:10.000000000 +0200
++++ tplzip/templates/recherche_risques.html	2026-11-04 16:53:42.077784323 +0100
+@@ -1,4 +1,5 @@
+ {% extends "base.html" %}
++{% import "_macros/cotation.html" as cot %}
+ 
+ {% block title %}Recherche avancée des risques{% endblock %}
+ 
+@@ -106,8 +107,8 @@
+                             <th>Référence</th>
+                             <th>Intitulé</th>
+                             <th>Catégorie</th>
+-                            <th>Niveau</th>
+-                            <th>Score</th>
++                            <th>Niveau net</th>
++                            <th class="text-center">Brut → Net</th>
+                             <th>Cartographie</th>
+                             <th>Dernière évaluation</th>
+                             <th>Action</th>
+@@ -123,53 +124,30 @@
+                                 {% if risque.description %}
+                                 <small class="text-muted">{{ risque.description[:100] }}{% if risque.description|length > 100 %}...{% endif %}</small>
+                                 {% endif %}
+-                             </div>
+                             </td>
+                             <td><span class="badge bg-secondary">{{ risque.categorie or 'Non définie' }}</span></td>
+-                            <td>
+-                                {% if derniere_eval %}
+-                                    {% if derniere_eval.niveau_risque == 'Critique' %}
+-                                        <span class="badge bg-danger">🔴 Critique</span>
+-                                    {% elif derniere_eval.niveau_risque == 'Élevé' %}
+-                                        <span class="badge bg-warning">🟠 Élevé</span>
+-                                    {% elif derniere_eval.niveau_risque == 'Moyen' %}
+-                                        <span class="badge bg-info">🟡 Moyen</span>
+-                                    {% elif derniere_eval.niveau_risque == 'Faible' %}
+-                                        <span class="badge bg-success">🟢 Faible</span>
+-                                    {% else %}
+-                                        <span class="badge bg-secondary">⚪ Non évalué</span>
+-                                    {% endif %}
+-                                {% else %}
+-                                    <span class="badge bg-secondary">⚪ Non évalué</span>
+-                                {% endif %}
+-                             </div>
+-                             <td class="text-center">
+-                                {% if derniere_eval %}
+-                                    <strong>{{ derniere_eval.score_risque }}/25</strong>
+-                                {% else %}
+-                                    <span class="text-muted">-</span>
+-                                {% endif %}
+-                             </div>
++                            <td>{{ cot.badge_eval(derniere_eval) }}</td>
++                            <td class="text-center">{{ cot.brut_net_eval(derniere_eval, compact=True) }}</td>
+                              <td>
+                                 {% if risque.cartographie %}
+                                     <span class="badge bg-info">{{ risque.cartographie.nom }}</span>
+                                 {% else %}
+                                     <span class="text-muted">-</span>
+                                 {% endif %}
+-                             </div>
++                             </td>
+                              <td class="text-center">
+                                 {% if derniere_eval and derniere_eval.created_at %}
+                                     <small>{{ derniere_eval.created_at.strftime('%d/%m/%Y') }}</small>
+                                 {% else %}
+                                     <small class="text-muted">Jamais</small>
+                                 {% endif %}
+-                             </div>
++                             </td>
+                              <td class="text-center">
+                                 <a href="{{ url_for('detail_risque', id=risque.id) }}" class="btn btn-sm btn-outline-primary">
+                                     <i class="fas fa-eye"></i> Voir
+                                 </a>
+-                             </div>
+-                         </td>
++                             </td>
++                        </tr>
+                         {% endfor %}
+                     </tbody>
+                 </table>
+diff -ru -x '*.pdf' tpl_orig/templates/reevaluation/detail.html tplzip/templates/reevaluation/detail.html
+--- tpl_orig/templates/reevaluation/detail.html	2026-07-16 20:35:16.000000000 +0200
++++ tplzip/templates/reevaluation/detail.html	2026-11-04 16:53:53.859368014 +0100
+@@ -1,6 +1,7 @@
+ <!-- templates/reevaluation/detail.html -->
+ 
+ {% extends "base.html" %}
++{% import "_macros/cotation.html" as cot %}
+ 
+ {% block content %}
+ <div class="container-fluid">
+@@ -112,23 +113,16 @@
+                                 </tr>
+                                 <tr>
+                                     <td><strong>Niveau actuel</strong></td>
++                                    {% set ev_actuelle = (demande.risque.evaluations|sort(attribute='created_at', reverse=True)|first) if demande.risque and demande.risque.evaluations else none %}
+                                     <td>
+-                                        {% if demande.risque %}
+-                                        <span class="badge 
+-                                            {% if demande.risque.niveau_criticite == 'Critique' %}bg-danger
+-                                            {% elif demande.risque.niveau_criticite == 'Élevé' %}bg-warning
+-                                            {% elif demande.risque.niveau_criticite == 'Moyen' %}bg-info
+-                                            {% else %}bg-success{% endif %}">
+-                                            {{ demande.risque.niveau_criticite or 'Non défini' }}
+-                                        </span>
+-                                        {% else %}
+-                                        <span class="text-muted">N/A</span>
+-                                        {% endif %}
++                                        {% if ev_actuelle %}{{ cot.badge_eval(ev_actuelle) }}
++                                        {% elif demande.risque %}{{ cot.badge(demande.risque.niveau_criticite) }}
++                                        {% else %}<span class="text-muted">N/A</span>{% endif %}
+                                     </td>
+                                 </tr>
+                                 <tr>
+                                     <td><strong>Score actuel</strong></td>
+-                                    <td>{{ demande.risque.score_risque if demande.risque else 'N/A' }}</td>
++                                    <td>{% if ev_actuelle %}{{ cot.brut_net_eval(ev_actuelle) }}{% elif demande.risque %}{{ cot.badge_score(demande.risque.score_risque) }}{% else %}N/A{% endif %}</td>
+                                 </tr>
+                             </table>
+                         </div>
+@@ -187,14 +181,8 @@
+                         </div>
+                     </div>
+                     <div class="text-center mt-3">
+-                        <span class="h4">Score: {{ demande.score_propose }}</span>
+-                        <span class="badge 
+-                            {% if demande.niveau_risque_propose == 'Critique' %}bg-danger
+-                            {% elif demande.niveau_risque_propose == 'Élevé' %}bg-warning
+-                            {% elif demande.niveau_risque_propose == 'Moyen' %}bg-info
+-                            {% else %}bg-success{% endif %} ms-2 fs-6">
+-                            {{ demande.niveau_risque_propose }}
+-                        </span>
++                        {% set c_prop = cotation_scores(demande.impact_propose, demande.probabilite_propose, demande.niveau_maitrise_propose) %}
++                        <div class="d-inline-block text-start">{{ cot.brut_net(c_prop.score_brut, c_prop.score_net, c_prop.taux_reduction) }}</div>
+                     </div>
+                 </div>
+             </div>
+diff -ru -x '*.pdf' tpl_orig/templates/reevaluation/liste.html tplzip/templates/reevaluation/liste.html
+--- tpl_orig/templates/reevaluation/liste.html	2026-07-21 03:02:17.000000000 +0200
++++ tplzip/templates/reevaluation/liste.html	2026-11-04 16:54:01.556236868 +0100
+@@ -1,5 +1,6 @@
+ <!-- templates/reevaluation/liste.html -->
+ {% extends "base.html" %}
++{% import "_macros/cotation.html" as cot %}
+ 
+ {% block content %}
+ <div class="container-fluid">
+@@ -129,14 +130,9 @@
+                                         I: {{ demande.impact_propose }}/5
+                                         P: {{ demande.probabilite_propose }}/5
+                                         <br>
+-                                        <span class="fw-bold">Score: {{ demande.score_propose }}</span>
+-                                        <span class="badge 
+-                                            {% if demande.niveau_risque_propose == 'Critique' %}bg-danger
+-                                            {% elif demande.niveau_risque_propose == 'Élevé' %}bg-warning
+-                                            {% elif demande.niveau_risque_propose == 'Moyen' %}bg-info
+-                                            {% else %}bg-success{% endif %}">
+-                                            {{ demande.niveau_risque_propose }}
+-                                        </span>
++                                        {% set c_prop = cotation_scores(demande.impact_propose, demande.probabilite_propose, demande.niveau_maitrise_propose) %}
++                                        {{ cot.brut_net(c_prop.score_brut, c_prop.score_net, c_prop.taux_reduction, compact=True) }}
++                                        {{ cot.badge(c_prop.niveau_net, petit=True) }}
+                                     </small>
+                                 </td>
+                                 <td>{{ demande.demandeur.username if demande.demandeur else 'N/A' }}</td>
+@@ -310,10 +306,8 @@
+                         I: ${d.impact_propose}/5
+                         P: ${d.probabilite_propose}/5
+                         <br>
+-                        <span class="fw-bold">Score: ${d.score_propose}</span>
+-                        <span class="badge ${d.niveau_risque_propose === 'Critique' ? 'bg-danger' : d.niveau_risque_propose === 'Élevé' ? 'bg-warning' : d.niveau_risque_propose === 'Moyen' ? 'bg-info' : 'bg-success'}">
+-                            ${d.niveau_risque_propose}
+-                        </span>
++                        ${(() => { const c = EgalyxCotation.scores(d.impact_propose, d.probabilite_propose, d.niveau_maitrise_propose);
++                                   return EgalyxCotation.brutNet(c.score_brut, c.score_net, c.taux_reduction); })()}
+                     </small>
+                 </td>
+                 <td>${d.demandeur}</td>
+diff -ru -x '*.pdf' tpl_orig/templates/risque/liste.html tplzip/templates/risque/liste.html
+--- tpl_orig/templates/risque/liste.html	2026-02-18 06:02:44.000000000 +0100
++++ tplzip/templates/risque/liste.html	2026-11-04 16:53:26.033917885 +0100
+@@ -1,4 +1,5 @@
+ {% extends "base.html" %}
++{% import "_macros/cotation.html" as cot %}
+ 
+ {% block content %}
+ <div class="container-fluid py-4">
+@@ -168,9 +169,9 @@
+                             <th>Cartographie</th>
+                             <th>
+                                 {% if campagne_id %}
+-                                Évaluation campagne
++                                Niveau net campagne <small class="text-muted fw-normal">(brut → net)</small>
+                                 {% else %}
+-                                Dernier niveau
++                                Niveau net <small class="text-muted fw-normal">(brut → net)</small>
+                                 {% endif %}
+                             </th>
+                             <th>KRI</th>
+@@ -204,14 +205,12 @@
+                                 {% endif %}
+                             </td>
+                             <td>
+-                                {% if campagne_id and risque.evaluation_campagne %}
+-                                    {% set niveau = risque.evaluation_campagne.niveau_risque %}
+-                                    {% include "includes/niveau_badge.html" %}
+-                                {% elif not campagne_id and risque.derniere_evaluation %}
+-                                    {% set niveau = risque.derniere_evaluation.niveau_risque %}
+-                                    {% include "includes/niveau_badge.html" %}
++                                {% set ev_aff = risque.evaluation_campagne if campagne_id else risque.derniere_evaluation %}
++                                {% if ev_aff %}
++                                    {{ cot.badge_eval(ev_aff) }}
++                                    <div class="mt-1">{{ cot.brut_net_eval(ev_aff, compact=True) }}</div>
+                                 {% else %}
+-                                    <span class="badge bg-secondary">Non évalué</span>
++                                    {{ cot.badge(none) }}
+                                 {% endif %}
+                             </td>
+                             <td class="text-center">

@@ -1,0 +1,483 @@
+--- integration/livraison/app.py	2026-11-04 16:28:00.927842230 +0100
++++ cotation/livraison/app.py	2026-11-04 16:59:35.928999934 +0100
+@@ -3937,15 +3937,8 @@
+ 
+ 
+ def get_niveau_from_score(score):
+-    """Convertit un score en niveau de risque"""
+-    if score <= 5:
+-        return "Faible"
+-    elif score <= 10:
+-        return "Moyen"
+-    elif score <= 15:
+-        return "Élevé"
+-    else:
+-        return "Critique"
++    """Convertit un score en niveau de risque (règle unique cotation.py)."""
++    return cotation_regle.niveau(score)
+ 
+ def get_tendance_color(score):
+     """Retourne la couleur de tendance selon le score"""
+@@ -27871,25 +27864,20 @@
+                 
+                 if evaluation:
+                     # Calculer le score et le niveau
+-                    impact = evaluation.impact_conf or evaluation.impact_val or evaluation.impact_pre
+-                    proba = evaluation.probabilite_conf or evaluation.probabilite_val or evaluation.probabilite_pre
+-                    
+-                    if impact and proba:
+-                        score = impact * proba
+-                        niveau, niveau_classe = calculer_niveau_risque(impact, proba)
+-                    else:
+-                        score = 0
+-                        niveau = "Non évalué"
+-                        niveau_classe = "secondary"
+-                    
++                    cot = cotation_regle.depuis_evaluation(evaluation)
+                     evaluations_campagne.append({
+                         'risque': risque,
+                         'evaluation': evaluation,
+-                        'score': score,
+-                        'niveau': niveau,
+-                        'niveau_classe': niveau_classe,
+-                        'impact': impact,
+-                        'probabilite': proba
++                        'score': cot['score_net'] or 0,          # NET = référence
++                        'niveau': cot['niveau_net'],
++                        'niveau_classe': cotation_regle.qualifier(cot['score_net'])[1],
++                        'score_brut': cot['score_brut'] or 0,
++                        'niveau_brut': cot['niveau_brut'],
++                        'score_net': cot['score_net'] or 0,
++                        'niveau_net': cot['niveau_net'],
++                        'taux_reduction': cot['taux_reduction'],
++                        'impact': cot['impact'],
++                        'probabilite': cot['probabilite']
+                     })
+             except Exception as e:
+                 print(f"⚠️ Erreur traitement risque {risque.id} pour campagne {campagne.id}: {e}")
+@@ -27939,21 +27927,18 @@
+             if hasattr(risque, 'evaluations'):
+                 for e in risque.evaluations:
+                     try:
+-                        impact = e.impact_conf or e.impact_val or e.impact_pre
+-                        proba = e.probabilite_conf or e.probabilite_val or e.probabilite_pre
+-                        
+-                        if impact and proba:
+-                            score = impact * proba
+-                            niveau, _ = calculer_niveau_risque(impact, proba)
+-                        else:
+-                            score = 0
+-                            niveau = "Non évalué"
+-                        
++                        cot = cotation_regle.depuis_evaluation(e)
+                         evaluations_risque.append({
+                             'campagne': e.campagne,
+                             'evaluation': e,
+-                            'score': score,
+-                            'niveau': niveau
++                            'score': cot['score_net'] or 0,      # NET = référence
++                            'niveau': cot['niveau_net'],
++                            'score_brut': cot['score_brut'] or 0,
++                            'niveau_brut': cot['niveau_brut'],
++                            'score_net': cot['score_net'] or 0,
++                            'niveau_net': cot['niveau_net'],
++                            'taux_reduction': cot['taux_reduction'],
++                            'probabilite_ajustee': cot['probabilite_ajustee'],
+                         })
+                     except Exception as e:
+                         print(f"⚠️ Erreur traitement évaluation {e.id}: {e}")
+@@ -27968,7 +27953,13 @@
+                 'evaluations': evaluations_risque,
+                 'evaluation': evaluations_risque[0] if evaluations_risque else None,
+                 'score': evaluations_risque[0]['score'] if evaluations_risque else 0,
+-                'niveau': evaluations_risque[0]['niveau'] if evaluations_risque else "Non évalué"
++                'niveau': evaluations_risque[0]['niveau'] if evaluations_risque else "Non évalué",
++                'score_brut': evaluations_risque[0]['score_brut'] if evaluations_risque else 0,
++                'niveau_brut': evaluations_risque[0]['niveau_brut'] if evaluations_risque else "Non évalué",
++                'score_net': evaluations_risque[0]['score_net'] if evaluations_risque else 0,
++                'niveau_net': evaluations_risque[0]['niveau_net'] if evaluations_risque else "Non évalué",
++                'taux_reduction': evaluations_risque[0]['taux_reduction'] if evaluations_risque else 0,
++                'probabilite_ajustee': evaluations_risque[0]['probabilite_ajustee'] if evaluations_risque else None,
+             })
+             
+         except Exception as e:
+@@ -28157,7 +28148,7 @@
+ @login_required
+ def telecharger_rapport_cartographie_pdf_campagne(cartographie_id, campagne_id):
+     """Générer un rapport PDF pour une cartographie et une campagne spécifique."""
+-    from utils import calculer_scores_risque, calculer_maitrise_depuis_dmr
++    # (règle unique : calculer_scores_risque et calculer_maitrise_depuis_dmr viennent de app.py / cotation.py)
+     from datetime import datetime
+ 
+     # ============================================
+@@ -38573,24 +38564,23 @@
+                                 evaluation.probabilite_pre)
+             
+             if impact_final and probabilite_final:
+-                score = impact_final * probabilite_final
+-                
++                cot = cotation_regle.depuis_evaluation(evaluation)
+                 item = {
+                     'risque': risque,
+                     'evaluation': evaluation,
+-                    'score': score,
++                    'score': cot['score_net'],          # NET = référence
++                    'score_net': cot['score_net'],
++                    'score_brut': cot['score_brut'],
++                    'niveau': cot['niveau_net'],
++                    'niveau_net': cot['niveau_net'],
++                    'niveau_brut': cot['niveau_brut'],
++                    'taux_reduction': cot['taux_reduction'],
+                     'impact': impact_final,
+                     'probabilite': probabilite_final
+                 }
+-                
+-                if score >= 17:  # Critique
+-                    tableau['actions_prioritaires'].append(item)
+-                elif score >= 11:  # Élevé
+-                    tableau['surveillance_renforcee'].append(item)
+-                elif score >= 5:  # Moyen
+-                    tableau['surveillance_courante'].append(item)
+-                else:  # Faible
+-                    tableau['actions_limitees'].append(item)
++                case = {'Critique': 'actions_prioritaires', 'Élevé': 'surveillance_renforcee',
++                        'Moyen': 'surveillance_courante'}.get(cot['niveau_net'], 'actions_limitees')
++                tableau[case].append(item)
+     
+     return tableau
+ 
+@@ -42985,34 +42975,20 @@
+ # MOTEUR DE COTATION CONFORME ISO 31000 / 31010
+ # ============================================================
+ 
+-# Taux de réduction de la probabilité selon le niveau de maîtrise (1 à 5)
+-TAUX_REDUCTION_MAITRISE = {
+-    1: 0.00,   # Très faible  : aucun contrôle
+-    2: 0.10,   # Faible       : contrôles informels
+-    3: 0.25,   # Moyenne      : contrôles documentés
+-    4: 0.40,   # Bonne        : contrôles testés
+-    5: 0.60,   # Très bonne   : contrôles continus et audités
+-}
++# ✅ RÈGLE UNIQUE : tout est défini dans cotation.py (seuils, taux, couleurs).
++import cotation as cotation_regle
++
++TAUX_REDUCTION_MAITRISE = cotation_regle.TAUX_REDUCTION_MAITRISE
+ 
+ 
+ def _qualifier_score(score):
+-    """Qualifie un score numérique en (niveau, couleur)."""
+-    if score is None:
+-        return ('Non évalué', 'secondary')
+-    if score <= 4:
+-        return ('Faible', 'success')
+-    elif score <= 10:
+-        return ('Moyen', 'warning')
+-    elif score <= 16:
+-        return ('Élevé', 'danger')
+-    else:
+-        return ('Critique', 'dark')
++    """Qualifie un score en (niveau, couleur Bootstrap). Délègue à cotation.py."""
++    return cotation_regle.qualifier(score)
+ 
+ 
+ def get_taux_reduction(niveau_maitrise):
+-    """Retourne le taux de réduction de probabilité selon le niveau de maîtrise."""
+-    if not niveau_maitrise:
+-        return 0.0
++    """Taux de réduction de probabilité selon la maîtrise. Délègue à cotation.py."""
++    return cotation_regle.taux_reduction(niveau_maitrise)
+     try:
+         return TAUX_REDUCTION_MAITRISE.get(int(niveau_maitrise), 0.0)
+     except (ValueError, TypeError):
+@@ -43090,38 +43066,11 @@
+ 
+ def calculer_scores_risque(impact, probabilite, niveau_maitrise):
+     """
+-    Calcule les scores brut et net conformément à ISO 31000 / 31010.
+-
+-    Returns dict avec :
+-        score_brut, niveau_brut,
+-        score_net, niveau_net,
+-        probabilite_ajustee, taux_reduction
++    Scores BRUT et NET (ISO 31000 / 31010). Délègue à cotation.py.
++    Retourne score_brut, niveau_brut, score_net, niveau_net,
++    probabilite_ajustee, taux_reduction.
+     """
+-    if not impact or not probabilite:
+-        return {
+-            'score_brut': 0, 'niveau_brut': 'Non évalué',
+-            'score_net': 0, 'niveau_net': 'Non évalué',
+-            'probabilite_ajustee': 0, 'taux_reduction': 0
+-        }
+-
+-    # Risque BRUT
+-    score_brut = impact * probabilite
+-    niveau_brut, _ = _qualifier_score(score_brut)
+-
+-    # Ajustement maîtrise
+-    taux_reduction = get_taux_reduction(niveau_maitrise)
+-    probabilite_ajustee = round(probabilite * (1 - taux_reduction), 2)
+-    score_net = round(impact * probabilite_ajustee, 2)
+-    niveau_net, _ = _qualifier_score(score_net)
+-
+-    return {
+-        'score_brut': score_brut,
+-        'niveau_brut': niveau_brut,
+-        'score_net': score_net,
+-        'niveau_net': niveau_net,
+-        'probabilite_ajustee': probabilite_ajustee,
+-        'taux_reduction': taux_reduction,
+-    }
++    return cotation_regle.scores(impact, probabilite, niveau_maitrise)
+ 
+ @app.route('/risque/<int:id>/evaluation-triphase', methods=['GET', 'POST'])
+ @login_required
+@@ -43138,7 +43087,7 @@
+         Un pointeur vers une campagne 'terminee' est IGNORÉ.
+     """
+     from datetime import datetime, timezone
+-    from utils import calculer_scores_risque, calculer_maitrise_depuis_dmr
++    # (règle unique : calculer_scores_risque et calculer_maitrise_depuis_dmr viennent de app.py / cotation.py)
+ 
+     print(f"\n{'='*70}")
+     print(f"🎯 EVALUATION TRIPHASE — Risque ID={id}")
+@@ -48226,46 +48175,18 @@
+     return redirect(url_for('detail_cartographie', id=cartographie_id))
+ 
+ 
+-def calculer_niveau_risque(score):
++def calculer_niveau_risque(impact_ou_score, probabilite=None):
+     """
+-    Calcule le niveau de risque à partir du score
+-    
+-    Args:
+-        score: Le score de risque (impact * probabilité)
+-    
+-    Returns:
+-        tuple: (niveau_risque, couleur_css)
+-    
+-    Exemple:
+-        >>> calculer_niveau_risque(9)
+-        ('Moyen', 'warning')
+-        >>> calculer_niveau_risque(25)
+-        ('Critique', 'dark')
+-    """
+-    if score <= 4:
+-        return 'Faible', 'success'
+-    elif score <= 10:
+-        return 'Moyen', 'warning'
+-    elif score <= 16:
+-        return 'Élevé', 'danger'
+-    else:
+-        return 'Critique', 'dark'
+-
+-def calculer_niveau_risque(impact, probabilite):
+-    """
+-    Calculer le niveau de risque basé sur l'impact et la probabilité
+-    Retourne : (niveau_risque_string, couleur_string)
+-    """
+-    score = impact * probabilite
+-    
+-    if score <= 4:
+-        return 'Faible', 'success'
+-    elif score <= 9:
+-        return 'Moyen', 'warning'
+-    elif score <= 16:
+-        return 'Élevé', 'danger'
+-    else:
+-        return 'Critique', 'dark'
++    Niveau de risque selon la RÈGLE UNIQUE (cotation.py).
++    Accepte calculer_niveau_risque(score) ou calculer_niveau_risque(impact, probabilite).
++    Retourne (niveau, couleur_bootstrap).
++    """
++    if probabilite is None:
++        return cotation_regle.qualifier(impact_ou_score)
++    try:
++        return cotation_regle.qualifier(float(impact_ou_score) * float(probabilite))
++    except (TypeError, ValueError):
++        return cotation_regle.qualifier(None)
+ 
+ 
+ def get_niveau_impact(niveau):
+@@ -56013,7 +55934,7 @@
+     Page de détail d'un risque — avec accès sécurisés aux colonnes ISO.
+     """
+     from datetime import datetime
+-    from utils import calculer_scores_risque, calculer_maitrise_depuis_dmr
++    # (règle unique : calculer_scores_risque et calculer_maitrise_depuis_dmr viennent de app.py / cotation.py)
+ 
+     # ============================================
+     # 1. FILTRE MULTI-TENANT
+@@ -56402,16 +56323,8 @@
+ # HELPER
+ # ============================================
+ def _qualifier_score_basique(score):
+-    """Qualifie un score brut sans tenir compte de la maîtrise."""
+-    if score is None:
+-        return 'Non évalué'
+-    if score <= 4:
+-        return 'Faible'
+-    if score <= 10:
+-        return 'Moyen'
+-    if score <= 16:
+-        return 'Élevé'
+-    return 'Critique'
++    """Qualifie un score (règle unique cotation.py)."""
++    return cotation_regle.niveau(score)
+ 
+ 
+ 
+@@ -71519,20 +71432,7 @@
+     return score_suggere, niveau_suggere
+ 
+ 
+-def calculer_niveau_risque(impact, probabilite):
+-    """
+-    Calcule le niveau de risque à partir de l'impact et de la probabilité
+-    """
+-    score = impact * probabilite
+-    
+-    if score <= 4:
+-        return 'Faible', 'success'
+-    elif score <= 10:
+-        return 'Moyen', 'warning'
+-    elif score <= 16:
+-        return 'Élevé', 'danger'
+-    else:
+-        return 'Critique', 'dark'
++# (ancienne calculer_niveau_risque supprimée : voir la version unique plus haut)
+ 
+ # ============================================================================
+ # ROUTES MANQUANTES POUR LE MODULE AUDIT
+@@ -108136,7 +108036,7 @@
+     Reste dans la plateforme opérateur, sans redirection admin.
+     """
+     from datetime import datetime
+-    from utils import calculer_scores_risque, calculer_maitrise_depuis_dmr
++    # (règle unique : calculer_scores_risque et calculer_maitrise_depuis_dmr viennent de app.py / cotation.py)
+ 
+     # Sécurité
+     if not current_user.is_operateur:
+@@ -108275,7 +108175,7 @@
+     RÈGLE : Toujours sur la campagne active.
+     """
+     from datetime import datetime, timezone
+-    from utils import calculer_scores_risque, calculer_maitrise_depuis_dmr
++    # (règle unique : calculer_scores_risque et calculer_maitrise_depuis_dmr viennent de app.py / cotation.py)
+ 
+     if not current_user.is_operateur:
+         flash('Accès non autorisé', 'error')
+@@ -112176,5 +112076,113 @@
+ # ═════════════════════ FIN ASSISTANT EGALYX ═════════════════════
+ 
+ 
++# ============================================================================
++# COTATION UNIFIÉE — branchement de cotation.py dans l'application
++# ----------------------------------------------------------------------------
++#  1. Écouteur SQLAlchemy : toute évaluation enregistrée (quelle que soit la
++#     route qui la crée) reçoit automatiquement ses scores BRUT/NET et ses
++#     niveaux selon la règle unique. Plus aucune route ne peut écrire
++#     « score_risque = impact × probabilité » avec une autre règle.
++#  2. Globals Jinja pour les templates (macro _macros/cotation.html).
++#  3. Recalcul des évaluations déjà en base (commande + page super admin).
++# ============================================================================
++import cotation as cotation_regle
++from sqlalchemy import event as cotation_sa_event
++
++try:
++    from models import EvaluationRisque as _CotationEvaluationRisque
++except Exception as _e_cot:  # pragma: no cover
++    _CotationEvaluationRisque = None
++    print(f"⚠️ Cotation : modèle EvaluationRisque introuvable ({_e_cot})")
++
++
++if _CotationEvaluationRisque is not None:
++    @cotation_sa_event.listens_for(_CotationEvaluationRisque, 'before_insert')
++    @cotation_sa_event.listens_for(_CotationEvaluationRisque, 'before_update')
++    def _cotation_avant_enregistrement(mapper, connection, evaluation):
++        try:
++            cotation_regle.appliquer(evaluation)
++        except Exception as e:  # ne jamais bloquer un enregistrement
++            print(f"⚠️ Cotation non appliquée (évaluation {getattr(evaluation, 'id', '?')}) : {e}")
++
++
++# ---------------------------------------------------------------- Jinja
++app.jinja_env.globals.update(
++    cotation_niveau=cotation_regle.niveau,              # score → 'Élevé'
++    cotation_style=cotation_regle.style,                # niveau ou score → {cle, hex, texte, bs, action, niveau}
++    cotation_normaliser=cotation_regle.normaliser,      # 'eleve' → 'Élevé'
++    cotation_evaluation=cotation_regle.depuis_evaluation,  # évaluation → dict brut/net
++    cotation_scores=cotation_regle.scores,              # (impact, proba, maîtrise) → dict brut/net
++    cotation_config_js=cotation_regle.config_js,        # pour window.EgalyxCotation
++    COTATION_SEUILS=cotation_regle.SEUILS,
++    calculer_niveau_risque=calculer_niveau_risque,      # version unique (score) ou (impact, proba)
++)
++app.jinja_env.filters['niveau_risque'] = cotation_regle.niveau
++
++
++# ---------------------------------------------------------------- Recalcul
++def recalculer_toutes_cotations(client_id=None, lot=500):
++    """
++    Recalcule toutes les évaluations avec la règle unique.
++    Retourne (nb_lues, nb_modifiees). client_id=None → tous les clients.
++    """
++    if _CotationEvaluationRisque is None:
++        return 0, 0
++    q = _CotationEvaluationRisque.query
++    if client_id is not None and hasattr(_CotationEvaluationRisque, 'client_id'):
++        q = q.filter(_CotationEvaluationRisque.client_id == client_id)
++    lues = modifiees = 0
++    for ev in q.order_by(_CotationEvaluationRisque.id).yield_per(lot):
++        lues += 1
++        avant = (getattr(ev, 'score_risque', None), getattr(ev, 'niveau_risque', None),
++                 getattr(ev, 'score_risque_brut', None), getattr(ev, 'niveau_risque_brut', None))
++        cotation_regle.appliquer(ev)
++        apres = (getattr(ev, 'score_risque', None), getattr(ev, 'niveau_risque', None),
++                 getattr(ev, 'score_risque_brut', None), getattr(ev, 'niveau_risque_brut', None))
++        if avant != apres:
++            modifiees += 1
++        if lues % lot == 0:
++            db.session.flush()
++    db.session.commit()
++    return lues, modifiees
++
++
++@app.cli.command('recalculer-cotations')
++def _cli_recalculer_cotations():
++    """flask recalculer-cotations : remet toutes les évaluations à la règle unique."""
++    lues, modifiees = recalculer_toutes_cotations()
++    print(f"✅ {lues} évaluation(s) relue(s), {modifiees} corrigée(s).")
++
++
++@app.route('/super-admin/recalculer-cotations', methods=['GET', 'POST'])
++@login_required
++def recalculer_cotations_admin():
++    if getattr(current_user, 'role', None) != 'super_admin':
++        abort(403)
++    resultat = None
++    if request.method == 'POST':
++        lues, modifiees = recalculer_toutes_cotations()
++        resultat = {'lues': lues, 'modifiees': modifiees}
++    return render_template_string('''
++{% extends "base.html" %}
++{% import "_macros/cotation.html" as cot %}
++{% block title %}Recalcul des cotations{% endblock %}
++{% block content %}
++<div class="container py-4" style="max-width:820px">
++  <h1 class="h4 mb-3"><i class="fas fa-scale-balanced me-2"></i>Recalcul des cotations de risques</h1>
++  <p class="text-muted">Remet toutes les évaluations existantes à la règle unique (brut, net, niveaux).
++     Les cotations saisies (impact, probabilité, maîtrise) ne sont pas modifiées.</p>
++  {{ cot.legende() }}
++  {% if resultat %}
++  <div class="alert alert-success mt-3">{{ resultat.lues }} évaluation(s) relue(s),
++       <strong>{{ resultat.modifiees }}</strong> corrigée(s).</div>
++  {% endif %}
++  <form method="post" class="mt-3">
++    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
++    <button class="btn btn-primary"><i class="fas fa-rotate me-2"></i>Recalculer maintenant</button>
++  </form>
++</div>
++{% endblock %}''', resultat=resultat)
++
+ if __name__ == '__main__':
+     app.run(debug=True, host='0.0.0.0', port=5005)
