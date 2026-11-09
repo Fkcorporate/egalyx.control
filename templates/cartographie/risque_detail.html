@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% import "_macros/cotation.html" as cot %}
 
 {% block styles %}
 {{ super() }}
@@ -970,6 +971,15 @@
 
 {% block content %}
 <div class="detail-container">
+    {% set _app = appetence_risque(risque) if appetence_risque is defined else none %}
+    {% if _app and _app.depasse %}
+    <div class="alert alert-danger d-flex align-items-center gap-2 mb-3" role="alert">
+        <i class="fas fa-triangle-exclamation"></i>
+        <div>Ce risque dépasse l'appétence fixée par l'organisation : score net <strong>{{ (_app.seuil + _app.ecart)|round(1) }}</strong>
+        pour un maximum accepté de <strong>{{ _app.seuil|round(1) }}</strong>. Une décision de traitement (réduire, transférer, éviter)
+        ou une acceptation formelle par la direction est attendue.</div>
+    </div>
+    {% endif %}
     <!-- ========== EN-TÊTE ========== -->
     <div class="page-header-modern animate-in">
         <div class="page-header-content">
@@ -1385,27 +1395,14 @@
                         {% set probabilite_final = derniere_evaluation.probabilite_conf or derniere_evaluation.probabilite_val or derniere_evaluation.probabilite_pre %}
                         {% set niveau_maitrise_final = derniere_evaluation.niveau_maitrise_conf or derniere_evaluation.niveau_maitrise_val or derniere_evaluation.niveau_maitrise_pre %}
 
-                        {# ✅ NOUVEAU : Récupérer les scores brut/net #}
-                        {% set score_brut = derniere_evaluation.score_risque_brut %}
-                        {% set niveau_brut = derniere_evaluation.niveau_risque_brut %}
-                        {% set score_net = derniere_evaluation.score_risque_net %}
-                        {% set niveau_net = derniere_evaluation.niveau_risque_net %}
-                        {% set taux_reduction = derniere_evaluation.taux_reduction_maitrise or 0 %}
-                        {% set probabilite_ajustee = derniere_evaluation.probabilite_ajustee %}
-
-                        {# ✅ FALLBACK : si les colonnes brut/net ne sont pas encore remplies #}
-                        {% if not score_brut and impact_final and probabilite_final %}
-                            {% set score_brut = impact_final * probabilite_final %}
-                            {% if score_brut <= 4 %}{% set niveau_brut = 'Faible' %}
-                            {% elif score_brut <= 10 %}{% set niveau_brut = 'Moyen' %}
-                            {% elif score_brut <= 16 %}{% set niveau_brut = 'Élevé' %}
-                            {% else %}{% set niveau_brut = 'Critique' %}{% endif %}
-                        {% endif %}
-
-                        {% if not score_net and score_brut %}
-                            {% set score_net = score_brut %}
-                            {% set niveau_net = niveau_brut %}
-                        {% endif %}
+                        {# ✅ Cotation recalculée selon la règle unique (cotation.py) #}
+                        {% set c_ev = cotation_evaluation(derniere_evaluation) %}
+                        {% set score_brut = c_ev.score_brut %}{% set niveau_brut = c_ev.niveau_brut %}
+                        {% set score_net = c_ev.score_net %}{% set niveau_net = c_ev.niveau_net %}
+                        {% set taux_reduction = c_ev.taux_reduction %}{% set probabilite_ajustee = c_ev.probabilite_ajustee %}
+                        {% set score_brut_final = score_brut %}{% set niveau_brut_final = niveau_brut %}
+                        {% set score_net_final = score_net %}{% set niveau_net_final = niveau_net %}
+                        {% set taux_reduction_final = taux_reduction %}{% set probabilite_ajustee_final = probabilite_ajustee %}
 
                         {% if impact_final and probabilite_final and impact_final > 0 and probabilite_final > 0 %}
 
@@ -1422,15 +1419,9 @@
                                     <i class="fas fa-fire me-1"></i>Risque BRUT
                                 </div>
                                 <div class="cotation-score">
-                                    {{ score_brut_final|round(1) if score_brut_final else 0 }}/25
+                                    {{ cot.fmt(score_brut_final) if score_brut_final else 0 }}/25
                                 </div>
-                                <span class="badge-modern mt-1
-                                    {% if niveau_brut_final == 'Critique' %}badge-danger
-                                    {% elif niveau_brut_final == 'Élevé' %}badge-warning
-                                    {% elif niveau_brut_final == 'Moyen' %}badge-info
-                                    {% else %}badge-success{% endif %}">
-                                    {{ niveau_brut_final or '—' }}
-                                </span>
+                                <div class="mt-1">{{ cot.badge(niveau_brut_final) }}</div>
                                 <div class="mt-2" style="font-size: 0.7rem; color: var(--gray);">
                                     Impact {{ impact_final or '?' }} × Proba {{ probabilite_final or '?' }}
                                 </div>
@@ -1455,15 +1446,9 @@
                                     <i class="fas fa-shield-alt me-1"></i>Risque NET
                                 </div>
                                 <div class="cotation-score">
-                                    {{ score_net_final|round(1) if score_net_final else 0 }}/25
+                                    {{ cot.fmt(score_net_final) if score_net_final else 0 }}/25
                                 </div>
-                                <span class="badge-modern mt-1
-                                    {% if niveau_net_final == 'Critique' %}badge-danger
-                                    {% elif niveau_net_final == 'Élevé' %}badge-warning
-                                    {% elif niveau_net_final == 'Moyen' %}badge-info
-                                    {% else %}badge-success{% endif %}">
-                                    {{ niveau_net_final or '—' }}
-                                </span>
+                                <div class="mt-1">{{ cot.badge(niveau_net_final) }}</div>
                                 <div class="mt-2" style="font-size: 0.7rem; color: var(--gray);">
                                     Proba ajustée : {{ probabilite_ajustee_final or probabilite_final or '?' }}
                                 </div>
@@ -2181,7 +2166,7 @@
                                 <th>Maîtrise</th>
                                 <th>Brut</th>
                                 <th>Net</th>
-                                <th>Niveau</th>
+                                <th>Niveau net</th>
                                 <th>Évaluateur</th>
                                 <th>Évolution</th>
                                 <th class="text-end">Actions</th>
@@ -2189,58 +2174,16 @@
                             </thead>
                             <tbody>
                                 {% for eval in historique_evaluations %}
-                                {% set impact = eval.impact_conf or eval.impact_val or eval.impact_pre %}
-                                {% set probabilite = eval.probabilite_conf or eval.probabilite_val or eval.probabilite_pre %}
-                                {% set niveau_maitrise = eval.niveau_maitrise_conf or eval.niveau_maitrise_val or eval.niveau_maitrise_pre %}
-                                {% set impact = eval.impact_conf or eval.impact_val or eval.impact_pre %}
-                                {% set probabilite = eval.probabilite_conf or eval.probabilite_val or eval.probabilite_pre %}
-                                {% set niveau_maitrise = eval.niveau_maitrise_conf or eval.niveau_maitrise_val or eval.niveau_maitrise_pre %}
+                                {# ✅ Cotation de chaque évaluation : règle unique (cotation.py) #}
+                                {% set c_h = cotation_evaluation(eval) %}
+                                {% set impact = c_h.impact|int if c_h.impact else none %}
+                                {% set probabilite = c_h.probabilite|int if c_h.probabilite else none %}
+                                {% set niveau_maitrise = c_h.niveau_maitrise|int if c_h.niveau_maitrise else none %}
+                                {% set score_brut = c_h.score_brut %}
+                                {% set score_net = c_h.score_net %}
+                                {% set score = score_net %}
+                                {% set niveau_display = c_h.niveau_net %}
 
-                                {# ✅ Scores brut / net #}
-                                {% set score_brut = eval.score_risque_brut %}
-                                {% set score_net = eval.score_risque_net %}
-
-                                {# Fallback si colonnes non remplies #}
-                                {% if not score_brut and impact and probabilite and impact > 0 and probabilite > 0 %}
-                                    {% set score_brut = impact * probabilite %}
-                                {% endif %}
-                                {% if not score_net %}
-                                    {% set score_net = score_brut %}
-                                {% endif %}
-
-                                {# Niveau #}
-                                {% if score_net and score_net > 0 %}
-                                    {% if score_net <= 4 %}
-                                        {% set niveau_display = 'Faible' %}
-                                    {% elif score_net <= 10 %}
-                                        {% set niveau_display = 'Moyen' %}
-                                    {% elif score_net <= 16 %}
-                                        {% set niveau_display = 'Élevé' %}
-                                    {% else %}
-                                        {% set niveau_display = 'Critique' %}
-                                    {% endif %}
-                                {% else %}
-                                    {% set niveau_display = 'Non défini' %}
-                                {% endif %}
-                                {% if impact and probabilite and impact > 0 and probabilite > 0 %}
-                                    {% set score = impact * probabilite %}
-                                {% endif %}
-                                
-                                {# ✅ RECALCULER LE NIVEAU #}
-                                {% if score and score > 0 %}
-                                    {% if score <= 4 %}
-                                        {% set niveau_display = 'Faible' %}
-                                    {% elif score <= 10 %}
-                                        {% set niveau_display = 'Moyen' %}
-                                    {% elif score <= 16 %}
-                                        {% set niveau_display = 'Élevé' %}
-                                    {% else %}
-                                        {% set niveau_display = 'Critique' %}
-                                    {% endif %}
-                                {% else %}
-                                    {% set niveau_display = 'Non défini' %}
-                                {% endif %}
-                                
                                 <tr {% if eval.id == derniere_evaluation.id %}style="background: rgba(201, 168, 76, 0.08); border-left: 3px solid var(--gold);"{% endif %}>
                                     <td>
                                         <small>{{ eval.created_at.strftime('%d/%m/%Y') }}</small>
@@ -2287,16 +2230,13 @@
                                     <td>{% if probabilite %}<span class="badge-modern badge-warning">{{ probabilite }}/5</span>{% else %}<span class="text-muted">-</span>{% endif %}</td>
                                     <td>{% if niveau_maitrise %}<span class="badge-modern badge-success">{{ niveau_maitrise }}/5</span>{% else %}<span class="text-muted">-</span>{% endif %}</td>
                                     <td>
-                                        <span class="badge-modern badge-secondary" title="Risque brut">{{ score_brut or '—' }}</span>
+                                        {% if score_brut %}{{ cot.badge_score(score_brut, petit=True) }}{% else %}<span class="text-muted">—</span>{% endif %}
                                     </td>
                                     <td>
-                                        <span class="badge-modern badge-primary" title="Risque net" style="font-weight: 700;">{{ score_net or '—' }}</span>
+                                        {% if score_net %}{{ cot.badge_score(score_net, petit=True) }}{% else %}<span class="text-muted">—</span>{% endif %}
                                     </td>
                                     <td>
-                                        <span class="badge-modern" 
-                                            style="background: {% if niveau_display == 'Critique' %}rgba(239,68,68,0.12); color: var(--danger);{% elif niveau_display == 'Élevé' %}rgba(245,158,11,0.12); color: var(--warning);{% elif niveau_display == 'Moyen' %}rgba(59,130,246,0.12); color: var(--info);{% else %}rgba(16,185,129,0.12); color: var(--success);{% endif %}">
-                                            {{ niveau_display }}
-                                        </span>
+                                        {{ cot.badge(niveau_display) }}
                                     </td>
                                     <td>
                                         {% if eval.evaluateur_final %}
@@ -2315,7 +2255,7 @@
                                     <td>
                                         {% if loop.index0 < historique_evaluations|length - 1 %}
                                             {% set prev = historique_evaluations[loop.index0 + 1] %}
-                                            {% set prev_score = prev.score_risque or 0 %}
+                                            {% set prev_score = cotation_evaluation(prev).score_net or 0 %}
                                             {% set current_score = score or 0 %}
                                             {% if current_score == 0 and prev_score == 0 %}
                                                 <span class="text-muted">-</span>
@@ -2324,9 +2264,9 @@
                                             {% else %}
                                                 {% set diff = current_score - prev_score %}
                                                 {% if diff > 0 %}
-                                                    <span class="badge-modern badge-danger"><i class="fas fa-arrow-up me-1"></i>+{{ diff }}</span>
+                                                    <span class="badge-modern badge-danger"><i class="fas fa-arrow-up me-1"></i>+{{ cot.fmt(diff) }}</span>
                                                 {% else %}
-                                                    <span class="badge-modern badge-success"><i class="fas fa-arrow-down me-1"></i>{{ diff }}</span>
+                                                    <span class="badge-modern badge-success"><i class="fas fa-arrow-down me-1"></i>−{{ cot.fmt(-diff) }}</span>
                                                 {% endif %}
                                             {% endif %}
                                         {% else %}
@@ -2835,13 +2775,15 @@ function voirDetailsEvaluation(evaluationId) {
             const probaFinale = data.probabilite_conf || data.probabilite_val || data.probabilite_pre;
             const maitriseFinale = data.niveau_maitrise_conf || data.niveau_maitrise_val || data.niveau_maitrise_pre;
             
-            // Scores brut / net
-            const scoreBrut = data.score_risque_brut || (impactFinal && probaFinale ? impactFinal * probaFinale : 0);
-            const scoreNet = data.score_risque_net || data.score_risque || scoreBrut;
-            const tauxReduction = data.taux_reduction_maitrise || 0;
-            const probaAjustee = data.probabilite_ajustee || probaFinale;
-            const niveauBrut = data.niveau_risque_brut || _qualifierScoreJS(scoreBrut);
-            const niveauNet = data.niveau_risque_net || data.niveau_risque || _qualifierScoreJS(scoreNet);
+            // Scores brut / net : recalculés selon la règle unique (EgalyxCotation)
+            const cRecalc = EgalyxCotation.scores(impactFinal, probaFinale, maitriseFinale);
+            const avecCotation = impactFinal && probaFinale;
+            const scoreBrut = avecCotation ? cRecalc.score_brut : (data.score_risque_brut || 0);
+            const scoreNet = avecCotation ? cRecalc.score_net : (data.score_risque_net || data.score_risque || scoreBrut);
+            const tauxReduction = avecCotation ? cRecalc.taux_reduction : (data.taux_reduction_maitrise || 0);
+            const probaAjustee = avecCotation ? cRecalc.probabilite_ajustee : (data.probabilite_ajustee || probaFinale);
+            const niveauBrut = _qualifierScoreJS(scoreBrut);
+            const niveauNet = _qualifierScoreJS(scoreNet);
             
             const clsBrut = _badgeClsJS(niveauBrut);
             const clsNet = _badgeClsJS(niveauNet);
@@ -3006,18 +2948,10 @@ function voirDetailsEvaluation(evaluationId) {
 
 // Utilitaires internes
 function _qualifierScoreJS(score) {
-    if (!score || score <= 0) return 'Non évalué';
-    if (score <= 4) return 'Faible';
-    if (score <= 10) return 'Moyen';
-    if (score <= 16) return 'Élevé';
-    return 'Critique';
+    return EgalyxCotation.niveau(score);            // règle unique (cotation.py)
 }
 function _badgeClsJS(niveau) {
-    if (niveau === 'Critique') return 'badge-danger';
-    if (niveau === 'Élevé') return 'badge-warning';
-    if (niveau === 'Moyen') return 'badge-info';
-    if (niveau === 'Faible') return 'badge-success';
-    return 'badge-secondary';
+    return 'cot-badge cot-' + EgalyxCotation.cle(niveau);
 }
 </script>
 {% endblock %}

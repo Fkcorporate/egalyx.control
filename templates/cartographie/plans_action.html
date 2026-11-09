@@ -1,0 +1,38 @@
+{% extends "base.html" %}
+{% import "_macros/page.html" as pg %}
+
+{% block title %}Plans d’action — {{ cartographie.nom }}{% endblock %}
+{% block styles %}{{ pg.styles() }}{% endblock %}
+{% block content %}
+<div class="container-fluid">
+  {{ pg.entete('Plans d’action de la cartographie', 'fa-list-check', cartographie.nom, retour=url_for('detail_cartographie', id=cartographie.id), libelle_retour='Cartographie') }}
+  <div class="pg-kpis">
+    {{ pg.kpi('Plans', stats.total) }}
+    {{ pg.kpi('En cours', stats.en_cours) }}
+    {{ pg.kpi('Terminés', stats.termines) }}
+    {{ pg.kpi('En retard', stats.en_retard, '#b91c1c' if stats.en_retard else none) }}
+  </div>
+  {% call pg.carte() %}
+    {% if plans_action %}
+    {% set aujourd_hui = now().date() %}
+    <div class="table-responsive"><table class="pg-table">
+      <thead><tr><th>Plan</th><th>Risque</th><th>Responsable</th><th>Statut</th><th>Échéance</th><th>Avancement</th></tr></thead>
+      <tbody>
+      {% for p in plans_action %}
+        {% set fin = p.date_fin_prevue %}
+        {% set retard = p.statut not in ('termine', 'annule') and fin and (fin.date() if fin.date is defined and fin.hour is defined else fin) < aujourd_hui %}
+        <tr>
+          <td><a class="pg-ref" href="{{ url_for('detail_plan_action', plan_id=p.id) }}">{{ p.reference or ('Plan #' ~ p.id) }}</a><div class="pg-second">{{ p.nom }}</div></td>
+          <td>{% if p.risque %}<a href="{{ url_for('detail_risque', id=p.risque.id) }}">{{ p.risque.reference }}</a>{% else %}—{% endif %}</td>
+          <td>{{ p.responsable.username if p.responsable else '—' }}</td>
+          <td>{{ pg.statut(p.statut) }}</td>
+          <td class="{{ 'text-danger fw-semibold' if retard }}">{{ pg.date(fin) }}{% if retard %} <i class="fas fa-triangle-exclamation" title="En retard"></i>{% endif %}</td>
+          <td>{{ pg.barre(p.pourcentage_realisation) }}</td>
+        </tr>
+      {% endfor %}
+      </tbody>
+    </table></div>
+    {% else %}{{ pg.vide('Aucun plan d’action lié aux risques de cette cartographie.', 'fa-list-check') }}{% endif %}
+  {% endcall %}
+</div>
+{% endblock %}

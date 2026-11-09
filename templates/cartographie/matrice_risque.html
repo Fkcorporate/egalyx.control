@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% import "_macros/cotation.html" as cot %}
 
 {% block title %}Matrice — {{ risque_cible.reference }}{% endblock %}
 
@@ -418,21 +419,13 @@
                                                 or derniere_evaluation_cible.niveau_maitrise_val 
                                                 or derniere_evaluation_cible.niveau_maitrise_pre %}
 
-                        {% if impact_final is not none and probabilite_final is not none %}
-                            {% set score_brut = impact_final * probabilite_final %}
-                            {% set score_net = derniere_evaluation_cible.score_risque_net 
-                                               or derniere_evaluation_cible.score_risque 
-                                               or score_brut %}
-                            {% set niveau_net = derniere_evaluation_cible.niveau_risque_net 
-                                                or derniere_evaluation_cible.niveau_risque 
-                                                or 'Non évalué' %}
-                            {% set taux_reduction = derniere_evaluation_cible.taux_reduction_maitrise or 0 %}
-                        {% else %}
-                            {% set score_brut = none %}
-                            {% set score_net = none %}
-                            {% set niveau_net = 'Non évalué' %}
-                            {% set taux_reduction = 0 %}
-                        {% endif %}
+                        {# ✅ Règle unique (cotation.py) #}
+                        {% set c_cible = cotation_evaluation(derniere_evaluation_cible) %}
+                        {% set score_brut = c_cible.score_brut if c_cible.evalue else none %}
+                        {% set score_net = c_cible.score_net if c_cible.evalue else none %}
+                        {% set niveau_brut = c_cible.niveau_brut %}
+                        {% set niveau_net = c_cible.niveau_net %}
+                        {% set taux_reduction = c_cible.taux_reduction or 0 %}
 
                         <div class="row text-center g-2">
                             <div class="col-4">
@@ -483,24 +476,17 @@
                         <div class="row text-center g-2">
                             <div class="col-6">
                                 <div class="small text-muted">Score BRUT</div>
-                                <div class="h4 mb-0" style="color: var(--danger);">
-                                    {{ score_brut if score_brut is not none else '—' }}/25
+                                <div class="h4 mb-0 cot-texte-{{ cot.cle(niveau_brut) }}">
+                                    {{ cot.fmt(score_brut) }}/25
                                 </div>
+                                {{ cot.badge(niveau_brut, petit=True) }}
                             </div>
                             <div class="col-6">
                                 <div class="small text-muted">Score NET</div>
-                                <div class="h4 mb-0" style="color: var(--primary);">
-                                    {{ score_net if score_net is not none else '—' }}/25
+                                <div class="h4 mb-0 cot-texte-{{ cot.cle(niveau_net) }}">
+                                    {{ cot.fmt(score_net) }}/25
                                 </div>
-                                <span class="badge-modern
-                                    {% if niveau_net == 'Critique' %}badge-danger
-                                    {% elif niveau_net == 'Élevé' %}badge-warning
-                                    {% elif niveau_net == 'Moyen' %}badge-info
-                                    {% elif niveau_net == 'Faible' %}badge-success
-                                    {% else %}badge-secondary{% endif %}"
-                                    style="font-size: 0.7rem;">
-                                    {{ niveau_net }}
-                                </span>
+                                {{ cot.badge(niveau_net, petit=True) }}
                             </div>
                         </div>
 

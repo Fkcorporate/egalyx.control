@@ -1,0 +1,707 @@
+{% extends "base.html" %}
+{% import "_macros/cotation.html" as cot %}
+
+{% block styles %}
+{{ super() }}
+<style>
+    /* ============================================
+       STYLES - ANALYSE IA
+       ============================================ */
+    :root {
+        --ia-primary: #7c3aed;
+        --ia-primary-light: #8b5cf6;
+        --ia-secondary: #06b6d4;
+        --ia-success: #10b981;
+        --ia-warning: #f59e0b;
+        --ia-danger: #ef4444;
+        --ia-gray: #6b7280;
+        --ia-bg: #f8fafc;
+    }
+
+    .ia-container { max-width: 1400px; margin: 0 auto; }
+
+    /* En-tête IA */
+    .ia-header {
+        background: linear-gradient(135deg, #1e1b4b 0%, #312e81 50%, #4f46e5 100%);
+        border-radius: 16px;
+        padding: 2rem;
+        margin-bottom: 2rem;
+        color: white;
+        position: relative;
+        overflow: hidden;
+    }
+    .ia-header::before {
+        content: '';
+        position: absolute;
+        top: -50%;
+        right: -10%;
+        width: 300px;
+        height: 300px;
+        background: rgba(139, 92, 246, 0.2);
+        border-radius: 50%;
+        transform: rotate(25deg);
+    }
+    .ia-header::after {
+        content: '';
+        position: absolute;
+        bottom: -50%;
+        left: -5%;
+        width: 400px;
+        height: 400px;
+        background: rgba(6, 182, 212, 0.1);
+        border-radius: 50%;
+        transform: rotate(-15deg);
+    }
+    .ia-header-content { position: relative; z-index: 2; }
+    .ia-title {
+        font-size: 2.2rem;
+        font-weight: 700;
+        font-family: 'Georgia', serif;
+        display: flex;
+        align-items: center;
+        gap: 1rem;
+        flex-wrap: wrap;
+    }
+    .ia-badge {
+        background: rgba(255,255,255,0.15);
+        padding: 0.25rem 1rem;
+        border-radius: 50px;
+        font-size: 0.8rem;
+        font-weight: 600;
+        letter-spacing: 1px;
+        border: 1px solid rgba(255,255,255,0.1);
+    }
+    .ia-stats-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+        gap: 1rem;
+        margin-top: 1.5rem;
+    }
+    .ia-stat-card {
+        background: rgba(255,255,255,0.08);
+        backdrop-filter: blur(10px);
+        border-radius: 12px;
+        padding: 1rem;
+        text-align: center;
+        border: 1px solid rgba(255,255,255,0.05);
+        transition: all 0.3s ease;
+    }
+    .ia-stat-card:hover { transform: translateY(-2px); background: rgba(255,255,255,0.12); }
+    .ia-stat-value { font-size: 1.8rem; font-weight: 700; }
+    .ia-stat-label { font-size: 0.75rem; opacity: 0.8; text-transform: uppercase; letter-spacing: 0.5px; }
+
+    /* Score IA */
+    .ia-score-ring {
+        width: 80px;
+        height: 80px;
+        border-radius: 50%;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 1.5rem;
+        font-weight: 700;
+        font-family: 'Georgia', serif;
+        position: relative;
+    }
+    .ia-score-ring.excellent { background: rgba(16,185,129,0.15); color: var(--ia-success); border: 3px solid var(--ia-success); }
+    .ia-score-ring.bon { background: rgba(6,182,212,0.15); color: var(--ia-secondary); border: 3px solid var(--ia-secondary); }
+    .ia-score-ring.moyen { background: rgba(245,158,11,0.15); color: var(--ia-warning); border: 3px solid var(--ia-warning); }
+    .ia-score-ring.faible { background: rgba(239,68,68,0.15); color: var(--ia-danger); border: 3px solid var(--ia-danger); }
+
+    /* Suggestions */
+    .suggestion-card {
+        background: white;
+        border: 1px solid var(--border);
+        border-radius: 12px;
+        padding: 1.25rem;
+        margin-bottom: 1rem;
+        transition: all 0.3s ease;
+        position: relative;
+        overflow: hidden;
+    }
+    .suggestion-card:hover {
+        transform: translateY(-2px);
+        box-shadow: var(--shadow-hover);
+        border-color: var(--ia-primary);
+    }
+    .suggestion-card::before {
+        content: '';
+        position: absolute;
+        left: 0;
+        top: 0;
+        bottom: 0;
+        width: 4px;
+    }
+    .suggestion-card.critical::before { background: var(--ia-danger); }
+    .suggestion-card.high::before { background: var(--ia-warning); }
+    .suggestion-card.medium::before { background: var(--ia-secondary); }
+    .suggestion-card.low::before { background: var(--ia-success); }
+    
+    .suggestion-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: flex-start;
+        margin-bottom: 0.75rem;
+        gap: 1rem;
+    }
+    .suggestion-icon {
+        width: 40px;
+        height: 40px;
+        border-radius: 10px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 1.2rem;
+        flex-shrink: 0;
+    }
+    .suggestion-icon.critical { background: rgba(239,68,68,0.12); color: var(--ia-danger); }
+    .suggestion-icon.high { background: rgba(245,158,11,0.12); color: var(--ia-warning); }
+    .suggestion-icon.medium { background: rgba(6,182,212,0.12); color: var(--ia-secondary); }
+    .suggestion-icon.low { background: rgba(16,185,129,0.12); color: var(--ia-success); }
+    
+    .suggestion-title { font-weight: 600; font-size: 1rem; color: var(--dark); }
+    .suggestion-description { font-size: 0.9rem; color: var(--gray); margin-bottom: 0.75rem; }
+    .suggestion-tag {
+        padding: 0.15rem 0.6rem;
+        border-radius: 20px;
+        font-size: 0.7rem;
+        font-weight: 600;
+        white-space: nowrap;
+    }
+    .suggestion-tag.critical { background: rgba(239,68,68,0.12); color: var(--ia-danger); }
+    .suggestion-tag.high { background: rgba(245,158,11,0.12); color: var(--ia-warning); }
+    .suggestion-tag.medium { background: rgba(6,182,212,0.12); color: var(--ia-secondary); }
+    .suggestion-tag.low { background: rgba(16,185,129,0.12); color: var(--ia-success); }
+    
+    /* Risques proposés */
+    .risk-proposed-card {
+        background: white;
+        border: 1px solid var(--border);
+        border-radius: 12px;
+        padding: 1rem;
+        transition: all 0.3s ease;
+        cursor: pointer;
+        height: 100%;
+    }
+    .risk-proposed-card:hover {
+        transform: translateY(-4px);
+        box-shadow: var(--shadow-hover);
+        border-color: var(--ia-primary);
+    }
+    .risk-proposed-card .risk-ref { font-weight: 600; color: var(--dark); }
+    .risk-proposed-card .risk-desc { color: var(--gray); font-size: 0.85rem; }
+    
+    /* Mode sombre */
+    [data-bs-theme="dark"] .suggestion-card,
+    [data-bs-theme="dark"] .risk-proposed-card {
+        background: #1e293b;
+        border-color: #334155;
+    }
+    [data-bs-theme="dark"] .suggestion-card:hover {
+        border-color: var(--ia-primary-light);
+    }
+    [data-bs-theme="dark"] .suggestion-title {
+        color: #f1f5f9;
+    }
+    [data-bs-theme="dark"] .suggestion-description {
+        color: #94a3b8;
+    }
+    [data-bs-theme="dark"] .risk-proposed-card .risk-ref {
+        color: #f1f5f9;
+    }
+
+    /* Badge IA */
+    .badge-ia {
+        background: linear-gradient(135deg, #7c3aed, #4f46e5);
+        color: white;
+        padding: 0.3rem 0.8rem;
+        border-radius: 20px;
+        font-size: 0.7rem;
+        font-weight: 600;
+    }
+
+    @media (max-width: 768px) {
+        .ia-title { font-size: 1.5rem; }
+        .ia-stats-grid { grid-template-columns: repeat(2, 1fr); }
+        .suggestion-header { flex-direction: column; gap: 0.5rem; }
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="ia-container">
+
+    <!-- ========== EN-TÊTE IA ========== -->
+    <div class="ia-header animate-in">
+        <div class="ia-header-content">
+            <div class="d-flex justify-content-between align-items-center flex-wrap">
+                <div>
+                    <div class="d-flex align-items-center gap-3">
+                        <div style="width: 60px; height: 60px; background: rgba(139,92,246,0.2); border-radius: 12px; display: flex; align-items: center; justify-content: center; font-size: 28px;">
+                            <i class="fas fa-brain"></i>
+                        </div>
+                        <div>
+                            <h1 class="ia-title">
+                                <span class="ia-badge">🧠 IA</span>
+                                Analyse Intelligente
+                            </h1>
+                            <p class="opacity-75 mb-0">
+                                {{ cartographie.nom }} • 
+                                <span class="badge-ia">
+                                    <i class="fas fa-robot me-1"></i>
+                                    {% if score_global.niveau == 'excellent' %}🟢 Maturité élevée
+                                    {% elif score_global.niveau == 'bon' %}🟡 Bonne maturité
+                                    {% elif score_global.niveau == 'moyen' %}🟠 Maturité moyenne
+                                    {% else %}🔴 Maturité faible{% endif %}
+                                </span>
+                            </p>
+                        </div>
+                    </div>
+                </div>
+                <div class="d-flex gap-2">
+                    <a href="{{ url_for('detail_cartographie', id=cartographie.id) }}" class="btn btn-outline-light btn-sm">
+                        <i class="fas fa-arrow-left me-1"></i> Retour
+                    </a>
+                    <button class="btn btn-light btn-sm" onclick="rafraichirAnalyse()">
+                        <i class="fas fa-sync-alt me-1"></i> Rafraîchir
+                    </button>
+                </div>
+            </div>
+
+            <!-- Statistiques -->
+            <div class="ia-stats-grid">
+                <div class="ia-stat-card">
+                    <div class="ia-stat-value">{{ stats.risques_total|default(0) }}</div>
+                    <div class="ia-stat-label">Risques totaux</div>
+                </div>
+                <div class="ia-stat-card">
+                    <div class="ia-stat-value">{{ stats.risques_evalues|default(0) }}</div>
+                    <div class="ia-stat-label">Risques évalués</div>
+                </div>
+                <div class="ia-stat-card">
+                    <div class="ia-stat-value">{{ stats.dispositifs_total|default(0) }}</div>
+                    <div class="ia-stat-label">Dispositifs</div>
+                </div>
+                <div class="ia-stat-card">
+                    <div class="ia-stat-value">{{ stats.taux_evaluation|default(0) }}%</div>
+                    <div class="ia-stat-label">Taux d'évaluation</div>
+                </div>
+                <div class="ia-stat-card">
+                    <div class="ia-stat-value">{{ stats.taux_couverture|default(0) }}%</div>
+                    <div class="ia-stat-label">Couverture dispositifs</div>
+                </div>
+                <div class="ia-stat-card">
+                    <div class="ia-stat-value">{{ stats.incidents_recents|default(0) }}</div>
+                    <div class="ia-stat-label">Incidents récents</div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- ========== SCORE GLOBAL IA ========== -->
+    <div class="row mb-4">
+        <div class="col-12">
+            <div class="card-modern animate-in">
+                <div class="card-body d-flex align-items-center justify-content-between flex-wrap">
+                    <div class="d-flex align-items-center gap-4">
+                        <div class="ia-score-ring {{ score_global.niveau|default('faible') }}">
+                            {{ score_global.score|default(0) }}
+                        </div>
+                        <div>
+                            <h5 class="mb-1" style="font-family: 'Georgia', serif; color: var(--dark);">
+                                Score de Maturité IA
+                                {% if score_global.niveau == 'excellent' %}
+                                    <span class="badge-modern badge-success ms-2">Excellent</span>
+                                {% elif score_global.niveau == 'bon' %}
+                                    <span class="badge-modern badge-info ms-2">Bon</span>
+                                {% elif score_global.niveau == 'moyen' %}
+                                    <span class="badge-modern badge-warning ms-2">Moyen</span>
+                                {% else %}
+                                    <span class="badge-modern badge-danger ms-2">À améliorer</span>
+                                {% endif %}
+                            </h5>
+                            <p class="text-muted mb-0">{{ score_global.message|default('Analyse en cours...') }}</p>
+                            <small class="text-muted">Basé sur l'évaluation complète de la cartographie</small>
+                        </div>
+                    </div>
+                    <div>
+                        <span class="badge-modern badge-secondary">{{ suggestions|length|default(0) }} suggestions</span>
+                        <span class="badge-modern badge-info ms-2">
+                            <i class="fas fa-robot me-1"></i>
+                            {% if total_risques == 0 %}Mode découverte{% else %}Analyse active{% endif %}
+                        </span>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- ========== SUGGESTIONS ========== -->
+    <div class="row mb-4">
+        <div class="col-12">
+            <div class="d-flex justify-content-between align-items-center mb-3">
+                <h4 style="font-family: 'Georgia', serif; color: var(--dark);">
+                    <i class="fas fa-lightbulb me-2" style="color: var(--ia-warning);"></i>
+                    Suggestions et Recommandations
+                    <span class="badge-modern badge-secondary ms-2">{{ suggestions|length|default(0) }}</span>
+                </h4>
+                <div class="d-flex gap-2 flex-wrap">
+                    <button class="btn-filter btn-sm" onclick="filtrerSuggestions('all')" style="border-radius: 20px; padding: 0.3rem 0.8rem;">
+                        <i class="fas fa-list me-1"></i>Toutes
+                    </button>
+                    <button class="btn-filter btn-sm" onclick="filtrerSuggestions('critical')" style="border-radius: 20px; padding: 0.3rem 0.8rem;">
+                        <span class="text-danger">●</span> Critique
+                    </button>
+                    <button class="btn-filter btn-sm" onclick="filtrerSuggestions('high')" style="border-radius: 20px; padding: 0.3rem 0.8rem;">
+                        <span class="text-warning">●</span> Élevée
+                    </button>
+                    <button class="btn-filter btn-sm" onclick="filtrerSuggestions('medium')" style="border-radius: 20px; padding: 0.3rem 0.8rem;">
+                        <span class="text-info">●</span> Moyenne
+                    </button>
+                    <button class="btn-filter btn-sm" onclick="filtrerSuggestions('low')" style="border-radius: 20px; padding: 0.3rem 0.8rem;">
+                        <span class="text-success">●</span> Basse
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- ========== LISTE DES SUGGESTIONS ========== -->
+    <div class="row" id="suggestionsContainer">
+        {% if suggestions and suggestions|length > 0 %}
+            {% for suggestion in suggestions %}
+            <div class="col-12 suggestion-item" data-priorite="{{ suggestion.priorite|default('low') }}">
+                <div class="suggestion-card {{ suggestion.priorite|default('low') }}">
+                    <div class="suggestion-header">
+                        <div class="d-flex gap-3 flex-grow-1">
+                            <div class="suggestion-icon {{ suggestion.priorite|default('low') }}">
+                                <i class="fas {{ suggestion.icone|default('fa-lightbulb') }}"></i>
+                            </div>
+                            <div class="flex-grow-1">
+                                <div class="suggestion-title">{{ suggestion.titre }}</div>
+                                <div class="suggestion-description">{{ suggestion.description }}</div>
+                                
+                                {% if suggestion.actions_conseillees and suggestion.actions_conseillees|length > 0 %}
+                                <div class="mt-2">
+                                    <small class="text-muted">Actions conseillées :</small>
+                                    <ul class="list-unstyled mb-0 small">
+                                        {% for action in suggestion.actions_conseillees %}
+                                        <li><i class="fas fa-check-circle text-success me-1"></i> {{ action }}</li>
+                                        {% endfor %}
+                                    </ul>
+                                </div>
+                                {% endif %}
+                            </div>
+                        </div>
+                        <div>
+                            <span class="suggestion-tag {{ suggestion.priorite|default('low') }}">
+                                {% if suggestion.priorite == 'critical' %}🔴 Critique
+                                {% elif suggestion.priorite == 'high' %}🟠 Élevée
+                                {% elif suggestion.priorite == 'medium' %}🟡 Moyenne
+                                {% else %}🟢 Basse{% endif %}
+                            </span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            {% endfor %}
+        {% else %}
+            <!-- État vide -->
+            <div class="col-12">
+                <div class="empty-state-full">
+                    <i class="fas fa-check-circle fa-4x" style="color: var(--ia-success);"></i>
+                    <h3 class="empty-title">Tout est parfait !</h3>
+                    <p class="empty-description">Aucune suggestion d'amélioration n'a été identifiée.</p>
+                </div>
+            </div>
+        {% endif %}
+    </div>
+
+    <!-- ========== RISQUES PROPOSÉS (SI CARTOGRAPHIE VIDE) ========== -->
+    {% if total_risques == 0 and risques_proposes and risques_proposes|length > 0 %}
+    <div class="row mt-4">
+        <div class="col-12">
+            <div class="card-modern animate-in" style="border: 2px solid var(--ia-primary); border-radius: 16px;">
+                <div class="card-header" style="background: linear-gradient(135deg, #1e1b4b, #4f46e5); color: white;">
+                    <h5 class="mb-0">
+                        <i class="fas fa-rocket me-2"></i>
+                        Risques suggérés pour démarrer
+                        <span class="badge-modern ms-2" style="background: rgba(255,255,255,0.15); color: white;">
+                            {{ risques_proposes|length }} risques
+                        </span>
+                    </h5>
+                </div>
+                <div class="card-body">
+                    <div class="alert alert-info">
+                        <i class="fas fa-lightbulb me-2"></i>
+                        <strong>IA recommandation :</strong> Voici des risques suggérés pour démarrer votre cartographie.
+                        Cliquez sur "Ajouter" pour les intégrer à votre cartographie.
+                    </div>
+                    
+                    <div class="row g-3">
+                        {% for risque in risques_proposes %}
+                        <div class="col-md-4">
+                            <div class="risk-proposed-card">
+                                <div class="d-flex justify-content-between align-items-start">
+                                    <div>
+                                        <div class="risk-ref">{{ risque.reference }}</div>
+                                        <h6 class="mt-1 mb-1" style="color: var(--dark);">{{ risque.intitule }}</h6>
+                                        <p class="risk-desc">{{ risque.description|truncate(80) }}</p>
+                                    </div>
+                                    <span class="badge-modern badge-secondary">{{ risque.categorie }}</span>
+                                </div>
+                                <div class="mt-2 d-flex gap-2">
+                                    <span class="badge-modern badge-info">Impact: {{ risque.impact_propose }}/5</span>
+                                    <span class="badge-modern badge-warning">Prob: {{ risque.probabilite_propose }}/5</span>
+                                </div>
+                                <div class="mt-3">
+                                    <form action="{{ url_for('ajouter_risque_suggere', cartographie_id=cartographie.id) }}" method="POST" class="d-inline">
+                                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                                        <input type="hidden" name="reference" value="{{ risque.reference }}">
+                                        <input type="hidden" name="intitule" value="{{ risque.intitule }}">
+                                        <input type="hidden" name="description" value="{{ risque.description }}">
+                                        <input type="hidden" name="categorie" value="{{ risque.categorie }}">
+                                        <input type="hidden" name="type_risque" value="{{ risque.type_risque }}">
+                                        <input type="hidden" name="impact_propose" value="{{ risque.impact_propose }}">
+                                        <input type="hidden" name="probabilite_propose" value="{{ risque.probabilite_propose }}">
+                                        <button type="submit" class="btn-modern btn-primary" style="padding: 0.3rem 1rem; font-size: 0.8rem;">
+                                            <i class="fas fa-plus me-1"></i>Ajouter
+                                        </button>
+                                    </form>
+                                    <button class="btn-modern btn-outline" style="padding: 0.3rem 1rem; font-size: 0.8rem;" onclick="ignorerRisqueSuggere('{{ risque.reference }}')">
+                                        <i class="fas fa-times me-1"></i>Ignorer
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                        {% endfor %}
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    {% endif %}
+
+    <!-- ========== ANALYSE DÉTAILLÉE ========== -->
+    <div class="row mt-4">
+        <div class="col-12">
+            <div class="card-modern animate-in">
+                <div class="card-header card-header-info">
+                    <h5>
+                        <i class="fas fa-chart-pie me-2"></i>
+                        Analyse Détaillée
+                    </h5>
+                </div>
+                <div class="card-body">
+                    <div class="row">
+                        <!-- Distribution par niveau -->
+                        <div class="col-md-6">
+                            <h6 class="fw-bold mb-3" style="font-family: 'Georgia', serif;">Distribution par niveau de risque net</h6>
+                            {% if distribution_niveaux and distribution_niveaux|length > 0 %}
+                                {% for niveau, count in distribution_niveaux.items() %}
+                                <div class="mb-2">
+                                    <div class="d-flex justify-content-between">
+                                        <span>{{ cot.badge(niveau) }}</span>
+                                        <span>{{ count }} risques</span>
+                                    </div>
+                                    <div class="progress-modern mt-1">
+                                        <div class="progress-modern-bar cot-{{ cot.cle(niveau) }}"
+                                            style="width: {{ (count / total_risques * 100) if total_risques > 0 else 0 }}%;">
+                                        </div>
+                                    </div>
+                                </div>
+                                {% endfor %}
+                            {% else %}
+                                <div class="text-center text-muted py-4">
+                                    <i class="fas fa-inbox fa-2x mb-2"></i>
+                                    <p>Aucune évaluation enregistrée</p>
+                                </div>
+                            {% endif %}
+                        </div>
+
+                        <!-- Top risques critiques -->
+                        <div class="col-md-6">
+                            <h6 class="fw-bold mb-3" style="font-family: 'Georgia', serif;">Top risques critiques</h6>
+                            {% if risques_critiques and risques_critiques|length > 0 %}
+                                {% for risque in risques_critiques[:5] %}
+                                <div class="d-flex justify-content-between align-items-center p-2 mb-2" style="background: var(--gray-light); border-radius: 8px; border-left: 3px solid var(--danger);">
+                                    <div>
+                                        <a href="{{ url_for('detail_risque', id=risque.id) }}" class="text-decoration-none fw-semibold" style="color: var(--dark);">
+                                            {{ risque.reference }}
+                                        </a>
+                                        <div class="small text-muted">{{ risque.intitule|truncate(50) }}</div>
+                                    </div>
+                                    {{ cot.badge('Critique', petit=True) }}
+                                </div>
+                                {% endfor %}
+                            {% else %}
+                                <div class="text-center text-muted py-4">
+                                    <i class="fas fa-check-circle fa-2x mb-2" style="color: var(--success);"></i>
+                                    <p>Aucun risque critique identifié</p>
+                                </div>
+                            {% endif %}
+                        </div>
+                    </div>
+
+                    <!-- Catégories -->
+                    <div class="row mt-4">
+                        <div class="col-md-6">
+                            <h6 class="fw-bold mb-3" style="font-family: 'Georgia', serif;">Couverture par catégorie</h6>
+                            <div class="row g-2">
+                                {% if categories and categories|length > 0 %}
+                                    {% for categorie, count in categories.items() %}
+                                    <div class="col-6">
+                                        <div class="p-2 rounded" style="background: var(--gray-light);">
+                                            <div class="d-flex justify-content-between">
+                                                <span class="fw-semibold">{{ categorie|title }}</span>
+                                                <span class="badge-modern badge-secondary">{{ count }}</span>
+                                            </div>
+                                        </div>
+                                    </div>
+                                    {% endfor %}
+                                {% else %}
+                                    <div class="col-12 text-center text-muted py-3">
+                                        <p>Aucune catégorie définie</p>
+                                    </div>
+                                {% endif %}
+                            </div>
+                        </div>
+                        <div class="col-md-6">
+                            <h6 class="fw-bold mb-3" style="font-family: 'Georgia', serif;">Couverture par type</h6>
+                            <div class="row g-2">
+                                {% if types and types|length > 0 %}
+                                    {% for type, count in types.items() %}
+                                    <div class="col-6">
+                                        <div class="p-2 rounded" style="background: var(--gray-light);">
+                                            <div class="d-flex justify-content-between">
+                                                <span class="fw-semibold">{{ type|title }}</span>
+                                                <span class="badge-modern badge-secondary">{{ count }}</span>
+                                            </div>
+                                        </div>
+                                    </div>
+                                    {% endfor %}
+                                {% else %}
+                                    <div class="col-12 text-center text-muted py-3">
+                                        <p>Aucun type défini</p>
+                                    </div>
+                                {% endif %}
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Token CSRF -->
+<meta name="csrf-token" content="{{ csrf_token() }}">
+{% endblock %}
+
+{% block scripts %}
+<script>
+// ============================================
+// FILTRAGE DES SUGGESTIONS
+// ============================================
+function filtrerSuggestions(priorite) {
+    const items = document.querySelectorAll('.suggestion-item');
+    
+    document.querySelectorAll('.btn-filter').forEach(btn => {
+        btn.classList.remove('active');
+        btn.style.borderColor = 'var(--border)';
+        btn.style.background = 'var(--gray-light)';
+    });
+    
+    const activeBtn = document.querySelector(`.btn-filter[onclick*="${priorite}"]`);
+    if (activeBtn) {
+        activeBtn.classList.add('active');
+        activeBtn.style.borderColor = 'var(--gold)';
+        activeBtn.style.background = 'rgba(201, 168, 76, 0.08)';
+    }
+    
+    let visibleCount = 0;
+    items.forEach(item => {
+        if (priorite === 'all' || item.dataset.priorite === priorite) {
+            item.style.display = '';
+            visibleCount++;
+        } else {
+            item.style.display = 'none';
+        }
+    });
+    
+    const badge = document.querySelector('.badge-modern.badge-secondary.ms-2');
+    if (badge) {
+        badge.textContent = visibleCount;
+    }
+}
+
+// ============================================
+// RAFRAÎCHIR L'ANALYSE
+// ============================================
+function rafraichirAnalyse() {
+    const btn = document.querySelector('button[onclick*="rafraichirAnalyse"]');
+    const originalHtml = btn.innerHTML;
+    btn.disabled = true;
+    btn.innerHTML = '<i class="fas fa-spinner fa-spin me-1"></i> Chargement...';
+    
+    fetch(`/api/ia/analyse/${CONFIG.cartographieId}/rafraichir`, {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            'X-CSRFToken': document.querySelector('meta[name="csrf-token"]').content
+        }
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            window.location.reload();
+        } else {
+            alert('❌ Erreur: ' + (data.error || 'Erreur inconnue'));
+            btn.disabled = false;
+            btn.innerHTML = originalHtml;
+        }
+    })
+    .catch(error => {
+        alert('❌ Erreur réseau: ' + error.message);
+        btn.disabled = false;
+        btn.innerHTML = originalHtml;
+    });
+}
+
+// ============================================
+// IGNORER UN RISQUE SUGGÉRÉ
+// ============================================
+function ignorerRisqueSuggere(reference) {
+    if (confirm(`Ignorer le risque suggéré "${reference}" ?`)) {
+        const card = event.target.closest('.risk-proposed-card');
+        if (card) {
+            card.style.display = 'none';
+        }
+        // Optionnel: appeler une API pour enregistrer l'ignorance
+    }
+}
+
+// ============================================
+// INITIALISATION
+// ============================================
+document.addEventListener('DOMContentLoaded', function() {
+    filtrerSuggestions('all');
+    // Export : /analyse-ia?imprimer=1 ouvre la boîte d'impression (« Enregistrer en PDF »)
+    if (new URLSearchParams(window.location.search).get('imprimer') === '1') {
+        setTimeout(function () { window.print(); }, 400);
+    }
+    
+    document.querySelectorAll('[title]').forEach(el => {
+        new bootstrap.Tooltip(el);
+    });
+});
+
+// ============================================
+// CONFIGURATION
+// ============================================
+const CONFIG = {
+    cartographieId: {{ cartographie.id }},
+    csrfToken: '{{ csrf_token() }}'
+};
+</script>
+{% endblock %}

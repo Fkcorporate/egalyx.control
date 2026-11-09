@@ -1,0 +1,36 @@
+{% extends "base.html" %}
+{% import "_macros/page.html" as pg %}
+
+{% block title %}Vérification des incohérences{% endblock %}
+{% block styles %}{{ pg.styles() }}{% endblock %}
+{% block content %}
+<div class="container-fluid" style="max-width: 1100px;">
+  {{ pg.entete('Vérification des incohérences', 'fa-magnifying-glass-chart', cartographie.nom if cartographie else none, retour=url_for('detail_cartographie', id=cartographie_id), libelle_retour='Cartographie') }}
+  {% set liste = (result.incoherences if result is mapping and result.incoherences is defined else (result if result is iterable and result is not string and result is not mapping else none)) %}
+  {% if liste is not none %}
+    {% call pg.carte((liste|length) ~ ' incohérence(s) détectée(s)') %}
+      {% if liste %}
+      <div class="table-responsive"><table class="pg-table">
+        <tbody>
+        {% for i in liste %}
+          <tr><td>{% if i is mapping %}
+                {% if i.risque_reference or i.reference %}<span class="pg-ref me-2">{{ i.risque_reference or i.reference }}</span>{% endif %}
+                {% if i.type %}<span class="badge text-bg-warning me-2">{{ i.type|replace('_', ' ')|capitalize }}</span>{% endif %}
+                {{ i.message or i.description or '' }}
+                {% set autres = i|dictsort|rejectattr('0', 'in', ['risque_reference', 'reference', 'type', 'message', 'description'])|list %}
+                {% if autres %}<details class="mt-1"><summary class="pg-second">Détails</summary>{{ pg.valeur(dict(autres)) }}</details>{% endif %}
+              {% else %}{{ i }}{% endif %}</td></tr>
+        {% endfor %}
+        </tbody>
+      </table></div>
+      {% else %}{{ pg.vide('Aucune incohérence : la cartographie est cohérente.', 'fa-circle-check') }}{% endif %}
+    {% endcall %}
+  {% endif %}
+  {% if result is mapping %}
+    {% set reste = result|dictsort|rejectattr('0', 'equalto', 'incoherences')|list %}
+    {% if reste %}{% call pg.carte('Synthèse') %}{{ pg.valeur(dict(reste)) }}{% endcall %}{% endif %}
+  {% elif liste is none %}
+    {% call pg.carte('Résultat') %}{{ pg.valeur(result) }}{% endcall %}
+  {% endif %}
+</div>
+{% endblock %}

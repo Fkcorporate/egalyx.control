@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% import "_macros/cotation.html" as cot %}
 
 {% block styles %}
 {{ super() }}
@@ -585,7 +586,7 @@
                                                     <div class="echelle-item-horizontal {% if evaluation_en_cours and evaluation_en_cours.niveau_maitrise_pre == i %}active{% endif %}"
                                                          data-value="{{ i }}" data-type="maitrise">
                                                         <div class="echelle-valeur">{{ i }}</div>
-                                                        <div class="echelle-couleur" style="background-color: {{ get_niveau_couleur('maitrise', maitrise_order) }};"></div>
+                                                        <div class="echelle-couleur" style="background-color: {{ (couleur_maitrise(i) if couleur_maitrise is defined else get_niveau_couleur('maitrise', i)) }};"></div>
                                                         <div class="echelle-label"><strong>{{ get_niveau_nom_court('maitrise', i) }}</strong></div>
                                                     </div>
                                                     {% endfor %}
@@ -748,11 +749,11 @@
                                             <select class="form-select-modern" name="niveau_maitrise_val" id="niveauMaitriseVal" onchange="mettreAJourPreview()">
                                                 <option value="0">Identique ({{ evaluation_en_cours.niveau_maitrise_pre or 3 }})</option>
                                                 {% for i in range(1, 6) %}
-                                                <option value="{{ i }}"
+                                                <option value="{{ i }}" style="color: {{ couleur_maitrise(i) if couleur_maitrise is defined else 'inherit' }}; font-weight: 600;"
                                                     {% if evaluation_en_cours.niveau_maitrise_val == i %}selected
                                                     {% elif not evaluation_en_cours.niveau_maitrise_val and niveau_maitrise_dmr and (niveau_maitrise_dmr|round(0, 'common')|int) == i %}selected
                                                     {% endif %}>
-                                                    {{ i }}/5
+                                                    {{ i }}/5 — {{ get_niveau_nom_court('maitrise', i) }}
                                                     {% if niveau_maitrise_dmr and (niveau_maitrise_dmr|round(0, 'common')|int) == i %}— 💡 suggéré{% endif %}
                                                 </option>
                                                 {% endfor %}
@@ -913,11 +914,11 @@
                                             <select class="form-select-modern" name="niveau_maitrise_conf" onchange="mettreAJourPreview()" {% if phase_actuelle == 'a_revoir' %}disabled{% endif %}>
                                                 <option value="0">Identique</option>
                                                 {% for i in range(1, 6) %}
-                                                <option value="{{ i }}"
+                                                <option value="{{ i }}" style="color: {{ couleur_maitrise(i) if couleur_maitrise is defined else 'inherit' }}; font-weight: 600;"
                                                     {% if evaluation_en_cours.niveau_maitrise_conf == i %}selected
                                                     {% elif not evaluation_en_cours.niveau_maitrise_conf and niveau_maitrise_dmr and (niveau_maitrise_dmr|round(0, 'common')|int) == i %}selected
                                                     {% endif %}>
-                                                    {{ i }}/5
+                                                    {{ i }}/5 — {{ get_niveau_nom_court('maitrise', i) }}
                                                 </option>
                                                 {% endfor %}
                                             </select>
@@ -1227,18 +1228,8 @@
                     </tbody>
                 </table>
 
-                <h6 class="mt-4 border-bottom pb-2" style="color: var(--dark);">📈 Interprétation des scores</h6>
-                <table class="table table-sm table-bordered">
-                    <thead style="background: var(--light);">
-                        <tr><th>Score</th><th>Niveau</th><th>Action</th></tr>
-                    </thead>
-                    <tbody>
-                        <tr><td>1-4</td><td><span class="badge-modern badge-success">Faible</span></td><td>Surveillance standard</td></tr>
-                        <tr><td>5-10</td><td><span class="badge-modern badge-warning">Moyen</span></td><td>Plan d'action recommandé</td></tr>
-                        <tr><td>11-16</td><td><span class="badge-modern badge-danger">Élevé</span></td><td>Actions correctives immédiates</td></tr>
-                        <tr><td>17-25</td><td><span class="badge-modern badge-dark">Critique</span></td><td>Escalade direction</td></tr>
-                    </tbody>
-                </table>
+                <h6 class="mt-4 border-bottom pb-2" style="color: var(--dark);">📈 Interprétation des scores (brut et net)</h6>
+                {{ cot.tableau_regles() }}
             </div>
             <div class="modal-footer">
                 <button type="button" class="btn-modern-secondary" data-bs-dismiss="modal">Fermer</button>
@@ -1255,7 +1246,7 @@
 // ============================================
 // CONFIGURATION
 // ============================================
-const TAUX_REDUCTION_MAITRISE = {1: 0.00, 2: 0.10, 3: 0.25, 4: 0.40, 5: 0.60};
+const TAUX_REDUCTION_MAITRISE = EgalyxCotation.tauxReduction;   // règle unique (cotation.py)
 
 const niveauMaitriseDMR = {{ niveau_maitrise_dmr if niveau_maitrise_dmr else 'null' }};
 const phaseActuelle = "{{ phase_actuelle }}";
@@ -1280,17 +1271,16 @@ const maitriseDescriptions = {
 // UTILITAIRES DE CALCUL
 // ============================================
 function qualifierScore(score) {
-    if (score <= 4) return { nom: 'Faible', couleur: 'success' };
-    if (score <= 10) return { nom: 'Moyen', couleur: 'warning' };
-    if (score <= 16) return { nom: 'Élevé', couleur: 'danger' };
-    return { nom: 'Critique', couleur: 'dark' };
+    // Règle unique : seuils et couleurs viennent de cotation.py via EgalyxCotation
+    const nom = EgalyxCotation.niveau(score);
+    return { nom: nom, couleur: EgalyxCotation.cle(nom) };
 }
 
 function calculerScores(impact, proba, maitrise) {
     if (!impact || !proba) {
         return { brut: 0, net: 0, reduction: 0, probaAjustee: 0, taux: 0,
-                 niveauBrut: {nom: '—', couleur: 'secondary'},
-                 niveauNet: {nom: '—', couleur: 'secondary'} };
+                 niveauBrut: {nom: '—', couleur: 'na'},
+                 niveauNet: {nom: '—', couleur: 'na'} };
     }
     const scoreBrut = impact * proba;
     const taux = TAUX_REDUCTION_MAITRISE[maitrise] || 0;
@@ -1422,11 +1412,11 @@ function mettreAJourPreview() {
 
     const brutBadge = document.getElementById('preview-brut-niveau');
     brutBadge.textContent = scores.niveauBrut.nom;
-    brutBadge.className = `cotation-item-badge badge-modern badge-${scores.niveauBrut.couleur}`;
+    brutBadge.className = `cotation-item-badge cot-badge cot-${scores.niveauBrut.couleur}`;
 
     const netBadge = document.getElementById('preview-net-niveau');
     netBadge.textContent = scores.niveauNet.nom;
-    netBadge.className = `cotation-item-badge badge-modern badge-${scores.niveauNet.couleur}`;
+    netBadge.className = `cotation-item-badge cot-badge cot-${scores.niveauNet.couleur}`;
 
     document.getElementById('preview-reduction').textContent =
         scores.taux > 0 ? `−${Math.round(scores.taux * 100)}%` : '0%';
@@ -1436,7 +1426,7 @@ function mettreAJourPreview() {
         document.getElementById('scoreAffiche').textContent = scores.net;
         const na = document.getElementById('niveauAffiche');
         na.textContent = scores.niveauNet.nom;
-        na.className = `badge-modern badge-${scores.niveauNet.couleur} fs-6`;
+        na.className = `cot-badge cot-${scores.niveauNet.couleur} fs-6`;
     }
 
     afficherCoherence(maitrise);
@@ -1515,7 +1505,7 @@ function dessinerMiniMatrice(impact = 0, probabilite = 0, score = 0) {
             ctx.strokeStyle = '#ddd';
             ctx.strokeRect(j * cellSize, i * cellSize, cellSize, cellSize);
 
-            ctx.fillStyle = scoreCell > 12 ? 'white' : 'black';
+            ctx.fillStyle = EgalyxCotation.style(EgalyxCotation.niveau(scoreCell)).texte;
             ctx.font = '10px Arial';
             ctx.textAlign = 'center';
             ctx.textBaseline = 'middle';
@@ -1539,10 +1529,7 @@ function dessinerMiniMatrice(impact = 0, probabilite = 0, score = 0) {
 }
 
 function getCouleurCellule(score) {
-    if (score <= 4) return '#28a745';
-    if (score <= 10) return '#ffc107';
-    if (score <= 16) return '#ff8c00';
-    return '#dc3545';
+    return EgalyxCotation.couleur(EgalyxCotation.niveau(score));
 }
 
 // ============================================

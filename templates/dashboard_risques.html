@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% import "_macros/cotation.html" as cot %}
 
 {% block title %}Tableau de bord des risques{% endblock %}
 
@@ -142,6 +143,8 @@
         font-weight: 600;
     }
 
+    .legend-dot { display: inline-block; width: 10px; height: 10px; border-radius: 50%; margin-right: 4px; vertical-align: middle; }
+
     /* Ligne N-1 */
     .risk-row-n1 {
         background: rgba(245, 158, 11, 0.04) !important;
@@ -216,7 +219,7 @@
                             {{ total_critiques }} Risque(s) Critique(s) NET
                         </h5>
                         <p class="mb-0 text-muted small">
-                            Score NET ≥ 17/25 après application des contrôles
+                            Score NET &gt; {{ COTATION_SEUILS[2] }}/25 après application des contrôles
                         </p>
                     </div>
 
@@ -419,9 +422,9 @@
                         Basé sur le niveau NET (après contrôles)
                     </small>
                     <div class="d-flex justify-content-center gap-3 flex-wrap small">
-                        <span><span class="legend-dot" style="background: #7f1d1d;"></span> Critique active: <strong>{{ risques_critiques_count|default(0) }}</strong></span>
+                        <span><span class="legend-dot cot-critique"></span> Critique active: <strong>{{ risques_critiques_count|default(0) }}</strong></span>
                         {% if risques_critiques_n_moins_1 and risques_critiques_n_moins_1 > 0 %}
-                        <span><span class="legend-dot" style="background: #f59e0b;"></span> Critique N-1: <strong>{{ risques_critiques_n_moins_1 }}</strong></span>
+                        <span><span class="legend-dot cot-critique" style="opacity:.5"></span> Critique N-1: <strong>{{ risques_critiques_n_moins_1 }}</strong></span>
                         {% endif %}
                     </div>
                 </div>
@@ -464,9 +467,7 @@
                                 </td>
                                 <td class="text-center">
                                     {% if item.score_moyen %}
-                                    <span class="fw-bold {% if item.score_moyen >= 16 %}text-danger{% elif item.score_moyen >= 10 %}text-warning{% else %}text-success{% endif %}">
-                                        {{ item.score_moyen }}/25
-                                    </span>
+                                    {{ cot.badge_score(item.score_moyen, petit=True) }}
                                     {% else %}
                                     <span class="text-muted">-</span>
                                     {% endif %}
@@ -581,55 +582,21 @@
                                 </div>
                                 {% endif %}
 
-                                {% if item.niveau_net == 'Critique' %}
-                                    {% if item.est_revaluation %}
-                                    <span class="risk-badge risk-critical-n1">
-                                        🔄 Critique N-1
-                                    </span>
-                                    {% else %}
-                                    <span class="risk-badge risk-critical">🔴 Critique</span>
-                                    {% endif %}
-                                {% elif item.niveau_net == 'Élevé' %}
-                                    <span class="risk-badge risk-high">🟠 Élevé</span>
-                                {% elif item.niveau_net == 'Moyen' %}
-                                    <span class="risk-badge risk-medium">🟡 Moyen</span>
-                                {% elif item.niveau_net == 'Faible' %}
-                                    <span class="risk-badge risk-low">🟢 Faible</span>
-                                {% else %}
-                                    <span class="risk-badge risk-none">⚪ —</span>
-                                {% endif %}
+                                {{ cot.badge(item.niveau_net, n1=(item.est_revaluation and item.niveau_net == 'Critique')) }}
                             {% else %}
-                                <span class="risk-badge risk-none">⚪ Non évalué</span>
+                                {{ cot.badge(none) }}
                             {% endif %}
                         </td>
 
                         {# ===== SCORES BRUT / NET ===== #}
                         <td class="text-center">
                             {% if item.score_brut or item.score_net %}
-                            <div class="score-block">
-                                <div class="score-line score-brut">
-                                    <span class="label">Brut</span>
-                                    <span class="value">
-                                        {{ '%.1f'|format(item.score_brut) if item.score_brut else 0 }}
-                                    </span>
-                                </div>
-                                <div class="score-line score-net">
-                                    <span class="label">Net</span>
-                                    <span class="value">
-                                        {{ '%.1f'|format(item.score_net) if item.score_net else 0 }}
-                                    </span>
-                                    {% if statut == 'termine' %}
-                                    <i class="fas fa-lock text-success" title="Score officiel" style="font-size: 0.65rem;"></i>
-                                    {% elif item.est_revaluation %}
-                                    <i class="fas fa-redo text-warning" title="Score N-1" style="font-size: 0.65rem;"></i>
-                                    {% endif %}
-                                </div>
-                                {% if item.taux_reduction and item.taux_reduction > 0 %}
-                                <div class="score-reduction">
-                                    <i class="fas fa-arrow-down me-1"></i>−{{ (item.taux_reduction * 100)|int }}%
-                                </div>
-                                {% endif %}
-                            </div>
+                            {{ cot.brut_net(item.score_brut, item.score_net, item.taux_reduction) }}
+                            {% if statut == 'termine' %}
+                            <i class="fas fa-lock text-success ms-1" title="Score officiel" style="font-size: 0.65rem;"></i>
+                            {% elif item.est_revaluation %}
+                            <i class="fas fa-redo text-warning ms-1" title="Score N-1" style="font-size: 0.65rem;"></i>
+                            {% endif %}
                             {% else %}
                             <span class="text-muted">—</span>
                             {% endif %}
@@ -709,13 +676,14 @@ function initialiserGraphique(type = 'doughnut') {
         niveaux.faible || 0,
         niveaux.non_evalue || 0
     ];
+    // Couleurs de la règle unique (EgalyxCotation)
     const colors = [
-        '#7f1d1d',      // Critique active (rouge foncé)
-        '#f59e0b',      // Critique N-1 (orange)
-        '#ef4444',      // Élevé (rouge)
-        '#3b82f6',      // Moyen (bleu)
-        '#10b981',      // Faible (vert)
-        '#94a3b8'       // Non évalué (gris)
+        EgalyxCotation.couleur('Critique'),          // Critique active
+        EgalyxCotation.couleur('Critique') + '80',   // Critique N-1 (même rouge, atténué)
+        EgalyxCotation.couleur('Élevé'),
+        EgalyxCotation.couleur('Moyen'),
+        EgalyxCotation.couleur('Faible'),
+        EgalyxCotation.couleur('Non évalué')
     ];
 
     const ctx = document.getElementById('niveauChart').getContext('2d');

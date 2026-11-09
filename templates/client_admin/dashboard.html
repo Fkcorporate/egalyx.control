@@ -1,6 +1,7 @@
 {# templates/client_admin/dashboard.html #}
 
 {% extends "base.html" %}
+{% import "_macros/cotation.html" as cot %}
 
 {% block title %}Dashboard Admin Client - Egalyx Control{% endblock %}
 
@@ -311,6 +312,26 @@
     }
 
     /* ============================================ */
+    /* ===== BLOC RISQUE CRITIQUE ===== */
+    /* ============================================ */
+    .critical-risk-item {
+        transition: var(--transition);
+        border-left: 3px solid transparent;
+    }
+    .critical-risk-item:hover {
+        border-left-color: var(--danger);
+        background: rgba(239, 68, 68, 0.03);
+    }
+    .critical-risk-item.revaluation {
+        border-left-color: var(--warning);
+        opacity: 0.9;
+    }
+    .critical-risk-item.revaluation:hover {
+        border-left-color: var(--warning);
+        background: rgba(245, 158, 11, 0.05);
+    }
+
+    /* ============================================ */
     /* ===== ANIMATIONS ===== */
     /* ============================================ */
     .fade-in {
@@ -528,6 +549,12 @@
     [data-bs-theme="dark"] .avatar-circle.bg-info { background: #1e3a8a; color: white; }
     [data-bs-theme="dark"] .avatar-circle.bg-gold { background: #a8873a; color: white; }
     [data-bs-theme="dark"] .avatar-circle.bg-purple { background: #5b21b6; color: white; }
+    [data-bs-theme="dark"] .critical-risk-item:hover {
+        background: rgba(248, 113, 113, 0.05);
+    }
+    [data-bs-theme="dark"] .critical-risk-item.revaluation:hover {
+        background: rgba(251, 191, 36, 0.05);
+    }
 }
 </style>
 {% endblock %}
@@ -536,15 +563,25 @@
 <div class="container-fluid py-4 fade-in">
     <div class="row">
         <div class="col-12">
-            <!-- Breadcrumb -->
+            <!-- ============================================ -->
+            <!-- BREADCRUMB -->
+            <!-- ============================================ -->
             <nav aria-label="breadcrumb">
                 <ol class="breadcrumb">
-                    <li class="breadcrumb-item"><a href="{{ url_for('dashboard') }}"><i class="fas fa-home me-1"></i>Dashboard</a></li>
-                    <li class="breadcrumb-item active"><i class="fas fa-building me-1"></i>Admin Client</li>
+                    <li class="breadcrumb-item">
+                        <a href="{{ url_for('dashboard') }}">
+                            <i class="fas fa-home me-1"></i>Dashboard
+                        </a>
+                    </li>
+                    <li class="breadcrumb-item active">
+                        <i class="fas fa-building me-1"></i>Admin Client
+                    </li>
                 </ol>
             </nav>
             
-            <!-- En-tête client -->
+            <!-- ============================================ -->
+            <!-- EN-TÊTE CLIENT -->
+            <!-- ============================================ -->
             <div class="card card-modern mb-4">
                 <div class="card-body">
                     <div class="row align-items-center">
@@ -567,6 +604,11 @@
                                 <a href="{{ url_for('admin_operateurs') }}" class="btn btn-outline-primary">
                                     <i class="fas fa-user-cog me-2"></i>Opérateurs
                                 </a>
+                                {% if url_exists is not defined or url_exists('parametres_risque.valideur_page') %}
+                                <a href="{{ url_for('parametres_risque.valideur_page') }}" class="btn btn-outline-primary">
+                                    <i class="fas fa-user-check me-2"></i>Valideur des opérateurs
+                                </a>
+                                {% endif %}
                             </div>
                         </div>
                     </div>
@@ -575,8 +617,11 @@
         </div>
     </div>
 
-    <!-- Statistiques principales -->
+    <!-- ============================================ -->
+    <!-- STATISTIQUES PRINCIPALES -->
+    <!-- ============================================ -->
     <div class="row g-4 mb-4">
+        <!-- Utilisateurs -->
         <div class="col-md-3">
             <div class="card card-stat fade-in stat-delay-1">
                 <div class="card-body">
@@ -599,6 +644,7 @@
             </div>
         </div>
         
+        <!-- Opérateurs -->
         <div class="col-md-3">
             <div class="card card-stat fade-in stat-delay-2">
                 <div class="card-body">
@@ -609,7 +655,9 @@
                         <div>
                             <div class="stat-value">{{ stats.operateurs }}</div>
                             <p class="stat-label">Opérateurs</p>
-                            <div class="stat-sub">{{ ((stats.operateurs / stats.utilisateurs * 100)|round if stats.utilisateurs > 0 else 0) }}% des utilisateurs</div>
+                            <div class="stat-sub">
+                                {{ ((stats.operateurs / stats.utilisateurs * 100)|round if stats.utilisateurs > 0 else 0) }}% des utilisateurs
+                            </div>
                             <div class="progress mt-1" style="height: 4px;">
                                 <div class="progress-bar bg-success" 
                                      style="width: {{ (stats.operateurs / stats.utilisateurs * 100)|round if stats.utilisateurs > 0 else 0 }}%">
@@ -621,6 +669,7 @@
             </div>
         </div>
         
+        <!-- Risques -->
         <div class="col-md-3">
             <div class="card card-stat fade-in stat-delay-3">
                 <div class="card-body">
@@ -640,7 +689,14 @@
                             {% if stats.risques_critiques > 0 %}
                             <div class="stat-sub text-danger mt-1">
                                 <i class="fas fa-circle me-1" style="font-size: 0.4rem;"></i>
-                                {{ stats.risques_critiques }} critiques
+                                <strong>{{ stats.risques_critiques }}</strong> critiques
+                                {% if stats.risques_critiques_n_moins_1 is defined and stats.risques_critiques_n_moins_1 > 0 %}
+                                <span class="badge-modern badge-warning ms-1" 
+                                      style="font-size: 0.6rem; padding: 0.15rem 0.4rem;"
+                                      title="Critiques N-1 à réévaluer">
+                                    {{ stats.risques_critiques_n_moins_1 }} à réévaluer
+                                </span>
+                                {% endif %}
                             </div>
                             {% endif %}
                         </div>
@@ -649,6 +705,7 @@
             </div>
         </div>
         
+        <!-- Audits -->
         <div class="col-md-3">
             <div class="card card-stat fade-in stat-delay-4">
                 <div class="card-body">
@@ -678,8 +735,11 @@
         </div>
     </div>
 
-    <!-- Statistiques avancées -->
+    <!-- ============================================ -->
+    <!-- STATISTIQUES AVANCÉES -->
+    <!-- ============================================ -->
     <div class="row g-4 mb-4">
+        <!-- Campagnes actives -->
         <div class="col-md-3">
             <div class="card card-stat fade-in stat-delay-5" style="border-left: 4px solid var(--warning);">
                 <div class="card-body">
@@ -695,6 +755,8 @@
                 </div>
             </div>
         </div>
+        
+        <!-- Plans en retard -->
         <div class="col-md-3">
             <div class="card card-stat fade-in stat-delay-6" style="border-left: 4px solid var(--danger);">
                 <div class="card-body">
@@ -710,6 +772,8 @@
                 </div>
             </div>
         </div>
+        
+        <!-- Opérateurs actifs -->
         <div class="col-md-3">
             <div class="card card-stat fade-in stat-delay-7" style="border-left: 4px solid #8b5cf6;">
                 <div class="card-body">
@@ -720,25 +784,36 @@
                         <div>
                             <div class="stat-value">{{ stats.operateurs_actifs }}</div>
                             <p class="stat-label">Opérateurs actifs</p>
-                            <div class="stat-sub">{{ ((stats.operateurs_actifs / stats.operateurs * 100)|round if stats.operateurs > 0 else 0) }}% des opérateurs</div>
+                            <div class="stat-sub">
+                                {{ ((stats.operateurs_actifs / stats.operateurs * 100)|round if stats.operateurs > 0 else 0) }}% des opérateurs
+                            </div>
                         </div>
                     </div>
                 </div>
             </div>
         </div>
+        
+        <!-- Score NET moyen -->
         <div class="col-md-3">
-            <div class="card card-stat fade-in stat-delay-8" style="border-left: 4px solid var(--success);">
+            <div class="card card-stat fade-in stat-delay-8" style="border-left: 4px solid var(--gold);">
                 <div class="card-body">
                     <div class="d-flex align-items-center">
                         <div class="stat-icon gold me-3">
-                            <i class="fas fa-percent"></i>
+                            <i class="fas fa-chart-line"></i>
                         </div>
                         <div>
-                            <div class="stat-value">
-                                {{ ((stats.operateurs / stats.utilisateurs * 100)|round if stats.utilisateurs > 0 else 0) }}%
+                            {% set sm = stats.score_risque_moyen|default(0) %}
+                            <div class="stat-value cot-texte-{{ cot.cle(cotation_niveau(sm)) if sm else 'na' }}">
+                                {{ cot.fmt(sm) if sm else 0 }}
                             </div>
-                            <p class="stat-label">Taux d'opérateurs</p>
-                            <div class="stat-sub">{{ stats.operateurs }} opérateurs / {{ stats.utilisateurs }} utilisateurs</div>
+                            <p class="stat-label">Score NET moyen</p>
+                            <div class="stat-sub">{% if sm %}{{ cot.badge_score(sm, afficher_score=False, petit=True) }}{% else %}{{ cot.badge(none, petit=True) }}{% endif %}</div>
+                            {% if stats.reevaluations_attente is defined and stats.reevaluations_attente > 0 %}
+                            <div class="stat-sub text-info mt-1">
+                                <i class="fas fa-sync me-1"></i>
+                                {{ stats.reevaluations_attente }} réévaluation(s)
+                            </div>
+                            {% endif %}
                         </div>
                     </div>
                 </div>
@@ -746,59 +821,148 @@
         </div>
     </div>
 
-    <!-- Permissions des opérateurs -->
+    <!-- ============================================ -->
+    <!-- TOP 10 DES RISQUES CRITIQUES -->
+    <!-- ============================================ -->
+    {% if stats_risques is defined and stats_risques.risques_critiques_formatted %}
+    <div class="row g-4 mb-4">
+        <div class="col-12">
+            <div class="card card-modern">
+                <div class="card-header d-flex justify-content-between align-items-center">
+                    <h6 class="mb-0">
+                        <i class="fas fa-fire me-2" style="color: #dc2626;"></i>
+                        Top {{ stats_risques.risques_critiques_formatted|length }} des risques critiques
+                    </h6>
+                    <span class="badge-modern badge-danger">
+                        {{ stats.risques_critiques_actifs|default(0) }} actifs
+                        {% if stats.risques_critiques_n_moins_1 is defined and stats.risques_critiques_n_moins_1 > 0 %}
+                        + {{ stats.risques_critiques_n_moins_1 }} N-1
+                        {% endif %}
+                    </span>
+                </div>
+                <div class="card-body p-0">
+                    <div class="list-group list-group-modern">
+                        {% for item in stats_risques.risques_critiques_formatted %}
+                        <div class="list-group-item critical-risk-item {% if item.est_revaluation %}revaluation{% endif %}">
+                            <div class="d-flex align-items-center gap-3">
+                                <!-- Icône criticité -->
+                                <div class="avatar-circle" 
+                                     style="background: {% if item.est_revaluation %}#f59e0b{% else %}#dc2626{% endif %}; 
+                                            color: white; width: 44px; height: 44px; font-size: 1rem;">
+                                    <i class="fas fa-{% if item.est_revaluation %}clock{% else %}fire{% endif %}"></i>
+                                </div>
+                                
+                                <!-- Infos -->
+                                <div class="flex-grow-1">
+                                    <div class="d-flex align-items-center gap-2 mb-1 flex-wrap">
+                                        <strong>{{ item.risque.reference }}</strong>
+                                        <span class="text-muted small">
+                                            {{ item.risque.intitule|truncate(60) }}
+                                        </span>
+                                        {% if item.est_revaluation %}
+                                        <span class="badge-modern badge-warning" style="font-size: 0.65rem;">
+                                            <i class="fas fa-clock me-1"></i>N-1
+                                        </span>
+                                        {% else %}
+                                        <span class="badge-modern badge-success" style="font-size: 0.65rem;">
+                                            <i class="fas fa-check-circle me-1"></i>Actif
+                                        </span>
+                                        {% endif %}
+                                    </div>
+                                    <div class="small text-muted">
+                                        <i class="fas fa-clipboard-list me-1"></i>
+                                        Campagne : {{ item.campagne_nom|truncate(40) }}
+                                    </div>
+                                </div>
+                                
+                                <!-- Score -->
+                                <div class="text-end flex-shrink-0">
+                                    {{ cot.brut_net(item.score_brut, item.score_net, item.taux_reduction) }}
+                                </div>
+                                
+                                <!-- Action -->
+                                <a href="{{ url_for('detail_risque', id=item.risque.id) }}" 
+                                   class="btn btn-sm btn-outline-primary ms-2"
+                                   title="Voir le détail">
+                                    <i class="fas fa-arrow-right"></i>
+                                </a>
+                            </div>
+                        </div>
+                        {% endfor %}
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    {% endif %}
+
+    <!-- ============================================ -->
+    <!-- PERMISSIONS DES OPÉRATEURS -->
+    <!-- ============================================ -->
     <div class="row g-4 mb-4">
         <div class="col-12">
             <div class="card card-modern">
                 <div class="card-header">
-                    <h6 class="mb-0"><i class="fas fa-key me-2" style="color: var(--gold);"></i>Permissions des opérateurs</h6>
+                    <h6 class="mb-0">
+                        <i class="fas fa-key me-2" style="color: var(--gold);"></i>
+                        Permissions des opérateurs
+                    </h6>
                 </div>
                 <div class="card-body">
                     <div class="row g-3">
                         <div class="col-md-4">
                             <div class="permission-item d-flex align-items-center justify-content-between">
                                 <div class="d-flex align-items-center">
-                                    <div class="permission-icon" style="background: rgba(59, 130, 246, 0.1); color: var(--info);">
+                                    <div class="permission-icon" 
+                                         style="background: rgba(59, 130, 246, 0.1); color: var(--info);">
                                         <i class="fas fa-search"></i>
                                     </div>
                                     <div class="ms-2">
                                         <strong style="font-size: 0.85rem;">Évaluer les risques</strong>
                                     </div>
                                 </div>
-                                <span class="badge-modern badge-info">{{ permissions_operateurs.peut_evaluer_risques }}/{{ permissions_operateurs.total }}</span>
+                                <span class="badge-modern badge-info">
+                                    {{ permissions_operateurs.peut_evaluer_risques }}/{{ permissions_operateurs.total }}
+                                </span>
                             </div>
                         </div>
                         <div class="col-md-4">
                             <div class="permission-item d-flex align-items-center justify-content-between">
                                 <div class="d-flex align-items-center">
-                                    <div class="permission-icon" style="background: rgba(245, 158, 11, 0.1); color: var(--warning);">
+                                    <div class="permission-icon" 
+                                         style="background: rgba(245, 158, 11, 0.1); color: var(--warning);">
                                         <i class="fas fa-clipboard-list"></i>
                                     </div>
                                     <div class="ms-2">
                                         <strong style="font-size: 0.85rem;">Exécuter campagnes</strong>
                                     </div>
                                 </div>
-                                <span class="badge-modern badge-warning">{{ permissions_operateurs.peut_executer_campagnes }}/{{ permissions_operateurs.total }}</span>
+                                <span class="badge-modern badge-warning">
+                                    {{ permissions_operateurs.peut_executer_campagnes }}/{{ permissions_operateurs.total }}
+                                </span>
                             </div>
                         </div>
                         <div class="col-md-4">
                             <div class="permission-item d-flex align-items-center justify-content-between">
                                 <div class="d-flex align-items-center">
-                                    <div class="permission-icon" style="background: rgba(16, 185, 129, 0.1); color: var(--success);">
+                                    <div class="permission-icon" 
+                                         style="background: rgba(16, 185, 129, 0.1); color: var(--success);">
                                         <i class="fas fa-tasks"></i>
                                     </div>
                                     <div class="ms-2">
                                         <strong style="font-size: 0.85rem;">Gérer plans d'action</strong>
                                     </div>
                                 </div>
-                                <span class="badge-modern badge-success">{{ permissions_operateurs.peut_creer_plans_action }}/{{ permissions_operateurs.total }}</span>
+                                <span class="badge-modern badge-success">
+                                    {{ permissions_operateurs.peut_creer_plans_action }}/{{ permissions_operateurs.total }}
+                                </span>
                             </div>
                         </div>
                     </div>
                     <div class="mt-3 text-center">
                         <small class="text-muted">
                             <i class="fas fa-info-circle me-1"></i>
-                            Sur {{ permissions_operateurs.total }} opérateurs, 
+                            Sur {{ permissions_operateurs.total }} opérateurs,
                             {{ permissions_operateurs.peut_evaluer_risques }} peuvent évaluer les risques,
                             {{ permissions_operateurs.peut_executer_campagnes }} peuvent exécuter des campagnes,
                             {{ permissions_operateurs.peut_creer_plans_action }} peuvent gérer les plans d'action.
@@ -809,12 +973,18 @@
         </div>
     </div>
 
-    <!-- Activités récentes et utilisateurs -->
+    <!-- ============================================ -->
+    <!-- ACTIVITÉS RÉCENTES + UTILISATEURS -->
+    <!-- ============================================ -->
     <div class="row g-4">
+        <!-- Activités récentes -->
         <div class="col-md-7">
             <div class="card card-modern">
                 <div class="card-header">
-                    <h5 class="mb-0"><i class="fas fa-history me-2" style="color: var(--gold);"></i>Activités récentes</h5>
+                    <h5 class="mb-0">
+                        <i class="fas fa-history me-2" style="color: var(--gold);"></i>
+                        Activités récentes
+                    </h5>
                 </div>
                 <div class="card-body p-0">
                     <div class="list-group list-group-modern">
@@ -831,17 +1001,24 @@
                                             <i class="fas fa-{{ 'user-plus' if 'creation' in activite.action else 'user-edit' if 'modification' in activite.action else 'bell' }}"></i>
                                         </div>
                                         <div>
-                                            <strong>{{ activite.utilisateur.username if activite.utilisateur else 'Système' }}</strong>
-                                            <span class="text-muted ms-1">{{ activite.details|truncate(50) if activite.details else activite.action }}</span>
+                                            <strong>
+                                                {{ activite.utilisateur.username if activite.utilisateur else 'Système' }}
+                                            </strong>
+                                            <span class="text-muted ms-1">
+                                                {{ activite.details|truncate(50) if activite.details else activite.action }}
+                                            </span>
                                         </div>
                                     </div>
                                 </div>
-                                <small class="text-muted flex-shrink-0 ms-2">{{ activite.date_creation.strftime('%d/%m/%Y %H:%M') if activite.date_creation else 'N/A' }}</small>
+                                <small class="text-muted flex-shrink-0 ms-2">
+                                    {{ activite.date_creation.strftime('%d/%m/%Y %H:%M') if activite.date_creation else 'N/A' }}
+                                </small>
                             </div>
                             {% endfor %}
                         {% else %}
                             <div class="text-center py-5">
-                                <div class="avatar-circle mx-auto mb-3" style="width: 56px; height: 56px; font-size: 1.5rem; background: var(--gray-light);">
+                                <div class="avatar-circle mx-auto mb-3" 
+                                     style="width: 56px; height: 56px; font-size: 1.5rem; background: var(--gray-light);">
                                     <i class="fas fa-history text-muted"></i>
                                 </div>
                                 <p class="text-muted mb-0">Aucune activité récente</p>
@@ -852,10 +1029,14 @@
             </div>
         </div>
 
+        <!-- Utilisateurs récents -->
         <div class="col-md-5">
             <div class="card card-modern">
                 <div class="card-header">
-                    <h5 class="mb-0"><i class="fas fa-user-plus me-2" style="color: var(--gold);"></i>Derniers utilisateurs</h5>
+                    <h5 class="mb-0">
+                        <i class="fas fa-user-plus me-2" style="color: var(--gold);"></i>
+                        Derniers utilisateurs
+                    </h5>
                 </div>
                 <div class="card-body p-0">
                     <div class="list-group list-group-modern">
@@ -871,7 +1052,9 @@
                                 <div class="flex-grow-1">
                                     <div class="d-flex align-items-center justify-content-between">
                                         <div>
-                                            <h6 class="mb-0" style="font-size: 0.9rem;">{{ user.username }}</h6>
+                                            <h6 class="mb-0" style="font-size: 0.9rem;">
+                                                {{ user.username }}
+                                            </h6>
                                             <small class="text-muted">{{ user.email }}</small>
                                         </div>
                                         <span class="badge-modern 
@@ -889,7 +1072,8 @@
                             {% endfor %}
                         {% else %}
                             <div class="text-center py-5">
-                                <div class="avatar-circle mx-auto mb-3" style="width: 56px; height: 56px; font-size: 1.5rem; background: var(--gray-light);">
+                                <div class="avatar-circle mx-auto mb-3" 
+                                     style="width: 56px; height: 56px; font-size: 1.5rem; background: var(--gray-light);">
                                     <i class="fas fa-users text-muted"></i>
                                 </div>
                                 <p class="text-muted mb-0">Aucun utilisateur récent</p>
@@ -897,11 +1081,15 @@
                         {% endif %}
                     </div>
                     <div class="card-footer bg-transparent text-center border-0 pt-0 pb-3">
-                        <a href="{{ url_for('client_admin_utilisateurs') }}" class="btn btn-modern-primary btn-sm">
-                            <i class="fas fa-users me-1"></i>Voir tous les utilisateurs
+                        <a href="{{ url_for('client_admin_utilisateurs') }}" 
+                           class="btn btn-modern-primary btn-sm">
+                            <i class="fas fa-users me-1"></i>
+                            Voir tous les utilisateurs
                         </a>
-                        <a href="{{ url_for('admin_operateurs') }}" class="btn btn-outline-primary btn-sm ms-2">
-                            <i class="fas fa-user-cog me-1"></i>Gérer les opérateurs
+                        <a href="{{ url_for('admin_operateurs') }}" 
+                           class="btn btn-outline-primary btn-sm ms-2">
+                            <i class="fas fa-user-cog me-1"></i>
+                            Gérer les opérateurs
                         </a>
                     </div>
                 </div>
@@ -917,6 +1105,10 @@ document.addEventListener('DOMContentLoaded', function() {
     // Activer les tooltips
     const tooltipTriggerList = [].slice.call(document.querySelectorAll('[data-bs-toggle="tooltip"]'));
     tooltipTriggerList.map(tooltipTriggerEl => new bootstrap.Tooltip(tooltipTriggerEl));
+    
+    // Activer tous les éléments avec title (pour les badges info)
+    const titleTriggers = [].slice.call(document.querySelectorAll('[title]'));
+    titleTriggers.map(el => new bootstrap.Tooltip(el));
     
     // Animation des stat cards au scroll
     const observer = new IntersectionObserver((entries) => {

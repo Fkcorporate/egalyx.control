@@ -1,0 +1,495 @@
+{# templates/cartographie/analyse_ia.html #}
+
+{% extends "base.html" %}
+
+{% block styles %}
+{{ super() }}
+<style>
+    .suggestion-card {
+        border: 1px solid var(--border);
+        border-radius: var(--radius);
+        padding: 1.5rem;
+        margin-bottom: 1.5rem;
+        transition: all 0.3s ease;
+        background: var(--card-bg);
+    }
+    
+    .suggestion-card:hover {
+        box-shadow: var(--shadow-hover);
+        transform: translateY(-2px);
+    }
+    
+    .suggestion-card.priorite-1 { border-left: 4px solid var(--danger); }
+    .suggestion-card.priorite-2 { border-left: 4px solid var(--warning); }
+    .suggestion-card.priorite-3 { border-left: 4px solid var(--info); }
+    
+    .suggestion-icon {
+        width: 48px;
+        height: 48px;
+        border-radius: 12px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 1.5rem;
+        flex-shrink: 0;
+    }
+    
+    .suggestion-icon.danger { background: rgba(239, 68, 68, 0.12); color: var(--danger); }
+    .suggestion-icon.warning { background: rgba(245, 158, 11, 0.12); color: var(--warning); }
+    .suggestion-icon.info { background: rgba(59, 130, 246, 0.12); color: var(--info); }
+    .suggestion-icon.success { background: rgba(16, 185, 129, 0.12); color: var(--success); }
+    
+    .stats-grid-ia {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+        gap: 1rem;
+        margin-bottom: 2rem;
+    }
+    
+    .stat-card-ia {
+        background: var(--card-bg);
+        border: 1px solid var(--border);
+        border-radius: var(--radius-sm);
+        padding: 1.25rem;
+        text-align: center;
+        transition: all 0.3s ease;
+    }
+    
+    .stat-card-ia:hover {
+        transform: translateY(-2px);
+        box-shadow: var(--shadow);
+    }
+    
+    .stat-card-ia .stat-value {
+        font-size: 2rem;
+        font-weight: 700;
+        font-family: 'Georgia', serif;
+        color: var(--primary);
+    }
+    
+    .stat-card-ia .stat-label {
+        font-size: 0.75rem;
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+        color: var(--gray);
+        font-weight: 600;
+    }
+    
+    .suggestion-actions {
+        display: flex;
+        gap: 0.5rem;
+        flex-wrap: wrap;
+        margin-top: 1rem;
+    }
+    
+    .btn-suggestion {
+        padding: 0.4rem 1rem;
+        border-radius: 20px;
+        font-size: 0.8rem;
+        font-weight: 500;
+        border: 1px solid var(--border);
+        background: var(--card-bg);
+        color: var(--text-primary);
+        transition: all 0.3s ease;
+        cursor: pointer;
+        text-decoration: none;
+    }
+    
+    .btn-suggestion:hover {
+        border-color: var(--primary);
+        color: var(--primary);
+        background: var(--gray-light);
+        transform: translateY(-2px);
+    }
+    
+    .btn-suggestion.primary {
+        background: var(--primary);
+        color: white;
+        border-color: var(--primary);
+    }
+    
+    .btn-suggestion.primary:hover {
+        background: var(--primary-light);
+        border-color: var(--primary-light);
+    }
+    
+    .risk-tag {
+        display: inline-block;
+        padding: 0.2rem 0.6rem;
+        border-radius: 12px;
+        font-size: 0.7rem;
+        font-weight: 500;
+        background: var(--gray-light);
+        color: var(--gray);
+        margin: 0.2rem;
+    }
+    
+    .risk-tag:hover {
+        background: var(--primary);
+        color: white;
+    }
+    
+    .loading-overlay {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        min-height: 300px;
+        flex-direction: column;
+        gap: 1rem;
+    }
+    
+    .loading-spinner {
+        width: 48px;
+        height: 48px;
+        border: 4px solid var(--border);
+        border-top-color: var(--primary);
+        border-radius: 50%;
+        animation: spin 0.8s linear infinite;
+    }
+    
+    @keyframes spin {
+        to { transform: rotate(360deg); }
+    }
+    
+    [data-bs-theme="dark"] .stat-card-ia {
+        background: #1e293b;
+        border-color: #334155;
+    }
+    
+    [data-bs-theme="dark"] .stat-card-ia .stat-value {
+        color: #60a5fa;
+    }
+    
+    [data-bs-theme="dark"] .suggestion-card {
+        background: #1e293b;
+        border-color: #334155;
+    }
+    
+    [data-bs-theme="dark"] .risk-tag {
+        background: #334155;
+        color: #94a3b8;
+    }
+    
+    [data-bs-theme="dark"] .risk-tag:hover {
+        background: #60a5fa;
+        color: #0f172a;
+    }
+    
+    [data-bs-theme="dark"] .btn-suggestion {
+        background: #1e293b;
+        border-color: #334155;
+        color: #f1f5f9;
+    }
+    
+    [data-bs-theme="dark"] .btn-suggestion:hover {
+        border-color: #60a5fa;
+        color: #60a5fa;
+        background: #334155;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="container-fluid py-4">
+
+    <!-- ========== EN-TÊTE ========== -->
+    <div class="row mb-4 animate-in">
+        <div class="col-12">
+            <div class="d-flex justify-content-between align-items-center flex-wrap">
+                <div>
+                    <nav aria-label="breadcrumb">
+                        <ol class="breadcrumb bg-transparent mb-1">
+                            <li class="breadcrumb-item"><a href="{{ url_for('liste_cartographies') }}" class="text-decoration-none">Cartographies</a></li>
+                            <li class="breadcrumb-item"><a href="{{ url_for('detail_cartographie', id=cartographie.id) }}" class="text-decoration-none">{{ cartographie.nom }}</a></li>
+                            <li class="breadcrumb-item active">Analyse IA</li>
+                        </ol>
+                    </nav>
+                    <h1 class="h2 mb-1" style="font-family: 'Georgia', serif; color: var(--text-primary);">
+                        <i class="fas fa-brain me-2" style="color: var(--gold);"></i>
+                        Analyse Intelligente
+                    </h1>
+                    <p class="text-muted mb-0">{{ cartographie.nom }} - Suggestions et recommandations IA</p>
+                </div>
+                <div>
+                    <a href="{{ url_for('detail_cartographie', id=cartographie.id) }}" class="btn-modern btn-outline">
+                        <i class="fas fa-arrow-left me-2"></i>Retour à la cartographie
+                    </a>
+                    <button class="btn-modern btn-primary" onclick="rafraichirAnalyse()">
+                        <i class="fas fa-sync-alt me-2"></i>Rafraîchir
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- ========== STATISTIQUES ========== -->
+    <div class="stats-grid-ia" id="statsContainer">
+        <div class="stat-card-ia">
+            <div class="stat-value" id="statTotal">-</div>
+            <div class="stat-label">Risques totaux</div>
+        </div>
+        <div class="stat-card-ia">
+            <div class="stat-value" id="statEvalues">-</div>
+            <div class="stat-label">Risques évalués</div>
+        </div>
+        <div class="stat-card-ia">
+            <div class="stat-value" id="statDispositifs">-</div>
+            <div class="stat-label">Dispositifs</div>
+        </div>
+        <div class="stat-card-ia">
+            <div class="stat-value" id="statTauxEval">-</div>
+            <div class="stat-label">Taux d'évaluation</div>
+        </div>
+        <div class="stat-card-ia">
+            <div class="stat-value" id="statTauxCouverture">-</div>
+            <div class="stat-label">Couverture dispositifs</div>
+        </div>
+        <div class="stat-card-ia">
+            <div class="stat-value" id="statIncidents">-</div>
+            <div class="stat-label">Incidents récents</div>
+        </div>
+    </div>
+
+    <!-- ========== SUGGESTIONS ========== -->
+    <div class="row">
+        <div class="col-12">
+            <div class="d-flex justify-content-between align-items-center mb-4">
+                <h3 class="h5 mb-0" style="font-family: 'Georgia', serif; color: var(--text-primary);">
+                    <i class="fas fa-list-check me-2" style="color: var(--gold);"></i>
+                    Suggestions et Recommandations
+                </h3>
+                <span class="badge-modern badge-info" id="suggestionsCount">0 suggestions</span>
+            </div>
+            
+            <div id="suggestionsContainer">
+                <div class="loading-overlay">
+                    <div class="loading-spinner"></div>
+                    <p class="text-muted">Analyse en cours...</p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+</div>
+
+<script>
+// ============================================
+// CHARGEMENT DE L'ANALYSE
+// ============================================
+
+async function chargerAnalyse() {
+    const container = document.getElementById('suggestionsContainer');
+    const statsContainer = document.getElementById('statsContainer');
+    
+    try {
+        const response = await fetch(`/api/cartographie/{{ cartographie.id }}/analyse-ia`);
+        const data = await response.json();
+        
+        if (data.success) {
+            // Mettre à jour les statistiques
+            document.getElementById('statTotal').textContent = data.statistiques.total_risques;
+            document.getElementById('statEvalues').textContent = data.statistiques.risques_evalues;
+            document.getElementById('statDispositifs').textContent = data.statistiques.total_dispositifs;
+            document.getElementById('statTauxEval').textContent = data.statistiques.taux_evaluation + '%';
+            document.getElementById('statTauxCouverture').textContent = data.statistiques.taux_couverture_dispositifs + '%';
+            document.getElementById('statIncidents').textContent = data.statistiques.total_incidents;
+            
+            // Mettre à jour le compteur
+            document.getElementById('suggestionsCount').textContent = data.suggestions.length + ' suggestions';
+            
+            // Afficher les suggestions
+            afficherSuggestions(data.suggestions);
+        } else {
+            container.innerHTML = `
+                <div class="alert-modern danger">
+                    <i class="fas fa-exclamation-triangle me-2"></i>
+                    Erreur : ${data.error || 'Impossible de charger l\'analyse'}
+                </div>
+            `;
+        }
+    } catch (error) {
+        container.innerHTML = `
+            <div class="alert-modern danger">
+                <i class="fas fa-exclamation-triangle me-2"></i>
+                Erreur réseau : ${error.message}
+            </div>
+        `;
+    }
+}
+
+function afficherSuggestions(suggestions) {
+    const container = document.getElementById('suggestionsContainer');
+    
+    if (!suggestions || suggestions.length === 0) {
+        container.innerHTML = `
+            <div class="card-modern text-center py-5">
+                <i class="fas fa-check-circle fa-3x mb-3" style="color: var(--success);"></i>
+                <h5 style="color: var(--dark);">Tout est excellent !</h5>
+                <p class="text-muted">Votre cartographie est bien structurée. Continuez votre bon travail.</p>
+            </div>
+        `;
+        return;
+    }
+    
+    let html = '';
+    suggestions.forEach(suggestion => {
+        const prioriteClass = suggestion.priorite === 1 ? 'danger' : 
+                            suggestion.priorite === 2 ? 'warning' : 'info';
+        const prioriteLabel = suggestion.priorite === 1 ? 'Haute' : 
+                             suggestion.priorite === 2 ? 'Moyenne' : 'Basse';
+        
+        html += `
+        <div class="suggestion-card priorite-${suggestion.priorite}">
+            <div class="d-flex gap-3">
+                <div class="suggestion-icon ${prioriteClass}">
+                    <i class="fas ${suggestion.icone || 'fa-lightbulb'}"></i>
+                </div>
+                <div class="flex-grow-1">
+                    <div class="d-flex justify-content-between align-items-start flex-wrap">
+                        <h5 class="mb-1" style="color: var(--dark);">
+                            ${suggestion.titre}
+                            <span class="badge-modern badge-${prioriteClass} ms-2">${prioriteLabel}</span>
+                        </h5>
+                    </div>
+                    <p class="mb-1 text-muted small">${suggestion.description}</p>
+                    <p class="mb-2 small" style="color: var(--primary);">
+                        <i class="fas fa-lightbulb me-1"></i>
+                        ${suggestion.recommandation}
+                    </p>
+                    
+                    ${suggestion.risques_concerenes ? `
+                    <div class="mb-2">
+                        <span class="text-muted small">Risques concernés :</span>
+                        ${suggestion.risques_concerenes.map(id => `
+                            <span class="risk-tag" onclick="ouvrirRisque(${id})">
+                                <i class="fas fa-external-link-alt me-1" style="font-size: 0.6rem;"></i>
+                                RISQ-${String(id).padStart(3, '0')}
+                            </span>
+                        `).join('')}
+                    </div>
+                    ` : ''}
+                    
+                    ${suggestion.risques_suggestions ? `
+                    <div class="mb-2">
+                        <span class="text-muted small">Risques suggérés :</span>
+                        ${suggestion.risques_suggestions.map(r => `
+                            <span class="risk-tag" style="background: rgba(16, 185, 129, 0.12); color: var(--success);">
+                                ${r.reference} - ${r.intitule}
+                            </span>
+                        `).join('')}
+                    </div>
+                    ` : ''}
+                    
+                    ${suggestion.details ? `
+                    <div class="mb-2">
+                        <span class="text-muted small">Détails :</span>
+                        ${suggestion.details.map(d => `
+                            <div class="small p-1" style="background: var(--gray-light); border-radius: 4px; margin: 2px 0;">
+                                ${d.risque} - ${d.dispositif} (${d.efficacite}/5)
+                            </div>
+                        `).join('')}
+                    </div>
+                    ` : ''}
+                    
+                    <div class="suggestion-actions">
+                        ${suggestion.action === 'evaluer' ? `
+                            <a href="{{ url_for('evaluer_tous_risques', cartographie_id=cartographie.id, campagne_id=0) }}" 
+                               class="btn-suggestion primary">
+                                <i class="fas fa-play me-1"></i>Évaluer maintenant
+                            </a>
+                        ` : ''}
+                        ${suggestion.action === 'creer_dispositif' ? `
+                            <a href="{{ url_for('nouveau_dispositif', risque_id=0) }}" 
+                               class="btn-suggestion primary" onclick="event.preventDefault(); alert('Redirection vers la création de dispositif');">
+                                <i class="fas fa-shield-alt me-1"></i>Créer un dispositif
+                            </a>
+                        ` : ''}
+                        ${suggestion.action === 'ajouter_risques_suggestions' ? `
+                            <button class="btn-suggestion primary" onclick="ajouterRisquesSuggestions()">
+                                <i class="fas fa-plus me-1"></i>Ajouter ces risques
+                            </button>
+                        ` : ''}
+                        ${suggestion.action === 'prioriser_categorie' ? `
+                            <a href="#" class="btn-suggestion" onclick="event.preventDefault(); alert('Voir les risques de la catégorie ${suggestion.categorie}');">
+                                <i class="fas fa-eye me-1"></i>Voir la catégorie
+                            </a>
+                        ` : ''}
+                        ${suggestion.action === 'renforcer_controles' ? `
+                            <a href="#" class="btn-suggestion" onclick="event.preventDefault(); alert('Voir les risques avec incidents');">
+                                <i class="fas fa-chart-line me-1"></i>Voir les incidents
+                            </a>
+                        ` : ''}
+                        ${suggestion.action === 'plan_amelioration' ? `
+                            <button class="btn-suggestion primary" onclick="genererPlanAmelioration()">
+                                <i class="fas fa-file-pdf me-1"></i>Générer un plan
+                            </button>
+                        ` : ''}
+                        <button class="btn-suggestion" onclick="ignorerSuggestion('${suggestion.id}')">
+                            <i class="fas fa-times me-1"></i>Ignorer
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+        `;
+    });
+    
+    container.innerHTML = html;
+}
+
+// ============================================
+// FONCTIONS UTILITAIRES
+// ============================================
+
+function rafraichirAnalyse() {
+    const btn = document.querySelector('[onclick="rafraichirAnalyse()"]');
+    const originalHtml = btn.innerHTML;
+    btn.disabled = true;
+    btn.innerHTML = '<i class="fas fa-spinner fa-spin me-2"></i>Chargement...';
+    
+    chargerAnalyse().finally(() => {
+        btn.disabled = false;
+        btn.innerHTML = originalHtml;
+    });
+}
+
+function ouvrirRisque(risqueId) {
+    window.location.href = `/risque/${risqueId}`;
+}
+
+function ignorerSuggestion(suggestionId) {
+    if (confirm('Ignorer cette suggestion ?')) {
+        // Stocker en local storage
+        let ignorees = JSON.parse(localStorage.getItem('suggestions_ignorees') || '[]');
+        ignorees.push(suggestionId);
+        localStorage.setItem('suggestions_ignorees', JSON.stringify(ignorees));
+        
+        // Rafraîchir l'affichage
+        const card = document.querySelector(`[data-suggestion-id="${suggestionId}"]`);
+        if (card) card.remove();
+    }
+}
+
+function ajouterRisquesSuggestions() {
+    if (confirm('Ajouter les risques suggérés à la cartographie ?')) {
+        // Rediriger vers la création de risque
+        window.location.href = "{{ url_for('nouveau_risque', cartographie_id=cartographie.id) }}";
+    }
+}
+
+function genererPlanAmelioration() {
+    alert('📄 Génération du plan d\'amélioration continue...\n\nUn rapport détaillé va être généré avec les actions prioritaires.');
+}
+
+// ============================================
+// INITIALISATION
+// ============================================
+document.addEventListener('DOMContentLoaded', function() {
+    chargerAnalyse();
+    
+    // Rafraîchir toutes les 5 minutes
+    setInterval(chargerAnalyse, 5 * 60 * 1000);
+});
+</script>
+
+{% endblock %}
