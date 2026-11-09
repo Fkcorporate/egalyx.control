@@ -1,0 +1,87 @@
+{% extends "base.html" %}
+{% import "_macros/page.html" as pg %}
+{% block title %}{{ 'Modifier ' ~ fiche.reference if fiche.id else 'Nouveau tiers' }}{% endblock %}
+{% block styles %}{{ pg.styles() }}{% endblock %}
+{% block content %}
+<div class="container" style="max-width: 1000px;">
+  {{ pg.entete(('Modifier ' ~ fiche.reference) if fiche.id else 'Nouveau tiers', 'fa-handshake', 'Le score de vigilance et la date de revue sont calculés à l’enregistrement, et le tiers est criblé contre les listes de sanctions.', retour=url_for('tiers.detail', tid=fiche.id) if fiche.id else url_for('tiers.liste')) }}
+  <form method="post">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    {% call pg.carte('Identification') %}
+    <div class="row g-3">
+      <div class="col-md-4"><label class="form-label">Type</label>
+        <select class="form-select" name="type_tiers" id="typeTiers">{% for k, l in Tiers.TYPES.items() %}<option value="{{ k }}" {% if fiche.type_tiers == k %}selected{% endif %}>{{ l }}</option>{% endfor %}</select></div>
+      <div class="col-md-4"><label class="form-label">Nature</label>
+        <select class="form-select" name="nature" id="nature">{% for k, l in NATURES.items() %}<option value="{{ k }}" {% if (fiche.nature or 'personne_morale') == k %}selected{% endif %}>{{ l }}</option>{% endfor %}</select></div>
+      <div class="col-md-4"><label class="form-label">Responsable de la relation</label>
+        <select class="form-select" name="responsable_id"><option value="">—</option>{% for u in utilisateurs %}<option value="{{ u.id }}" {% if fiche.responsable_id == u.id %}selected{% endif %}>{{ u.username }}</option>{% endfor %}</select></div>
+      <div class="col-md-8"><label class="form-label">Raison sociale ou nom complet</label><input class="form-control" name="nom" value="{{ fiche.nom or '' }}" maxlength="200" required></div>
+      <div class="col-md-4"><label class="form-label">Sigle / nom commercial</label><input class="form-control" name="sigle" value="{{ fiche.sigle or '' }}"></div>
+      <div class="col-md-4"><label class="form-label">N° d’identification</label><input class="form-control" name="numero_identification" value="{{ fiche.numero_identification or '' }}" placeholder="RCCM, SIREN, NIF, pièce d’identité"></div>
+      <div class="col-md-4"><label class="form-label">Pays (immatriculation / nationalité)</label><input class="form-control" name="pays" value="{{ fiche.pays or '' }}" list="paysListe"></div>
+      <div class="col-md-4"><label class="form-label">Pays de résidence / d’activité</label><input class="form-control" name="pays_residence" value="{{ fiche.pays_residence or '' }}" list="paysListe"></div>
+      <div class="col-md-6"><label class="form-label">Secteur d’activité</label><input class="form-control" name="secteur" value="{{ fiche.secteur or '' }}"></div>
+      <div class="col-md-3 personne-physique"><label class="form-label">Date de naissance</label><input class="form-control" type="date" name="date_naissance" value="{{ fiche.date_naissance.isoformat() if fiche.date_naissance else '' }}"></div>
+    </div>
+    {% endcall %}
+
+    {% call pg.carte('Facteurs de risque LCB-FT') %}
+    <div class="row g-3">
+      <div class="col-md-4"><div class="form-check mt-2"><input class="form-check-input" type="checkbox" name="est_ppe" value="1" id="ppe" {% if fiche.est_ppe %}checked{% endif %}><label class="form-check-label" for="ppe">Personne politiquement exposée (ou proche)</label></div></div>
+      <div class="col-md-4"><div class="form-check mt-2"><input class="form-check-input" type="checkbox" name="structure_complexe" value="1" id="sc" {% if fiche.structure_complexe %}checked{% endif %}><label class="form-check-label" for="sc">Structure de détention complexe</label></div></div>
+      <div class="col-md-4"><label class="form-label">Entrée en relation</label>
+        <select class="form-select" name="canal">{% for k, l in CANAUX.items() %}<option value="{{ k }}" {% if (fiche.canal or 'presentiel') == k %}selected{% endif %}>{{ l }}</option>{% endfor %}</select></div>
+      <div class="col-md-4"><label class="form-label">Montant annuel de la relation</label><input class="form-control" name="montant_relation" inputmode="decimal" value="{{ fiche.montant_relation if fiche.montant_relation is not none else '' }}"></div>
+    </div>
+    <div class="personne-morale mt-3">
+      <div class="fw-semibold small mb-2">Bénéficiaires effectifs (détention ≥ 25 % ou contrôle)</div>
+      {% set be = fiche.beneficiaires_effectifs or [] %}
+      {% for i in range(6) %}{% set b = be[i] if i < be|length else {} %}
+      <div class="row g-2 mb-2 be-ligne" {% if i >= [be|length, 1]|max %}style="display: none;"{% endif %}>
+        <div class="col-md-5"><input class="form-control form-control-sm" name="be_nom_{{ i }}" value="{{ b.get('nom', '') }}" placeholder="Nom et prénom"></div>
+        <div class="col-md-2"><input class="form-control form-control-sm" name="be_part_{{ i }}" value="{{ b.get('part') if b.get('part') is not none else '' }}" placeholder="% détenu"></div>
+        <div class="col-md-3"><input class="form-control form-control-sm" name="be_pays_{{ i }}" value="{{ b.get('pays', '') }}" placeholder="Nationalité" list="paysListe"></div>
+        <div class="col-md-2"><div class="form-check mt-1"><input class="form-check-input" type="checkbox" name="be_ppe_{{ i }}" value="1" id="beppe{{ i }}" {% if b.get('ppe') %}checked{% endif %}><label class="form-check-label small" for="beppe{{ i }}">PPE</label></div></div>
+      </div>
+      {% endfor %}
+      <button class="btn btn-link btn-sm p-0" type="button" id="ajoutBe"><i class="fas fa-plus me-1"></i>Ajouter un bénéficiaire</button>
+    </div>
+    {% endcall %}
+
+    <div id="blocFournisseur">
+    {% call pg.carte('Fournisseur : dépendance et criticité') %}
+    <div class="row g-3">
+      <div class="col-md-4"><label class="form-label">Impact d’un arrêt du fournisseur</label>
+        <select class="form-select" name="impact_arret"><option value="">—</option>{% for k, l in IMPACTS.items() %}<option value="{{ k }}" {% if fiche.impact_arret == k %}selected{% endif %}>{{ k }} — {{ l }}</option>{% endfor %}</select></div>
+      <div class="col-md-4"><label class="form-label">Dépendance (% des achats du domaine)</label><input class="form-control" name="dependance_pct" inputmode="decimal" value="{{ fiche.dependance_pct if fiche.dependance_pct is not none else '' }}"></div>
+      <div class="col-md-4"><label class="form-label">Remplaçable rapidement ?</label>
+        <select class="form-select" name="substituable"><option value="1" {% if fiche.substituable is not sameas false %}selected{% endif %}>Oui</option><option value="0" {% if fiche.substituable is sameas false %}selected{% endif %}>Non</option></select></div>
+    </div>
+    {% endcall %}
+    </div>
+
+    {% call pg.carte('Commentaire') %}
+      <textarea class="form-control" name="commentaire" rows="3">{{ fiche.commentaire or '' }}</textarea>
+    {% endcall %}
+    <button class="btn btn-primary" type="submit"><i class="fas fa-check me-1"></i>Enregistrer et évaluer</button>
+  </form>
+  <datalist id="paysListe">{% for p in ["Côte d'Ivoire", 'Sénégal', 'Mali', 'Burkina Faso', 'Niger', 'Togo', 'Bénin', 'Guinée-Bissau', 'Cameroun', 'Gabon', 'Congo', 'Tchad', 'République centrafricaine', 'Guinée équatoriale', 'Guinée', 'République démocratique du Congo', 'Maroc', 'Tunisie', 'Algérie', 'France', 'Belgique', 'Suisse', 'Luxembourg', 'Canada', 'Nigeria', 'Ghana', 'Kenya', 'Afrique du Sud', 'Émirats arabes unis', 'Chine', 'Liban', 'Royaume-Uni', 'États-Unis'] %}<option value="{{ p }}">{% endfor %}</datalist>
+</div>
+{% endblock %}
+{% block scripts %}
+<script>
+  (function () {
+    var type = document.getElementById('typeTiers'), nature = document.getElementById('nature');
+    function maj() {
+      document.getElementById('blocFournisseur').style.display = type.value === 'fournisseur' ? '' : 'none';
+      document.querySelectorAll('.personne-morale').forEach(function (e) { e.style.display = nature.value === 'personne_morale' ? '' : 'none'; });
+      document.querySelectorAll('.personne-physique').forEach(function (e) { e.style.display = nature.value === 'personne_physique' ? '' : 'none'; });
+    }
+    type.addEventListener('change', maj); nature.addEventListener('change', maj); maj();
+    document.getElementById('ajoutBe').addEventListener('click', function () {
+      var cachee = Array.prototype.find.call(document.querySelectorAll('.be-ligne'), function (l) { return l.style.display === 'none'; });
+      if (cachee) cachee.style.display = ''; else this.disabled = true;
+    });
+  })();
+</script>
+{% endblock %}

@@ -1,0 +1,59 @@
+{% extends "base.html" %}
+{% import "_macros/page.html" as pg %}
+{% block title %}Alertes internes{% endblock %}
+{% block styles %}{{ pg.styles() }}{% endblock %}
+{% block content %}
+<div class="container-fluid">
+  {{ pg.entete('Dispositif d’alerte interne', 'fa-bullhorn', 'Signalements reçus · accusé de réception sous 7 jours, retour d’information sous 3 mois') }}
+
+  <div class="pg-kpis">
+    {{ pg.kpi('Dossiers ouverts', ind.ouverts) }}
+    {{ pg.kpi('Accusés de réception en retard', ind.accuse_retard, '#b42318' if ind.accuse_retard else none) }}
+    {{ pg.kpi('Retours d’information en retard', ind.retour_retard, '#b42318' if ind.retour_retard else none) }}
+    {{ pg.kpi('Total reçus', ind.total) }}
+  </div>
+
+  {% if lien_public %}
+  {% call pg.carte('Lien à communiquer à vos collaborateurs et partenaires') %}
+    <div class="input-group input-group-sm">
+      <input class="form-control" id="lienAlerte" value="{{ lien_public }}" readonly>
+      <button class="btn btn-outline-secondary" type="button" onclick="navigator.clipboard && navigator.clipboard.writeText(document.getElementById('lienAlerte').value)"><i class="far fa-copy me-1"></i>Copier</button>
+      <a class="btn btn-outline-secondary" href="{{ lien_public }}" target="_blank" rel="noopener">Ouvrir</a>
+    </div>
+    <div class="pg-second mt-2">Page accessible sans compte. Les signalements peuvent être anonymes ; le suivi se fait avec un code et un mot de passe.
+      Intégrez ce lien à votre code de conduite, à l’intranet et à l’affichage obligatoire.</div>
+  {% endcall %}
+  {% endif %}
+
+  {% call pg.carte('Signalements') %}
+    <div class="d-flex gap-2 flex-wrap mb-3">
+      {% for v, lib in [('', 'Tous'), ('ouverts', 'Ouverts')] + Signalement.STATUTS.items()|list %}
+      <a class="btn btn-sm {{ 'btn-primary' if statut == v else 'btn-outline-secondary' }}" href="{{ url_for('alertes.liste', statut=v or None) }}">{{ lib }}</a>
+      {% endfor %}
+    </div>
+    {% if signalements %}
+    <div class="table-responsive"><table class="pg-table">
+      <thead><tr><th>Dossier</th><th>Catégorie</th><th>Reçu le</th><th>État</th><th>Accusé de réception</th><th>Retour d’information</th><th>Référent</th></tr></thead>
+      <tbody>
+      {% for s in signalements %}
+        <tr>
+          <td class="pg-ref"><a href="{{ url_for('alertes.detail', sid=s.id) }}">{{ s.code_suivi }}</a>{% if s.anonyme %}<div class="pg-second">anonyme</div>{% endif %}</td>
+          <td>{{ s.categorie_libelle }}</td>
+          <td>{{ pg.date(s.created_at) }}</td>
+          <td><span class="badge text-bg-{{ 'secondary' if s.est_cloture else 'primary' }}">{{ s.statut_libelle }}</span></td>
+          <td>{% if s.date_accuse_reception %}{{ pg.date(s.date_accuse_reception) }}
+              {% elif s.echeance_accuse < maintenant %}<span class="text-danger fw-semibold">en retard ({{ pg.date(s.echeance_accuse) }})</span>
+              {% else %}avant le {{ pg.date(s.echeance_accuse) }}{% endif %}</td>
+          <td>{% if s.date_retour_information %}{{ pg.date(s.date_retour_information) }}
+              {% elif s.est_cloture %}—
+              {% elif s.echeance_retour and s.echeance_retour < maintenant %}<span class="text-danger fw-semibold">en retard</span>
+              {% else %}avant le {{ pg.date(s.echeance_retour) }}{% endif %}</td>
+          <td>{{ s.referent.username if s.referent else '—' }}</td>
+        </tr>
+      {% endfor %}
+      </tbody>
+    </table></div>
+    {% else %}{{ pg.vide('Aucun signalement.', 'fa-bullhorn') }}{% endif %}
+  {% endcall %}
+</div>
+{% endblock %}

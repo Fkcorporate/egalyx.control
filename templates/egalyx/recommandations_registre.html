@@ -1,0 +1,65 @@
+{% extends base_layout %}
+{% import "_macros/page.html" as pg %}
+{% import "egalyx/_recos.html" as rc %}
+{% block title %}Registre des recommandations{% endblock %}
+{% block styles %}{{ pg.styles() }}{% endblock %}
+{% block content %}
+<div class="container-fluid">
+  {% call pg.entete('Registre des recommandations', 'fa-list-check', "Audit interne, contrôle interne N2, commissaire aux comptes, régulateur, inspection : un seul suivi") %}
+    <a class="btn btn-sm btn-outline-secondary" href="{{ url_for('recommandations.miennes') }}"><i class="fas fa-user-check me-1"></i>Mes recommandations</a>
+    {% if peut_gerer %}<a class="btn btn-sm btn-primary" href="{{ url_for('recommandations.externe_nouvelle') }}"><i class="fas fa-plus me-1"></i>Recommandation externe</a>{% endif %}
+  {% endcall %}
+
+  <div class="pg-kpis">
+    {{ pg.kpi('Taux de mise en œuvre', (ind.taux_mise_en_oeuvre ~ ' %') if ind.taux_mise_en_oeuvre is not none else '—') }}
+    {{ pg.kpi('Ouvertes', ind.ouvertes) }}
+    {{ pg.kpi('Échues', ind.echues, '#b42318' if ind.echues else none) }}
+    {{ pg.kpi('Clôtures à valider', ind.a_valider, '#b54708' if ind.a_valider else none) }}
+    {{ pg.kpi('Ancienneté moyenne', (ind.anciennete_moyenne ~ ' j') if ind.anciennete_moyenne is not none else '—') }}
+    {{ pg.kpi('Ouvertes depuis plus de 6 mois', ind.plus_de_180_jours, '#b54708' if ind.plus_de_180_jours else none) }}
+  </div>
+
+  {% if ind.par_source %}
+  {% call pg.carte('Par origine', aide='recommandations retenues (hors proposées et rejetées)') %}
+    <div class="table-responsive"><table class="pg-table">
+      <thead><tr><th>Origine</th><th class="pg-num">Total</th><th class="pg-num">Clôturées</th><th class="pg-num">Taux</th><th class="pg-num">Échues</th></tr></thead>
+      <tbody>
+      {% for s, v in ind.par_source.items() %}
+        <tr><td>{{ sources.get(s, s) }}</td><td class="pg-num">{{ v.total }}</td><td class="pg-num">{{ v.cloturees }}</td>
+            <td class="pg-num">{{ ((100 * v.cloturees / v.total)|round|int) if v.total else 0 }} %</td>
+            <td class="pg-num {{ 'text-danger fw-semibold' if v.echues }}">{{ v.echues }}</td></tr>
+      {% endfor %}
+      </tbody>
+    </table></div>
+  {% endcall %}
+  {% endif %}
+
+  {% call pg.carte() %}
+    <form class="d-flex gap-2 flex-wrap mb-3" method="get">
+      <select class="form-select form-select-sm" style="max-width: 220px;" name="source"><option value="">Toutes origines</option>{% for k, v in sources.items() %}<option value="{{ k }}" {% if f_source == k %}selected{% endif %}>{{ v }}</option>{% endfor %}</select>
+      <select class="form-select form-select-sm" style="max-width: 200px;" name="statut"><option value="">Tous statuts</option>{% for k, v in statuts.items() %}<option value="{{ k }}" {% if f_statut == k %}selected{% endif %}>{{ v }}</option>{% endfor %}</select>
+      <label class="form-check-label d-flex align-items-center gap-1 small"><input class="form-check-input" type="checkbox" name="echues" value="1" {% if f_echues %}checked{% endif %}> Échues seulement</label>
+      <button class="btn btn-sm btn-outline-primary">Filtrer</button>
+    </form>
+    {% if lignes %}
+    <div class="table-responsive"><table class="pg-table">
+      <thead><tr><th>Réf.</th><th>Recommandation</th><th>Origine</th><th>Priorité</th><th>Responsable</th><th>Échéance</th><th>Avancement</th><th>Statut</th></tr></thead>
+      <tbody>
+      {% for l in lignes %}
+        <tr>
+          <td class="pg-ref"><a href="{{ url_for('recommandations.fiche', source=l.type, reco_id=l.id) }}">{{ l.reference }}</a></td>
+          <td style="max-width: 420px;">{{ l.titre }}{% if l.origine %}<div class="pg-second">{{ l.origine }}</div>{% endif %}</td>
+          <td>{{ rc.badge_source(l.source, sources) }}</td>
+          <td>{{ rc.badge_priorite(l.priorite, priorites) }}</td>
+          <td>{% if l.responsable %}{{ l.responsable.username }}{% else %}<span class="badge text-bg-danger bg-opacity-75">Sans responsable</span>{% endif %}</td>
+          <td>{{ rc.echeance(l) }}</td>
+          <td>{{ rc.barre(l.progression) }}</td>
+          <td>{{ rc.badge_statut(l.statut, statuts) }}</td>
+        </tr>
+      {% endfor %}
+      </tbody>
+    </table></div>
+    {% else %}{{ pg.vide('Aucune recommandation pour ces critères.', 'fa-list-check') }}{% endif %}
+  {% endcall %}
+</div>
+{% endblock %}

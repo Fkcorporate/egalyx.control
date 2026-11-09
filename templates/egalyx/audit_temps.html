@@ -1,0 +1,50 @@
+{% extends "base.html" %}
+{% import "_macros/page.html" as pg %}
+{% block title %}Temps passé — {{ a.reference }}{% endblock %}
+{% block styles %}{{ pg.styles() }}{% endblock %}
+{% block content %}
+<div class="container-fluid">
+  {{ pg.entete('Temps passé', 'fa-stopwatch', a.reference ~ ' · ' ~ a.titre, retour=url_for('detail_audit', id=a.id), libelle_retour='Fiche de l\'audit') }}
+  <div class="pg-kpis">
+    {{ pg.kpi('Total', tps.total ~ ' h') }}
+    {{ pg.kpi('Soit', tps.jours ~ ' j (' ~ heures_jour ~ ' h/j)') }}
+    {{ pg.kpi('Budget de la mission', tps.budget if tps.budget is not none else '—') }}
+  </div>
+  <div class="row g-3">
+    <div class="col-lg-5">
+      {% if membre or gest %}
+      {% call pg.carte('Saisir du temps') %}
+        <form method="post" class="row g-2">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+          <div class="col-6"><label class="form-label small" for="date">Date</label><input type="date" class="form-control form-control-sm" id="date" name="date" value="{{ aujourd_hui.isoformat() }}" max="{{ aujourd_hui.isoformat() }}" required></div>
+          <div class="col-6"><label class="form-label small" for="heures">Heures</label><input type="number" step="0.25" min="0.25" max="24" class="form-control form-control-sm" id="heures" name="heures" required></div>
+          <div class="col-12"><label class="form-label small" for="activite">Activité</label><select class="form-select form-select-sm" id="activite" name="activite">{% for k, v in activites.items() %}<option value="{{ k }}">{{ v }}</option>{% endfor %}</select></div>
+          <div class="col-12"><input class="form-control form-control-sm" name="commentaire" placeholder="Commentaire (facultatif)" maxlength="300"></div>
+          <div class="col-12"><button class="btn btn-primary btn-sm">Enregistrer</button></div>
+        </form>
+      {% endcall %}
+      {% endif %}
+      {% call pg.carte('Répartition') %}
+        <table class="pg-table"><thead><tr><th>Auditeur</th><th class="pg-num">Heures</th></tr></thead><tbody>
+          {% for n, h in tps.par_user.items() %}<tr><td>{{ n }}</td><td class="pg-num">{{ h|round(2) }}</td></tr>{% else %}<tr><td colspan="2" class="pg-second">—</td></tr>{% endfor %}
+        </tbody></table>
+        <table class="pg-table mt-3"><thead><tr><th>Activité</th><th class="pg-num">Heures</th></tr></thead><tbody>
+          {% for k, h in tps.par_activite.items() %}<tr><td>{{ activites.get(k, k) }}</td><td class="pg-num">{{ h|round(2) }}</td></tr>{% endfor %}
+        </tbody></table>
+      {% endcall %}
+    </div>
+    <div class="col-lg-7">
+      {% call pg.carte('Saisies') %}
+        {% if tps.lignes %}
+        <table class="pg-table"><thead><tr><th>Date</th><th>Auditeur</th><th>Activité</th><th class="pg-num">Heures</th><th></th></tr></thead><tbody>
+        {% for l in tps.lignes %}<tr><td>{{ l.date.strftime('%d/%m/%Y') }}</td><td>{{ l.user.username if l.user }}</td>
+          <td>{{ activites.get(l.activite, l.activite) }}{% if l.commentaire %}<div class="pg-second">{{ l.commentaire }}</div>{% endif %}</td>
+          <td class="pg-num">{{ l.heures }}</td>
+          <td class="text-end">{% if l.user_id == current_user.id or gest %}<form method="post" class="d-inline"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><button class="btn btn-link btn-sm text-danger p-0" name="supprimer" value="{{ l.id }}" title="Supprimer"><i class="fas fa-trash"></i></button></form>{% endif %}</td></tr>
+        {% endfor %}</tbody></table>
+        {% else %}{{ pg.vide('Aucune saisie.', 'fa-stopwatch') }}{% endif %}
+      {% endcall %}
+    </div>
+  </div>
+</div>
+{% endblock %}

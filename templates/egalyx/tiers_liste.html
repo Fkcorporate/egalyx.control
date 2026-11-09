@@ -1,0 +1,52 @@
+{% extends "base.html" %}
+{% import "_macros/page.html" as pg %}
+{% import "egalyx/_vigilance.html" as vg %}
+{% block title %}Tiers & LCB-FT{% endblock %}
+{% block styles %}{{ pg.styles() }}{% endblock %}
+{% block content %}
+<div class="container-fluid">
+  {% call pg.entete('Tiers & LCB-FT', 'fa-handshake', 'Connaissance des clients, fournisseurs et partenaires · vigilance anti-blanchiment · criblage sanctions') %}
+    <a class="btn btn-sm btn-outline-secondary" href="{{ url_for('tiers.export_csv') }}"><i class="fas fa-file-csv me-1"></i>Export</a>
+    {% if peut_gerer %}<a class="btn btn-sm btn-primary" href="{{ url_for('tiers.formulaire') }}"><i class="fas fa-plus me-1"></i>Nouveau tiers</a>{% endif %}
+  {% endcall %}
+
+  <div class="pg-kpis">
+    {{ pg.kpi('Tiers suivis', ind.total) }}
+    {{ pg.kpi('Vigilance renforcée ou refus', ind.renforcee, '#b54708' if ind.renforcee else none) }}
+    {{ pg.kpi('Revues en retard', ind.revue, '#b42318' if ind.revue else none) }}
+    {{ pg.kpi('Criblages à vérifier', ind.criblage, '#b42318' if ind.criblage else none) }}
+    {{ pg.kpi('Fournisseurs critiques', ind.fournisseurs_critiques) }}
+  </div>
+
+  {% call pg.carte() %}
+    <form class="d-flex gap-2 flex-wrap mb-3" method="get">
+      <input class="form-control form-control-sm" style="max-width: 240px;" name="q" value="{{ recherche }}" placeholder="Nom ou référence">
+      <select class="form-select form-select-sm" style="max-width: 180px;" name="type"><option value="">Tous types</option>{% for k, l in Tiers.TYPES.items() %}<option value="{{ k }}" {% if type_t == k %}selected{% endif %}>{{ l }}</option>{% endfor %}</select>
+      <select class="form-select form-select-sm" style="max-width: 180px;" name="vigilance"><option value="">Toutes vigilances</option>{% for k, l in Tiers.VIGILANCES.items() %}<option value="{{ k }}" {% if vig == k %}selected{% endif %}>{{ l }}</option>{% endfor %}</select>
+      <select class="form-select form-select-sm" style="max-width: 200px;" name="filtre"><option value="">—</option><option value="revue" {% if filtre == 'revue' %}selected{% endif %}>Revue en retard</option><option value="criblage" {% if filtre == 'criblage' %}selected{% endif %}>Criblage à vérifier</option></select>
+      <button class="btn btn-sm btn-outline-primary">Filtrer</button>
+    </form>
+    {% if tiers %}
+    <div class="table-responsive"><table class="pg-table">
+      <thead><tr><th>Réf.</th><th>Tiers</th><th>Type</th><th>Pays</th><th class="pg-num">Score</th><th>Vigilance</th><th>Criticité</th><th>Prochaine revue</th><th>Criblage</th></tr></thead>
+      <tbody>
+      {% for fiche in tiers %}
+        {% set cr = fiche.criblages[0] if fiche.criblages else none %}
+        <tr>
+          <td class="pg-ref"><a href="{{ url_for('tiers.detail', tid=fiche.id) }}">{{ fiche.reference }}</a></td>
+          <td><strong>{{ fiche.nom }}</strong>{% if fiche.est_ppe %} <span class="badge text-bg-warning">PPE</span>{% endif %}<div class="pg-second">{{ fiche.secteur or '' }}</div></td>
+          <td>{{ Tiers.TYPES.get(fiche.type_tiers, fiche.type_tiers) }}</td>
+          <td>{{ fiche.pays or '—' }}</td>
+          <td class="pg-num">{{ fiche.score_lcb if fiche.score_lcb is not none else '—' }}</td>
+          <td>{{ vg.badge_vigilance(fiche.niveau_vigilance) }}</td>
+          <td>{{ vg.badge_criticite(fiche.criticite) }}</td>
+          <td class="{{ 'text-danger fw-semibold' if fiche.revue_en_retard }}">{{ pg.date(fiche.date_prochaine_revue) }}</td>
+          <td>{% if not cr %}—{% elif cr.statut == 'a_verifier' %}<span class="badge text-bg-danger">À vérifier</span>{% elif cr.statut == 'confirme' %}<span class="badge text-bg-dark">Confirmé</span>{% else %}<span class="badge text-bg-success">RAS</span>{% endif %}</td>
+        </tr>
+      {% endfor %}
+      </tbody>
+    </table></div>
+    {% else %}{{ pg.vide('Aucun tiers. Créez la fiche de vos clients, fournisseurs et partenaires.', 'fa-handshake') }}{% endif %}
+  {% endcall %}
+</div>
+{% endblock %}

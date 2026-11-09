@@ -1,0 +1,258 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Rapport au comité d’audit — {{ client.nom if client else '' }} — {{ c.date }}</title>
+<style>
+  :root { --encre: #111827; --doux: #6b7280; --trait: #e5e7eb; --marine: #1A3C6B; --fond: #f8fafc; }
+  * { box-sizing: border-box; }
+  body { margin: 0; font-family: -apple-system, "Segoe UI", Roboto, Arial, sans-serif; color: var(--encre); background: #e5e7eb; font-size: 10.5pt; line-height: 1.5; }
+  .barre-outils { position: sticky; top: 0; z-index: 5; background: var(--marine); color: #fff; display: flex; gap: .75rem; align-items: center; padding: .6rem 1rem; }
+  .barre-outils a, .barre-outils button { color: #fff; background: rgba(255,255,255,.12); border: 1px solid rgba(255,255,255,.25); border-radius: 8px; padding: .35rem .8rem; font-size: .9rem; text-decoration: none; cursor: pointer; }
+  .barre-outils .titre { font-weight: 600; margin-right: auto; }
+  .page { width: 210mm; min-height: 297mm; margin: 1rem auto; background: #fff; padding: 18mm 18mm 16mm; box-shadow: 0 2px 12px rgba(0,0,0,.12); position: relative; }
+  .couverture { display: flex; flex-direction: column; justify-content: space-between; background: linear-gradient(160deg, #0f1f3d 0%, #1A3C6B 60%, #2a5a9a 100%); color: #fff; }
+  .couverture .marque { font-weight: 800; letter-spacing: .02em; opacity: .9; }
+  .couverture h1 { font-size: 30pt; line-height: 1.1; margin: 0 0 .5rem; font-weight: 750; }
+  .couverture .org { font-size: 16pt; opacity: .95; }
+  .couverture .meta { font-size: 10pt; opacity: .85; border-top: 1px solid rgba(255,255,255,.3); padding-top: 1rem; display: grid; grid-template-columns: 1fr 1fr; gap: .4rem 1rem; }
+  .confidentiel { display: inline-block; border: 1px solid rgba(255,255,255,.6); border-radius: 4px; padding: .1rem .5rem; font-size: 8.5pt; letter-spacing: .08em; text-transform: uppercase; }
+  h2 { font-size: 14pt; color: var(--marine); margin: 0 0 .6rem; padding-bottom: .3rem; border-bottom: 2px solid var(--marine); }
+  h2 .num { color: var(--doux); font-weight: 500; margin-right: .4rem; }
+  h3 { font-size: 11pt; margin: 1.1rem 0 .4rem; }
+  section { margin-bottom: 1.4rem; break-inside: avoid; }
+  .synthese p { margin: 0 0 .55rem; text-align: justify; }
+  .decisions { background: #fff7ed; border-left: 4px solid #ea580c; padding: .7rem 1rem; border-radius: 0 8px 8px 0; }
+  .decisions ol { margin: .3rem 0 0; padding-left: 1.2rem; }
+  .kpis { display: grid; grid-template-columns: repeat(4, 1fr); gap: .5rem; }
+  .kpi { border: 1px solid var(--trait); border-radius: 8px; padding: .55rem .7rem; }
+  .kpi .lib { font-size: 7.5pt; text-transform: uppercase; letter-spacing: .04em; color: var(--doux); font-weight: 600; }
+  .kpi .val { font-size: 19pt; font-weight: 750; line-height: 1.15; font-variant-numeric: tabular-nums; }
+  .kpi .sous { font-size: 8pt; color: var(--doux); }
+  .tendance.mal { color: #b42318; } .tendance.bien { color: #067647; }
+  table { width: 100%; border-collapse: collapse; font-size: 9pt; }
+  th { text-align: left; font-size: 7.5pt; text-transform: uppercase; letter-spacing: .04em; color: var(--doux); border-bottom: 1px solid var(--encre); padding: .3rem .35rem; }
+  td { border-bottom: 1px solid var(--trait); padding: .35rem; vertical-align: top; }
+  .num { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
+  .pastille { display: inline-block; padding: .05rem .45rem; border-radius: 4px; font-size: 8pt; font-weight: 650; white-space: nowrap; }
+  .deux { display: grid; grid-template-columns: 1fr 1fr; gap: 1.2rem; }
+  .matrice { display: grid; grid-template-columns: 22px repeat(5, 1fr); gap: 3px; font-size: 8pt; }
+  .matrice .case { aspect-ratio: 1.6; border-radius: 4px; display: flex; align-items: center; justify-content: center; font-weight: 750; font-size: 11pt; }
+  .matrice .axe { display: flex; align-items: center; justify-content: center; color: var(--doux); }
+  .legende { font-size: 8pt; color: var(--doux); margin-top: .3rem; }
+  .barres .ligne { display: grid; grid-template-columns: 70px 1fr 1fr; gap: .5rem; align-items: center; margin-bottom: .35rem; font-size: 9pt; }
+  .barres .piste { background: var(--fond); border-radius: 4px; height: 14px; position: relative; }
+  .barres .piste span { position: absolute; left: 0; top: 0; bottom: 0; border-radius: 4px; }
+  .vide { color: var(--doux); font-style: italic; }
+  .pied { position: absolute; bottom: 8mm; left: 18mm; right: 18mm; font-size: 7.5pt; color: var(--doux); display: flex; justify-content: space-between; }
+  .note { font-size: 8pt; color: var(--doux); margin-top: .3rem; }
+  @page { size: A4; margin: 0; }
+  @media print {
+    body { background: #fff; }
+    .barre-outils { display: none; }
+    .page { margin: 0; box-shadow: none; page-break-after: always; }
+    .couverture { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+    .matrice .case, .pastille, .barres .piste span, .decisions { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+  }
+</style>
+</head>
+<body>
+{% set st = cotation_style %}
+{% macro pastille(niveau) -%}{%- set s = st(niveau) -%}<span class="pastille" style="background: {{ s.hex }}; color: {{ s.texte }};">{{ s.niveau }}</span>{%- endmacro %}
+{% macro tendance(t, unite='') -%}{% if t and t.ecart %}<span class="tendance {{ t.sens }}">{{ '▲' if t.ecart > 0 else '▼' }} {{ t.ecart|abs }}{{ unite }}</span>{% endif %}{%- endmacro %}
+{% set k = d.kpi %}
+
+<div class="barre-outils">
+  <span class="titre">Rapport au comité d’audit — aperçu avant impression</span>
+  <button type="button" onclick="window.print()">Imprimer / enregistrer en PDF</button>
+  <a href="{{ url_for('tableau_de_bord_strategique') }}">Tableau de bord</a>
+</div>
+
+{# ============================ COUVERTURE ============================ #}
+<div class="page couverture">
+  <div class="marque">EGALYX CONTROL</div>
+  <div>
+    <span class="confidentiel">Confidentiel — usage du comité</span>
+    <h1 style="margin-top: 1rem;">Rapport au comité d’audit</h1>
+    <div class="org">{{ client.nom if client else '' }}</div>
+    <div style="margin-top: .5rem; opacity: .85;">Gestion des risques, contrôle interne, audit interne et conformité</div>
+  </div>
+  <div class="meta">
+    <div>Situation au</div><div><strong>{{ c.date }}</strong></div>
+    <div>Périmètre</div><div>Toute l’organisation</div>
+    <div>Évolutions comparées à</div><div>{{ c.fenetre }} jours auparavant</div>
+    <div>Généré le</div><div>{{ genere_le.strftime('%d/%m/%Y à %H:%M') }}{% if auteur %} par {{ auteur }}{% endif %}</div>
+  </div>
+</div>
+
+{# ============================ SYNTHÈSE ============================ #}
+<div class="page">
+  <section class="synthese">
+    <h2><span class="num">1.</span>Synthèse</h2>
+    {% for p in synthese %}<p>{{ p }}</p>{% endfor %}
+  </section>
+  {% if decisions %}
+  <section class="decisions">
+    <strong>Décisions attendues du comité</strong>
+    <ol>{% for x in decisions %}<li>{{ x }}</li>{% endfor %}</ol>
+  </section>
+  {% endif %}
+  <section>
+    <h2><span class="num">2.</span>Chiffres clés</h2>
+    <div class="kpis">
+      <div class="kpi"><div class="lib">Risques critiques (net)</div><div class="val" style="color: #991b1b;">{{ k.critiques.valeur }}</div><div class="sous">{{ k.critiques.brut }} avant maîtrise {{ tendance(k.critiques.tendance) }}</div></div>
+      <div class="kpi"><div class="lib">Score net moyen</div><div class="val">{{ k.score_moyen.valeur if k.score_moyen.valeur is not none else '—' }}</div><div class="sous">sur 25 {{ tendance(k.score_moyen.tendance) }}</div></div>
+      <div class="kpi"><div class="lib">Couverture</div><div class="val">{{ k.couverture.valeur if k.couverture.valeur is not none else '—' }} %</div><div class="sous">{{ k.couverture.evalues }} / {{ k.couverture.total }} risques évalués</div></div>
+      <div class="kpi"><div class="lib">Hors appétence</div><div class="val" style="color: {{ '#b42318' if c.hors_appetence else 'inherit' }};">{{ c.hors_appetence if c.hors_appetence is not none else '—' }}</div><div class="sous">{{ 'appétence non fixée' if c.hors_appetence is none else 'risque(s)' }}</div></div>
+      <div class="kpi"><div class="lib">Plans d’action en retard</div><div class="val">{{ k.plans_retard.valeur }}</div><div class="sous">sur {{ k.plans_retard.ouverts }} ouverts</div></div>
+      <div class="kpi"><div class="lib">Incidents ({{ c.fenetre }} j)</div><div class="val">{{ k.incidents.valeur }}</div><div class="sous">dont {{ k.incidents.graves }} grave(s) {{ tendance(k.incidents.tendance) }}</div></div>
+      <div class="kpi"><div class="lib">KRI en alerte</div><div class="val">{{ k.kri_alerte.valeur }}</div><div class="sous">sur {{ k.kri_alerte.actifs }} suivis</div></div>
+      <div class="kpi"><div class="lib">Recommandations échues</div><div class="val">{{ c.recommandations_retard }}</div><div class="sous">{{ c.audits }} audit(s) sur 12 mois</div></div>
+    </div>
+  </section>
+  <div class="pied"><span>{{ client.nom if client else '' }} — Rapport au comité d’audit — {{ c.date }}</span><span>Confidentiel</span></div>
+</div>
+
+{# ============================ PROFIL DE RISQUE ============================ #}
+<div class="page">
+  <section>
+    <h2><span class="num">3.</span>Profil de risque</h2>
+    <div class="deux">
+      <div>
+        <h3 style="margin-top: 0;">Effet des dispositifs de maîtrise</h3>
+        {% set maxi = [d.niveaux_brut.values()|max, d.niveaux_net.values()|max, 1]|max %}
+        <div class="barres">
+          <div class="ligne" style="font-size: 7.5pt; color: var(--doux);"><span></span><span>Avant maîtrise (brut)</span><span>Après maîtrise (net)</span></div>
+          {% for n in ['Critique', 'Élevé', 'Moyen', 'Faible'] %}{% set s = st(n) %}
+          <div class="ligne"><span>{{ n }}</span>
+            <span class="piste"><span style="width: {{ 100 * d.niveaux_brut[n] / maxi }}%; background: {{ s.hex }}; opacity: .45;"></span></span>
+            <span class="piste"><span style="width: {{ 100 * d.niveaux_net[n] / maxi }}%; background: {{ s.hex }};"></span></span></div>
+          <div class="ligne" style="margin-top: -.3rem; font-size: 8pt; color: var(--doux);"><span></span><span>{{ d.niveaux_brut[n] }}</span><span>{{ d.niveaux_net[n] }}</span></div>
+          {% endfor %}
+        </div>
+      </div>
+      <div>
+        <h3 style="margin-top: 0;">Matrice des risques nets</h3>
+        <div class="matrice">
+          {% for i in range(5, 0, -1) %}
+            <div class="axe">{{ i }}</div>
+            {% for p in range(1, 6) %}{% set cel = d.matrices.net[i - 1][p - 1] %}{% set s = st(i * p) %}
+              <div class="case" style="background: {{ s.hex }}{{ '' if cel else '33' }}; color: {{ s.texte if cel else s.hex }};">{{ cel|length if cel else '' }}</div>
+            {% endfor %}
+          {% endfor %}
+          <div></div>{% for p in range(1, 6) %}<div class="axe">{{ p }}</div>{% endfor %}
+        </div>
+        <div class="legende">Lignes : impact · colonnes : probabilité résiduelle · chiffre : nombre de risques.</div>
+      </div>
+    </div>
+
+    <h3>Évolution sur 12 mois (risques nets critiques et élevés)</h3>
+    {% set evo = d.evolution %}
+    {% set hmax = [evo|map(attribute='critiques')|max if evo else 0, 1]|max + [evo|map(attribute='eleves')|max if evo else 0, 0]|max %}
+    <svg viewBox="0 0 600 150" width="100%" role="img" aria-label="Évolution mensuelle des risques critiques et élevés">
+      {% set l = 600 / [evo|length, 1]|max %}
+      {% for e in evo %}
+        {% set hc = 110 * e.critiques / hmax %}{% set he = 110 * e.eleves / hmax %}
+        <rect x="{{ loop.index0 * l + l * 0.2 }}" y="{{ 120 - hc - he }}" width="{{ l * 0.6 }}" height="{{ he }}" fill="#ea580c" rx="2"/>
+        <rect x="{{ loop.index0 * l + l * 0.2 }}" y="{{ 120 - hc }}" width="{{ l * 0.6 }}" height="{{ hc }}" fill="#991b1b" rx="2"/>
+        {% if e.critiques + e.eleves %}<text x="{{ loop.index0 * l + l / 2 }}" y="{{ 116 - hc - he }}" text-anchor="middle" font-size="9" fill="#111827">{{ e.critiques + e.eleves }}</text>{% endif %}
+        <text x="{{ loop.index0 * l + l / 2 }}" y="136" text-anchor="middle" font-size="9" fill="#6b7280">{{ e.libelle }}</text>
+      {% endfor %}
+      <line x1="0" y1="120" x2="600" y2="120" stroke="#d1d5db"/>
+    </svg>
+    <div class="legende"><span style="color: #991b1b;">■</span> Critiques &nbsp; <span style="color: #ea580c;">■</span> Élevés — même règle de cotation appliquée à chaque fin de mois.</div>
+  </section>
+
+  <section>
+    <h3>Risques les plus élevés</h3>
+    {% if d.top_risques %}
+    <table><thead><tr><th>Réf.</th><th>Risque</th><th>Entité</th><th class="num">Brut</th><th class="num">Net</th><th>Niveau</th></tr></thead><tbody>
+      {% for t in d.top_risques %}<tr><td>{{ t.risque.reference }}</td><td>{{ t.risque.intitule }}</td><td>{{ t.entite }}</td>
+        <td class="num">{{ t.cot.score_brut|round(1) }}</td><td class="num"><strong>{{ t.cot.score_net|round(1) }}</strong></td><td>{{ pastille(t.cot.niveau_net) }}</td></tr>{% endfor %}
+    </tbody></table>
+    {% else %}<p class="vide">Aucun risque évalué.</p>{% endif %}
+  </section>
+  <div class="pied"><span>{{ client.nom if client else '' }} — Rapport au comité d’audit — {{ c.date }}</span><span>Confidentiel</span></div>
+</div>
+
+{# ============================ APPÉTENCE, PLANS, INCIDENTS ============================ #}
+<div class="page">
+  <section>
+    <h2><span class="num">4.</span>Risques au-delà de l’appétence</h2>
+    {% if d.appetence and d.appetence.risques %}
+    <table><thead><tr><th>Réf.</th><th>Risque</th><th>Catégorie</th><th class="num">Net</th><th class="num">Seuil</th><th class="num">Écart</th></tr></thead><tbody>
+      {% for t in d.appetence.risques %}<tr><td>{{ t.risque.reference }}</td><td>{{ t.risque.intitule }}</td><td>{{ t.risque.categorie or '—' }}</td>
+        <td class="num">{{ t.cot.score_net|round(1) }}</td><td class="num">{{ t.appetence.seuil|round(1) }}</td><td class="num" style="color: #b42318;">+{{ t.appetence.ecart }}</td></tr>{% endfor %}
+    </tbody></table>
+    {% elif d.appetence is none %}<p class="vide">L’appétence au risque n’est pas encore fixée.</p>
+    {% else %}<p>Tous les risques évalués se situent dans l’appétence fixée.</p>{% endif %}
+  </section>
+
+  <section>
+    <h2><span class="num">5.</span>Plans d’action en retard</h2>
+    {% if d.plans_retard %}
+    <table><thead><tr><th>Réf.</th><th>Action</th><th>Responsable</th><th>Échéance</th><th class="num">Retard</th><th class="num">Avancement</th></tr></thead><tbody>
+      {% for x in d.plans_retard %}<tr><td>{{ x.plan.reference }}</td><td>{{ x.plan.nom }}</td><td>{{ x.plan.responsable.username if x.plan.responsable else '—' }}</td>
+        <td>{{ x.echeance.strftime('%d/%m/%Y') }}</td><td class="num" style="color: #b42318;">{{ x.jours }} j</td><td class="num">{{ x.avancement }} %</td></tr>{% endfor %}
+    </tbody></table>
+    {% if d.nb_plans_retard > d.plans_retard|length %}<div class="note">… et {{ d.nb_plans_retard - d.plans_retard|length }} autre(s).</div>{% endif %}
+    {% else %}<p>Aucun plan d’action en retard.</p>{% endif %}
+  </section>
+
+  <section class="deux">
+    <div>
+      <h2><span class="num">6.</span>Incidents graves</h2>
+      {% if d.incidents_graves %}
+      <table><tbody>{% for i in d.incidents_graves %}<tr><td>{{ i.date_occurrence.strftime('%d/%m') }}</td><td>{{ i.titre }}</td><td>{{ (i.gravite or '')|capitalize }}</td></tr>{% endfor %}</tbody></table>
+      {% else %}<p class="vide">Aucun incident grave sur {{ c.fenetre }} jours.</p>{% endif %}
+    </div>
+    <div>
+      <h2><span class="num">7.</span>Indicateurs en alerte</h2>
+      {% if d.kri_alerte %}
+      <table><tbody>{% for x in d.kri_alerte %}<tr><td>{{ x.kri.nom }}</td><td class="num">{{ x.valeur }} {{ x.kri.unite_mesure or '' }}</td><td style="color: {{ '#991b1b' if x.grave else '#b54708' }};">{{ x.etat|replace('_', ' ') }}</td></tr>{% endfor %}</tbody></table>
+      {% else %}<p class="vide">Aucun indicateur en alerte.</p>{% endif %}
+    </div>
+  </section>
+  <div class="pied"><span>{{ client.nom if client else '' }} — Rapport au comité d’audit — {{ c.date }}</span><span>Confidentiel</span></div>
+</div>
+
+{# ============================ AUDIT ET CONFORMITÉ ============================ #}
+<div class="page">
+  <section>
+    <h2><span class="num">8.</span>Audit interne (12 mois)</h2>
+    {% if audits %}
+    <table><thead><tr><th>Réf.</th><th>Mission</th><th>Statut</th><th class="num">Constatations</th><th class="num">dont majeures</th><th class="num">Recommandations</th><th class="num">échues</th></tr></thead><tbody>
+      {% for a in audits %}<tr><td>{{ a.audit.reference }}</td><td>{{ a.audit.titre }}</td><td>{{ (a.audit.statut or '')|replace('_', ' ')|capitalize }}</td>
+        <td class="num">{{ a.constatations }}</td><td class="num">{{ a.majeures }}</td><td class="num">{{ a.recos }}</td><td class="num" style="color: {{ '#b42318' if a.recos_retard else 'inherit' }};">{{ a.recos_retard }}</td></tr>{% endfor %}
+    </tbody></table>
+    {% else %}<p class="vide">Aucune mission sur la période.</p>{% endif %}
+    {% if reco_retard %}
+    <h3>Recommandations échues</h3>
+    <table><thead><tr><th>Réf.</th><th>Recommandation</th><th>Échéance</th><th class="num">Avancement</th></tr></thead><tbody>
+      {% for r in reco_retard %}<tr><td>{{ r.reference }}</td><td>{{ (r.description or '')|truncate(110) }}</td><td>{{ r.date_echeance.strftime('%d/%m/%Y') }}</td><td class="num">{{ r.taux_avancement or 0 }} %</td></tr>{% endfor %}
+    </tbody></table>
+    {% endif %}
+  </section>
+
+  <section>
+    <h2><span class="num">9.</span>Conformité</h2>
+    <div class="kpis">
+      <div class="kpi"><div class="lib">Tiers suivis (LCB-FT)</div><div class="val">{{ c.tiers }}</div><div class="sous">{{ c.tiers_renforces }} en vigilance renforcée</div></div>
+      <div class="kpi"><div class="lib">Criblages à lever</div><div class="val" style="color: {{ '#b42318' if c.criblages_a_verifier else 'inherit' }};">{{ c.criblages_a_verifier }}</div><div class="sous">listes de sanctions</div></div>
+      <div class="kpi"><div class="lib">Signalements (12 mois)</div><div class="val">{{ c.alertes }}</div><div class="sous">{{ c.alertes_ouvertes }} en cours</div></div>
+      <div class="kpi"><div class="lib">Hors délai légal</div><div class="val" style="color: {{ '#b42318' if c.alertes_delais else 'inherit' }};">{{ c.alertes_delais }}</div><div class="sous">dispositif d’alerte</div></div>
+    </div>
+    <div class="note">Par confidentialité, aucun élément permettant d’identifier un lanceur d’alerte ou les faits signalés ne figure dans ce rapport.</div>
+  </section>
+
+  <section>
+    <h2><span class="num">10.</span>Méthode</h2>
+    <p class="note" style="font-size: 9pt;">Cotation : score brut = impact × probabilité (1 à 25) ; score net = impact × probabilité résiduelle après prise en compte du niveau de
+      maîtrise. Niveaux selon les seuils de l’organisation. La synthèse est rédigée automatiquement à partir des chiffres de ce rapport, selon des règles fixes :
+      elle ne contient aucune appréciation qui ne découle des données. Données extraites d’Egalyx Control le {{ genere_le.strftime('%d/%m/%Y à %H:%M') }}.</p>
+  </section>
+  <div class="pied"><span>{{ client.nom if client else '' }} — Rapport au comité d’audit — {{ c.date }}</span><span>Confidentiel</span></div>
+</div>
+</body>
+</html>

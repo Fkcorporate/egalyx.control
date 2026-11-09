@@ -1,0 +1,210 @@
+{% extends "base.html" %}
+{% import "_macros/page.html" as pg %}
+{% block title %}Éditer l’organigramme — {{ processus.nom }}{% endblock %}
+{% block styles %}{{ pg.styles() }}<style>
+  .ed-zone { display: grid; grid-template-columns: 1fr 280px; gap: 1rem; }
+  @media (max-width: 992px) { .ed-zone { grid-template-columns: 1fr; } }
+  .ed-cadre { overflow: auto; height: 68vh; border: 1px solid var(--bs-border-color); border-radius: 10px;
+              background: radial-gradient(circle, var(--bs-border-color) 1px, transparent 1px) 0 0 / 20px 20px; touch-action: none; }
+  .ed-cadre svg { display: block; user-select: none; }
+  .ed-noeud { cursor: grab; }
+  .ed-noeud.sel .forme { stroke: #f59e0b; stroke-width: 3; }
+  .ed-noeud text { fill: #fff; font-size: 12px; font-weight: 600; pointer-events: none; }
+  .ed-lien { stroke: var(--bs-secondary-color); stroke-width: 1.8; fill: none; cursor: pointer; }
+  .ed-lien-zone { stroke: transparent; stroke-width: 12; fill: none; cursor: pointer; }
+  .ed-lien.sel { stroke: #f59e0b; stroke-width: 3; }
+  .ed-lib { font-size: 11px; fill: var(--bs-body-color); paint-order: stroke; stroke: var(--bs-body-bg); stroke-width: 3px; pointer-events: none; }
+  .mode-lien .ed-noeud { cursor: crosshair; }
+  .ed-panneau .form-label { font-size: .8rem; font-weight: 600; margin-bottom: .2rem; }
+</style>{% endblock %}
+{% block content %}
+<div class="container-fluid">
+  {% call pg.entete('Éditer l’organigramme', 'fa-pen-ruler', processus.nom, retour=url_for('organigramme_avance', id=processus.id), libelle_retour='Vue') %}
+    <span class="small text-secondary align-self-center" id="etat" aria-live="polite"></span>
+    <button class="btn btn-sm btn-primary" id="btnEnregistrer" type="button"><i class="fas fa-floppy-disk me-1"></i>Enregistrer</button>
+  {% endcall %}
+  <div class="d-flex gap-2 flex-wrap mb-2">
+    <button class="btn btn-sm btn-outline-primary" id="btnAjouter" type="button"><i class="fas fa-plus me-1"></i>Étape</button>
+    <button class="btn btn-sm btn-outline-primary" id="btnLien" type="button" aria-pressed="false"><i class="fas fa-arrow-right-long me-1"></i>Relier</button>
+    <button class="btn btn-sm btn-outline-secondary" id="btnAuto" type="button"><i class="fas fa-wand-magic-sparkles me-1"></i>Disposition automatique</button>
+    <span class="small text-secondary align-self-center ms-2">Glissez les étapes · « Relier » puis cliquez l’étape de départ et celle d’arrivée · cliquez un lien pour le modifier.</span>
+  </div>
+  <div class="ed-zone">
+    <div class="ed-cadre" id="cadre"><svg id="svg" xmlns="http://www.w3.org/2000/svg">
+      <defs><marker id="edFleche" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="currentColor"/></marker></defs>
+      <g id="gLiens" style="color: var(--bs-secondary-color);"></g><g id="gNoeuds"></g>
+    </svg></div>
+    <div class="pg-carte ed-panneau" id="panneau">
+      <div class="text-secondary small" id="panneauVide">Sélectionnez une étape ou un lien pour le modifier.</div>
+      <div id="panneauNoeud" hidden>
+        <div class="mb-2"><label class="form-label" for="pNom">Nom</label><input class="form-control form-control-sm" id="pNom" maxlength="200"></div>
+        <div class="mb-2"><label class="form-label" for="pType">Forme</label>
+          <select class="form-select form-select-sm" id="pType"><option value="action">Action (rectangle)</option><option value="decision">Décision (losange)</option><option value="debut">Début</option><option value="fin">Fin</option></select></div>
+        <div class="row g-2 mb-2">
+          <div class="col-6"><label class="form-label" for="pLarg">Largeur</label><input class="form-control form-control-sm" id="pLarg" type="number" min="60" max="600" step="10"></div>
+          <div class="col-6"><label class="form-label" for="pCoul">Couleur</label><input class="form-control form-control-sm form-control-color w-100" id="pCoul" type="color"></div>
+        </div>
+        <div class="small text-secondary">Supprimer une étape existante se fait depuis la fiche du processus.</div>
+        <button class="btn btn-sm btn-outline-danger mt-2" id="pRetirer" type="button" hidden>Retirer cette nouvelle étape</button>
+      </div>
+      <div id="panneauLien" hidden>
+        <div class="mb-2"><label class="form-label" for="lLib">Libellé (ex. oui / non)</label><input class="form-control form-control-sm" id="lLib" maxlength="100"></div>
+        <button class="btn btn-sm btn-outline-danger" id="lSuppr" type="button">Supprimer le lien</button>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}
+{% block scripts %}
+<script>
+(function () {
+  var URL_API = {{ url_for('organigramme_editeur.enregistrer_api', pid=processus.id)|tojson }};
+  var data = {{ donnees|tojson }};
+  var NS = 'http://www.w3.org/2000/svg';
+  var svg = document.getElementById('svg'), gN = document.getElementById('gNoeuds'), gL = document.getElementById('gLiens');
+  var etat = document.getElementById('etat'), cadre = document.getElementById('cadre');
+  var sel = null, modeLien = false, source = null, modifie = false, compteur = 0;
+
+  function el(nom, attrs) { var e = document.createElementNS(NS, nom); for (var k in attrs) e.setAttribute(k, attrs[k]); return e; }
+  function noeud(id) { return data.etapes.find(function (e) { return String(e.id) === String(id); }); }
+  function marquer() { modifie = true; etat.textContent = 'Modifications non enregistrées'; }
+  function tronquer(t, n) { return t.length > n ? t.slice(0, n - 1) + '…' : t; }
+
+  function bordure(n, x, y) {             // point d'intersection du segment centre→(x,y) avec le bord de n
+    var cx = n.x + n.largeur / 2, cy = n.y + n.hauteur / 2, dx = x - cx, dy = y - cy;
+    if (!dx && !dy) return [cx, cy];
+    var k = Math.min(dx ? (n.largeur / 2) / Math.abs(dx) : 1e9, dy ? (n.hauteur / 2) / Math.abs(dy) : 1e9);
+    return [cx + dx * k, cy + dy * k];
+  }
+
+  function dessiner() {
+    gN.innerHTML = ''; gL.innerHTML = '';
+    var maxX = 800, maxY = 500;
+    data.etapes.forEach(function (n) { maxX = Math.max(maxX, n.x + n.largeur + 80); maxY = Math.max(maxY, n.y + n.hauteur + 80); });
+    svg.setAttribute('width', maxX); svg.setAttribute('height', maxY);
+    data.liens.forEach(function (l, i) {
+      var s = noeud(l.source), c = noeud(l.cible); if (!s || !c) return;
+      var a = bordure(s, c.x + c.largeur / 2, c.y + c.hauteur / 2), b = bordure(c, s.x + s.largeur / 2, s.y + s.hauteur / 2);
+      var zone = el('line', { x1: a[0], y1: a[1], x2: b[0], y2: b[1], 'class': 'ed-lien-zone' });
+      var ligne = el('line', { x1: a[0], y1: a[1], x2: b[0], y2: b[1], 'class': 'ed-lien' + (sel && sel.lien === i ? ' sel' : ''), 'marker-end': 'url(#edFleche)' });
+      zone.addEventListener('click', function (ev) { ev.stopPropagation(); selectionner({ lien: i }); });
+      gL.appendChild(ligne); gL.appendChild(zone);
+      if (l.label) { var t = el('text', { x: (a[0] + b[0]) / 2, y: (a[1] + b[1]) / 2 - 6, 'text-anchor': 'middle', 'class': 'ed-lib' }); t.textContent = l.label; gL.appendChild(t); }
+    });
+    data.etapes.forEach(function (n) {
+      var g = el('g', { 'class': 'ed-noeud' + (sel && String(sel.noeud) === String(n.id) ? ' sel' : ''), transform: 'translate(' + n.x + ',' + n.y + ')', tabindex: 0 });
+      var forme;
+      if (n.type === 'decision') forme = el('polygon', { points: [n.largeur / 2 + ',0', n.largeur + ',' + n.hauteur / 2, n.largeur / 2 + ',' + n.hauteur, '0,' + n.hauteur / 2].join(' ') });
+      else forme = el('rect', { width: n.largeur, height: n.hauteur, rx: (n.type === 'debut' || n.type === 'fin') ? n.hauteur / 2 : 8 });
+      forme.setAttribute('fill', n.couleur || '#1A3C6B'); forme.setAttribute('class', 'forme');
+      var t = el('text', { x: n.largeur / 2, y: n.hauteur / 2 + 4, 'text-anchor': 'middle' });
+      t.textContent = (n.ordre ? n.ordre + '. ' : '') + tronquer(n.nom, Math.max(8, Math.floor(n.largeur / 7.5)));
+      var titre = el('title', {}); titre.textContent = n.nom;
+      g.appendChild(titre); g.appendChild(forme); g.appendChild(t);
+      g.addEventListener('pointerdown', function (ev) { debutGlisser(ev, n); });
+      gN.appendChild(g);
+    });
+  }
+
+  // ---------------------------------------------------------------- glisser-déposer
+  var glisse = null;
+  function point(ev) { var r = svg.getBoundingClientRect(); return { x: ev.clientX - r.left, y: ev.clientY - r.top }; }
+  function debutGlisser(ev, n) {
+    ev.stopPropagation();
+    if (modeLien) {
+      if (!source) { source = n; selectionner({ noeud: n.id }); etat.textContent = 'Cliquez l’étape d’arrivée'; return; }
+      if (String(source.id) !== String(n.id) && !data.liens.some(function (l) { return String(l.source) === String(source.id) && String(l.cible) === String(n.id); })) {
+        data.liens.push({ source: source.id, cible: n.id, label: '' }); marquer();
+      }
+      source = null; selectionner({ noeud: n.id }); etat.textContent = modifie ? 'Modifications non enregistrées' : ''; return;
+    }
+    var p = point(ev); glisse = { n: n, dx: p.x - n.x, dy: p.y - n.y, bouge: false };
+    svg.setPointerCapture && svg.setPointerCapture(ev.pointerId);
+    selectionner({ noeud: n.id });
+  }
+  svg.addEventListener('pointermove', function (ev) {
+    if (!glisse) return;
+    var p = point(ev);
+    glisse.n.x = Math.max(0, Math.round((p.x - glisse.dx) / 10) * 10);
+    glisse.n.y = Math.max(0, Math.round((p.y - glisse.dy) / 10) * 10);
+    glisse.bouge = true; dessiner();
+  });
+  svg.addEventListener('pointerup', function () { if (glisse && glisse.bouge) marquer(); glisse = null; });
+  svg.addEventListener('pointerdown', function () { if (!modeLien) selectionner(null); });
+
+  // ---------------------------------------------------------------- panneau
+  var pN = document.getElementById('panneauNoeud'), pL = document.getElementById('panneauLien'), pV = document.getElementById('panneauVide');
+  function selectionner(s) {
+    sel = s; pN.hidden = !(s && s.noeud !== undefined); pL.hidden = !(s && s.lien !== undefined); pV.hidden = !!s;
+    if (s && s.noeud !== undefined) {
+      var n = noeud(s.noeud);
+      document.getElementById('pNom').value = n.nom; document.getElementById('pType').value = n.type;
+      document.getElementById('pLarg').value = n.largeur; document.getElementById('pCoul').value = n.couleur || '#1A3C6B';
+      document.getElementById('pRetirer').hidden = typeof n.id === 'number';
+    }
+    if (s && s.lien !== undefined) document.getElementById('lLib').value = data.liens[s.lien].label || '';
+    dessiner();
+  }
+  function surNoeud(champ, conv) {
+    return function (ev) { if (!sel || sel.noeud === undefined) return; var n = noeud(sel.noeud); n[champ] = conv ? conv(ev.target.value) : ev.target.value; marquer(); dessiner(); };
+  }
+  document.getElementById('pNom').addEventListener('input', surNoeud('nom'));
+  document.getElementById('pType').addEventListener('change', surNoeud('type'));
+  document.getElementById('pLarg').addEventListener('input', surNoeud('largeur', function (v) { return Math.min(600, Math.max(60, parseInt(v, 10) || 140)); }));
+  document.getElementById('pCoul').addEventListener('input', surNoeud('couleur'));
+  document.getElementById('pRetirer').addEventListener('click', function () {
+    var id = sel.noeud;
+    data.etapes = data.etapes.filter(function (e) { return String(e.id) !== String(id); });
+    data.liens = data.liens.filter(function (l) { return String(l.source) !== String(id) && String(l.cible) !== String(id); });
+    marquer(); selectionner(null);
+  });
+  document.getElementById('lLib').addEventListener('input', function (ev) { if (sel && sel.lien !== undefined) { data.liens[sel.lien].label = ev.target.value; marquer(); dessiner(); } });
+  document.getElementById('lSuppr').addEventListener('click', function () { if (sel && sel.lien !== undefined) { data.liens.splice(sel.lien, 1); marquer(); selectionner(null); } });
+
+  // ---------------------------------------------------------------- barre d'outils
+  document.getElementById('btnAjouter').addEventListener('click', function () {
+    var nom = prompt('Nom de la nouvelle étape'); if (!nom || !nom.trim()) return;
+    compteur += 1;
+    var n = { id: 'n' + compteur, ordre: null, nom: nom.trim(), x: cadre.scrollLeft + 40, y: cadre.scrollTop + 40, largeur: 140, hauteur: 60, couleur: '#1A3C6B', type: 'action' };
+    data.etapes.push(n); marquer(); selectionner({ noeud: n.id });
+  });
+  var bL = document.getElementById('btnLien');
+  bL.addEventListener('click', function () {
+    modeLien = !modeLien; source = null; bL.classList.toggle('active', modeLien); bL.setAttribute('aria-pressed', modeLien);
+    cadre.classList.toggle('mode-lien', modeLien); etat.textContent = modeLien ? 'Cliquez l’étape de départ' : (modifie ? 'Modifications non enregistrées' : '');
+  });
+  document.getElementById('btnAuto').addEventListener('click', function () {
+    var parLigne = Math.max(1, Math.floor((cadre.clientWidth - 40) / 200));
+    data.etapes.slice().sort(function (a, b) { return (a.ordre || 999) - (b.ordre || 999); }).forEach(function (n, i) {
+      n.x = 40 + (i % parLigne) * 200; n.y = 40 + Math.floor(i / parLigne) * 120;
+    });
+    marquer(); dessiner();
+  });
+  document.addEventListener('keydown', function (ev) {
+    if ((ev.key === 'Delete' || ev.key === 'Backspace') && sel && sel.lien !== undefined && document.activeElement.tagName !== 'INPUT') {
+      data.liens.splice(sel.lien, 1); marquer(); selectionner(null);
+    }
+  });
+
+  // ---------------------------------------------------------------- enregistrement
+  var bE = document.getElementById('btnEnregistrer');
+  bE.addEventListener('click', function () {
+    bE.disabled = true; etat.textContent = 'Enregistrement…';
+    var jeton = document.querySelector('meta[name="csrf-token"]');
+    fetch(URL_API, { method: 'POST', credentials: 'same-origin',
+      headers: { 'Content-Type': 'application/json', 'Accept': 'application/json', 'X-CSRFToken': jeton ? jeton.content : '' },
+      body: JSON.stringify({ etapes: data.etapes, liens: data.liens }) })
+      .then(function (r) { return r.json().then(function (j) { return { ok: r.ok, j: j }; }); })
+      .then(function (res) {
+        if (!res.ok || !res.j.ok) throw new Error((res.j && res.j.erreur) || 'Erreur');
+        data = res.j.donnees; modifie = false; sel = null; selectionner(null);
+        etat.textContent = 'Enregistré : ' + res.j.etapes + ' étape(s), ' + res.j.liens + ' lien(s)';
+      })
+      .catch(function (e) { etat.textContent = 'Échec : ' + e.message; })
+      .finally(function () { bE.disabled = false; });
+  });
+  window.addEventListener('beforeunload', function (ev) { if (modifie) { ev.preventDefault(); ev.returnValue = ''; } });
+  dessiner();
+})();
+</script>
+{% endblock %}

@@ -1,0 +1,50 @@
+{% extends base_layout %}
+{% import "_macros/page.html" as pg %}
+{% import "egalyx/_recos.html" as rc %}
+{% block title %}Mes recommandations{% endblock %}
+{% block styles %}{{ pg.styles() }}{% endblock %}
+{% block content %}
+<div class="container-fluid py-3">
+  {{ pg.entete('Mes recommandations', 'fa-user-check', "Les recommandations dont vous êtes responsable : déclarez l'avancement, joignez vos preuves, demandez la clôture.") }}
+
+  {% if a_decider %}
+  {% call pg.carte('Clôtures à valider', aide='demandées par les responsables : vous décidez') %}
+    <div class="table-responsive"><table class="pg-table">
+      <thead><tr><th>Réf.</th><th>Recommandation</th><th>Origine</th><th>Responsable</th><th></th></tr></thead>
+      <tbody>{% for l in a_decider %}
+        <tr><td class="pg-ref">{{ l.reference }}</td><td>{{ l.titre }}</td><td>{{ rc.badge_source(l.source, sources) }}</td>
+            <td>{{ l.responsable.username if l.responsable else '—' }}</td>
+            <td class="text-end"><a class="btn btn-sm btn-warning" href="{{ url_for('recommandations.fiche', source=l.type, reco_id=l.id) }}">Décider</a></td></tr>
+      {% endfor %}</tbody>
+    </table></div>
+  {% endcall %}
+  {% endif %}
+
+  {% call pg.carte('À mettre en œuvre') %}
+    {% set ouvertes = lignes|rejectattr('statut', 'in', ['cloturee', 'rejetee'])|list %}
+    {% if ouvertes %}
+    <div class="table-responsive"><table class="pg-table">
+      <thead><tr><th>Réf.</th><th>Recommandation</th><th>Origine</th><th>Échéance</th><th>Avancement</th><th>Statut</th><th></th></tr></thead>
+      <tbody>{% for l in ouvertes %}
+        <tr>
+          <td class="pg-ref">{{ l.reference }}</td>
+          <td style="max-width: 420px;">{{ l.titre }}{% if l.motif_refus %}<div class="pg-second text-danger"><i class="fas fa-rotate-left me-1"></i>Clôture refusée : {{ l.motif_refus }}</div>{% endif %}</td>
+          <td>{{ rc.badge_source(l.source, sources) }}</td>
+          <td>{{ rc.echeance(l) }}</td>
+          <td>{{ rc.barre(l.progression) }}</td>
+          <td>{{ rc.badge_statut(l.statut, statuts) }}</td>
+          <td class="text-end"><a class="btn btn-sm btn-outline-primary" href="{{ url_for('recommandations.fiche', source=l.type, reco_id=l.id) }}">Mettre à jour</a></td>
+        </tr>
+      {% endfor %}</tbody>
+    </table></div>
+    {% else %}{{ pg.vide("Aucune recommandation en cours à votre nom.", 'fa-circle-check') }}{% endif %}
+  {% endcall %}
+
+  {% set closes = lignes|selectattr('statut', 'in', ['cloturee'])|list %}
+  {% if closes %}
+  {% call pg.carte('Clôturées') %}
+    <ul class="list-unstyled mb-0 small">{% for l in closes %}<li class="mb-1"><span class="pg-ref">{{ l.reference }}</span> — {{ l.titre }}</li>{% endfor %}</ul>
+  {% endcall %}
+  {% endif %}
+</div>
+{% endblock %}

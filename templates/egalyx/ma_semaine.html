@@ -1,0 +1,37 @@
+{% extends "base.html" %}
+{% import "_macros/page.html" as pg %}
+{% block title %}Ma semaine{% endblock %}
+{% block styles %}{{ pg.styles() }}<style>
+  .ms-tache { display: grid; grid-template-columns: 150px 1fr 140px; gap: 1rem; align-items: center; padding: .75rem .25rem; border-bottom: 1px solid var(--bs-border-color); text-decoration: none; color: inherit; }
+  .ms-tache:hover { background: var(--bs-tertiary-bg); }
+  .ms-tache:last-child { border-bottom: 0; }
+  .ms-type { font-size: .72rem; text-transform: uppercase; letter-spacing: .03em; color: var(--bs-secondary-color); font-weight: 600; }
+  .ms-ech { text-align: right; font-size: .85rem; font-variant-numeric: tabular-nums; }
+  .ms-retard { color: #b42318; font-weight: 650; }
+  @media (max-width: 700px) { .ms-tache { grid-template-columns: 1fr; gap: .2rem; } .ms-ech { text-align: left; } }
+</style>{% endblock %}
+{% block content %}
+<div class="container" style="max-width: 1000px;">
+  {{ pg.entete('Ma semaine', 'fa-calendar-check', 'Bonjour ' ~ current_user.username ~ ' — vos actions, évaluations, mesures et revues, par urgence') }}
+  <div class="pg-kpis">
+    {{ pg.kpi('En retard', resume.retard, '#b42318' if resume.retard else none) }}
+    {{ pg.kpi('À faire sous 7 jours', resume.semaine) }}
+    {{ pg.kpi('Total à suivre', resume.total) }}
+  </div>
+  {% set groupes = [('En retard', taches|selectattr('retard_jours')|list), ('Cette semaine', taches|rejectattr('retard_jours')|selectattr('priorite', 'equalto', 1)|list), ('Plus tard', taches|rejectattr('retard_jours')|selectattr('priorite', 'equalto', 2)|list)] %}
+  {% for titre, lst in groupes if lst %}
+    {% call pg.carte(titre, aide=lst|length ~ ' élément(s)') %}
+      {% for t in lst %}
+      <a class="ms-tache" href="{{ t.lien or '#' }}">
+        <span class="ms-type">{{ t.type }}</span>
+        <span><strong>{{ t.titre }}</strong><div class="pg-second">{{ t.sous_titre }}</div></span>
+        <span class="ms-ech {{ 'ms-retard' if t.retard_jours }}">{% if t.retard_jours %}{{ t.retard_jours }} j de retard{% elif t.echeance %}{{ t.echeance.strftime('%d/%m/%Y') }}{% else %}—{% endif %}</span>
+      </a>
+      {% endfor %}
+    {% endcall %}
+  {% else %}
+    {% call pg.carte() %}{{ pg.vide('Rien à faire pour le moment. Bonne semaine !', 'fa-mug-hot') }}{% endcall %}
+  {% endfor %}
+  <p class="pg-second">Un récapitulatif vous est envoyé chaque lundi par e-mail lorsque des éléments sont en retard ou arrivent à échéance.</p>
+</div>
+{% endblock %}

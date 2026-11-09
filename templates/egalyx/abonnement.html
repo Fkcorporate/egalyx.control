@@ -1,0 +1,84 @@
+{% extends "base.html" %}
+{% import "_macros/page.html" as pg %}
+{% block title %}Abonnement{% endblock %}
+{% block styles %}{{ pg.styles() }}<style>
+  .formule { border: 1px solid var(--bs-border-color); border-radius: 12px; padding: 1rem; height: 100%; cursor: pointer; display: block; }
+  .formule:has(input:checked) { border-color: var(--bs-primary); box-shadow: 0 0 0 2px var(--bs-primary-border-subtle); }
+  .formule .prix { font-size: 1.4rem; font-weight: 700; font-variant-numeric: tabular-nums; }
+</style>{% endblock %}
+{% block content %}
+<div class="container" style="max-width: 1100px;">
+  {{ pg.entete('Abonnement', 'fa-credit-card', client.nom if client else '') }}
+
+  {% set exp = client.date_expiration if client else none %}
+  {% call pg.carte('Situation') %}
+    <dl class="pg-dl">
+      <dt>Formule</dt><dd>{{ client.formule.nom if client and client.formule else (client.plan|capitalize if client and client.plan else '—') }}</dd>
+      <dt>Échéance</dt><dd>{% if exp %}{{ pg.date(exp) }}{% set jours = (exp.date() - aujourd_hui).days %}
+        {% if jours < 0 %} <span class="badge text-bg-danger">expiré</span>{% elif jours <= 15 %} <span class="badge text-bg-warning">dans {{ jours }} jour(s)</span>{% endif %}{% else %}—{% endif %}</dd>
+    </dl>
+  {% endcall %}
+
+  {% call pg.carte('Renouveler ou changer de formule') %}
+    {% if not prestataires %}
+      <p class="mb-0 small">Le paiement en ligne n’est pas encore ouvert. Pour renouveler, contactez-nous : un devis et une facture vous seront adressés.</p>
+    {% elif not formules %}
+      <p class="mb-0 small">Aucune formule tarifée n’est disponible.</p>
+    {% else %}
+    <form method="post" action="{{ url_for('paiement.payer') }}">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <div class="btn-group btn-group-sm mb-3" role="group" aria-label="Période">
+        <input type="radio" class="btn-check" name="periode" id="pMens" value="mensuel" checked><label class="btn btn-outline-primary" for="pMens">Mensuel</label>
+        <input type="radio" class="btn-check" name="periode" id="pAnn" value="annuel"><label class="btn btn-outline-primary" for="pAnn">Annuel</label>
+      </div>
+      <div class="row g-3 mb-3">
+        {% for f in formules %}
+        <div class="col-md-4">
+          <label class="formule">
+            <input class="form-check-input me-2" type="radio" name="formule_id" value="{{ f.id }}" {% if (client and client.formule_id == f.id) or (loop.first and not (client and client.formule_id)) %}checked{% endif %} required>
+            <strong>{{ f.nom }}</strong>{% if client and client.formule_id == f.id %} <span class="badge text-bg-secondary">actuelle</span>{% endif %}
+            <div class="prix mt-2" data-mensuel="{{ '%.2f'|format(f.prix_mensuel or 0) }} € · {{ '{:,}'.format(xof(f.prix_mensuel or 0)).replace(',', ' ') }} FCFA" data-annuel="{{ '%.2f'|format(f.prix_annuel or 0) }} € · {{ '{:,}'.format(xof(f.prix_annuel or 0)).replace(',', ' ') }} FCFA">
+              {{ '%.2f'|format(f.prix_mensuel or 0) }} € · {{ '{:,}'.format(xof(f.prix_mensuel or 0)).replace(',', ' ') }} FCFA</div>
+            {% if f.description %}<div class="pg-second mt-1">{{ f.description|truncate(140) }}</div>{% endif %}
+            <div class="pg-second mt-1">{{ f.max_utilisateurs }} utilisateurs</div>
+          </label>
+        </div>
+        {% endfor %}
+      </div>
+      <div class="d-flex gap-2 flex-wrap">
+        {% for pr in prestataires %}
+        <button class="btn {{ 'btn-primary' if loop.first else 'btn-outline-primary' }}" name="prestataire" value="{{ pr.code }}">
+          <i class="fas {{ 'fa-mobile-screen' if pr.code == 'cinetpay' else 'fa-credit-card' }} me-1"></i>{{ pr.nom }}</button>
+        {% endfor %}
+      </div>
+      <div class="pg-second mt-2">{% for pr in prestataires %}{{ pr.detail }}.{{ ' ' }}{% endfor %}Conversion euro → franc CFA à la parité fixe (1 € = 655,957 FCFA).
+        La nouvelle période commence à la fin de la période en cours.</div>
+    </form>
+    {% endif %}
+  {% endcall %}
+
+  {% call pg.carte('Paiements') %}
+    {% if paiements %}
+    <table class="pg-table"><thead><tr><th>Référence</th><th>Date</th><th>Formule</th><th class="pg-num">Montant</th><th>Moyen</th><th>État</th></tr></thead><tbody>
+      {% for p in paiements %}<tr>
+        <td class="pg-ref">{{ p.reference }}</td><td>{{ pg.date(p.paye_le or p.created_at, True) }}</td>
+        <td>{{ p.formule.nom if p.formule else '' }} · {{ p.periode }}</td>
+        <td class="pg-num">{{ '{:,.2f}'.format(p.montant).replace(',', ' ') if p.devise == 'EUR' else '{:,.0f}'.format(p.montant).replace(',', ' ') }} {{ '€' if p.devise == 'EUR' else 'FCFA' }}</td>
+        <td>{{ 'CinetPay' if p.prestataire == 'cinetpay' else 'Stripe' }}</td>
+        <td>{% set c = {'reussi': ('Payé', 'success'), 'initie': ('En attente', 'warning'), 'echoue': ('Échoué', 'danger'), 'annule': ('Annulé', 'secondary')}.get(p.statut, (p.statut, 'secondary')) %}
+            <span class="badge text-bg-{{ c[1] }}">{{ c[0] }}</span>{% if p.statut == 'initie' %} <a class="small" href="{{ url_for('paiement.retour', reference=p.reference) }}">vérifier</a>{% endif %}</td>
+      </tr>{% endfor %}
+    </tbody></table>
+    {% else %}{{ pg.vide('Aucun paiement en ligne.', 'fa-receipt') }}{% endif %}
+  {% endcall %}
+</div>
+{% endblock %}
+{% block scripts %}
+<script>
+  document.querySelectorAll('input[name=periode]').forEach(function (r) {
+    r.addEventListener('change', function () {
+      document.querySelectorAll('.formule .prix').forEach(function (e) { e.textContent = e.dataset[r.value]; });
+    });
+  });
+</script>
+{% endblock %}

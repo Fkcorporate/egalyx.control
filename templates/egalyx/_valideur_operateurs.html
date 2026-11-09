@@ -1,0 +1,41 @@
+{# Carte « valideurs des évaluations des opérateurs » — par cartographie, avec un valideur par défaut pour l'organisation. #}
+{% set _vctx = contexte_valideur_operateurs() if contexte_valideur_operateurs is defined else none %}
+{% if _vctx %}
+<div class="card mb-4" data-sans-masquage>
+  <div class="card-header bg-white"><h6 class="mb-0"><i class="fas fa-user-check me-2"></i>Validation des évaluations faites par les opérateurs <span class="badge bg-light text-secondary fw-normal ms-1">facultatif</span></h6></div>
+  <div class="card-body">
+    <p class="small text-secondary mb-3">Sans valideur, rien ne change : l'opérateur pré-évalue puis valide lui-même, et l'administrateur confirme.
+      Avec un valideur, l'opérateur ne fait que la pré-évaluation ; le valideur valide ou renvoie à revoir, puis l'administrateur confirme.
+      Choisissez un valideur <strong>par cartographie</strong> ; le valideur de l'organisation s'applique aux cartographies qui n'en ont pas.
+      Le valideur peut être un opérateur (il valide depuis l'espace opérationnel) ou un cadre.</p>
+    <form method="POST" action="{{ url_for('parametres_risque.valideur_page', client_id=_vctx.client_id if current_user.role == 'super_admin' else none) }}">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() if csrf_token is defined else '' }}">
+      <input type="hidden" name="suite" value="{{ request.full_path if request.full_path and not request.full_path.endswith('?') else request.path }}">
+      <div class="table-responsive">
+      <table class="table table-sm align-middle mb-3">
+        <thead><tr><th style="width: 45%;">Périmètre</th><th>Valideur</th></tr></thead>
+        <tbody>
+          <tr class="table-light">
+            <td><strong>Par défaut (toute l'organisation)</strong></td>
+            <td><select class="form-select form-select-sm" name="valideur_evaluations_operateurs_id">
+              <option value="">— Aucun : l'opérateur valide lui-même —</option>
+              {% for u in _vctx.valideurs %}<option value="{{ u.id }}" {% if _vctx.actuel_id == u.id %}selected{% endif %}>{{ u.username }}{% if u.is_operateur %} (opérateur){% endif %}</option>{% endfor %}
+            </select></td>
+          </tr>
+          {% for c in _vctx.cartographies %}
+          <tr>
+            <td><i class="fas fa-map me-1 text-secondary"></i>{{ c.nom }}</td>
+            <td><select class="form-select form-select-sm" name="carto_{{ c.id }}">
+              <option value="">— Celui de l'organisation{% if _vctx.actuel %} ({{ _vctx.actuel.username }}){% else %} (aucun){% endif %} —</option>
+              {% for u in _vctx.valideurs %}<option value="{{ u.id }}" {% if c.valideur_operateurs_id == u.id %}selected{% endif %}>{{ u.username }}{% if u.is_operateur %} (opérateur){% endif %}</option>{% endfor %}
+            </select></td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+      </div>
+      <button class="btn btn-primary"><i class="fas fa-check me-1"></i>Enregistrer</button>
+    </form>
+  </div>
+</div>
+{% endif %}

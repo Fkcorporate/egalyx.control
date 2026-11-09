@@ -1,2717 +1,710 @@
 {% extends "base.html" %}
+{% import "_macros/cotation.html" as cot %}
 
 {% block title %}Tableau de bord stratégique{% endblock %}
 
 {% block styles %}
-{{ super() }}
-<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/chart.js@3.9.1/dist/chart.min.css">
 <style>
-    /* ============================================ */
-    /* ===== VARIABLES PRINCIPALES ===== */
-    /* ============================================ */
-    :root {
-        --primary: #1a2a5e;
-        --primary-light: #2a4a8a;
-        --primary-dark: #0f1a3a;
-        --gold: #c9a84c;
-        --gold-light: #f0d080;
-        --success: #10b981;
-        --success-light: #d1fae5;
-        --warning: #f59e0b;
-        --warning-light: #fef3c7;
-        --danger: #ef4444;
-        --danger-light: #fee2e2;
-        --info: #3b82f6;
-        --info-light: #dbeafe;
-        --dark: #0a1628;
-        --gray: #6b7280;
-        --gray-light: #f3f4f6;
-        --light: #f8f9fd;
-        --border: #e5e7eb;
-        --shadow: 0 2px 12px rgba(10, 22, 40, 0.08);
-        --shadow-hover: 0 12px 32px rgba(10, 22, 40, 0.12);
-        --radius: 16px;
-        --radius-sm: 10px;
-        --radius-xs: 6px;
-        --transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-    }
+  /* ============ Tableau de bord stratégique — vue comité de direction ============ */
+  .ds { --ds-surface: var(--bs-body-bg); --ds-carte: var(--bs-body-bg); --ds-bord: var(--bs-border-color);
+        --ds-texte: var(--bs-body-color); --ds-texte-2: var(--bs-secondary-color); --ds-fond: var(--bs-tertiary-bg);
+        --ds-bien: #15803d; --ds-mal: #b91c1c; }
+  [data-bs-theme="dark"] .ds { --ds-bien: #4ade80; --ds-mal: #f87171; }
 
-    * {
-        transition: var(--transition);
-    }
+  .ds-entete { display: flex; justify-content: space-between; align-items: flex-end; flex-wrap: wrap; gap: 1rem; margin-bottom: 1.25rem; }
+  .ds-entete h1 { font-size: 1.5rem; font-weight: 700; margin: 0; }
+  .ds-entete .ds-sous { color: var(--ds-texte-2); font-size: .9rem; margin-top: .25rem; }
 
-    /* ============================================ */
-    /* ===== CARDS ===== */
-    /* ============================================ */
-    .dashboard-card {
-        background: var(--card-bg);
-        border-radius: var(--radius);
-        box-shadow: var(--shadow);
-        transition: var(--transition);
-        overflow: hidden;
-        border: 1px solid var(--border);
-    }
-    .dashboard-card:hover {
-        transform: translateY(-4px);
-        box-shadow: var(--shadow-hover);
-    }
-    .dashboard-card .card-header-custom {
-        padding: 0.85rem 1.5rem;
-        background: var(--bg-secondary);
-        border-bottom: 2px solid var(--border);
-        font-weight: 600;
-        font-size: 1rem;
-        color: var(--text-primary);
-        display: flex;
-        align-items: center;
-        gap: 0.75rem;
-    }
-    .dashboard-card .card-header-custom .icon {
-        color: var(--gold);
-        font-size: 1.2rem;
-    }
+  .ds-carte { background: var(--ds-carte); border: 1px solid var(--ds-bord); border-radius: 12px; padding: 1.1rem 1.25rem; height: 100%; }
+  .ds-carte-titre { display: flex; justify-content: space-between; align-items: baseline; gap: .75rem; margin-bottom: .9rem; }
+  .ds-carte-titre h2 { font-size: 1rem; font-weight: 650; margin: 0; }
+  .ds-carte-titre .ds-aide { color: var(--ds-texte-2); font-size: .8rem; }
+  .ds-carte-titre a { font-size: .8rem; text-decoration: none; white-space: nowrap; }
 
-    /* ============================================ */
-    /* ===== STAT CARDS ===== */
-    /* ============================================ */
-    .stat-card {
-        border-radius: var(--radius);
-        padding: 1.25rem 1.5rem;
-        color: white;
-        transition: var(--transition);
-        position: relative;
-        overflow: hidden;
-        cursor: pointer;
-        border: none;
-        min-height: 90px;
-    }
-    .stat-card:hover {
-        transform: translateY(-6px) scale(1.02);
-        box-shadow: 0 16px 40px rgba(0,0,0,0.20);
-    }
-    .stat-card .stat-value {
-        font-size: 2.2rem;
-        font-weight: 700;
-        margin-bottom: 0;
-        line-height: 1.2;
-        font-family: 'Georgia', serif;
-    }
-    .stat-card .stat-label {
-        font-size: 0.7rem;
-        opacity: 0.9;
-        text-transform: uppercase;
-        letter-spacing: 1px;
-        font-weight: 500;
-        margin-top: 2px;
-    }
-    .stat-card .stat-icon {
-        position: absolute;
-        right: 1rem;
-        bottom: 0.5rem;
-        font-size: 3.2rem;
-        opacity: 0.12;
-    }
-    .stat-card .stat-sub {
-        font-size: 0.65rem;
-        opacity: 0.75;
-        margin-top: 4px;
-    }
+  /* Filtres */
+  .ds-filtres { display: flex; flex-wrap: wrap; gap: .5rem; align-items: center; }
+  .ds-filtres .form-select { width: auto; min-width: 170px; font-size: .875rem; }
 
-    .stat-card-primary { background: linear-gradient(135deg, #1a2a5e, #2a4a8a); }
-    .stat-card-success { background: linear-gradient(135deg, #0d9488, #065f46); }
-    .stat-card-warning { background: linear-gradient(135deg, #d97706, #92400e); }
-    .stat-card-danger { background: linear-gradient(135deg, #dc2626, #991b1b); }
-    .stat-card-info { background: linear-gradient(135deg, #2563eb, #1e3a8a); }
-    .stat-card-secondary { background: linear-gradient(135deg, #4b5563, #1f2937); }
-    .stat-card-gold { background: linear-gradient(135deg, #c9a84c, #a8873a); }
-    .stat-card-purple { background: linear-gradient(135deg, #7c3aed, #5b21b6); }
-    .stat-card-rose { background: linear-gradient(135deg, #e11d48, #9f1239); }
+  /* Indicateurs clés */
+  .ds-kpi { display: block; text-decoration: none; color: inherit; transition: border-color .15s, box-shadow .15s; }
+  .ds-kpi:hover { border-color: var(--bs-primary); box-shadow: 0 4px 14px rgba(15, 23, 42, .06); color: inherit; }
+  .ds-kpi-lib { font-size: .78rem; color: var(--ds-texte-2); font-weight: 600; text-transform: uppercase; letter-spacing: .03em; }
+  .ds-kpi-val { font-size: 2rem; font-weight: 700; line-height: 1.1; margin: .35rem 0 .2rem; font-variant-numeric: tabular-nums; }
+  .ds-kpi-val small { font-size: .95rem; font-weight: 500; color: var(--ds-texte-2); }
+  .ds-kpi-sous { font-size: .8rem; color: var(--ds-texte-2); min-height: 1.2em; }
+  .ds-kpi.ds-vigilance { border-color: #f59e0b; box-shadow: inset 4px 0 0 #f59e0b; }
+  .ds-vigilance-txt { color: #b45309; font-weight: 600; }
+  .ds-sans-resp { display: inline-block; font-size: .72rem; font-weight: 600; color: #b91c1c; background: rgba(220,38,38,.08);
+                  border: 1px solid rgba(220,38,38,.35); border-radius: 999px; padding: .05rem .5rem; white-space: nowrap; }
+  .ds-tend { display: inline-flex; align-items: center; gap: .25rem; font-size: .78rem; font-weight: 600; }
+  .ds-tend.bien { color: var(--ds-bien); } .ds-tend.mal { color: var(--ds-mal); } .ds-tend.stable { color: var(--ds-texte-2); }
+  .ds-kpi-marque { display: inline-block; width: 10px; height: 10px; border-radius: 50%; margin-right: .35rem; vertical-align: middle; }
 
-    /* ============================================ */
-    /* ===== FILTRES ===== */
-    /* ============================================ */
-    .filter-bar {
-        background: var(--card-bg);
-        border-radius: var(--radius);
-        padding: 1.25rem 1.5rem;
-        border: 1px solid var(--border);
-        box-shadow: var(--shadow);
-    }
-    .filter-bar .form-label {
-        font-weight: 600;
-        font-size: 0.7rem;
-        text-transform: uppercase;
-        letter-spacing: 0.8px;
-        color: var(--gray);
-        margin-bottom: 4px;
-    }
-    .filter-bar .form-select,
-    .filter-bar .form-control {
-        border-radius: var(--radius-sm);
-        border: 2px solid var(--border);
-        font-size: 0.85rem;
-        background: var(--card-bg);
-        color: var(--text-primary);
-        padding: 0.5rem 0.75rem;
-    }
-    .filter-bar .form-select:focus,
-    .filter-bar .form-control:focus {
-        border-color: var(--gold);
-        box-shadow: 0 0 0 4px rgba(201, 168, 76, 0.15);
-    }
+  /* Matrice */
+  .ds-matrice { display: grid; grid-template-columns: 1.6rem repeat(5, 1fr); gap: 3px; }
+  .ds-cell { aspect-ratio: 1.35; border-radius: 6px; display: flex; align-items: center; justify-content: center;
+             font-weight: 700; font-size: .95rem; position: relative; cursor: default; }
+  .ds-cell.vide { opacity: .22; }
+  .ds-cell.pleine { cursor: help; }
+  .ds-cell:focus-visible { outline: 2px solid var(--ds-texte); outline-offset: 1px; }
+  .ds-axe { font-size: .72rem; color: var(--ds-texte-2); display: flex; align-items: center; justify-content: center; }
+  .ds-axe-titre { font-size: .72rem; color: var(--ds-texte-2); text-align: center; margin-top: .35rem; }
+  .ds-axe-y { writing-mode: vertical-rl; transform: rotate(180deg); }
 
-    /* ============================================ */
-    /* ===== ORGANISATION : PANNEAU PAYS ===== */
-    /* ============================================ */
-    .org-panel {
-        background: var(--card-bg);
-        border-radius: var(--radius);
-        box-shadow: var(--shadow);
-        border: 1px solid var(--border);
-        overflow: hidden;
-        margin-bottom: 1.75rem;
-        transition: var(--transition);
-    }
-    .org-panel:hover { box-shadow: var(--shadow-hover); }
-    .org-panel-head {
-        background: linear-gradient(120deg, var(--primary-dark) 0%, var(--primary) 65%, var(--primary-light) 100%);
-        padding: 1.35rem 1.75rem;
-        color: white;
-        display: flex;
-        flex-wrap: wrap;
-        align-items: center;
-        justify-content: space-between;
-        gap: 1rem;
-        border-bottom: 3px solid var(--gold);
-    }
-    .org-panel-head .org-id {
-        display: flex;
-        align-items: center;
-        gap: 1rem;
-    }
-    .org-panel-head .org-flag {
-        font-size: 1.7rem;
-        width: 50px;
-        height: 50px;
-        border-radius: 14px;
-        background: rgba(255,255,255,0.12);
-        border: 1px solid rgba(255,255,255,0.16);
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        flex-shrink: 0;
-    }
-    .org-panel-head .org-name {
-        font-family: 'Georgia', serif;
-        font-size: 1.25rem;
-        font-weight: 700;
-        line-height: 1.25;
-    }
-    .org-panel-head .org-code {
-        display: inline-block;
-        font-size: 0.62rem;
-        text-transform: uppercase;
-        letter-spacing: 1px;
-        opacity: 0.85;
-        background: rgba(255,255,255,0.12);
-        border: 1px solid rgba(255,255,255,0.14);
-        padding: 0.1rem 0.6rem;
-        border-radius: 20px;
-        margin-top: 3px;
-    }
-    .org-panel-head .org-actions {
-        display: flex;
-        gap: 0.5rem;
-        flex-wrap: wrap;
-    }
+  /* Barres empilées brut / net */
+  .ds-pile { display: flex; height: 22px; gap: 2px; border-radius: 4px; overflow: hidden; background: var(--ds-fond); }
+  .ds-pile > span { display: flex; align-items: center; justify-content: center; font-size: .72rem; font-weight: 700; min-width: 0; }
+  .ds-pile-lib { font-size: .8rem; font-weight: 600; width: 2.6rem; flex-shrink: 0; color: var(--ds-texte-2); }
+  .ds-legende { display: flex; flex-wrap: wrap; gap: .4rem 1rem; font-size: .78rem; color: var(--ds-texte-2); }
+  .ds-legende i { display: inline-block; width: 10px; height: 10px; border-radius: 3px; margin-right: .35rem; vertical-align: -1px; }
 
-    /* Réutilise le langage visuel du panneau d'entité pour les métriques pays */
-    .org-metrics { display: grid; gap: 1px; background: var(--border); }
-    .org-metrics.cols-5 { grid-template-columns: repeat(5, 1fr); }
-    .org-metric {
-        background: var(--card-bg);
-        padding: 0.9rem 1rem;
-        text-align: center;
-        cursor: pointer;
-        transition: var(--transition);
-    }
-    .org-metric:hover { background: var(--bg-secondary); }
-    .org-metric .v {
-        font-family: 'Georgia', serif;
-        font-weight: 700;
-        font-size: 1.25rem;
-        color: var(--text-primary);
-        line-height: 1.1;
-    }
-    .org-metric .v.danger { color: var(--danger); }
-    .org-metric .v.warning { color: var(--warning); }
-    .org-metric .v.success { color: var(--success); }
-    .org-metric .v.gold { color: var(--gold); }
-    .org-metric .l {
-        font-size: 0.6rem;
-        text-transform: uppercase;
-        letter-spacing: 0.5px;
-        color: var(--gray);
-        margin-top: 3px;
-        font-weight: 600;
-    }
+  /* Courbe */
+  .ds-courbe { position: relative; }
+  .ds-courbe svg { display: block; width: 100%; height: 220px; overflow: visible; }
+  .ds-bulle { position: absolute; pointer-events: none; background: var(--bs-body-bg); border: 1px solid var(--ds-bord);
+              border-radius: 8px; padding: .45rem .6rem; font-size: .78rem; box-shadow: 0 6px 18px rgba(0,0,0,.12);
+              white-space: nowrap; z-index: 5; display: none; }
 
-    .org-section { padding: 1.25rem 1.75rem; border-top: 1px solid var(--border); }
+  /* Listes */
+  .ds-table { width: 100%; font-size: .85rem; }
+  .ds-table th { font-size: .72rem; text-transform: uppercase; letter-spacing: .03em; color: var(--ds-texte-2); font-weight: 600;
+                 border-bottom: 1px solid var(--ds-bord); padding: .4rem .5rem; white-space: nowrap; }
+  .ds-table td { padding: .55rem .5rem; border-bottom: 1px solid var(--ds-bord); vertical-align: middle; }
+  .ds-table tr:last-child td { border-bottom: 0; }
+  .ds-table a { text-decoration: none; }
+  .ds-ref { font-weight: 650; white-space: nowrap; }
+  .ds-intitule { color: var(--ds-texte-2); font-size: .8rem; display: block; max-width: 340px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .ds-num { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
+  .ds-th-tri { cursor: pointer; user-select: none; }
+  .ds-th-tri::after { content: " ↕"; opacity: .35; }
+  .ds-th-tri[aria-sort="ascending"]::after { content: " ↑"; opacity: 1; }
+  .ds-th-tri[aria-sort="descending"]::after { content: " ↓"; opacity: 1; }
+  .ds-ligne-lien { cursor: pointer; }
+  .ds-ligne-lien:hover td { background: var(--ds-fond); }
+  .ds-mini-pile { display: flex; height: 8px; width: 120px; gap: 2px; border-radius: 3px; overflow: hidden; background: var(--ds-fond); }
+  .ds-avancement { height: 6px; width: 70px; background: var(--ds-fond); border-radius: 3px; overflow: hidden; display: inline-block; vertical-align: middle; }
+  .ds-avancement > span { display: block; height: 100%; background: var(--bs-primary); }
+  .ds-vide { text-align: center; color: var(--ds-texte-2); padding: 1.5rem .5rem; font-size: .875rem; }
+  .ds-vide i { display: block; font-size: 1.4rem; margin-bottom: .4rem; opacity: .5; }
 
-    /* ===== Grille des pôles ===== */
-    .org-pole-grid {
-        display: grid;
-        grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
-        gap: 1rem;
-    }
-    .org-pole-card {
-        background: var(--bg-secondary);
-        border-radius: var(--radius-sm);
-        border: 1px solid var(--border);
-        overflow: hidden;
-        transition: var(--transition);
-    }
-    .org-pole-card:hover {
-        border-color: var(--gold);
-        box-shadow: var(--shadow);
-        transform: translateY(-3px);
-    }
-    .org-pole-head {
-        padding: 0.85rem 1.1rem;
-        display: flex;
-        align-items: center;
-        justify-content: space-between;
-        gap: 0.6rem;
-        background: var(--card-bg);
-        border-bottom: 1px solid var(--border);
-    }
-    .org-pole-head .pole-id {
-        display: flex;
-        align-items: center;
-        gap: 0.6rem;
-        min-width: 0;
-    }
-    .org-pole-head .pole-dot {
-        width: 10px;
-        height: 10px;
-        border-radius: 50%;
-        flex-shrink: 0;
-    }
-    .org-pole-head .pole-text { min-width: 0; }
-    .org-pole-head .pole-name {
-        font-weight: 700;
-        font-size: 0.92rem;
-        color: var(--text-primary);
-        white-space: nowrap;
-        overflow: hidden;
-        text-overflow: ellipsis;
-    }
-    .org-pole-head .pole-resp {
-        font-size: 0.63rem;
-        color: var(--gray);
-    }
-    .org-pole-head .pole-actions {
-        display: flex;
-        gap: 0.3rem;
-        flex-shrink: 0;
-    }
-    .org-pole-head .pole-actions .icon-btn {
-        width: 26px;
-        height: 26px;
-        border-radius: 8px;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        background: var(--bg-secondary);
-        color: var(--gray);
-        font-size: 0.68rem;
-        border: 1px solid var(--border);
-        text-decoration: none;
-        transition: var(--transition);
-        cursor: pointer;
-    }
-    .org-pole-head .pole-actions .icon-btn:hover {
-        background: var(--gold);
-        color: var(--dark);
-        border-color: var(--gold);
-    }
-
-    .org-pole-metrics {
-        display: grid;
-        grid-template-columns: repeat(4, 1fr);
-        gap: 1px;
-        background: var(--border);
-    }
-    .org-pole-metrics .m {
-        background: var(--card-bg);
-        padding: 0.55rem 0.3rem;
-        text-align: center;
-        cursor: pointer;
-        transition: var(--transition);
-    }
-    .org-pole-metrics .m:hover { background: var(--bg-secondary); }
-    .org-pole-metrics .m .v {
-        font-family: 'Georgia', serif;
-        font-weight: 700;
-        font-size: 0.95rem;
-        line-height: 1.1;
-    }
-    .org-pole-metrics .m .v.danger { color: var(--danger); }
-    .org-pole-metrics .m .v.warning { color: var(--warning); }
-    .org-pole-metrics .m .v.success { color: var(--success); }
-    .org-pole-metrics .m .v.info { color: var(--info); }
-    .org-pole-metrics .m .l {
-        font-size: 0.52rem;
-        text-transform: uppercase;
-        letter-spacing: 0.4px;
-        color: var(--gray);
-        margin-top: 2px;
-    }
-
-    .org-pole-body { padding: 0.85rem 1.1rem; }
-    .org-pole-body .org-subhead {
-        font-size: 0.62rem;
-        font-weight: 700;
-        text-transform: uppercase;
-        letter-spacing: 0.5px;
-        color: var(--gray);
-        margin: 0.6rem 0 0.4rem;
-        display: flex;
-        align-items: center;
-        gap: 0.35rem;
-    }
-    .org-pole-body .org-subhead:first-child { margin-top: 0; }
-
-    /* ===== Lignes directions ===== */
-    .org-dir-list {
-        display: flex;
-        flex-direction: column;
-        gap: 0.4rem;
-    }
-    .org-dir-row {
-        border-radius: 8px;
-        background: var(--card-bg);
-        border: 1px solid var(--border);
-        padding: 0.5rem 0.7rem;
-        cursor: pointer;
-        transition: var(--transition);
-    }
-    .org-dir-row:hover {
-        border-color: var(--gold);
-        background: var(--bg-secondary);
-    }
-    .org-dir-row .dir-row-top {
-        display: flex;
-        align-items: center;
-        justify-content: space-between;
-        gap: 0.5rem;
-        flex-wrap: wrap;
-    }
-    .org-dir-row .dir-main {
-        display: flex;
-        align-items: center;
-        gap: 0.5rem;
-        min-width: 0;
-    }
-    .org-dir-row .dir-main .name {
-        font-weight: 600;
-        font-size: 0.8rem;
-        color: var(--text-primary);
-    }
-    .org-dir-row .dir-main .resp {
-        font-size: 0.6rem;
-        color: var(--gray);
-    }
-    .org-dir-row .dir-actions {
-        display: flex;
-        gap: 0.25rem;
-        flex-shrink: 0;
-    }
-    .org-dir-row .dir-actions a,
-    .org-dir-row .dir-actions button {
-        width: 22px;
-        height: 22px;
-        border-radius: 6px;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        font-size: 0.6rem;
-        border: 1px solid var(--border);
-        background: var(--bg-secondary);
-        color: var(--gray);
-        text-decoration: none;
-        transition: var(--transition);
-    }
-    .org-dir-row .dir-actions a:hover,
-    .org-dir-row .dir-actions button:hover {
-        background: var(--gold);
-        color: var(--dark);
-        border-color: var(--gold);
-    }
-    .org-dir-row .dir-tags {
-        display: flex;
-        gap: 0.35rem;
-        flex-wrap: wrap;
-        margin-top: 0.4rem;
-    }
-    .org-dir-row .dir-tags .tag {
-        font-size: 0.6rem;
-        padding: 0.08rem 0.5rem;
-        border-radius: 10px;
-        font-weight: 700;
-    }
-    .org-dir-row .dir-tags .tag.danger { background: var(--danger-light); color: var(--danger); }
-    .org-dir-row .dir-tags .tag.warning { background: var(--warning-light); color: var(--warning); }
-    .org-dir-row .dir-tags .tag.info { background: var(--info-light); color: var(--info); }
-    .org-dir-row .dir-tags .tag.gold { background: rgba(201, 168, 76, 0.14); color: var(--gold); }
-
-    /* ===== Services (chips discrets) ===== */
-    .org-services {
-        display: flex;
-        flex-wrap: wrap;
-        gap: 0.35rem;
-        margin-top: 0.5rem;
-        padding-left: 0.1rem;
-    }
-    .org-service-chip {
-        font-size: 0.62rem;
-        padding: 0.16rem 0.6rem;
-        border-radius: 12px;
-        background: var(--info-light);
-        color: var(--info);
-        font-weight: 600;
-        display: inline-flex;
-        align-items: center;
-        gap: 0.3rem;
-    }
-
-    /* ===== Variante compacte des cartes de risque ===== */
-    .risk-item.compact {
-        padding: 0.25rem 0.5rem;
-        margin-bottom: 0.25rem;
-    }
-    .risk-item.compact .risk-ref { font-size: 0.62rem; }
-    .risk-item.compact .risk-title { font-size: 0.58rem; }
-    .risk-item.compact .risk-badge { font-size: 0.5rem; padding: 0.05rem 0.35rem; }
-
-    /* ============================================ */
-    /* ===== RISK ITEM ===== */
-    /* ============================================ */
-    .risk-item {
-        padding: 0.3rem 0.6rem;
-        border-radius: var(--radius-xs);
-        border-left: 4px solid;
-        margin-bottom: 0.3rem;
-        background: var(--bg-secondary);
-        display: flex;
-        flex-wrap: wrap;
-        justify-content: space-between;
-        align-items: center;
-        cursor: pointer;
-        transition: var(--transition);
-    }
-    .risk-item:hover {
-        background: var(--card-bg);
-        transform: translateX(4px);
-        box-shadow: var(--shadow);
-    }
-    .risk-item.critique { border-left-color: var(--danger); background: var(--danger-light); }
-    .risk-item.eleve { border-left-color: var(--warning); background: var(--warning-light); }
-    .risk-item.moyen { border-left-color: var(--info); background: var(--info-light); }
-    .risk-item.faible { border-left-color: var(--success); background: var(--success-light); }
-    .risk-item .risk-ref {
-        font-weight: 600;
-        color: var(--text-primary);
-        font-size: 0.8rem;
-    }
-    .risk-item .risk-title {
-        color: var(--text-secondary);
-        font-size: 0.75rem;
-        flex: 1;
-        margin: 0 0.5rem;
-    }
-    .risk-item .risk-badge {
-        font-size: 0.6rem;
-        padding: 0.1rem 0.6rem;
-        border-radius: 14px;
-        font-weight: 600;
-    }
-    .risk-item .risk-badge.critique { background: var(--danger); color: white; }
-    .risk-item .risk-badge.eleve { background: var(--warning); color: white; }
-    .risk-item .risk-badge.moyen { background: var(--info); color: white; }
-    .risk-item .risk-badge.faible { background: var(--success); color: white; }
-    .risk-item .risk-direction {
-        font-size: 0.55rem;
-        color: var(--gray);
-        margin-left: 0.5rem;
-    }
-
-    /* ============================================ */
-    /* ===== PROGRESS BAR ===== */
-    /* ============================================ */
-    .progress-custom {
-        height: 6px;
-        border-radius: 10px;
-        background: var(--border);
-        overflow: hidden;
-    }
-    .progress-custom-bar {
-        border-radius: 10px;
-        transition: width 0.8s ease;
-        height: 100%;
-    }
-    .progress-custom-bar.gold { background: linear-gradient(90deg, var(--gold), var(--gold-light)); }
-    .progress-custom-bar.primary { background: linear-gradient(90deg, var(--primary), var(--primary-light)); }
-    .progress-custom-bar.success { background: linear-gradient(90deg, #10b981, #34d399); }
-    .progress-custom-bar.warning { background: linear-gradient(90deg, #f59e0b, #fbbf24); }
-    .progress-custom-bar.danger { background: linear-gradient(90deg, #ef4444, #f87171); }
-
-    /* ============================================ */
-    /* ===== TABLE ===== */
-    /* ============================================ */
-    .direction-table {
-        width: 100%;
-        border-collapse: collapse;
-        font-size: 0.85rem;
-    }
-    .direction-table th {
-        background: var(--bg-secondary);
-        font-weight: 600;
-        font-size: 0.7rem;
-        text-transform: uppercase;
-        letter-spacing: 0.8px;
-        color: var(--gray);
-        border-bottom: 2px solid var(--border);
-        padding: 0.75rem 0.5rem;
-    }
-    .direction-table td {
-        vertical-align: middle;
-        padding: 0.6rem 0.5rem;
-        border-bottom: 1px solid var(--border);
-        color: var(--text-primary);
-    }
-    .direction-table tr:hover td {
-        background: var(--bg-secondary);
-    }
-
-    /* ============================================ */
-    /* ===== BOUTONS ===== */
-    /* ============================================ */
-    .btn-soft-primary {
-        background: rgba(26, 42, 94, 0.08);
-        color: var(--primary);
-        border: none;
-        border-radius: 30px;
-        padding: 0.3rem 1.2rem;
-        font-size: 0.8rem;
-        font-weight: 500;
-        transition: var(--transition);
-    }
-    .btn-soft-primary:hover {
-        background: rgba(26, 42, 94, 0.15);
-        transform: translateY(-2px);
-    }
-    .btn-soft-gold {
-        background: rgba(201, 168, 76, 0.12);
-        color: var(--gold);
-        border: none;
-        border-radius: 30px;
-        padding: 0.3rem 1.2rem;
-        font-size: 0.8rem;
-        font-weight: 500;
-        transition: var(--transition);
-    }
-    .btn-soft-gold:hover {
-        background: rgba(201, 168, 76, 0.20);
-        transform: translateY(-2px);
-    }
-    .btn-primary-custom {
-        background: var(--primary);
-        color: white;
-        border: none;
-        border-radius: 30px;
-        padding: 0.5rem 1.5rem;
-        font-weight: 500;
-        transition: var(--transition);
-    }
-    .btn-primary-custom:hover {
-        background: var(--primary-light);
-        transform: translateY(-3px);
-        box-shadow: 0 4px 16px rgba(26, 42, 94, 0.25);
-        color: white;
-    }
-    .btn-soft-success {
-        background: rgba(16, 185, 129, 0.08);
-        color: var(--success);
-        border: none;
-        border-radius: 30px;
-        padding: 0.3rem 1.2rem;
-        font-size: 0.8rem;
-        font-weight: 500;
-        transition: var(--transition);
-    }
-    .btn-soft-success:hover {
-        background: rgba(16, 185, 129, 0.18);
-        transform: translateY(-2px);
-    }
-    .btn-soft-danger {
-        background: rgba(239, 68, 68, 0.08);
-        color: var(--danger);
-        border: none;
-        border-radius: 30px;
-        padding: 0.3rem 1.2rem;
-        font-size: 0.8rem;
-        font-weight: 500;
-        transition: var(--transition);
-    }
-    .btn-soft-danger:hover {
-        background: rgba(239, 68, 68, 0.18);
-        transform: translateY(-2px);
-    }
-    .btn-soft-info {
-        background: rgba(59, 130, 246, 0.08);
-        color: var(--info);
-        border: none;
-        border-radius: 30px;
-        padding: 0.3rem 1.2rem;
-        font-size: 0.8rem;
-        font-weight: 500;
-        transition: var(--transition);
-    }
-    .btn-soft-info:hover {
-        background: rgba(59, 130, 246, 0.18);
-        transform: translateY(-2px);
-    }
-
-    /* ============================================ */
-    /* ===== IA PRÉDICTIVE ===== */
-    /* ============================================ */
-    .ia-card {
-        background: linear-gradient(135deg, #f8f9fd 0%, #eef0f7 100%);
-        border-radius: var(--radius);
-        padding: 1.25rem;
-        border: 1px solid var(--border);
-    }
-    .ia-card .ia-number {
-        font-size: 2rem;
-        font-weight: 700;
-        font-family: 'Georgia', serif;
-    }
-    .ia-card .ia-label {
-        font-size: 0.7rem;
-        color: var(--gray);
-        text-transform: uppercase;
-        letter-spacing: 0.8px;
-    }
-
-    /* ============================================ */
-    /* ===== ALERT BANNER ===== */
-    /* ============================================ */
-    .alert-banner {
-        border-radius: var(--radius-sm);
-        padding: 0.6rem 1rem;
-        margin-bottom: 0.5rem;
-        border-left: 5px solid;
-        display: flex;
-        align-items: center;
-        gap: 0.75rem;
-        cursor: pointer;
-        transition: var(--transition);
-    }
-    .alert-banner:hover {
-        transform: translateX(6px);
-        opacity: 0.92;
-        box-shadow: var(--shadow);
-    }
-    .alert-banner.danger { background: var(--danger-light); border-left-color: var(--danger); }
-    .alert-banner.warning { background: var(--warning-light); border-left-color: var(--warning); }
-    .alert-banner.info { background: var(--info-light); border-left-color: var(--info); }
-    .alert-banner.success { background: var(--success-light); border-left-color: var(--success); }
-    .alert-banner .alert-icon { font-size: 1.3rem; }
-    .alert-banner .alert-text { font-size: 0.85rem; color: var(--text-primary); }
-
-    /* ============================================ */
-    /* ===== FILTRE ACTIF ===== */
-    /* ============================================ */
-    .filtre-actif-badge {
-        background: rgba(201, 168, 76, 0.12);
-        border: 2px solid var(--gold);
-        border-radius: 30px;
-        padding: 0.3rem 1.2rem;
-        font-size: 0.8rem;
-        font-weight: 600;
-        color: var(--gold);
-        display: inline-flex;
-        align-items: center;
-        gap: 0.5rem;
-    }
-
-    /* ============================================ */
-    /* ===== ANIMATIONS ===== */
-    /* ============================================ */
-    .animate-fade-in {
-        animation: fadeInUp 0.6s ease-out;
-    }
-    @keyframes fadeInUp {
-        from { opacity: 0; transform: translateY(20px); }
-        to { opacity: 1; transform: translateY(0); }
-    }
-    .animate-slide-in {
-        animation: slideIn 0.5s ease-out;
-    }
-    @keyframes slideIn {
-        from { opacity: 0; transform: translateX(-20px); }
-        to { opacity: 1; transform: translateX(0); }
-    }
-
-    /* ============================================ */
-    /* ===== ENTITÉ SÉLECTIONNÉE (PANNEAU MODERNE) ===== */
-    /* ============================================ */
-    @keyframes slideInDown {
-        from { opacity: 0; transform: translateY(-24px); }
-        to { opacity: 1; transform: translateY(0); }
-    }
-    .entity-panel {
-        background: var(--card-bg);
-        border-radius: var(--radius);
-        box-shadow: var(--shadow);
-        border: 1px solid var(--border);
-        overflow: hidden;
-        margin-bottom: 1.75rem;
-        animation: slideInDown 0.5s ease-out;
-    }
-    .entity-panel-head {
-        background: linear-gradient(120deg, var(--primary-dark) 0%, var(--primary) 65%, var(--primary-light) 100%);
-        padding: 1.5rem 2rem;
-        color: white;
-        display: flex;
-        flex-wrap: wrap;
-        align-items: center;
-        justify-content: space-between;
-        gap: 1rem;
-        border-bottom: 3px solid var(--gold);
-    }
-    .entity-panel-head .entity-id {
-        display: flex;
-        align-items: center;
-        gap: 1rem;
-    }
-    .entity-panel-head .entity-icon {
-        width: 52px;
-        height: 52px;
-        border-radius: 14px;
-        background: rgba(255,255,255,0.12);
-        border: 1px solid rgba(255,255,255,0.16);
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        font-size: 1.4rem;
-        flex-shrink: 0;
-    }
-    .entity-panel-head .entity-type {
-        font-size: 0.65rem;
-        text-transform: uppercase;
-        letter-spacing: 2px;
-        opacity: 0.72;
-        font-weight: 600;
-    }
-    .entity-panel-head .entity-name {
-        font-family: 'Georgia', serif;
-        font-size: 1.45rem;
-        font-weight: 700;
-        line-height: 1.25;
-    }
-    .entity-panel-head .entity-code {
-        font-size: 0.72rem;
-        opacity: 0.7;
-        margin-top: 2px;
-    }
-    .entity-panel-head .entity-actions {
-        display: flex;
-        gap: 0.5rem;
-        flex-wrap: wrap;
-    }
-    .entity-panel-head .entity-actions .btn-panel {
-        background: rgba(255,255,255,0.10);
-        color: white;
-        border: 1px solid rgba(255,255,255,0.18);
-        border-radius: 30px;
-        padding: 0.4rem 1.1rem;
-        font-size: 0.78rem;
-        font-weight: 500;
-        transition: var(--transition);
-        text-decoration: none;
-        white-space: nowrap;
-        cursor: pointer;
-    }
-    .entity-panel-head .entity-actions .btn-panel:hover {
-        background: rgba(255,255,255,0.22);
-        transform: translateY(-2px);
-        color: white;
-    }
-    .entity-panel-head .entity-actions .btn-panel.btn-panel-gold {
-        background: var(--gold);
-        color: var(--dark);
-        border-color: var(--gold);
-    }
-    .entity-panel-head .entity-actions .btn-panel.btn-panel-gold:hover {
-        background: var(--gold-light);
-    }
-
-    .entity-metrics {
-        display: grid;
-        gap: 1px;
-        background: var(--border);
-    }
-    .entity-metrics.cols-4 { grid-template-columns: repeat(4, 1fr); }
-    .entity-metrics.cols-3 { grid-template-columns: repeat(3, 1fr); }
-    .entity-metrics.cols-2 { grid-template-columns: repeat(2, 1fr); }
-    .entity-metrics + .entity-metrics { border-top: 1px solid var(--border); }
-    .entity-metric {
-        background: var(--card-bg);
-        padding: 1.1rem 1.35rem;
-        cursor: pointer;
-        transition: var(--transition);
-    }
-    .entity-metric:hover { background: var(--bg-secondary); }
-    .entity-metric .metric-icon {
-        color: var(--gold);
-        font-size: 0.72rem;
-        margin-bottom: 0.45rem;
-        display: block;
-    }
-    .entity-metric .metric-value {
-        font-family: 'Georgia', serif;
-        font-weight: 700;
-        font-size: 1.55rem;
-        color: var(--text-primary);
-        line-height: 1.1;
-    }
-    .entity-metric .metric-value.danger { color: var(--danger); }
-    .entity-metric .metric-value.warning { color: var(--warning); }
-    .entity-metric .metric-value.success { color: var(--success); }
-    .entity-metric .metric-value.info { color: var(--info); }
-    .entity-metric .metric-label {
-        font-size: 0.66rem;
-        text-transform: uppercase;
-        letter-spacing: 0.6px;
-        color: var(--gray);
-        margin-top: 3px;
-        font-weight: 600;
-    }
-    .entity-metric .metric-sub {
-        display: flex;
-        gap: 0.35rem;
-        flex-wrap: wrap;
-        margin-top: 0.5rem;
-    }
-    .entity-metric .metric-sub .chip {
-        font-size: 0.6rem;
-        padding: 0.12rem 0.5rem;
-        border-radius: 12px;
-        font-weight: 700;
-    }
-    .entity-metric .metric-sub .chip.danger { background: var(--danger-light); color: var(--danger); }
-    .entity-metric .metric-sub .chip.warning { background: var(--warning-light); color: var(--warning); }
-    .entity-metric .metric-sub .chip.info { background: var(--info-light); color: var(--info); }
-
-    .entity-section {
-        padding: 1.35rem 2rem;
-        border-top: 1px solid var(--border);
-    }
-    .entity-section-title {
-        font-size: 0.78rem;
-        font-weight: 700;
-        text-transform: uppercase;
-        letter-spacing: 0.8px;
-        color: var(--gray);
-        margin-bottom: 1rem;
-        display: flex;
-        align-items: center;
-        gap: 0.5rem;
-    }
-    .entity-section-title .icon { color: var(--gold); font-size: 0.85rem; }
-    .entity-section-title .count-badge {
-        background: var(--gold);
-        color: var(--dark);
-        font-size: 0.62rem;
-        padding: 0.06rem 0.55rem;
-        border-radius: 10px;
-        font-weight: 700;
-    }
-    .entity-section-title .see-all {
-        margin-left: auto;
-        font-size: 0.72rem;
-        font-weight: 600;
-        color: var(--primary);
-        text-decoration: none;
-        text-transform: none;
-        letter-spacing: normal;
-    }
-    .entity-section-title .see-all:hover { color: var(--gold); }
-
-    /* Tableau directions modernisé */
-    .entity-dir-table {
-        width: 100%;
-        border-collapse: collapse;
-        font-size: 0.82rem;
-    }
-    .entity-dir-table th {
-        text-align: left;
-        font-size: 0.63rem;
-        text-transform: uppercase;
-        letter-spacing: 0.6px;
-        color: var(--gray);
-        font-weight: 700;
-        padding: 0.5rem 0.75rem;
-        border-bottom: 2px solid var(--border);
-        white-space: nowrap;
-    }
-    .entity-dir-table td {
-        padding: 0.7rem 0.75rem;
-        border-bottom: 1px solid var(--border);
-        vertical-align: middle;
-        color: var(--text-primary);
-    }
-    .entity-dir-table tbody tr { cursor: pointer; transition: var(--transition); }
-    .entity-dir-table tbody tr:hover td { background: var(--bg-secondary); }
-    .entity-dir-table .dir-cell {
-        font-weight: 600;
-        color: var(--text-primary);
-        display: flex;
-        align-items: center;
-        gap: 0.55rem;
-    }
-    .entity-dir-table .dir-cell .icon-dot {
-        width: 8px; height: 8px; border-radius: 50%;
-        background: var(--gold);
-        flex-shrink: 0;
-    }
-    .entity-dir-table .metric-pill {
-        display: inline-flex;
-        align-items: center;
-        gap: 0.4rem;
-        font-weight: 600;
-    }
-    .entity-dir-table .metric-pill.danger { color: var(--danger); }
-    .entity-dir-table .metric-pill.warning { color: var(--warning); }
-    .entity-dir-table .metric-pill.success { color: var(--success); }
-    .entity-dir-table .metric-pill.info { color: var(--info); }
-    .entity-dir-table .metric-pill .tag {
-        font-size: 0.58rem;
-        padding: 0.06rem 0.45rem;
-        border-radius: 10px;
-        background: var(--danger-light);
-        color: var(--danger);
-        font-weight: 700;
-    }
-    .entity-dir-table .metric-pill .tag.warning { background: var(--warning-light); color: var(--warning); }
-    .entity-dir-table td.text-end { text-align: right; color: var(--gray); }
-
-    .entity-risk-grid {
-        display: grid;
-        grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
-        gap: 0.5rem;
-    }
-
-    .entity-footer {
-        padding: 0.75rem 2rem;
-        background: var(--bg-secondary);
-        border-top: 1px solid var(--border);
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        gap: 0.5rem;
-        font-size: 0.75rem;
-        font-weight: 600;
-        color: var(--gray);
-        letter-spacing: 0.4px;
-    }
-    .entity-footer .icon { color: var(--gold); }
-
-    /* ============================================ */
-    /* ===== SECTION TITRE ===== */
-    /* ============================================ */
-    .section-title {
-        font-family: 'Georgia', serif;
-        font-weight: 700;
-        color: var(--text-primary);
-        margin-bottom: 1rem;
-        display: flex;
-        align-items: center;
-        gap: 0.75rem;
-    }
-    .section-title .icon {
-        color: var(--gold);
-        font-size: 1.3rem;
-    }
-
-    /* ============================================ */
-    /* ===== MODE SOMBRE ===== */
-    /* ============================================ */
-    [data-bs-theme="dark"] {
-        --card-bg: #1e293b;
-        --bg-secondary: #334155;
-        --text-primary: #f8fafc;
-        --text-secondary: #cbd5e1;
-        --border: #334155;
-        --gray: #94a3b8;
-        --shadow: 0 2px 12px rgba(0, 0, 0, 0.3);
-        --shadow-hover: 0 12px 32px rgba(0, 0, 0, 0.4);
-        --light: #1e293b;
-        --gray-light: #1e293b;
-        --success-light: rgba(16, 185, 129, 0.15);
-        --warning-light: rgba(245, 158, 11, 0.15);
-        --danger-light: rgba(239, 68, 68, 0.15);
-        --info-light: rgba(59, 130, 246, 0.15);
-        
-        --primary: #2563eb;
-        --primary-light: #60a5fa;
-        --primary-dark: #1e3a8a;
-        --gold: #d4af37;
-        --gold-light: #f0d080;
-        --info: #60a5fa;
-        --success: #34d399;
-        --warning: #fbbf24;
-        --danger: #f87171;
-    }
-
-    [data-bs-theme="dark"] .dashboard-card {
-        background: var(--card-bg);
-        border-color: var(--border);
-    }
-    [data-bs-theme="dark"] .dashboard-card .card-header-custom {
-        background: var(--bg-secondary);
-        color: var(--text-primary);
-        border-color: var(--border);
-    }
-    [data-bs-theme="dark"] .filter-bar {
-        background: var(--card-bg);
-        border-color: var(--border);
-    }
-    [data-bs-theme="dark"] .filter-bar .form-select,
-    [data-bs-theme="dark"] .filter-bar .form-control {
-        background: var(--bg-secondary);
-        color: var(--text-primary);
-        border-color: var(--border);
-    }
-    [data-bs-theme="dark"] .filter-bar .form-select option {
-        background: var(--bg-secondary);
-        color: var(--text-primary);
-    }
-    [data-bs-theme="dark"] .entity-panel-head {
-        background: linear-gradient(120deg, #0a1628, #1a2a4a 65%, #24365f 100%);
-    }
-    [data-bs-theme="dark"] .entity-metric:hover { background: var(--bg-secondary); }
-    [data-bs-theme="dark"] .entity-footer { background: var(--bg-secondary); }
-    [data-bs-theme="dark"] .entity-dir-table th { color: var(--text-secondary); }
-    [data-bs-theme="dark"] .stat-card-primary { background: linear-gradient(135deg, #0f172a, #1e293b); }
-    [data-bs-theme="dark"] .stat-card-success { background: linear-gradient(135deg, #065f46, #0d9488); }
-    [data-bs-theme="dark"] .stat-card-warning { background: linear-gradient(135deg, #78350f, #d97706); }
-    [data-bs-theme="dark"] .stat-card-info { background: linear-gradient(135deg, #1e3a8a, #2563eb); }
-    [data-bs-theme="dark"] .stat-card-danger { background: linear-gradient(135deg, #7f1d1d, #dc2626); }
-    [data-bs-theme="dark"] .stat-card-secondary { background: linear-gradient(135deg, #1f2937, #4b5563); }
-    [data-bs-theme="dark"] .direction-table th {
-        background: var(--bg-secondary);
-        color: var(--text-secondary);
-    }
-    [data-bs-theme="dark"] .direction-table td {
-        color: var(--text-primary);
-    }
-    [data-bs-theme="dark"] .direction-table tr:hover td {
-        background: var(--bg-secondary);
-    }
-    [data-bs-theme="dark"] .ia-card {
-        background: var(--bg-secondary);
-        border-color: var(--border);
-    }
-    [data-bs-theme="dark"] .risk-item {
-        background: var(--bg-secondary);
-    }
-    [data-bs-theme="dark"] .risk-item:hover {
-        background: var(--card-bg);
-    }
-    [data-bs-theme="dark"] .risk-item .risk-ref {
-        color: var(--text-primary);
-    }
-    [data-bs-theme="dark"] .risk-item .risk-title {
-        color: var(--text-secondary);
-    }
-    [data-bs-theme="dark"] .risk-item.critique { background: rgba(248, 113, 113, 0.15); }
-    [data-bs-theme="dark"] .risk-item.eleve { background: rgba(251, 191, 36, 0.15); }
-    [data-bs-theme="dark"] .risk-item.moyen { background: rgba(96, 165, 250, 0.15); }
-    [data-bs-theme="dark"] .risk-item.faible { background: rgba(52, 211, 153, 0.15); }
-    [data-bs-theme="dark"] .btn-soft-primary {
-        background: rgba(37, 99, 235, 0.15);
-        color: var(--primary-light);
-    }
-    [data-bs-theme="dark"] .btn-soft-primary:hover {
-        background: rgba(37, 99, 235, 0.25);
-    }
-    [data-bs-theme="dark"] .btn-soft-success {
-        background: rgba(16, 185, 129, 0.15);
-        color: #34d399;
-    }
-    [data-bs-theme="dark"] .btn-soft-success:hover {
-        background: rgba(16, 185, 129, 0.25);
-    }
-    [data-bs-theme="dark"] .btn-soft-danger {
-        background: rgba(239, 68, 68, 0.15);
-        color: #f87171;
-    }
-    [data-bs-theme="dark"] .btn-soft-danger:hover {
-        background: rgba(239, 68, 68, 0.25);
-    }
-    [data-bs-theme="dark"] .btn-soft-info {
-        background: rgba(96, 165, 250, 0.15);
-        color: #60a5fa;
-    }
-    [data-bs-theme="dark"] .btn-soft-info:hover {
-        background: rgba(96, 165, 250, 0.25);
-    }
-    [data-bs-theme="dark"] .btn-primary-custom {
-        background: var(--primary);
-        color: white;
-    }
-    [data-bs-theme="dark"] .btn-primary-custom:hover {
-        background: var(--primary-light);
-        color: white;
-    }
-    [data-bs-theme="dark"] .btn-soft-gold {
-        background: rgba(212, 175, 55, 0.15);
-        color: var(--gold-light);
-    }
-    [data-bs-theme="dark"] .btn-soft-gold:hover {
-        background: rgba(212, 175, 55, 0.25);
-    }
-    [data-bs-theme="dark"] .alert-banner.danger { background: rgba(248, 113, 113, 0.10); }
-    [data-bs-theme="dark"] .alert-banner.warning { background: rgba(251, 191, 36, 0.10); }
-    [data-bs-theme="dark"] .alert-banner.info { background: rgba(96, 165, 250, 0.10); }
-    [data-bs-theme="dark"] .alert-banner.success { background: rgba(52, 211, 153, 0.10); }
-    [data-bs-theme="dark"] .entity-dir-table .metric-pill.danger { color: #f87171; }
-    [data-bs-theme="dark"] .entity-dir-table .metric-pill.warning { color: #fbbf24; }
-    [data-bs-theme="dark"] .entity-dir-table .metric-pill.success { color: #34d399; }
-    [data-bs-theme="dark"] .entity-dir-table .metric-pill.info { color: #60a5fa; }
-    [data-bs-theme="dark"] .entity-dir-table .metric-pill .tag { background: rgba(248, 113, 113, 0.15); color: #f87171; }
-    [data-bs-theme="dark"] .entity-dir-table .metric-pill .tag.warning { background: rgba(251, 191, 36, 0.15); color: #fbbf24; }
-
-    /* ============================================ */
-    /* ===== RESPONSIVE ===== */
-    /* ============================================ */
-    @media (max-width: 768px) {
-        .stat-card .stat-value { font-size: 1.5rem; }
-        .stat-card { padding: 0.75rem 1rem; min-height: 70px; }
-        .entity-panel-head { padding: 1.1rem 1.25rem; }
-        .entity-panel-head .entity-name { font-size: 1.15rem; }
-        .entity-panel-head .entity-icon { width: 42px; height: 42px; font-size: 1.15rem; }
-        .entity-metrics.cols-4 { grid-template-columns: repeat(2, 1fr); }
-        .entity-metrics.cols-3 { grid-template-columns: repeat(1, 1fr); }
-        .entity-metrics.cols-2 { grid-template-columns: repeat(1, 1fr); }
-        .entity-metric { padding: 0.85rem 1rem; }
-        .entity-metric .metric-value { font-size: 1.25rem; }
-        .entity-section { padding: 1rem 1.25rem; }
-        .entity-dir-table { font-size: 0.72rem; }
-        .direction-table { font-size: 0.7rem; }
-        .direction-table th, .direction-table td { padding: 0.3rem 0.2rem; }
-        .filter-bar { padding: 0.75rem 1rem; }
-        .dashboard-card .card-header-custom { padding: 0.6rem 1rem; font-size: 0.9rem; }
-        .ia-card .ia-number { font-size: 1.5rem; }
-        .org-panel-head { padding: 1rem 1.25rem; }
-        .org-panel-head .org-name { font-size: 1.05rem; }
-        .org-panel-head .org-flag { width: 42px; height: 42px; font-size: 1.3rem; }
-        .org-metrics.cols-5 { grid-template-columns: repeat(3, 1fr); }
-        .org-section { padding: 1rem 1.25rem; }
-        .org-pole-grid { grid-template-columns: 1fr; }
-        .risk-item { padding: 0.2rem 0.4rem; }
-        .risk-item .risk-ref { font-size: 0.65rem; }
-        .risk-item .risk-title { font-size: 0.6rem; }
-    }
-
-    @media (max-width: 576px) {
-        .stat-card .stat-value { font-size: 1.2rem; }
-        .stat-card { padding: 0.5rem 0.75rem; min-height: 60px; }
-        .entity-panel-head .entity-name { font-size: 1rem; }
-        .entity-metrics.cols-4, .entity-metrics.cols-3, .entity-metrics.cols-2 { grid-template-columns: repeat(1, 1fr); }
-        .entity-metric .metric-value { font-size: 1.1rem; }
-        .org-metrics.cols-5 { grid-template-columns: repeat(2, 1fr); }
-        .org-pole-metrics { grid-template-columns: repeat(2, 1fr); }
-        .org-dir-row .dir-row-top { flex-direction: column; align-items: flex-start; gap: 0.35rem; }
-        .risk-item .risk-ref { font-size: 0.6rem; }
-    }
+  @media print {
+    .sidebar, .navbar, .ds-filtres, .ds-no-print, .eg-chat-btn, .eg-chat { display: none !important; }
+    .main-content, main { margin: 0 !important; padding: 0 !important; }
+    .ds-carte { break-inside: avoid; }
+    .ds-ligne-lien:hover td { background: none; }
+  }
 </style>
 {% endblock %}
 
 {% block content %}
-<div class="container-fluid px-4 animate-fade-in">
+<div class="container-fluid ds">
 
-    <!-- ========================================== -->
-    <!-- ===== EN-TÊTE ===== -->
-    <!-- ========================================== -->
-    <div class="d-flex flex-wrap justify-content-between align-items-center mb-4">
-        <div>
-            <h2 class="h3 fw-bold mb-1" style="font-family: 'Georgia', serif; color: var(--text-primary);">
-                <i class="fas fa-chart-line me-2" style="color: var(--gold);"></i>
-                Tableau de bord stratégique
-                {% if show_kiosk %}
-                <span class="badge ms-2" style="background: var(--gold); color: var(--dark);"><i class="fas fa-tv me-1"></i>Mode présentation</span>
+{% if sans_client %}
+  <div class="ds-carte text-center py-5">
+    <i class="fas fa-building fa-2x mb-3 text-secondary"></i>
+    <h1 class="h5">Choisissez un client</h1>
+    <p class="text-secondary mb-0">Le tableau de bord stratégique présente les données d'un seul client.
+       Sélectionnez-en un dans « Vue Client ».</p>
+  </div>
+{% else %}
+  {% set k = d.kpi %}
+
+  {# ============================ EN-TÊTE ============================ #}
+  <div class="ds-entete">
+    <div>
+      <h1>Tableau de bord stratégique</h1>
+      <div class="ds-sous">
+        {% if d.entite_active %}Périmètre : <strong>{{ d.entite_active.nom }}</strong>{% else %}Toute l'organisation{% endif %}
+        · données au {{ d.genere_le.strftime('%d/%m/%Y à %H:%M') }}
+        · évolutions comparées à il y a {{ d.fenetre_jours }} jours
+      </div>
+    </div>
+    <form class="ds-filtres" method="get" action="{{ url_for('tableau_de_bord_strategique') }}" id="dsFiltres">
+      <select class="form-select form-select-sm" name="pays_id" id="dsPays" aria-label="Pays">
+        <option value="">Tous les pays</option>
+        {% for p in d.pays %}<option value="{{ p.id }}" {% if pays_id == p.id %}selected{% endif %}>{{ p.nom }}</option>{% endfor %}
+      </select>
+      <select class="form-select form-select-sm" name="pole_id" id="dsPole" aria-label="Pôle">
+        <option value="">Tous les pôles</option>
+        {% for p in d.poles %}<option value="{{ p.id }}" data-parent="{{ p.pays_id or '' }}" {% if pole_id == p.id %}selected{% endif %}>{{ p.nom }}</option>{% endfor %}
+      </select>
+      <select class="form-select form-select-sm" name="direction_id" id="dsDirection" aria-label="Direction">
+        <option value="">Toutes les directions</option>
+        {% for x in d.directions %}<option value="{{ x.id }}" data-parent="{{ x.pole_id or '' }}" {% if direction_id == x.id %}selected{% endif %}>{{ x.nom }}</option>{% endfor %}
+      </select>
+      {% if pays_id or pole_id or direction_id %}
+      <a class="btn btn-sm btn-outline-secondary" href="{{ url_for('tableau_de_bord_strategique') }}"><i class="fas fa-rotate-left me-1"></i>Tout</a>
+      {% endif %}
+      {% if url_exists('rapport_comite.page') and has_permission('can_view_rapport_comite') %}
+      <a class="btn btn-sm btn-primary ds-no-print" href="{{ url_for('rapport_comite.page') }}" target="_blank" rel="noopener" title="Rapport complet au comité d'audit">
+        <i class="fas fa-file-contract me-1"></i>Rapport au comité
+      </a>
+      {% endif %}
+      <button type="button" class="btn btn-sm btn-outline-secondary ds-no-print" onclick="window.print()" title="Imprimer ou enregistrer en PDF">
+        <i class="fas fa-print"></i>
+      </button>
+    </form>
+  </div>
+
+  {# ============================ APPÉTENCE AU RISQUE ============================ #}
+  {% if d.appetence and d.appetence.nombre %}
+  <div class="alert alert-danger d-flex gap-3 align-items-start mb-3" role="alert">
+    <i class="fas fa-triangle-exclamation mt-1"></i>
+    <div class="flex-grow-1">
+      <strong>{{ d.appetence.nombre }} risque{{ 's' if d.appetence.nombre > 1 }} au-delà de l'appétence fixée</strong>
+      {% if d.appetence.seuil_global %}(score net maximal accepté : {{ d.appetence.seuil_global|round(1) }}){% endif %}
+      — décision attendue : réduire, transférer ou accepter formellement.
+      <div class="mt-1 small">
+        {% for t in d.appetence.risques %}
+          <a class="alert-link me-2" href="{{ url_for('detail_risque', id=t.risque.id) }}">{{ t.risque.reference }}</a>
+          <span class="me-3">net {{ t.cot.score_net|round(1) }} / seuil {{ t.appetence.seuil|round(1) }}</span>
+        {% endfor %}
+      </div>
+    </div>
+    {% if current_user.is_client_admin or current_user.role in ('admin', 'super_admin') %}
+    {% if url_exists('parametres_risque.page') and has_permission('can_manage_settings') %}
+    <a class="btn btn-sm btn-outline-danger ds-no-print" href="{{ url_for('parametres_risque.page') }}">Appétence</a>
+    {% endif %}
+    {% endif %}
+  </div>
+  {% elif d.appetence is not none %}
+  <div class="alert alert-success py-2 small mb-3"><i class="fas fa-check me-2"></i>Tous les risques évalués sont dans l'appétence fixée.</div>
+  {% endif %}
+
+  {# ============================ INDICATEURS CLÉS ============================ #}
+  {% macro tendance(t, unite='') -%}
+    {%- if t -%}
+      <span class="ds-tend {{ t.sens }}" title="Évolution sur {{ d.fenetre_jours }} jours">
+        {%- if t.sens == 'stable' -%}<i class="fas fa-equals"></i> stable
+        {%- else -%}<i class="fas fa-arrow-{{ 'up' if t.ecart > 0 else 'down' }}"></i> {{ '+' if t.ecart > 0 }}{{ cot.fmt(t.ecart) if t.ecart > 0 else '−' ~ cot.fmt(-t.ecart) }}{{ unite }}
+        {%- endif -%}
+      </span>
+    {%- else -%}<span class="ds-tend stable">—</span>{%- endif -%}
+  {%- endmacro %}
+
+  <div class="row g-3 mb-3">
+    <div class="col-6 col-md-4 col-xl-2">
+      <a class="ds-carte ds-kpi" href="{{ url_for('dashboard_risques', niveau='critique') }}">
+        <div class="ds-kpi-lib"><span class="ds-kpi-marque cot-critique"></span>Risques critiques</div>
+        <div class="ds-kpi-val">{{ k.critiques.valeur }}</div>
+        <div class="ds-kpi-sous">{{ tendance(k.critiques.tendance) }} · {{ k.critiques.brut }} avant maîtrise</div>
+      </a>
+    </div>
+    <div class="col-6 col-md-4 col-xl-2">
+      <a class="ds-carte ds-kpi" href="{{ url_for('dashboard_risques') }}">
+        <div class="ds-kpi-lib">Score net moyen</div>
+        <div class="ds-kpi-val">{% if k.score_moyen.valeur is not none %}{{ cot.fmt(k.score_moyen.valeur) }}<small>/25</small>{% else %}—{% endif %}</div>
+        <div class="ds-kpi-sous">{{ tendance(k.score_moyen.tendance) }}{% if k.score_moyen.valeur is not none %} · {{ cot.badge_score(k.score_moyen.valeur, afficher_score=False, petit=True) }}{% endif %}</div>
+      </a>
+    </div>
+    <div class="col-6 col-md-4 col-xl-2">
+      <a class="ds-carte ds-kpi" href="{{ url_for('dashboard_risques', niveau='non_evalue') }}">
+        <div class="ds-kpi-lib">Risques évalués</div>
+        <div class="ds-kpi-val">{% if k.couverture.valeur is not none %}{{ k.couverture.valeur }}<small>%</small>{% else %}—{% endif %}</div>
+        <div class="ds-kpi-sous">{{ tendance(k.couverture.tendance, ' pt') }} · {{ k.couverture.evalues }}/{{ k.couverture.total }}</div>
+      </a>
+    </div>
+    <div class="col-6 col-md-4 col-xl-2">
+      <a class="ds-carte ds-kpi{{ ' ds-vigilance' if k.plans_retard.sans_responsable }}" href="{{ url_for('liste_plans_action') }}">
+        <div class="ds-kpi-lib">Plans en retard</div>
+        <div class="ds-kpi-val">{{ k.plans_retard.valeur }}</div>
+        <div class="ds-kpi-sous">sur {{ k.plans_retard.ouverts }} plan(s) ouvert(s){% if k.plans_retard.sans_responsable %}
+          · <span class="ds-vigilance-txt">{{ k.plans_retard.sans_responsable }} sans responsable</span>{% endif %}</div>
+      </a>
+    </div>
+    <div class="col-6 col-md-4 col-xl-2">
+      <a class="ds-carte ds-kpi{{ ' ds-vigilance' if k.kri_alerte.non_suivi or k.kri_alerte.non_mesures }}" href="{{ url_for('liste_kri') }}">
+        <div class="ds-kpi-lib">KRI en alerte</div>
+        {% if k.kri_alerte.non_suivi %}
+        <div class="ds-kpi-val">—</div>
+        <div class="ds-kpi-sous ds-vigilance-txt">Aucun KRI suivi dans ce périmètre</div>
+        {% else %}
+        <div class="ds-kpi-val">{{ k.kri_alerte.valeur }}</div>
+        <div class="ds-kpi-sous">sur {{ k.kri_alerte.actifs }} indicateur(s) suivi(s){% if k.kri_alerte.non_mesures %}
+          · <span class="ds-vigilance-txt">{{ k.kri_alerte.non_mesures }} non mesuré(s) à temps</span>{% endif %}</div>
+        {% endif %}
+      </a>
+    </div>
+    <div class="col-6 col-md-4 col-xl-2">
+      <a class="ds-carte ds-kpi{{ ' ds-vigilance' if k.incidents.aucune_declaration }}" href="{{ url_for('liste_incidents') }}">
+        <div class="ds-kpi-lib">Incidents ({{ d.fenetre_jours }} j)</div>
+        <div class="ds-kpi-val">{{ k.incidents.valeur }}</div>
+        {% if k.incidents.aucune_declaration %}
+        <div class="ds-kpi-sous ds-vigilance-txt">Aucun incident déclaré depuis 12 mois</div>
+        {% else %}
+        <div class="ds-kpi-sous">{{ tendance(k.incidents.tendance) }} · {{ k.incidents.graves }} grave(s)</div>
+        {% endif %}
+      </a>
+    </div>
+  </div>
+
+  {# ============================ EXPOSITION ============================ #}
+  <div class="row g-3 mb-3">
+    {# ---- Matrice ---- #}
+    <div class="col-lg-5">
+      <div class="ds-carte">
+        <div class="ds-carte-titre">
+          <h2>Matrice des risques</h2>
+          <div class="btn-group btn-group-sm ds-no-print" role="group" aria-label="Type de matrice">
+            <button type="button" class="btn btn-outline-secondary active" data-matrice="net" aria-pressed="true">Net</button>
+            <button type="button" class="btn btn-outline-secondary" data-matrice="brut" aria-pressed="false">Brut</button>
+          </div>
+        </div>
+        {% for type_m in ['net', 'brut'] %}
+        {% set m = d.matrices[type_m] %}
+        <div class="ds-matrice-bloc" data-bloc="{{ type_m }}" {% if type_m == 'brut' %}hidden{% endif %}>
+          <div class="d-flex">
+            <div class="ds-axe ds-axe-y me-1">Impact</div>
+            <div class="flex-grow-1">
+              <div class="ds-matrice" role="grid" aria-label="Matrice {{ type_m }} : impact (lignes) × probabilité (colonnes)">
+                {% for i in range(5, 0, -1) %}
+                  <div class="ds-axe">{{ i }}</div>
+                  {% for p in range(1, 6) %}
+                    {% set risques_cell = m[i - 1][p - 1] %}
+                    {% set st = cotation_style(i * p) %}
+                    <div class="ds-cell {{ 'pleine' if risques_cell else 'vide' }}" role="gridcell"
+                         style="background: {{ st.hex }}; color: {{ st.texte }};"
+                         {% if risques_cell %}tabindex="0"
+                         data-info="Impact {{ i }} × probabilité {{ p }} — zone {{ st.niveau }}|{% for r in risques_cell %}{{ r.ref }} : {{ type_m }} {{ cot.fmt(r.score) }}{{ (' (' ~ r.niveau ~ ')') if r.niveau != st.niveau }}{{ ', ' if not loop.last }}{% endfor %}"
+                         aria-label="{{ risques_cell|length }} risque(s), impact {{ i }}, probabilité {{ p }}"{% endif %}>
+                      {{ risques_cell|length if risques_cell }}
+                    </div>
+                  {% endfor %}
+                {% endfor %}
+                <div></div>
+                {% for p in range(1, 6) %}<div class="ds-axe">{{ p }}</div>{% endfor %}
+              </div>
+              <div class="ds-axe-titre">Probabilité{{ ' résiduelle (après maîtrise)' if type_m == 'net' }}</div>
+              {% if type_m == 'net' %}<div class="small text-secondary mt-1">Net = impact × probabilité réduite selon la maîtrise (−10 % à −60 %) : un score peut être décimal (ex. 4 × 4 × 0,6 = 9,6). Survolez une case pour le score exact.</div>{% endif %}
+            </div>
+          </div>
+        </div>
+        {% endfor %}
+        <div class="mt-3">{{ cot.legende(compact=True) }}</div>
+      </div>
+    </div>
+
+    {# ---- Effet de la maîtrise + évolution ---- #}
+    <div class="col-lg-7">
+      <div class="ds-carte">
+        <div class="ds-carte-titre">
+          <h2>Effet des dispositifs de maîtrise</h2>
+          <span class="ds-aide">risques évalués par niveau</span>
+        </div>
+        {% set total_ev = d.niveaux_net.values()|sum %}
+        {% for lib, niv in [('Brut', d.niveaux_brut), ('Net', d.niveaux_net)] %}
+        <div class="d-flex align-items-center gap-2 mb-2">
+          <span class="ds-pile-lib">{{ lib }}</span>
+          <div class="ds-pile flex-grow-1" role="img"
+               aria-label="{{ lib }} : {% for n in ['Critique', 'Élevé', 'Moyen', 'Faible'] %}{{ niv[n] }} {{ n|lower }}{{ ', ' if not loop.last }}{% endfor %}">
+            {% if total_ev %}
+              {% for n in ['Critique', 'Élevé', 'Moyen', 'Faible'] %}
+                {% if niv[n] %}
+                <span class="cot-{{ cot.cle(n) }}" style="width: {{ (100 * niv[n] / total_ev)|round(2) }}%;"
+                      title="{{ lib }} — {{ n }} : {{ niv[n] }} risque(s)">{% if 100 * niv[n] / total_ev >= 7 %}{{ niv[n] }}{% endif %}</span>
                 {% endif %}
-            </h2>
-            <nav aria-label="breadcrumb">
-                <ol class="breadcrumb mb-0">
-                    <li class="breadcrumb-item"><a href="{{ url_for('dashboard') }}" style="color: var(--primary); text-decoration: none;">Tableau de bord</a></li>
-                    <li class="breadcrumb-item active" style="color: var(--gray);">Stratégique</li>
-                </ol>
-            </nav>
-        </div>
-        <div class="d-flex gap-2 mt-2 mt-sm-0 flex-wrap">
-            <button class="btn btn-soft-gold" onclick="toggleKioskMode()">
-                <i class="fas fa-tv me-1"></i>Mode présentation
-            </button>
-            <a href="{{ url_for('veille_reglementaire') }}" class="btn btn-soft-info">
-                <i class="fas fa-newspaper me-1"></i>Veille
-            </a>
-            <a href="{{ url_for('liste_incidents') }}" class="btn btn-soft-danger">
-                <i class="fas fa-exclamation-triangle me-1"></i>Incidents
-            </a>
-            <a href="{{ url_for('admin_pays') }}" class="btn btn-soft-primary">
-                <i class="fas fa-globe me-1"></i>Pays
-            </a>
-            <a href="{{ url_for('admin_poles') }}" class="btn btn-soft-primary">
-                <i class="fas fa-layer-group me-1"></i>Pôles
-            </a>
-            <a href="{{ url_for('c2n_dashboard') }}" class="btn btn-soft-gold">
-                <i class="fas fa-shield-alt me-1"></i>C2N
-            </a>
-        </div>
-    </div>
-
-    <!-- ========================================== -->
-    <!-- ===== FILTRES ===== -->
-    <!-- ========================================== -->
-    <div class="filter-bar mb-4">
-        <form method="GET" class="row g-3 align-items-end" id="filterForm">
-            <div class="col-md-3">
-                <label class="form-label fw-semibold small mb-1">
-                    <i class="fas fa-globe me-1" style="color: var(--gold);"></i>Pays
-                </label>
-                <select name="pays_id" class="form-select" onchange="this.form.submit()">
-                    <option value="">--- Tous les pays ---</option>
-                    {% for pays in pays_list %}
-                    <option value="{{ pays.id }}" {% if pays_id == pays.id and niveau_filtre == 'pays' %}selected{% endif %}>
-                        {{ pays.drapeau or '🌍' }} {{ pays.nom }}
-                    </option>
-                    {% endfor %}
-                </select>
-            </div>
-            <div class="col-md-3">
-                <label class="form-label fw-semibold small mb-1">
-                    <i class="fas fa-layer-group me-1" style="color: var(--gold);"></i>Pôle
-                </label>
-                <select name="pole_id" class="form-select" onchange="this.form.submit()">
-                    <option value="">--- Tous les pôles ---</option>
-                    {% for pole in poles %}
-                    <option value="{{ pole.id }}" {% if pole_id == pole.id and niveau_filtre == 'pole' %}selected{% endif %}>
-                        {{ pole.nom }}
-                    </option>
-                    {% endfor %}
-                </select>
-            </div>
-            <div class="col-md-3">
-                <label class="form-label fw-semibold small mb-1">
-                    <i class="fas fa-building me-1" style="color: var(--gold);"></i>Direction
-                </label>
-                <select name="direction_id" class="form-select" onchange="this.form.submit()">
-                    <option value="">--- Toutes les directions ---</option>
-                    {% for direction in directions %}
-                    <option value="{{ direction.id }}" {% if direction_id == direction.id and niveau_filtre == 'direction' %}selected{% endif %}>
-                        {{ direction.nom }}
-                    </option>
-                    {% endfor %}
-                </select>
-            </div>
-            <div class="col-md-3">
-                <label class="form-label fw-semibold small mb-1">
-                    <i class="fas fa-calendar me-1" style="color: var(--gold);"></i>Année
-                </label>
-                <select name="annee" class="form-select" onchange="this.form.submit()">
-                    <option value="2024" {% if annee_selectionnee == '2024' %}selected{% endif %}>2024</option>
-                    <option value="2025" {% if annee_selectionnee == '2025' %}selected{% endif %}>2025</option>
-                    <option value="2026" {% if annee_selectionnee == '2026' %}selected{% endif %}>2026</option>
-                </select>
-            </div>
-            <div class="col-12">
-                <div class="d-flex gap-2 justify-content-end">
-                    <button type="button" class="btn btn-soft-primary" onclick="reinitialiserFiltres()">
-                        <i class="fas fa-undo me-1"></i>Réinitialiser
-                    </button>
-                    <button type="submit" class="btn btn-primary-custom">
-                        <i class="fas fa-search me-1"></i>Appliquer
-                    </button>
-                </div>
-            </div>
-        </form>
-    </div>
-
-    <!-- ========================================== -->
-    <!-- ===== FILTRE ACTIF ===== -->
-    <!-- ========================================== -->
-    {% if niveau_filtre != 'global' and entite_selectionnee %}
-    <div class="alert alert-info mb-3 py-2 px-4 rounded-3 d-flex align-items-center justify-content-between flex-wrap" style="border-left: 4px solid var(--gold);">
-        <div>
-            <i class="fas fa-filter me-2" style="color: var(--gold);"></i>
-            <strong>Filtre actif :</strong> 
-            {% if niveau_filtre == 'pays' %}
-            Pays « {{ entite_selectionnee.nom }} »
-            {% elif niveau_filtre == 'pole' %}
-            Pôle « {{ entite_selectionnee.nom }} »
-            {% elif niveau_filtre == 'direction' %}
-            Direction « {{ entite_selectionnee.nom }} »
+              {% endfor %}
             {% endif %}
-            <span class="badge ms-2" style="background: var(--gold); color: var(--dark);">
-                <i class="fas fa-filter me-1"></i>Filtré
-            </span>
+          </div>
         </div>
-        <a href="{{ url_for('tableau_de_bord_strategique') }}" class="btn btn-sm btn-soft-danger">
-            <i class="fas fa-times"></i> Effacer le filtre
-        </a>
+        {% endfor %}
+        <div class="ds-legende mt-2 mb-3">
+          {% for n in ['Critique', 'Élevé', 'Moyen', 'Faible'] %}<span><i class="cot-{{ cot.cle(n) }}"></i>{{ n }}</span>{% endfor %}
+        </div>
+
+        <div class="ds-carte-titre mt-2 mb-1">
+          <h2>Évolution sur {{ d.evolution|length }} mois</h2>
+          <span class="ds-aide">nombre de risques, niveau net</span>
+        </div>
+        <div class="ds-courbe" id="dsCourbe" aria-describedby="dsCourbeTable">
+          <svg role="img" aria-label="Évolution mensuelle des risques critiques et élevés"></svg>
+          <div class="ds-bulle" id="dsBulle"></div>
+        </div>
+        <div class="ds-legende mt-1">
+          <span><i class="cot-critique"></i>Critiques</span>
+          <span><i class="cot-eleve"></i>Élevés</span>
+          <a class="ms-auto ds-no-print" data-bs-toggle="collapse" href="#dsCourbeTable" role="button" aria-expanded="false">Voir les chiffres</a>
+        </div>
+        <div class="collapse mt-2" id="dsCourbeTable">
+          <table class="ds-table">
+            <thead><tr><th>Mois</th><th class="ds-num">Critiques</th><th class="ds-num">Élevés</th><th class="ds-num">Évalués</th></tr></thead>
+            <tbody>
+              {% for e in d.evolution %}<tr><td>{{ e.mois }}</td><td class="ds-num">{{ e.critiques }}</td><td class="ds-num">{{ e.eleves }}</td><td class="ds-num">{{ e.evalues }}</td></tr>{% endfor %}
+            </tbody>
+          </table>
+        </div>
+      </div>
     </div>
-    {% endif %}
+  </div>
 
-    <!-- ========================================== -->
-    <!-- ===== STATISTIQUES GLOBALES ===== -->
-    <!-- ========================================== -->
-    <div class="row g-3 mb-4">
-        <div class="col-6 col-sm-4 col-md-2">
-            <div class="stat-card stat-card-primary" onclick="filtrerPar('pays', '')">
-                <div class="stat-label">PAYS</div>
-                <div class="stat-value">{{ pays_list|length }}</div>
-                <i class="fas fa-globe stat-icon"></i>
-            </div>
+  {# ============================ PRIORITÉS ============================ #}
+  <div class="row g-3 mb-3">
+    <div class="col-xl-7">
+      <div class="ds-carte">
+        <div class="ds-carte-titre">
+          <h2>Risques prioritaires</h2>
+          <a href="{{ url_for('dashboard_risques') }}">Tous les risques <i class="fas fa-arrow-right ms-1"></i></a>
         </div>
-        <div class="col-6 col-sm-4 col-md-2">
-            <div class="stat-card stat-card-success" onclick="filtrerPar('pole', '')">
-                <div class="stat-label">PÔLES</div>
-                <div class="stat-value">{{ poles|length }}</div>
-                <i class="fas fa-layer-group stat-icon"></i>
-            </div>
-        </div>
-        <div class="col-6 col-sm-4 col-md-2">
-            <div class="stat-card stat-card-info" onclick="filtrerPar('direction', '')">
-                <div class="stat-label">DIRECTIONS</div>
-                <div class="stat-value">{{ directions|length }}</div>
-                <i class="fas fa-building stat-icon"></i>
-            </div>
-        </div>
-        <div class="col-6 col-sm-4 col-md-2">
-            <!-- ✅ CORRIGÉ : Redirige vers dashboard_risques -->
-            <div class="stat-card stat-card-warning" onclick="window.location.href='{{ url_for('dashboard_risques') }}'">
-                <div class="stat-label">RISQUES</div>
-                <div class="stat-value">{{ stats_globaux.risques.total|default(0) }}</div>
-                <i class="fas fa-exclamation-triangle stat-icon"></i>
-            </div>
-        </div>
-        <div class="col-6 col-sm-4 col-md-2">
-            <!-- ✅ CORRIGÉ : Redirige vers dashboard_risques avec filtre critique -->
-            <div class="stat-card stat-card-rose" onclick="window.location.href='{{ url_for('dashboard_risques', niveau='critique') }}'">
-                <div class="stat-label">CRITIQUES</div>
-                <div class="stat-value">{{ stats_globaux.risques.critiques|default(0) }}</div>
-                <i class="fas fa-bolt stat-icon"></i>
-            </div>
-        </div>
-        <div class="col-6 col-sm-4 col-md-2">
-            <!-- ✅ CORRIGÉ : Redirige vers liste_plans_action -->
-            <div class="stat-card stat-card-purple" onclick="window.location.href='{{ url_for('liste_plans_action') }}'">
-                <div class="stat-label">PLANS ACTION</div>
-                <div class="stat-value">{{ stats_globaux.plans_action.total|default(0) }}</div>
-                <i class="fas fa-tasks stat-icon"></i>
-            </div>
-        </div>
-    </div>
-
-    <!-- ========================================== -->
-    <!-- ===== IA PRÉDICTIVE ===== -->
-    <!-- ========================================== -->
-    <div class="row g-3 mb-4">
-        <div class="col-md-12">
-            <div class="dashboard-card">
-                <div class="card-header-custom">
-                    <i class="fas fa-robot icon"></i>
-                    IA Prédictive
-                    <span class="badge ms-2" style="background: var(--gold); color: var(--dark);">BETA</span>
-                </div>
-                <div class="p-3">
-                    <div class="row">
-                        <div class="col-md-3 text-center border-end">
-                            <div class="ia-number" style="color: var(--warning);">{{ ia_predictions.risques_a_surveiller|default(0) }}</div>
-                            <div class="ia-label">Risques à surveiller</div>
-                        </div>
-                        <div class="col-md-3 text-center border-end">
-                            <div class="ia-number" style="color: var(--success);">{{ ia_predictions.tendance_conformite|default('Stable') }}</div>
-                            <div class="ia-label">Tendance conformité</div>
-                        </div>
-                        <div class="col-md-3 text-center border-end">
-                            <div class="ia-number" style="color: var(--info);">{{ (ia_predictions.proba_incident_30j|default(0) * 100)|round|int }}%</div>
-                            <div class="ia-label">Probabilité incident (30j)</div>
-                        </div>
-                        <div class="col-md-3 text-center">
-                            <div class="ia-number" style="color: var(--danger);">{{ ia_predictions.alertes_critiques|default(0) }}</div>
-                            <div class="ia-label">Alertes critiques</div>
-                        </div>
-                    </div>
-                    <div class="mt-3 pt-2 border-top">
-                        {% if ia_predictions.recommandations %}
-                        {% for reco in ia_predictions.recommandations[:3] %}
-                        <div class="alert-banner {{ 'danger' if loop.first else 'warning' if loop.index == 2 else 'info' }}" onclick="window.location.href='{{ url_for('veille_reglementaire') }}'">
-                            <span class="alert-icon">
-                                <i class="fas fa-{{ 'exclamation-triangle' if loop.first else 'lightbulb' if loop.index == 2 else 'info-circle' }}"></i>
-                            </span>
-                            <span class="alert-text">{{ reco }}</span>
-                        </div>
-                        {% endfor %}
-                        {% else %}
-                        <div class="alert-banner success">
-                            <span class="alert-icon"><i class="fas fa-check-circle"></i></span>
-                            <span class="alert-text">Aucune prédiction pour le moment</span>
-                        </div>
-                        {% endif %}
-                    </div>
-                </div>
-            </div>
-        </div>
-    </div>
-
-    <!-- ========================================== -->
-    <!-- ===== ALERTES ===== -->
-    <!-- ========================================== -->
-    {% if alertes %}
-    <div class="row g-3 mb-4">
-        <div class="col-md-12">
-            <div class="dashboard-card">
-                <div class="card-header-custom">
-                    <i class="fas fa-bell icon" style="color: var(--danger);"></i>
-                    Alertes stratégiques
-                    <span class="badge ms-2" style="background: var(--danger); color: white;">{{ alertes|length }}</span>
-                </div>
-                <div class="p-3">
-                    {% for alerte in alertes %}
-                    <div class="alert-banner {{ alerte.type }}" onclick="window.location.href='{{ alerte.lien or url_for('dashboard_risques') }}'">
-                        <span class="alert-icon"><i class="fas {{ alerte.icone }}"></i></span>
-                        <span class="alert-text">
-                            <strong>{{ alerte.titre }}</strong>
-                            <span class="text-muted ms-2">{{ alerte.message }}</span>
-                        </span>
-                    </div>
-                    {% endfor %}
-                </div>
-            </div>
-        </div>
-    </div>
-    {% endif %}
-
-    <!-- ========================================== -->
-    <!-- ===== ENTITÉ SÉLECTIONNÉE (QUAND FILTRE ACTIF) ===== -->
-    <!-- ========================================== -->
-    {% if entite_selectionnee and entite_stats and niveau_filtre != 'global' %}
-    <div class="entity-panel">
-
-        <!-- En-tête identité de l'entité -->
-        <div class="entity-panel-head">
-            <div class="entity-id">
-                <div class="entity-icon">
-                    {% if entite_type == 'pays' %}<i class="fas fa-globe"></i>{% endif %}
-                    {% if entite_type == 'pole' %}<i class="fas fa-layer-group"></i>{% endif %}
-                    {% if entite_type == 'direction' %}<i class="fas fa-building"></i>{% endif %}
-                    {% if entite_type == 'service' %}<i class="fas fa-users"></i>{% endif %}
-                </div>
-                <div>
-                    <div class="entity-type">{{ entite_type }}</div>
-                    <div class="entity-name">{{ entite_selectionnee.nom }}</div>
-                    {% if entite_type == 'pays' and entite_selectionnee.code %}
-                    <div class="entity-code">Code {{ entite_selectionnee.code }}</div>
-                    {% endif %}
-                </div>
-            </div>
-            <div class="entity-actions">
-                <button class="btn-panel btn-panel-gold" onclick="openDetailPopup('{{ entite_type }}', '{{ entite_selectionnee.nom }}', {{ entite_selectionnee.id }})">
-                    <i class="fas fa-chart-line me-1"></i>Analyse complète
-                </button>
-                <a href="{{ url_for('liste_incidents') }}" class="btn-panel">
-                    <i class="fas fa-exclamation-triangle me-1"></i>Incidents
-                </a>
-                <a href="{{ url_for('veille_reglementaire') }}" class="btn-panel">
-                    <i class="fas fa-newspaper me-1"></i>Veille
-                </a>
-            </div>
-        </div>
-
-        <!-- Indicateurs clés -->
-        <div class="entity-metrics cols-4">
-            <div class="entity-metric" onclick="window.location.href='{{ url_for('liste_incidents') }}'">
-                <span class="metric-icon"><i class="fas fa-shield-halved"></i></span>
-                <div class="metric-value">{{ entite_stats.risques.total|default(0) }}</div>
-                <div class="metric-label">Risques identifiés</div>
-            </div>
-            <!-- ✅ CORRIGÉ : DMR redirige vers dashboard_risques -->
-            <div class="entity-metric" onclick="window.location.href='{{ url_for('dashboard_risques') }}'">
-                <span class="metric-icon"><i class="fas fa-check-double"></i></span>
-                <div class="metric-value success">{{ entite_stats.dmr.efficaces|default(0) }}/{{ entite_stats.dmr.total|default(0) }}</div>
-                <div class="metric-label">DMR efficaces</div>
-            </div>
-            <div class="entity-metric" onclick="window.location.href='{{ url_for('liste_plans_action') if url_for('liste_plans_action') else '#' }}'">
-                <span class="metric-icon"><i class="fas fa-clock"></i></span>
-                <div class="metric-value {% if entite_stats.plans_action.en_retard|default(0) > 0 %}danger{% endif %}">{{ entite_stats.plans_action.en_retard|default(0) }}</div>
-                <div class="metric-label">Plans en retard</div>
-            </div>
-            <div class="entity-metric" onclick="window.location.href='{{ url_for('dashboard') }}'">
-                <span class="metric-icon"><i class="fas fa-gauge-high"></i></span>
-                <div class="metric-value {% if entite_stats.kri.critique|default(0) > 0 %}danger{% endif %}">{{ entite_stats.kri.critique|default(0) }}</div>
-                <div class="metric-label">KPI critiques</div>
-            </div>
-        </div>
-
-        <!-- Activité : incidents & veille -->
-        <div class="entity-metrics cols-2">
-            <div class="entity-metric" onclick="window.location.href='{{ url_for('liste_incidents') }}'">
-                <span class="metric-icon"><i class="fas fa-exclamation-circle"></i></span>
-                <div class="metric-value danger">{{ stats_incidents.total|default(0) }}</div>
-                <div class="metric-label">Incidents</div>
-                <div class="metric-sub">
-                    <span class="chip danger">{{ stats_incidents.critiques|default(0) }} critiques</span>
-                    <span class="chip warning">{{ stats_incidents.eleves|default(0) }} élevés</span>
-                    <span class="chip info">{{ stats_incidents.ouverts|default(0) }} ouverts</span>
-                </div>
-            </div>
-            <div class="entity-metric" onclick="window.location.href='{{ url_for('veille_reglementaire') }}'">
-                <span class="metric-icon"><i class="fas fa-newspaper"></i></span>
-                <div class="metric-value info">{{ stats_veille.total|default(0) }}</div>
-                <div class="metric-label">Veille réglementaire</div>
-                <div class="metric-sub">
-                    <span class="chip warning">{{ stats_veille.a_surveiller|default(0) }} à surveiller</span>
-                    <span class="chip danger">{{ stats_veille.echeance_proche|default(0) }} échéances proches</span>
-                </div>
-            </div>
-        </div>
-
-        <!-- Prévisions IA pour l'entité -->
-        <div class="entity-metrics cols-3">
-            <div class="entity-metric" onclick="window.location.href='{{ url_for('liste_incidents') }}'">
-                <span class="metric-icon"><i class="fas fa-robot"></i></span>
-                <div class="metric-value warning">{{ entite_stats.predictions.risques_a_surveiller|default(0) }}</div>
-                <div class="metric-label">Risques à surveiller (IA)</div>
-            </div>
-            <div class="entity-metric">
-                <span class="metric-icon"><i class="fas fa-chart-line"></i></span>
-                <div class="metric-value success">{{ entite_stats.predictions.tendance|default('Stable') }}</div>
-                <div class="metric-label">Tendance prédite</div>
-            </div>
-            <div class="entity-metric" onclick="window.location.href='{{ url_for('liste_incidents') }}'">
-                <span class="metric-icon"><i class="fas fa-bolt"></i></span>
-                <div class="metric-value info">{{ (entite_stats.predictions.proba_incident|default(0) * 100)|round|int }}%</div>
-                <div class="metric-label">Risque d'incident (30j)</div>
-            </div>
-        </div>
-
-        <!-- ===== DÉTAIL PAR DIRECTION (tableau) ===== -->
-        {% if entite_directions_stats %}
-        <div class="entity-section">
-            <div class="entity-section-title">
-                <i class="fas fa-building icon"></i>Détail par direction
-                <span class="count-badge">{{ entite_directions_stats|length }}</span>
-            </div>
-            <div class="table-responsive">
-                <table class="entity-dir-table">
-                    <thead>
-                        <tr>
-                            <th>Direction</th>
-                            <th>Risques</th>
-                            <th>DMR</th>
-                            <th>Retards</th>
-                            <th>KPI</th>
-                            <th>Incidents</th>
-                            <th>Veille</th>
-                            <th></th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        {% for dir_stats in entite_directions_stats %}
-                        <tr onclick="filtrerPar('direction', '{{ dir_stats.id }}')">
-                            <td>
-                                <span class="dir-cell"><span class="icon-dot"></span>{{ dir_stats.nom }}</span>
-                            </td>
-                            <td>
-                                <span class="metric-pill {% if dir_stats.risques.critiques > 0 %}danger{% else %}info{% endif %}">
-                                    {{ dir_stats.risques.total }}
-                                    {% if dir_stats.risques.critiques > 0 %}<span class="tag">{{ dir_stats.risques.critiques }} crit.</span>{% endif %}
-                                </span>
-                            </td>
-                            <td>
-                                <!-- ✅ CORRIGÉ : DMR redirige vers dashboard_risques -->
-                                <span class="metric-pill {% if dir_stats.dmr.efficaces > 0 %}success{% else %}warning{% endif %}" 
-                                      onclick="event.stopPropagation();window.location.href='{{ url_for('dashboard_risques') }}'">
-                                    {{ dir_stats.dmr.efficaces }}/{{ dir_stats.dmr.total }}
-                                </span>
-                            </td>
-                            <td>
-                                <span class="metric-pill {% if dir_stats.plans_action.en_retard > 0 %}danger{% else %}success{% endif %}"
-                                      onclick="event.stopPropagation();window.location.href='{{ url_for('liste_plans_action') }}'">
-                                    {{ dir_stats.plans_action.en_retard }}
-                                </span>
-                            </td>
-                            <td>
-                                <span class="metric-pill {% if dir_stats.kri.critique > 0 %}danger{% else %}info{% endif %}">
-                                    {{ dir_stats.kri.critique }}
-                                </span>
-                            </td>
-                            <td>
-                                <span class="metric-pill {% if dir_stats.incidents.critiques > 0 %}danger{% else %}info{% endif %}" 
-                                      onclick="event.stopPropagation();window.location.href='{{ url_for('liste_incidents') }}?direction_associee={{ dir_stats.nom }}'">
-                                    {{ dir_stats.incidents.total }}
-                                    {% if dir_stats.incidents.critiques > 0 %}<span class="tag">{{ dir_stats.incidents.critiques }} crit.</span>{% endif %}
-                                </span>
-                            </td>
-                            <td>
-                                <span class="metric-pill {% if dir_stats.veille.a_surveiller > 0 %}warning{% else %}success{% endif %}"
-                                      onclick="event.stopPropagation();window.location.href='{{ url_for('veille_reglementaire') }}?direction={{ dir_stats.nom }}'">
-                                    {{ dir_stats.veille.total }}
-                                    {% if dir_stats.veille.a_surveiller > 0 %}<span class="tag warning">{{ dir_stats.veille.a_surveiller }} à surv.</span>{% endif %}
-                                    {% if dir_stats.veille.echeance_proche > 0 %}<span class="tag">{{ dir_stats.veille.echeance_proche }} éch.</span>{% endif %}
-                                </span>
-                            </td>
-                            <td class="text-end" onclick="event.stopPropagation();filtrerPar('direction', '{{ dir_stats.id }}')">
-                                <i class="fas fa-chevron-right"></i>
-                            </td>
-                        </tr>
-                        {% endfor %}
-                    </tbody>
-                </table>
-            </div>
-        </div>
-        {% endif %}
-
-        <!-- ===== RISQUES CRITIQUES ===== -->
-        {% if entite_risques_critiques %}
-        <div class="entity-section">
-            <div class="entity-section-title">
-                <i class="fas fa-triangle-exclamation icon" style="color: var(--danger);"></i>Risques critiques
-                <span class="count-badge" style="background: var(--danger); color: white;">{{ entite_risques_critiques|length }}</span>
-                <!-- ✅ CORRIGÉ : Redirige vers liste_risques avec filtre niveau -->
-                <a href="{{ url_for('liste_risques') }}?niveau=Critique" class="see-all">Voir tous <i class="fas fa-arrow-right ms-1"></i></a>
-            </div>
-            <div class="entity-risk-grid">
-                {% for risque in entite_risques_critiques %}
-                <!-- ✅ CORRIGÉ : Redirige vers detail_risque -->
-                <div class="risk-item critique" onclick="window.location.href='{{ url_for('detail_risque', id=risque.id) }}'">
-                    <span class="risk-ref">{{ risque.reference }}</span>
-                    <span class="risk-title">{{ risque.intitule|truncate(30) }}</span>
-                    {% if risque.direction_nom %}
-                    <span class="risk-direction"><i class="fas fa-building me-1"></i>{{ risque.direction_nom }}</span>
-                    {% endif %}
-                    <span class="risk-badge critique">Critique</span>
-                </div>
-                {% endfor %}
-            </div>
-        </div>
-        {% endif %}
-
-        <!-- ===== RISQUES ÉLEVÉS ===== -->
-        {% if entite_risques_eleves %}
-        <div class="entity-section">
-            <div class="entity-section-title">
-                <i class="fas fa-circle-exclamation icon" style="color: var(--warning);"></i>Risques élevés
-                <span class="count-badge" style="background: var(--warning); color: var(--dark);">{{ entite_risques_eleves|length }}</span>
-                <!-- ✅ CORRIGÉ : Redirige vers liste_risques avec filtre niveau -->
-                <a href="{{ url_for('liste_risques') }}?niveau=Élevé" class="see-all">Voir tous <i class="fas fa-arrow-right ms-1"></i></a>
-            </div>
-            <div class="entity-risk-grid">
-                {% for risque in entite_risques_eleves %}
-                <!-- ✅ CORRIGÉ : Redirige vers detail_risque -->
-                <div class="risk-item eleve" onclick="window.location.href='{{ url_for('detail_risque', id=risque.id) }}'">
-                    <span class="risk-ref">{{ risque.reference }}</span>
-                    <span class="risk-title">{{ risque.intitule|truncate(30) }}</span>
-                    {% if risque.direction_nom %}
-                    <span class="risk-direction"><i class="fas fa-building me-1"></i>{{ risque.direction_nom }}</span>
-                    {% endif %}
-                    <span class="risk-badge eleve">Élevé</span>
-                </div>
-                {% endfor %}
-            </div>
-        </div>
-        {% endif %}
-
-        <div class="entity-footer">
-            <i class="fas fa-filter icon"></i> Vue filtrée sur {{ entite_type|capitalize }}
-        </div>
-    </div>
-    {% endif %}
-
-    <!-- ========================================== -->
-    <!-- ===== CAMPAGNES DE CONTRÔLE (UNIQUEMENT SI FILTRE ACTIF) ===== -->
-    <!-- ========================================== -->
-    {% if niveau_filtre != 'global' and campagnes_controle %}
-    <div class="dashboard-card mb-4">
-        <div class="card-header-custom">
-            <i class="fas fa-check-double icon" style="color: var(--success);"></i>
-            Campagnes de contrôle
-            <span class="badge ms-2" style="background: var(--success); color: white;">{{ campagnes_controle|length }}</span>
-            <span class="ms-auto">
-                <a href="{{ url_for('liste_campagnes_controle') }}" class="btn btn-soft-primary btn-sm">
-                    <i class="fas fa-arrow-right me-1"></i>Voir toutes
-                </a>
-            </span>
-        </div>
+        {% if d.top_risques %}
         <div class="table-responsive">
-            <table class="table table-hover mb-0 direction-table">
-                <thead>
-                    <tr>
-                        <th>Campagne</th>
-                        <th>Période</th>
-                        <th>Organisation</th>
-                        <th class="text-center">Avancement</th>
-                        <th class="text-center">Conformité</th>
-                        <th class="text-center">Anomalies</th>
-                        <th>Statut</th>
-                        <th class="text-center">Actions</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    {% for campagne in campagnes_controle[:5] %}
-                    <tr>
-                        <td>
-                            <strong>{{ campagne.nom }}</strong>
-                            {% if campagne.description %}
-                            <br><small class="text-muted">{{ campagne.description|truncate(40) }}</small>
-                            {% endif %}
-                        </td>
-                        <td class="text-nowrap">
-                            {{ campagne.date_debut.strftime('%d/%m/%Y') if campagne.date_debut }}<br>
-                            <span class="text-muted">→</span><br>
-                            {{ campagne.date_fin.strftime('%d/%m/%Y') if campagne.date_fin }}
-                        </td>
-                        <td>
-                            {% if campagne.pole %}
-                            <span class="badge" style="background: rgba(59, 130, 246, 0.12); color: #2563eb;">
-                                <i class="fas fa-layer-group me-1"></i>{{ campagne.pole.nom }}
-                            </span>
-                            {% endif %}
-                            {% if campagne.direction %}
-                            <span class="badge ms-1" style="background: rgba(26, 42, 94, 0.10); color: var(--primary);">
-                                <i class="fas fa-building me-1"></i>{{ campagne.direction.nom }}
-                            </span>
-                            {% endif %}
-                        </td>
-                        <td class="text-center text-nowrap">
-                            <span class="fw-semibold">{{ campagne.nb_dossiers_controles or 0 }}/{{ campagne.nb_dossiers_prevus or 0 }}</span>
-                            <div class="progress-custom mt-1" style="width: 80px;">
-                                <div class="progress-custom-bar primary" style="width: {{ (campagne.nb_dossiers_controles / campagne.nb_dossiers_prevus * 100)|round|int if campagne.nb_dossiers_prevus else 0 }}%"></div>
-                            </div>
-                        </td>
-                        <td class="text-center">
-                            {% set taux = campagne.taux_conformite or 0 %}
-                            <span class="badge {% if taux >= 80 %}bg-success{% elif taux >= 60 %}bg-warning text-dark{% else %}bg-danger{% endif %} rounded-pill">
-                                {{ "%.1f"|format(taux) }}%
-                            </span>
-                        </td>
-                        <td class="text-center">
-                            <span class="badge bg-danger rounded-pill">{{ campagne.nb_anomalies or 0 }}</span>
-                        </td>
-                        <td>
-                            {% if campagne.statut == 'en_cours' %}
-                            <span class="badge bg-primary rounded-pill"><i class="fas fa-play-circle me-1"></i>En cours</span>
-                            {% elif campagne.statut == 'termine' %}
-                            <span class="badge bg-success rounded-pill"><i class="fas fa-check-circle me-1"></i>Terminé</span>
-                            {% elif campagne.statut == 'en_preparation' %}
-                            <span class="badge bg-warning text-dark rounded-pill"><i class="fas fa-edit me-1"></i>Préparation</span>
-                            {% else %}
-                            <span class="badge bg-secondary rounded-pill">{{ campagne.statut }}</span>
-                            {% endif %}
-                        </td>
-                        <td class="text-center">
-                            <a href="{{ url_for('detail_campagne_controle', campagne_id=campagne.id) }}" class="btn btn-soft-primary btn-sm">
-                                <i class="fas fa-eye"></i>
-                            </a>
-                        </td>
-                    </tr>
-                    {% endfor %}
-                </tbody>
-            </table>
+          <table class="ds-table">
+            <thead><tr><th>Risque</th><th>Entité</th><th>Niveau net</th><th>Brut → net</th><th class="ds-num">{{ d.fenetre_jours }} j</th></tr></thead>
+            <tbody>
+              {% for t in d.top_risques %}
+              <tr class="ds-ligne-lien" data-href="{{ url_for('detail_risque', id=t.risque.id) }}">
+                <td><a class="ds-ref" href="{{ url_for('detail_risque', id=t.risque.id) }}">{{ t.risque.reference }}</a>
+                    <span class="ds-intitule" title="{{ t.risque.intitule }}">{{ t.risque.intitule }}</span></td>
+                <td>{{ t.entite }}</td>
+                <td>{{ cot.badge(t.cot.niveau_net, petit=True) }}</td>
+                <td>{{ cot.brut_net(t.cot.score_brut, t.cot.score_net, t.cot.taux_reduction, compact=True) }}</td>
+                <td class="ds-num">
+                  {% if t.avant and t.avant.evalue %}
+                    {% set ecart = (t.cot.score_net or 0) - (t.avant.score_net or 0) %}
+                    {% if ecart > 0 %}<span class="ds-tend mal"><i class="fas fa-arrow-up"></i> +{{ cot.fmt(ecart) }}</span>
+                    {% elif ecart < 0 %}<span class="ds-tend bien"><i class="fas fa-arrow-down"></i> −{{ cot.fmt(-ecart) }}</span>
+                    {% else %}<span class="ds-tend stable">=</span>{% endif %}
+                  {% else %}<span class="ds-tend stable" title="Pas d'évaluation il y a {{ d.fenetre_jours }} jours">nouveau</span>{% endif %}
+                </td>
+              </tr>
+              {% endfor %}
+            </tbody>
+          </table>
         </div>
-    </div>
-    {% endif %}
-
-    <!-- ========================================== -->
-    <!-- ===== RECOMMANDATIONS C2N (UNIQUEMENT SI FILTRE ACTIF) ===== -->
-    <!-- ========================================== -->
-    {% if niveau_filtre != 'global' and stats_recommandations.total > 0 %}
-    <div class="dashboard-card mb-4">
-        <div class="card-header-custom">
-            <i class="fas fa-lightbulb icon" style="color: var(--warning);"></i>
-            Recommandations C2N
-            <span class="badge ms-2" style="background: var(--warning); color: var(--dark);">{{ stats_recommandations.total|default(0) }}</span>
-            <span class="ms-auto">
-                <a href="{{ url_for('c2n_recommandations_central') }}" class="btn btn-soft-primary btn-sm">
-                    <i class="fas fa-arrow-right me-1"></i>Gérer
-                </a>
-            </span>
-        </div>
-        <div class="p-3">
-            <div class="row g-3">
-                <div class="col-md-3" onclick="window.location.href='{{ url_for('c2n_recommandations_central') }}?statut=proposee'">
-                    <div class="text-center p-3 rounded-3" style="background: var(--light); cursor: pointer;">
-                        <div class="display-6 fw-bold mb-0" style="color: var(--warning); font-family: 'Georgia', serif;">{{ stats_recommandations.proposee|default(0) }}</div>
-                        <small class="text-muted">En attente</small>
-                    </div>
-                </div>
-                <div class="col-md-3" onclick="window.location.href='{{ url_for('c2n_recommandations_central') }}?statut=acceptee'">
-                    <div class="text-center p-3 rounded-3" style="background: var(--light); cursor: pointer;">
-                        <div class="display-6 fw-bold mb-0" style="color: var(--primary); font-family: 'Georgia', serif;">{{ stats_recommandations.acceptee|default(0) }}</div>
-                        <small class="text-muted">Acceptées</small>
-                    </div>
-                </div>
-                <div class="col-md-3" onclick="window.location.href='{{ url_for('c2n_recommandations_central') }}?statut=realisee'">
-                    <div class="text-center p-3 rounded-3" style="background: var(--light); cursor: pointer;">
-                        <div class="display-6 fw-bold mb-0" style="color: var(--success); font-family: 'Georgia', serif;">{{ stats_recommandations.realisee|default(0) }}</div>
-                        <small class="text-muted">Réalisées</small>
-                    </div>
-                </div>
-                <div class="col-md-3" onclick="window.location.href='{{ url_for('c2n_recommandations_central') }}?en_retard=true'">
-                    <div class="text-center p-3 rounded-3" style="background: var(--light); cursor: pointer;">
-                        <div class="display-6 fw-bold mb-0" style="color: var(--danger); font-family: 'Georgia', serif;">{{ stats_recommandations.en_retard|default(0) }}</div>
-                        <small class="text-muted">En retard</small>
-                    </div>
-                </div>
-            </div>
-            <div class="mt-3 pt-2 border-top d-flex flex-wrap justify-content-between small text-muted">
-                <span><i class="fas fa-chart-line me-1" style="color: var(--gold);"></i>Progression moyenne: <strong>{{ stats_recommandations.progression_moyenne|default(0) }}%</strong></span>
-                <span><i class="fas fa-calendar me-1" style="color: var(--gold);"></i>Échéances proches (7j): <strong>{{ stats_recommandations.echeances_proches|default(0) }}</strong></span>
-                <span><i class="fas fa-chart-pie me-1" style="color: var(--gold);"></i>Taux réalisation: <strong>{{ (stats_recommandations.realisee / stats_recommandations.total * 100)|round|int if stats_recommandations.total > 0 else 0 }}%</strong></span>
-            </div>
-        </div>
-    </div>
-    {% endif %}
-
-    <!-- ========================================== -->
-    <!-- ===== ARBORESCENCE COMPLÈTE (UNIQUEMENT SI AUCUN FILTRE ACTIF) ===== -->
-    <!-- ========================================== -->
-    {% if niveau_filtre == 'global' %}
-
-    <div class="d-flex align-items-center gap-3 mb-4">
-        <h4 class="section-title mb-0">
-            <i class="fas fa-sitemap icon"></i>
-            Organisation par pays
-        </h4>
-        <span class="badge" style="background: var(--gold); color: var(--dark); font-weight: 600;">
-            {{ arborescence|length }} pays
-        </span>
-    </div>
-
-    {% for pays_item in arborescence %}
-        {% if not pays_item.est_sans_pays %}
-        <!-- ===== CARTE PAYS MODERNISÉE ===== -->
-        <div class="card pays-modern-card mb-4 animate-fade-in" style="border: none; border-radius: var(--radius); box-shadow: var(--shadow); overflow: hidden; background: var(--card-bg);">
-            <!-- En-tête pays -->
-            <div class="pays-modern-header" style="background: linear-gradient(120deg, var(--primary-dark) 0%, var(--primary) 65%, var(--primary-light) 100%); padding: 1rem 1.5rem; display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 0.75rem; border-bottom: 3px solid var(--gold);">
-                <div class="d-flex align-items-center gap-3">
-                    <span style="font-size: 2rem; line-height: 1;">{{ pays_item.drapeau }}</span>
-                    <div>
-                        <span style="font-family: 'Georgia', serif; font-size: 1.25rem; font-weight: 700; color: white; letter-spacing: 0.5px;">{{ pays_item.nom }}</span>
-                        <span class="ms-2" style="background: rgba(255,255,255,0.12); padding: 0.1rem 0.6rem; border-radius: 20px; font-size: 0.6rem; font-weight: 600; color: rgba(255,255,255,0.8); border: 1px solid rgba(255,255,255,0.08);">{{ pays_item.code }}</span>
-                    </div>
-                </div>
-                <div class="d-flex gap-1 flex-wrap">
-                    <button class="btn btn-sm" style="background: rgba(255,255,255,0.10); color: white; border: 1px solid rgba(255,255,255,0.12); border-radius: 30px; padding: 0.2rem 0.8rem; font-size: 0.7rem; font-weight: 500; transition: all 0.3s ease;" onclick="filtrerPar('pays', '{{ pays_item.id }}')" onmouseover="this.style.background='rgba(255,255,255,0.20)'" onmouseout="this.style.background='rgba(255,255,255,0.10)'">
-                        <i class="fas fa-eye me-1"></i>Filtrer
-                    </button>
-                    <button class="btn btn-sm" style="background: var(--gold); color: var(--dark); border: none; border-radius: 30px; padding: 0.2rem 0.8rem; font-size: 0.7rem; font-weight: 600; transition: all 0.3s ease;" onclick="openDetailPopup('pays', '{{ pays_item.nom }}', {{ pays_item.id }})" onmouseover="this.style.background='var(--gold-light)'" onmouseout="this.style.background='var(--gold)'">
-                        <i class="fas fa-chart-line me-1"></i>Analyse
-                    </button>
-                    <a href="{{ url_for('liste_incidents') }}?direction_associee={{ pays_item.nom }}" class="btn btn-sm" style="background: rgba(239, 68, 68, 0.20); color: white; border: 1px solid rgba(239, 68, 68, 0.25); border-radius: 30px; padding: 0.2rem 0.8rem; font-size: 0.7rem; font-weight: 500; transition: all 0.3s ease; text-decoration: none;" onmouseover="this.style.background='rgba(239, 68, 68, 0.35)'" onmouseout="this.style.background='rgba(239, 68, 68, 0.20)'">
-                        <i class="fas fa-exclamation-triangle me-1"></i>Incidents
-                    </a>
-                    <a href="{{ url_for('veille_reglementaire') }}?pays_id={{ pays_item.id }}" class="btn btn-sm" style="background: rgba(59, 130, 246, 0.20); color: white; border: 1px solid rgba(59, 130, 246, 0.25); border-radius: 30px; padding: 0.2rem 0.8rem; font-size: 0.7rem; font-weight: 500; transition: all 0.3s ease; text-decoration: none;" onmouseover="this.style.background='rgba(59, 130, 246, 0.35)'" onmouseout="this.style.background='rgba(59, 130, 246, 0.20)'">
-                        <i class="fas fa-newspaper me-1"></i>Veille
-                    </a>
-                </div>
-            </div>
-
-            <!-- Métriques pays (5 colonnes) -->
-            <div style="display: grid; grid-template-columns: repeat(5, 1fr); gap: 1px; background: var(--border);">
-                <div class="pays-metric" style="background: var(--card-bg); padding: 0.75rem 0.5rem; text-align: center; cursor: pointer; transition: all 0.3s ease;" onclick="window.location.href='{{ url_for('admin_poles') }}?pays_id={{ pays_item.id }}'" onmouseover="this.style.background='var(--bg-secondary)'" onmouseout="this.style.background='var(--card-bg)'">
-                    <div style="font-family: 'Georgia', serif; font-weight: 700; font-size: 1.2rem; color: var(--text-primary); line-height: 1.1;">{{ pays_item.poles|length }}</div>
-                    <div style="font-size: 0.6rem; text-transform: uppercase; letter-spacing: 0.5px; color: var(--gray); font-weight: 600; margin-top: 2px;">Pôles</div>
-                </div>
-                <div class="pays-metric" style="background: var(--card-bg); padding: 0.75rem 0.5rem; text-align: center; cursor: pointer; transition: all 0.3s ease;" onclick="window.location.href='{{ url_for('liste_risques') }}?pays_id={{ pays_item.id }}'" onmouseover="this.style.background='var(--bg-secondary)'" onmouseout="this.style.background='var(--card-bg)'">
-                    <div style="font-family: 'Georgia', serif; font-weight: 700; font-size: 1.2rem; color: var(--text-primary); line-height: 1.1;">{{ pays_item.stats.risques.total|default(0) }}</div>
-                    <div style="font-size: 0.6rem; text-transform: uppercase; letter-spacing: 0.5px; color: var(--gray); font-weight: 600; margin-top: 2px;">Risques</div>
-                </div>
-                <div class="pays-metric" style="background: var(--card-bg); padding: 0.75rem 0.5rem; text-align: center; cursor: pointer; transition: all 0.3s ease;" onclick="window.location.href='{{ url_for('liste_risques') }}?pays_id={{ pays_item.id }}&niveau=Critique'" onmouseover="this.style.background='var(--bg-secondary)'" onmouseout="this.style.background='var(--card-bg)'">
-                    <div style="font-family: 'Georgia', serif; font-weight: 700; font-size: 1.2rem; color: var(--danger); line-height: 1.1;">{{ pays_item.stats.risques.critiques|default(0) }}</div>
-                    <div style="font-size: 0.6rem; text-transform: uppercase; letter-spacing: 0.5px; color: var(--gray); font-weight: 600; margin-top: 2px;">Critiques</div>
-                </div>
-                <!-- ✅ CORRIGÉ : DMR redirige vers dashboard_risques -->
-                <div class="pays-metric" style="background: var(--card-bg); padding: 0.75rem 0.5rem; text-align: center; cursor: pointer; transition: all 0.3s ease;" onclick="window.location.href='{{ url_for('dashboard_risques') }}'" onmouseover="this.style.background='var(--bg-secondary)'" onmouseout="this.style.background='var(--card-bg)'">
-                    <div style="font-family: 'Georgia', serif; font-weight: 700; font-size: 1.2rem; color: var(--success); line-height: 1.1;">{{ pays_item.stats.dmr.efficaces|default(0) }}/{{ pays_item.stats.dmr.total|default(0) }}</div>
-                    <div style="font-size: 0.6rem; text-transform: uppercase; letter-spacing: 0.5px; color: var(--gray); font-weight: 600; margin-top: 2px;">DMR efficaces</div>
-                </div>
-                <div class="pays-metric" style="background: var(--card-bg); padding: 0.75rem 0.5rem; text-align: center; cursor: pointer; transition: all 0.3s ease;" onclick="window.location.href='{{ url_for('c2n_recommandations_central') }}?pays_id={{ pays_item.id }}'" onmouseover="this.style.background='var(--bg-secondary)'" onmouseout="this.style.background='var(--card-bg)'">
-                    <div style="font-family: 'Georgia', serif; font-weight: 700; font-size: 1.2rem; color: var(--gold); line-height: 1.1;">{{ pays_item.c2n.recommandations|default(0) }}</div>
-                    <div style="font-size: 0.6rem; text-transform: uppercase; letter-spacing: 0.5px; color: var(--gray); font-weight: 600; margin-top: 2px;">Recommandations</div>
-                </div>
-            </div>
-
-            <!-- ===== RISQUES CRITIQUES DU PAYS ===== -->
-            {% if pays_item.risques_critiques %}
-            <div style="padding: 0.75rem 1.5rem; border-top: 1px solid var(--border);">
-                <div style="display: flex; align-items: center; gap: 0.5rem; margin-bottom: 0.5rem;">
-                    <i class="fas fa-triangle-exclamation" style="color: var(--danger); font-size: 0.85rem;"></i>
-                    <span style="font-weight: 700; font-size: 0.75rem; color: var(--danger); text-transform: uppercase; letter-spacing: 0.5px;">Risques critiques ({{ pays_item.risques_critiques|length }})</span>
-                    <a href="{{ url_for('liste_risques') }}?pays_id={{ pays_item.id }}&niveau=Critique" style="margin-left: auto; font-size: 0.65rem; font-weight: 600; color: var(--primary); text-decoration: none;">Voir tous <i class="fas fa-arrow-right ms-1"></i></a>
-                </div>
-                <div style="display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 0.4rem;">
-                    {% for risque in pays_item.risques_critiques[:5] %}
-                    <!-- ✅ CORRIGÉ : Redirige vers detail_risque -->
-                    <div class="risk-item critique" onclick="window.location.href='{{ url_for('detail_risque', id=risque.id) }}'" style="padding: 0.25rem 0.5rem; margin-bottom: 0; cursor: pointer; border-radius: 6px; background: var(--danger-light); border-left: 3px solid var(--danger); display: flex; align-items: center; justify-content: space-between; gap: 0.3rem; flex-wrap: wrap;">
-                        <span style="font-weight: 600; font-size: 0.65rem; color: var(--text-primary);">{{ risque.reference }}</span>
-                        <span style="font-size: 0.6rem; color: var(--text-secondary); flex: 1;">{{ risque.intitule|truncate(30) }}</span>
-                        {% if risque.direction_nom %}
-                        <span style="font-size: 0.5rem; color: var(--gray);"><i class="fas fa-building me-1"></i>{{ risque.direction_nom }}</span>
-                        {% endif %}
-                        <span style="font-size: 0.5rem; padding: 0.05rem 0.4rem; border-radius: 10px; font-weight: 700; background: var(--danger); color: white; flex-shrink: 0;">Critique</span>
-                    </div>
-                    {% endfor %}
-                </div>
-            </div>
-            {% endif %}
-
-            <!-- ===== PÔLES DU PAYS ===== -->
-            <div style="padding: 0.75rem 1.5rem 1.25rem 1.5rem; border-top: 1px solid var(--border);">
-                <div style="display: flex; align-items: center; gap: 0.5rem; margin-bottom: 0.75rem;">
-                    <i class="fas fa-layer-group" style="color: var(--gold); font-size: 0.85rem;"></i>
-                    <span style="font-weight: 700; font-size: 0.75rem; color: var(--gray); text-transform: uppercase; letter-spacing: 0.5px;">Pôles ({{ pays_item.poles|length }})</span>
-                </div>
-                <div style="display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 1rem;">
-                    {% for pole in pays_item.poles %}
-                    {% if not pole.est_direction_seule %}
-                    <div class="pole-modern-card" style="background: var(--bg-secondary); border-radius: var(--radius-sm); border: 1px solid var(--border); overflow: hidden; transition: all 0.3s ease;" onmouseover="this.style.borderColor='var(--gold)'; this.style.boxShadow='var(--shadow)'" onmouseout="this.style.borderColor='var(--border)'; this.style.boxShadow='none'">
-                        <!-- En-tête pôle -->
-                        <div style="padding: 0.6rem 0.8rem; display: flex; align-items: center; justify-content: space-between; gap: 0.5rem; background: var(--card-bg); border-bottom: 1px solid var(--border);">
-                            <div style="display: flex; align-items: center; gap: 0.5rem; min-width: 0;">
-                                <span style="width: 10px; height: 10px; border-radius: 50%; background: {{ pole.couleur }}; flex-shrink: 0;"></span>
-                                <div style="min-width: 0;">
-                                    <div style="font-weight: 700; font-size: 0.85rem; color: var(--text-primary); white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">{{ pole.nom }}</div>
-                                    {% if pole.responsable_nom %}
-                                    <div style="font-size: 0.6rem; color: var(--gray);"><i class="fas fa-user-check me-1"></i>{{ pole.responsable_nom }}</div>
-                                    {% endif %}
-                                </div>
-                            </div>
-                            <div style="display: flex; gap: 0.25rem; flex-shrink: 0;">
-                                <button class="btn btn-sm" style="width: 26px; height: 26px; border-radius: 6px; display: flex; align-items: center; justify-content: center; background: var(--bg-secondary); color: var(--gray); font-size: 0.6rem; border: 1px solid var(--border); transition: all 0.3s ease;" onclick="filtrerPar('pole', '{{ pole.id }}')" onmouseover="this.style.background='var(--gold)'; this.style.color='var(--dark)'; this.style.borderColor='var(--gold)'" onmouseout="this.style.background='var(--bg-secondary)'; this.style.color='var(--gray)'; this.style.borderColor='var(--border)'">
-                                    <i class="fas fa-eye"></i>
-                                </button>
-                                <button class="btn btn-sm" style="width: 26px; height: 26px; border-radius: 6px; display: flex; align-items: center; justify-content: center; background: var(--bg-secondary); color: var(--gray); font-size: 0.6rem; border: 1px solid var(--border); transition: all 0.3s ease;" onclick="openDetailPopup('pole', '{{ pole.nom }}', {{ pole.id }})" onmouseover="this.style.background='var(--gold)'; this.style.color='var(--dark)'; this.style.borderColor='var(--gold)'" onmouseout="this.style.background='var(--bg-secondary)'; this.style.color='var(--gray)'; this.style.borderColor='var(--border)'">
-                                    <i class="fas fa-chart-line"></i>
-                                </button>
-                                <a href="{{ url_for('liste_incidents') }}?pole_id={{ pole.id }}" class="btn btn-sm" style="width: 26px; height: 26px; border-radius: 6px; display: flex; align-items: center; justify-content: center; background: var(--bg-secondary); color: var(--gray); font-size: 0.6rem; border: 1px solid var(--border); transition: all 0.3s ease; text-decoration: none;" onmouseover="this.style.background='var(--danger)'; this.style.color='white'; this.style.borderColor='var(--danger)'" onmouseout="this.style.background='var(--bg-secondary)'; this.style.color='var(--gray)'; this.style.borderColor='var(--border)'">
-                                    <i class="fas fa-exclamation-triangle"></i>
-                                </a>
-                                <a href="{{ url_for('veille_reglementaire') }}?pole_id={{ pole.id }}" class="btn btn-sm" style="width: 26px; height: 26px; border-radius: 6px; display: flex; align-items: center; justify-content: center; background: var(--bg-secondary); color: var(--gray); font-size: 0.6rem; border: 1px solid var(--border); transition: all 0.3s ease; text-decoration: none;" onmouseover="this.style.background='var(--info)'; this.style.color='white'; this.style.borderColor='var(--info)'" onmouseout="this.style.background='var(--bg-secondary)'; this.style.color='var(--gray)'; this.style.borderColor='var(--border)'">
-                                    <i class="fas fa-newspaper"></i>
-                                </a>
-                            </div>
-                        </div>
-                        <!-- Métriques pôle -->
-                        <div style="display: grid; grid-template-columns: repeat(5, 1fr); gap: 1px; background: var(--border);">
-                            <div class="pole-metric" style="background: var(--card-bg); padding: 0.4rem 0.2rem; text-align: center; cursor: pointer; transition: all 0.3s ease;" onclick="window.location.href='{{ url_for('liste_risques') }}?pole_id={{ pole.id }}&niveau=Critique'" onmouseover="this.style.background='var(--bg-secondary)'" onmouseout="this.style.background='var(--card-bg)'">
-                                <div style="font-family: 'Georgia', serif; font-weight: 700; font-size: 0.85rem; color: var(--danger);">{{ pole.stats.risques.critiques|default(0) }}</div>
-                                <div style="font-size: 0.45rem; text-transform: uppercase; letter-spacing: 0.3px; color: var(--gray); font-weight: 600;">Crit.</div>
-                            </div>
-                            <div class="pole-metric" style="background: var(--card-bg); padding: 0.4rem 0.2rem; text-align: center; cursor: pointer; transition: all 0.3s ease;" onclick="window.location.href='{{ url_for('liste_risques') }}?pole_id={{ pole.id }}&niveau=Élevé'" onmouseover="this.style.background='var(--bg-secondary)'" onmouseout="this.style.background='var(--card-bg)'">
-                                <div style="font-family: 'Georgia', serif; font-weight: 700; font-size: 0.85rem; color: var(--warning);">{{ pole.stats.risques.eleves|default(0) }}</div>
-                                <div style="font-size: 0.45rem; text-transform: uppercase; letter-spacing: 0.3px; color: var(--gray); font-weight: 600;">Élevés</div>
-                            </div>
-                            <!-- ✅ CORRIGÉ : DMR redirige vers dashboard_risques -->
-                            <div class="pole-metric" style="background: var(--card-bg); padding: 0.4rem 0.2rem; text-align: center; cursor: pointer; transition: all 0.3s ease;" onclick="window.location.href='{{ url_for('dashboard_risques') }}'" onmouseover="this.style.background='var(--bg-secondary)'" onmouseout="this.style.background='var(--card-bg)'">
-                                <div style="font-family: 'Georgia', serif; font-weight: 700; font-size: 0.85rem; color: var(--success);">{{ pole.stats.dmr.efficaces|default(0) }}/{{ pole.stats.dmr.total|default(0) }}</div>
-                                <div style="font-size: 0.45rem; text-transform: uppercase; letter-spacing: 0.3px; color: var(--gray); font-weight: 600;">DMR</div>
-                            </div>
-                            <div class="pole-metric" style="background: var(--card-bg); padding: 0.4rem 0.2rem; text-align: center; cursor: pointer; transition: all 0.3s ease;" onclick="window.location.href='{{ url_for('liste_incidents') }}?pole_id={{ pole.id }}'" onmouseover="this.style.background='var(--bg-secondary)'" onmouseout="this.style.background='var(--card-bg)'">
-                                <div style="font-family: 'Georgia', serif; font-weight: 700; font-size: 0.85rem; color: var(--info);">{{ pole.stats.incidents.total|default(0) }}</div>
-                                <div style="font-size: 0.45rem; text-transform: uppercase; letter-spacing: 0.3px; color: var(--gray); font-weight: 600;">Incidents</div>
-                            </div>
-                            <div class="pole-metric" style="background: var(--card-bg); padding: 0.4rem 0.2rem; text-align: center; cursor: pointer; transition: all 0.3s ease;" onclick="window.location.href='{{ url_for('veille_reglementaire') }}?pole_id={{ pole.id }}'" onmouseover="this.style.background='var(--bg-secondary)'" onmouseout="this.style.background='var(--card-bg)'">
-                                <div style="font-family: 'Georgia', serif; font-weight: 700; font-size: 0.85rem; color: var(--gold);">{{ pole.stats.veille.total|default(0) }}</div>
-                                <div style="font-size: 0.45rem; text-transform: uppercase; letter-spacing: 0.3px; color: var(--gray); font-weight: 600;">Veille</div>
-                            </div>
-                        </div>
-                        <!-- Directions -->
-                        <div style="padding: 0.6rem 0.8rem;">
-                            {% if pole.risques_critiques %}
-                            <div style="margin-bottom: 0.5rem;">
-                                <div style="font-size: 0.6rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.4px; color: var(--gray); margin-bottom: 0.25rem;">
-                                    <i class="fas fa-bolt" style="color: var(--danger);"></i> Risques critiques ({{ pole.risques_critiques|length }})
-                                </div>
-                                {% for risque in pole.risques_critiques[:2] %}
-                                <!-- ✅ CORRIGÉ : Redirige vers detail_risque -->
-                                <div class="risk-item critique" onclick="window.location.href='{{ url_for('detail_risque', id=risque.id) }}'" style="padding: 0.15rem 0.4rem; margin-bottom: 0.15rem; cursor: pointer; border-radius: 4px; background: var(--danger-light); border-left: 3px solid var(--danger); display: flex; align-items: center; gap: 0.3rem; flex-wrap: wrap;">
-                                    <span style="font-weight: 600; font-size: 0.55rem; color: var(--text-primary);">{{ risque.reference }}</span>
-                                    <span style="font-size: 0.5rem; color: var(--text-secondary); flex: 1;">{{ risque.intitule|truncate(20) }}</span>
-                                    {% if risque.direction_nom %}
-                                    <span style="font-size: 0.45rem; color: var(--gray);"><i class="fas fa-building me-1"></i>{{ risque.direction_nom }}</span>
-                                    {% endif %}
-                                </div>
-                                {% endfor %}
-                                {% if pole.risques_critiques|length > 2 %}
-                                <div style="font-size: 0.55rem; color: var(--gray); padding-left: 0.5rem;">+ {{ pole.risques_critiques|length - 2 }} autre(s)</div>
-                                {% endif %}
-                            </div>
-                            {% endif %}
-
-                            <div style="font-size: 0.6rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.4px; color: var(--gray); margin-bottom: 0.3rem;">
-                                <i class="fas fa-building"></i> Directions ({{ pole.directions|length }})
-                            </div>
-                            <div style="display: flex; flex-direction: column; gap: 0.3rem;">
-                                {% for direction in pole.directions %}
-                                <div class="direction-row" style="border-radius: 6px; background: var(--card-bg); border: 1px solid var(--border); padding: 0.3rem 0.6rem; cursor: pointer; transition: all 0.3s ease;" onclick="filtrerPar('direction', '{{ direction.id }}')" onmouseover="this.style.borderColor='var(--gold)'; this.style.background='var(--bg-secondary)'" onmouseout="this.style.borderColor='var(--border)'; this.style.background='var(--card-bg)'">
-                                    <div style="display: flex; align-items: center; justify-content: space-between; gap: 0.3rem; flex-wrap: wrap;">
-                                        <div style="display: flex; align-items: center; gap: 0.4rem; min-width: 0;">
-                                            <span style="font-weight: 600; font-size: 0.75rem; color: var(--text-primary);">{{ direction.nom }}</span>
-                                            {% if direction.responsable_nom %}
-                                            <span style="font-size: 0.55rem; color: var(--gray);">· {{ direction.responsable_nom }}</span>
-                                            {% endif %}
-                                        </div>
-                                        <div style="display: flex; gap: 0.2rem; flex-shrink: 0;" onclick="event.stopPropagation();">
-                                            <button style="width: 20px; height: 20px; border-radius: 4px; display: flex; align-items: center; justify-content: center; font-size: 0.5rem; border: 1px solid var(--border); background: var(--bg-secondary); color: var(--gray); transition: all 0.3s ease;" onclick="openDetailPopup('direction', '{{ direction.nom }}', {{ direction.id }})" onmouseover="this.style.background='var(--gold)'; this.style.color='var(--dark)'; this.style.borderColor='var(--gold)'" onmouseout="this.style.background='var(--bg-secondary)'; this.style.color='var(--gray)'; this.style.borderColor='var(--border)'">
-                                                <i class="fas fa-chart-line"></i>
-                                            </button>
-                                            <a href="{{ url_for('liste_incidents') }}?direction_associee={{ direction.nom }}" style="width: 20px; height: 20px; border-radius: 4px; display: flex; align-items: center; justify-content: center; font-size: 0.5rem; border: 1px solid var(--border); background: var(--bg-secondary); color: var(--gray); transition: all 0.3s ease; text-decoration: none;" onmouseover="this.style.background='var(--danger)'; this.style.color='white'; this.style.borderColor='var(--danger)'" onmouseout="this.style.background='var(--bg-secondary)'; this.style.color='var(--gray)'; this.style.borderColor='var(--border)'">
-                                                <i class="fas fa-exclamation-triangle"></i>
-                                            </a>
-                                            <a href="{{ url_for('veille_reglementaire') }}?direction={{ direction.nom }}" style="width: 20px; height: 20px; border-radius: 4px; display: flex; align-items: center; justify-content: center; font-size: 0.5rem; border: 1px solid var(--border); background: var(--bg-secondary); color: var(--gray); transition: all 0.3s ease; text-decoration: none;" onmouseover="this.style.background='var(--info)'; this.style.color='white'; this.style.borderColor='var(--info)'" onmouseout="this.style.background='var(--bg-secondary)'; this.style.color='var(--gray)'; this.style.borderColor='var(--border)'">
-                                                <i class="fas fa-newspaper"></i>
-                                            </a>
-                                        </div>
-                                    </div>
-                                    <div style="display: flex; gap: 0.3rem; flex-wrap: wrap; margin-top: 0.2rem;">
-                                        <span style="font-size: 0.5rem; padding: 0.05rem 0.4rem; border-radius: 8px; font-weight: 600; background: var(--info-light); color: var(--info);" onclick="event.stopPropagation();window.location.href='{{ url_for('liste_incidents') }}?direction_associee={{ direction.nom }}'">
-                                            <i class="fas fa-exclamation-circle me-1"></i>{{ direction.incidents.total|default(0) }} incidents
-                                            {% if direction.incidents.critiques|default(0) > 0 %}
-                                            <span style="background: var(--danger); color: white; padding: 0.05rem 0.25rem; border-radius: 4px; font-size: 0.4rem;">{{ direction.incidents.critiques }} crit.</span>
-                                            {% endif %}
-                                        </span>
-                                        <span style="font-size: 0.5rem; padding: 0.05rem 0.4rem; border-radius: 8px; font-weight: 600; background: rgba(201, 168, 76, 0.12); color: var(--gold);" onclick="event.stopPropagation();window.location.href='{{ url_for('veille_reglementaire') }}?direction={{ direction.nom }}'">
-                                            <i class="fas fa-newspaper me-1"></i>{{ direction.veille.total|default(0) }} veilles
-                                            {% if direction.veille.a_surveiller|default(0) > 0 %}
-                                            <span style="background: var(--warning); color: var(--dark); padding: 0.05rem 0.25rem; border-radius: 4px; font-size: 0.4rem;">{{ direction.veille.a_surveiller }} à surv.</span>
-                                            {% endif %}
-                                        </span>
-                                        <span style="font-size: 0.5rem; padding: 0.05rem 0.4rem; border-radius: 8px; font-weight: 600; background: var(--success-light); color: var(--success);">
-                                            <i class="fas fa-cubes me-1"></i>{{ direction.services|length }} services
-                                        </span>
-                                    </div>
-                                    <!-- Risques de la direction -->
-                                    {% if direction.risques_critiques %}
-                                    <div style="margin-top: 0.3rem;">
-                                        {% for risque in direction.risques_critiques[:2] %}
-                                        <!-- ✅ CORRIGÉ : Redirige vers detail_risque -->
-                                        <div class="risk-item critique" onclick="event.stopPropagation();window.location.href='{{ url_for('detail_risque', id=risque.id) }}'" style="padding: 0.1rem 0.3rem; margin-bottom: 0.1rem; cursor: pointer; border-radius: 4px; background: var(--danger-light); border-left: 3px solid var(--danger); display: flex; align-items: center; gap: 0.3rem; flex-wrap: wrap;">
-                                            <span style="font-weight: 600; font-size: 0.5rem; color: var(--text-primary);">{{ risque.reference }}</span>
-                                            <span style="font-size: 0.45rem; color: var(--text-secondary); flex: 1;">{{ risque.intitule|truncate(20) }}</span>
-                                            <span style="font-size: 0.4rem; padding: 0.05rem 0.25rem; border-radius: 6px; font-weight: 700; background: var(--danger); color: white;">Critique</span>
-                                        </div>
-                                        {% endfor %}
-                                    </div>
-                                    {% endif %}
-                                    <!-- Services -->
-                                    {% if direction.services %}
-                                    <div style="display: flex; flex-wrap: wrap; gap: 0.2rem; margin-top: 0.3rem;" onclick="event.stopPropagation();">
-                                        {% for service in direction.services[:4] %}
-                                        <span style="font-size: 0.5rem; padding: 0.05rem 0.4rem; border-radius: 8px; background: var(--info-light); color: var(--info); font-weight: 600;">
-                                            <i class="fas fa-cube me-1"></i>{{ service.nom }}
-                                        </span>
-                                        {% endfor %}
-                                        {% if direction.services|length > 4 %}
-                                        <span style="font-size: 0.5rem; padding: 0.05rem 0.4rem; border-radius: 8px; background: var(--bg-secondary); color: var(--gray); font-weight: 600;">+{{ direction.services|length - 4 }}</span>
-                                        {% endif %}
-                                    </div>
-                                    {% endif %}
-                                </div>
-                                {% endfor %}
-                            </div>
-                            {% if not pole.directions %}
-                            <div style="text-align: center; padding: 0.5rem 0; color: var(--gray); font-size: 0.7rem;">
-                                <i class="fas fa-folder-open me-1"></i>Aucune direction
-                            </div>
-                            {% endif %}
-                        </div>
-                    </div>
-                    {% endif %}
-                    {% endfor %}
-                </div>
-                {% if not pays_item.poles %}
-                <div style="text-align: center; padding: 1rem 0; color: var(--gray);">
-                    <i class="fas fa-folder-open fa-2x d-block mb-2" style="color: var(--border);"></i>
-                    <span style="font-size: 0.85rem;">Aucun pôle dans ce pays</span>
-                </div>
-                {% endif %}
-            </div>
-        </div>
+        {% else %}
+        <div class="ds-vide"><i class="fas fa-clipboard-check"></i>Aucun risque évalué sur ce périmètre.</div>
         {% endif %}
-    {% endfor %}
+      </div>
+    </div>
 
-    <!-- ========================================== -->
-    <!-- ===== PÔLES SANS PAYS ===== -->
-    <!-- ========================================== -->
-    {% for pays_item in arborescence %}
-        {% if pays_item.est_sans_pays and not pays_item.est_sans_pole %}
-        <h4 class="section-title mt-4">
-            <i class="fas fa-layer-group icon" style="color: var(--warning);"></i>
-            Pôles sans pays
-        </h4>
-        <div style="display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 1rem; margin-bottom: 1.5rem;">
-            {% for pole in pays_item.poles %}
-            <div class="pole-modern-card" style="background: var(--bg-secondary); border-radius: var(--radius-sm); border: 1px solid var(--border); border-top: 3px solid var(--warning); overflow: hidden; transition: all 0.3s ease;" onmouseover="this.style.borderColor='var(--gold)'; this.style.boxShadow='var(--shadow)'" onmouseout="this.style.borderColor='var(--border)'; this.style.boxShadow='none'">
-                <!-- En-tête pôle -->
-                <div style="padding: 0.6rem 0.8rem; display: flex; align-items: center; justify-content: space-between; gap: 0.5rem; background: var(--card-bg); border-bottom: 1px solid var(--border);">
-                    <div style="display: flex; align-items: center; gap: 0.5rem; min-width: 0;">
-                        <span style="width: 10px; height: 10px; border-radius: 50%; background: var(--warning); flex-shrink: 0;"></span>
-                        <div style="min-width: 0;">
-                            <div style="font-weight: 700; font-size: 0.85rem; color: var(--text-primary); white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">{{ pole.nom }}</div>
-                            <div style="font-size: 0.55rem; color: var(--warning);"><i class="fas fa-question-circle me-1"></i>Sans pays</div>
-                        </div>
-                    </div>
-                    <div style="display: flex; gap: 0.25rem; flex-shrink: 0;">
-                        <button class="btn btn-sm" style="width: 26px; height: 26px; border-radius: 6px; display: flex; align-items: center; justify-content: center; background: var(--bg-secondary); color: var(--gray); font-size: 0.6rem; border: 1px solid var(--border); transition: all 0.3s ease;" onclick="filtrerPar('pole', '{{ pole.id }}')" onmouseover="this.style.background='var(--gold)'; this.style.color='var(--dark)'; this.style.borderColor='var(--gold)'" onmouseout="this.style.background='var(--bg-secondary)'; this.style.color='var(--gray)'; this.style.borderColor='var(--border)'">
-                            <i class="fas fa-eye"></i>
-                        </button>
-                        <button class="btn btn-sm" style="width: 26px; height: 26px; border-radius: 6px; display: flex; align-items: center; justify-content: center; background: var(--bg-secondary); color: var(--gray); font-size: 0.6rem; border: 1px solid var(--border); transition: all 0.3s ease;" onclick="openDetailPopup('pole', '{{ pole.nom }}', {{ pole.id }})" onmouseover="this.style.background='var(--gold)'; this.style.color='var(--dark)'; this.style.borderColor='var(--gold)'" onmouseout="this.style.background='var(--bg-secondary)'; this.style.color='var(--gray)'; this.style.borderColor='var(--border)'">
-                            <i class="fas fa-chart-line"></i>
-                        </button>
-                        <a href="{{ url_for('liste_incidents') }}?pole_id={{ pole.id }}" class="btn btn-sm" style="width: 26px; height: 26px; border-radius: 6px; display: flex; align-items: center; justify-content: center; background: var(--bg-secondary); color: var(--gray); font-size: 0.6rem; border: 1px solid var(--border); transition: all 0.3s ease; text-decoration: none;" onmouseover="this.style.background='var(--danger)'; this.style.color='white'; this.style.borderColor='var(--danger)'" onmouseout="this.style.background='var(--bg-secondary)'; this.style.color='var(--gray)'; this.style.borderColor='var(--border)'">
-                            <i class="fas fa-exclamation-triangle"></i>
-                        </a>
-                    </div>
-                </div>
-                <!-- Métriques pôle -->
-                <div style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 1px; background: var(--border);">
-                    <div class="pole-metric" style="background: var(--card-bg); padding: 0.4rem 0.2rem; text-align: center; cursor: pointer; transition: all 0.3s ease;" onclick="window.location.href='{{ url_for('liste_risques') }}?pole_id={{ pole.id }}&niveau=Critique'" onmouseover="this.style.background='var(--bg-secondary)'" onmouseout="this.style.background='var(--card-bg)'">
-                        <div style="font-family: 'Georgia', serif; font-weight: 700; font-size: 0.85rem; color: var(--danger);">{{ pole.stats.risques.critiques|default(0) }}</div>
-                        <div style="font-size: 0.45rem; text-transform: uppercase; letter-spacing: 0.3px; color: var(--gray); font-weight: 600;">Crit.</div>
-                    </div>
-                    <div class="pole-metric" style="background: var(--card-bg); padding: 0.4rem 0.2rem; text-align: center; cursor: pointer; transition: all 0.3s ease;" onclick="window.location.href='{{ url_for('liste_risques') }}?pole_id={{ pole.id }}&niveau=Élevé'" onmouseover="this.style.background='var(--bg-secondary)'" onmouseout="this.style.background='var(--card-bg)'">
-                        <div style="font-family: 'Georgia', serif; font-weight: 700; font-size: 0.85rem; color: var(--warning);">{{ pole.stats.risques.eleves|default(0) }}</div>
-                        <div style="font-size: 0.45rem; text-transform: uppercase; letter-spacing: 0.3px; color: var(--gray); font-weight: 600;">Élevés</div>
-                    </div>
-                    <!-- ✅ CORRIGÉ : DMR redirige vers dashboard_risques -->
-                    <div class="pole-metric" style="background: var(--card-bg); padding: 0.4rem 0.2rem; text-align: center; cursor: pointer; transition: all 0.3s ease;" onclick="window.location.href='{{ url_for('dashboard_risques') }}'" onmouseover="this.style.background='var(--bg-secondary)'" onmouseout="this.style.background='var(--card-bg)'">
-                        <div style="font-family: 'Georgia', serif; font-weight: 700; font-size: 0.85rem; color: var(--success);">{{ pole.stats.dmr.efficaces|default(0) }}/{{ pole.stats.dmr.total|default(0) }}</div>
-                        <div style="font-size: 0.45rem; text-transform: uppercase; letter-spacing: 0.3px; color: var(--gray); font-weight: 600;">DMR</div>
-                    </div>
-                    <div class="pole-metric" style="background: var(--card-bg); padding: 0.4rem 0.2rem; text-align: center;">
-                        <div style="font-family: 'Georgia', serif; font-weight: 700; font-size: 0.85rem; color: var(--info);">{{ pole.directions|length }}</div>
-                        <div style="font-size: 0.45rem; text-transform: uppercase; letter-spacing: 0.3px; color: var(--gray); font-weight: 600;">Directions</div>
-                    </div>
-                </div>
-                <!-- Directions -->
-                <div style="padding: 0.6rem 0.8rem;">
-                    {% if pole.risques_critiques %}
-                    <div style="margin-bottom: 0.5rem;">
-                        <div style="font-size: 0.6rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.4px; color: var(--gray); margin-bottom: 0.25rem;">
-                            <i class="fas fa-bolt" style="color: var(--danger);"></i> Risques critiques ({{ pole.risques_critiques|length }})
-                        </div>
-                        {% for risque in pole.risques_critiques[:2] %}
-                        <!-- ✅ CORRIGÉ : Redirige vers detail_risque -->
-                        <div class="risk-item critique" onclick="window.location.href='{{ url_for('detail_risque', id=risque.id) }}'" style="padding: 0.15rem 0.4rem; margin-bottom: 0.15rem; cursor: pointer; border-radius: 4px; background: var(--danger-light); border-left: 3px solid var(--danger); display: flex; align-items: center; gap: 0.3rem; flex-wrap: wrap;">
-                            <span style="font-weight: 600; font-size: 0.55rem; color: var(--text-primary);">{{ risque.reference }}</span>
-                            <span style="font-size: 0.5rem; color: var(--text-secondary); flex: 1;">{{ risque.intitule|truncate(20) }}</span>
-                        </div>
-                        {% endfor %}
-                    </div>
-                    {% endif %}
+    <div class="col-xl-5">
+      <div class="ds-carte">
+        <div class="ds-carte-titre">
+          <h2>Plans d'action en retard {% if d.nb_plans_retard %}<span class="badge text-bg-secondary ms-1">{{ d.nb_plans_retard }}</span>{% endif %}</h2>
+          <a href="{{ url_for('liste_plans_action') }}">Tous les plans <i class="fas fa-arrow-right ms-1"></i></a>
+        </div>
+        {% if d.plans_retard %}
+        <div class="table-responsive">
+          <table class="ds-table">
+            <thead><tr><th>Plan</th><th>Responsable</th><th class="ds-num">Retard</th><th>Avancement</th></tr></thead>
+            <tbody>
+              {% for x in d.plans_retard %}
+              {% set p = x.plan %}
+              <tr class="ds-ligne-lien" data-href="{{ url_for('detail_plan_action', plan_id=p.id) }}">
+                <td><a class="ds-ref" href="{{ url_for('detail_plan_action', plan_id=p.id) }}">{{ p.reference or ('Plan #' ~ p.id) }}</a>
+                    <span class="ds-intitule" title="{{ p.nom }}">{{ p.nom }}</span></td>
+                <td>{% if p.responsable %}{{ p.responsable.username }}{% else %}<span class="ds-sans-resp">Sans responsable</span>{% endif %}</td>
+                <td class="ds-num"><span class="ds-tend mal" title="Échéance : {{ x.echeance.strftime('%d/%m/%Y') }}">{{ x.jours }} j</span></td>
+                <td><span class="ds-avancement" title="{{ x.avancement|int }} %"><span style="width: {{ (x.avancement or 0) if (x.avancement or 0) < 100 else 100 }}%"></span></span>
+                    <small class="text-secondary ms-1">{{ x.avancement|int }} %</small></td>
+              </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+        {% else %}
+        <div class="ds-vide"><i class="fas fa-circle-check"></i>Aucun plan d'action en retard.</div>
+        {% endif %}
+      </div>
+    </div>
+  </div>
 
-                    <div style="font-size: 0.6rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.4px; color: var(--gray); margin-bottom: 0.3rem;">
-                        <i class="fas fa-building"></i> Directions
-                    </div>
-                    <div style="display: flex; flex-direction: column; gap: 0.3rem;">
-                        {% for direction in pole.directions %}
-                        <div class="direction-row" style="border-radius: 6px; background: var(--card-bg); border: 1px solid var(--border); padding: 0.3rem 0.6rem; cursor: pointer; transition: all 0.3s ease;" onclick="filtrerPar('direction', '{{ direction.id }}')" onmouseover="this.style.borderColor='var(--gold)'; this.style.background='var(--bg-secondary)'" onmouseout="this.style.borderColor='var(--border)'; this.style.background='var(--card-bg)'">
-                            <div style="display: flex; align-items: center; justify-content: space-between; gap: 0.3rem; flex-wrap: wrap;">
-                                <div style="display: flex; align-items: center; gap: 0.4rem; min-width: 0;">
-                                    <span style="font-weight: 600; font-size: 0.75rem; color: var(--text-primary);">{{ direction.nom }}</span>
-                                    {% if direction.responsable_nom %}
-                                    <span style="font-size: 0.55rem; color: var(--gray);">· {{ direction.responsable_nom }}</span>
-                                    {% endif %}
-                                </div>
-                                <div style="display: flex; gap: 0.2rem; flex-shrink: 0;" onclick="event.stopPropagation();">
-                                    <button style="width: 20px; height: 20px; border-radius: 4px; display: flex; align-items: center; justify-content: center; font-size: 0.5rem; border: 1px solid var(--border); background: var(--bg-secondary); color: var(--gray); transition: all 0.3s ease;" onclick="openDetailPopup('direction', '{{ direction.nom }}', {{ direction.id }})" onmouseover="this.style.background='var(--gold)'; this.style.color='var(--dark)'; this.style.borderColor='var(--gold)'" onmouseout="this.style.background='var(--bg-secondary)'; this.style.color='var(--gray)'; this.style.borderColor='var(--border)'">
-                                        <i class="fas fa-chart-line"></i>
-                                    </button>
-                                    <a href="{{ url_for('liste_incidents') }}?direction_associee={{ direction.nom }}" style="width: 20px; height: 20px; border-radius: 4px; display: flex; align-items: center; justify-content: center; font-size: 0.5rem; border: 1px solid var(--border); background: var(--bg-secondary); color: var(--gray); transition: all 0.3s ease; text-decoration: none;" onmouseover="this.style.background='var(--danger)'; this.style.color='white'; this.style.borderColor='var(--danger)'" onmouseout="this.style.background='var(--bg-secondary)'; this.style.color='var(--gray)'; this.style.borderColor='var(--border)'">
-                                        <i class="fas fa-exclamation-triangle"></i>
-                                    </a>
-                                </div>
-                            </div>
-                            <div style="display: flex; gap: 0.3rem; flex-wrap: wrap; margin-top: 0.2rem;">
-                                <span style="font-size: 0.5rem; padding: 0.05rem 0.4rem; border-radius: 8px; font-weight: 600; background: var(--success-light); color: var(--success);">
-                                    <i class="fas fa-cubes me-1"></i>{{ direction.services|length }} services
-                                </span>
-                            </div>
-                            {% if direction.risques_critiques %}
-                            <div style="margin-top: 0.3rem;">
-                                {% for risque in direction.risques_critiques[:2] %}
-                                <!-- ✅ CORRIGÉ : Redirige vers detail_risque -->
-                                <div class="risk-item critique" onclick="event.stopPropagation();window.location.href='{{ url_for('detail_risque', id=risque.id) }}'" style="padding: 0.1rem 0.3rem; margin-bottom: 0.1rem; cursor: pointer; border-radius: 4px; background: var(--danger-light); border-left: 3px solid var(--danger); display: flex; align-items: center; gap: 0.3rem; flex-wrap: wrap;">
-                                    <span style="font-weight: 600; font-size: 0.5rem; color: var(--text-primary);">{{ risque.reference }}</span>
-                                    <span style="font-size: 0.45rem; color: var(--text-secondary); flex: 1;">{{ risque.intitule|truncate(20) }}</span>
-                                    <span style="font-size: 0.4rem; padding: 0.05rem 0.25rem; border-radius: 6px; font-weight: 700; background: var(--danger); color: white;">Critique</span>
-                                </div>
-                                {% endfor %}
-                            </div>
-                            {% endif %}
-                        </div>
-                        {% endfor %}
-                    </div>
-                    {% if not pole.directions %}
-                    <div style="text-align: center; padding: 0.5rem 0; color: var(--gray); font-size: 0.7rem;">
-                        <i class="fas fa-folder-open me-1"></i>Aucune direction
-                    </div>
-                    {% endif %}
-                </div>
-            </div>
+  {# ============================ COMPARATIF DES ENTITÉS ============================ #}
+  {% if d.niveau_entites and d.comparatif %}
+  {% set nom_niveau = {'pays': 'pays', 'pole': 'pôles', 'direction': 'directions'}[d.niveau_entites] %}
+  {% set param = {'pays': 'pays_id', 'pole': 'pole_id', 'direction': 'direction_id'}[d.niveau_entites] %}
+  <div class="ds-carte mb-3">
+    <div class="ds-carte-titre">
+      <h2>Comparatif des {{ nom_niveau }}</h2>
+      <span class="ds-aide">cliquez sur une ligne pour zoomer · cliquez sur un en-tête pour trier</span>
+    </div>
+    <div class="table-responsive">
+      <table class="ds-table" id="dsComparatif">
+        <thead>
+          <tr>
+            <th class="ds-th-tri" data-type="texte">{{ nom_niveau|capitalize }}</th>
+            <th class="ds-th-tri ds-num" data-type="nombre">Risques</th>
+            <th class="ds-th-tri ds-num" data-type="nombre">Évalués</th>
+            <th>Répartition nette</th>
+            <th class="ds-th-tri ds-num" data-type="nombre" aria-sort="descending">Critiques</th>
+            <th class="ds-th-tri ds-num" data-type="nombre">Élevés</th>
+            <th class="ds-th-tri ds-num" data-type="nombre">Score net moyen</th>
+            <th class="ds-th-tri ds-num" data-type="nombre">Plans en retard</th>
+            <th class="ds-th-tri ds-num" data-type="nombre">Incidents {{ d.fenetre_jours }} j</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for l in d.comparatif %}
+          {% set n_ev = l.niveaux.values()|sum %}
+          <tr class="ds-ligne-lien" data-href="{{ url_for('tableau_de_bord_strategique', **{param: l.entite.id}) }}">
+            <td data-v="{{ l.entite.nom }}"><strong>{{ l.entite.nom }}</strong></td>
+            <td class="ds-num" data-v="{{ l.risques }}">{{ l.risques }}</td>
+            <td class="ds-num" data-v="{{ l.couverture if l.couverture is not none else -1 }}">{{ (l.couverture ~ ' %') if l.couverture is not none else '—' }}</td>
+            <td>
+              <div class="ds-mini-pile" role="img" aria-label="{% for n in ['Critique', 'Élevé', 'Moyen', 'Faible'] %}{{ l.niveaux[n] }} {{ n|lower }}{{ ', ' if not loop.last }}{% endfor %}">
+                {% if n_ev %}{% for n in ['Critique', 'Élevé', 'Moyen', 'Faible'] %}{% if l.niveaux[n] %}<span class="cot-{{ cot.cle(n) }}" style="width: {{ (100 * l.niveaux[n] / n_ev)|round(2) }}%" title="{{ n }} : {{ l.niveaux[n] }}"></span>{% endif %}{% endfor %}{% endif %}
+              </div>
+            </td>
+            <td class="ds-num" data-v="{{ l.niveaux['Critique'] }}">{{ l.niveaux['Critique'] }}</td>
+            <td class="ds-num" data-v="{{ l.niveaux['Élevé'] }}">{{ l.niveaux['Élevé'] }}</td>
+            <td class="ds-num" data-v="{{ l.score_moyen if l.score_moyen is not none else -1 }}">
+              {% if l.score_moyen is not none %}{{ cot.fmt(l.score_moyen) }} {{ cot.badge_score(l.score_moyen, afficher_score=False, petit=True) }}{% else %}—{% endif %}
+            </td>
+            <td class="ds-num" data-v="{{ l.plans_retard }}">{{ l.plans_retard }}</td>
+            <td class="ds-num" data-v="{{ l.incidents }}">{{ l.incidents }}</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+  {% endif %}
+
+  {# ============================ SIGNAUX ============================ #}
+  <div class="row g-3 mb-4">
+    <div class="col-lg-6">
+      <div class="ds-carte">
+        <div class="ds-carte-titre">
+          <h2>Indicateurs de risque (KRI) en alerte</h2>
+          <a href="{{ url_for('liste_kri') }}">Tous les KRI <i class="fas fa-arrow-right ms-1"></i></a>
+        </div>
+        {% if d.kri_alerte %}
+        <table class="ds-table">
+          <thead><tr><th>Indicateur</th><th>État</th><th class="ds-num">Dernière valeur</th></tr></thead>
+          <tbody>
+            {% for x in d.kri_alerte %}
+            <tr class="ds-ligne-lien" data-href="{{ url_for('detail_kri', kri_id=x.kri.id) }}">
+              <td><a class="ds-ref" href="{{ url_for('detail_kri', kri_id=x.kri.id) }}">{{ x.kri.nom }}</a>
+                  {% if x.risque %}<span class="ds-intitule">{{ x.risque.reference }}{% if x.niveau_risque %} · coté {{ x.niveau_risque }}{% endif %}</span>{% endif %}
+                  {% if x.a_reevaluer %}<span class="ds-sans-resp" title="Le KRI est critique alors que le risque est coté {{ x.niveau_risque }} : la cotation doit être revue.">Risque à réévaluer</span>{% endif %}</td>
+              <td><span class="ds-tend mal"><i class="fas fa-{{ 'circle-exclamation' if x.grave else 'triangle-exclamation' }}"></i> {{ x.etat|replace('_', ' ')|capitalize }}</span></td>
+              <td class="ds-num">{{ x.valeur }}{{ (' ' ~ x.kri.unite_mesure) if x.kri.unite_mesure }}{% if x.date %}<br><small class="text-secondary">{{ x.date.strftime('%d/%m/%Y') }}</small>{% endif %}</td>
+            </tr>
             {% endfor %}
-        </div>
+          </tbody>
+        </table>
+        {% else %}
+        {% if d.kpi.kri_alerte.non_suivi %}
+        <div class="ds-vide ds-vigilance-txt"><i class="fas fa-triangle-exclamation"></i>Aucun KRI n'est suivi dans ce périmètre : la surveillance des risques par indicateurs n'est pas en place.</div>
+        {% else %}
+        <div class="ds-vide"><i class="fas fa-gauge-high"></i>Aucun KRI en alerte.</div>
         {% endif %}
-    {% endfor %}
-
-    <!-- ========================================== -->
-    <!-- ===== DIRECTIONS SANS PÔLE ===== -->
-    <!-- ========================================== -->
-    {% for pays_item in arborescence %}
-        {% if pays_item.est_sans_pole %}
-        <h4 class="section-title mt-4">
-            <i class="fas fa-building icon" style="color: var(--info);"></i>
-            Directions sans pôle
-        </h4>
-        <div style="display: flex; flex-direction: column; gap: 0.5rem; margin-bottom: 1.5rem;">
-            {% for pole in pays_item.poles %}
-                {% if pole.est_direction_seule %}
-                <div class="direction-row" style="border-radius: var(--radius-sm); border: 1px solid var(--border); border-left: 3px solid var(--info); background: var(--card-bg); padding: 0.6rem 1rem; cursor: pointer; transition: all 0.3s ease;" onclick="filtrerPar('direction', '{{ pole.directions[0].id if pole.directions else '' }}')" onmouseover="this.style.borderColor='var(--gold)'; this.style.boxShadow='var(--shadow)'" onmouseout="this.style.borderColor='var(--border)'; this.style.boxShadow='none'">
-                    <div style="display: flex; align-items: center; justify-content: space-between; gap: 0.5rem; flex-wrap: wrap;">
-                        <div style="display: flex; align-items: center; gap: 0.5rem; min-width: 0;">
-                            <i class="fas fa-building" style="color: var(--info);"></i>
-                            <span style="font-weight: 600; font-size: 0.85rem; color: var(--text-primary);">{{ pole.nom }}</span>
-                            <span style="font-size: 0.55rem; color: var(--warning);"><i class="fas fa-question-circle me-1"></i>Sans pôle</span>
-                        </div>
-                        <div style="display: flex; gap: 0.3rem; flex-shrink: 0;" onclick="event.stopPropagation();">
-                            <button style="width: 26px; height: 26px; border-radius: 6px; display: flex; align-items: center; justify-content: center; font-size: 0.6rem; border: 1px solid var(--border); background: var(--bg-secondary); color: var(--gray); transition: all 0.3s ease;" onclick="openDetailPopup('direction', '{{ pole.nom }}', {{ pole.directions[0].id if pole.directions else '' }})" onmouseover="this.style.background='var(--gold)'; this.style.color='var(--dark)'; this.style.borderColor='var(--gold)'" onmouseout="this.style.background='var(--bg-secondary)'; this.style.color='var(--gray)'; this.style.borderColor='var(--border)'">
-                                <i class="fas fa-chart-line"></i>
-                            </button>
-                            <a href="{{ url_for('liste_incidents') }}?direction_associee={{ pole.nom }}" style="width: 26px; height: 26px; border-radius: 6px; display: flex; align-items: center; justify-content: center; font-size: 0.6rem; border: 1px solid var(--border); background: var(--bg-secondary); color: var(--gray); transition: all 0.3s ease; text-decoration: none;" onmouseover="this.style.background='var(--danger)'; this.style.color='white'; this.style.borderColor='var(--danger)'" onmouseout="this.style.background='var(--bg-secondary)'; this.style.color='var(--gray)'; this.style.borderColor='var(--border)'">
-                                <i class="fas fa-exclamation-triangle"></i>
-                            </a>
-                        </div>
-                    </div>
-                    <div style="display: flex; gap: 0.3rem; flex-wrap: wrap; margin-top: 0.3rem;">
-                        <span style="font-size: 0.5rem; padding: 0.05rem 0.4rem; border-radius: 8px; font-weight: 600; background: var(--info-light); color: var(--info);">
-                            <i class="fas fa-cubes me-1"></i>{{ pole.directions[0].services|length if pole.directions else 0 }} services
-                        </span>
-                    </div>
-                    {% if pole.risques_critiques %}
-                    <div style="margin-top: 0.3rem;">
-                        {% for risque in pole.risques_critiques[:2] %}
-                        <!-- ✅ CORRIGÉ : Redirige vers detail_risque -->
-                        <div class="risk-item critique" onclick="event.stopPropagation();window.location.href='{{ url_for('detail_risque', id=risque.id) }}'" style="padding: 0.1rem 0.3rem; margin-bottom: 0.1rem; cursor: pointer; border-radius: 4px; background: var(--danger-light); border-left: 3px solid var(--danger); display: flex; align-items: center; gap: 0.3rem; flex-wrap: wrap;">
-                            <span style="font-weight: 600; font-size: 0.5rem; color: var(--text-primary);">{{ risque.reference }}</span>
-                            <span style="font-size: 0.45rem; color: var(--text-secondary); flex: 1;">{{ risque.intitule|truncate(20) }}</span>
-                            <span style="font-size: 0.4rem; padding: 0.05rem 0.25rem; border-radius: 6px; font-weight: 700; background: var(--danger); color: white;">Critique</span>
-                        </div>
-                        {% endfor %}
-                    </div>
-                    {% endif %}
-                </div>
-                {% endif %}
+        {% endif %}
+      </div>
+    </div>
+    <div class="col-lg-6">
+      <div class="ds-carte">
+        <div class="ds-carte-titre">
+          <h2>Incidents graves ({{ d.fenetre_jours }} derniers jours)</h2>
+          <a href="{{ url_for('liste_incidents') }}">Tous les incidents <i class="fas fa-arrow-right ms-1"></i></a>
+        </div>
+        {% if d.incidents_graves %}
+        <table class="ds-table">
+          <thead><tr><th>Incident</th><th>Gravité</th><th class="ds-num">Date</th></tr></thead>
+          <tbody>
+            {% for i in d.incidents_graves %}
+            <tr class="ds-ligne-lien" data-href="{{ url_for('detail_incident', id=i.id) }}">
+              <td><a class="ds-ref" href="{{ url_for('detail_incident', id=i.id) }}">{{ i.reference or ('Incident #' ~ i.id) }}</a>
+                  <span class="ds-intitule" title="{{ i.titre }}">{{ i.titre }}</span></td>
+              {% set libelles_gravite = {'critique': 'Critique', 'majeur': 'Majeur', 'majeure': 'Majeure', 'elevee': 'Élevée', 'élevée': 'Élevée', 'haute': 'Haute', 'moyenne': 'Moyenne', 'mineure': 'Mineure'} %}
+              <td>{{ libelles_gravite.get((i.gravite or '')|lower, (i.gravite or '—')|capitalize) }}</td>
+              <td class="ds-num">{{ i.date_occurrence.strftime('%d/%m/%Y') if i.date_occurrence }}</td>
+            </tr>
             {% endfor %}
-        </div>
+          </tbody>
+        </table>
+        {% else %}
+        {% if d.kpi.incidents.aucune_declaration %}
+        <div class="ds-vide ds-vigilance-txt"><i class="fas fa-triangle-exclamation"></i>Aucun incident déclaré depuis 12 mois : vérifiez que les incidents remontent bien.</div>
+        {% else %}
+        <div class="ds-vide"><i class="fas fa-shield-halved"></i>Aucun incident grave sur la période.</div>
         {% endif %}
-    {% endfor %}
-
-    <!-- ========================================== -->
-    <!-- ===== SI AUCUNE DONNÉE ===== -->
-    <!-- ========================================== -->
-    {% if not arborescence %}
-    <div class="dashboard-card text-center py-5">
-        <i class="fas fa-globe fa-4x mb-3" style="color: var(--border);"></i>
-        <h4 style="font-family: 'Georgia', serif; color: var(--text-primary);">Aucune organisation configurée</h4>
-        <p class="text-muted">Commencez par créer des pays et des pôles pour visualiser votre tableau de bord stratégique.</p>
-        <div class="d-flex gap-3 justify-content-center flex-wrap">
-            <a href="{{ url_for('admin_pays') }}" class="btn btn-primary-custom">
-                <i class="fas fa-plus me-2"></i>Créer un pays
-            </a>
-            <a href="{{ url_for('admin_poles') }}" class="btn btn-soft-primary">
-                <i class="fas fa-layer-group me-2"></i>Gérer les pôles
-            </a>
-            <a href="{{ url_for('liste_incidents') }}" class="btn btn-soft-danger">
-                <i class="fas fa-exclamation-triangle me-2"></i>Voir les incidents
-            </a>
-            <a href="{{ url_for('veille_reglementaire') }}" class="btn btn-soft-info">
-                <i class="fas fa-newspaper me-2"></i>Veille réglementaire
-            </a>
-        </div>
+        {% endif %}
+      </div>
     </div>
-    {% endif %}
-
-    {% endif %}
-
+  </div>
+{% endif %}
 </div>
+{% endblock %}
 
-<!-- ========================================== -->
-<!-- ===== MODAL POPUP ===== -->
-<!-- ========================================== -->
-<div class="modal fade" id="detailPopupModal" tabindex="-1">
-    <div class="modal-dialog modal-lg modal-dialog-centered">
-        <div class="modal-content rounded-4">
-            <div class="modal-header bg-primary text-white border-0">
-                <h5 class="modal-title" id="popupTitle">
-                    <i class="fas fa-chart-line me-2"></i>Analyse détaillée
-                </h5>
-                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
-            </div>
-            <div class="modal-body" id="popupContent">
-                <div class="text-center py-5">
-                    <div class="spinner-border text-primary" role="status"></div>
-                    <p class="mt-2 text-muted">Chargement des données...</p>
-                </div>
-            </div>
-            <div class="modal-footer border-0">
-                <button type="button" class="btn btn-soft-primary" data-bs-dismiss="modal">Fermer</button>
-                <button type="button" class="btn btn-primary-custom" onclick="exportPopupData()">
-                    <i class="fas fa-download me-1"></i>Exporter
-                </button>
-            </div>
-        </div>
-    </div>
-</div>
-
-<!-- ========================================== -->
-<!-- ===== SCRIPTS ===== -->
-<!-- ========================================== -->
+{% block scripts %}
+{% if not sans_client %}
 <script>
-let currentPopupData = null;
-let kioskInterval = null;
+(function () {
+  'use strict';
 
-// Filtrer par entité
-function filtrerPar(type, id) {
-    const form = document.getElementById('filterForm');
-    if (!form) return;
-    
-    const selects = form.querySelectorAll('select');
-    selects.forEach(select => {
-        select.selectedIndex = 0;
+  // ---------- Lignes cliquables (sans gêner les liens internes) ----------
+  document.querySelectorAll('.ds-ligne-lien[data-href]').forEach(function (tr) {
+    tr.addEventListener('click', function (e) {
+      if (e.target.closest('a, button')) return;
+      window.location.href = tr.dataset.href;
     });
-    
-    if (type === 'pays') {
-        const select = form.querySelector('select[name="pays_id"]');
-        if (select) select.value = id || '';
-    } else if (type === 'pole') {
-        const select = form.querySelector('select[name="pole_id"]');
-        if (select) select.value = id || '';
-    } else if (type === 'direction') {
-        const select = form.querySelector('select[name="direction_id"]');
-        if (select) select.value = id || '';
-    }
-    
-    form.submit();
-}
+  });
 
-// Mode présentation
-function toggleKioskMode() {
-    if (kioskInterval) {
-        clearInterval(kioskInterval);
-        kioskInterval = null;
-        document.body.classList.remove('kiosk-mode');
-        showNotification('Mode présentation désactivé', 'info');
-    } else {
-        kioskInterval = setInterval(() => {
-            const nextButton = document.querySelector('.org-panel-head .btn-panel.btn-panel-gold');
-            if (nextButton) nextButton.click();
-        }, 15000);
-        document.body.classList.add('kiosk-mode');
-        showNotification('Mode présentation activé - Rotation toutes les 15 secondes', 'success');
-    }
-}
-
-// Notification toast
-function showNotification(message, type) {
-    const toast = document.createElement('div');
-    toast.className = `toast align-items-center text-white bg-${type === 'success' ? 'success' : type === 'info' ? 'info' : 'warning'} border-0 position-fixed top-0 end-0 m-3`;
-    toast.setAttribute('role', 'alert');
-    toast.innerHTML = `<div class="d-flex"><div class="toast-body"><i class="fas fa-${type === 'success' ? 'check-circle' : 'info-circle'} me-2"></i>${message}</div><button type="button" class="btn-close btn-close-white me-2 m-auto" data-bs-dismiss="toast"></button></div>`;
-    document.body.appendChild(toast);
-    const bsToast = new bootstrap.Toast(toast, { delay: 3000 });
-    bsToast.show();
-    setTimeout(() => toast.remove(), 3500);
-}
-
-// Reinitialiser les filtres
-function reinitialiserFiltres() {
-    const form = document.getElementById('filterForm');
-    if (!form) return;
-    
-    const selects = form.querySelectorAll('select');
-    selects.forEach(select => {
-        select.selectedIndex = 0;
+  // ---------- Filtres en cascade : pays → pôles → directions ----------
+  const selPays = document.getElementById('dsPays');
+  const selPole = document.getElementById('dsPole');
+  const selDir = document.getElementById('dsDirection');
+  function cascade(parent, enfant) {
+    const v = parent.value;
+    Array.from(enfant.options).forEach(function (o) {
+      if (!o.value) return;
+      const visible = !v || o.dataset.parent === v;
+      o.hidden = !visible; o.disabled = !visible;
     });
-    
-    form.submit();
-}
+    if (enfant.selectedOptions[0] && enfant.selectedOptions[0].disabled) enfant.value = '';
+  }
+  function majCascade() { cascade(selPays, selPole); if (selPole.value) cascade(selPole, selDir); else {
+      // sans pôle choisi : directions des pôles visibles
+      const polesVisibles = new Set(Array.from(selPole.options).filter(o => o.value && !o.disabled).map(o => o.value));
+      Array.from(selDir.options).forEach(function (o) {
+        if (!o.value) return;
+        const visible = !selPays.value || polesVisibles.has(o.dataset.parent);
+        o.hidden = !visible; o.disabled = !visible;
+      });
+      if (selDir.selectedOptions[0] && selDir.selectedOptions[0].disabled) selDir.value = '';
+  } }
+  majCascade();
+  [selPays, selPole, selDir].forEach(function (s, idx) {
+    s.addEventListener('change', function () {
+      if (idx === 0) { selPole.value = ''; selDir.value = ''; }
+      if (idx === 1) { selDir.value = ''; }
+      majCascade();
+      // on n'envoie que le filtre le plus précis
+      const f = document.getElementById('dsFiltres');
+      const url = new URL(f.action, window.location.origin);
+      if (selDir.value) url.searchParams.set('direction_id', selDir.value);
+      else if (selPole.value) url.searchParams.set('pole_id', selPole.value);
+      else if (selPays.value) url.searchParams.set('pays_id', selPays.value);
+      window.location.href = url.toString();
+    });
+  });
 
-// Popup détail
-function generateDetailContentFromData(stats, title) {
-    const totalRisques = (stats.risques && stats.risques.total) || 1;
-    const totalDmr = (stats.dmr && stats.dmr.total) || 1;
-    const totalPlans = (stats.plans_action && stats.plans_action.total) || 1;
-    const totalKri = (stats.kri && stats.kri.total) || 1;
-    
-    const critiques = (stats.risques && stats.risques.critiques) || 0;
-    const eleves = (stats.risques && stats.risques.eleves) || 0;
-    const moyens = (stats.risques && stats.risques.moyens) || 0;
-    const faibles = (stats.risques && stats.risques.faibles) || 0;
-    
-    const dmrEfficaces = (stats.dmr && stats.dmr.efficaces) || 0;
-    const dmrAAmeliorer = (stats.dmr && stats.dmr.a_ameliorer) || 0;
-    const dmrInefficaces = (stats.dmr && stats.dmr.inefficaces) || 0;
-    
-    const plansEnCours = (stats.plans_action && stats.plans_action.en_cours) || 0;
-    const plansTermines = (stats.plans_action && stats.plans_action.termines) || 0;
-    const plansRetard = (stats.plans_action && stats.plans_action.en_retard) || 0;
-    
-    const kriCritique = (stats.kri && stats.kri.critique) || 0;
-    const kriAlerte = (stats.kri && stats.kri.alerte) || 0;
-    
-    const niveau = stats.evaluations?.niveau || 'Non évalué';
-    const niveauCouleur = stats.evaluations?.couleur || 'secondary';
-    
-    // Incidents et veille
-    const incidentsTotal = stats.incidents?.total || 0;
-    const incidentsCritiques = stats.incidents?.critiques || 0;
-    const veilleTotal = stats.veille?.total || 0;
-    const veilleASurveiller = stats.veille?.a_surveiller || 0;
-    
-    return `
-        <div class="row">
-            <div class="col-md-6 mb-3">
-                <div class="card h-100 border-0 shadow-sm">
-                    <div class="card-header bg-danger text-white border-0">
-                        <i class="fas fa-exclamation-triangle me-2"></i>Risques
-                        <a href="{{ url_for('liste_incidents') }}" class="btn btn-sm btn-light ms-2">Voir les incidents</a>
-                    </div>
-                    <div class="card-body">
-                        <div class="row text-center">
-                            <div class="col-6 mb-2" onclick="window.location.href='{{ url_for('liste_incidents') }}?gravite=critique'">
-                                <h3 class="text-danger">${critiques}</h3>
-                                <small>Critiques</small>
-                            </div>
-                            <div class="col-6 mb-2" onclick="window.location.href='{{ url_for('liste_incidents') }}?gravite=elevee'">
-                                <h3 class="text-warning">${eleves}</h3>
-                                <small>Élevés</small>
-                            </div>
-                            <div class="col-6" onclick="window.location.href='{{ url_for('liste_incidents') }}?gravite=moyenne'">
-                                <h3 class="text-info">${moyens}</h3>
-                                <small>Moyens</small>
-                            </div>
-                            <div class="col-6" onclick="window.location.href='{{ url_for('liste_incidents') }}?gravite=mineure'">
-                                <h3 class="text-success">${faibles}</h3>
-                                <small>Faibles</small>
-                            </div>
-                        </div>
-                        <div class="progress mt-3" style="height: 8px;">
-                            <div class="progress-bar bg-danger" style="width: ${(critiques / totalRisques * 100) || 0}%"></div>
-                            <div class="progress-bar bg-warning" style="width: ${(eleves / totalRisques * 100) || 0}%"></div>
-                            <div class="progress-bar bg-info" style="width: ${(moyens / totalRisques * 100) || 0}%"></div>
-                            <div class="progress-bar bg-success" style="width: ${(faibles / totalRisques * 100) || 0}%"></div>
-                        </div>
-                        <div class="text-center mt-2"><small>Total: ${stats.risques.total || 0} risques</small></div>
-                    </div>
-                </div>
-            </div>
-            <div class="col-md-6 mb-3">
-                <div class="card h-100 border-0 shadow-sm">
-                    <div class="card-header bg-success text-white border-0">
-                        <i class="fas fa-shield-alt me-2"></i>Dispositifs de maîtrise
-                        <a href="{{ url_for('admin_directions') }}" class="btn btn-sm btn-light ms-2">Gérer</a>
-                    </div>
-                    <div class="card-body">
-                        <div class="row text-center">
-                            <div class="col-4" onclick="window.location.href='{{ url_for('admin_directions') }}?efficacite=bonne'">
-                                <h3 class="text-success">${dmrEfficaces}</h3>
-                                <small>Efficaces</small>
-                            </div>
-                            <div class="col-4" onclick="window.location.href='{{ url_for('admin_directions') }}?efficacite=moyenne'">
-                                <h3 class="text-warning">${dmrAAmeliorer}</h3>
-                                <small>À améliorer</small>
-                            </div>
-                            <div class="col-4" onclick="window.location.href='{{ url_for('admin_directions') }}?efficacite=faible'">
-                                <h3 class="text-danger">${dmrInefficaces}</h3>
-                                <small>Inefficaces</small>
-                            </div>
-                        </div>
-                        <div class="progress mt-3" style="height: 8px;">
-                            <div class="progress-bar bg-success" style="width: ${(dmrEfficaces / totalDmr * 100) || 0}%"></div>
-                            <div class="progress-bar bg-warning" style="width: ${(dmrAAmeliorer / totalDmr * 100) || 0}%"></div>
-                            <div class="progress-bar bg-danger" style="width: ${(dmrInefficaces / totalDmr * 100) || 0}%"></div>
-                        </div>
-                        <div class="text-center mt-2"><small>Total: ${stats.dmr.total || 0} DMR</small></div>
-                    </div>
-                </div>
-            </div>
-            <div class="col-md-6 mb-3">
-                <div class="card h-100 border-0 shadow-sm">
-                    <div class="card-header bg-info text-white border-0">
-                        <i class="fas fa-tasks me-2"></i>Plans d'action
-                        <a href="{{ url_for('liste_plans_action') if url_for('liste_plans_action') else '#' }}" class="btn btn-sm btn-light ms-2">Voir tous</a>
-                    </div>
-                    <div class="card-body">
-                        <div class="row text-center">
-                            <div class="col-4" onclick="window.location.href='{{ url_for('liste_plans_action') if url_for('liste_plans_action') else '#' }}?statut=en_cours'">
-                                <h3 class="text-warning">${plansEnCours}</h3>
-                                <small>En cours</small>
-                            </div>
-                            <div class="col-4" onclick="window.location.href='{{ url_for('liste_plans_action') if url_for('liste_plans_action') else '#' }}?statut=termine'">
-                                <h3 class="text-success">${plansTermines}</h3>
-                                <small>Terminés</small>
-                            </div>
-                            <div class="col-4" onclick="window.location.href='{{ url_for('liste_plans_action') if url_for('liste_plans_action') else '#' }}?en_retard=true'">
-                                <h3 class="text-danger">${plansRetard}</h3>
-                                <small>En retard</small>
-                            </div>
-                        </div>
-                        <div class="progress mt-3" style="height: 8px;">
-                            <div class="progress-bar bg-warning" style="width: ${(plansEnCours / totalPlans * 100) || 0}%"></div>
-                            <div class="progress-bar bg-success" style="width: ${(plansTermines / totalPlans * 100) || 0}%"></div>
-                            <div class="progress-bar bg-danger" style="width: ${(plansRetard / totalPlans * 100) || 0}%"></div>
-                        </div>
-                        <div class="text-center mt-2"><small>Total: ${stats.plans_action.total || 0} plans</small></div>
-                    </div>
-                </div>
-            </div>
-            <div class="col-md-6 mb-3">
-                <div class="card h-100 border-0 shadow-sm">
-                    <div class="card-header bg-primary text-white border-0">
-                        <i class="fas fa-chart-line me-2"></i>KRI / KPI
-                        <a href="{{ url_for('dashboard') }}" class="btn btn-sm btn-light ms-2">Tableau de bord</a>
-                    </div>
-                    <div class="card-body">
-                        <div class="row text-center">
-                            <div class="col-6" onclick="window.location.href='{{ url_for('dashboard') }}?statut=critique'">
-                                <h3 class="text-danger">${kriCritique}</h3>
-                                <small>Critiques</small>
-                            </div>
-                            <div class="col-6" onclick="window.location.href='{{ url_for('dashboard') }}?statut=alerte'">
-                                <h3 class="text-warning">${kriAlerte}</h3>
-                                <small>Alertes</small>
-                            </div>
-                        </div>
-                        <div class="progress mt-3" style="height: 8px;">
-                            <div class="progress-bar bg-danger" style="width: ${(kriCritique / totalKri * 100) || 0}%"></div>
-                            <div class="progress-bar bg-warning" style="width: ${(kriAlerte / totalKri * 100) || 0}%"></div>
-                            <div class="progress-bar bg-success" style="width: ${((totalKri - kriCritique - kriAlerte) / totalKri * 100) || 0}%"></div>
-                        </div>
-                        <div class="text-center mt-2"><small>Total: ${stats.kri.total || 0} indicateurs</small></div>
-                    </div>
-                </div>
-            </div>
-            <!-- Incidents et Veille -->
-            <div class="col-md-6 mb-3">
-                <div class="card h-100 border-0 shadow-sm">
-                    <div class="card-header bg-rose text-white border-0">
-                        <i class="fas fa-exclamation-circle me-2"></i>Incidents
-                        <a href="{{ url_for('liste_incidents') }}" class="btn btn-sm btn-light ms-2">Voir tous</a>
-                    </div>
-                    <div class="card-body">
-                        <div class="row text-center">
-                            <div class="col-6" onclick="window.location.href='{{ url_for('liste_incidents') }}'">
-                                <h3 class="text-danger">${incidentsTotal}</h3>
-                                <small>Total</small>
-                            </div>
-                            <div class="col-6" onclick="window.location.href='{{ url_for('liste_incidents') }}?gravite=critique'">
-                                <h3 class="text-danger">${incidentsCritiques}</h3>
-                                <small>Critiques</small>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-            </div>
-            <div class="col-md-6 mb-3">
-                <div class="card h-100 border-0 shadow-sm">
-                    <div class="card-header bg-purple text-white border-0">
-                        <i class="fas fa-newspaper me-2"></i>Veille réglementaire
-                        <a href="{{ url_for('veille_reglementaire') }}" class="btn btn-sm btn-light ms-2">Voir tout</a>
-                    </div>
-                    <div class="card-body">
-                        <div class="row text-center">
-                            <div class="col-6" onclick="window.location.href='{{ url_for('veille_reglementaire') }}'">
-                                <h3 class="text-info">${veilleTotal}</h3>
-                                <small>Total</small>
-                            </div>
-                            <div class="col-6" onclick="window.location.href='{{ url_for('veille_reglementaire') }}?statut=a_surveiller'">
-                                <h3 class="text-warning">${veilleASurveiller}</h3>
-                                <small>À surveiller</small>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-            </div>
-        </div>
-        <div class="mt-3 text-center">
-            <span class="badge bg-${niveauCouleur} fs-6 p-2">Niveau: ${niveau}</span>
-            <a href="{{ url_for('veille_reglementaire') }}" class="btn btn-soft-info ms-2">
-                <i class="fas fa-newspaper me-1"></i>Veille réglementaire
-            </a>
-            <a href="{{ url_for('liste_incidents') }}" class="btn btn-soft-danger ms-2">
-                <i class="fas fa-exclamation-triangle me-1"></i>Incidents
-            </a>
-        </div>
-    `;
-}
+  // ---------- Matrice : bascule net / brut + infobulle ----------
+  document.querySelectorAll('[data-matrice]').forEach(function (btn) {
+    btn.addEventListener('click', function () {
+      document.querySelectorAll('[data-matrice]').forEach(function (b) {
+        const actif = b === btn; b.classList.toggle('active', actif); b.setAttribute('aria-pressed', actif);
+      });
+      document.querySelectorAll('[data-bloc]').forEach(function (bl) { bl.hidden = bl.dataset.bloc !== btn.dataset.matrice; });
+    });
+  });
+  const bulle = document.getElementById('dsBulle');
+  function esc(t) { return String(t).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+  function montrerBulle(html, x, y, conteneur) {
+    const r = conteneur.getBoundingClientRect();
+    bulle.innerHTML = html; bulle.style.display = 'block';
+    if (bulle.parentElement !== conteneur) conteneur.appendChild(bulle);
+    let gauche = x - r.left + 12, haut = y - r.top + 12;
+    if (gauche + bulle.offsetWidth > r.width) gauche = x - r.left - bulle.offsetWidth - 12;
+    bulle.style.left = gauche + 'px'; bulle.style.top = haut + 'px';
+  }
+  function cacherBulle() { bulle.style.display = 'none'; }
+  document.querySelectorAll('.ds-cell.pleine').forEach(function (cell) {
+    const [titre, liste] = cell.dataset.info.split('|');
+    const html = '<strong>' + esc(titre) + '</strong><br>' + esc(liste).replace(/, /g, '<br>');
+    const conteneur = cell.closest('.ds-carte');
+    conteneur.style.position = 'relative';
+    cell.addEventListener('mousemove', e => montrerBulle(html, e.clientX, e.clientY, conteneur));
+    cell.addEventListener('mouseleave', cacherBulle);
+    cell.addEventListener('focus', function () { const b = cell.getBoundingClientRect(); montrerBulle(html, b.right, b.top, conteneur); });
+    cell.addEventListener('blur', cacherBulle);
+  });
 
-function exportPopupData() {
-    showNotification('Export généré - Le fichier sera disponible sous peu', 'success');
-}
+  // ---------- Courbe d'évolution (SVG, sans bibliothèque) ----------
+  const donnees = {{ d.evolution|tojson }};
+  const series = [
+    { cle: 'critiques', nom: 'Critiques', couleur: EgalyxCotation.couleur('Critique') },
+    { cle: 'eleves', nom: 'Élevés', couleur: EgalyxCotation.couleur('Élevé') },
+  ];
+  const zone = document.getElementById('dsCourbe');
+  const svg = zone.querySelector('svg');
+  const NS = 'http://www.w3.org/2000/svg';
+  function el(nom, attrs, parent) { const n = document.createElementNS(NS, nom); for (const k in attrs) n.setAttribute(k, attrs[k]); (parent || svg).appendChild(n); return n; }
 
-function openDetailPopup(type, title, id) {
-    const modal = new bootstrap.Modal(document.getElementById('detailPopupModal'));
-    document.getElementById('popupTitle').innerHTML = `<i class="fas fa-chart-line me-2"></i>Analyse détaillée - ${title}`;
-    document.getElementById('popupContent').innerHTML = '<div class="text-center py-5"><div class="spinner-border text-primary"></div><p class="mt-2 text-muted">Chargement...</p></div>';
-    modal.show();
-    
-    fetch(`/api/entite-stats?type=${type}&id=${id}`)
-        .then(response => response.json())
-        .then(data => {
-            if (data.success && data.stats) {
-                document.getElementById('popupContent').innerHTML = generateDetailContentFromData(data.stats, title);
-                currentPopupData = data.stats;
-            } else {
-                document.getElementById('popupContent').innerHTML = '<div class="alert alert-danger m-3">Erreur lors du chargement des données</div>';
-            }
-        })
-        .catch(error => {
-            console.error('Erreur:', error);
-            document.getElementById('popupContent').innerHTML = '<div class="alert alert-danger m-3">Erreur de connexion</div>';
+  function dessiner() {
+    while (svg.firstChild) svg.removeChild(svg.firstChild);
+    const L = svg.clientWidth || 600, H = 220, m = { g: 30, d: 74, h: 12, b: 26 };
+    svg.setAttribute('viewBox', '0 0 ' + L + ' ' + H);
+    const max = Math.max(1, ...donnees.flatMap(p => series.map(s => p[s.cle])));
+    const pas = max <= 5 ? 1 : max <= 10 ? 2 : max <= 25 ? 5 : Math.ceil(max / 5 / 5) * 5;
+    const haut = Math.ceil(max / pas) * pas;
+    const x = i => m.g + (donnees.length === 1 ? 0 : i * (L - m.g - m.d) / (donnees.length - 1));
+    const y = v => H - m.b - v * (H - m.h - m.b) / haut;
+    const styleTexte = getComputedStyle(document.body);
+    const encre2 = styleTexte.getPropertyValue('--bs-secondary-color') || '#64748b';
+    const grille = styleTexte.getPropertyValue('--bs-border-color') || '#e2e8f0';
+
+    for (let v = 0; v <= haut; v += pas) {
+      el('line', { x1: m.g, x2: L - m.d, y1: y(v), y2: y(v), stroke: grille, 'stroke-width': 1 });
+      el('text', { x: m.g - 8, y: y(v) + 4, 'text-anchor': 'end', 'font-size': 11, fill: encre2 }).textContent = v;
+    }
+    donnees.forEach(function (p, i) {
+      if (donnees.length > 8 && i % 2 === 1 && i !== donnees.length - 1) return;
+      el('text', { x: x(i), y: H - 6, 'text-anchor': 'middle', 'font-size': 11, fill: encre2 }).textContent = p.libelle;
+    });
+    const fond = getComputedStyle(svg).getPropertyValue('--bs-body-bg') || '#fff';
+    series.forEach(function (s) {
+      el('polyline', { points: donnees.map((p, i) => x(i) + ',' + y(p[s.cle])).join(' '), fill: 'none',
+                       stroke: s.couleur, 'stroke-width': 2, 'stroke-linejoin': 'round', 'stroke-linecap': 'round' });
+      const dern = donnees[donnees.length - 1];
+      el('circle', { cx: x(donnees.length - 1), cy: y(dern[s.cle]), r: 4.5, fill: s.couleur, stroke: fond, 'stroke-width': 2 });
+    });
+    // libellés directs en bout de courbe, sans chevauchement
+    const fin = donnees[donnees.length - 1];
+    let pos = series.map(s => ({ s: s, y: y(fin[s.cle]) })).sort((a, b) => a.y - b.y);
+    for (let i = 1; i < pos.length; i++) if (pos[i].y - pos[i - 1].y < 14) pos[i].y = pos[i - 1].y + 14;
+    pos.forEach(function (p) {
+      el('text', { x: L - m.d + 10, y: p.y + 4, 'font-size': 12, fill: styleTexte.getPropertyValue('--bs-body-color') || '#0f172a' })
+        .textContent = fin[p.s.cle] + ' ' + p.s.nom.toLowerCase();
+    });
+    // couche de survol : réticule + infobulle
+    const reticule = el('line', { y1: m.h, y2: H - m.b, stroke: encre2, 'stroke-width': 1, opacity: 0 });
+    const capte = el('rect', { x: m.g - 10, y: 0, width: L - m.g - m.d + 20, height: H, fill: 'transparent' });
+    function survol(e) {
+      const r = svg.getBoundingClientRect();
+      const px = (e.clientX - r.left) * (L / r.width);
+      let i = Math.round((px - m.g) / ((L - m.g - m.d) / Math.max(1, donnees.length - 1)));
+      i = Math.max(0, Math.min(donnees.length - 1, i));
+      reticule.setAttribute('x1', x(i)); reticule.setAttribute('x2', x(i)); reticule.setAttribute('opacity', .5);
+      const p = donnees[i];
+      montrerBulle('<strong>' + esc(p.mois) + '</strong>' + series.map(s =>
+        '<br><span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:' + s.couleur + ';margin-right:6px"></span>' +
+        esc(s.nom) + ' : <strong>' + p[s.cle] + '</strong>').join('') + '<br><span style="color:' + encre2 + '">' + p.evalues + ' risque(s) évalué(s)</span>',
+        r.left + x(i) * (r.width / L), e.clientY, zone);
+    }
+    capte.addEventListener('mousemove', survol);
+    capte.addEventListener('mouseleave', function () { reticule.setAttribute('opacity', 0); cacherBulle(); });
+  }
+  dessiner();
+  let minuteur; window.addEventListener('resize', function () { clearTimeout(minuteur); minuteur = setTimeout(dessiner, 150); });
+  const obs = new MutationObserver(dessiner);
+  obs.observe(document.documentElement, { attributes: true, attributeFilter: ['data-bs-theme'] });
+
+  // ---------- Tri du comparatif ----------
+  const table = document.getElementById('dsComparatif');
+  if (table) {
+    table.querySelectorAll('.ds-th-tri').forEach(function (th) {
+      th.setAttribute('tabindex', '0');
+      function trier() {
+        const col = Array.from(th.parentNode.children).indexOf(th);
+        const desc = th.getAttribute('aria-sort') !== 'descending';
+        table.querySelectorAll('.ds-th-tri').forEach(t => t.removeAttribute('aria-sort'));
+        th.setAttribute('aria-sort', desc ? 'descending' : 'ascending');
+        const corps = table.tBodies[0];
+        const lignes = Array.from(corps.rows);
+        const num = th.dataset.type === 'nombre';
+        lignes.sort(function (a, b) {
+          const va = a.cells[col].dataset.v, vb = b.cells[col].dataset.v;
+          const c = num ? parseFloat(va) - parseFloat(vb) : va.localeCompare(vb, 'fr');
+          return desc ? -c : c;
         });
-}
-
-// ========================================== //
-// ===== INITIALISATION ===== //
-// ========================================== //
-document.addEventListener('DOMContentLoaded', function() {
-    // Animation des cartes
-    document.querySelectorAll('.dashboard-card').forEach((card, index) => {
-        card.style.opacity = '0';
-        card.style.transform = 'translateY(20px)';
-        setTimeout(() => {
-            card.style.transition = 'all 0.5s ease';
-            card.style.opacity = '1';
-            card.style.transform = 'translateY(0)';
-        }, index * 60);
+        lignes.forEach(l => corps.appendChild(l));
+      }
+      th.addEventListener('click', trier);
+      th.addEventListener('keydown', e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); trier(); } });
     });
-});
+  }
+})();
 </script>
+{% endif %}
 {% endblock %}

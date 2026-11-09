@@ -1,0 +1,104 @@
+{% extends "base.html" %}
+{% import "_macros/page.html" as pg %}
+{% block title %}Versions et validation — {{ a.nom }}{% endblock %}
+{% block styles %}{{ pg.styles() }}{% endblock %}
+{% block content %}
+<div class="container-fluid">
+  {% call pg.entete(a.nom, 'fa-project-diagram', 'Procédure · versions, validation, revue annuelle et couloirs d\'acteurs', retour=url_for('liste_logigrammes'), libelle_retour='Logigrammes') %}
+    <a class="btn btn-sm btn-outline-primary" href="{{ url_for('editer_logigramme', id=a.id) }}"><i class="fas fa-pen-ruler me-1"></i>Ouvrir l'éditeur</a>
+  {% endcall %}
+
+  <div class="pg-kpis">
+    {{ pg.kpi('Statut', statuts[statut]) }}
+    {{ pg.kpi('Version en vigueur', ('v' ~ a.version_courante) if a.version_courante else 'aucune') }}
+    {{ pg.kpi('Prochaine revue', a.date_revue_prevue.strftime('%d/%m/%Y') if a.date_revue_prevue else '—',
+              '#b42318' if a.date_revue_prevue and a.date_revue_prevue < aujourd_hui else none) }}
+    {{ pg.kpi('Propriétaire', noms.get(a.proprietaire_id, '—')) }}
+  </div>
+
+  {% if statut == 'brouillon' and a.version_courante %}
+  <div class="alert alert-info small"><i class="fas fa-circle-info me-1"></i>Le dessin a été modifié depuis la version {{ a.version_courante }}. Celle-ci reste la version en vigueur jusqu'à la validation de la suivante.</div>
+  {% endif %}
+  {% if a.motif_rejet and statut == 'brouillon' %}
+  <div class="alert alert-warning small"><strong>Renvoyée en brouillon :</strong> {{ a.motif_rejet }}</div>
+  {% endif %}
+
+  <div class="row g-3">
+    <div class="col-lg-7">
+      {% call pg.carte('Vérification du dessin') %}
+        {% if verif.ok and not verif.avertissements %}<div class="text-success small"><i class="fas fa-circle-check me-1"></i>Aucun problème détecté.</div>{% endif %}
+        {% for x in verif.erreurs %}<div class="small text-danger mb-1"><i class="fas fa-circle-xmark me-1"></i>{{ x.message }}</div>{% endfor %}
+        {% for x in verif.avertissements %}<div class="small mb-1" style="color:#b54708;"><i class="fas fa-triangle-exclamation me-1"></i>{{ x.message }}</div>{% endfor %}
+        {% if verif.erreurs %}<div class="pg-second mt-2">Les erreurs empêchent la soumission à validation.</div>{% endif %}
+      {% endcall %}
+
+      {% call pg.carte('Historique des versions') %}
+        {% if versions %}
+        <table class="pg-table"><thead><tr><th>Version</th><th>Nature</th><th>Par</th><th>Date</th><th>Commentaire</th><th></th></tr></thead><tbody>
+        {% for v in versions %}<tr>
+          <td class="pg-ref">v{{ v.version }}</td>
+          <td>{{ {'validation': 'Validation', 'auto_validation': 'Validation par son auteur', 'revue': 'Revue annuelle'}.get(v.nature, v.nature) }}</td>
+          <td>{{ v.user.username if v.user else '—' }}</td><td>{{ v.created_at.strftime('%d/%m/%Y') }}</td>
+          <td class="pg-second">{{ v.commentaire or '' }}</td>
+          <td>{% if v.contenu %}<a href="{{ url_for('logigrammes.version', activite_id=a.id, version_id=v.id) }}">Voir</a>{% endif %}</td>
+        </tr>{% endfor %}</tbody></table>
+        {% else %}{{ pg.vide('Aucune version validée pour le moment.', 'fa-code-branch') }}{% endif %}
+      {% endcall %}
+    </div>
+
+    <div class="col-lg-5">
+      {% call pg.carte('Validation') %}
+        {% if statut == 'brouillon' and (gest or a.proprietaire_id == current_user.id) %}
+          <form method="post" action="{{ url_for('logigrammes.soumettre', activite_id=a.id) }}">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            <button class="btn btn-warning btn-sm" {% if not verif.ok %}disabled title="Corrigez d'abord les erreurs du dessin"{% endif %}><i class="fas fa-paper-plane me-1"></i>Soumettre à validation</button>
+          </form>
+        {% elif statut == 'en_validation' %}
+          <p class="small">Soumise le {{ a.soumis_le.strftime('%d/%m/%Y') if a.soumis_le }} par {{ noms.get(a.soumis_par_id, '—') }}.</p>
+          {% if peut_valider %}
+          <form method="post" action="{{ url_for('logigrammes.valider', activite_id=a.id) }}" class="mb-2">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            <input class="form-control form-control-sm mb-2" name="commentaire" placeholder="Commentaire de validation (facultatif)">
+            <button class="btn btn-success btn-sm"><i class="fas fa-stamp me-1"></i>Valider la version {{ (a.version_courante or 0) + 1 }}</button>
+          </form>
+          {% endif %}
+          {% if gest %}
+          <form method="post" action="{{ url_for('logigrammes.rejeter', activite_id=a.id) }}">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            <textarea class="form-control form-control-sm mb-2" name="motif" rows="2" placeholder="Ce qui doit être corrigé"></textarea>
+            <button class="btn btn-outline-danger btn-sm"><i class="fas fa-rotate-left me-1"></i>Renvoyer en brouillon</button>
+          </form>
+          {% endif %}
+        {% elif statut == 'valide' %}
+          <p class="small mb-2">Version {{ a.version_courante }} validée le {{ a.valide_le.strftime('%d/%m/%Y') if a.valide_le }} par {{ noms.get(a.valide_par_id, '—') }}.</p>
+          {% if gest or a.proprietaire_id == current_user.id %}
+          <form method="post" action="{{ url_for('logigrammes.revue', activite_id=a.id) }}">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            <input class="form-control form-control-sm mb-2" name="commentaire" placeholder="Commentaire de revue (facultatif)">
+            <button class="btn btn-outline-primary btn-sm"><i class="fas fa-calendar-check me-1"></i>Confirmer la revue annuelle (sans modification)</button>
+          </form>
+          {% endif %}
+        {% else %}<p class="small text-secondary mb-0">Rien à faire pour le moment.</p>{% endif %}
+      {% endcall %}
+
+      {% if gest %}
+      {% call pg.carte('Propriétaire de la procédure') %}
+        <form method="post" action="{{ url_for('logigrammes.proprietaire', activite_id=a.id) }}" class="d-flex gap-2">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+          <select class="form-select form-select-sm" name="proprietaire_id"><option value="">—</option>{% for u in utilisateurs %}<option value="{{ u.id }}" {% if u.id == a.proprietaire_id %}selected{% endif %}>{{ u.username }}</option>{% endfor %}</select>
+          <button class="btn btn-sm btn-outline-primary">Enregistrer</button>
+        </form>
+      {% endcall %}
+
+      {% call pg.carte("Couloirs d'acteurs", aide='un acteur par ligne, de haut en bas') %}
+        <form method="post" action="{{ url_for('logigrammes.acteurs', activite_id=a.id) }}">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+          <textarea class="form-control form-control-sm mb-2" name="acteurs" rows="4" placeholder="Comptable&#10;Responsable N+1&#10;Trésorier">{{ (a.acteurs or [])|join('\n') }}</textarea>
+          <button class="btn btn-sm btn-outline-primary">Enregistrer les couloirs</button>
+        </form>
+      {% endcall %}
+      {% endif %}
+    </div>
+  </div>
+</div>
+{% endblock %}

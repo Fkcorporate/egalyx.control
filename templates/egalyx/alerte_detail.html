@@ -1,0 +1,103 @@
+{% extends "base.html" %}
+{% import "_macros/page.html" as pg %}
+{% block title %}Signalement {{ s.code_suivi }}{% endblock %}
+{% block styles %}{{ pg.styles() }}<style>
+  .fil-msg { border-radius: 10px; padding: .6rem .8rem; margin-bottom: .6rem; font-size: .9rem; white-space: pre-wrap; }
+  .fil-msg.lanceur { background: var(--bs-primary-bg-subtle); margin-right: 3rem; }
+  .fil-msg.referent { background: var(--bs-tertiary-bg); margin-left: 3rem; }
+  .fil-msg.interne { background: var(--bs-warning-bg-subtle); margin-left: 3rem; border: 1px dashed var(--bs-warning-border-subtle); }
+  .fil-msg.systeme { color: var(--bs-secondary-color); font-size: .8rem; text-align: center; padding: .2rem; }
+  .fil-meta { font-size: .75rem; color: var(--bs-secondary-color); margin-bottom: .2rem; }
+  .texte-long { white-space: pre-wrap; }
+</style>{% endblock %}
+{% block content %}
+<div class="container-fluid">
+  {{ pg.entete('Signalement ' ~ s.code_suivi, 'fa-bullhorn', s.categorie_libelle ~ ' · reçu le ' ~ s.created_at.strftime('%d/%m/%Y') ~ ' · ' ~ s.statut_libelle, retour=url_for('alertes.liste'), libelle_retour='Signalements') }}
+  <div class="alert alert-secondary small"><i class="fas fa-user-secret me-2"></i>Informations strictement confidentielles. Chaque consultation est journalisée. Ne transmettez pas l’identité du lanceur d’alerte sans son consentement.</div>
+  <div class="row g-3">
+    <div class="col-xl-7">
+      {% call pg.carte('Faits signalés') %}
+        <dl class="pg-dl mb-3">
+          <dt>Catégorie</dt><dd>{{ s.categorie_libelle }}</dd>
+          <dt>Date des faits</dt><dd>{{ s.date_faits or '—' }}</dd>
+          <dt>Lieu</dt><dd>{{ s.lieu or '—' }}</dd>
+          <dt>Lanceur d’alerte</dt><dd>{% if s.anonyme %}Anonyme{% else %}{% set i = s.identite %}{{ i.get('nom') }}{% if i.get('fonction') %} — {{ i.get('fonction') }}{% endif %}{% if i.get('contact') %}<div class="pg-second">{{ i.get('contact') }}</div>{% endif %}{% endif %}</dd>
+        </dl>
+        <div class="texte-long">{{ s.description }}</div>
+        {% if s.personnes_impliquees %}<hr><div class="small fw-semibold mb-1">Personnes impliquées</div><div class="texte-long small">{{ s.personnes_impliquees }}</div>{% endif %}
+      {% endcall %}
+
+      {% call pg.carte('Échanges') %}
+        {% for m in s.messages %}
+          {% if m.auteur == 'systeme' %}<div class="fil-msg systeme">{{ m.contenu }} — {{ m.created_at.strftime('%d/%m/%Y %H:%M') }}</div>
+          {% else %}
+          <div class="fil-msg {{ 'interne' if m.interne else m.auteur }}">
+            <div class="fil-meta">{% if m.auteur == 'lanceur' %}Lanceur d’alerte{% else %}{{ m.referent.username if m.referent else 'Référent' }}{% if m.interne %} · note interne (invisible du lanceur){% endif %}{% endif %} · {{ m.created_at.strftime('%d/%m/%Y %H:%M') }}</div>{{ m.contenu }}</div>
+          {% endif %}
+        {% endfor %}
+        {% if not s.est_cloture %}
+        <form method="post" action="{{ url_for('alertes.action', sid=s.id) }}" class="mt-3">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+          <textarea class="form-control mb-2" name="message" rows="3" placeholder="Message au lanceur d’alerte, ou note interne" required></textarea>
+          <div class="d-flex gap-2 flex-wrap align-items-center">
+            <button class="btn btn-sm btn-primary" name="action" value="message">Envoyer au lanceur d’alerte</button>
+            <button class="btn btn-sm btn-outline-warning" name="action" value="note">Note interne</button>
+            {% if s.date_accuse_reception and not s.date_retour_information %}
+            <div class="form-check ms-2"><input class="form-check-input" type="checkbox" name="retour" value="1" id="retour"><label class="form-check-label small" for="retour">Ce message vaut retour d’information sur les suites</label></div>
+            {% endif %}
+          </div>
+        </form>
+        {% endif %}
+      {% endcall %}
+    </div>
+
+    <div class="col-xl-5">
+      {% call pg.carte('Délais') %}
+        <dl class="pg-dl">
+          <dt>Accusé de réception</dt><dd>{% if s.date_accuse_reception %}<span class="text-success">envoyé le {{ pg.date(s.date_accuse_reception) }}</span>{% else %}à envoyer avant le <strong class="{{ 'text-danger' if s.echeance_accuse < maintenant }}">{{ pg.date(s.echeance_accuse) }}</strong>{% endif %}</dd>
+          <dt>Retour d’information</dt><dd>{% if s.date_retour_information %}<span class="text-success">fait le {{ pg.date(s.date_retour_information) }}</span>{% else %}avant le <strong class="{{ 'text-danger' if s.echeance_retour and s.echeance_retour < maintenant }}">{{ pg.date(s.echeance_retour) }}</strong>{% endif %}</dd>
+          <dt>Référent</dt><dd>{{ s.referent.username if s.referent else 'non attribué' }}</dd>
+        </dl>
+      {% endcall %}
+
+      {% if not s.est_cloture %}
+      {% call pg.carte('Instruction') %}
+        {% if not s.date_accuse_reception %}
+        <form method="post" action="{{ url_for('alertes.action', sid=s.id) }}" class="mb-3">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><input type="hidden" name="action" value="accuser">
+          <textarea class="form-control form-control-sm mb-2" name="message" rows="2" placeholder="Message d’accusé de réception (facultatif : un texte standard est utilisé)"></textarea>
+          <button class="btn btn-sm btn-primary w-100">Accuser réception</button>
+        </form>
+        {% elif s.recevable is none %}
+        <form method="post" action="{{ url_for('alertes.action', sid=s.id) }}" class="mb-3">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><input type="hidden" name="action" value="recevabilite">
+          <div class="small fw-semibold mb-1">Recevabilité</div>
+          <textarea class="form-control form-control-sm mb-2" name="message" rows="2" placeholder="Message au lanceur d’alerte (obligatoire si irrecevable)"></textarea>
+          <div class="d-flex gap-2"><button class="btn btn-sm btn-success flex-fill" name="recevable" value="1">Recevable</button>
+            <button class="btn btn-sm btn-outline-danger flex-fill" name="recevable" value="0">Irrecevable</button></div>
+        </form>
+        {% endif %}
+        <form method="post" action="{{ url_for('alertes.action', sid=s.id) }}" class="mb-3">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><input type="hidden" name="action" value="attribuer">
+          <div class="small fw-semibold mb-1">Référent en charge</div>
+          <div class="input-group input-group-sm">
+            <select class="form-select" name="referent_id">{% for r in referents %}<option value="{{ r.id }}" {% if r.id == s.referent_id %}selected{% endif %}>{{ r.username }}</option>{% endfor %}</select>
+            <button class="btn btn-outline-secondary">Attribuer</button></div>
+        </form>
+        {% if s.recevable %}
+        <form method="post" action="{{ url_for('alertes.action', sid=s.id) }}">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><input type="hidden" name="action" value="cloturer">
+          <div class="small fw-semibold mb-1">Clôture</div>
+          <select class="form-select form-select-sm mb-2" name="issue" required><option value="">— issue —</option><option value="cloture_fonde">Faits établis : mesures prises</option><option value="cloture_non_fonde">Faits non établis</option></select>
+          <textarea class="form-control form-control-sm mb-2" name="message" rows="3" placeholder="Conclusion communiquée au lanceur d’alerte" required></textarea>
+          <button class="btn btn-sm btn-outline-dark w-100">Clôturer le dossier</button>
+        </form>
+        {% endif %}
+      {% endcall %}
+      {% else %}
+      {% call pg.carte('Clôture') %}<p class="small mb-0 texte-long">{{ s.motif_cloture or '—' }}</p>{% endcall %}
+      {% endif %}
+    </div>
+  </div>
+</div>
+{% endblock %}

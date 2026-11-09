@@ -1,0 +1,84 @@
+{% extends base_layout %}
+{% import "_macros/page.html" as pg %}
+{% import "egalyx/_recos.html" as rc %}
+{% block title %}{{ l.reference }}{% endblock %}
+{% block styles %}{{ pg.styles() }}{% endblock %}
+{% block content %}
+<div class="container-fluid py-3">
+  {% call pg.entete(l.reference, 'fa-clipboard-check', sources.get(l.source, l.source) ~ (' · ' ~ l.origine if l.origine else ''), retour=url_for('recommandations.miennes'), libelle_retour='Mes recommandations') %}
+    {% if l.lien and l.type != 'externe' and not current_user.is_operateur %}<a class="btn btn-sm btn-outline-secondary" href="{{ l.lien }}"><i class="fas fa-up-right-from-square me-1"></i>Voir dans {{ 'l\'audit' if l.type == 'audit' else 'le contrôle N2' }}</a>{% endif %}
+    {% if l.type == 'externe' and est_gestionnaire %}<a class="btn btn-sm btn-outline-primary" href="{{ url_for('recommandations.externe_modifier', reco_id=l.id) }}"><i class="fas fa-pen me-1"></i>Modifier</a>{% endif %}
+  {% endcall %}
+
+  <div class="row g-3">
+    <div class="col-lg-7">
+      {% call pg.carte('Recommandation') %}
+        <p class="mb-3" style="white-space: pre-wrap;">{{ l.description or l.titre }}</p>
+        <dl class="pg-dl">
+          <dt>Statut</dt><dd>{{ rc.badge_statut(l.statut, statuts) }}</dd>
+          <dt>Priorité</dt><dd>{{ rc.badge_priorite(l.priorite, priorites) }}</dd>
+          <dt>Responsable</dt><dd>{% if l.responsable %}{{ l.responsable.username }}{% else %}<span class="text-danger">Aucun — à désigner</span>{% endif %}</dd>
+          <dt>Échéance</dt><dd>{{ rc.echeance(l) }}</dd>
+          <dt>Avancement</dt><dd>{{ rc.barre(l.progression) }}</dd>
+        </dl>
+        {% if l.motif_refus and l.statut != 'cloturee' %}<div class="alert alert-warning mt-3 mb-0 small"><strong>Clôture refusée :</strong> {{ l.motif_refus }}</div>{% endif %}
+      {% endcall %}
+
+      {% call pg.carte('Historique') %}
+        {% if suivis %}
+        <ul class="list-unstyled mb-0">
+          {% set libelles = {'creation': 'Création', 'avancement': 'Avancement', 'demande_cloture': 'Clôture demandée', 'cloture_validee': 'Clôture validée', 'cloture_refusee': 'Clôture refusée'} %}
+          {% for s in suivis %}
+          <li class="mb-3">
+            <div class="small"><strong>{{ libelles.get(s.action, s.action) }}</strong>{% if s.progression is not none %} · {{ s.progression }} %{% endif %}
+              <span class="pg-second">— {{ s.user.username if s.user else '' }}, {{ s.created_at.strftime('%d/%m/%Y %H:%M') if s.created_at }}</span></div>
+            {% if s.commentaire %}<div class="small" style="white-space: pre-wrap;">{{ s.commentaire }}</div>{% endif %}
+            {% if s.fichier %}<a class="small" href="{{ url_for('recommandations.preuve', suivi_id=s.id) }}"><i class="fas fa-paperclip me-1"></i>{{ s.nom_fichier or 'Preuve' }}</a>{% endif %}
+          </li>
+          {% endfor %}
+        </ul>
+        {% else %}{{ pg.vide('Aucun suivi pour le moment.', 'fa-clock-rotate-left') }}{% endif %}
+      {% endcall %}
+    </div>
+
+    <div class="col-lg-5">
+      {% if peut_decider %}
+      {% call pg.carte('Décider de la clôture') %}
+        <p class="small text-secondary">Vérifiez les preuves jointes dans l'historique avant de décider.</p>
+        <form method="post" action="{{ url_for('recommandations.cloture', source=l.type, reco_id=l.id) }}">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+          <label class="form-label small" for="commentaire_cloture">Commentaire (obligatoire pour refuser)</label>
+          <textarea class="form-control form-control-sm mb-2" id="commentaire_cloture" name="commentaire" rows="3"></textarea>
+          <div class="d-flex gap-2">
+            <button class="btn btn-success btn-sm" name="decision" value="valider"><i class="fas fa-check me-1"></i>Valider la clôture</button>
+            <button class="btn btn-outline-danger btn-sm" name="decision" value="refuser"><i class="fas fa-rotate-left me-1"></i>Refuser</button>
+          </div>
+        </form>
+      {% endcall %}
+      {% elif l.statut == 'a_valider' %}
+      {% call pg.carte('Clôture demandée') %}<p class="small mb-0">Un gestionnaire (autre que le responsable) doit valider la clôture.</p>{% endcall %}
+      {% endif %}
+
+      {% if peut_avancer and l.statut != 'a_valider' %}
+      {% call pg.carte('Déclarer l\'avancement') %}
+        <form method="post" enctype="multipart/form-data" action="{{ url_for('recommandations.avancement', source=l.type, reco_id=l.id) }}">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+          <label class="form-label small" for="progression">Avancement : <strong id="pval">{{ l.progression }}</strong> %</label>
+          <input type="range" class="form-range" min="0" max="100" step="5" id="progression" name="progression" value="{{ l.progression }}"
+                 oninput="document.getElementById('pval').textContent=this.value; document.getElementById('bloc-cloture').hidden = this.value < 100;">
+          <label class="form-label small mt-2" for="commentaire">Ce qui a été fait</label>
+          <textarea class="form-control form-control-sm" id="commentaire" name="commentaire" rows="3" required></textarea>
+          <label class="form-label small mt-2" for="preuve">Preuve (procédure, compte rendu, capture…)</label>
+          <input class="form-control form-control-sm" type="file" id="preuve" name="preuve">
+          <div class="form-check mt-2" id="bloc-cloture" {% if l.progression < 100 %}hidden{% endif %}>
+            <input class="form-check-input" type="checkbox" name="demander_cloture" value="1" id="demander_cloture">
+            <label class="form-check-label small" for="demander_cloture">Demander la clôture (une preuve est exigée)</label>
+          </div>
+          <button class="btn btn-primary btn-sm mt-3"><i class="fas fa-floppy-disk me-1"></i>Enregistrer</button>
+        </form>
+      {% endcall %}
+      {% endif %}
+    </div>
+  </div>
+</div>
+{% endblock %}

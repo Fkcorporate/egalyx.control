@@ -1,0 +1,71 @@
+{% extends "base.html" %}
+{% import "_macros/page.html" as pg %}
+{% block title %}Paramètres des risques{% endblock %}
+{% block styles %}{{ pg.styles() }}{% endblock %}
+{% macro v(nom, actuel, defaut) -%}{{ (form.get(nom) if form else (actuel if actuel is not none else defaut)) }}{%- endmacro %}
+{% block content %}
+<div class="container" style="max-width: 1000px;">
+  {{ pg.entete('Paramètres des risques', 'fa-sliders', 'Règle de cotation, appétence au risque et listes LCB-FT de votre organisation') }}
+  <form method="post">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+
+    {% call pg.carte('Seuils de cotation (matrice 5 × 5, score de 1 à 25)', aide='Par défaut : 4 / 10 / 16') %}
+      <div class="row g-3">
+        <div class="col-md-4"><label class="form-label">Faible jusqu’à</label><input class="form-control" name="seuil_faible" inputmode="decimal" value="{{ v('seuil_faible', p.seuil_faible if p else none, defaut.seuils[0]) }}" required></div>
+        <div class="col-md-4"><label class="form-label">Moyen jusqu’à</label><input class="form-control" name="seuil_moyen" inputmode="decimal" value="{{ v('seuil_moyen', p.seuil_moyen if p else none, defaut.seuils[1]) }}" required></div>
+        <div class="col-md-4"><label class="form-label">Élevé jusqu’à</label><input class="form-control" name="seuil_eleve" inputmode="decimal" value="{{ v('seuil_eleve', p.seuil_eleve if p else none, defaut.seuils[2]) }}" required></div>
+      </div>
+      <div class="pg-second mt-2">Au-delà du seuil « Élevé » : Critique. Toute modification recalcule immédiatement toutes les évaluations de votre organisation.</div>
+    {% endcall %}
+
+    {% call pg.carte('Réduction du risque par niveau de maîtrise', aide='Score net = impact × probabilité × (1 − taux)') %}
+      {% set taux = p.taux() if p else defaut.taux %}
+      <div class="row g-3">
+        {% for n, lib in [(1, 'Très faible'), (2, 'Faible'), (3, 'Moyenne'), (4, 'Bonne'), (5, 'Très bonne')] %}
+        <div class="col"><label class="form-label small">{{ n }} — {{ lib }}</label>
+          <div class="input-group input-group-sm"><input class="form-control" name="taux_{{ n }}" inputmode="decimal" value="{{ form.get('taux_' ~ n) if form else (taux[n] * 100)|round(1) }}"><span class="input-group-text">%</span></div></div>
+        {% endfor %}
+      </div>
+    {% endcall %}
+
+    {% call pg.carte('Appétence au risque', aide='Score net maximal que la direction accepte sans traitement') %}
+      <div class="row g-3">
+        <div class="col-md-4"><label class="form-label">Seuil global</label><input class="form-control" name="appetence_score_net" inputmode="decimal" placeholder="ex. 10" value="{{ v('appetence_score_net', p.appetence_score_net if p else none, '') }}"></div>
+        <div class="col-md-8"><label class="form-label">Déclaration d’appétence (validée par la direction)</label>
+          <textarea class="form-control" name="appetence_declaration" rows="2" placeholder="ex. Aucune tolérance pour les risques de conformité ; tolérance modérée pour les risques opérationnels…">{{ form.get('appetence_declaration') if form else (p.appetence_declaration if p and p.appetence_declaration else '') }}</textarea></div>
+      </div>
+      {% if categories %}
+      <div class="fw-semibold small mt-3 mb-2">Seuil par catégorie (vide = seuil global)</div>
+      <div class="row g-2">
+        {% set par_cat = (p.appetence_par_categorie if p and p.appetence_par_categorie else {}) %}
+        {% for cat in categories %}
+        <div class="col-md-4"><div class="input-group input-group-sm"><span class="input-group-text text-truncate" style="max-width: 60%;" title="{{ cat }}">{{ cat }}</span>
+          <input class="form-control" name="appetence_cat_{{ loop.index0 }}" inputmode="decimal" value="{{ form.get('appetence_cat_' ~ loop.index0) if form else (par_cat.get(cat) if par_cat.get(cat) is not none else '') }}"></div></div>
+        {% endfor %}
+      </div>
+      {% endif %}
+      <div class="pg-second mt-2">Les risques au-delà de l’appétence sont signalés sur le tableau de bord stratégique et sur leur fiche.</div>
+    {% endcall %}
+
+
+    {% call pg.carte('LCB-FT : pays et secteurs à risque', aide=('Listes GAFI à jour du ' ~ p.listes_gafi_maj_le.strftime('%d/%m/%Y')) if p and p.listes_gafi_maj_le else 'Listes GAFI du 19/06/2026 par défaut') %}
+      <div class="row g-3">
+        <div class="col-md-4"><label class="form-label small">Liste noire du GAFI (une ligne par pays)</label>
+          <textarea class="form-control form-control-sm" name="pays_liste_noire" rows="8">{{ form.get('pays_liste_noire') if form else ((p.pays_liste_noire if p and p.pays_liste_noire else defaut.noire)|join('\n')) }}</textarea></div>
+        <div class="col-md-4"><label class="form-label small">Liste grise du GAFI</label>
+          <textarea class="form-control form-control-sm" name="pays_liste_grise" rows="8">{{ form.get('pays_liste_grise') if form else ((p.pays_liste_grise if p and p.pays_liste_grise else defaut.grise)|join('\n')) }}</textarea></div>
+        <div class="col-md-4"><label class="form-label small">Secteurs sensibles (mots-clés)</label>
+          <textarea class="form-control form-control-sm" name="secteurs_sensibles" rows="8">{{ form.get('secteurs_sensibles') if form else ((p.secteurs_sensibles if p and p.secteurs_sensibles else defaut.secteurs)|join('\n')) }}</textarea></div>
+        <div class="col-md-4"><label class="form-label small">Montant annuel jugé élevé</label><input class="form-control form-control-sm" name="seuil_montant_lcb" inputmode="decimal" value="{{ v('seuil_montant_lcb', p.seuil_montant_lcb if p else none, '') }}"></div>
+      </div>
+      <div class="pg-second mt-2">Le GAFI révise ses listes à chaque plénière (février, juin, octobre) : vérifiez-les sur fatf-gafi.org après chaque plénière.</div>
+    {% endcall %}
+
+    <div class="d-flex gap-2 mb-4">
+      <button class="btn btn-primary" name="action" value="enregistrer"><i class="fas fa-check me-1"></i>Enregistrer</button>
+      <button class="btn btn-outline-secondary" name="action" value="listes_gafi" formnovalidate onclick="return confirm('Remplacer les listes de pays par celles du GAFI du 19 juin 2026 ?');">Rétablir les listes GAFI de juin 2026</button>
+    </div>
+  </form>
+  {% include 'egalyx/_valideur_operateurs.html' %}
+</div>
+{% endblock %}

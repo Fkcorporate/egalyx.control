@@ -1,0 +1,63 @@
+{% extends "base.html" %}
+{% import "_macros/page.html" as pg %}
+{% block title %}Signature — {{ o.reference }}{% endblock %}
+{% block styles %}{{ pg.styles() }}<style>.empreinte { font-family: ui-monospace, Menlo, Consolas, monospace; font-size: .78rem; word-break: break-all; }</style>{% endblock %}
+{% block content %}
+<div class="container" style="max-width: 1000px;">
+  {{ pg.entete('Signature : ' ~ d.libelle, 'fa-file-signature', (o.reference or '') ~ ' — ' ~ d.titre(o), retour=d.lien(o), libelle_retour='Document') }}
+
+  {% call pg.carte('Signatures') %}
+    {% if signatures %}
+    <table class="pg-table"><thead><tr><th>Signataire</th><th>Qualité</th><th>Date</th><th>Méthode</th><th>Validité</th><th></th></tr></thead><tbody>
+      {% for s in signatures %}
+      <tr>
+        <td><strong>{{ s.signataire.username if s.signataire else '?' }}</strong>{% if s.commentaire %}<div class="pg-second">{{ s.commentaire }}</div>{% endif %}</td>
+        <td>{{ ROLES.get(s.role_signataire, s.role_signataire) }}</td>
+        <td>{{ pg.date(s.created_at, True) }}<div class="pg-second">IP {{ s.adresse_ip }}</div></td>
+        <td class="small">{{ 'Code e-mail' if s.methode == 'code_email' else 'Mot de passe' }}</td>
+        <td>{% if s.revoquee %}<span class="badge text-bg-secondary">Révoquée</span>
+            {% elif s.valide %}<span class="badge text-bg-success"><i class="fas fa-check me-1"></i>Valide</span>
+            {% else %}<span class="badge text-bg-warning" title="Le document a changé depuis la signature">Document modifié depuis</span>{% endif %}</td>
+        <td class="text-end">{% if not s.revoquee and (s.signataire_id == current_user.id or current_user.is_client_admin or current_user.role in ('admin', 'super_admin')) %}
+          <form method="post" action="{{ url_for('signature.revoquer', sig_id=s.id) }}" onsubmit="return confirm('Révoquer cette signature ?');">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><button class="btn btn-sm btn-link text-danger p-0">Révoquer</button></form>{% endif %}</td>
+      </tr>
+      {% endfor %}
+    </tbody></table>
+    {% else %}{{ pg.vide('Aucune signature.', 'fa-file-signature') }}{% endif %}
+    <div class="pg-second mt-3">Empreinte actuelle du contenu (SHA-256) : <span class="empreinte">{{ empreinte }}</span><br>
+      Une signature reste valide tant que le contenu signé est inchangé (les changements de statut ou d’avancement ne l’invalident pas).</div>
+  {% endcall %}
+
+  {% call pg.carte('Signer ce document') %}
+    {% if not peut_signer %}
+      <p class="small mb-0 text-secondary"><i class="fas fa-lock me-1"></i>Vous n’avez pas la permission « Signer les documents ». Demandez-la à l’administrateur de votre organisation.</p>
+    {% elif deja_signe %}
+      <p class="small mb-0"><i class="fas fa-check-circle text-success me-1"></i>Vous avez déjà signé la version actuelle de ce document.</p>
+    {% else %}
+    <p class="small">En signant, vous attestez avoir pris connaissance de la version actuelle du document et l’approuver dans la qualité choisie.
+      Signature interne tracée — ce n’est pas une signature électronique qualifiée au sens d’eIDAS.</p>
+    {% if par_email and not code_envoye %}
+      <form method="post" action="{{ url_for('signature.envoyer_code', type_doc=type_doc, doc_id=o.id) }}">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <button class="btn btn-primary btn-sm"><i class="fas fa-envelope me-1"></i>Recevoir un code de signature ({{ current_user.email }})</button>
+      </form>
+    {% else %}
+      <form method="post" action="{{ url_for('signature.signer', type_doc=type_doc, doc_id=o.id) }}" class="row g-2" autocomplete="off">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <div class="col-md-4"><label class="form-label small">Qualité</label>
+          <select class="form-select form-select-sm" name="role">{% for k, l in ROLES.items() %}<option value="{{ k }}" {% if k == 'valideur' %}selected{% endif %}>{{ l }}</option>{% endfor %}</select></div>
+        {% if par_email %}
+        <div class="col-md-3"><label class="form-label small">Code reçu par e-mail</label><input class="form-control form-control-sm" name="code" inputmode="numeric" maxlength="6" required></div>
+        {% else %}
+        <div class="col-md-3"><label class="form-label small">Votre mot de passe</label><input class="form-control form-control-sm" type="password" name="mot_de_passe" autocomplete="current-password" required></div>
+        {% endif %}
+        <div class="col-md-5"><label class="form-label small">Commentaire (facultatif)</label><input class="form-control form-control-sm" name="commentaire" maxlength="2000"></div>
+        <div class="col-12"><button class="btn btn-primary btn-sm"><i class="fas fa-file-signature me-1"></i>Signer</button>
+          {% if par_email %}<span class="pg-second ms-2">Code valable 10 minutes.</span>{% endif %}</div>
+      </form>
+    {% endif %}
+    {% endif %}
+  {% endcall %}
+</div>
+{% endblock %}

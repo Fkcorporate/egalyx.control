@@ -1,0 +1,65 @@
+{% extends "base.html" %}
+{% import "_macros/page.html" as pg %}
+{% block title %}Bibliothèque de risques{% endblock %}
+{% block styles %}{{ pg.styles() }}<style>
+  .bib-secteurs { display: flex; gap: .4rem; flex-wrap: wrap; margin-bottom: 1rem; }
+  .bib-risque td { vertical-align: top; }
+  .bib-note { display: inline-flex; width: 1.6rem; height: 1.6rem; border-radius: 6px; align-items: center; justify-content: center; font-weight: 700; font-size: .8rem; background: var(--bs-tertiary-bg); }
+</style>{% endblock %}
+{% block content %}
+<div class="container-fluid">
+  {{ pg.entete('Bibliothèque de risques', 'fa-book-open', '84 risques types rédigés par secteur, avec leurs causes, conséquences et référentiels — à importer dans vos cartographies') }}
+  <div class="bib-secteurs">
+    {% for code, s in secteurs.items() %}
+    <a class="btn btn-sm {{ 'btn-primary' if code == secteur else 'btn-outline-secondary' }}" href="{{ url_for('bibliotheque.page', secteur=code) }}">{{ s.nom }} <span class="badge text-bg-light ms-1">{{ s.risques|length }}</span></a>
+    {% endfor %}
+  </div>
+  <form method="post">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <input type="hidden" name="secteur" value="{{ secteur }}">
+    {% call pg.carte(secteurs[secteur].nom, aide='Référentiels : ' ~ secteurs[secteur].referentiels) %}
+      <div class="table-responsive"><table class="pg-table bib-risque">
+        <thead><tr><th><input class="form-check-input" type="checkbox" id="tout" checked aria-label="Tout sélectionner"></th><th>Risque</th><th>Causes</th><th>Conséquences</th><th class="text-center" title="Impact × probabilité de départ">I × P</th><th>Référentiel</th></tr></thead>
+        <tbody>
+        {% for r in risques %}
+          <tr>
+            <td><input class="form-check-input choix" type="checkbox" name="risques" value="{{ r.index }}" checked aria-label="{{ r.intitule }}"></td>
+            <td><strong>{{ r.intitule }}</strong><div class="pg-second">{{ r.categorie }}</div></td>
+            <td class="small">{{ r.cause }}</td>
+            <td class="small">{{ r.consequences }}</td>
+            <td class="text-center text-nowrap"><span class="bib-note">{{ r.impact }}</span> × <span class="bib-note">{{ r.probabilite }}</span>
+              <div class="pg-second">{{ cotation_niveau(r.impact * r.probabilite) if cotation_niveau is defined else '' }}</div></td>
+            <td class="small text-secondary">{{ r.referentiel }}</td>
+          </tr>
+        {% endfor %}
+        </tbody>
+      </table></div>
+    {% endcall %}
+    {% call pg.carte('Importer la sélection') %}
+      {% if cartos %}
+      <div class="d-flex gap-2 flex-wrap align-items-end">
+        <div><label class="form-label small mb-1" for="carto">Dans la cartographie</label>
+          <select class="form-select form-select-sm" id="carto" name="cartographie_id" required style="min-width: 320px;">
+            {% for c in cartos %}<option value="{{ c.id }}">{{ c.nom }}</option>{% endfor %}</select></div>
+        <button class="btn btn-sm btn-primary"><i class="fas fa-file-import me-1"></i>Importer <span id="nbChoix">{{ risques|length }}</span> risque(s)</button>
+      </div>
+      <div class="pg-second mt-2">Les risques déjà présents dans la cartographie (même intitulé) sont ignorés. Impact et probabilité sont des valeurs de départ :
+        l’évaluation (brute et nette) reste à faire par les propriétaires de risques.</div>
+      {% else %}
+      <p class="small mb-0">Créez d’abord une cartographie, puis revenez importer ces risques.
+        <a href="{{ url_for('liste_cartographies') }}">Cartographies</a></p>
+      {% endif %}
+    {% endcall %}
+  </form>
+</div>
+{% endblock %}
+{% block scripts %}
+<script>
+  (function () {
+    var cases = document.querySelectorAll('.choix'), tout = document.getElementById('tout'), nb = document.getElementById('nbChoix');
+    function maj() { var n = Array.prototype.filter.call(cases, function (c) { return c.checked; }).length; if (nb) nb.textContent = n; tout.checked = n === cases.length; tout.indeterminate = n > 0 && n < cases.length; }
+    tout.addEventListener('change', function () { cases.forEach(function (c) { c.checked = tout.checked; }); maj(); });
+    cases.forEach(function (c) { c.addEventListener('change', maj); });
+  })();
+</script>
+{% endblock %}

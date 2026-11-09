@@ -1,0 +1,100 @@
+{% extends "base.html" %}
+{% import "_macros/page.html" as pg %}
+{% block title %}Constats et réponses — {{ a.reference }}{% endblock %}
+{% block styles %}{{ pg.styles() }}<style>.c5 dt { min-width: 120px; } .pos-accord { color: #067647; } .pos-partiel { color: #b54708; } .pos-desaccord { color: #b42318; }</style>{% endblock %}
+{% block content %}
+<div class="container-fluid">
+  {% call pg.entete('Constats et réponses de l\'audité', 'fa-comments', a.reference ~ ' · ' ~ a.titre, retour=url_for('detail_audit', id=a.id), libelle_retour='Fiche de l\'audit') %}{% endcall %}
+
+  <div class="pg-kpis">
+    {{ pg.kpi('État du rapport', etats.get(a.etat_rapport, 'Brouillon')) }}
+    {{ pg.kpi('Réponses reçues', suivi.repondus ~ ' / ' ~ suivi.constats if suivi else '—') }}
+    {{ pg.kpi('Date limite de réponse', a.date_limite_reponses.strftime('%d/%m/%Y') if a.date_limite_reponses else '—',
+              '#b42318' if a.date_limite_reponses and a.date_limite_reponses < aujourd_hui and a.etat_rapport == 'provisoire' else none) }}
+    {{ pg.kpi('Déclarations d\'indépendance', (suivi.independance.membres|length - suivi.independance.manquantes|length) ~ ' / ' ~ suivi.independance.membres|length if suivi else '—',
+              '#b42318' if suivi and suivi.independance.manquantes else none) }}
+  </div>
+
+  {% if gest and a.etat_rapport != 'definitif' %}
+  {% call pg.carte('Étapes du rapport') %}
+    <div class="d-flex flex-wrap gap-3 align-items-end">
+      {% if a.etat_rapport != 'provisoire' %}
+      <form method="post" action="{{ url_for('audit_plus.rapport_provisoire', audit_id=a.id) }}" class="d-flex gap-2 align-items-end">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <div><label class="form-label small mb-1" for="date_limite">Réponses attendues avant le</label>
+          <input type="date" class="form-control form-control-sm" id="date_limite" name="date_limite" value="{{ defaut_limite.isoformat() }}"></div>
+        <button class="btn btn-sm btn-warning"><i class="fas fa-paper-plane me-1"></i>Émettre le rapport provisoire</button>
+      </form>
+      <div class="small text-secondary">Les audités sont prévenus et répondent constat par constat. Toute l'équipe doit avoir signé sa déclaration d'indépendance.</div>
+      {% else %}
+      <form method="post" action="{{ url_for('audit_plus.rapport_definitif', audit_id=a.id) }}">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <button class="btn btn-sm btn-success"><i class="fas fa-stamp me-1"></i>Émettre le rapport définitif</button>
+      </form>
+      <div class="small text-secondary">Possible quand chaque constat a une réponse, ou après la date limite. Ensuite, tout est figé.</div>
+      {% endif %}
+    </div>
+  {% endcall %}
+  {% endif %}
+
+  {% for c in constats %}
+  <div class="pg-carte" id="constat-{{ c.id }}">
+    <div class="pg-carte-titre"><h2>{{ c.reference }}</h2>
+      <span class="pg-aide">{{ (c.criticite or c.gravite or '')|capitalize }}</span></div>
+    <div class="row g-3">
+      <div class="col-lg-6">
+        <dl class="pg-dl c5">
+          <dt>Constat</dt><dd style="white-space: pre-wrap;">{{ c.description }}</dd>
+          <dt>Critère</dt><dd style="white-space: pre-wrap;">{{ c.critere or '—' }}</dd>
+          <dt>Cause</dt><dd style="white-space: pre-wrap;">{{ c.cause_racine or '—' }}</dd>
+          <dt>Conséquence</dt><dd style="white-space: pre-wrap;">{{ c.consequence or '—' }}</dd>
+          <dt>Recommandations</dt><dd>{% for r in c.recommandations %}<div class="small">• {{ r.reference }} — {{ (r.description or '')[:140] }}</div>{% else %}—{% endfor %}</dd>
+        </dl>
+        {% if gest and a.etat_rapport != 'definitif' %}
+        <details class="mt-2"><summary class="small">Compléter le constat (critère, cause, conséquence)</summary>
+          <form method="post" class="mt-2">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            <input type="hidden" name="constatation_id" value="{{ c.id }}"><input type="hidden" name="quoi" value="5c">
+            <label class="form-label small" for="critere-{{ c.id }}">Critère (référentiel, procédure, loi non respectés)</label>
+            <textarea class="form-control form-control-sm mb-2" id="critere-{{ c.id }}" name="critere" rows="2">{{ c.critere or '' }}</textarea>
+            <label class="form-label small" for="cause-{{ c.id }}">Cause</label>
+            <textarea class="form-control form-control-sm mb-2" id="cause-{{ c.id }}" name="cause_racine" rows="2">{{ c.cause_racine or '' }}</textarea>
+            <label class="form-label small" for="consequence-{{ c.id }}">Conséquence (effet ou risque)</label>
+            <textarea class="form-control form-control-sm mb-2" id="consequence-{{ c.id }}" name="consequence" rows="2">{{ c.consequence or '' }}</textarea>
+            <button class="btn btn-sm btn-outline-primary">Enregistrer</button>
+          </form>
+        </details>
+        {% endif %}
+      </div>
+      <div class="col-lg-6">
+        <h3 class="h6">Réponse de l'audité</h3>
+        {% if c.reponse_audite %}
+          <div class="small mb-1"><strong class="pos-{{ c.position_audite }}">{{ positions.get(c.position_audite, '—') }}</strong>
+            <span class="pg-second">— {{ utilisateurs[c.reponse_par_id].username if c.reponse_par_id in utilisateurs else '' }}{{ ', ' ~ c.reponse_le.strftime('%d/%m/%Y') if c.reponse_le }}</span></div>
+          <div class="small" style="white-space: pre-wrap;">{{ c.reponse_audite }}</div>
+          {% if c.plan_audite %}<div class="small mt-2"><strong>Plan d'action :</strong> {{ c.plan_audite }}</div>{% endif %}
+          {% if c.date_engagement %}<div class="small"><strong>Engagement :</strong> {{ c.date_engagement.strftime('%d/%m/%Y') }}</div>{% endif %}
+        {% elif a.etat_rapport != 'provisoire' %}<div class="small text-secondary">Les réponses s'ouvrent à l'émission du rapport provisoire.</div>
+        {% else %}<div class="small text-secondary">En attente de réponse.</div>{% endif %}
+        {% if peut_repondre %}
+        <details class="mt-2" {% if not c.reponse_audite %}open{% endif %}><summary class="small">{{ 'Modifier la réponse' if c.reponse_audite else 'Répondre' }}</summary>
+          <form method="post" class="mt-2">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            <input type="hidden" name="constatation_id" value="{{ c.id }}"><input type="hidden" name="quoi" value="reponse">
+            <div class="d-flex gap-3 mb-2">{% for k, v in positions.items() %}<label class="small"><input type="radio" name="position" value="{{ k }}" {% if c.position_audite == k %}checked{% endif %} required> {{ v }}</label>{% endfor %}</div>
+            <textarea class="form-control form-control-sm mb-2" name="reponse" rows="3" placeholder="Votre réponse au constat" required>{{ c.reponse_audite or '' }}</textarea>
+            <textarea class="form-control form-control-sm mb-2" name="plan" rows="2" placeholder="Plan d'action engagé (obligatoire en cas d'accord)">{{ c.plan_audite or '' }}</textarea>
+            <label class="form-label small" for="eng-{{ c.id }}">Date d'engagement</label>
+            <input type="date" class="form-control form-control-sm mb-2" id="eng-{{ c.id }}" name="date_engagement" value="{{ c.date_engagement.isoformat() if c.date_engagement else '' }}" style="max-width: 200px;">
+            <button class="btn btn-sm btn-primary">Enregistrer la réponse</button>
+          </form>
+        </details>
+        {% endif %}
+      </div>
+    </div>
+  </div>
+  {% else %}
+  {% call pg.carte() %}{{ pg.vide('Aucun constat dans cet audit.', 'fa-magnifying-glass') }}{% endcall %}
+  {% endfor %}
+</div>
+{% endblock %}

@@ -1,0 +1,85 @@
+{% extends "base.html" %}
+{% import "_macros/page.html" as pg %}
+{% block title %}Modules — {{ client.nom }}{% endblock %}
+{% block styles %}{{ pg.styles() }}<style>
+  .mc-profils { display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap: .6rem; }
+  .mc-profil { text-align: left; border: 1px solid var(--bs-border-color); border-radius: 10px; padding: .7rem .8rem; background: var(--bs-body-bg); }
+  .mc-profil:hover { border-color: var(--bs-primary); }
+  .mc-profil strong { display: block; font-size: .9rem; }
+  .mc-profil span { font-size: .78rem; color: var(--bs-secondary-color); }
+  .mc-groupe { margin-bottom: 1rem; }
+  .mc-groupe h3 { font-size: .78rem; text-transform: uppercase; letter-spacing: .04em; color: var(--bs-secondary-color); font-weight: 650; margin: 0 0 .5rem; }
+  .mc-modules { display: grid; grid-template-columns: repeat(auto-fit, minmax(270px, 1fr)); gap: .5rem; }
+  .mc-module { display: flex; gap: .7rem; align-items: flex-start; border: 1px solid var(--bs-border-color); border-radius: 10px; padding: .65rem .75rem; cursor: pointer; }
+  .mc-module:has(input:checked) { border-color: var(--bs-primary); background: var(--bs-primary-bg-subtle); }
+  .mc-module input { margin-top: .2rem; }
+  .mc-module small { display: block; color: var(--bs-secondary-color); font-size: .78rem; }
+  .mc-barre { position: sticky; bottom: 0; background: var(--bs-body-bg); border-top: 1px solid var(--bs-border-color); padding: .75rem 0; display: flex; gap: .5rem; align-items: center; flex-wrap: wrap; z-index: 3; }
+</style>{% endblock %}
+{% block content %}
+<div class="container" style="max-width: 1100px;">
+  {{ pg.entete('Modules de ' ~ client.nom, 'fa-puzzle-piece', client.reference ~ ' · formule ' ~ (client.formule.nom if client.formule else '—') ~ ' · ' ~ nb_utilisateurs ~ ' utilisateur(s) actif(s)', retour=url_for('super_admin_client_detail', id=client.id), libelle_retour='Fiche client') }}
+
+  {% if actifs is none %}
+  <div class="alert alert-info small"><i class="fas fa-circle-info me-2"></i><strong>Aucune restriction pour l’instant</strong> : ce client a accès à tout ce que permettent sa formule et les permissions de ses utilisateurs.
+    Les cases ci-dessous sont une proposition tirée de sa formule : enregistrez pour l’appliquer.</div>
+  {% else %}
+  <div class="alert alert-success small"><i class="fas fa-check me-2"></i><strong>{{ actifs|length }} module(s) activé(s).</strong>
+    Les autres sont invisibles et inaccessibles pour tous les utilisateurs de {{ client.nom }}, quel que soit leur rôle.</div>
+  {% endif %}
+
+  {% call pg.carte('1. Partir d’un profil', aide='Un clic coche les modules ; ajustez ensuite') %}
+    <div class="mc-profils">
+      {% for code, p in profils.items() %}
+      <button type="button" class="mc-profil" data-modules="{{ p[2]|join(',') }}"><strong>{{ p[0] }}</strong><span>{{ p[1] }}</span></button>
+      {% endfor %}
+    </div>
+  {% endcall %}
+
+  <form method="post" id="formModules">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    {% call pg.carte('2. Ajuster les modules') %}
+      {% for g in groupes %}
+      <div class="mc-groupe">
+        <h3>{{ g }}</h3>
+        <div class="mc-modules">
+          {% for code, nom, desc, groupe, perms, _cles in catalogue if groupe == g %}
+          <label class="mc-module">
+            <input class="form-check-input" type="checkbox" name="modules" value="{{ code }}" {% if code in proposition %}checked{% endif %}>
+            <span><strong>{{ nom }}</strong><small>{{ desc }}</small></span>
+          </label>
+          {% endfor %}
+        </div>
+      </div>
+      {% endfor %}
+      <p class="pg-second mb-0">Toujours disponibles, quels que soient les modules : tableau de bord, « Ma semaine », utilisateurs et permissions,
+        directions et pôles, paramètres, notifications, sécurité du compte. Dans les modules activés, chaque utilisateur ne voit que ce que ses permissions autorisent.</p>
+    {% endcall %}
+    <div class="mc-barre">
+      <button class="btn btn-primary" name="action" value="enregistrer"><i class="fas fa-check me-1"></i>Appliquer à {{ client.nom }}</button>
+      <span class="small text-secondary"><span id="nbCoches">0</span> module(s) coché(s) — effet immédiat, sans reconnexion.</span>
+      {% if actifs is not none %}
+      <button class="btn btn-outline-secondary ms-auto" name="action" value="aucune_restriction" formnovalidate
+              onclick="return confirm('Retirer la restriction : le client retrouve tous les modules de sa formule ?');">Retirer la restriction</button>
+      {% endif %}
+    </div>
+  </form>
+</div>
+{% endblock %}
+{% block scripts %}
+<script>
+  (function () {
+    var cases = document.querySelectorAll('input[name=modules]'), nb = document.getElementById('nbCoches');
+    function maj() { nb.textContent = Array.prototype.filter.call(cases, function (c) { return c.checked; }).length; }
+    cases.forEach(function (c) { c.addEventListener('change', maj); });
+    document.querySelectorAll('.mc-profil').forEach(function (b) {
+      b.addEventListener('click', function () {
+        var choix = b.dataset.modules.split(',');
+        cases.forEach(function (c) { c.checked = choix.indexOf(c.value) >= 0; });
+        maj();
+      });
+    });
+    maj();
+  })();
+</script>
+{% endblock %}

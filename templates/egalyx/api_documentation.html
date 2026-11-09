@@ -1,0 +1,53 @@
+{% extends "base.html" %}
+{% import "_macros/page.html" as pg %}
+{% block title %}Documentation de l’API{% endblock %}
+{% block styles %}{{ pg.styles() }}<style>
+  .meth { font-family: ui-monospace, Menlo, Consolas, monospace; font-size: .75rem; font-weight: 700; padding: .15rem .45rem; border-radius: 5px; color: #fff; }
+  .meth.get { background: #0e7490; } .meth.post { background: #15803d; }
+  .chemin { font-family: ui-monospace, Menlo, Consolas, monospace; font-weight: 600; }
+  pre.code { background: #0f172a; color: #e2e8f0; border-radius: 8px; padding: .75rem 1rem; font-size: .8rem; white-space: pre-wrap; margin: .5rem 0 0; }
+  .champs { font-size: .8rem; columns: 2; margin: .5rem 0 0; padding-left: 1rem; }
+</style>{% endblock %}
+{% macro champs(schema) -%}
+  {%- if schema.get('$ref') -%}{% set schema = spec.components.schemas[schema['$ref'].split('/')[-1]] %}{%- endif -%}
+  {%- set data = schema.get('properties', {}).get('data') -%}
+  {%- if data -%}
+    {%- set cible = data.get('items', data) -%}
+    {%- if cible.get('$ref') -%}{% set cible = spec.components.schemas[cible['$ref'].split('/')[-1]] %}{%- endif -%}
+    <ul class="champs">{% for k, v in cible.get('properties', {}).items() %}<li><code>{{ k }}</code> <span class="text-secondary">{{ v.get('type', 'objet') }}{% if v.get('format') %} ({{ v.format }}){% endif %}</span></li>{% endfor %}</ul>
+  {%- endif -%}
+{%- endmacro %}
+{% block content %}
+<div class="container" style="max-width: 1100px;">
+  {% call pg.entete('API Egalyx Control', 'fa-code', 'Version ' ~ spec.info.version ~ ' · ' ~ serveur) %}
+    <a class="btn btn-sm btn-outline-secondary" href="{{ url_for('api_doc.openapi') }}" target="_blank"><i class="fas fa-file-code me-1"></i>OpenAPI (JSON)</a>
+  {% endcall %}
+  {% call pg.carte('Authentification') %}
+    <p class="small mb-2">Chaque requête porte l’en-tête <code>X-API-Key</code>. Les clés se créent dans l’administration de votre organisation ;
+      elles portent des permissions par module (<code>read_risques</code>, <code>write_audits</code>…) et peuvent expirer ou être révoquées.
+      Les réponses sont toujours limitées aux données de l’organisation de la clé. Chaque appel est journalisé.</p>
+    <pre class="code">curl -H "X-API-Key: VOTRE_CLE" {{ serveur }}/risques</pre>
+    <p class="small mt-2 mb-0">Erreurs : <code>401</code> clé absente, invalide ou expirée · <code>403</code> permission manquante · <code>404</code> élément introuvable.
+      Le fichier OpenAPI s’importe dans Postman, Insomnia, Power BI ou tout générateur de client.</p>
+  {% endcall %}
+  {% for chemin, ops in spec.paths.items() %}
+    {% for methode, op in ops.items() %}
+    {% call pg.carte() %}
+      <div class="d-flex align-items-center gap-2 mb-1"><span class="meth {{ methode }}">{{ methode|upper }}</span><span class="chemin">{{ chemin }}</span></div>
+      <div class="fw-semibold">{{ op.summary }}</div>
+      {% if op.description %}<div class="small text-secondary">{{ op.description|replace('`', '')|trim }}</div>{% endif %}
+      {% if op.parameters %}<div class="small mt-2">Paramètres : {% for p in op.parameters %}<code>{{ p.name }}</code> ({{ 'chemin' if p['in'] == 'path' else 'requête' }}{{ ', obligatoire' if p.required }}){{ ', ' if not loop.last }}{% endfor %}</div>{% endif %}
+      {% set ex_chemin = chemin.replace('{audit_id}', '12') %}
+      {% if methode == 'post' %}
+      <pre class="code">curl -X POST -H "X-API-Key: VOTRE_CLE" -H "Content-Type: application/json" \
+     -d '{"titre": "Audit des achats", "date_debut_prevue": "2026-12-01"}' {{ serveur }}{{ ex_chemin }}</pre>
+      {% else %}
+      <pre class="code">curl -H "X-API-Key: VOTRE_CLE" {% if op.security == [] %}{% endif %}{{ serveur }}{{ ex_chemin }}</pre>
+      {% endif %}
+      {% set ok = op.responses.get('200') or op.responses.get('201') %}
+      {% if ok and ok.get('content') %}{{ champs(ok.content['application/json'].schema) }}{% endif %}
+    {% endcall %}
+    {% endfor %}
+  {% endfor %}
+</div>
+{% endblock %}

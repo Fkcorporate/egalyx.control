@@ -1,0 +1,53 @@
+{% extends "base.html" %}
+{% import "_macros/page.html" as pg %}
+{% block title %}{{ a.nom }} — v{{ v.version }}{% endblock %}
+{% block styles %}{{ pg.styles() }}<style>@media print { .pg-no-print, nav, .sidebar { display: none !important; } }</style>{% endblock %}
+{% block content %}
+{% set couleurs = {'debut': '#059669', 'action': '#2563eb', 'decision': '#0369a1', 'controle': '#d97706', 'risque': '#dc2626', 'fin': '#4b5563', 'titre': '#ffffff', 'organisation': '#1e293b'} %}
+<div class="container-fluid">
+  {% call pg.entete(c.nom ~ ' — version ' ~ v.version, 'fa-code-branch', 'Copie figée, validée le ' ~ v.created_at.strftime('%d/%m/%Y') ~ ' par ' ~ (v.user.username if v.user else '—'), retour=url_for('logigrammes.suivi', activite_id=a.id)) %}
+    <button class="btn btn-sm btn-outline-secondary" onclick="window.print()"><i class="fas fa-print me-1"></i>Imprimer</button>
+  {% endcall %}
+  {% call pg.carte() %}
+  <div style="overflow:auto;">
+  <svg xmlns="http://www.w3.org/2000/svg" width="{{ largeur }}" height="{{ hauteur }}" viewBox="0 0 {{ largeur }} {{ hauteur }}" font-family="Arial, sans-serif">
+    <defs><marker id="fl" markerWidth="10" markerHeight="10" refX="9" refY="5" orient="auto"><polygon points="0 0, 10 5, 0 10" fill="#64748b"/></marker></defs>
+    {% for ac in c.acteurs or [] %}
+      <rect x="0" y="{{ loop.index0 * hauteur_couloir }}" width="{{ largeur }}" height="{{ hauteur_couloir }}" fill="{{ '#f8fafc' if loop.index0 % 2 == 0 else '#eef2f7' }}" stroke="#cbd5e1"/>
+      <text x="8" y="{{ loop.index0 * hauteur_couloir + 18 }}" font-size="12" font-weight="700" fill="#334155">{{ ac }}</text>
+    {% endfor %}
+    {% for l in c.liens %}{% set s = par_id.get(l.source) %}{% set t = par_id.get(l.cible) %}{% if s and t %}
+      {% set cx1 = s.x + s.l / 2 %}{% set cy1 = s.y + s.h / 2 %}{% set cx2 = t.x + t.l / 2 %}{% set cy2 = t.y + t.h / 2 %}
+      {% set dx = cx2 - cx1 %}{% set dy = cy2 - cy1 %}
+      {# Les flèches partent du bord de la forme source et s'arrêtent au bord de la cible (pointe visible) #}
+      {% set ax = (dx if dx > 0 else -dx) %}{% set ay = (dy if dy > 0 else -dy) %}
+      {% set ksx = (s.l / 2) / ax if ax else 99999 %}{% set ksy = (s.h / 2) / ay if ay else 99999 %}
+      {% set ktx = (t.l / 2) / ax if ax else 99999 %}{% set kty = (t.h / 2) / ay if ay else 99999 %}
+      {% set ks = ksx if ksx < ksy else ksy %}{% set kt = ktx if ktx < kty else kty %}
+      {% set fs = ks if ks < 1 else 1 %}{% set ft = kt if kt < 1 else 1 %}
+      {% set x1 = cx1 + dx * fs %}{% set y1 = cy1 + dy * fs %}
+      {% set x2 = cx2 - dx * ft %}{% set y2 = cy2 - dy * ft %}
+      <line x1="{{ x1 }}" y1="{{ y1 }}" x2="{{ x2 }}" y2="{{ y2 }}" stroke="{{ '#059669' if l.libelle|lower == 'oui' else ('#dc2626' if l.libelle|lower == 'non' else '#64748b') }}" stroke-width="2" marker-end="url(#fl)"/>
+      {% if l.libelle %}<text x="{{ (x1 + x2) / 2 }}" y="{{ (y1 + y2) / 2 - 6 }}" font-size="11" font-weight="700" text-anchor="middle" fill="#0f172a">{{ l.libelle }}</text>{% endif %}
+    {% endif %}{% endfor %}
+    {% for e in c.elements %}
+      {% if e.type == 'decision' %}
+        <polygon points="{{ e.x + e.l / 2 }},{{ e.y }} {{ e.x + e.l }},{{ e.y + e.h / 2 }} {{ e.x + e.l / 2 }},{{ e.y + e.h }} {{ e.x }},{{ e.y + e.h / 2 }}" fill="{{ couleurs.decision }}"/>
+      {% else %}
+        <rect x="{{ e.x }}" y="{{ e.y }}" width="{{ e.l }}" height="{{ e.h }}" rx="{{ 30 if e.type in ['debut', 'fin'] else 8 }}" fill="{{ couleurs.get(e.type, '#64748b') }}" {% if e.type == 'titre' %}stroke="#cbd5e1"{% endif %}/>
+      {% endif %}
+      {% if e.type != 'organisation' %}
+      <text x="{{ e.x + e.l / 2 }}" y="{{ e.y + e.h / 2 + 4 }}" font-size="12" font-weight="600" text-anchor="middle" fill="{{ '#0f172a' if e.type == 'titre' else '#ffffff' }}">{{ e.libelle[:28] }}</text>
+      {% endif %}
+    {% endfor %}
+  </svg>
+  </div>
+  {% endcall %}
+  {% call pg.carte('Étapes, acteurs, risques et contrôles') %}
+    <table class="pg-table"><thead><tr><th>Étape</th><th>Type</th><th>Acteur</th><th>Risques</th><th>Contrôles</th></tr></thead><tbody>
+    {% for e in c.elements if e.type not in ['titre', 'organisation'] %}
+      <tr><td>{{ e.libelle }}</td><td>{{ e.type|capitalize }}</td><td>{{ e.acteur or '—' }}</td><td>{{ e.risques|join(', ') or '—' }}</td><td>{{ e.controles|join(', ') or '—' }}</td></tr>
+    {% endfor %}</tbody></table>
+  {% endcall %}
+</div>
+{% endblock %}

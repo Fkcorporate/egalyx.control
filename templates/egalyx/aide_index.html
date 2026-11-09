@@ -1,0 +1,57 @@
+{% extends "base.html" if current_user.is_authenticated else "egalyx/_public.html" %}
+{% import "_macros/page.html" as pg %}
+{% block title %}Centre d'aide — Egalyx Control{% endblock %}
+{% block styles %}{{ super() }}{{ pg.styles() }}{% include "egalyx/_aide_styles.html" %}{% endblock %}
+{% block pied %}Centre d'aide Egalyx Control{% endblock %}
+{% block content %}
+<div class="{{ 'container' if current_user.is_authenticated }}" style="max-width: 1100px;">
+  {{ pg.entete("Centre d'aide", 'fa-life-ring', 'Guides pas à pas, réponses aux questions fréquentes et dépannage') }}
+
+  <form class="ad-recherche" method="get" action="{{ url_for('aide.accueil') }}" role="search">
+    <i class="fas fa-magnifying-glass"></i>
+    <input type="search" name="q" value="{{ q }}" placeholder="Décrivez ce que vous cherchez : « déclarer un incident », « code 2FA perdu »…" aria-label="Rechercher dans l'aide" autofocus>
+    <button class="btn btn-primary" type="submit">Chercher</button>
+  </form>
+
+  {% if q %}
+    {% call pg.carte('Résultats pour « ' ~ q ~ ' »', aide=resultats|length ~ ' fiche(s)') %}
+      {% for a in resultats %}
+        <a class="ad-ligne" href="{{ url_for('aide.fiche', id_=a.id) if not a.glossaire else '#glossaire' }}">
+          <strong>{{ a.titre }}</strong><span class="pg-second">{{ a.resume|aide_rendu }}</span>
+        </a>
+      {% else %}
+        {{ pg.vide("Aucune fiche ne correspond. Essayez d'autres mots, ou posez la question à l'assistant (bouton en bas à droite).", 'fa-circle-question') }}
+      {% endfor %}
+    {% endcall %}
+  {% endif %}
+
+  <div class="ad-actions">
+    <a class="btn btn-outline-secondary btn-sm" href="{{ url_for('aide.guide_complet') }}" target="_blank" rel="noopener"><i class="fas fa-print me-1"></i>Guide complet imprimable (PDF)</a>
+    {% if current_user.is_authenticated and url_exists is defined and url_exists('nouveau_ticket_support') %}
+    <a class="btn btn-outline-secondary btn-sm" href="{{ url_for('nouveau_ticket_support') }}"><i class="fas fa-ticket-alt me-1"></i>Contacter le support</a>
+    {% endif %}
+    {% if not current_user.is_authenticated %}
+    <a class="btn btn-outline-secondary btn-sm" href="{{ url_for('login') }}"><i class="fas fa-right-to-bracket me-1"></i>Se connecter</a>
+    {% endif %}
+  </div>
+
+  <div class="ad-grille">
+    {% for c in categories %}
+    <section class="pg-carte ad-cat" id="cat-{{ c.code }}">
+      <h2><i class="fas {{ c.icone }}"></i>{{ c.titre }}</h2>
+      <ul>
+        {% for a in c.articles %}<li><a href="{{ url_for('aide.fiche', id_=a.id) }}">{{ a.titre }}</a></li>{% endfor %}
+      </ul>
+    </section>
+    {% endfor %}
+  </div>
+
+  {% if glossaire %}
+  {% call pg.carte('Glossaire', aide=glossaire|length ~ ' termes') %}
+    <dl class="pg-dl" id="glossaire">
+      {% for terme, definition in glossaire %}<dt>{{ terme }}</dt><dd>{{ definition }}</dd>{% endfor %}
+    </dl>
+  {% endcall %}
+  {% endif %}
+</div>
+{% endblock %}

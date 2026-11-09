@@ -1,0 +1,1132 @@
+{% extends "base.html" %}
+
+{% block title %}Tableau de bord stratégique - Egalyx Control{% endblock %}
+
+{% block extra_css %}
+<!-- Chart.js CDN -->
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+<!-- Font Awesome 6 -->
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
+
+<style>
+    /* ============================================
+       STYLES MODERNES POUR LE DASHBOARD STRATÉGIQUE
+    ============================================ */
+    
+    :root {
+        --primary: #1e3a8a;
+        --primary-light: #3b82f6;
+        --secondary: #64748b;
+        --success: #10b981;
+        --warning: #f59e0b;
+        --danger: #ef4444;
+        --info: #06b6d4;
+        --dark: #0f172a;
+        --light: #f8fafc;
+        --border: #e2e8f0;
+        --sidebar-width: 320px;
+    }
+
+    /* Layout spécifique */
+    .strategic-dashboard {
+        background: #f1f5f9;
+        min-height: calc(100vh - 60px);
+    }
+    
+    /* Sidebar arborescence */
+    .strategic-sidebar {
+        width: var(--sidebar-width);
+        background: white;
+        border-right: 1px solid var(--border);
+        position: fixed;
+        left: 0;
+        top: 60px;
+        bottom: 0;
+        overflow-y: auto;
+        z-index: 100;
+        transition: transform 0.3s ease;
+    }
+    
+    .strategic-sidebar.collapsed {
+        transform: translateX(-100%);
+    }
+    
+    .strategic-main {
+        margin-left: var(--sidebar-width);
+        padding: 1.5rem;
+        transition: margin 0.3s ease;
+    }
+    
+    .strategic-main.full-width {
+        margin-left: 0;
+    }
+    
+    /* Toggle button */
+    .sidebar-toggle {
+        position: fixed;
+        left: 10px;
+        bottom: 20px;
+        z-index: 101;
+        background: var(--primary);
+        color: white;
+        border: none;
+        border-radius: 50%;
+        width: 45px;
+        height: 45px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        cursor: pointer;
+        box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        transition: all 0.2s;
+    }
+    
+    .sidebar-toggle:hover {
+        background: var(--primary-light);
+        transform: scale(1.05);
+    }
+    
+    /* Styles arborescence */
+    .tree-node {
+        user-select: none;
+    }
+    
+    .tree-node-header {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        padding: 10px 15px;
+        cursor: pointer;
+        border-radius: 8px;
+        transition: all 0.2s;
+    }
+    
+    .tree-node-header:hover {
+        background: #f1f5f9;
+    }
+    
+    .tree-node-header.active {
+        background: linear-gradient(135deg, var(--primary), var(--primary-light));
+        color: white;
+    }
+    
+    .tree-node-header.active .tree-node-stats {
+        color: rgba(255,255,255,0.8);
+    }
+    
+    .tree-node-icon {
+        width: 32px;
+        font-size: 1.2rem;
+        text-align: center;
+    }
+    
+    .tree-node-content {
+        flex: 1;
+    }
+    
+    .tree-node-title {
+        font-weight: 600;
+        font-size: 0.9rem;
+    }
+    
+    .tree-node-stats {
+        font-size: 0.7rem;
+        color: var(--secondary);
+        margin-top: 2px;
+    }
+    
+    .tree-node-badge {
+        background: #e2e8f0;
+        padding: 2px 8px;
+        border-radius: 20px;
+        font-size: 0.7rem;
+        font-weight: 600;
+    }
+    
+    .tree-node-children {
+        margin-left: 20px;
+        border-left: 1px solid var(--border);
+    }
+    
+    /* Cartes KPI */
+    .kpi-card {
+        background: white;
+        border-radius: 16px;
+        padding: 1.25rem;
+        box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+        transition: all 0.2s;
+        border: 1px solid var(--border);
+    }
+    
+    .kpi-card:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+    }
+    
+    .kpi-value {
+        font-size: 2rem;
+        font-weight: 700;
+        margin-bottom: 0.25rem;
+    }
+    
+    .kpi-label {
+        font-size: 0.8rem;
+        color: var(--secondary);
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+    }
+    
+    .kpi-trend {
+        font-size: 0.7rem;
+        margin-top: 0.5rem;
+    }
+    
+    .kpi-trend.up { color: var(--success); }
+    .kpi-trend.down { color: var(--danger); }
+    
+    /* Graph cards */
+    .graph-card {
+        background: white;
+        border-radius: 16px;
+        padding: 1.25rem;
+        box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+        border: 1px solid var(--border);
+        height: 100%;
+    }
+    
+    .graph-title {
+        font-weight: 600;
+        font-size: 1rem;
+        margin-bottom: 1rem;
+        display: flex;
+        align-items: center;
+        gap: 8px;
+    }
+    
+    /* Alertes */
+    .alert-card {
+        border-radius: 12px;
+        padding: 1rem;
+        margin-bottom: 1rem;
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        cursor: pointer;
+        transition: all 0.2s;
+    }
+    
+    .alert-card:hover {
+        transform: translateX(5px);
+    }
+    
+    .alert-danger { background: #fef2f2; border-left: 4px solid var(--danger); }
+    .alert-warning { background: #fffbeb; border-left: 4px solid var(--warning); }
+    .alert-info { background: #eff6ff; border-left: 4px solid var(--info); }
+    .alert-success { background: #ecfdf5; border-left: 4px solid var(--success); }
+    
+    /* Tableaux */
+    .data-table {
+        width: 100%;
+        border-collapse: collapse;
+    }
+    
+    .data-table th {
+        text-align: left;
+        padding: 12px;
+        background: var(--light);
+        font-weight: 600;
+        font-size: 0.8rem;
+        color: var(--secondary);
+        border-bottom: 1px solid var(--border);
+    }
+    
+    .data-table td {
+        padding: 12px;
+        border-bottom: 1px solid var(--border);
+        font-size: 0.85rem;
+    }
+    
+    .data-table tr:hover {
+        background: var(--light);
+    }
+    
+    /* Badges */
+    .badge-risk {
+        display: inline-block;
+        padding: 4px 10px;
+        border-radius: 20px;
+        font-size: 0.7rem;
+        font-weight: 600;
+    }
+    
+    .badge-risk.critique { background: #fee2e2; color: #991b1b; }
+    .badge-risk.eleve { background: #ffedd5; color: #9b2c1d; }
+    .badge-risk.moyen { background: #fef3c7; color: #92400e; }
+    .badge-risk.faible { background: #d1fae5; color: #065f46; }
+    
+    /* Loading spinner */
+    .loading-spinner {
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        padding: 2rem;
+    }
+    
+    /* Responsive */
+    @media (max-width: 992px) {
+        .strategic-sidebar {
+            transform: translateX(-100%);
+        }
+        .strategic-sidebar.mobile-open {
+            transform: translateX(0);
+        }
+        .strategic-main {
+            margin-left: 0;
+        }
+        .sidebar-toggle {
+            display: flex;
+        }
+    }
+    
+    @media (min-width: 993px) {
+        .sidebar-toggle {
+            display: none;
+        }
+    }
+    
+    /* Animation loading */
+    @keyframes pulse {
+        0%, 100% { opacity: 1; }
+        50% { opacity: 0.5; }
+    }
+    
+    .loading-pulse {
+        animation: pulse 1.5s ease-in-out infinite;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="strategic-dashboard">
+    <!-- Sidebar Toggle Button -->
+    <button class="sidebar-toggle" id="sidebarToggle">
+        <i class="fas fa-bars"></i>
+    </button>
+    
+    <!-- Sidebar Arborescence -->
+    <div class="strategic-sidebar" id="strategicSidebar">
+        <div class="p-3 border-bottom">
+            <h5 class="mb-0">
+                <i class="fas fa-sitemap me-2 text-primary"></i>
+                Organisation
+            </h5>
+            <p class="text-muted small mb-0 mt-1">Navigation par entité</p>
+        </div>
+        
+        <div class="p-2" id="arborescence-container">
+            <div class="loading-spinner">
+                <div class="spinner-border text-primary" role="status"></div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Main Content -->
+    <div class="strategic-main" id="strategicMain">
+        <!-- En-tête -->
+        <div class="d-flex justify-content-between align-items-center mb-4 flex-wrap gap-3">
+            <div>
+                <h2 class="h3 mb-1" id="entiteNom">Tableau de bord stratégique</h2>
+                <p class="text-muted mb-0" id="entiteHierarchie">
+                    <i class="fas fa-globe me-1"></i> Vue globale de l'organisation
+                </p>
+            </div>
+            <div class="d-flex gap-2">
+                <select id="anneeSelect" class="form-select form-select-sm w-auto">
+                    {% for a in [now.year, now.year-1, now.year-2] %}
+                    <option value="{{ a }}" {% if annee == a %}selected{% endif %}>{{ a }}</option>
+                    {% endfor %}
+                </select>
+                <button id="refreshBtn" class="btn btn-sm btn-outline-primary" title="Actualiser">
+                    <i class="fas fa-sync-alt"></i>
+                </button>
+                <button id="exportBtn" class="btn btn-sm btn-outline-secondary" title="Exporter PDF">
+                    <i class="fas fa-file-pdf"></i>
+                </button>
+            </div>
+        </div>
+        
+        <!-- Alertes Stratégiques -->
+        <div id="alertesContainer" class="mb-4">
+            {% if alertes %}
+                {% for alerte in alertes %}
+                <div class="alert-card alert-{{ alerte.type }}" onclick="window.location.href='{{ alerte.lien }}'">
+                    <div class="alert-icon">
+                        <i class="fas {{ alerte.icone }} fa-lg"></i>
+                    </div>
+                    <div class="alert-content flex-grow-1">
+                        <strong>{{ alerte.titre }}</strong>
+                        <p class="mb-0 small">{{ alerte.message }}</p>
+                    </div>
+                    <div class="alert-action">
+                        <i class="fas fa-chevron-right"></i>
+                    </div>
+                </div>
+                {% endfor %}
+            {% else %}
+                <div class="alert alert-success d-flex align-items-center" role="alert">
+                    <i class="fas fa-check-circle me-2"></i>
+                    <div>Aucune alerte majeure. Tous les indicateurs sont dans le vert.</div>
+                </div>
+            {% endif %}
+        </div>
+        
+        <!-- Cartes KPI -->
+        <div class="row g-3 mb-4" id="kpiContainer">
+            <!-- Rempli dynamiquement -->
+            <div class="col-md-6 col-lg-3">
+                <div class="kpi-card text-center loading-pulse">
+                    <div class="spinner-border text-primary"></div>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Graphiques -->
+        <div class="row g-3 mb-4">
+            <div class="col-md-6">
+                <div class="graph-card">
+                    <div class="graph-title">
+                        <i class="fas fa-chart-pie text-primary"></i>
+                        Répartition par niveau de risque
+                    </div>
+                    <canvas id="niveauxRisqueChart" height="250"></canvas>
+                </div>
+            </div>
+            <div class="col-md-6">
+                <div class="graph-card">
+                    <div class="graph-title">
+                        <i class="fas fa-chart-line text-primary"></i>
+                        Évolution des risques (12 mois)
+                    </div>
+                    <canvas id="evolutionRisquesChart" height="250"></canvas>
+                </div>
+            </div>
+        </div>
+        
+        <div class="row g-3 mb-4">
+            <div class="col-md-6">
+                <div class="graph-card">
+                    <div class="graph-title">
+                        <i class="fas fa-chart-bar text-primary"></i>
+                        Efficacité des dispositifs de maîtrise
+                    </div>
+                    <canvas id="dispositifsChart" height="250"></canvas>
+                </div>
+            </div>
+            <div class="col-md-6">
+                <div class="graph-card">
+                    <div class="graph-title">
+                        <i class="fas fa-chart-simple text-primary"></i>
+                        Répartition des incidents par gravité
+                    </div>
+                    <canvas id="incidentsChart" height="250"></canvas>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Tableau des risques critiques -->
+        <div class="graph-card mb-4">
+            <div class="graph-title d-flex justify-content-between align-items-center">
+                <span><i class="fas fa-exclamation-triangle text-danger"></i> Risques critiques</span>
+                <button class="btn btn-sm btn-link text-primary" id="voirTousRisquesBtn">
+                    Voir tous <i class="fas fa-arrow-right ms-1"></i>
+                </button>
+            </div>
+            <div class="table-responsive">
+                <table class="data-table" id="risquesTable">
+                    <thead>
+                        <tr>
+                            <th>Référence</th>
+                            <th>Intitulé</th>
+                            <th>Catégorie</th>
+                            <th>Niveau</th>
+                            <th>Score</th>
+                            <th>Direction</th>
+                        </tr>
+                    </thead>
+                    <tbody id="risquesTableBody">
+                        <tr><td colspan="6" class="text-center text-muted">Chargement...</td></tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+        
+        <!-- Tableau des plans d'action -->
+        <div class="graph-card">
+            <div class="graph-title d-flex justify-content-between align-items-center">
+                <span><i class="fas fa-tasks text-warning"></i> Plans d'action en cours</span>
+                <button class="btn btn-sm btn-link text-primary" id="voirTousPlansBtn">
+                    Voir tous <i class="fas fa-arrow-right ms-1"></i>
+                </button>
+            </div>
+            <div class="table-responsive">
+                <table class="data-table" id="plansTable">
+                    <thead>
+                        <tr>
+                            <th>Référence</th>
+                            <th>Nom</th>
+                            <th>Priorité</th>
+                            <th>Avancement</th>
+                            <th>Échéance</th>
+                            <th>Responsable</th>
+                        </tr>
+                    </thead>
+                    <tbody id="plansTableBody">
+                        <tr><td colspan="6" class="text-center text-muted">Chargement...</td></tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+// ============================================
+// TABLEAU DE BORD STRATÉGIQUE - JAVASCRIPT
+// ============================================
+
+// État global
+let currentEntity = {
+    type: 'global',
+    id: null,
+    nom: 'Global',
+    hierarchie: 'Vue globale de l\'organisation'
+};
+
+let charts = {
+    niveaux: null,
+    evolution: null,
+    dispositifs: null,
+    incidents: null
+};
+
+let anneeCourante = {{ annee }};
+
+// ============================================
+// 1. CHARGEMENT DE L'ARBORESCENCE
+// ============================================
+
+async function chargerArborescence() {
+    const container = document.getElementById('arborescence-container');
+    
+    try {
+        const response = await fetch('/api/strategique/arborescence');
+        const data = await response.json();
+        
+        if (!data.success) throw new Error(data.error);
+        
+        const html = buildArborescenceHTML(data.arborescence);
+        container.innerHTML = html;
+        
+        // Attacher les événements
+        attachTreeEvents();
+        
+        // Ouvrir le premier niveau par défaut
+        document.querySelectorAll('.tree-node-children').forEach(child => {
+            child.style.display = 'block';
+        });
+        
+    } catch (error) {
+        console.error('Erreur chargement arborescence:', error);
+        container.innerHTML = `
+            <div class="alert alert-danger m-3">
+                <i class="fas fa-exclamation-triangle"></i>
+                Erreur de chargement. Veuillez rafraîchir.
+            </div>
+        `;
+    }
+}
+
+function buildArborescenceHTML(arborescence) {
+    let html = '<div class="tree-node">';
+    
+    // Nœud global
+    const isGlobalActive = (currentEntity.type === 'global');
+    html += `
+        <div class="tree-node-header ${isGlobalActive ? 'active' : ''}" 
+             data-type="global" data-id="" data-nom="Global">
+            <div class="tree-node-icon">
+                <i class="fas fa-chart-line"></i>
+            </div>
+            <div class="tree-node-content">
+                <div class="tree-node-title">Vue globale</div>
+                <div class="tree-node-stats">Toute l'organisation</div>
+            </div>
+        </div>
+    `;
+    
+    // Parcourir les pays
+    for (const pays of arborescence) {
+        const isActive = (currentEntity.type === 'pays' && currentEntity.id == pays.id);
+        html += `
+            <div class="tree-node">
+                <div class="tree-node-header ${isActive ? 'active' : ''}" 
+                     data-type="pays" data-id="${pays.id}" data-nom="${pays.nom}">
+                    <div class="tree-node-icon">
+                        <i class="fas fa-flag"></i> ${pays.drapeau}
+                    </div>
+                    <div class="tree-node-content">
+                        <div class="tree-node-title">${escapeHtml(pays.nom)}</div>
+                        <div class="tree-node-stats">
+                            ${pays.stats.nb_risques || 0} risques | 
+                            ${pays.stats.nb_poles || 0} pôles
+                        </div>
+                    </div>
+                    <div class="tree-node-badge">
+                        ${pays.stats.nb_alertes || 0}
+                    </div>
+                </div>
+                <div class="tree-node-children" style="display: none;">
+        `;
+        
+        // Pôles du pays
+        for (const pole of pays.poles) {
+            const isPoleActive = (currentEntity.type === 'pole' && currentEntity.id == pole.id);
+            html += `
+                <div class="tree-node">
+                    <div class="tree-node-header ${isPoleActive ? 'active' : ''}" 
+                         data-type="pole" data-id="${pole.id}" data-nom="${pole.nom}"
+                         style="margin-left: 15px;">
+                        <div class="tree-node-icon">
+                            <i class="fas fa-building" style="color: ${pole.couleur}"></i>
+                        </div>
+                        <div class="tree-node-content">
+                            <div class="tree-node-title">${escapeHtml(pole.nom)}</div>
+                            <div class="tree-node-stats">
+                                ${pole.stats.nb_risques || 0} risques | 
+                                ${pole.stats.nb_directions || 0} directions
+                            </div>
+                        </div>
+                        <div class="tree-node-badge">
+                            ${pole.stats.nb_alertes || 0}
+                        </div>
+                    </div>
+                    <div class="tree-node-children" style="display: none;">
+            `;
+            
+            // Directions du pôle
+            for (const direction of pole.directions) {
+                const isDirActive = (currentEntity.type === 'direction' && currentEntity.id == direction.id);
+                html += `
+                    <div class="tree-node-header ${isDirActive ? 'active' : ''}" 
+                         data-type="direction" data-id="${direction.id}" data-nom="${direction.nom}"
+                         style="margin-left: 30px;">
+                        <div class="tree-node-icon">
+                            <i class="fas fa-folder-open"></i>
+                        </div>
+                        <div class="tree-node-content">
+                            <div class="tree-node-title">${escapeHtml(direction.nom)}</div>
+                            <div class="tree-node-stats">
+                                ${direction.stats.nb_risques || 0} risques | 
+                                ${direction.stats.nb_services || 0} services
+                            </div>
+                        </div>
+                        <div class="tree-node-badge">
+                            ${direction.stats.nb_alertes || 0}
+                        </div>
+                    </div>
+                    <div class="tree-node-children" style="display: none;">
+                `;
+                
+                // Services de la direction
+                for (const service of direction.services) {
+                    const isServActive = (currentEntity.type === 'service' && currentEntity.id == service.id);
+                    html += `
+                        <div class="tree-node-header ${isServActive ? 'active' : ''}" 
+                             data-type="service" data-id="${service.id}" data-nom="${service.nom}"
+                             style="margin-left: 45px;">
+                            <div class="tree-node-icon">
+                                <i class="fas fa-users"></i>
+                            </div>
+                            <div class="tree-node-content">
+                                <div class="tree-node-title">${escapeHtml(service.nom)}</div>
+                                <div class="tree-node-stats">
+                                    ${service.stats.nb_risques || 0} risques
+                                    ${service.responsable ? '<br><small>Resp: ' + escapeHtml(service.responsable) + '</small>' : ''}
+                                </div>
+                            </div>
+                            <div class="tree-node-badge">
+                                ${service.stats.nb_alertes || 0}
+                            </div>
+                        </div>
+                    `;
+                }
+                
+                html += `</div></div>`; // ferme children et node direction
+            }
+            
+            html += `</div></div>`; // ferme children et node pole
+        }
+        
+        html += `</div></div>`; // ferme children et node pays
+    }
+    
+    html += '</div>';
+    return html;
+}
+
+function attachTreeEvents() {
+    document.querySelectorAll('.tree-node-header').forEach(header => {
+        // Clic sur l'en-tête pour sélectionner l'entité
+        header.addEventListener('click', async (e) => {
+            e.stopPropagation();
+            
+            const type = header.dataset.type;
+            const id = header.dataset.id;
+            const nom = header.dataset.nom;
+            
+            // Mettre à jour l'état
+            currentEntity = {
+                type: type,
+                id: id || null,
+                nom: nom || 'Global',
+                hierarchie: getHierarchiePath(header)
+            };
+            
+            // Mettre à jour l'UI
+            document.querySelectorAll('.tree-node-header').forEach(h => h.classList.remove('active'));
+            header.classList.add('active');
+            
+            document.getElementById('entiteNom').innerText = currentEntity.nom;
+            document.getElementById('entiteHierarchie').innerHTML = `<i class="fas fa-${getIconForType(type)} me-1"></i> ${currentEntity.hierarchie}`;
+            
+            // Charger les données
+            await chargerToutesLesDonnees();
+        });
+        
+        // Clic sur la flèche pour expand/collapse (optionnel)
+        const children = header.parentElement.querySelector('.tree-node-children');
+        if (children) {
+            const expandIcon = document.createElement('i');
+            expandIcon.className = 'fas fa-chevron-right tree-expand-icon';
+            expandIcon.style.marginRight = '8px';
+            expandIcon.style.cursor = 'pointer';
+            expandIcon.style.fontSize = '0.7rem';
+            expandIcon.style.color = '#64748b';
+            expandIcon.addEventListener('click', (e) => {
+                e.stopPropagation();
+                const isVisible = children.style.display !== 'none';
+                children.style.display = isVisible ? 'none' : 'block';
+                expandIcon.style.transform = isVisible ? 'rotate(0deg)' : 'rotate(90deg)';
+            });
+            header.insertBefore(expandIcon, header.firstChild);
+        }
+    });
+}
+
+function getHierarchiePath(element) {
+    const path = [];
+    let current = element;
+    
+    while (current) {
+        const nom = current.dataset.nom;
+        if (nom && nom !== 'Global') {
+            path.unshift(nom);
+        }
+        current = current.parentElement?.closest('.tree-node-header');
+    }
+    
+    return path.join(' > ') || 'Vue globale';
+}
+
+function getIconForType(type) {
+    const icons = {
+        'global': 'chart-line',
+        'pays': 'flag',
+        'pole': 'building',
+        'direction': 'folder-open',
+        'service': 'users'
+    };
+    return icons[type] || 'building';
+}
+
+// ============================================
+// 2. CHARGEMENT DES STATISTIQUES
+// ============================================
+
+async function chargerToutesLesDonnees() {
+    await Promise.all([
+        chargerStatistiques(),
+        chargerRisques(),
+        chargerPlansAction()
+    ]);
+}
+
+async function chargerStatistiques() {
+    const kpiContainer = document.getElementById('kpiContainer');
+    
+    try {
+        let url = `/api/strategique/stats/${currentEntity.type}/${currentEntity.id || 0}?annee=${anneeCourante}`;
+        if (currentEntity.type === 'global') {
+            url = `/api/strategique/stats/global/0?annee=${anneeCourante}`;
+        }
+        
+        const response = await fetch(url);
+        const data = await response.json();
+        
+        if (!data.success) throw new Error(data.error);
+        
+        const stats = data.stats;
+        
+        // Mettre à jour les KPI
+        kpiContainer.innerHTML = `
+            <div class="col-md-6 col-lg-3">
+                <div class="kpi-card">
+                    <div class="kpi-value text-primary">${stats.risques.total || 0}</div>
+                    <div class="kpi-label">Risques totaux</div>
+                    <div class="kpi-trend">
+                        <i class="fas fa-chart-line"></i> ${stats.risques.par_niveau?.Critique || 0} critiques
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-6 col-lg-3">
+                <div class="kpi-card">
+                    <div class="kpi-value text-danger">${stats.incidents.total || 0}</div>
+                    <div class="kpi-label">Incidents</div>
+                    <div class="kpi-trend up">
+                        <i class="fas fa-check-circle"></i> ${stats.incidents.taux_resolution || 0}% résolus
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-6 col-lg-3">
+                <div class="kpi-card">
+                    <div class="kpi-value text-warning">${stats.plans_action.total || 0}</div>
+                    <div class="kpi-label">Plans d'action</div>
+                    <div class="kpi-trend down">
+                        <i class="fas fa-clock"></i> ${stats.plans_action.en_retard || 0} en retard
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-6 col-lg-3">
+                <div class="kpi-card">
+                    <div class="kpi-value text-success">${stats.dispositifs.efficaces || 0}</div>
+                    <div class="kpi-label">DMR efficaces</div>
+                    <div class="kpi-trend">
+                        <i class="fas fa-shield-alt"></i> ${stats.dispositifs.total || 0} dispositifs
+                    </div>
+                </div>
+            </div>
+        `;
+        
+        // Mettre à jour les graphiques
+        updateNiveauxRisqueChart(stats.risques.par_niveau);
+        updateEvolutionChart(stats.risques.evolution_mois);
+        updateDispositifsChart(stats.dispositifs);
+        updateIncidentsChart(stats.incidents.par_gravite);
+        
+    } catch (error) {
+        console.error('Erreur chargement stats:', error);
+        kpiContainer.innerHTML = `
+            <div class="col-12">
+                <div class="alert alert-danger">Erreur de chargement des statistiques</div>
+            </div>
+        `;
+    }
+}
+
+// ============================================
+// 3. GRAPHIQUES
+// ============================================
+
+function updateNiveauxRisqueChart(parNiveau) {
+    const ctx = document.getElementById('niveauxRisqueChart').getContext('2d');
+    const labels = ['Critique', 'Élevé', 'Moyen', 'Faible', 'Non évalué'];
+    const data = [
+        parNiveau?.Critique || 0,
+        parNiveau?.Élevé || 0,
+        parNiveau?.Moyen || 0,
+        parNiveau?.Faible || 0,
+        parNiveau?.['Non évalué'] || 0
+    ];
+    const colors = ['#ef4444', '#f97316', '#eab308', '#22c55e', '#94a3b8'];
+    
+    if (charts.niveaux) charts.niveaux.destroy();
+    
+    charts.niveaux = new Chart(ctx, {
+        type: 'doughnut',
+        data: {
+            labels: labels,
+            datasets: [{
+                data: data,
+                backgroundColor: colors,
+                borderWidth: 0,
+                hoverOffset: 10
+            }]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: true,
+            plugins: {
+                legend: { position: 'bottom' },
+                tooltip: { callbacks: { label: (ctx) => `${ctx.label}: ${ctx.raw} risques` } }
+            }
+        }
+    });
+}
+
+function updateEvolutionChart(evolutionMois) {
+    const ctx = document.getElementById('evolutionRisquesChart').getContext('2d');
+    const moisLabels = ['Jan', 'Fév', 'Mar', 'Avr', 'Mai', 'Jun', 'Jul', 'Aoû', 'Sep', 'Oct', 'Nov', 'Déc'];
+    
+    if (charts.evolution) charts.evolution.destroy();
+    
+    charts.evolution = new Chart(ctx, {
+        type: 'line',
+        data: {
+            labels: moisLabels,
+            datasets: [{
+                label: 'Risques créés',
+                data: evolutionMois || Array(12).fill(0),
+                borderColor: '#3b82f6',
+                backgroundColor: 'rgba(59,130,246,0.1)',
+                tension: 0.3,
+                fill: true
+            }]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: true,
+            plugins: { legend: { position: 'top' } }
+        }
+    });
+}
+
+function updateDispositifsChart(dispositifs) {
+    const ctx = document.getElementById('dispositifsChart').getContext('2d');
+    
+    if (charts.dispositifs) charts.dispositifs.destroy();
+    
+    charts.dispositifs = new Chart(ctx, {
+        type: 'bar',
+        data: {
+            labels: ['Efficaces', 'À améliorer', 'Inefficaces', 'Non évalués'],
+            datasets: [{
+                label: 'Nombre de dispositifs',
+                data: [
+                    dispositifs.efficaces || 0,
+                    dispositifs.a_ameliorer || 0,
+                    dispositifs.inefficaces || 0,
+                    dispositifs.non_evalues || 0
+                ],
+                backgroundColor: ['#10b981', '#f59e0b', '#ef4444', '#94a3b8'],
+                borderRadius: 8
+            }]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: true,
+            plugins: { legend: { position: 'top' } }
+        }
+    });
+}
+
+function updateIncidentsChart(parGravite) {
+    const ctx = document.getElementById('incidentsChart').getContext('2d');
+    
+    if (charts.incidents) charts.incidents.destroy();
+    
+    charts.incidents = new Chart(ctx, {
+        type: 'pie',
+        data: {
+            labels: ['Critique', 'Élevée', 'Moyenne', 'Mineure'],
+            datasets: [{
+                data: [
+                    parGravite?.critique || 0,
+                    parGravite?.elevee || 0,
+                    parGravite?.moyenne || 0,
+                    parGravite?.mineure || 0
+                ],
+                backgroundColor: ['#ef4444', '#f97316', '#eab308', '#22c55e']
+            }]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: true,
+            plugins: { legend: { position: 'bottom' } }
+        }
+    });
+}
+
+// ============================================
+// 4. CHARGEMENT DES TABLEAUX
+// ============================================
+
+async function chargerRisques() {
+    const tbody = document.getElementById('risquesTableBody');
+    tbody.innerHTML = '<tr><td colspan="6" class="text-center"><div class="spinner-border spinner-border-sm"></div> Chargement...</td></tr>';
+    
+    try {
+        let url = `/api/strategique/risques?niveau=critique&annee=${anneeCourante}`;
+        if (currentEntity.type !== 'global' && currentEntity.id) {
+            url += `&niveau=${currentEntity.type}&entite_id=${currentEntity.id}`;
+        }
+        
+        const response = await fetch(url);
+        const data = await response.json();
+        
+        if (!data.success) throw new Error(data.error);
+        
+        if (data.risques.length === 0) {
+            tbody.innerHTML = '<tr><td colspan="6" class="text-center text-muted">Aucun risque critique</td></tr>';
+            return;
+        }
+        
+        tbody.innerHTML = data.risques.slice(0, 10).map(risque => `
+            <tr>
+                <td><code>${escapeHtml(risque.reference)}</code></td>
+                <td>${escapeHtml(risque.intitule.substring(0, 60))}${risque.intitule.length > 60 ? '...' : ''}</td>
+                <td>${escapeHtml(risque.categorie || '-')}</td>
+                <td><span class="badge-risk ${risque.niveau_risque.toLowerCase()}">${risque.niveau_risque}</span></td>
+                <td>${risque.score || 0}</td>
+                <td>${escapeHtml(risque.direction || '-')}</td>
+            <tr>
+        `).join('');
+        
+    } catch (error) {
+        console.error('Erreur chargement risques:', error);
+        tbody.innerHTML = '<tr><td colspan="6" class="text-center text-danger">Erreur de chargement</td></tr>';
+    }
+}
+
+async function chargerPlansAction() {
+    const tbody = document.getElementById('plansTableBody');
+    tbody.innerHTML = '<tr><td colspan="6" class="text-center"><div class="spinner-border spinner-border-sm"></div> Chargement...</td></tr>';
+    
+    try {
+        let url = `/api/strategique/plan-action?statut=en_cours&annee=${anneeCourante}`;
+        if (currentEntity.type !== 'global' && currentEntity.id) {
+            url += `&niveau=${currentEntity.type}&entite_id=${currentEntity.id}`;
+        }
+        
+        const response = await fetch(url);
+        const data = await response.json();
+        
+        if (!data.success) throw new Error(data.error);
+        
+        if (data.plans.length === 0) {
+            tbody.innerHTML = '<tr><td colspan="6" class="text-center text-muted">Aucun plan d\'action en cours</td></tr>';
+            return;
+        }
+        
+        tbody.innerHTML = data.plans.slice(0, 10).map(plan => {
+            const prioriteClass = plan.priorite === 'haute' ? 'text-danger' : plan.priorite === 'moyenne' ? 'text-warning' : 'text-success';
+            const avancementClass = plan.pourcentage_realisation >= 75 ? 'success' : plan.pourcentage_realisation >= 50 ? 'warning' : 'secondary';
+            
+            return `
+            <tr>
+                <td><code>${escapeHtml(plan.reference)}</code></td>
+                <td>${escapeHtml(plan.nom.substring(0, 50))}${plan.nom.length > 50 ? '...' : ''}</td>
+                <td class="${prioriteClass}"><i class="fas fa-flag"></i> ${plan.priorite === 'haute' ? 'Haute' : plan.priorite === 'moyenne' ? 'Moyenne' : 'Basse'}</td>
+                <td>
+                    <div class="d-flex align-items-center gap-2">
+                        <div class="progress flex-grow-1" style="height: 6px; width: 80px;">
+                            <div class="progress-bar bg-${avancementClass}" style="width: ${plan.pourcentage_realisation}%"></div>
+                        </div>
+                        <small>${plan.pourcentage_realisation}%</small>
+                    </div>
+                </td>
+                <td class="${plan.est_en_retard ? 'text-danger' : ''}">
+                    ${plan.est_en_retard ? '<i class="fas fa-exclamation-triangle"></i> ' : ''}
+                    ${plan.date_fin_prevue}
+                </td>
+                <td>${escapeHtml(plan.responsable || '-')}</td>
+            </tr>
+            `;
+        }).join('');
+        
+    } catch (error) {
+        console.error('Erreur chargement plans:', error);
+        tbody.innerHTML = '<tr><td colspan="6" class="text-center text-danger">Erreur de chargement</td></tr>';
+    }
+}
+
+// ============================================
+// 5. UTILITAIRES
+// ============================================
+
+function escapeHtml(text) {
+    if (!text) return '';
+    const div = document.createElement('div');
+    div.textContent = text;
+    return div.innerHTML;
+}
+
+// ============================================
+// 6. ÉVÉNEMENTS & INITIALISATION
+// ============================================
+
+document.addEventListener('DOMContentLoaded', async () => {
+    // Initialiser l'arborescence
+    await chargerArborescence();
+    
+    // Charger les données initiales
+    await chargerToutesLesDonnees();
+    
+    // Écouteurs d'événements
+    document.getElementById('anneeSelect').addEventListener('change', async (e) => {
+        anneeCourante = parseInt(e.target.value);
+        await chargerToutesLesDonnees();
+    });
+    
+    document.getElementById('refreshBtn').addEventListener('click', async () => {
+        await chargerToutesLesDonnees();
+        showToast('Données actualisées', 'success');
+    });
+    
+    document.getElementById('exportBtn').addEventListener('click', () => {
+        window.print();
+    });
+    
+    document.getElementById('voirTousRisquesBtn').addEventListener('click', () => {
+        let url = '/risques?niveau_risque=Critique';
+        if (currentEntity.type !== 'global' && currentEntity.id) {
+            url += `&${currentEntity.type}_id=${currentEntity.id}`;
+        }
+        window.location.href = url;
+    });
+    
+    document.getElementById('voirTousPlansBtn').addEventListener('click', () => {
+        let url = '/plans-action?statut=en_cours';
+        if (currentEntity.type !== 'global' && currentEntity.id) {
+            url += `&${currentEntity.type}_id=${currentEntity.id}`;
+        }
+        window.location.href = url;
+    });
+    
+    // Sidebar toggle pour mobile
+    const sidebar = document.getElementById('strategicSidebar');
+    const toggleBtn = document.getElementById('sidebarToggle');
+    const main = document.getElementById('strategicMain');
+    
+    toggleBtn.addEventListener('click', () => {
+        if (window.innerWidth <= 992) {
+            sidebar.classList.toggle('mobile-open');
+        } else {
+            sidebar.classList.toggle('collapsed');
+            main.classList.toggle('full-width');
+        }
+    });
+});
+
+// Toast notification simple
+function showToast(message, type = 'info') {
+    const toast = document.createElement('div');
+    toast.className = `position-fixed bottom-0 end-0 m-3 alert alert-${type} animate__animated animate__fadeInUp`;
+    toast.style.zIndex = '9999';
+    toast.innerHTML = `<i class="fas fa-${type === 'success' ? 'check-circle' : 'info-circle'} me-2"></i>${message}`;
+    document.body.appendChild(toast);
+    setTimeout(() => toast.remove(), 3000);
+}
+</script>
+{% endblock %}
