@@ -1075,7 +1075,6 @@ def _generer_matrice_classique_legacy(evaluations, matrice_type='classique'):
     print(f"✅ Matrice {matrice_type} générée ({len(evaluations_valides)} risques)")
     return graphic
 
-
 def diagnostiquer_evaluations_manquantes(cartographie_id):
     """Fonction de diagnostic pour identifier les évaluations manquantes"""
     from app import db
@@ -1105,224 +1104,322 @@ def diagnostiquer_evaluations_manquantes(cartographie_id):
             print(f"      Probabilité: Conf={prob_conf}, Val={prob_val}, Pre={prob_pre} → Final={prob_final}")
             print(f"      Valide: {impact_final and prob_final and impact_final > 0 and prob_final > 0}")
 
+
+
 def generer_matrice_risque_specifique(evaluations, risque_surbrillance=None):
-    """
-    Génère une matrice avec un risque spécifique en surbrillance.
+    """Générer une matrice avec un risque spécifique en surbrillance - VERSION LÉGENDES CORRIGÉE"""
+    fig, ax = plt.subplots(figsize=(14, 12))
     
-    Args:
-        evaluations: Liste des évaluations à afficher
-        risque_surbrillance: Risque à mettre en évidence
+    # Configuration de la matrice 5x5
+    impacts = np.arange(1, 6)
+    probabilites = np.arange(1, 6)
     
-    Returns:
-        str: Image PNG encodée en base64
-    """
-    import matplotlib
-    matplotlib.use('Agg')
-    import matplotlib.pyplot as plt
-    import matplotlib.patches as patches
-    from matplotlib.lines import Line2D
-    import numpy as np
-    from io import BytesIO
-    import base64
-
-    COULEURS_FOND = {
-        'Faible':   'lightgreen',
-        'Moyen':    'yellow',
-        'Élevé':    'orange',
-        'Critique': 'red',
-    }
-
-    def _niveau(score):
-        if score <= 4:  return 'Faible'
-        if score <= 10: return 'Moyen'
-        if score <= 16: return 'Élevé'
-        return 'Critique'
-
-    fig, ax = plt.subplots(figsize=(13, 11))
-    fig.patch.set_facecolor('white')
-
-    # Grille
-    for i in range(5):
-        for j in range(5):
-            score_cell = (i + 1) * (j + 1)
-            niveau = _niveau(score_cell)
-            couleur = COULEURS_FOND[niveau]
-
-            rect = patches.Rectangle(
-                (j, i), 1, 1,
-                linewidth=2, edgecolor='black',
-                facecolor=couleur, alpha=0.7
-            )
+    # Création de la grille colorée
+    for i, impact in enumerate(impacts):
+        for j, proba in enumerate(probabilites):
+            score = impact * proba
+            couleur = get_couleur_risque(score)
+            
+            rect = patches.Rectangle((j, i), 1, 1, linewidth=2,
+                                   edgecolor='black', facecolor=couleur, alpha=0.7)
             ax.add_patch(rect)
+            
+            ax.text(j + 0.5, i + 0.5, f'{score}', 
+                   ha='center', va='center', fontsize=14, fontweight='bold')
+    
+    # Dictionnaire pour regrouper les risques par position
+    risques_par_position = {}
+    
+    evaluations_valides = []
+    risques_non_evalues = []
+    
+    for idx, evaluation in enumerate(evaluations):
+        impact = (evaluation.impact_conf or 
+                 evaluation.impact_val or 
+                 evaluation.impact_pre)
+        probabilite = (evaluation.probabilite_conf or 
+                      evaluation.probabilite_val or 
+                      evaluation.probabilite_pre)
+        
+        if impact and probabilite and impact > 0 and probabilite > 0:
+            x = probabilite - 1
+            y = impact - 1
+            
+            x_centre = x + 0.5
+            y_centre = y + 0.5
+            
+            position_key = f"{x}_{y}"
+            if position_key not in risques_par_position:
+                risques_par_position[position_key] = []
+            
+            score_calcule = impact * probabilite
+            
+            risque_data = {
+                'evaluation': evaluation,
+                'x_centre': x_centre,
+                'y_centre': y_centre,
+                'x': x,
+                'y': y,
+                'impact': impact,
+                'probabilite': probabilite,
+                'score': score_calcule,
+                'index': idx,
+                'is_target': (risque_surbrillance and evaluation.risque.id == risque_surbrillance.id)
+            }
+            
+            risques_par_position[position_key].append(risque_data)
+            evaluations_valides.append(evaluation)
 
-            ax.text(j + 0.5, i + 0.5, f'{score_cell}',
-                    ha='center', va='center',
-                    fontsize=14, fontweight='bold')
-
-    # Tracé des risques
-    for evaluation in evaluations:
-        impact = (evaluation.impact_conf or evaluation.impact_val 
-                  or evaluation.impact_pre)
-        proba = (evaluation.probabilite_conf or evaluation.probabilite_val 
-                 or evaluation.probabilite_pre)
-
-        if not (impact and proba and impact > 0 and proba > 0):
-            continue
-
-        x = (proba - 1) + 0.5
-        y = (impact - 1) + 0.5
-
-        # Est-ce le risque cible ?
-        is_target = (
-            risque_surbrillance 
-            and evaluation.risque_id == risque_surbrillance.id
-        )
-
-        if is_target:
-            # Risque ciblé : gros marqueur rouge avec halo
-            ax.plot(x, y, 'o', markersize=25, color='red',
-                    markeredgecolor='yellow', markeredgewidth=4,
-                    alpha=1.0, zorder=10)
-
-            circle = plt.Circle((x, y), 0.35, color='yellow', 
-                                alpha=0.3, zorder=9)
+    # Couleurs pour les différents risques
+    colors = ['blue', 'purple', 'darkred', 'darkgreen', 'darkorange', 'darkcyan', 'brown', 'pink', 'navy', 'teal']
+    
+    # Tracer les risques
+    for position_key, risques_list in risques_par_position.items():
+        has_target = any(r['is_target'] for r in risques_list)
+        
+        if has_target:
+            risque_cible_data = next(r for r in risques_list if r['is_target'])
+            x = risque_cible_data['x_centre']
+            y = risque_cible_data['y_centre']
+            
+            ax.plot(x, y, 'o', markersize=25, color='red', 
+                   markeredgecolor='yellow', markeredgewidth=4, alpha=1.0, zorder=10)
+            
+            circle = plt.Circle((x, y), 0.4, color='yellow', alpha=0.3, zorder=9)
             ax.add_patch(circle)
-
-            ax.annotate(
-                f"⭐ {evaluation.risque.reference} ⭐",
-                (x, y),
-                xytext=(25, 25),
-                textcoords='offset points',
-                fontsize=12, fontweight='bold',
-                bbox=dict(boxstyle="round,pad=0.5", 
-                          fc='yellow', alpha=0.9, ec='orange'),
-                arrowprops=dict(arrowstyle='->', color='orange', lw=2),
-                zorder=11
-            )
+            
+            risque_ref = risque_cible_data['evaluation'].risque.reference
+            score_target = risque_cible_data['score']
+            
+            ax.annotate(f"⭐ {risque_ref} (S:{score_target}) ⭐", 
+                       (x, y), xytext=(25, 25), 
+                       textcoords='offset points', fontsize=14, fontweight='bold',
+                       bbox=dict(boxstyle="round,pad=0.6", fc='yellow', alpha=0.9, ec='orange'),
+                       arrowprops=dict(arrowstyle='->', color='orange', lw=2),
+                       zorder=11)
+            
+        elif len(risques_list) == 1:
+            risque_data = risques_list[0]
+            color_idx = risque_data['index'] % len(colors)
+            x = risque_data['x_centre']
+            y = risque_data['y_centre']
+            
+            ax.plot(x, y, 'o', markersize=16, color=colors[color_idx], 
+                   markeredgecolor='white', markeredgewidth=2, alpha=0.8, zorder=5)
+            
+            ax.annotate(risque_data['evaluation'].risque.reference, (x, y), xytext=(10, 10), 
+                       textcoords='offset points', fontsize=9, fontweight='bold',
+                       bbox=dict(boxstyle="round,pad=0.3", fc='white', alpha=0.8),
+                       zorder=6)
+        
         else:
-            # Autres risques : petit marqueur bleu
-            ax.plot(x, y, 'o', markersize=12, color='#3b82f6',
-                    markeredgecolor='white', markeredgewidth=2,
-                    alpha=0.7, zorder=5)
-
-            ax.annotate(
-                evaluation.risque.reference,
-                (x, y),
-                xytext=(8, 8),
-                textcoords='offset points',
-                fontsize=8, fontweight='bold',
-                bbox=dict(boxstyle="round,pad=0.3", 
-                          fc='white', alpha=0.9),
-                zorder=6
-            )
-
-    # Axes
+            x_centre = float(position_key.split('_')[0]) + 0.5
+            y_centre = float(position_key.split('_')[1]) + 0.5
+            
+            ax.plot(x_centre, y_centre, 's', markersize=18, color='purple', 
+                   markeredgecolor='white', markeredgewidth=2, alpha=0.8, zorder=5)
+            
+            ax.text(x_centre, y_centre, str(len(risques_list)), 
+                   ha='center', va='center', fontsize=10, fontweight='bold', color='white',
+                   zorder=6)
+    
+    # Configuration des axes
     ax.set_xlim(0, 5)
     ax.set_ylim(0, 5)
     ax.set_xticks([0.5, 1.5, 2.5, 3.5, 4.5])
     ax.set_yticks([0.5, 1.5, 2.5, 3.5, 4.5])
-
-    ax.set_xticklabels(
-        ['1\nTrès rare', '2\nRare', '3\nPossible',
-         '4\nProbable', '5\nTrès probable'],
-        fontsize=10
-    )
-    ax.set_yticklabels(
-        ['1\nNégligeable', '2\nMineur', '3\nModéré',
-         '4\nImportant', '5\nCritique'],
-        fontsize=10
-    )
-
+    
+    ax.set_xticklabels(['1\nTrès rare', '2\nRare', '3\nPossible', '4\nProbable', '5\nTrès probable'], fontsize=11)
+    ax.set_yticklabels(['1\nNégligeable', '2\nMineur', '3\nModéré', '4\nImportant', '5\nCritique'], fontsize=11)
     ax.set_xlabel('Probabilité', fontsize=13, fontweight='bold', labelpad=15)
     ax.set_ylabel('Impact', fontsize=13, fontweight='bold', labelpad=15)
-
-    titre = "Matrice des Risques — Vue Spécifique"
+    
+    titre = "Matrice des Risques - Vue Spécifique"
     if risque_surbrillance:
         titre += f"\n{risque_surbrillance.reference} en surbrillance"
-    ax.set_title(titre, fontsize=15, fontweight='bold', pad=20)
-
-    # Légende
-    legend_elements = [
-        Line2D([0], [0], marker='o', color='w', label='Risque ciblé',
-               markerfacecolor='red', markersize=14,
-               markeredgecolor='yellow', markeredgewidth=2),
-        Line2D([0], [0], marker='o', color='w', label='Autres risques',
-               markerfacecolor='#3b82f6', markersize=12,
-               markeredgecolor='white', markeredgewidth=2),
+    ax.set_title(titre, fontsize=16, fontweight='bold', pad=25)
+    
+    # CORRECTION : LÉGENDES BIEN POSITIONNÉES SANS EMPILEMENT
+    legend_x = 5.3
+    current_y = 4.5
+    
+    # Légende des risques
+    if evaluations_valides:
+        ax.text(legend_x, current_y, 'LÉGENDE RISQUES:', fontweight='bold', fontsize=10, 
+                bbox=dict(boxstyle="round,pad=0.3", fc='lightblue', alpha=0.7))
+        current_y -= 0.3
+        
+        for idx in range(min(3, len(evaluations_valides))):
+            eval_data = evaluations_valides[idx]
+            impact = (eval_data.impact_conf or eval_data.impact_val or eval_data.impact_pre)
+            probabilite = (eval_data.probabilite_conf or eval_data.probabilite_val or eval_data.probabilite_pre)
+            
+            if impact and probabilite:
+                color_idx = idx % len(colors)
+                ax.plot(legend_x, current_y, 'o', markersize=8, color=colors[color_idx])
+                risk_score = impact * probabilite
+                ax.text(legend_x + 0.25, current_y, 
+                       f"{eval_data.risque.reference} (S:{risk_score})", 
+                       fontsize=7, va='center')
+                current_y -= 0.2
+        
+        # Légende risque cible
+        if risque_surbrillance:
+            current_y -= 0.1  # Espacement
+            ax.plot(legend_x, current_y, 'o', markersize=10, color='red', markeredgecolor='yellow')
+            target_score = "N/A"
+            for position_list in risques_par_position.values():
+                for risk in position_list:
+                    if risk['is_target']:
+                        target_score = risk['score']
+                        break
+            
+            ax.text(legend_x + 0.25, current_y, 
+                   f"{risque_surbrillance.reference} (S:{target_score})", 
+                   fontsize=7, fontweight='bold', va='center')
+            current_y -= 0.15
+        
+        # Légende risques multiples
+        current_y -= 0.1  # Espacement
+        ax.plot(legend_x, current_y, 's', markersize=8, color='purple', markeredgecolor='white')
+        ax.text(legend_x + 0.25, current_y, "Risques multiples", fontsize=7, fontweight='bold', va='center')
+        current_y -= 0.2
+    
+    # Légende des niveaux de risque - BIEN SÉPARÉE
+    current_y -= 0.2  # Espacement supplémentaire
+    ax.text(legend_x, current_y, 'NIVEAUX DE RISQUE:', fontweight='bold', fontsize=10)
+    current_y -= 0.25
+    
+    niveaux = [
+        ('Faible (1-4)', 'lightgreen'), 
+        ('Moyen (5-10)', 'yellow'), 
+        ('Élevé (11-16)', 'orange'), 
+        ('Critique (17-25)', 'red')
     ]
-    ax.legend(handles=legend_elements, loc='upper center',
-              bbox_to_anchor=(0.5, -0.08), ncol=2, frameon=False,
-              fontsize=11)
-
-    # Export
+    
+    for i, (texte, couleur) in enumerate(niveaux):
+        ax.add_patch(patches.Rectangle((legend_x, current_y - 0.1), 0.25, 0.12, facecolor=couleur))
+        ax.text(legend_x + 0.3, current_y - 0.04, texte, fontsize=7, va='center')
+        current_y -= 0.15
+    
+    # Statistiques - BIEN SÉPARÉES
+    current_y -= 0.3  # Espacement supplémentaire
+    
+    # Calcul des statistiques
+    stats_text = f"STATISTIQUES:\n• {len(evaluations_valides)} risques évalués"
+    if len(risques_non_evalues) > 0:
+        stats_text += f"\n• {len(risques_non_evalues)} à évaluer"
+    
+    if evaluations_valides:
+        scores_calcules = []
+        for eval_data in evaluations_valides:
+            impact = (eval_data.impact_conf or eval_data.impact_val or eval_data.impact_pre)
+            probabilite = (eval_data.probabilite_conf or eval_data.probabilite_val or eval_data.probabilite_pre)
+            if impact and probabilite:
+                scores_calcules.append(impact * probabilite)
+        
+        if scores_calcules:
+            score_moyen = sum(scores_calcules) / len(scores_calcules)
+            score_max = max(scores_calcules)
+            score_min = min(scores_calcules)
+            stats_text += f"\n• Score moyen: {score_moyen:.1f}"
+            stats_text += f"\n• Min: {score_min} | Max: {score_max}"
+    
+    if risque_surbrillance:
+        target_impact = "N/A"
+        target_prob = "N/A"
+        target_score = "N/A"
+        
+        for position_list in risques_par_position.values():
+            for risk in position_list:
+                if risk['is_target']:
+                    eval_data = risk['evaluation']
+                    target_impact = (eval_data.impact_conf or eval_data.impact_val or eval_data.impact_pre)
+                    target_prob = (eval_data.probabilite_conf or eval_data.probabilite_val or eval_data.probabilite_pre)
+                    target_score = risk['score']
+                    break
+        
+        stats_text += f"\n• Risque sélectionné:"
+        stats_text += f"\n  {risque_surbrillance.reference}"
+        stats_text += f"\n  Impact: {target_impact}/5"
+        stats_text += f"\n  Prob: {target_prob}/5"
+        stats_text += f"\n  Score: {target_score}"
+    
+    # Ajuster la taille de la police selon la longueur du texte
+    fontsize_stats = 7 if len(stats_text) > 150 else 8
+    
+    ax.text(legend_x, current_y, stats_text, fontsize=fontsize_stats, 
+            bbox=dict(boxstyle="round,pad=0.3", fc='lightgreen', alpha=0.7),
+            verticalalignment='top')
+    
+    # Ajuster les limites pour la légende
+    ax.set_xlim(0, 7.0)
+    
+    # Conversion en image base64
     buffer = BytesIO()
-    plt.savefig(buffer, format='png', dpi=140,
-                bbox_inches='tight', facecolor='white')
+    plt.savefig(buffer, format='png', dpi=150, bbox_inches='tight', facecolor='white')
     buffer.seek(0)
-    graphic = base64.b64encode(buffer.getvalue()).decode('utf-8')
+    image_png = buffer.getvalue()
     buffer.close()
+    
+    graphic = base64.b64encode(image_png).decode('utf-8')
     plt.close()
-
-    print(f"✅ Matrice spécifique générée ({len(evaluations)} évals, "
-          f"cible={risque_surbrillance.reference if risque_surbrillance else 'N/A'})")
+    
+    print(f"✅ Matrice spécifique générée avec légendes bien positionnées")
     return graphic
 
 def generer_tableau_bordeaux(risques):
-    """Générer le tableau de Bordeaux avec classement par niveau de risque"""
-
+    """Tableau de Bordeaux basé sur le NET (résiduel)."""
     tableau = {
-        'actions_prioritaires': [],    # Risques Critiques
-        'surveillance_renforcee': [],  # Risques Élevés
-        'surveillance_courante': [],   # Risques Moyens
-        'actions_limitees': []         # Risques Faibles
+        'actions_prioritaires': [],
+        'surveillance_renforcee': [],
+        'surveillance_courante': [],
+        'actions_limitees': []
     }
-
+    
     for risque in risques:
-        # Ignorer les risques archivés - VERSION ROBUSTE
         if getattr(risque, 'is_archived', False):
             continue
-
-        # Filtrer uniquement les évaluations confirmées
+        
         evaluations_confirmees = [
             e for e in getattr(risque, 'evaluations', [])
             if getattr(e, 'date_confirmation', None) is not None
         ]
-
         if not evaluations_confirmees:
             continue
-
+        
         try:
-            # Récupérer la dernière évaluation confirmée
-            derniere_evaluation = max(evaluations_confirmees, key=lambda x: x.date_confirmation)
-            niveau_risque = getattr(derniere_evaluation, 'niveau_risque', None)
-            score = getattr(derniere_evaluation, 'score_risque', 0)
-
-            # Classer par niveau de risque exact
+            derniere = max(evaluations_confirmees, key=lambda x: x.date_confirmation)
+            
+            # Priorité NET, fallback score_risque, fallback BRUT
+            niveau = derniere.niveau_risque_net or derniere.niveau_risque
+            score = (derniere.score_risque_net or derniere.score_risque
+                     or derniere.score_risque_brut or 0)
+            
             entry = {
                 'risque': risque,
                 'score': score,
-                'evaluation': derniere_evaluation,
-                'niveau': niveau_risque
+                'score_brut': derniere.score_risque_brut,
+                'evaluation': derniere,
+                'niveau': niveau,
+                'taux_reduction': derniere.taux_reduction_maitrise or 0
             }
-
-            if niveau_risque == 'Critique':
+            
+            if niveau == 'Critique':
                 tableau['actions_prioritaires'].append(entry)
-            elif niveau_risque == 'Élevé':
+            elif niveau == 'Élevé':
                 tableau['surveillance_renforcee'].append(entry)
-            elif niveau_risque == 'Moyen':
+            elif niveau == 'Moyen':
                 tableau['surveillance_courante'].append(entry)
-            elif niveau_risque == 'Faible':
+            elif niveau == 'Faible':
                 tableau['actions_limitees'].append(entry)
-
         except Exception as e:
-            print(f"⚠️ Erreur traitement risque {getattr(risque, 'reference', 'N/A')}: {e}")
-            continue
-
-    # Trier chaque catégorie par score décroissant
-    for categorie in tableau:
-        tableau[categorie] = sorted(tableau[categorie], key=lambda x: x['score'], reverse=True)
-
-    print(f"📋 Tableau Bordeaux généré: {sum(len(v) for v in tableau.values())} risques")
+            print(f"⚠️ Erreur Bordeaux {getattr(risque, 'reference', 'N/A')}: {e}")
+    
+    for cat in tableau:
+        tableau[cat].sort(key=lambda x: x['score'], reverse=True)
+    
+    print(f"📋 Bordeaux: {sum(len(v) for v in tableau.values())} risques")
     return tableau
 
 def calculer_tendance_kri(mesures, periode_jours=30):
@@ -2489,7 +2586,7 @@ def synchroniser_cartographie_apres_archivage(cartographie_id, user_id):
     
 def get_kri_stats():
     """Récupérer les statistiques des KRI pour le dashboard"""
-    from sqlalchemy import func
+    from sqlalchemy import func, or_, and_ 
     
     # KRI actifs associés à des risques non archivés
     kris_actifs = KRI.query.join(Risque).filter(
@@ -2886,6 +2983,7 @@ def verifier_incoherences_cartographie(cartographie_id):
         corrections.append("Description par défaut ajoutée")
     
     if corrections:
+        from models import db
         db.session.commit()
     
     return {
@@ -3137,7 +3235,6 @@ def calculer_tendance_kri_detaille(valeurs):
     else:
         return 'stable'
 
-
 def generer_graphique_kri(kri, mesures=None, format='base64'):
     """
     Génère un graphique d'évolution du KRI/KPI
@@ -3352,7 +3449,6 @@ def generer_graphique_kri(kri, mesures=None, format='base64'):
     if format == 'base64':
         return base64.b64encode(image_png).decode('utf-8')
     return image_png
-
 def synchroniser_kri_automatique():
     """Synchronisation automatique des KRI"""
     from models import KRI, MesureKRI, Risque, db
@@ -3828,7 +3924,9 @@ class GestionnaireParametrage:
         print(f"🔄 Synchronisation modification champ: {champ.nom_technique}")
         # Logique de synchronisation à implémenter selon les besoins
 
-
+# ============================================
+# utils.py - UN SEUL log_activity À GARDER
+# ============================================
 # ============================================
 # utils.py - VERSION FINALE log_activity
 # ============================================
@@ -3870,6 +3968,10 @@ def log_activity(user_id, action, description, entite_type=None, entite_id=None)
         print(f"❌ Erreur journalisation activité: {e}")
         db.session.rollback()
         return False
+
+# ============================================
+# AJOUTER APRÈS les fonctions existantes
+# ============================================
 
 # ============================================
 # FONCTIONS POUR LE DASHBOARD OPÉRATIONNEL
