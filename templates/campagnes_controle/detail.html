@@ -1,0 +1,477 @@
+{% extends "base.html" %}
+
+{% block title %}{{ campagne.nom }} - Egalyx Control{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <!-- En-tête -->
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <div>
+            <h1 class="h2 mb-1">
+                <i class="fas fa-clipboard-list text-primary me-2"></i>
+                {{ campagne.nom }}
+            </h1>
+            <div class="d-flex align-items-center gap-3">
+                <span class="badge bg-secondary">{{ campagne.reference }}</span>
+                <span class="badge bg-{{ campagne.get_couleur_statut() }}">
+                    <i class="fas {{ campagne.get_icone_statut() }} me-1"></i>
+                    {{ {'en_preparation': 'En préparation', 'en_cours': 'En cours', 'termine': 'Terminé', 'annule': 'Annulé'}[campagne.statut] }}
+                </span>
+                {% if campagne.is_archived %}
+                <span class="badge bg-secondary"><i class="fas fa-archive me-1"></i>Archivée</span>
+                {% endif %}
+            </div>
+        </div>
+        <div class="btn-group">
+            {% if not campagne.is_archived %}
+            <a href="{{ url_for('modifier_campagne_controle', id=campagne.id) }}" class="btn btn-outline-secondary">
+                <i class="fas fa-edit me-2"></i>Modifier
+            </a>
+            <button type="button" class="btn btn-outline-danger" onclick="archiverCampagne()">
+                <i class="fas fa-archive me-2"></i>Archiver
+            </button>
+            {% else %}
+            <button type="button" class="btn btn-outline-success" onclick="desarchiverCampagne()">
+                <i class="fas fa-undo me-2"></i>Restaurer
+            </button>
+            {% endif %}
+            <a href="{{ url_for('exporter_campagne_excel', id=campagne.id) }}" class="btn btn-success">
+                <i class="fas fa-file-excel me-2"></i>Exporter
+            </a>
+        </div>
+    </div>
+
+    <!-- Cartes KPI -->
+    <div class="row mb-4">
+        <div class="col-md-3">
+            <div class="card bg-light">
+                <div class="card-body">
+                    <div class="d-flex justify-content-between align-items-center">
+                        <div>
+                            <small class="text-muted">Dossiers contrôlés</small>
+                            <h3 class="mb-0">{{ campagne.nb_dossiers_controles }}<small class="text-muted">/{{ campagne.nb_dossiers_prevus }}</small></h3>
+                        </div>
+                        <i class="fas fa-folder-open fa-2x text-info"></i>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card bg-light">
+                <div class="card-body">
+                    <div class="d-flex justify-content-between align-items-center">
+                        <div>
+                            <small class="text-muted">Conformité</small>
+                            <h3 class="mb-0 text-success">{{ campagne.taux_conformite }}%</h3>
+                        </div>
+                        <i class="fas fa-check-circle fa-2x text-success"></i>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card bg-light">
+                <div class="card-body">
+                    <div class="d-flex justify-content-between align-items-center">
+                        <div>
+                            <small class="text-muted">Anomalies</small>
+                            <h3 class="mb-0 text-danger">{{ campagne.nb_anomalies }}</h3>
+                        </div>
+                        <i class="fas fa-exclamation-triangle fa-2x text-danger"></i>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card bg-light">
+                <div class="card-body">
+                    <div class="d-flex justify-content-between align-items-center">
+                        <div>
+                            <small class="text-muted">Jours restants</small>
+                            <h3 class="mb-0">{{ stats.jours_restants }}</h3>
+                        </div>
+                        <i class="fas fa-calendar-day fa-2x text-warning"></i>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="row">
+        <!-- Colonne gauche: Informations -->
+        <div class="col-lg-4">
+            <div class="card shadow-sm mb-4">
+                <div class="card-header bg-white">
+                    <h5 class="mb-0"><i class="fas fa-info-circle me-2"></i>Informations</h5>
+                </div>
+                <div class="card-body">
+                    <table class="table table-sm">
+                        <tr>
+                            <th width="40%">Créateur</th>
+                            <td>{{ campagne.createur.username if campagne.createur else 'N/A' }}</td>
+                        </tr>
+                        <tr>
+                            <th>Pôle/Filiale</th>
+                            <td>{{ campagne.pole.nom if campagne.pole else '-' }}</td>
+                        </tr>
+                        <!-- ========== 🔥 AJOUT : DIRECTION ========== -->
+                        <tr>
+                            <th>Direction</th>
+                            <td>
+                                {% if campagne.direction %}
+                                <span class="badge bg-primary">{{ campagne.direction.nom }}</span>
+                                {% else %}
+                                <span class="text-muted">-</span>
+                                {% endif %}
+                            </td>
+                        </tr>
+                        <!-- ========== 🔥 AJOUT : SERVICE ========== -->
+                        <tr>
+                            <th>Service</th>
+                            <td>
+                                {% if campagne.service %}
+                                <span class="badge bg-info">{{ campagne.service.nom }}</span>
+                                {% else %}
+                                <span class="text-muted">-</span>
+                                {% endif %}
+                            </td>
+                        </tr>
+                        <!-- ========== 🔥 AJOUT : ORGANISATION COMPLÈTE ========== -->
+                        {% if organisation %}
+                        <tr>
+                            <th>Organisation</th>
+                            <td>
+                                <span class="badge bg-success">
+                                    <i class="fas fa-building me-1"></i>
+                                    {{ organisation_type }}: {{ organisation.nom }}
+                                </span>
+                            </td>
+                        </tr>
+                        {% endif %}
+                        <tr>
+                            <th>Période</th>
+                            <td>{{ campagne.date_debut.strftime('%d/%m/%Y') if campagne.date_debut else 'N/A' }} → {{ campagne.date_fin.strftime('%d/%m/%Y') if campagne.date_fin else 'N/A' }}</td>
+                        </tr>
+                        <tr>
+                            <th>Validateur</th>
+                            <td>{{ campagne.valideur.username if campagne.valideur else '-' }}</td>
+                        </tr>
+                        <tr>
+                            <th>Évaluateur</th>
+                            <td>{{ campagne.evaluateur.username if campagne.evaluateur else '-' }}</td>
+                        </tr>
+                        <tr>
+                            <th>Volume prévisionnel</th>
+                            <td>{{ campagne.volume_previsionnel }}</td>
+                        </tr>
+                        <tr>
+                            <th>Avancement</th>
+                            <td>
+                                <div class="progress" style="height: 8px;">
+                                    <div class="progress-bar bg-info" role="progressbar" 
+                                         style="width: {{ stats.avancement }}%"></div>
+                                </div>
+                                <small>{{ stats.avancement }}%</small>
+                            </td>
+                        </tr>
+                    </table>
+                    {% if campagne.commentaire_general %}
+                    <hr>
+                    <strong>Commentaire :</strong>
+                    <p class="mt-2 text-muted">{{ campagne.commentaire_general }}</p>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+
+        <!-- Colonne droite: Graphiques -->
+        <div class="col-lg-8">
+            <div class="card shadow-sm mb-4">
+                <div class="card-header bg-white">
+                    <h5 class="mb-0"><i class="fas fa-chart-line me-2"></i>Évolution de la conformité</h5>
+                </div>
+                <div class="card-body">
+                    <canvas id="evolutionChart" height="200"></canvas>
+                </div>
+            </div>
+
+            <div class="row">
+                <div class="col-md-6">
+                    <div class="card shadow-sm mb-4">
+                        <div class="card-header bg-white">
+                            <h5 class="mb-0"><i class="fas fa-chart-pie me-2"></i>Répartition des résultats</h5>
+                        </div>
+                        <div class="card-body">
+                            <canvas id="resultatsChart" height="200"></canvas>
+                            <div class="text-center mt-3">
+                                <span class="badge bg-success">Conformes: {{ stats.conformes }}</span>
+                                <span class="badge bg-danger">Anomalies: {{ stats.anomalies }}</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-md-6">
+                    <div class="card shadow-sm mb-4">
+                        <div class="card-header bg-white">
+                            <h5 class="mb-0"><i class="fas fa-chart-bar me-2"></i>Répartition par type</h5>
+                        </div>
+                        <div class="card-body">
+                            <canvas id="typesChart" height="200"></canvas>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Liste des dossiers -->
+    <div class="card shadow-sm">
+        <div class="card-header bg-white d-flex justify-content-between align-items-center">
+            <h5 class="mb-0">
+                <i class="fas fa-folder-open me-2"></i>
+                Dossiers contrôlés ({{ dossiers|length }})
+            </h5>
+            <a href="{{ url_for('ajouter_dossier_controle', id=campagne.id) }}" class="btn btn-sm btn-primary">
+                <i class="fas fa-plus me-2"></i>Ajouter un dossier
+            </a>
+        </div>
+        <div class="card-body p-0">
+            <div class="table-responsive">
+                <table class="table table-hover mb-0">
+                    <thead class="table-light">
+                        <tr>
+                            <th>Référence</th>
+                            <th>Nom du dossier</th>
+                            <th>Type</th>
+                            <th>Date contrôle</th>
+                            <th>Contrôleur</th>
+                            <th>Résultat</th>
+                            <th>Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for dossier in dossiers %}
+                        <tr>
+                            <td><code>{{ dossier.reference }}</code></td>
+                            <td>{{ dossier.nom_dossier }}</td>
+                            <td>{{ dossier.type_dossier or '-' }}</td>
+                            <td>{{ dossier.date_controle.strftime('%d/%m/%Y') if dossier.date_controle else '-' }}</td>
+                            <td>{{ dossier.controleur.username if dossier.controleur else '-' }}</td>
+                            <td>
+                                {% if dossier.est_conforme %}
+                                <span class="badge bg-success"><i class="fas fa-check me-1"></i>Conforme</span>
+                                {% else %}
+                                <span class="badge bg-danger"><i class="fas fa-times me-1"></i>Non conforme</span>
+                                {% endif %}
+                                {% if dossier.est_anomalie %}
+                                <span class="badge bg-warning text-dark"><i class="fas fa-exclamation-triangle me-1"></i>Anomalie</span>
+                                {% endif %}
+                            </td>
+                            <td>
+                                <div class="btn-group btn-group-sm">
+                                    <button type="button" class="btn btn-outline-primary" 
+                                            onclick="voirDetailsDossier({{ dossier.id }})"
+                                            title="Voir détails">
+                                        <i class="fas fa-eye"></i>
+                                    </button>
+                                    <a href="{{ url_for('modifier_dossier_controle', dossier_id=dossier.id) }}" 
+                                       class="btn btn-outline-secondary" title="Modifier">
+                                        <i class="fas fa-edit"></i>
+                                    </a>
+                                    <button type="button" class="btn btn-outline-danger" 
+                                            onclick="supprimerDossier({{ dossier.id }}, '{{ dossier.nom_dossier }}')"
+                                            title="Supprimer">
+                                        <i class="fas fa-trash"></i>
+                                    </button>
+                                </div>
+                            </td>
+                        </tr>
+                        {% else %}
+                        <tr>
+                            <td colspan="7" class="text-center py-5">
+                                <i class="fas fa-folder-open fa-3x text-muted mb-3"></i>
+                                <p class="text-muted mb-0">Aucun dossier contrôlé</p>
+                                <a href="{{ url_for('ajouter_dossier_controle', id=campagne.id) }}" class="btn btn-primary mt-3">
+                                    <i class="fas fa-plus me-2"></i>Ajouter un dossier
+                                </a>
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Modal Détails Dossier -->
+<div class="modal fade" id="dossierModal" tabindex="-1">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Détails du dossier</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body" id="dossierModalBody">
+                <div class="text-center">
+                    <div class="spinner-border" role="status">
+                        <span class="visually-hidden">Chargement...</span>
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Fermer</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<script>
+// Graphique d'évolution
+const evolutionData = {{ evolution_data|safe }};
+const evolutionCtx = document.getElementById('evolutionChart').getContext('2d');
+if (evolutionData && evolutionData.length > 0) {
+    new Chart(evolutionCtx, {
+        type: 'line',
+        data: {
+            labels: evolutionData.map(d => d.date),
+            datasets: [{
+                label: 'Dossiers conformes',
+                data: evolutionData.map(d => d.conformes),
+                borderColor: '#28a745',
+                backgroundColor: 'rgba(40, 167, 69, 0.1)',
+                fill: true,
+                tension: 0.4
+            }, {
+                label: 'Total contrôlés',
+                data: evolutionData.map(d => d.total),
+                borderColor: '#007bff',
+                backgroundColor: 'rgba(0, 123, 255, 0.1)',
+                fill: true,
+                tension: 0.4
+            }]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: true,
+            plugins: {
+                legend: { position: 'top' }
+            }
+        }
+    });
+}
+
+// Graphique des résultats
+const resultatsCtx = document.getElementById('resultatsChart').getContext('2d');
+new Chart(resultatsCtx, {
+    type: 'doughnut',
+    data: {
+        labels: ['Conformes', 'Non conformes'],
+        datasets: [{
+            data: [{{ stats.conformes }}, {{ stats.total_dossiers - stats.conformes }}],
+            backgroundColor: ['#28a745', '#dc3545'],
+            borderWidth: 0
+        }]
+    },
+    options: {
+        responsive: true,
+        maintainAspectRatio: true,
+        plugins: {
+            legend: { position: 'bottom' }
+        }
+    }
+});
+
+// Graphique par type
+fetch('/api/campagne/{{ campagne.id }}/graphiques')
+    .then(res => res.json())
+    .then(data => {
+        if (data.repartition_types) {
+            const typesCtx = document.getElementById('typesChart').getContext('2d');
+            const labels = Object.keys(data.repartition_types);
+            const totals = labels.map(l => data.repartition_types[l].total);
+            
+            new Chart(typesCtx, {
+                type: 'bar',
+                data: {
+                    labels: labels,
+                    datasets: [{
+                        label: 'Nombre de dossiers',
+                        data: totals,
+                        backgroundColor: '#17a2b8',
+                        borderRadius: 4
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: true,
+                    plugins: {
+                        legend: { display: false }
+                    }
+                }
+            });
+        }
+    });
+
+function voirDetailsDossier(dossierId) {
+    const modal = new bootstrap.Modal(document.getElementById('dossierModal'));
+    const body = document.getElementById('dossierModalBody');
+    
+    body.innerHTML = '<div class="text-center"><div class="spinner-border" role="status"></div></div>';
+    modal.show();
+    window.location.href = `/campagne/dossier/${dossierId}/details`;
+}
+
+function supprimerDossier(id, nom) {
+    if (confirm(`Êtes-vous sûr de vouloir supprimer le dossier "${nom}" ?`)) {
+        fetch(`/campagne/dossier/${id}/supprimer`, {
+            method: 'POST',
+            headers: {
+                'X-CSRFToken': '{{ csrf_token() }}'
+            }
+        }).then(response => {
+            if (response.ok) {
+                window.location.reload();
+            } else {
+                alert('Erreur lors de la suppression');
+            }
+        });
+    }
+}
+
+function archiverCampagne() {
+    if (confirm('Êtes-vous sûr de vouloir archiver cette campagne ?')) {
+        fetch(`/campagne/{{ campagne.id }}/archiver`, {
+            method: 'POST',
+            headers: {
+                'X-CSRFToken': '{{ csrf_token() }}'
+            }
+        }).then(response => {
+            if (response.ok) {
+                window.location.href = "{{ url_for('liste_campagnes_controle') }}";
+            } else {
+                alert('Erreur lors de l\'archivage');
+            }
+        });
+    }
+}
+
+function desarchiverCampagne() {
+    if (confirm('Êtes-vous sûr de vouloir restaurer cette campagne ?')) {
+        fetch(`/campagne/{{ campagne.id }}/desarchiver`, {
+            method: 'POST',
+            headers: {
+                'X-CSRFToken': '{{ csrf_token() }}'
+            }
+        }).then(response => {
+            if (response.ok) {
+                window.location.href = "{{ url_for('liste_campagnes_controle') }}";
+            } else {
+                alert('Erreur lors de la restauration');
+            }
+        });
+    }
+}
+</script>
+{% endblock %}
