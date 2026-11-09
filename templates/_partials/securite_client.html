@@ -1,0 +1,89 @@
+{#
+  Jeton CSRF ajouté automatiquement à toutes les requêtes qui modifient des données.
+  Inclus dans chaque mise en page (base.html, operateur/base_operateur.html, home.html,
+  base_public.html, base_auth.html). Grâce à lui, les routes n'ont plus besoin de @csrf.exempt :
+    - formulaires POST : champ caché csrf_token ajouté s'il manque (y compris formulaires créés
+      dynamiquement ou envoyés par form.submit()) ;
+    - fetch(), XMLHttpRequest et jQuery.ajax : en-tête X-CSRFToken ajouté pour POST/PUT/PATCH/DELETE.
+  Seules les requêtes vers ce site sont concernées (le jeton n'est jamais envoyé ailleurs).
+#}
+{% set _jeton_csrf = csrf_token() %}
+<meta name="csrf-token" content="{{ _jeton_csrf }}">
+<script>
+(function () {
+  'use strict';
+  if (window.__egalyxCsrf) return;
+  var JETON = {{ _jeton_csrf|tojson }};
+  window.__egalyxCsrf = JETON;
+  var SURES = { GET: 1, HEAD: 1, OPTIONS: 1, TRACE: 1 };
+
+  function memeSite(url) {
+    try { return new URL(url, window.location.href).origin === window.location.origin; }
+    catch (e) { return false; }
+  }
+
+  // ---- fetch() ----
+  if (window.fetch) {
+    var fetchOrigine = window.fetch;
+    window.fetch = function (ressource, options) {
+      try {
+        var url = (ressource && ressource.url) || ressource;
+        var methode = ((options && options.method) || (ressource && ressource.method) || 'GET').toUpperCase();
+        if (!SURES[methode] && memeSite(url)) {
+          options = Object.assign({}, options || {});
+          var entetes = new Headers(options.headers || (ressource && ressource.headers) || {});
+          if (!entetes.has('X-CSRFToken')) entetes.set('X-CSRFToken', JETON);
+          options.headers = entetes;
+        }
+      } catch (e) { /* ne jamais bloquer une requête */ }
+      return fetchOrigine.call(this, ressource, options);
+    };
+  }
+
+  // ---- XMLHttpRequest (et donc jQuery.ajax) ----
+  var ouvrir = XMLHttpRequest.prototype.open, envoyer = XMLHttpRequest.prototype.send,
+      definir = XMLHttpRequest.prototype.setRequestHeader;
+  XMLHttpRequest.prototype.open = function (methode, url) {
+    this.__csrfMethode = String(methode || 'GET').toUpperCase(); this.__csrfUrl = url; this.__csrfPose = false;
+    return ouvrir.apply(this, arguments);
+  };
+  XMLHttpRequest.prototype.setRequestHeader = function (nom) {
+    if (String(nom).toLowerCase() === 'x-csrftoken') this.__csrfPose = true;
+    return definir.apply(this, arguments);
+  };
+  XMLHttpRequest.prototype.send = function () {
+    try {
+      if (!SURES[this.__csrfMethode] && !this.__csrfPose && memeSite(this.__csrfUrl)) definir.call(this, 'X-CSRFToken', JETON);
+    } catch (e) { /* idem */ }
+    return envoyer.apply(this, arguments);
+  };
+
+  // ---- Formulaires POST ----
+  function proteger(form) {
+    if (!form || !form.getAttribute) return;
+    var methode = (form.getAttribute('method') || 'GET').toUpperCase();
+    if (SURES[methode]) return;
+    if (!memeSite(form.getAttribute('action') || window.location.href)) return;
+    if (form.querySelector('input[name="csrf_token"]')) return;
+    var champ = document.createElement('input');
+    champ.type = 'hidden'; champ.name = 'csrf_token'; champ.value = JETON;
+    form.appendChild(champ);
+  }
+  function protegerTout(racine) { (racine || document).querySelectorAll('form').forEach(proteger); }
+  document.addEventListener('submit', function (e) { proteger(e.target); }, true);
+  var soumettre = HTMLFormElement.prototype.submit;
+  HTMLFormElement.prototype.submit = function () { proteger(this); return soumettre.apply(this, arguments); };
+  function demarrer() {
+    protegerTout(document);
+    new MutationObserver(function (mutations) {
+      mutations.forEach(function (m) {
+        m.addedNodes.forEach(function (n) {
+          if (n.nodeType !== 1) return;
+          if (n.tagName === 'FORM') proteger(n); else if (n.querySelectorAll) protegerTout(n);
+        });
+      });
+    }).observe(document.documentElement, { childList: true, subtree: true });
+  }
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', demarrer); else demarrer();
+})();
+</script>

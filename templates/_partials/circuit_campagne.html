@@ -1,0 +1,49 @@
+{#- Circuit unique campagne ↔ contrôle interne N2 (egalyx/circuit_controle.py).
+    Paramètres : campagne ; avec_reouverture (bool) pour afficher le formulaire de réouverture. -#}
+{% if circuit_campagne is defined %}{% set cc = circuit_campagne(campagne) %}
+<div class="card border-0 shadow-sm mb-3" id="circuit-validation">
+  <div class="card-body">
+    <h6 class="fw-bold mb-2"><i class="fas fa-stamp me-2 text-primary"></i>{{ t("Validation") }}</h6>
+    <ul class="list-unstyled small mb-2">
+      <li><span class="text-muted">{{ t("Validateur") }} :</span>
+        <strong>{{ cc.validateur or t("gestionnaires des campagnes") }}</strong></li>
+      {% if cc.planification %}
+      <li><span class="text-muted">{{ t("Planification N2") }} :</span>
+        {% if url_exists('c2n_detail_planification') %}<a href="{{ url_for('c2n_detail_planification', id=cc.planification.id) }}">{{ cc.planification.reference }}</a>{% else %}{{ cc.planification.reference }}{% endif %}
+        · {{ cc.planification.get_statut_label() if cc.planification.get_statut_label is defined else cc.planification.statut }}</li>
+      {% endif %}
+      <li><span class="text-muted">{{ t("Réouvertures") }} :</span> {{ cc.reouvertures }} / {{ cc.max_reouvertures }}</li>
+      {% if campagne.statut == 'termine' and campagne.date_validation %}
+      <li class="text-success"><i class="fas fa-check-circle me-1"></i>{{ t("Validée le") }} {{ campagne.date_validation.strftime('%d/%m/%Y') }}</li>
+      {% endif %}
+    </ul>
+
+    {% if campagne.statut == 'en_attente_validation' %}
+      {% if cc.peut_decider %}
+      <form method="POST" action="{{ url_for('operateur_valider_campagne', campagne_id=campagne.id) }}" class="mt-2">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <label class="form-label small fw-semibold" for="cc-commentaire">{{ t("Commentaire (obligatoire pour un rejet, 10 caractères minimum)") }}</label>
+        <textarea class="form-control form-control-sm mb-2" id="cc-commentaire" name="commentaire" rows="2"></textarea>
+        <div class="d-flex gap-2 flex-wrap">
+          <button type="submit" name="action" value="approuve" class="btn btn-sm btn-success"><i class="fas fa-check me-1"></i>{{ t("Valider la campagne") }}</button>
+          <button type="submit" name="action" value="rejete" class="btn btn-sm btn-outline-danger"><i class="fas fa-times me-1"></i>{{ t("Rejeter") }}</button>
+        </div>
+        <div class="form-text">{{ t("La validation crée les non-conformités dans le N2 et valide aussi la planification rattachée.") }}</div>
+      </form>
+      {% else %}
+      <div class="alert alert-light small mb-0 py-2"><i class="fas fa-hourglass-half me-1"></i>{{ t("En attente de la décision du validateur.") }}{% if cc.raison %} <span class="text-muted">({{ cc.raison }})</span>{% endif %}</div>
+      {% endif %}
+    {% endif %}
+
+    {% if avec_reouverture and cc.peut_rouvrir %}
+    <form method="POST" action="{{ url_for('operateur_rouvrir_campagne', campagne_id=campagne.id) }}" class="mt-2">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <div class="input-group input-group-sm">
+        <input type="text" name="raison" class="form-control" minlength="5" required placeholder="{{ t('Raison de la réouverture') }}">
+        <button class="btn btn-outline-warning" type="submit"><i class="fas fa-undo-alt me-1"></i>{{ t("Rouvrir") }}</button>
+      </div>
+    </form>
+    {% endif %}
+  </div>
+</div>
+{% endif %}

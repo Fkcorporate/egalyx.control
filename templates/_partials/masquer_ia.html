@@ -1,0 +1,35 @@
+{#- IA désactivée (plateforme, organisation ou permission) : retire des pages tout bouton, lien ou formulaire d'IA.
+    Les adresses correspondantes sont de toute façon bloquées côté serveur (egalyx/ia.py). -#}
+<style>.eg-ia-masque { display: none !important; }</style>
+<script>
+(function () {
+  var MOTIFS = {{ ia_motifs_adresses|tojson }};
+  var TEXTE = /(^|[\s(«"'])(IA|AI)([\s)»"'!:.,]|$)|intelligence artificielle|🤖|ia[- ]ultra/i;
+  var CIBLES = 'a, button, form, .dropdown-item, .nav-link, .btn, [data-ia], [onclick], [data-url], [data-href], [data-action]';
+  function porteIA(e) {
+    if (e.hasAttribute('data-ia')) return true;
+    if (e.closest && e.closest('#egChat, .ad-cat, .ad-ligne, .ad-actions')) return false;   // assistant et centre d'aide : jamais masqués
+    var attrs = ['href', 'action', 'onclick', 'data-url', 'data-href', 'data-action', 'formaction'];
+    for (var i = 0; i < attrs.length; i++) {
+      var v = (e.getAttribute(attrs[i]) || '').toLowerCase();
+      if (v && MOTIFS.some(function (m) { return v.indexOf(m) >= 0; })) return true;
+    }
+    if (/^(A|BUTTON)$/.test(e.tagName) || e.classList.contains('btn') || e.classList.contains('dropdown-item') || e.classList.contains('nav-link')) {
+      var t = (e.textContent || '').trim();
+      return t.length < 80 && TEXTE.test(t);
+    }
+    return false;
+  }
+  function masquer(racine) {
+    (racine.querySelectorAll ? racine.querySelectorAll(CIBLES) : []).forEach(function (e) {
+      if (!porteIA(e)) return;
+      e.classList.add('eg-ia-masque');
+      var li = e.closest('li'); if (li && li.querySelectorAll('a, button').length === 1) li.classList.add('eg-ia-masque');
+    });
+    (racine.querySelectorAll ? racine.querySelectorAll('[data-ia-bloc]') : []).forEach(function (e) { e.classList.add('eg-ia-masque'); });
+  }
+  masquer(document);
+  new MutationObserver(function (ms) { ms.forEach(function (m) { m.addedNodes.forEach(function (n) { if (n.nodeType === 1) masquer(n.parentNode || n); }); }); })
+    .observe(document.body, { childList: true, subtree: true });
+})();
+</script>

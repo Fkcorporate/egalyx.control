@@ -1,0 +1,59 @@
+{#- Recherche globale : Ctrl+K (ou ⌘K) ouvre la palette ; résultats de /api/recherche. -#}
+<style>
+  .rg-fond { position: fixed; inset: 0; background: rgba(15, 23, 42, .45); z-index: 2000; display: none; align-items: flex-start; justify-content: center; padding-top: 12vh; }
+  .rg-fond.ouvert { display: flex; }
+  .rg-boite { width: min(640px, 92vw); background: var(--bs-body-bg, #fff); border-radius: 14px; box-shadow: 0 20px 60px rgba(0,0,0,.3); overflow: hidden; }
+  .rg-saisie { width: 100%; border: 0; border-bottom: 1px solid var(--bs-border-color, #e5e7eb); padding: 1rem 1.1rem; font-size: 1.05rem; outline: none; background: transparent; color: inherit; }
+  .rg-liste { max-height: 55vh; overflow: auto; }
+  .rg-item { display: flex; gap: .75rem; align-items: center; padding: .6rem 1.1rem; text-decoration: none; color: inherit; }
+  .rg-item.actif, .rg-item:hover { background: var(--bs-primary-bg-subtle, #eef4ff); }
+  .rg-type { font-size: .68rem; text-transform: uppercase; letter-spacing: .04em; color: var(--bs-secondary-color, #6b7280); width: 95px; flex: none; font-weight: 600; }
+  .rg-titre { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .rg-sous { font-size: .8rem; color: var(--bs-secondary-color, #6b7280); }
+  .rg-aide { padding: .55rem 1.1rem; font-size: .75rem; color: var(--bs-secondary-color, #6b7280); border-top: 1px solid var(--bs-border-color, #e5e7eb); }
+  .rg-bouton { display: inline-flex; align-items: center; gap: .4rem; }
+  .rg-bouton kbd { font-size: .65rem; padding: .1rem .3rem; }
+</style>
+<div class="rg-fond" id="rgFond" role="dialog" aria-modal="true" aria-label="Recherche globale">
+  <div class="rg-boite">
+    <input class="rg-saisie" id="rgSaisie" type="search" placeholder="Rechercher un risque, un audit, un tiers, un plan d’action…" autocomplete="off">
+    <div class="rg-liste" id="rgListe" role="listbox"></div>
+    <div class="rg-aide">↑ ↓ pour naviguer · Entrée pour ouvrir · Échap pour fermer</div>
+  </div>
+</div>
+<script>
+(function () {
+  var fond = document.getElementById('rgFond'), saisie = document.getElementById('rgSaisie'), liste = document.getElementById('rgListe');
+  var URL = {{ url_for('recherche.api')|tojson }}, minuteur = null, actif = -1, items = [];
+  function echapper(t) { var d = document.createElement('div'); d.textContent = t == null ? '' : t; return d.innerHTML; }
+  function ouvrir() { fond.classList.add('ouvert'); saisie.value = ''; liste.innerHTML = ''; saisie.focus(); setTimeout(function () { saisie.focus(); }, 10); }
+  function fermer() { fond.classList.remove('ouvert'); }
+  window.egalyxRecherche = ouvrir;
+  function marquer(i) { items.forEach(function (e, j) { e.classList.toggle('actif', j === i); }); actif = i; if (items[i]) items[i].scrollIntoView({ block: 'nearest' }); }
+  function chercher() {
+    var q = saisie.value.trim();
+    if (q.length < 2) { liste.innerHTML = ''; items = []; return; }
+    fetch(URL + '?q=' + encodeURIComponent(q), { credentials: 'same-origin', headers: { 'Accept': 'application/json' } })
+      .then(function (r) { return r.json(); })
+      .then(function (j) {
+        var r = j.resultats || [];
+        liste.innerHTML = r.length ? r.map(function (x) {
+          return '<a class="rg-item" role="option" href="' + echapper(x.url) + '"><span class="rg-type">' + echapper(x.type) + '</span>' +
+                 '<span class="rg-titre">' + echapper(x.titre) + '<div class="rg-sous">' + echapper(x.sous_titre) + '</div></span></a>';
+        }).join('') : '<div class="rg-item"><span class="rg-sous">Aucun résultat pour « ' + echapper(q) + ' »</span></div>';
+        items = Array.prototype.slice.call(liste.querySelectorAll('a.rg-item')); marquer(items.length ? 0 : -1);
+      }).catch(function () { liste.innerHTML = '<div class="rg-item"><span class="rg-sous">Recherche indisponible.</span></div>'; });
+  }
+  saisie.addEventListener('input', function () { clearTimeout(minuteur); minuteur = setTimeout(chercher, 180); });
+  saisie.addEventListener('keydown', function (e) {
+    if (e.key === 'ArrowDown') { e.preventDefault(); marquer(Math.min(items.length - 1, actif + 1)); }
+    else if (e.key === 'ArrowUp') { e.preventDefault(); marquer(Math.max(0, actif - 1)); }
+    else if (e.key === 'Enter' && items[actif]) { e.preventDefault(); window.location = items[actif].href; }
+  });
+  fond.addEventListener('click', function (e) { if (e.target === fond) fermer(); });
+  document.addEventListener('keydown', function (e) {
+    if ((e.ctrlKey || e.metaKey) && (e.key === 'k' || e.key === 'K')) { e.preventDefault(); fond.classList.contains('ouvert') ? fermer() : ouvrir(); }
+    else if (e.key === 'Escape' && fond.classList.contains('ouvert')) fermer();
+  });
+})();
+</script>

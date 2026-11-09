@@ -1,0 +1,35 @@
+{% macro organigramme(processus, etapes, liens, hauteur_max=520) %}
+{#- Vue en lecture seule : étapes placées selon leurs coordonnées, liens fléchés -#}
+{% set ns = namespace(maxx=0, maxy=0) %}
+{% for e in etapes %}{% set ns.maxx = [ns.maxx, (e.position_x or 0) + (e.largeur or 140)]|max %}{% set ns.maxy = [ns.maxy, (e.position_y or 0) + (e.hauteur or 60)]|max %}{% endfor %}
+{% set L = ns.maxx + 40 %}{% set H = ns.maxy + 40 %}
+{% set pos = {} %}
+{% for e in etapes %}{% set _ = pos.update({e.id: ((e.position_x or 0) + 20, (e.position_y or 0) + 20, e.largeur or 140, e.hauteur or 60)}) %}{% endfor %}
+<div class="orga-cadre" style="max-height: {{ hauteur_max }}px;">
+<svg viewBox="0 0 {{ L }} {{ H }}" width="{{ L }}" height="{{ H }}" role="img" aria-label="Organigramme du processus {{ processus.nom }}">
+  <defs><marker id="fleche" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+    <path d="M0,0 L10,5 L0,10 z" fill="currentColor"/></marker></defs>
+  {% for l in liens %}{% if l.etape_source_id in pos and l.etape_cible_id in pos %}
+    {% set s = pos[l.etape_source_id] %}{% set c = pos[l.etape_cible_id] %}
+    {% set x1 = s[0] + s[2] / 2 %}{% set y1 = s[1] + s[3] / 2 %}{% set x2 = c[0] + c[2] / 2 %}{% set y2 = c[1] + c[3] / 2 %}
+    {# point d'arrivée sur le bord de la boîte cible #}
+    {% set dx = x2 - x1 %}{% set dy = y2 - y1 %}
+    {% set kx = (c[2] / 2) / (dx|abs) if dx != 0 else 99999 %}{% set ky = (c[3] / 2) / (dy|abs) if dy != 0 else 99999 %}
+    {% set k = [kx, ky]|min %}{% set k = [k, 1]|min %}
+    <line class="orga-lien" x1="{{ x1 }}" y1="{{ y1 }}" x2="{{ x2 - dx * k }}" y2="{{ y2 - dy * k }}" marker-end="url(#fleche)"/>
+    {% if l.label %}<text class="orga-lib-lien" x="{{ (x1 + x2) / 2 }}" y="{{ (y1 + y2) / 2 - 6 }}" text-anchor="middle">{{ l.label }}</text>{% endif %}
+  {% endif %}{% endfor %}
+  {% for e in etapes %}
+    {% set p = pos[e.id] %}{% set coul = e.couleur or '#1A3C6B' %}
+    <g class="orga-etape"><title>{{ e.ordre }}. {{ e.nom }}{% if e.description %} — {{ e.description }}{% endif %}</title>
+    {% if (e.type_etape or '') == 'decision' %}
+      <polygon points="{{ p[0] + p[2] / 2 }},{{ p[1] }} {{ p[0] + p[2] }},{{ p[1] + p[3] / 2 }} {{ p[0] + p[2] / 2 }},{{ p[1] + p[3] }} {{ p[0] }},{{ p[1] + p[3] / 2 }}" fill="{{ coul }}" />
+    {% else %}
+      <rect x="{{ p[0] }}" y="{{ p[1] }}" width="{{ p[2] }}" height="{{ p[3] }}" rx="{{ p[3] / 2 if (e.type_etape or '') in ('debut', 'fin', 'start', 'end') else 8 }}" fill="{{ coul }}" />
+    {% endif %}
+    <text x="{{ p[0] + p[2] / 2 }}" y="{{ p[1] + p[3] / 2 + 4 }}" text-anchor="middle" class="orga-texte">{{ e.ordre }}. {{ e.nom|truncate(22, end='…') }}</text>
+    </g>
+  {% endfor %}
+</svg>
+</div>
+{% endmacro %}

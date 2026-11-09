@@ -1,0 +1,192 @@
+{#
+  _macros/cotation.html — AFFICHAGE UNIQUE DE LA COTATION DES RISQUES
+  ====================================================================
+  Toutes les règles (seuils, couleurs, taux) viennent de cotation.py
+  via les globals Jinja cotation_niveau / cotation_style / cotation_evaluation.
+  Aucun seuil n'est écrit ici : pour changer la règle, on modifie cotation.py.
+
+  Utilisation dans un template :
+      {% import "_macros/cotation.html" as cot %}
+      {{ cot.badge('Élevé') }}                       badge à partir d'un niveau (accepte 'eleve', 'CRITIQUE'…)
+      {{ cot.badge_score(12.5) }}                    badge à partir d'un score
+      {{ cot.brut_net(20, 12, 0.40) }}               bloc Brut → Net (−40 %)
+      {{ cot.brut_net_eval(evaluation) }}            bloc Brut → Net calculé depuis une évaluation
+      {{ cot.badge_eval(evaluation) }}               badge du niveau NET d'une évaluation
+      {{ cot.legende() }}                            légende des 4 niveaux
+      class="cot-bord-{{ cot.cle(niveau) }}"         classes CSS : cot-{cle}, cot-texte-{cle}, cot-bord-{cle}, cot-fond-{cle}
+
+  En JavaScript (chargé par base.html) :
+      EgalyxCotation.niveau(12)  → 'Élevé'
+      EgalyxCotation.style('Élevé').hex
+      EgalyxCotation.badge('Élevé') → HTML du badge
+      EgalyxCotation.brutNet(20, 12, 0.4) → HTML du bloc
+#}
+
+{% macro fmt(score) -%}
+{%- if score is none or score == '' -%}—
+{%- elif (score|float) == ((score|float)|round(0)) -%}{{ (score|float)|int }}
+{%- else -%}{{ '%.1f'|format(score|float) }}
+{%- endif -%}
+{%- endmacro %}
+
+{% macro cle(niveau) -%}{{ cotation_style(niveau).cle }}{%- endmacro %}
+{% macro hex(niveau) -%}{{ cotation_style(niveau).hex }}{%- endmacro %}
+{% macro nom(niveau) -%}{{ cotation_style(niveau).niveau }}{%- endmacro %}
+
+{# ---------------------------------------------------------------- badges #}
+{% macro badge(niveau, prefixe=None, score=None, petit=False, n1=False) -%}
+{%- set st = cotation_style(niveau) -%}
+<span class="cot-badge cot-{{ st.cle }}{% if petit %} cot-badge-sm{% endif %}" title="{{ st.niveau }} — {{ st.action }}">
+{%- if prefixe %}<span class="cot-prefixe">{{ prefixe }}</span>{% endif -%}
+{{ st.niveau }}{% if n1 %} <span class="cot-prefixe">N-1</span>{% endif %}{% if score is not none %} · {{ fmt(score) }}{% endif -%}
+</span>
+{%- endmacro %}
+
+{% macro badge_score(score, prefixe=None, afficher_score=True, petit=False) -%}
+{{ badge(cotation_niveau(score), prefixe=prefixe, score=(score if afficher_score and score else none), petit=petit) }}
+{%- endmacro %}
+
+{% macro badge_eval(evaluation, type='net', afficher_score=False, petit=False) -%}
+{%- set c = cotation_evaluation(evaluation) -%}
+{%- if type == 'brut' -%}
+{{ badge(c.niveau_brut, score=(c.score_brut if afficher_score else none), petit=petit) }}
+{%- else -%}
+{{ badge(c.niveau_net, score=(c.score_net if afficher_score else none), petit=petit) }}
+{%- endif -%}
+{%- endmacro %}
+
+{# ---------------------------------------------------------------- brut → net #}
+{% macro brut_net(brut, net, taux=None, compact=False) -%}
+{%- if (brut is none or brut == 0) and (net is none or net == 0) -%}
+<span class="cot-badge cot-na">Non évalué</span>
+{%- else -%}
+{%- set nb = cotation_niveau(brut) -%}{%- set nn = cotation_niveau(net if net is not none else brut) -%}
+{%- if compact -%}
+<span class="cot-brutnet cot-brutnet-compact" title="Brut {{ fmt(brut) }} ({{ nb }}) → Net {{ fmt(net) }} ({{ nn }}){% if taux %} · maîtrise −{{ (taux * 100)|round|int }} %{% endif %}">
+  <span class="cot-pastille cot-{{ cle(nb) }}">{{ fmt(brut) }}</span>
+  <i class="fas fa-arrow-right cot-fleche"></i>
+  <span class="cot-pastille cot-{{ cle(nn) }}">{{ fmt(net) }}</span>
+</span>
+{%- else -%}
+<span class="cot-brutnet">
+  <span class="cot-ligne"><span class="cot-lib">Brut</span>{{ badge(nb, score=brut, petit=True) }}</span>
+  <span class="cot-ligne"><span class="cot-lib">Net</span>{{ badge(nn, score=net, petit=True) }}
+  {%- if taux and taux > 0 %}<span class="cot-reduction" title="Réduction apportée par la maîtrise"><i class="fas fa-arrow-down"></i>{{ (taux * 100)|round|int }} %</span>{% endif -%}
+  </span>
+</span>
+{%- endif -%}
+{%- endif -%}
+{%- endmacro %}
+
+{% macro brut_net_eval(evaluation, compact=False) -%}
+{%- set c = cotation_evaluation(evaluation) -%}
+{%- if c.evalue -%}{{ brut_net(c.score_brut, c.score_net, c.taux_reduction, compact) }}
+{%- else -%}<span class="cot-badge cot-na">Non évalué</span>{%- endif -%}
+{%- endmacro %}
+
+{# ---------------------------------------------------------------- légende #}
+{% macro legende(compact=False) -%}
+{%- set s = COTATION_SEUILS -%}
+<div class="cot-legende{% if compact %} cot-legende-compact{% endif %}">
+  <span>{{ badge('Faible', petit=True) }} <small>1 – {{ s[0] }}</small></span>
+  <span>{{ badge('Moyen', petit=True) }} <small>&gt; {{ s[0] }} – {{ s[1] }}</small></span>
+  <span>{{ badge('Élevé', petit=True) }} <small>&gt; {{ s[1] }} – {{ s[2] }}</small></span>
+  <span>{{ badge('Critique', petit=True) }} <small>&gt; {{ s[2] }} – 25</small></span>
+  {% if not compact %}<small class="text-muted d-block mt-1">Brut = impact × probabilité. Net = impact × probabilité réduite par la maîtrise. Le niveau NET sert de référence.</small>{% endif %}
+</div>
+{%- endmacro %}
+
+{% macro tableau_regles() -%}
+{%- set s = COTATION_SEUILS -%}
+<table class="table table-sm align-middle mb-0">
+  <thead><tr><th>Score</th><th>Niveau</th><th>Réponse attendue</th></tr></thead>
+  <tbody>
+    <tr><td>1 – {{ s[0] }}</td><td>{{ badge('Faible', petit=True) }}</td><td>{{ cotation_style('Faible').action }}</td></tr>
+    <tr><td>&gt; {{ s[0] }} – {{ s[1] }}</td><td>{{ badge('Moyen', petit=True) }}</td><td>{{ cotation_style('Moyen').action }}</td></tr>
+    <tr><td>&gt; {{ s[1] }} – {{ s[2] }}</td><td>{{ badge('Élevé', petit=True) }}</td><td>{{ cotation_style('Élevé').action }}</td></tr>
+    <tr><td>&gt; {{ s[2] }} – 25</td><td>{{ badge('Critique', petit=True) }}</td><td>{{ cotation_style('Critique').action }}</td></tr>
+  </tbody>
+</table>
+{%- endmacro %}
+
+{# ---------------------------------------------------------------- CSS (appelé une fois dans base.html) #}
+{% macro styles() -%}
+{%- set S = cotation_config_js().styles -%}
+<style id="egalyx-cotation">
+  :root {
+  {%- for nom, st in S.items() %}
+    --cot-{{ st.cle }}: {{ st.hex }}; --cot-{{ st.cle }}-texte: {{ st.texte }};
+  {%- endfor %}
+  }
+  {%- for nom, st in S.items() %}
+  .cot-{{ st.cle }} { background: var(--cot-{{ st.cle }}) !important; color: var(--cot-{{ st.cle }}-texte) !important; }
+  .cot-texte-{{ st.cle }} { color: var(--cot-{{ st.cle }}) !important; }
+  .cot-bord-{{ st.cle }} { border-left-color: var(--cot-{{ st.cle }}) !important; }
+  .cot-fond-{{ st.cle }} { background: color-mix(in srgb, var(--cot-{{ st.cle }}) 12%, transparent) !important; }
+  {%- endfor %}
+  .text-bg-orange, .bg-orange { background: var(--cot-eleve) !important; color: #fff !important; }
+  .cot-badge { display: inline-flex; align-items: center; gap: .3em; padding: .25em .7em; border-radius: 999px;
+               font-size: .75rem; font-weight: 600; line-height: 1.2; white-space: nowrap; }
+  .cot-badge-sm { font-size: .68rem; padding: .15em .55em; }
+  .cot-prefixe { font-weight: 500; opacity: .85; font-size: .9em; }
+  .cot-brutnet { display: inline-flex; flex-direction: column; gap: .2rem; align-items: flex-start; }
+  .cot-brutnet .cot-ligne { display: inline-flex; align-items: center; gap: .35rem; }
+  .cot-lib { font-size: .62rem; text-transform: uppercase; letter-spacing: .04em; color: #94a3b8; font-weight: 700; min-width: 2.2rem; }
+  .cot-reduction { font-size: .66rem; color: #16a34a; font-weight: 700; }
+  .cot-reduction i { font-size: .6rem; margin-right: .15rem; }
+  .cot-brutnet-compact { flex-direction: row; align-items: center; gap: .3rem; }
+  .cot-pastille { display: inline-block; min-width: 2rem; text-align: center; padding: .1rem .4rem; border-radius: 6px; font-weight: 700; font-size: .78rem; }
+  .cot-fleche { font-size: .6rem; color: #94a3b8; }
+  .cot-legende { display: flex; flex-wrap: wrap; gap: .6rem 1rem; align-items: center; }
+  .cot-legende small { color: #64748b; }
+  [data-bs-theme="dark"] .cot-legende small { color: #94a3b8; }
+</style>
+{%- endmacro %}
+
+{# ---------------------------------------------------------------- JS (appelé une fois dans base.html) #}
+{% macro script() -%}
+<script id="egalyx-cotation-js">
+window.EgalyxCotation = (function (cfg) {
+  const s = cfg.seuils;
+  const ALIAS = { faible: 'Faible', moyen: 'Moyen', modere: 'Moyen', eleve: 'Élevé', elevee: 'Élevé', majeur: 'Élevé',
+                  critique: 'Critique', 'tres eleve': 'Critique' };
+  function niveau(score) {
+    const v = parseFloat(String(score ?? '').replace(',', '.'));
+    if (!(v > 0)) return 'Non évalué';
+    if (v <= s[0]) return 'Faible';
+    if (v <= s[1]) return 'Moyen';
+    if (v <= s[2]) return 'Élevé';
+    return 'Critique';
+  }
+  function normaliser(n) {
+    if (n === null || n === undefined || n === '') return 'Non évalué';
+    if (typeof n === 'number') return niveau(n);
+    if (cfg.styles[n]) return n;
+    const k = String(n).normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().replace(/_/g, ' ').trim();
+    return ALIAS[k] || 'Non évalué';
+  }
+  function style(n) { const nom = normaliser(n); return Object.assign({ niveau: nom }, cfg.styles[nom]); }
+  function fmt(x) { const v = parseFloat(x); if (!(v > 0)) return '—'; return Number.isInteger(v) ? String(v) : v.toFixed(1); }
+  function esc(t) { return String(t).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c])); }
+  function badge(n, score) {
+    const st = style(n);
+    return `<span class="cot-badge cot-${st.cle}">${esc(st.niveau)}${score ? ' · ' + fmt(score) : ''}</span>`;
+  }
+  function brutNet(brut, net, taux) {
+    const red = taux > 0 ? `<span class="cot-reduction"><i class="fas fa-arrow-down"></i>${Math.round(taux * 100)} %</span>` : '';
+    return `<span class="cot-brutnet"><span class="cot-ligne"><span class="cot-lib">Brut</span>${badge(niveau(brut), brut)}</span>` +
+           `<span class="cot-ligne"><span class="cot-lib">Net</span>${badge(niveau(net), net)}${red}</span></span>`;
+  }
+  function scores(impact, proba, maitrise) {
+    const i = parseFloat(impact), p = parseFloat(proba);
+    if (!(i > 0 && p > 0)) return { score_brut: 0, niveau_brut: 'Non évalué', score_net: 0, niveau_net: 'Non évalué', probabilite_ajustee: 0, taux_reduction: 0 };
+    const t = cfg.tauxReduction[String(Math.round(parseFloat(maitrise)))] || 0;
+    const pa = Math.round(p * (1 - t) * 100) / 100;
+    const brut = Math.round(i * p * 100) / 100, net = Math.round(i * pa * 100) / 100;
+    return { score_brut: brut, niveau_brut: niveau(brut), score_net: net, niveau_net: niveau(net), probabilite_ajustee: pa, taux_reduction: t };
+  }
+  return { seuils: s, scoreMax: cfg.scoreMax, styles: cfg.styles, tauxReduction: cfg.tauxReduction,
+           niveau, normaliser, style, couleur: n => style(n).hex, cle: n => style(n).cle, badge, brutNet, scores, fmt };
+})({{ cotation_config_js()|tojson }});
+</script>
+{%- endmacro %}

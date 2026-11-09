@@ -1,0 +1,35 @@
+{% extends "base.html" %}
+{% import "_macros/page.html" as pg %}
+
+{% block title %}Envois du webhook {{ webhook.name }}{% endblock %}
+{% block styles %}{{ pg.styles() }}{% endblock %}
+{% block content %}
+<div class="container-fluid">
+  {{ pg.entete('Historique des envois', 'fa-paper-plane', webhook.name ~ ' — ' ~ webhook.url, retour=url_for('admin_webhooks'), libelle_retour='Webhooks') }}
+  <div class="pg-kpis">
+    {{ pg.kpi('Envoyés', webhook.total_sent or 0) }}
+    {{ pg.kpi('Réussis', webhook.total_success or 0) }}
+    {{ pg.kpi('Échecs', webhook.total_failed or 0) }}
+  </div>
+  {% call pg.carte('100 derniers envois') %}
+    {% if logs %}
+    <div class="table-responsive"><table class="pg-table">
+      <thead><tr><th>Date</th><th>Événement</th><th>Résultat</th><th class="pg-num">Code HTTP</th><th class="pg-num">Durée</th><th>Détail</th></tr></thead>
+      <tbody>
+      {% for l in logs %}
+        <tr>
+          <td class="text-nowrap">{{ pg.date(l.created_at, True) }}</td>
+          <td><code>{{ l.event }}</code>{% if l.entite_type %}<div class="pg-second">{{ l.entite_type }} #{{ l.entite_id }}</div>{% endif %}</td>
+          <td>{% if l.success %}<span class="badge text-bg-success">Réussi</span>{% else %}<span class="badge text-bg-danger">Échec</span>{% endif %}</td>
+          <td class="pg-num">{{ l.response_status or '—' }}</td>
+          <td class="pg-num">{{ (l.duration_ms ~ ' ms') if l.duration_ms is not none else '—' }}</td>
+          <td>{% if l.error_message %}<span class="text-danger small">{{ l.error_message|truncate(140) }}</span>{% endif %}
+              {% if l.response_body %}<details><summary class="pg-second">Réponse</summary><pre class="pg-pre">{{ l.response_body|truncate(2000) }}</pre></details>{% endif %}</td>
+        </tr>
+      {% endfor %}
+      </tbody>
+    </table></div>
+    {% else %}{{ pg.vide('Aucun envoi pour ce webhook.', 'fa-paper-plane') }}{% endif %}
+  {% endcall %}
+</div>
+{% endblock %}

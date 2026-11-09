@@ -1,0 +1,129 @@
+{#
+  _macros/page.html — briques communes des pages simples (listes, formulaires, détails).
+  Utilisation :
+      {% import "_macros/page.html" as pg %}
+      {% block styles %}{{ pg.styles() }}{% endblock %}
+      {{ pg.entete('Titre', 'fa-list', 'Sous-titre', retour=url_for('...')) }}
+      {% call pg.carte('Titre de carte') %} ... {% endcall %}
+      {{ pg.vide('Aucun élément.', 'fa-inbox') }}
+      {{ pg.date(objet.created_at) }}   {{ pg.statut('en_cours') }}
+#}
+
+{% macro styles() -%}
+<style>
+  .pg-entete { display: flex; justify-content: space-between; align-items: flex-end; flex-wrap: wrap; gap: 1rem; margin-bottom: 1.25rem; }
+  .pg-entete h1 { font-size: 1.45rem; font-weight: 700; margin: 0; display: flex; align-items: center; gap: .6rem; }
+  .pg-entete h1 i { color: var(--bs-primary); font-size: 1.15rem; }
+  .pg-sous { color: var(--bs-secondary-color); font-size: .9rem; margin-top: .3rem; }
+  .pg-carte { background: var(--bs-body-bg); border: 1px solid var(--bs-border-color); border-radius: 12px; padding: 1.1rem 1.25rem; margin-bottom: 1rem; }
+  .pg-carte-titre { display: flex; justify-content: space-between; align-items: baseline; gap: .75rem; margin-bottom: .9rem; }
+  .pg-carte-titre h2 { font-size: 1rem; font-weight: 650; margin: 0; }
+  .pg-carte-titre .pg-aide { color: var(--bs-secondary-color); font-size: .8rem; }
+  .pg-table { width: 100%; font-size: .875rem; }
+  .pg-table th { font-size: .72rem; text-transform: uppercase; letter-spacing: .03em; color: var(--bs-secondary-color); font-weight: 600;
+                 border-bottom: 1px solid var(--bs-border-color); padding: .45rem .55rem; white-space: nowrap; }
+  .pg-table td { padding: .6rem .55rem; border-bottom: 1px solid var(--bs-border-color); vertical-align: middle; }
+  .pg-table tr:last-child td { border-bottom: 0; }
+  .pg-table a { text-decoration: none; }
+  .pg-num { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
+  .pg-ref { font-weight: 650; white-space: nowrap; }
+  .pg-second { color: var(--bs-secondary-color); font-size: .8rem; }
+  .pg-vide { text-align: center; color: var(--bs-secondary-color); padding: 2rem .5rem; font-size: .9rem; }
+  .pg-vide i { display: block; font-size: 1.6rem; margin-bottom: .5rem; opacity: .45; }
+  .pg-kpis { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: .75rem; margin-bottom: 1rem; }
+  .pg-kpi { background: var(--bs-body-bg); border: 1px solid var(--bs-border-color); border-radius: 12px; padding: .9rem 1rem; }
+  .pg-kpi-lib { font-size: .75rem; color: var(--bs-secondary-color); font-weight: 600; text-transform: uppercase; letter-spacing: .03em; }
+  .pg-kpi-val { font-size: 1.7rem; font-weight: 700; line-height: 1.15; margin-top: .25rem; font-variant-numeric: tabular-nums; }
+  .pg-dl { display: grid; grid-template-columns: minmax(140px, max-content) 1fr; gap: .45rem 1.25rem; margin: 0; font-size: .9rem; }
+  .pg-dl dt { color: var(--bs-secondary-color); font-weight: 500; }
+  .pg-dl dd { margin: 0; }
+  .pg-barre { height: 6px; width: 90px; background: var(--bs-tertiary-bg); border-radius: 3px; overflow: hidden; display: inline-block; vertical-align: middle; }
+  .pg-barre > span { display: block; height: 100%; background: var(--bs-primary); }
+  .pg-pre { white-space: pre-wrap; font-size: .82rem; background: var(--bs-tertiary-bg); border-radius: 8px; padding: .6rem .75rem; margin: 0; max-height: 260px; overflow: auto; }
+  @media print { .pg-no-print { display: none !important; } .pg-carte { break-inside: avoid; } }
+</style>
+{%- endmacro %}
+
+{% macro entete(titre, icone='fa-file', sous_titre=none, retour=none, libelle_retour='Retour') -%}
+<div class="pg-entete">
+  <div>
+    <h1><i class="fas {{ icone }}"></i>{{ titre }}</h1>
+    {% if sous_titre %}<div class="pg-sous">{{ sous_titre }}</div>{% endif %}
+  </div>
+  <div class="d-flex gap-2 flex-wrap pg-no-print">
+    {{ caller() if caller }}
+    {% if retour %}<a class="btn btn-sm btn-outline-secondary" href="{{ retour }}"><i class="fas fa-arrow-left me-1"></i>{{ libelle_retour }}</a>{% endif %}
+  </div>
+</div>
+{%- endmacro %}
+
+{% macro carte(titre=none, aide=none, lien=none, libelle_lien='Tout voir') -%}
+<div class="pg-carte">
+  {% if titre %}
+  <div class="pg-carte-titre">
+    <h2>{{ titre }}</h2>
+    {% if lien %}<a href="{{ lien }}" class="small text-decoration-none">{{ libelle_lien }} <i class="fas fa-arrow-right ms-1"></i></a>
+    {% elif aide %}<span class="pg-aide">{{ aide }}</span>{% endif %}
+  </div>
+  {% endif %}
+  {{ caller() }}
+</div>
+{%- endmacro %}
+
+{% macro vide(message='Aucun élément à afficher.', icone='fa-inbox') -%}
+<div class="pg-vide"><i class="fas {{ icone }}"></i>{{ message }}</div>
+{%- endmacro %}
+
+{% macro kpi(libelle, valeur, couleur=none) -%}
+<div class="pg-kpi"><div class="pg-kpi-lib">{{ libelle }}</div><div class="pg-kpi-val"{% if couleur %} style="color: {{ couleur }}"{% endif %}>{{ valeur }}</div></div>
+{%- endmacro %}
+
+{% macro date(d, avec_heure=False) -%}
+{%- if d -%}{{ d.strftime('%d/%m/%Y %H:%M' if avec_heure else '%d/%m/%Y') if d.strftime is defined else d }}{%- else -%}—{%- endif -%}
+{%- endmacro %}
+
+{% macro barre(pourcentage) -%}
+{%- set p = (pourcentage or 0)|float -%}
+<span class="pg-barre" title="{{ p|round|int }} %"><span style="width: {{ [[p, 0]|max, 100]|min }}%"></span></span>
+<small class="text-secondary ms-1">{{ p|round|int }} %</small>
+{%- endmacro %}
+
+{% set _STATUTS = {
+  'en_cours': ('En cours', 'primary'), 'en_attente': ('En attente', 'secondary'), 'termine': ('Terminé', 'success'),
+  'terminee': ('Terminée', 'success'), 'annule': ('Annulé', 'dark'), 'a_faire': ('À faire', 'secondary'),
+  'planifie': ('Planifié', 'info'), 'brouillon': ('Brouillon', 'secondary'), 'valide': ('Validé', 'success'),
+  'validee': ('Validée', 'success'), 'rejete': ('Rejeté', 'danger'), 'rejetee': ('Rejetée', 'danger'),
+  'en_revision': ('En révision', 'warning'), 'approuve': ('Approuvé', 'success'), 'actif': ('Actif', 'success'),
+  'inactif': ('Inactif', 'secondary'), 'en_retard': ('En retard', 'danger'), 'realise': ('Réalisé', 'success'),
+  'realisee': ('Réalisée', 'success'), 'ouvert': ('Ouvert', 'warning'), 'ferme': ('Fermé', 'secondary'),
+} %}
+{% macro statut(code) -%}
+{%- set s = _STATUTS.get((code or '')|lower) -%}
+{%- if s -%}<span class="badge text-bg-{{ s[1] }}">{{ s[0] }}</span>
+{%- elif code -%}<span class="badge text-bg-secondary">{{ code|replace('_', ' ')|capitalize }}</span>
+{%- else -%}<span class="text-secondary">—</span>{%- endif -%}
+{%- endmacro %}
+
+{% macro valeur(v) -%}
+{#- Affiche proprement une valeur quelconque (texte, nombre, liste, dict) -#}
+{%- if v is none or v == '' -%}<span class="text-secondary">—</span>
+{%- elif v is mapping -%}<dl class="pg-dl">{% for k, x in v.items() %}<dt>{{ k|replace('_', ' ')|capitalize }}</dt><dd>{{ valeur(x) }}</dd>{% endfor %}</dl>
+{%- elif v is iterable and v is not string -%}{% if v|length == 0 %}<span class="text-secondary">—</span>{% else %}<ul class="mb-0 ps-3">{% for x in v %}<li>{{ valeur(x) }}</li>{% endfor %}</ul>{% endif %}
+{%- elif v is sameas true -%}Oui{%- elif v is sameas false -%}Non
+{%- else -%}{{ v }}{%- endif -%}
+{%- endmacro %}
+
+{% macro champ(field, colonne='col-12') -%}
+{#- Champ WTForms rendu avec Bootstrap -#}
+<div class="{{ colonne }}">
+  {% if field.type == 'BooleanField' %}
+    <div class="form-check mt-2">{{ field(class='form-check-input') }} {{ field.label(class='form-check-label') }}</div>
+  {% else %}
+    {{ field.label(class='form-label') }}
+    {% set classe = 'form-select' if field.type in ('SelectField', 'SelectMultipleField', 'QuerySelectField') else 'form-control' %}
+    {{ field(class=classe ~ (' is-invalid' if field.errors else '')) }}
+  {% endif %}
+  {% for e in field.errors %}<div class="invalid-feedback d-block">{{ e }}</div>{% endfor %}
+  {% if field.description %}<div class="form-text">{{ field.description }}</div>{% endif %}
+</div>
+{%- endmacro %}
