@@ -2,6 +2,59 @@ from flask_sqlalchemy import SQLAlchemy
 from flask_login import UserMixin
 from datetime import datetime, date, timezone, timedelta
 from werkzeug.security import generate_password_hash, check_password_hash
+import cotation as _cotation   # règle unique de cotation des risques (cotation.py, à côté de app.py)
+import os
+from flask_login import current_user
+from sqlalchemy.orm.attributes import flag_modified
+
+
+# ============================================================================
+# CHIFFREMENT DES SECRETS (mots de passe de base, clés SSH…)
+# ----------------------------------------------------------------------------
+# Clé : variable d'environnement EGALYX_CLE_CHIFFREMENT (clé Fernet).
+#   Générer une clé :  python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"
+# Les valeurs chiffrées commencent par « enc1: ». Les anciennes valeurs en clair restent lisibles
+# et sont chiffrées à la prochaine écriture (ou en une fois : flask chiffrer-secrets).
+# ============================================================================
+PREFIXE_SECRET = 'enc1:'
+
+
+def _fernet():
+    cle = os.environ.get('EGALYX_CLE_CHIFFREMENT')
+    if not cle:
+        return None
+    from cryptography.fernet import Fernet
+    return Fernet(cle.encode() if isinstance(cle, str) else cle)
+
+
+def chiffrer_secret(valeur):
+    if valeur in (None, '') or str(valeur).startswith(PREFIXE_SECRET):
+        return valeur
+    f = _fernet()
+    if f is None:
+        print("⚠️ EGALYX_CLE_CHIFFREMENT non définie : secret enregistré EN CLAIR")
+        return valeur
+    return PREFIXE_SECRET + f.encrypt(str(valeur).encode()).decode()
+
+
+def dechiffrer_secret(valeur):
+    if valeur in (None, '') or not str(valeur).startswith(PREFIXE_SECRET):
+        return valeur
+    f = _fernet()
+    if f is None:
+        print("⚠️ EGALYX_CLE_CHIFFREMENT non définie : impossible de lire un secret chiffré")
+        return None
+    return f.decrypt(str(valeur)[len(PREFIXE_SECRET):].encode()).decode()
+
+
+def marquer_json_modifie(objet, *champs):
+    """À appeler après avoir modifié un champ JSON « sur place » (append, clé de dict…) :
+    sinon SQLAlchemy ne détecte pas le changement et rien n'est enregistré."""
+    for champ in champs:
+        try:
+            flag_modified(objet, champ)
+        except Exception:
+            pass
 
 db = SQLAlchemy()
 
@@ -14,6 +67,7 @@ class User(UserMixin, db.Model):
     # CHAMPS EXISTANTS (conservés)
     # ============================================
     id = db.Column(db.Integer, primary_key=True)
+    updated_at = db.Column(db.DateTime, nullable=True)   # écrit par l'application mais absent de la base (recette nov. 2026)
     username = db.Column(db.String(80), unique=True, nullable=False)
     email = db.Column(db.String(120), unique=True, nullable=False)
     password_hash = db.Column(db.String(128))
@@ -36,6 +90,13 @@ class User(UserMixin, db.Model):
     is_client_admin = db.Column(db.Boolean, default=False)
     can_manage_users = db.Column(db.Boolean, default=False)
     can_view_users_list = db.Column(db.Boolean, default=False)
+
+    # Double authentification (TOTP) — voir egalyx/double_auth.py
+    totp_secret_chiffre = db.Column(db.String(255))          # secret chiffré (enc1:…)
+    totp_actif = db.Column(db.Boolean, default=False)
+    totp_active_le = db.Column(db.DateTime)
+    totp_dernier_pas = db.Column(db.Integer)                 # interdit la réutilisation d'un code
+    totp_codes_secours = db.Column(db.JSON)                  # empreintes des codes de secours restants
     
     # Relation client
     client = db.relationship('Client', back_populates='utilisateurs')
@@ -112,6 +173,8 @@ class User(UserMixin, db.Model):
         'can_view_tableau_bord_strategique': False,
         'can_view_controle_interne_n2': False,
         'can_manage_controle_interne_n2': False,
+        'can_view_recommandations': False,
+        'can_manage_recommandations': False,
         
         'can_view_reports': True,
         
@@ -449,6 +512,7 @@ class User(UserMixin, db.Model):
             
             # Ajouter l'ancien hash à l'historique
             self.password_history.append(self.password_hash)
+            marquer_json_modifie(self, 'password_history')
             
             # Garder seulement les 10 derniers
             if len(self.password_history) > 10:
@@ -812,6 +876,17 @@ class User(UserMixin, db.Model):
             return True
         
         # ============================================
+        # 1 bis. MODULES ACTIVÉS POUR SON ORGANISATION (choix du super admin)
+        # Un module désactivé l'emporte sur toute permission individuelle.
+        # ============================================
+        try:
+            from egalyx.modules_client import permission_autorisee_par_module
+            if not permission_autorisee_par_module(self, permission):
+                return False
+        except ImportError:
+            pass
+        
+        # ============================================
         # 2. VÉRIFIER D'ABORD LES PERMISSIONS EXPLICITES DANS LA BASE
         # ============================================
         if self.permissions and permission in self.permissions:
@@ -882,6 +957,17 @@ class User(UserMixin, db.Model):
                 
                 # IA
                 'can_use_ia_analysis': True,
+
+                # Registre des recommandations
+                'can_view_recommandations': True,
+                'can_manage_recommandations': True,
+
+                # Conformité et reporting (v4/v5)
+                'can_view_tiers': True,
+                'can_manage_tiers': True,
+                'can_manage_alertes': True,
+                'can_view_rapport_comite': True,
+                'can_sign_documents': True,
                 
                 # Qualité
                 'can_manage_quality': True,
@@ -952,6 +1038,8 @@ class User(UserMixin, db.Model):
                 'can_view_departments': True,
                 'can_view_notifications': True,
                 'can_view_action_plans': True,
+                'can_view_tiers': True,
+                'can_sign_documents': True,
                 'can_export_data': True,
                 
                 # 🔥 RAPPORTS - Plus de forcage, utilisateur la DB
@@ -1029,6 +1117,8 @@ class User(UserMixin, db.Model):
                 'can_view_notifications': True,
                 'can_manage_audit': True,
                 'can_view_action_plans': True,
+                'can_view_tiers': True,
+                'can_sign_documents': True,
             },
             'utilisateur': {
                 'can_view_dashboard': True,
@@ -1041,6 +1131,10 @@ class User(UserMixin, db.Model):
                 'can_view_departments': True,
                 'can_view_notifications': True,
                 'can_manage_regulatory': True,
+                'can_view_tiers': True,
+                'can_manage_tiers': True,
+                'can_manage_alertes': True,
+                'can_sign_documents': True,
             },
             'consultant': {
                 'can_view_dashboard': True,
@@ -1270,6 +1364,7 @@ class Direction(db.Model):
     __tablename__ = 'direction'
     
     id = db.Column(db.Integer, primary_key=True)
+    updated_at = db.Column(db.DateTime, nullable=True)   # écrit par l'application mais absent de la base (recette nov. 2026)
     nom = db.Column(db.String(100), nullable=False)
     description = db.Column(db.Text)
     
@@ -1375,11 +1470,13 @@ class Service(db.Model):
             self.equipe_membres = []
         if nom_membre not in self.equipe_membres:
             self.equipe_membres.append(nom_membre)
+            marquer_json_modifie(self, 'equipe_membres')
     
     # Méthode pour retirer un membre de l'équipe
     def retirer_membre_equipe(self, nom_membre):
         if self.equipe_membres and nom_membre in self.equipe_membres:
             self.equipe_membres.remove(nom_membre)
+            marquer_json_modifie(self, 'equipe_membres')
     
     # Propriété pour obtenir le nombre de membres
     @property
@@ -1467,10 +1564,12 @@ class Pole(db.Model):
 class Pays(db.Model):
     """Pays pour l'organisation géographique"""
     __tablename__ = 'pays'
+    # Unicité PAR CLIENT (et non globale) : deux clients peuvent avoir la même référence
+    __table_args__ = (db.UniqueConstraint('client_id', 'code', name='uq_pays_client_code'),)
     
     id = db.Column(db.Integer, primary_key=True)
     nom = db.Column(db.String(100), nullable=False)
-    code = db.Column(db.String(3), nullable=False, unique=True)  # Code ISO: FRA, USA, etc.
+    code = db.Column(db.String(3), nullable=False)  # Code ISO: FRA, USA, etc.
     code_telephone = db.Column(db.String(5), nullable=True)  # +33, +1, etc.
     drapeau = db.Column(db.String(10), nullable=True)  # Emoji ou code du drapeau
     description = db.Column(db.Text)
@@ -1507,6 +1606,8 @@ class ConfigurationOrganigramme(db.Model):
     __tablename__ = 'configuration_organigramme'
     
     id = db.Column(db.Integer, primary_key=True)
+    logo_taille = db.Column(db.String(50), nullable=True)   # écrit par l'application mais absent de la base (recette nov. 2026)
+    logo_type = db.Column(db.String(50), nullable=True)   # écrit par l'application mais absent de la base (recette nov. 2026)
     client_id = db.Column(db.Integer, db.ForeignKey('clients.id'), unique=True)
     nom_entreprise = db.Column(db.String(200), default="Nom de l'entreprise")
     logo_entreprise = db.Column(db.String(500), nullable=True)  # Chemin du logo
@@ -1527,6 +1628,9 @@ class Cartographie(db.Model):
     __tablename__ = 'cartographie'
     
     id = db.Column(db.Integer, primary_key=True)
+    updated_at = db.Column(db.DateTime, nullable=True)   # écrit par l'application mais absent de la base (recette nov. 2026)
+    derniere_sync_matrices = db.Column(db.DateTime, nullable=True)   # écrit par l'application mais absent de la base (recette nov. 2026)
+    valideur_operateurs_id = db.Column(db.Integer, nullable=True)   # valideur des évaluations des opérateurs pour CETTE cartographie (sinon : celui de l'organisation)
     nom = db.Column(db.String(200), nullable=False)
     description = db.Column(db.Text)
     
@@ -1983,14 +2087,18 @@ class EvaluationRisque(db.Model):
         self.audit_id = audit_id
         self.constat_id = constat_id
         self.metadonnees['source'] = 'audit'
+        marquer_json_modifie(self, 'metadonnees')
         self.metadonnees['audit_reference'] = Audit.query.get(audit_id).reference if audit_id else None
+        marquer_json_modifie(self, 'metadonnees')
         self.metadonnees['justification'] = justification
+        marquer_json_modifie(self, 'metadonnees')
         self.updated_at = datetime.utcnow()
         
         if constat_id:
             constat = Constatation.query.get(constat_id)
             if constat:
                 self.metadonnees['constat_reference'] = constat.reference
+                marquer_json_modifie(self, 'metadonnees')
         
         self.ajouter_historique_modification(
             'creation_audit',
@@ -2001,7 +2109,9 @@ class EvaluationRisque(db.Model):
     def marquer_origine_campagne(self, campagne_id, campagne_nom):
         self.origine = 'campagne'
         self.metadonnees['source'] = 'campagne'
+        marquer_json_modifie(self, 'metadonnees')
         self.metadonnees['campagne_origine'] = campagne_nom
+        marquer_json_modifie(self, 'metadonnees')
         self.updated_at = datetime.utcnow()
     
     def ajouter_historique_modification(self, action, details, user_id):
@@ -2010,6 +2120,7 @@ class EvaluationRisque(db.Model):
         
         if 'historique_modifications' not in self.metadonnees:
             self.metadonnees['historique_modifications'] = []
+            marquer_json_modifie(self, 'metadonnees')
         
         user_nom = 'Système'
         if user_id:
@@ -2024,6 +2135,7 @@ class EvaluationRisque(db.Model):
             'utilisateur_id': user_id,
             'utilisateur_nom': user_nom
         })
+        marquer_json_modifie(self, 'metadonnees')
         
         self.updated_at = datetime.utcnow()
     
@@ -2292,6 +2404,7 @@ class KRI(db.Model):
     __tablename__ = 'kri'
     
     id = db.Column(db.Integer, primary_key=True)
+    tendance = db.Column(db.String(20), nullable=True)   # écrit par l'application mais absent de la base (recette nov. 2026)
     
     # TYPE D'INDICATEUR : 'kri' ou 'kpi'
     type_indicateur = db.Column(db.String(50), nullable=True)  # Ajoutez cette ligne si manquante
@@ -2695,6 +2808,7 @@ class MesureKRI(db.Model):
     __tablename__ = 'mesure_kri'
     
     id = db.Column(db.Integer, primary_key=True)
+    updated_at = db.Column(db.DateTime, nullable=True)   # écrit par l'application mais absent de la base (recette nov. 2026)
     kri_id = db.Column(db.Integer, db.ForeignKey('kri.id'))
     valeur = db.Column(db.Float, nullable=False)
     date_mesure = db.Column(db.DateTime, nullable=False)
@@ -2710,6 +2824,10 @@ class SousEtapeProcessus(db.Model):
     __tablename__ = 'sous_etape_processus'
     
     id = db.Column(db.Integer, primary_key=True)
+    responsable_id = db.Column(db.Integer, nullable=True)   # écrit par l'application mais absent de la base (recette nov. 2026)
+    duree_estimee = db.Column(db.String(50), nullable=True)   # écrit par l'application mais absent de la base (recette nov. 2026)
+    inputs = db.Column(db.Text, nullable=True)   # écrit par l'application mais absent de la base (recette nov. 2026)
+    outputs = db.Column(db.Text, nullable=True)   # écrit par l'application mais absent de la base (recette nov. 2026)
     nom = db.Column(db.String(200), nullable=False)
     description = db.Column(db.Text)
     reference = db.Column(db.String(50), nullable=False)
@@ -2891,6 +3009,10 @@ class ControleProcessus(db.Model):
     
     # Multi-tenant
     client_id = db.Column(db.Integer, db.ForeignKey('clients.id'), nullable=True)
+
+    # Rattachement au processus (fiche processus) et à l'étape contrôlée
+    processus_id = db.Column(db.Integer, db.ForeignKey('processus.id'), nullable=True, index=True)
+    etape_id = db.Column(db.Integer, db.ForeignKey('etape_processus.id'), nullable=True)
     
     # Métadonnées
     metadonnees = db.Column(db.JSON, default={})
@@ -4122,6 +4244,7 @@ class VeilleWorkflowApprobation(db.Model):
             'utilisateur_nom': user.username if user else 'Système',
             'commentaire': commentaire
         })
+        marquer_json_modifie(self, 'historique_etapes')
     
     # ============================================
     # TRANSITIONS
@@ -4464,6 +4587,13 @@ class Audit(db.Model):
     # COLONNES
     # ============================================
     id = db.Column(db.Integer, primary_key=True)
+    etat_rapport = db.Column(db.String(20), nullable=True)   # None/brouillon, provisoire, definitif
+    rapport_provisoire_le = db.Column(db.DateTime, nullable=True)
+    rapport_provisoire_par_id = db.Column(db.Integer, nullable=True)
+    date_limite_reponses = db.Column(db.Date, nullable=True)
+    rapport_definitif_le = db.Column(db.DateTime, nullable=True)
+    rapport_definitif_par_id = db.Column(db.Integer, nullable=True)
+    commentaires = db.Column(db.Text, nullable=True)   # écrit par l'application mais absent de la base (recette nov. 2026)
     reference = db.Column(db.String(50), nullable=False)
     titre = db.Column(db.String(200), nullable=False)
     description = db.Column(db.Text)
@@ -4789,11 +4919,13 @@ class Audit(db.Model):
         }
         
         self.membres_externes.append(nouveau_membre)
+        marquer_json_modifie(self, 'membres_externes')
         return nouveau_membre
     
     def supprimer_membre_externe(self, index):
         """Supprime un membre externe de l'équipe"""
         if self.membres_externes and 0 <= index < len(self.membres_externes):
+            marquer_json_modifie(self, 'membres_externes')
             return self.membres_externes.pop(index)
         return None
     
@@ -5058,6 +5190,15 @@ class Constatation(db.Model):
     __tablename__ = 'constatations'
     
     id = db.Column(db.Integer, primary_key=True)
+    critere = db.Column(db.Text, nullable=True)   # 5C : référentiel / norme non respecté
+    consequence = db.Column(db.Text, nullable=True)   # 5C : effet ou risque qui en découle
+    reponse_audite = db.Column(db.Text, nullable=True)   # réponse du management au rapport provisoire
+    position_audite = db.Column(db.String(20), nullable=True)   # accord / partiel / desaccord
+    plan_audite = db.Column(db.Text, nullable=True)
+    date_engagement = db.Column(db.Date, nullable=True)
+    reponse_par_id = db.Column(db.Integer, nullable=True)
+    reponse_le = db.Column(db.DateTime, nullable=True)
+    feuille_source_id = db.Column(db.Integer, nullable=True)   # écrit par l'application mais absent de la base (recette nov. 2026)
     reference = db.Column(db.String(50), nullable=False)
     description = db.Column(db.Text, nullable=False)
     type_constatation = db.Column(db.String(50), nullable=False)
@@ -5433,6 +5574,11 @@ class Recommandation(db.Model):
     __tablename__ = 'recommandations'
     
     id = db.Column(db.Integer, primary_key=True)
+    demande_cloture_le = db.Column(db.DateTime, nullable=True)   # registre des recommandations : clôture demandée
+    demande_cloture_par_id = db.Column(db.Integer, nullable=True)
+    cloture_validee_le = db.Column(db.DateTime, nullable=True)
+    cloture_validee_par_id = db.Column(db.Integer, nullable=True)
+    motif_refus_cloture = db.Column(db.Text, nullable=True)
     reference = db.Column(db.String(50), nullable=False)
     description = db.Column(db.Text, nullable=False)
     type_recommandation = db.Column(db.String(50), nullable=False)
@@ -5591,6 +5737,7 @@ class PlanAction(db.Model):
     __tablename__ = 'plans_action'
     
     id = db.Column(db.Integer, primary_key=True)
+    audits = db.relationship('Audit', secondary='plans_action_audits', lazy='select')   # plusieurs audits par plan
     reference = db.Column(db.String(50), nullable=False)
     nom = db.Column(db.String(200), nullable=False)
     description = db.Column(db.Text)
@@ -5784,9 +5931,11 @@ class PlanAction(db.Model):
 class DemandeReevaluation(db.Model):
     """Demande de réévaluation d'un risque issue d'un audit"""
     __tablename__ = 'demandes_reevaluation'
+    # Unicité PAR CLIENT (et non globale) : deux clients peuvent avoir la même référence
+    __table_args__ = (db.UniqueConstraint('client_id', 'reference', name='uq_demandes_reevaluation_client_reference'),)
     
     id = db.Column(db.Integer, primary_key=True)
-    reference = db.Column(db.String(50), unique=True, nullable=False)
+    reference = db.Column(db.String(50), nullable=False)
     
     # ============================================
     # LIENS AVEC LES OBJETS SOURCES
@@ -5906,17 +6055,20 @@ class DemandeReevaluation(db.Model):
         return f"REEVAL-{annee}-{count + 1:04d}"
     
     def calculer_score_propose(self):
-        """Calcule le score proposé"""
+        """
+        Calcule la cotation proposée selon la règle unique (cotation.py).
+        score_propose = score BRUT (impact × probabilité, colonne entière) ;
+        niveau_risque_propose = niveau NET (après maîtrise proposée), le niveau de référence.
+        """
         if self.impact_propose and self.probabilite_propose:
-            self.score_propose = self.impact_propose * self.probabilite_propose
-            self.niveau_risque_propose = self._get_niveau_risque(self.score_propose)
+            c = _cotation.scores(self.impact_propose, self.probabilite_propose, self.niveau_maitrise_propose)
+            self.score_propose = int(round(c['score_brut']))
+            self.niveau_risque_propose = c['niveau_net']
         return self.score_propose
-    
+
     def _get_niveau_risque(self, score):
-        if score <= 4: return 'Faible'
-        if score <= 10: return 'Moyen'
-        if score <= 16: return 'Élevé'
-        return 'Critique'
+        """Niveau d'un score (règle unique cotation.py)."""
+        return _cotation.niveau(score)
     
     def valider(self, user_id, commentaire=None):
         """Valide la demande de réévaluation et crée l'évaluation"""
@@ -6041,6 +6193,7 @@ class DemandeReevaluation(db.Model):
             'utilisateur_nom': user_nom,
             'details': details
         })
+        marquer_json_modifie(self, 'historique_actions')
     
     def get_statut_label(self):
         labels = {
@@ -6148,6 +6301,8 @@ class SousAction(db.Model):
     __tablename__ = 'sous_actions'
     
     id = db.Column(db.Integer, primary_key=True)
+    commentaire = db.Column(db.Text, nullable=True)   # écrit par l'application mais absent de la base (recette nov. 2026)
+    ordre = db.Column(db.Integer, nullable=True)   # écrit par l'application mais absent de la base (recette nov. 2026)
     plan_action_id = db.Column(db.Integer, db.ForeignKey('plans_action.id'), nullable=False)  # 'plans_action.id'
     reference = db.Column(db.String(50))
     description = db.Column(db.Text, nullable=False)
@@ -6270,9 +6425,11 @@ class JournalAudit(db.Model):
 class FeuilleTravail(db.Model):
     """Feuille de travail pour une mission d'audit"""
     __tablename__ = 'feuilles_travail'
+    # Unicité PAR CLIENT (et non globale) : deux clients peuvent avoir la même référence
+    __table_args__ = (db.UniqueConstraint('client_id', 'reference', name='uq_feuilles_travail_client_reference'),)
     
     id = db.Column(db.Integer, primary_key=True)
-    reference = db.Column(db.String(50), unique=True, nullable=False)
+    reference = db.Column(db.String(50), nullable=False)
     titre = db.Column(db.String(200), nullable=False)
     description = db.Column(db.Text)
     
@@ -6394,13 +6551,20 @@ test_risques = db.Table('test_risques',
 
 class Risque(db.Model):
     __tablename__ = 'risques'
+    # Unicité PAR CLIENT (et non globale) : deux clients peuvent avoir la même référence
+    __table_args__ = (db.UniqueConstraint('client_id', 'reference', name='uq_risques_client_reference'),)
     
     # ============================================
     # COLONNES DE BASE
     # ============================================
     id = db.Column(db.Integer, primary_key=True)
+    processus_metier_associe_id = db.Column(db.Integer, nullable=True)   # écrit par l'application mais absent de la base (recette nov. 2026)
+    updated_at = db.Column(db.DateTime, nullable=True)   # écrit par l'application mais absent de la base (recette nov. 2026)
+    derniere_evaluation_date = db.Column(db.DateTime, nullable=True)   # écrit par l'application mais absent de la base (recette nov. 2026)
+    dernier_score_risque = db.Column(db.Float, nullable=True)   # écrit par l'application mais absent de la base (recette nov. 2026)
+    dernier_niveau_risque = db.Column(db.String(30), nullable=True)   # écrit par l'application mais absent de la base (recette nov. 2026)
     cartographie_id = db.Column(db.Integer, db.ForeignKey('cartographie.id'))
-    reference = db.Column(db.String(50), unique=True, nullable=False)
+    reference = db.Column(db.String(50), nullable=False)
     intitule = db.Column(db.String(300), nullable=False)
     description = db.Column(db.Text)
     processus_concerne = db.Column(db.String(200))
@@ -6583,54 +6747,48 @@ class Risque(db.Model):
     # MÉTHODES DE CALCUL
     # ============================================
     
+    # Échelle unique 1 à 5 (identique aux évaluations). Les anciennes valeurs texte sont
+    # converties selon le sens des libellés de l'outil (1 Négligeable … 5 Critique /
+    # 1 Très rare … 5 Très probable). Les valeurs chiffrées ('4', 4) sont lues telles quelles :
+    # avant, elles retombaient sur la valeur par défaut et tout risque saisi en chiffres valait 4 (faible).
+    ECHELLE_IMPACT = {'negligeable': 1, 'mineur': 2, 'modere': 3, 'severe': 4, 'important': 4,
+                      'majeur': 4, 'critique': 5}
+    ECHELLE_PROBABILITE = {'tres_rare': 1, 'rare': 2, 'peu_probable': 2, 'possible': 3,
+                           'probable': 4, 'frequente': 5, 'tres_probable': 5, 'certain': 5}
+    NIVEAU_STOCKE = {'Faible': 'faible', 'Moyen': 'moyen', 'Élevé': 'eleve', 'Critique': 'critique'}
+
+    @staticmethod
+    def _note_1_5(valeur, echelle, defaut=3):
+        if valeur is None or valeur == '':
+            return defaut
+        try:
+            n = int(round(float(str(valeur).replace(',', '.'))))
+            return min(5, max(1, n))
+        except (TypeError, ValueError):
+            cle = _cotation._sans_accent(str(valeur)).strip().lower().replace(' ', '_').replace('-', '_')
+            return echelle.get(cle, defaut)
+
     def calculer_score_risque(self):
-        """Calcule le score de risque (Impact × Probabilité)"""
-        matrice_impact = {'mineur': 1, 'modere': 2, 'severe': 3, 'critique': 4}
-        matrice_probabilite = {'rare': 1, 'possible': 2, 'probable': 3, 'frequente': 4}
-        
-        impact_score = matrice_impact.get(self.impact, 2)
-        proba_score = matrice_probabilite.get(self.probabilite, 2)
-        
-        self.score_risque = impact_score * proba_score
+        """Score BRUT du risque : impact × probabilité, échelle 1 à 5 (1 à 25)."""
+        self.score_risque = (self._note_1_5(self.impact, self.ECHELLE_IMPACT)
+                             * self._note_1_5(self.probabilite, self.ECHELLE_PROBABILITE))
         return self.score_risque
-    
+
     def calculer_niveau_criticite(self):
-        """Calcule le niveau de criticité à partir du score"""
+        """Niveau de criticité (règle unique cotation.py), stocké en minuscules sans accent."""
         if self.score_risque is None:
             self.calculer_score_risque()
-        
-        if self.score_risque >= 16:
-            self.niveau_criticite = 'critique'
-        elif self.score_risque >= 11:
-            self.niveau_criticite = 'eleve'
-        elif self.score_risque >= 6:
-            self.niveau_criticite = 'moyen'
-        else:
-            self.niveau_criticite = 'faible'
-        
+        self.niveau_criticite = self.calculer_niveau_criticite_from_score(self.score_risque)
         return self.niveau_criticite
-    
+
     @staticmethod
     def calculer_niveau_criticite_from_score(score):
-        """Calcule le niveau de criticité à partir d'un score donné"""
-        if score >= 16:
-            return 'critique'
-        elif score >= 11:
-            return 'eleve'
-        elif score >= 6:
-            return 'moyen'
-        else:
-            return 'faible'
-    
+        """Niveau à partir d'un score (règle unique) : 'faible' | 'moyen' | 'eleve' | 'critique'."""
+        return Risque.NIVEAU_STOCKE.get(_cotation.niveau(score), 'faible')
+
     def get_couleur_criticite(self):
-        """Retourne la couleur CSS pour le niveau de criticité"""
-        couleurs = {
-            'faible': '#10b981',
-            'moyen': '#f59e0b',
-            'eleve': '#ef4444',
-            'critique': '#dc2626'
-        }
-        return couleurs.get(self.niveau_criticite, '#6b7280')
+        """Couleur du niveau de criticité (palette unique cotation.py)."""
+        return _cotation.style(self.niveau_criticite)['hex']
     
     # ============================================
     # MÉTHODES DE GESTION DES ORIGINES
@@ -6639,10 +6797,14 @@ class Risque(db.Model):
     def marquer_origine_audit(self, audit_id, demande_id=None):
         """Marque le risque comme issu d'un audit"""
         self.metadonnees['origine'] = 'audit'
+        marquer_json_modifie(self, 'metadonnees')
         self.metadonnees['audit_reference'] = audit_id
+        marquer_json_modifie(self, 'metadonnees')
         if demande_id:
             self.metadonnees['demande_reevaluation_id'] = demande_id
+            marquer_json_modifie(self, 'metadonnees')
         self.metadonnees['date_proposition'] = datetime.utcnow().isoformat()
+        marquer_json_modifie(self, 'metadonnees')
     
     # ============================================
     # MÉTHODES D'ARCHIVAGE
@@ -6728,6 +6890,7 @@ class TestControleFeuille(db.Model):
     # IDENTIFIANTS
     # ============================================
     id = db.Column(db.Integer, primary_key=True)
+    risque_associe_id = db.Column(db.Integer, nullable=True)   # écrit par l'application mais absent de la base (recette nov. 2026)
     feuille_travail_id = db.Column(db.Integer, db.ForeignKey('feuilles_travail.id'), nullable=False)
     
     # ============================================
@@ -7331,9 +7494,11 @@ class FeuilleTravailVersion(db.Model):
 class ModeleFeuilleTravail(db.Model):
     """Modèles prédéfinis de feuilles de travail (bibliothèque professionnelle)"""
     __tablename__ = 'modeles_feuilles_travail'
+    # Unicité PAR CLIENT (et non globale) : deux clients peuvent avoir la même référence
+    __table_args__ = (db.UniqueConstraint('client_id', 'reference', name='uq_modeles_feuilles_travail_client_reference'),)
     
     id = db.Column(db.Integer, primary_key=True)
-    reference = db.Column(db.String(50), unique=True, nullable=False)
+    reference = db.Column(db.String(50), nullable=False)
     nom = db.Column(db.String(200), nullable=False)
     description = db.Column(db.Text)
     categorie = db.Column(db.String(100))  # Financier, Conformité, IT, Opérationnel, etc.
@@ -7461,9 +7626,11 @@ class TagFeuille(db.Model):
 class Competence(db.Model):
     """Compétence à développer"""
     __tablename__ = 'competences'
+    # Unicité PAR CLIENT (et non globale) : deux clients peuvent avoir la même référence
+    __table_args__ = (db.UniqueConstraint('client_id', 'code', name='uq_competences_client_code'),)
     
     id = db.Column(db.Integer, primary_key=True)
-    code = db.Column(db.String(20), unique=True, nullable=False)
+    code = db.Column(db.String(20), nullable=False)
     nom = db.Column(db.String(200), nullable=False)
     categorie = db.Column(db.String(50))  # Technique, Comportementale, Management, Normative
     description = db.Column(db.Text)
@@ -7473,7 +7640,7 @@ class Competence(db.Model):
     # Métadonnées
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
-    client_id = db.Column(db.Integer, db.ForeignKey('client.id'), nullable=False)
+    client_id = db.Column(db.Integer, db.ForeignKey('clients.id'), nullable=False)
     
     def __repr__(self):
         return f'<Competence {self.code}: {self.nom}>'
@@ -7515,7 +7682,7 @@ class EvaluationCompetence(db.Model):
     competence = db.relationship('Competence')
     evaluateur = db.relationship('User', foreign_keys=[evaluateur_id])
     
-    client_id = db.Column(db.Integer, db.ForeignKey('client.id'), nullable=False)
+    client_id = db.Column(db.Integer, db.ForeignKey('clients.id'), nullable=False)
     
     def __repr__(self):
         return f'<Evaluation {self.auditeur_id}/{self.competence_id}>'
@@ -7528,9 +7695,11 @@ class EvaluationCompetence(db.Model):
 class Formation(db.Model):
     """Formation disponible"""
     __tablename__ = 'formations'
+    # Unicité PAR CLIENT (et non globale) : deux clients peuvent avoir la même référence
+    __table_args__ = (db.UniqueConstraint('client_id', 'reference', name='uq_formations_client_reference'),)
     
     id = db.Column(db.Integer, primary_key=True)
-    reference = db.Column(db.String(20), unique=True, nullable=False)
+    reference = db.Column(db.String(20), nullable=False)
     titre = db.Column(db.String(200), nullable=False)
     description = db.Column(db.Text)
     objectifs = db.Column(db.Text)
@@ -7559,7 +7728,7 @@ class Formation(db.Model):
     
     # Métadonnées
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
-    client_id = db.Column(db.Integer, db.ForeignKey('client.id'), nullable=False)
+    client_id = db.Column(db.Integer, db.ForeignKey('clients.id'), nullable=False)
     
     def __repr__(self):
         return f'<Formation {self.reference}: {self.titre}>'
@@ -7597,7 +7766,7 @@ class InscriptionFormation(db.Model):
     formation = db.relationship('Formation')
     auditeur = db.relationship('User', foreign_keys=[auditeur_id])
     
-    client_id = db.Column(db.Integer, db.ForeignKey('client.id'), nullable=False)
+    client_id = db.Column(db.Integer, db.ForeignKey('clients.id'), nullable=False)
     
     def __repr__(self):
         return f'<Inscription {self.auditeur_id} -> {self.formation_id}>'
@@ -7606,9 +7775,11 @@ class InscriptionFormation(db.Model):
 class PlanDeveloppementIndividuel(db.Model):
     """Plan de développement individuel (PDI)"""
     __tablename__ = 'plans_developpement'
+    # Unicité PAR CLIENT (et non globale) : deux clients peuvent avoir la même référence
+    __table_args__ = (db.UniqueConstraint('client_id', 'reference', name='uq_plans_developpement_client_reference'),)
     
     id = db.Column(db.Integer, primary_key=True)
-    reference = db.Column(db.String(20), unique=True, nullable=False)
+    reference = db.Column(db.String(20), nullable=False)
     auditeur_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
     annee = db.Column(db.Integer, nullable=False)
     
@@ -7650,7 +7821,7 @@ class PlanDeveloppementIndividuel(db.Model):
     validateur = db.relationship('User', foreign_keys=[valide_par_id])
     createur = db.relationship('User', foreign_keys=[created_by])
     
-    client_id = db.Column(db.Integer, db.ForeignKey('client.id'), nullable=False)
+    client_id = db.Column(db.Integer, db.ForeignKey('clients.id'), nullable=False)
     
     def __repr__(self):
         return f'<PDI {self.reference} - {self.auditeur_id}>'
@@ -7696,7 +7867,7 @@ class FeedbackAuditeur(db.Model):
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     periode = db.Column(db.String(20))  # trimestre1, semestre1, annuel
     
-    client_id = db.Column(db.Integer, db.ForeignKey('client.id'), nullable=False)
+    client_id = db.Column(db.Integer, db.ForeignKey('clients.id'), nullable=False)
     
     def __repr__(self):
         return f'<Feedback {self.auditeur_id} par {self.evaluateur_id}>'
@@ -7808,9 +7979,12 @@ class TitreOrganisation(db.Model):
 class ConfigurationAudit(db.Model):
     """Configuration des paramètres d'audit"""
     __tablename__ = 'configurations_audit'
+    # Unicité PAR CLIENT (et non globale) : deux clients peuvent avoir la même référence
+    __table_args__ = (db.UniqueConstraint('client_id', 'nom_config', name='uq_configurations_audit_client_nom_config'),)
     
     id = db.Column(db.Integer, primary_key=True)
-    nom_config = db.Column(db.String(100), nullable=False, unique=True)
+    created_by = db.Column(db.Integer, nullable=True)   # écrit par l'application mais absent de la base (recette nov. 2026)
+    nom_config = db.Column(db.String(100), nullable=False)
     type_audit = db.Column(db.String(50), nullable=False)
     duree_standard = db.Column(db.Integer, default=30)
     seuil_gravite_min = db.Column(db.Integer, default=3)
@@ -7826,6 +8000,7 @@ class TemplateConstatation(db.Model):
     __tablename__ = 'templates_constatations'
     
     id = db.Column(db.Integer, primary_key=True)
+    created_by = db.Column(db.Integer, nullable=True)   # écrit par l'application mais absent de la base (recette nov. 2026)
     reference = db.Column(db.String(50), nullable=False)
     titre = db.Column(db.String(200), nullable=False)
     description = db.Column(db.Text)
@@ -7918,6 +8093,17 @@ class ProcessusActivite(db.Model):
     __tablename__ = 'processus_activite'
     
     id = db.Column(db.Integer, primary_key=True)
+    statut_validation = db.Column(db.String(20), nullable=True)   # brouillon (défaut), en_validation, valide
+    version_courante = db.Column(db.Integer, nullable=True)        # dernière version validée (0 = jamais validé)
+    proprietaire_id = db.Column(db.Integer, nullable=True)         # propriétaire de la procédure
+    soumis_le = db.Column(db.DateTime, nullable=True)
+    soumis_par_id = db.Column(db.Integer, nullable=True)
+    valide_le = db.Column(db.DateTime, nullable=True)
+    valide_par_id = db.Column(db.Integer, nullable=True)
+    date_revue_prevue = db.Column(db.Date, nullable=True)          # revue annuelle de la procédure
+    motif_rejet = db.Column(db.Text, nullable=True)
+    acteurs = db.Column(db.JSON, nullable=True)                    # couloirs : liste ordonnée des acteurs
+    processus_source_id = db.Column(db.Integer, nullable=True)   # ancien « Processus » converti en ce logigramme
     nom = db.Column(db.String(200), nullable=False)
     description = db.Column(db.Text)
     direction_id = db.Column(db.Integer, db.ForeignKey('direction.id'))
@@ -8041,9 +8227,11 @@ class JournalActivite(db.Model):
 
 class PermissionTemplate(db.Model):
     __tablename__ = 'permission_templates'
+    # Unicité PAR CLIENT (et non globale) : deux clients peuvent avoir la même référence
+    __table_args__ = (db.UniqueConstraint('client_id', 'name', name='uq_permission_templates_client_name'),)
     
     id = db.Column(db.Integer, primary_key=True)
-    name = db.Column(db.String(100), nullable=False, unique=True)
+    name = db.Column(db.String(100), nullable=False)
     description = db.Column(db.Text)
     permissions = db.Column(db.JSON, nullable=False)
     role = db.Column(db.String(20), default='utilisateur')
@@ -8096,9 +8284,11 @@ class UserSession(db.Model):
 # -------------------- CONFIGURATION DES CHAMPS DE RISQUE --------------------
 class ConfigurationChampRisque(db.Model):
     __tablename__ = 'configuration_champs_risque'
+    # Unicité PAR CLIENT (et non globale) : deux clients peuvent avoir la même référence
+    __table_args__ = (db.UniqueConstraint('client_id', 'nom_technique', name='uq_configuration_champs_risque_client_nom_technique'),)
     
     id = db.Column(db.Integer, primary_key=True)
-    nom_technique = db.Column(db.String(100), unique=True, nullable=False)
+    nom_technique = db.Column(db.String(100), nullable=False)
     nom_affichage = db.Column(db.String(200), nullable=False)
     type_champ = db.Column(db.String(50), nullable=False)
     est_obligatoire = db.Column(db.Boolean, default=False)
@@ -8224,9 +8414,11 @@ class ConfigurationChampRisque(db.Model):
 # -------------------- CONFIGURATION DES LISTES DÉROULANTES --------------------
 class ConfigurationListeDeroulante(db.Model):
     __tablename__ = 'configuration_listes_deroulantes'
+    # Unicité PAR CLIENT (et non globale) : deux clients peuvent avoir la même référence
+    __table_args__ = (db.UniqueConstraint('client_id', 'nom_technique', name='uq_configuration_listes_deroulantes_client_nom_technique'),)
     
     id = db.Column(db.Integer, primary_key=True)
-    nom_technique = db.Column(db.String(100), unique=True, nullable=False)  # Ex: 'categories_risque', 'types_risque'
+    nom_technique = db.Column(db.String(100), nullable=False)  # Ex: 'categories_risque', 'types_risque'
     nom_affichage = db.Column(db.String(200), nullable=False)  # Ex: 'Catégories de risque', 'Types de risque'
     est_multiple = db.Column(db.Boolean, default=False)  # Sélection multiple ou non
     valeurs = db.Column(db.JSON, nullable=False)  # Liste des valeurs [{'valeur': 'x', 'label': 'X'}]
@@ -8974,6 +9166,9 @@ class Client(db.Model):
 
     # Formule d'abonnement
     formule_id = db.Column(db.Integer, db.ForeignKey('formules_abonnement.id'))
+    # Modules activés pour ce client par le super admin ({code: bool}, voir egalyx/modules_client.py).
+    # Vide = aucune restriction (formule + permissions).
+    modules_actifs = db.Column(db.JSON)
     
     # Timestamps
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
@@ -9057,6 +9252,7 @@ class EnvironnementClient(db.Model):
     __tablename__ = 'environnements_client'
     
     id = db.Column(db.Integer, primary_key=True)
+    date_maintenance = db.Column(db.DateTime, nullable=True)   # écrit par l'application mais absent de la base (recette nov. 2026)
     client_id = db.Column(db.Integer, db.ForeignKey('clients.id'), nullable=False)
     nom = db.Column(db.String(100), nullable=False)
     
@@ -9068,13 +9264,14 @@ class EnvironnementClient(db.Model):
     db_host = db.Column(db.String(200))
     db_name = db.Column(db.String(100))
     db_user = db.Column(db.String(100))
-    db_password = db.Column(db.String(500))
+    # Secret chiffré en base (même colonne « db_password ») ; lecture/écriture en clair via la propriété
+    _db_password = db.Column('db_password', db.String(500))
 
     # Configuration serveur
     server_ip = db.Column(db.String(50))
     server_port = db.Column(db.Integer, default=22)
     server_ssh_user = db.Column(db.String(50))
-    server_ssh_key = db.Column(db.Text)
+    _server_ssh_key = db.Column('server_ssh_key', db.Text)
     
     # Statut
     statut = db.Column(db.String(20), default='actif')  # actif, suspendu, en_maintenance, supprime
@@ -9093,17 +9290,34 @@ class EnvironnementClient(db.Model):
     # Relations
     client = db.relationship('Client', back_populates='environnements')
 
-def __repr__(self):
-    return f'<Environnement {self.nom} pour client {self.client_id}>'
+    # Secrets : chiffrés à l'écriture, déchiffrés à la lecture
+    @property
+    def db_password(self):
+        return dechiffrer_secret(self._db_password)
 
-def get_db_connection_string(self):
-    """Retourne la chaîne de connexion à la base de données"""
-    return f"postgresql://{self.db_user}:{self.db_password}@{self.db_host}/{self.db_name}"
+    @db_password.setter
+    def db_password(self, valeur):
+        self._db_password = chiffrer_secret(valeur)
 
-def provisionner_serveur(self):
-    """Déclenche le provisionnement du serveur"""
-    # Cette méthode serait implémentée avec Ansible/Terraform/etc.
-    pass
+    @property
+    def server_ssh_key(self):
+        return dechiffrer_secret(self._server_ssh_key)
+
+    @server_ssh_key.setter
+    def server_ssh_key(self, valeur):
+        self._server_ssh_key = chiffrer_secret(valeur)
+
+    def __repr__(self):
+        return f'<Environnement {self.nom} pour client {self.client_id}>'
+
+    def get_db_connection_string(self):
+        """Chaîne de connexion à la base (mot de passe déchiffré, à ne jamais afficher ni journaliser)."""
+        from urllib.parse import quote_plus
+        return f"postgresql://{self.db_user}:{quote_plus(self.db_password or '')}@{self.db_host}/{self.db_name}"
+
+    def provisionner_serveur(self):
+        """Déclenche le provisionnement du serveur (à brancher sur Ansible/Terraform)."""
+        raise NotImplementedError("Provisionnement automatique non disponible")
 
 # -------------------- JOURNAL ACTIVITÉ CLIENT --------------------
 class JournalActiviteClient(db.Model):
@@ -9504,9 +9718,11 @@ class FormuleAbonnement(db.Model):
                     # Si le module est activé, activer la permission
                     if is_module_active:
                         self.permissions_template[permission] = True
+                        marquer_json_modifie(self, 'permissions_template')
                     # Si le module est désactivé, désactiver la permission
                     else:
                         self.permissions_template[permission] = False
+                        marquer_json_modifie(self, 'permissions_template')
     
     def check_module_permission_sync(self):
         """Vérifie la synchronisation entre modules et permissions"""
@@ -9545,6 +9761,7 @@ class FormuleAbonnement(db.Model):
             for issue in issues:
                 module_active = self.modules.get(issue['module'], False)
                 self.permissions_template[issue['permission']] = module_active
+                marquer_json_modifie(self, 'permissions_template')
                 print(f"  🔄 {issue['permission']} = {module_active} (module: {issue['module']})")
             
             return True
@@ -9590,6 +9807,7 @@ class FormuleAbonnement(db.Model):
             self.permissions_template = {}
         
         self.permissions_template[permission_name] = is_active
+        marquer_json_modifie(self, 'permissions_template')
         self.updated_at = datetime.utcnow()
         return self
     
@@ -9726,8 +9944,10 @@ class FormuleAbonnement(db.Model):
             if old_name in self.modules:
                 # Transférer la valeur
                 self.modules[new_name] = self.modules[old_name]
+                marquer_json_modifie(self, 'modules')
                 # Supprimer l'ancien
                 del self.modules[old_name]
+                marquer_json_modifie(self, 'modules')
                 fixes_applied += 1
                 print(f"  🔄 Renommage: {old_name} → {new_name}")
         
@@ -9746,6 +9966,7 @@ class FormuleAbonnement(db.Model):
                 
                 if module_active != current_permission:
                     self.permissions_template[permission] = module_active
+                    marquer_json_modifie(self, 'permissions_template')
                     fixes_applied += 1
                     print(f"  🔄 Permission: {permission} = {module_active}")
         
@@ -10307,6 +10528,7 @@ class DispositifMaitrise(db.Model):
     __tablename__ = 'dispositifs_maitrise'
     
     id = db.Column(db.Integer, primary_key=True)
+    plan_action_id = db.Column(db.Integer, nullable=True)   # écrit par l'application mais absent de la base (recette nov. 2026)
     risque_id = db.Column(db.Integer, db.ForeignKey('risques.id'), nullable=False)
     reference = db.Column(db.String(50), nullable=False)
     nom = db.Column(db.String(300), nullable=False)
@@ -11168,6 +11390,7 @@ class VerificationDispositif(db.Model):
     __tablename__ = 'verifications_dispositif'
     
     id = db.Column(db.Integer, primary_key=True)
+    updated_at = db.Column(db.DateTime, nullable=True)   # écrit par l'application mais absent de la base (recette nov. 2026)
     dispositif_id = db.Column(db.Integer, db.ForeignKey('dispositifs_maitrise.id'), nullable=False)
     date_verification = db.Column(db.Date, nullable=False)
     type_verification = db.Column(db.String(100))  # Test, Observation, Revue documentaire
@@ -11400,12 +11623,16 @@ class FichierPlanAction(db.Model):
 class ProgrammeAudit(db.Model):
     """Programme d'audit stratégique - Version complète"""
     __tablename__ = 'programmes_audit'
+    # Unicité PAR CLIENT (et non globale) : deux clients peuvent avoir la même référence
+    __table_args__ = (db.UniqueConstraint('client_id', 'reference', name='uq_programmes_audit_client_reference'),)
     
     # ============================================
     # IDENTIFICATION DE BASE
     # ============================================
     id = db.Column(db.Integer, primary_key=True)
-    reference = db.Column(db.String(50), unique=True, nullable=False)
+    approuve_par_id = db.Column(db.Integer, nullable=True)
+    motif_desapprobation = db.Column(db.Text, nullable=True)
+    reference = db.Column(db.String(50), nullable=False)
     nom = db.Column(db.String(200), nullable=False)
     description = db.Column(db.Text)
     
@@ -12588,13 +12815,15 @@ class PlanQualiteFonction(db.Model):
     Conforme aux standards : ISO 9001:2025, COSO ERM, CMMI 3.0, EFQM 2025, IATF 16949, AS9100D
     """
     __tablename__ = 'plans_qualite_fonction'
+    # Unicité PAR CLIENT (et non globale) : deux clients peuvent avoir la même référence
+    __table_args__ = (db.UniqueConstraint('client_id', 'reference', name='uq_plans_qualite_fonction_client_reference'),)
 
     id = db.Column(db.Integer, primary_key=True)
     
     # ============================================
     # 1. IDENTIFICATION AVANCÉE
     # ============================================
-    reference = db.Column(db.String(50), unique=True, nullable=False)
+    reference = db.Column(db.String(50), nullable=False)
     titre = db.Column(db.String(200), nullable=False)
     description = db.Column(db.Text, nullable=True)
     version = db.Column(db.String(20), default='1.0')
@@ -12691,15 +12920,9 @@ class PlanQualiteFonction(db.Model):
     # 6. GESTION DES RISQUES QUALITÉ (COSO ERM + ISO 31000)
     # ============================================
     
-    # NOUVEAU: Cartographie des risques qualité
-    risques_qualite = db.Column(db.JSON, default={
-        'risques_strategiques': [],
-        'risques_operationnels': [],
-        'risques_financiers': [],
-        'risques_conformite': [],
-        'risques_cyber': [],
-        'risques_reputationnels': []
-    })
+    # (Colonne « risques_qualite » retirée : elle était masquée par la propriété risques_qualite
+    #  définie plus bas — SQLAlchemy ne l'a jamais enregistrée. La propriété, qui lit la cartographie
+    #  des risques qualité, reste la seule source.)
     
     # NOUVEAU: Matrice d'appétence au risque
     apetence_risque = db.Column(db.JSON, default={
@@ -13665,9 +13888,11 @@ class PlanQualiteFonction(db.Model):
 class NonConformite(db.Model):
     """Non-conformité qualité (ISO 9001:2025 Section 10.2)"""
     __tablename__ = 'non_conformites'
+    # Unicité PAR CLIENT (et non globale) : deux clients peuvent avoir la même référence
+    __table_args__ = (db.UniqueConstraint('client_id', 'reference', name='uq_non_conformites_client_reference'),)
     
     id = db.Column(db.Integer, primary_key=True)
-    reference = db.Column(db.String(50), unique=True, nullable=False)
+    reference = db.Column(db.String(50), nullable=False)
     plan_qualite_id = db.Column(db.Integer, db.ForeignKey('plans_qualite_fonction.id'), nullable=False)
     
     # Description
@@ -13707,9 +13932,11 @@ class NonConformite(db.Model):
 class AuditQualite(db.Model):
     """Audit qualité (ISO 19011:2025) - Version CORRIGÉE"""
     __tablename__ = 'audits_qualite'
+    # Unicité PAR CLIENT (et non globale) : deux clients peuvent avoir la même référence
+    __table_args__ = (db.UniqueConstraint('client_id', 'reference', name='uq_audits_qualite_client_reference'),)
     
     id = db.Column(db.Integer, primary_key=True)
-    reference = db.Column(db.String(50), unique=True, nullable=False)
+    reference = db.Column(db.String(50), nullable=False)
     plan_qualite_id = db.Column(db.Integer, db.ForeignKey('plans_qualite_fonction.id'), nullable=False)
     
     # ============================================
@@ -13792,9 +14019,12 @@ class AuditQualite(db.Model):
 class GrilleAuditQualite(db.Model):
     """Grille d'audit qualité prédéfinie (bibliothèque)"""
     __tablename__ = 'grilles_audit_qualite'
+    # Unicité PAR CLIENT (et non globale) : deux clients peuvent avoir la même référence
+    __table_args__ = (db.UniqueConstraint('client_id', 'reference', name='uq_grilles_audit_qualite_client_reference'),)
     
     id = db.Column(db.Integer, primary_key=True)
-    reference = db.Column(db.String(50), unique=True)
+    updated_at = db.Column(db.DateTime, nullable=True)   # écrit par l'application mais absent de la base (recette nov. 2026)
+    reference = db.Column(db.String(50))
     titre = db.Column(db.String(200), nullable=False)
     description = db.Column(db.Text)
     
@@ -13835,10 +14065,12 @@ class ReponseAuditQualite(db.Model):
 class PlanActionAudit(db.Model):
     """Plan d'action spécifique à un audit qualité"""
     __tablename__ = 'plans_action_audit_qualite'
+    # Unicité PAR CLIENT (et non globale) : deux clients peuvent avoir la même référence
+    __table_args__ = (db.UniqueConstraint('client_id', 'reference', name='uq_plans_action_audit_qualite_client_reference'),)
     
     id = db.Column(db.Integer, primary_key=True)
     audit_qualite_id = db.Column(db.Integer, db.ForeignKey('audits_qualite.id'))
-    reference = db.Column(db.String(50), unique=True)
+    reference = db.Column(db.String(50))
     intitule = db.Column(db.String(200), nullable=False)
     description = db.Column(db.Text)
     
@@ -13868,9 +14100,11 @@ class PlanActionAudit(db.Model):
 class FormationQualite(db.Model):
     """Formation qualité (ISO 9001:2025 Section 7.2)"""
     __tablename__ = 'formations_qualite'
+    # Unicité PAR CLIENT (et non globale) : deux clients peuvent avoir la même référence
+    __table_args__ = (db.UniqueConstraint('client_id', 'reference', name='uq_formations_qualite_client_reference'),)
     
     id = db.Column(db.Integer, primary_key=True)
-    reference = db.Column(db.String(50), unique=True, nullable=False)
+    reference = db.Column(db.String(50), nullable=False)
     plan_qualite_id = db.Column(db.Integer, db.ForeignKey('plans_qualite_fonction.id'), nullable=False)
     
     # Identification
@@ -14110,9 +14344,11 @@ class CartographieRisqueFonction(db.Model):
 class ActionAmeliorationQualite(db.Model):
     """Action d'amélioration qualité liée à un plan"""
     __tablename__ = 'actions_amelioration_qualite'
+    # Unicité PAR CLIENT (et non globale) : deux clients peuvent avoir la même référence
+    __table_args__ = (db.UniqueConstraint('client_id', 'reference', name='uq_actions_amelioration_qualite_client_reference'),)
 
     id = db.Column(db.Integer, primary_key=True)
-    reference = db.Column(db.String(50), unique=True, nullable=False)
+    reference = db.Column(db.String(50), nullable=False)
     intitule = db.Column(db.String(200), nullable=False)
     description = db.Column(db.Text, nullable=True)
     
@@ -14649,6 +14885,7 @@ class CampagneControle(db.Model):
     __tablename__ = 'campagnes_controle'
     
     id = db.Column(db.Integer, primary_key=True)
+    date_debut_reelle = db.Column(db.Date, nullable=True)   # écrit par l'application mais absent de la base (recette nov. 2026)
     
     # ============================================
     # IDENTIFICATION
@@ -14726,6 +14963,21 @@ class CampagneControle(db.Model):
     archived_at = db.Column(db.DateTime, nullable=True)
     archived_by = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=True)
     archive_reason = db.Column(db.String(255), nullable=True)
+
+    # ===== Circuit de validation (egalyx/circuit_controle.py) =====
+    # Ces champs étaient affectés par le code mais n'existaient pas en base : rien n'était enregistré.
+    soumis_par_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=True)
+    date_soumission = db.Column(db.DateTime, nullable=True)
+    valide_par_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=True)
+    date_validation = db.Column(db.DateTime, nullable=True)
+    commentaire_validation = db.Column(db.Text, nullable=True)
+    rejete_par_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=True)
+    date_rejet = db.Column(db.DateTime, nullable=True)
+    raison_rejet = db.Column(db.Text, nullable=True)
+    rouvert_par_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=True)
+    date_rouverture = db.Column(db.DateTime, nullable=True)
+    raison_rouverture = db.Column(db.Text, nullable=True)
+    historique_actions = db.Column(db.JSON, default=list)
     
     # ============================================
     # AUDIT
@@ -14891,6 +15143,7 @@ class CampagneControle(db.Model):
             self.dossiers_reglement_controles = []
         if dossier not in self.dossiers_reglement_controles:
             self.dossiers_reglement_controles.append(dossier)
+            marquer_json_modifie(self, 'dossiers_reglement_controles')
             self.updated_at = datetime.utcnow()
     
     def ajouter_motif_anomalie(self, motif):
@@ -14898,12 +15151,14 @@ class CampagneControle(db.Model):
             self.motifs_anomalie = []
         if motif not in self.motifs_anomalie:
             self.motifs_anomalie.append(motif)
+            marquer_json_modifie(self, 'motifs_anomalie')
             self.updated_at = datetime.utcnow()
     
     def ajouter_recommandation(self, recommandation):
         if not self.recommandations:
             self.recommandations = []
         self.recommandations.append(recommandation)
+        marquer_json_modifie(self, 'recommandations')
         self.updated_at = datetime.utcnow()
     
     # ============================================
@@ -14923,16 +15178,19 @@ class CampagneControle(db.Model):
         Returns:
             dict: {'created': N, 'deleted': M}
         """
-        anciens_motifs = set(self.motifs_anomalie or [])
-        nouveaux_motifs = set(m.strip() for m in (self.motifs_anomalie or []) if m and m.strip())
-        
-        motifs_ajoutes = nouveaux_motifs - anciens_motifs
-        motifs_supprimes = anciens_motifs - nouveaux_motifs
-        
-        # Créer les nouvelles anomalies
+        # On compare les motifs saisis aux anomalies DÉJÀ EN BASE (et non la liste à elle-même :
+        # l'ancienne version ne créait jamais rien, donc aucune non-conformité à la validation).
+        def _texte(m):
+            if isinstance(m, dict):
+                m = m.get('motif') or m.get('libelle') or m.get('description') or ''
+            return (m or '').strip()
+        nouveaux_motifs = {t for t in (_texte(m) for m in (self.motifs_anomalie or [])) if t}
+        existantes = AnomalieDetectee.query.filter_by(campagne_id=self.id, client_id=self.client_id).all()
+        deja = {(a.motif or '').strip() for a in existantes}
+
         created = 0
-        for motif in motifs_ajoutes:
-            anomalie = AnomalieDetectee(
+        for motif in sorted(nouveaux_motifs - deja):
+            db.session.add(AnomalieDetectee(
                 campagne_id=self.id,
                 motif=motif,
                 criticite='mineur',
@@ -14940,21 +15198,16 @@ class CampagneControle(db.Model):
                 statut='a_traiter',
                 client_id=self.client_id,
                 created_by=user_id
-            )
-            db.session.add(anomalie)
+            ))
             created += 1
-        
-        # Supprimer les anomalies retirées (uniquement si 'a_traiter')
+
+        # Retirer les anomalies dont le motif a été effacé (uniquement si encore « à traiter »)
         deleted = 0
-        for motif in motifs_supprimes:
-            count = AnomalieDetectee.query.filter_by(
-                campagne_id=self.id,
-                motif=motif,
-                statut='a_traiter',
-                client_id=self.client_id
-            ).delete()
-            deleted += count
-        
+        for a in existantes:
+            if (a.motif or '').strip() not in nouveaux_motifs and a.statut == 'a_traiter':
+                db.session.delete(a)
+                deleted += 1
+
         return {'created': created, 'deleted': deleted}
     
     def get_anomalies_stats(self):
@@ -15463,13 +15716,15 @@ class FichierCampagneControle(db.Model):
 class PlanContinuiteActivite(db.Model):
     """Plan de Continuité d'Activité - PCA"""
     __tablename__ = 'plans_continuite_activite'
+    # Unicité PAR CLIENT (et non globale) : deux clients peuvent avoir la même référence
+    __table_args__ = (db.UniqueConstraint('client_id', 'reference', name='uq_plans_continuite_activite_client_reference'),)
     
     id = db.Column(db.Integer, primary_key=True)
     
     # ============================================
     # IDENTIFICATION
     # ============================================
-    reference = db.Column(db.String(50), unique=True, nullable=False)
+    reference = db.Column(db.String(50), nullable=False)
     titre = db.Column(db.String(200), nullable=False)
     description = db.Column(db.Text)
     version = db.Column(db.String(20), default='1.0')
@@ -15637,9 +15892,11 @@ class PlanContinuiteActivite(db.Model):
 class ActionPCA(db.Model):
     """Actions du plan de continuité"""
     __tablename__ = 'actions_pca'
+    # Unicité PAR CLIENT (et non globale) : deux clients peuvent avoir la même référence
+    __table_args__ = (db.UniqueConstraint('client_id', 'reference', name='uq_actions_pca_client_reference'),)
     
     id = db.Column(db.Integer, primary_key=True)
-    reference = db.Column(db.String(50), unique=True, nullable=False)
+    reference = db.Column(db.String(50), nullable=False)
     plan_id = db.Column(db.Integer, db.ForeignKey('plans_continuite_activite.id'), nullable=False)
     
     intitule = db.Column(db.String(200), nullable=False)
@@ -15677,9 +15934,11 @@ class ActionPCA(db.Model):
 class ExercicePCA(db.Model):
     """Exercices et tests du PCA"""
     __tablename__ = 'exercices_pca'
+    # Unicité PAR CLIENT (et non globale) : deux clients peuvent avoir la même référence
+    __table_args__ = (db.UniqueConstraint('client_id', 'reference', name='uq_exercices_pca_client_reference'),)
     
     id = db.Column(db.Integer, primary_key=True)
-    reference = db.Column(db.String(50), unique=True, nullable=False)
+    reference = db.Column(db.String(50), nullable=False)
     plan_id = db.Column(db.Integer, db.ForeignKey('plans_continuite_activite.id'), nullable=False)
     
     nom = db.Column(db.String(200), nullable=False)
@@ -15756,10 +16015,13 @@ class DocumentPCA(db.Model):
 class Incident(db.Model):
     """Gestion complète des incidents - Version Révolutionnaire"""
     __tablename__ = 'incidents'
+    # Unicité PAR CLIENT (et non globale) : deux clients peuvent avoir la même référence
+    __table_args__ = (db.UniqueConstraint('client_id', 'reference', name='uq_incidents_client_reference'),)
     
     # ==================== IDENTIFIANTS DE BASE ====================
     id = db.Column(db.Integer, primary_key=True)
-    reference = db.Column(db.String(30), unique=True, nullable=False)
+    escalade_date = db.Column(db.DateTime, nullable=True)   # écrit par l'application mais absent de la base (recette nov. 2026)
+    reference = db.Column(db.String(30), nullable=False)
     titre = db.Column(db.String(200), nullable=False)
     description = db.Column(db.Text)
     
@@ -16326,9 +16588,12 @@ class Incident(db.Model):
 class TicketSupport(db.Model):
     """Interface client pour déclarer des incidents"""
     __tablename__ = 'tickets_support'
+    # Unicité PAR CLIENT (et non globale) : deux clients peuvent avoir la même référence
+    __table_args__ = (db.UniqueConstraint('client_id', 'reference', name='uq_tickets_support_client_reference'),)
     
     id = db.Column(db.Integer, primary_key=True)
-    reference = db.Column(db.String(30), unique=True, nullable=False)
+    gravite_incident = db.Column(db.String(30), nullable=True)   # écrit par l'application mais absent de la base (recette nov. 2026)
+    reference = db.Column(db.String(30), nullable=False)
     
     # Informations client
     client_id = db.Column(db.Integer, db.ForeignKey('clients.id'))
@@ -17094,6 +17359,7 @@ class WorkflowApprobation(db.Model):
             'utilisateur_nom': utilisateur_nom,
             'commentaire': commentaire
         })
+        marquer_json_modifie(self, 'historique_etapes')
         
         # Garder seulement les 50 derniers
         if len(self.historique_etapes) > 50:
@@ -18036,9 +18302,11 @@ class DirectionSecteur(db.Model):
 class BibliothequeRisque(db.Model):
     """Bibliothèque de risques prédéfinis - VERSION AVEC SECTEUR ET DIRECTION"""
     __tablename__ = 'bibliotheque_risques'
+    # Unicité PAR CLIENT (et non globale) : deux clients peuvent avoir la même référence
+    __table_args__ = (db.UniqueConstraint('client_id', 'reference', name='uq_bibliotheque_risques_client_reference'),)
     
     id = db.Column(db.Integer, primary_key=True)
-    reference = db.Column(db.String(50), unique=True, nullable=False)
+    reference = db.Column(db.String(50), nullable=False)
     intitule = db.Column(db.String(300), nullable=False)
     description = db.Column(db.Text)
     
@@ -18483,9 +18751,12 @@ class ActualisationCartographie(db.Model):
 class ProgrammeControle(db.Model):
     """Plan stratégique annuel de contrôle interne"""
     __tablename__ = 'programmes_controle'
+    # Unicité PAR CLIENT (et non globale) : deux clients peuvent avoir la même référence
+    __table_args__ = (db.UniqueConstraint('client_id', 'reference', name='uq_programmes_controle_client_reference'),)
 
     id = db.Column(db.Integer, primary_key=True)
-    reference = db.Column(db.String(20), unique=True, nullable=False)
+    objectifs = db.Column(db.Text, nullable=True)   # écrit par l'application mais absent de la base (recette nov. 2026)
+    reference = db.Column(db.String(20), nullable=False)
     annee = db.Column(db.Integer, nullable=False)
     nom = db.Column(db.String(200), nullable=False)
     description = db.Column(db.Text)
@@ -18504,9 +18775,12 @@ class ProgrammeControle(db.Model):
 class MissionControle(db.Model):
     """Mission de contrôle assignée à une Direction/Service"""
     __tablename__ = 'missions_controle'
+    # Unicité PAR CLIENT (et non globale) : deux clients peuvent avoir la même référence
+    __table_args__ = (db.UniqueConstraint('client_id', 'reference', name='uq_missions_controle_client_reference'),)
 
     id = db.Column(db.Integer, primary_key=True)
-    reference = db.Column(db.String(20), unique=True, nullable=False)
+    date_fin_reelle = db.Column(db.Date, nullable=True)   # écrit par l'application mais absent de la base (recette nov. 2026)
+    reference = db.Column(db.String(20), nullable=False)
     intitule = db.Column(db.String(200), nullable=False)
     description = db.Column(db.Text)
     
@@ -18551,9 +18825,11 @@ class MissionControle(db.Model):
 class TacheControle(db.Model):
     """Tâche élémentaire de contrôle (Niveau 1)"""
     __tablename__ = 'taches_controle'
+    # Unicité PAR CLIENT (et non globale) : deux clients peuvent avoir la même référence
+    __table_args__ = (db.UniqueConstraint('client_id', 'reference', name='uq_taches_controle_client_reference'),)
     
     id = db.Column(db.Integer, primary_key=True)
-    reference = db.Column(db.String(20), unique=True, nullable=False)
+    reference = db.Column(db.String(20), nullable=False)
     intitule = db.Column(db.String(200), nullable=False)
     description = db.Column(db.Text)
     
@@ -18603,9 +18879,11 @@ class ValidationTrace(db.Model):
 class ReferentielControle(db.Model):
     """Référentiel des contrôles"""
     __tablename__ = 'referentiel_controles'
+    # Unicité PAR CLIENT (et non globale) : deux clients peuvent avoir la même référence
+    __table_args__ = (db.UniqueConstraint('client_id', 'code_controle', name='uq_referentiel_controles_client_code_controle'),)
     
     id = db.Column(db.Integer, primary_key=True)
-    code_controle = db.Column(db.String(50), unique=True, nullable=False)
+    code_controle = db.Column(db.String(50), nullable=False)
     nom = db.Column(db.String(200), nullable=False)
     processus = db.Column(db.String(100))
     metier = db.Column(db.String(100))
@@ -18632,12 +18910,14 @@ class ReferentielControle(db.Model):
 class PlanificationControle(db.Model):
     """Planification des contrôles - Version complète avec workflow"""
     __tablename__ = 'planification_controles'
+    # Unicité PAR CLIENT (et non globale) : deux clients peuvent avoir la même référence
+    __table_args__ = (db.UniqueConstraint('client_id', 'reference', name='uq_planification_controles_client_reference'),)
     
     # ============================================
     # IDENTIFICATION DE BASE
     # ============================================
     id = db.Column(db.Integer, primary_key=True)
-    reference = db.Column(db.String(50), unique=True, nullable=False)
+    reference = db.Column(db.String(50), nullable=False)
     annee = db.Column(db.Integer, nullable=False)
     mois = db.Column(db.Integer)
     perimetre = db.Column(db.String(500))
@@ -18788,6 +19068,7 @@ class PlanificationControle(db.Model):
             'nouveau_statut': nouveau_statut
         }
         self.historique_actions.append(entry)
+        marquer_json_modifie(self, 'historique_actions')
         
         # Garder seulement les 100 derniers
         if len(self.historique_actions) > 100:
@@ -19509,6 +19790,11 @@ class RecommandationC2N(db.Model):
     __tablename__ = 'recommandations_c2n'
     
     id = db.Column(db.Integer, primary_key=True)
+    demande_cloture_le = db.Column(db.DateTime, nullable=True)   # registre des recommandations : clôture demandée
+    demande_cloture_par_id = db.Column(db.Integer, nullable=True)
+    cloture_validee_le = db.Column(db.DateTime, nullable=True)
+    cloture_validee_par_id = db.Column(db.Integer, nullable=True)
+    motif_refus_cloture = db.Column(db.Text, nullable=True)
     planification_id = db.Column(db.Integer, db.ForeignKey('planification_controles.id'), nullable=False)
     
     # Contenu
@@ -19702,12 +19988,14 @@ class RecommandationC2N(db.Model):
             
             if 'historique_rouvertures' not in self.metadonnees:
                 self.metadonnees['historique_rouvertures'] = []
+                marquer_json_modifie(self, 'metadonnees')
             
             self.metadonnees['historique_rouvertures'].append({
                 'date': datetime.utcnow().isoformat(),
                 'ancien_statut': ancien_statut,
                 'plan_action_concerne': self.plan_action_id
             })
+            marquer_json_modifie(self, 'metadonnees')
             
             self.date_rejet = None
             self.date_acceptation = None
@@ -19730,16 +20018,19 @@ class RecommandationC2N(db.Model):
         # Sauvegarder le motif actuel
         if raison:
             self.metadonnees['dernier_motif_rejet'] = raison
+            marquer_json_modifie(self, 'metadonnees')
             
             # Ajouter à l'historique
             if 'historique_rejets' not in self.metadonnees:
                 self.metadonnees['historique_rejets'] = []
+                marquer_json_modifie(self, 'metadonnees')
             
             self.metadonnees['historique_rejets'].append({
                 'date': datetime.utcnow().isoformat(),
                 'motif': raison,
                 'rejete_par': User.query.get(user_id).username if user_id else current_user.username
             })
+            marquer_json_modifie(self, 'metadonnees')
         
         self.updated_at = datetime.utcnow()
         return True
@@ -19785,9 +20076,11 @@ class RecommandationC2N(db.Model):
 class PlanActionC2N(db.Model):
     """Plans d'action (niveau opérationnel)"""
     __tablename__ = 'plans_action_c2n'
+    # Unicité PAR CLIENT (et non globale) : deux clients peuvent avoir la même référence
+    __table_args__ = (db.UniqueConstraint('client_id', 'reference', name='uq_plans_action_c2n_client_reference'),)
     
     id = db.Column(db.Integer, primary_key=True)
-    reference = db.Column(db.String(50), unique=True, nullable=False)
+    reference = db.Column(db.String(50), nullable=False)
     
     # Liens
     non_conformite_id = db.Column(db.Integer, db.ForeignKey('non_conformites_c2n.id'), nullable=True)
@@ -20363,9 +20656,11 @@ class CommentaireSousActionC2N(db.Model):
 class NonConformiteC2N(db.Model):
     """Gestion des non-conformités"""
     __tablename__ = 'non_conformites_c2n'
+    # Unicité PAR CLIENT (et non globale) : deux clients peuvent avoir la même référence
+    __table_args__ = (db.UniqueConstraint('client_id', 'reference', name='uq_non_conformites_c2n_client_reference'),)
     
     id = db.Column(db.Integer, primary_key=True)
-    reference = db.Column(db.String(50), unique=True, nullable=False)
+    reference = db.Column(db.String(50), nullable=False)
     execution_id = db.Column(db.Integer, db.ForeignKey('execution_controle.id'), nullable=False)
     
     description = db.Column(db.Text, nullable=False)
@@ -20539,12 +20834,14 @@ class NonConformiteC2N(db.Model):
 
 class ProcessusMetier(db.Model):
     __tablename__ = 'processus_metier'
+    # Unicité PAR CLIENT (et non globale) : deux clients peuvent avoir la même référence
+    __table_args__ = (db.UniqueConstraint('client_id', 'reference', name='uq_processus_metier_client_reference'), db.UniqueConstraint('client_id', 'code', name='uq_processus_metier_client_code'),)
     
     id = db.Column(db.Integer, primary_key=True)
-    reference = db.Column(db.String(50), unique=True, nullable=False)
+    reference = db.Column(db.String(50), nullable=False)
     nom = db.Column(db.String(200), nullable=False)
     description = db.Column(db.Text)
-    code = db.Column(db.String(50), unique=True)
+    code = db.Column(db.String(50))
     
     parent_id = db.Column(db.Integer, db.ForeignKey('processus_metier.id'))
     parent = db.relationship('ProcessusMetier', remote_side=[id], backref='sous_processus')
@@ -20790,3 +21087,458 @@ class PermissionOperateur(db.Model):
             'services_autorises': self.services_autorises
         }
 
+
+# ============================================================
+# ASSISTANT EGALYX (chatbot) — historique des conversations
+# ============================================================
+# Une ligne par message (question de l'utilisateur ou réponse de l'assistant).
+# La table est créée automatiquement au démarrage par db.create_all().
+
+class ConversationAssistant(db.Model):
+    """Historique du chatbot intégré (assistant Egalyx)"""
+    __tablename__ = 'conversations_assistant'
+
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False, index=True)
+    client_id = db.Column(db.Integer, db.ForeignKey('clients.id'), nullable=True, index=True)
+    role = db.Column(db.String(20), nullable=False)        # 'user' ou 'assistant'
+    contenu = db.Column(db.Text, nullable=False)
+    outils_utilises = db.Column(db.JSON, default=list)     # outils appelés pour cette réponse (traçabilité)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow, index=True)
+
+    utilisateur = db.relationship('User', foreign_keys=[user_id])
+
+    __table_args__ = (
+        db.Index('ix_conv_assistant_user_date', 'user_id', 'created_at'),
+    )
+
+    def to_dict(self):
+        return {
+            'role': self.role,
+            'content': self.contenu,
+            'created_at': self.created_at.isoformat() if self.created_at else None,
+        }
+
+    def __repr__(self):
+        return f'<ConversationAssistant {self.id} {self.role} user={self.user_id}>'
+
+
+# ============================================================================
+# MODULES AJOUTÉS (v4) : paramètres de risque, alerte interne, tiers & LCB-FT,
+# signature interne, paiement en ligne.
+# ============================================================================
+
+# -------------------- PARAMÈTRES DES RISQUES (par client) --------------------
+class ParametresRisque(db.Model):
+    """Seuils de cotation, taux de maîtrise, appétence au risque et listes LCB-FT propres à un client."""
+    __tablename__ = 'parametres_risque'
+
+    id = db.Column(db.Integer, primary_key=True)
+    valideur_evaluations_operateurs_id = db.Column(db.Integer, nullable=True)   # valideur désigné des évaluations faites par les opérateurs
+    client_id = db.Column(db.Integer, db.ForeignKey('clients.id'), nullable=False, unique=True)
+    seuil_faible = db.Column(db.Float, default=4)
+    seuil_moyen = db.Column(db.Float, default=10)
+    seuil_eleve = db.Column(db.Float, default=16)
+    taux_maitrise = db.Column(db.JSON)                 # {"1": 0.0, ..., "5": 0.6}
+    appetence_score_net = db.Column(db.Float)          # score net maximal accepté (None = non défini)
+    appetence_par_categorie = db.Column(db.JSON)       # {"Financier": 6, ...}
+    appetence_declaration = db.Column(db.Text)         # déclaration d'appétence validée par la direction
+    pays_liste_noire = db.Column(db.JSON)              # LCB-FT (modifiable)
+    pays_liste_grise = db.Column(db.JSON)
+    secteurs_sensibles = db.Column(db.JSON)
+    seuil_montant_lcb = db.Column(db.Float)            # montant de relation jugé élevé
+    listes_gafi_maj_le = db.Column(db.Date)
+    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    updated_by = db.Column(db.Integer, db.ForeignKey('user.id'))
+
+    def seuils(self):
+        return (self.seuil_faible or 4, self.seuil_moyen or 10, self.seuil_eleve or 16)
+
+    def taux(self):
+        base = {1: 0.0, 2: 0.10, 3: 0.25, 4: 0.40, 5: 0.60}
+        for k, v in (self.taux_maitrise or {}).items():
+            try:
+                base[int(k)] = float(v)
+            except (TypeError, ValueError):
+                pass
+        return base
+
+
+# -------------------- ALERTE INTERNE (Sapin II / directive UE 2019/1937) --------------------
+class Signalement(db.Model):
+    """Signalement d'un lanceur d'alerte. Contenu et identité chiffrés (EGALYX_CLE_CHIFFREMENT)."""
+    __tablename__ = 'signalements'
+
+    id = db.Column(db.Integer, primary_key=True)
+    client_id = db.Column(db.Integer, db.ForeignKey('clients.id'), nullable=False, index=True)
+    code_suivi = db.Column(db.String(20), unique=True, nullable=False)     # communiqué au lanceur d'alerte
+    mot_de_passe_hash = db.Column(db.String(255), nullable=False)
+    categorie = db.Column(db.String(50), nullable=False)
+    _description = db.Column('description', db.Text, nullable=False)
+    date_faits = db.Column(db.String(100))
+    lieu = db.Column(db.String(200))
+    _personnes = db.Column('personnes_impliquees', db.Text)
+    anonyme = db.Column(db.Boolean, default=True)
+    _identite = db.Column('identite', db.Text)                             # JSON chiffré {nom, contact}
+    statut = db.Column(db.String(30), default='recu')
+    recevable = db.Column(db.Boolean)
+    referent_id = db.Column(db.Integer, db.ForeignKey('user.id'))
+    date_accuse_reception = db.Column(db.DateTime)
+    date_retour_information = db.Column(db.DateTime)
+    motif_cloture = db.Column(db.Text)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    referent = db.relationship('User', foreign_keys=[referent_id])
+    messages = db.relationship('MessageSignalement', backref='signalement', lazy=True,
+                               order_by='MessageSignalement.created_at', cascade='all, delete-orphan')
+
+    STATUTS = {'recu': 'Reçu', 'recevable': 'Recevable', 'en_instruction': 'En instruction',
+               'cloture_fonde': 'Clôturé — fondé', 'cloture_non_fonde': 'Clôturé — non fondé',
+               'irrecevable': 'Irrecevable'}
+    CATEGORIES = {'fraude': 'Fraude, détournement', 'corruption': "Corruption, trafic d'influence",
+                  'conflit_interets': "Conflit d'intérêts", 'harcelement': 'Harcèlement, discrimination',
+                  'sante_securite': 'Santé, sécurité', 'environnement': 'Environnement',
+                  'donnees': 'Données personnelles', 'concurrence': 'Concurrence, sanctions', 'autre': 'Autre'}
+
+    @property
+    def description(self):
+        return dechiffrer_secret(self._description)
+
+    @description.setter
+    def description(self, v):
+        self._description = chiffrer_secret(v)
+
+    @property
+    def personnes_impliquees(self):
+        return dechiffrer_secret(self._personnes)
+
+    @personnes_impliquees.setter
+    def personnes_impliquees(self, v):
+        self._personnes = chiffrer_secret(v)
+
+    @property
+    def identite(self):
+        import json as _json
+        v = dechiffrer_secret(self._identite)
+        try:
+            return _json.loads(v) if v else {}
+        except ValueError:
+            return {}
+
+    @identite.setter
+    def identite(self, v):
+        import json as _json
+        self._identite = chiffrer_secret(_json.dumps(v or {}, ensure_ascii=False)) if v else None
+
+    @property
+    def statut_libelle(self):
+        return self.STATUTS.get(self.statut, self.statut)
+
+    @property
+    def categorie_libelle(self):
+        return self.CATEGORIES.get(self.categorie, self.categorie)
+
+    @property
+    def est_cloture(self):
+        return self.statut in ('cloture_fonde', 'cloture_non_fonde', 'irrecevable')
+
+    @property
+    def echeance_accuse(self):
+        return self.created_at + timedelta(days=7) if self.created_at else None
+
+    @property
+    def echeance_retour(self):
+        """Retour d'information au lanceur d'alerte : 3 mois après l'accusé de réception."""
+        base = self.date_accuse_reception or self.created_at
+        return base + timedelta(days=90) if base else None
+
+
+class MessageSignalement(db.Model):
+    __tablename__ = 'messages_signalement'
+
+    id = db.Column(db.Integer, primary_key=True)
+    signalement_id = db.Column(db.Integer, db.ForeignKey('signalements.id'), nullable=False, index=True)
+    auteur = db.Column(db.String(20), nullable=False)      # lanceur | referent | systeme
+    referent_id = db.Column(db.Integer, db.ForeignKey('user.id'))
+    _contenu = db.Column('contenu', db.Text, nullable=False)
+    interne = db.Column(db.Boolean, default=False)           # note interne, invisible du lanceur
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+    referent = db.relationship('User', foreign_keys=[referent_id])
+
+    @property
+    def contenu(self):
+        return dechiffrer_secret(self._contenu)
+
+    @contenu.setter
+    def contenu(self, v):
+        self._contenu = chiffrer_secret(v)
+
+
+# -------------------- TIERS, KYC & LCB-FT, FOURNISSEURS --------------------
+class Tiers(db.Model):
+    """Client, fournisseur, partenaire ou intermédiaire : connaissance (KYC), risque LCB-FT, criticité fournisseur."""
+    __tablename__ = 'tiers'
+    __table_args__ = (db.UniqueConstraint('client_id', 'reference', name='uq_tiers_client_reference'),)
+
+    id = db.Column(db.Integer, primary_key=True)
+    client_id = db.Column(db.Integer, db.ForeignKey('clients.id'), nullable=False, index=True)
+    reference = db.Column(db.String(30), nullable=False)
+    type_tiers = db.Column(db.String(20), default='client')       # client | fournisseur | partenaire | intermediaire
+    nature = db.Column(db.String(20), default='personne_morale')  # personne_morale | personne_physique
+    nom = db.Column(db.String(200), nullable=False)               # raison sociale ou nom complet
+    sigle = db.Column(db.String(100))
+    numero_identification = db.Column(db.String(100))              # RCCM, SIREN, NIF, pièce d'identité…
+    pays = db.Column(db.String(100))                               # pays d'immatriculation / nationalité
+    pays_residence = db.Column(db.String(100))
+    secteur = db.Column(db.String(150))
+    date_naissance = db.Column(db.Date)
+    est_ppe = db.Column(db.Boolean, default=False)
+    beneficiaires_effectifs = db.Column(db.JSON)                   # [{"nom":..., "part":..., "pays":..., "ppe":bool}]
+    structure_complexe = db.Column(db.Boolean, default=False)
+    canal = db.Column(db.String(20), default='presentiel')         # presentiel | distance
+    montant_relation = db.Column(db.Float)
+    # Fournisseurs
+    impact_arret = db.Column(db.Integer)                           # 1 faible … 4 bloquant
+    dependance_pct = db.Column(db.Float)
+    substituable = db.Column(db.Boolean, default=True)
+    note_evaluation = db.Column(db.Float)                          # dernière note /5
+    # Résultats
+    score_lcb = db.Column(db.Integer)
+    niveau_vigilance = db.Column(db.String(20))                    # simplifiee | standard | renforcee | refus
+    facteurs_lcb = db.Column(db.JSON)
+    criticite_score = db.Column(db.Integer)
+    criticite = db.Column(db.String(20))
+    sanction_confirmee = db.Column(db.Boolean, default=False)
+    statut = db.Column(db.String(20), default='en_cours')          # en_cours | valide | refuse | suspendu
+    date_derniere_revue = db.Column(db.Date)
+    date_prochaine_revue = db.Column(db.Date)
+    responsable_id = db.Column(db.Integer, db.ForeignKey('user.id'))
+    commentaire = db.Column(db.Text)
+    is_archived = db.Column(db.Boolean, default=False)
+    created_by = db.Column(db.Integer, db.ForeignKey('user.id'))
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    responsable = db.relationship('User', foreign_keys=[responsable_id])
+    criblages = db.relationship('CriblageTiers', backref='tiers', lazy=True, order_by='CriblageTiers.created_at.desc()')
+    revues = db.relationship('RevueTiers', backref='tiers', lazy=True, order_by='RevueTiers.created_at.desc()')
+
+    TYPES = {'client': 'Client', 'fournisseur': 'Fournisseur', 'partenaire': 'Partenaire', 'intermediaire': 'Intermédiaire'}
+    VIGILANCES = {'simplifiee': 'Simplifiée', 'standard': 'Standard', 'renforcee': 'Renforcée', 'refus': 'Refus / gel'}
+
+    @property
+    def revue_en_retard(self):
+        return bool(self.date_prochaine_revue and self.date_prochaine_revue < date.today())
+
+
+class EntreeSanction(db.Model):
+    """Entrée d'une liste de sanctions (ONU, UE, OFAC, liste nationale…), importée par le super admin."""
+    __tablename__ = 'entrees_sanctions'
+
+    id = db.Column(db.Integer, primary_key=True)
+    source = db.Column(db.String(50), nullable=False, index=True)
+    nom = db.Column(db.String(300), nullable=False)
+    alias = db.Column(db.Text)                       # séparés par « ; »
+    pays = db.Column(db.String(150))
+    programme = db.Column(db.String(200))
+    type_entite = db.Column(db.String(30))           # personne | entite
+    date_import = db.Column(db.DateTime, default=datetime.utcnow)
+
+
+class CriblageTiers(db.Model):
+    __tablename__ = 'criblages_tiers'
+
+    id = db.Column(db.Integer, primary_key=True)
+    client_id = db.Column(db.Integer, db.ForeignKey('clients.id'), nullable=False, index=True)
+    tiers_id = db.Column(db.Integer, db.ForeignKey('tiers.id'), nullable=False, index=True)
+    correspondances = db.Column(db.JSON)             # [{nom_liste, score, source, ...}]
+    nb_entrees_controlees = db.Column(db.Integer)
+    statut = db.Column(db.String(30), default='aucune_correspondance')   # aucune_correspondance | a_verifier | confirme | faux_positif
+    commentaire = db.Column(db.Text)
+    realise_par = db.Column(db.Integer, db.ForeignKey('user.id'))
+    verifie_par = db.Column(db.Integer, db.ForeignKey('user.id'))
+    verifie_le = db.Column(db.DateTime)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+    auteur = db.relationship('User', foreign_keys=[realise_par])
+    verificateur = db.relationship('User', foreign_keys=[verifie_par])
+
+
+class RevueTiers(db.Model):
+    """Historique : revues KYC périodiques et évaluations des fournisseurs."""
+    __tablename__ = 'revues_tiers'
+
+    id = db.Column(db.Integer, primary_key=True)
+    client_id = db.Column(db.Integer, db.ForeignKey('clients.id'), nullable=False, index=True)
+    tiers_id = db.Column(db.Integer, db.ForeignKey('tiers.id'), nullable=False, index=True)
+    type_revue = db.Column(db.String(30), default='kyc')      # kyc | evaluation_fournisseur
+    note = db.Column(db.Float)
+    niveau_vigilance = db.Column(db.String(20))
+    score_lcb = db.Column(db.Integer)
+    commentaire = db.Column(db.Text)
+    auteur_id = db.Column(db.Integer, db.ForeignKey('user.id'))
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+    auteur = db.relationship('User', foreign_keys=[auteur_id])
+
+
+# -------------------- SIGNATURE INTERNE --------------------
+class SignatureDocument(db.Model):
+    """Signature électronique interne : qui a validé quelle version (empreinte SHA-256) d'un document, et quand."""
+    __tablename__ = 'signatures_documents'
+
+    id = db.Column(db.Integer, primary_key=True)
+    client_id = db.Column(db.Integer, db.ForeignKey('clients.id'), index=True)
+    type_document = db.Column(db.String(40), nullable=False)    # audit | plan_action | plan_action_c2n | feuille_travail
+    document_id = db.Column(db.Integer, nullable=False)
+    reference_document = db.Column(db.String(100))
+    empreinte = db.Column(db.String(64), nullable=False)
+    signataire_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
+    role_signataire = db.Column(db.String(30))                   # auteur | valideur | approbateur
+    commentaire = db.Column(db.Text)
+    methode = db.Column(db.String(30), default='code_email')
+    adresse_ip = db.Column(db.String(45))
+    navigateur = db.Column(db.String(300))
+    revoquee = db.Column(db.Boolean, default=False)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+    signataire = db.relationship('User', foreign_keys=[signataire_id])
+    __table_args__ = (db.Index('ix_signature_document', 'type_document', 'document_id'),)
+
+
+# -------------------- PAIEMENT EN LIGNE --------------------
+class PaiementEnLigne(db.Model):
+    __tablename__ = 'paiements_en_ligne'
+
+    id = db.Column(db.Integer, primary_key=True)
+    client_id = db.Column(db.Integer, db.ForeignKey('clients.id'), nullable=False, index=True)
+    formule_id = db.Column(db.Integer, db.ForeignKey('formules_abonnement.id'), nullable=False)
+    periode = db.Column(db.String(20), default='mensuel')
+    montant = db.Column(db.Float, nullable=False)
+    devise = db.Column(db.String(3), nullable=False)
+    prestataire = db.Column(db.String(20), nullable=False)          # cinetpay | stripe
+    reference = db.Column(db.String(40), unique=True, nullable=False)
+    reference_prestataire = db.Column(db.String(200))
+    statut = db.Column(db.String(20), default='initie')              # initie | reussi | echoue | annule
+    reponse = db.Column(db.JSON)
+    abonnement_id = db.Column(db.Integer, db.ForeignKey('abonnements_client.id'))
+    initie_par = db.Column(db.Integer, db.ForeignKey('user.id'))
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    paye_le = db.Column(db.DateTime)
+
+    formule = db.relationship('FormuleAbonnement')
+
+
+# =============================================================================
+# AMÉLIORATIONS NOV. 2026 : recommandations, KRI, audit
+# =============================================================================
+plans_action_audits = db.Table(
+    'plans_action_audits',
+    db.Column('plan_action_id', db.Integer, db.ForeignKey('plans_action.id', ondelete='CASCADE'), primary_key=True),
+    db.Column('audit_id', db.Integer, db.ForeignKey('audits.id', ondelete='CASCADE'), primary_key=True),
+)
+
+
+class RecommandationExterne(db.Model):
+    """Recommandation émise hors de l'outil : commissaire aux comptes, régulateur, inspection, auditeur externe."""
+    __tablename__ = 'recommandations_externes'
+    id = db.Column(db.Integer, primary_key=True)
+    client_id = db.Column(db.Integer, db.ForeignKey('clients.id'), nullable=False, index=True)
+    source = db.Column(db.String(30), nullable=False, default='cac')   # cac, regulateur, inspection, externe
+    emetteur = db.Column(db.String(200))                              # ex. « Commission bancaire — mission 2026 »
+    reference = db.Column(db.String(60), nullable=False)
+    titre = db.Column(db.String(300), nullable=False)
+    description = db.Column(db.Text)
+    priorite = db.Column(db.String(20), default='moyenne')             # faible, moyenne, haute, critique
+    date_emission = db.Column(db.Date)
+    date_echeance = db.Column(db.Date)
+    direction_id = db.Column(db.Integer, db.ForeignKey('direction.id'), nullable=True)
+    responsable_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=True)
+    statut = db.Column(db.String(20), default='ouverte')               # ouverte, en_cours, cloturee, rejetee
+    progression = db.Column(db.Integer, default=0)
+    demande_cloture_le = db.Column(db.DateTime)
+    demande_cloture_par_id = db.Column(db.Integer)
+    cloture_validee_le = db.Column(db.DateTime)
+    cloture_validee_par_id = db.Column(db.Integer)
+    motif_refus_cloture = db.Column(db.Text)
+    created_by = db.Column(db.Integer, db.ForeignKey('user.id'))
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    responsable = db.relationship('User', foreign_keys=[responsable_id])
+    direction = db.relationship('Direction', foreign_keys=[direction_id])
+
+
+class SuiviRecommandation(db.Model):
+    """Journal commun des recommandations (toutes sources) : avancement, preuve, demande et décision de clôture."""
+    __tablename__ = 'suivi_recommandations'
+    id = db.Column(db.Integer, primary_key=True)
+    client_id = db.Column(db.Integer, db.ForeignKey('clients.id'), nullable=False, index=True)
+    source = db.Column(db.String(20), nullable=False)        # audit, c2n, externe
+    recommandation_id = db.Column(db.Integer, nullable=False, index=True)
+    action = db.Column(db.String(30), nullable=False)        # avancement, demande_cloture, cloture_validee, cloture_refusee
+    progression = db.Column(db.Integer)
+    commentaire = db.Column(db.Text)
+    fichier = db.Column(db.String(300))                      # chemin relatif de la preuve (dossier instance)
+    nom_fichier = db.Column(db.String(200))
+    user_id = db.Column(db.Integer, db.ForeignKey('user.id'))
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    user = db.relationship('User', foreign_keys=[user_id])
+
+
+class HistoriqueSeuilKRI(db.Model):
+    """Seuils d'un KRI en vigueur sur une période : une mesure ancienne est jugée avec les seuils de son époque."""
+    __tablename__ = 'historique_seuils_kri'
+    id = db.Column(db.Integer, primary_key=True)
+    kri_id = db.Column(db.Integer, db.ForeignKey('kri.id', ondelete='CASCADE'), nullable=False, index=True)
+    seuil_alerte = db.Column(db.Float)
+    seuil_critique = db.Column(db.Float)
+    sens = db.Column(db.String(20))
+    valable_jusqu_au = db.Column(db.DateTime, nullable=False)   # seuils remplacés à cette date
+    modifie_par_id = db.Column(db.Integer)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+
+class TempsAudit(db.Model):
+    """Temps passé par un auditeur sur une mission."""
+    __tablename__ = 'temps_audit'
+    id = db.Column(db.Integer, primary_key=True)
+    client_id = db.Column(db.Integer, db.ForeignKey('clients.id'), nullable=False, index=True)
+    audit_id = db.Column(db.Integer, db.ForeignKey('audits.id', ondelete='CASCADE'), nullable=False, index=True)
+    user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
+    date = db.Column(db.Date, nullable=False)
+    heures = db.Column(db.Float, nullable=False)
+    activite = db.Column(db.String(30), default='terrain')    # preparation, terrain, rapport, revue, suivi
+    commentaire = db.Column(db.String(300))
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    user = db.relationship('User', foreign_keys=[user_id])
+
+
+class DeclarationIndependance(db.Model):
+    """Déclaration d'indépendance et d'absence de conflit d'intérêts d'un membre de l'équipe (norme IIA)."""
+    __tablename__ = 'declarations_independance'
+    id = db.Column(db.Integer, primary_key=True)
+    client_id = db.Column(db.Integer, db.ForeignKey('clients.id'), nullable=False, index=True)
+    audit_id = db.Column(db.Integer, db.ForeignKey('audits.id', ondelete='CASCADE'), nullable=False, index=True)
+    user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
+    conflit = db.Column(db.Boolean, default=False)
+    details = db.Column(db.Text)
+    signe_le = db.Column(db.DateTime, default=datetime.utcnow)
+    user = db.relationship('User', foreign_keys=[user_id])
+    __table_args__ = (db.UniqueConstraint('audit_id', 'user_id', name='uq_independance_audit_user'),)
+
+
+class VersionLogigramme(db.Model):
+    """Version validée d'un logigramme (copie figée), ou trace d'une revue annuelle sans modification."""
+    __tablename__ = 'versions_logigramme'
+    id = db.Column(db.Integer, primary_key=True)
+    client_id = db.Column(db.Integer, db.ForeignKey('clients.id'), nullable=False, index=True)
+    activite_id = db.Column(db.Integer, db.ForeignKey('processus_activite.id', ondelete='CASCADE'), nullable=False, index=True)
+    version = db.Column(db.Integer, nullable=False)
+    nature = db.Column(db.String(20), default='validation')   # validation, auto_validation, revue
+    contenu = db.Column(db.JSON)                              # éléments, liens, acteurs, risques et contrôles rattachés
+    commentaire = db.Column(db.Text)
+    user_id = db.Column(db.Integer, db.ForeignKey('user.id'))
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    user = db.relationship('User', foreign_keys=[user_id])
