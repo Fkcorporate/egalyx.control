@@ -1,0 +1,94 @@
+"""
+Modules Egalyx Control ajoutés en v4.
+
+Branchement (une seule ligne, à la fin de app.py, avant « if __name__ == '__main__' ») :
+    from egalyx import enregistrer_extensions
+    enregistrer_extensions(app, db, csrf=csrf, recalculer_cotations=recalculer_toutes_cotations)
+"""
+import logging
+
+journal = logging.getLogger('egalyx')
+
+
+def enregistrer_extensions(app, db, csrf=None, recalculer_cotations=None, construire_dashboard=None):
+    from egalyx import (base_donnees, double_auth, sso, parametres_risque, alerte, tiers, signature,
+                        paiement, export_donnees, api_doc, organigramme)
+    base_donnees.enregistrer(app, db)
+    from egalyx import cloisonnement
+    cloisonnement.enregistrer(app)          # isolation des organisations sur toutes les routes
+    from egalyx import questionnaires_publics
+    questionnaires_publics.enregistrer(app)  # réponses publiques : questionnaire public, actif, dans ses dates
+    double_auth.enregistrer(app)
+    sso.enregistrer(app)
+    parametres_risque.enregistrer(app, recalculer=recalculer_cotations)
+    alerte.enregistrer(app)
+    tiers.enregistrer(app)
+    signature.enregistrer(app)
+    paiement.enregistrer(app, csrf=csrf)
+    export_donnees.enregistrer(app)
+    api_doc.enregistrer(app, csrf=csrf)
+    organigramme.enregistrer(app)
+
+    # v5 : démonstration, rapport au comité, bibliothèque sectorielle, recherche, « Ma semaine », automatismes
+    from egalyx import demo, rapport_comite, bibliotheque, recherche, ma_semaine, automatismes
+    demo.enregistrer(app)
+    rapport_comite.enregistrer(app, construire_dashboard=construire_dashboard)
+    bibliotheque.enregistrer(app)
+    recherche.enregistrer(app)
+    ma_semaine.enregistrer(app)
+    automatismes.enregistrer(app)
+    from egalyx import modules_client
+    modules_client.enregistrer(app)
+    from egalyx import ia
+    ia.enregistrer(app)                     # interrupteur unique de l'IA (plateforme, client, permission)
+    from egalyx import aide
+    aide.enregistrer(app)                   # centre d'aide /aide + base de connaissances de l'assistant
+    from egalyx import circuit_controle
+    circuit_controle.enregistrer(app)       # circuit unique campagnes de contrôle ↔ contrôle interne N2
+    from egalyx import recommandations, kri_suivi, audit_plus
+    recommandations.enregistrer(app)        # registre unique des recommandations (audit, N2, externes)
+    kri_suivi.enregistrer(app)              # KRI : fraîcheur des mesures, seuils cohérents et historisés
+    audit_plus.enregistrer(app)             # audit : rapport provisoire/définitif, réponses, temps, indépendance
+    from egalyx import logigrammes
+    logigrammes.enregistrer(app)
+    from egalyx import permissions_grille
+    permissions_grille.enregistrer(app)     # grille des permissions issue du catalogue ; modules non souscrits verrouillés            # logigrammes : versions, validation, couloirs, vérification, conversion
+    from egalyx import masquage
+    masquage.enregistrer(app)               # liens, boutons, formulaires et blocs des fonctions indisponibles : retirés
+    _filtres_min_max(app)                   # « [a, b]|min » et « valeur|min(borne) » fonctionnent tous les deux
+    from egalyx import langue
+    langue.enregistrer(app)                 # EN DERNIER : bascule français / anglais (remplace les anciens systèmes)
+
+    from datetime import datetime as _dt
+    app.jinja_env.globals.setdefault('datetime', _dt)      # utilisé par errors/500.html
+    from egalyx import courriel
+    app.jinja_env.globals.update(
+        egalyx_paiement_actif=lambda: bool(paiement.prestataires()),
+        egalyx_courriel_configure=courriel.est_configure,
+    )
+    print("✅ Modules v4 : 2FA, SSO, alerte interne, tiers/LCB-FT, signature, paiement, export, "
+          "API documentée, organigramme éditable, paramètres de risque, sauvegardes, démonstration, "
+          "rapport au comité, bibliothèque sectorielle, recherche globale, Ma semaine, relances")
+
+def _filtres_min_max(app):
+    """app.py redéfinit les filtres Jinja « min » et « max » en « valeur|min(borne) ». Les écrans qui utilisent
+    la forme standard « [a, b]|min » recevaient alors la liste elle-même (barres vides, organigramme et graphiques faux).
+    Ces versions acceptent les deux formes."""
+    def fabrique(fonction):
+        def filtre(valeur, *args, attribute=None, **kw):
+            if isinstance(valeur, (list, tuple, set)) or (hasattr(valeur, '__iter__') and not isinstance(valeur, (str, bytes, dict))):
+                elements = [x for x in valeur if x is not None]
+                if not elements:
+                    return None
+                if attribute:     # comme Jinja : renvoie l'élément dont l'attribut est le plus petit / grand
+                    cle = lambda x: (x.get(attribute) if isinstance(x, dict) else getattr(x, attribute, None)) or 0
+                    return fonction(elements, key=cle)
+                return fonction(elements)
+            borne = args[0] if args else kw.get('min_value', kw.get('max_value', 0))
+            try:
+                return fonction(float(valeur), float(borne))
+            except (TypeError, ValueError):
+                return valeur
+        return filtre
+    app.jinja_env.filters['min'] = fabrique(min)
+    app.jinja_env.filters['max'] = fabrique(max)
