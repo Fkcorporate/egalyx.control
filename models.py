@@ -8176,7 +8176,7 @@ class ParametreEvaluation(db.Model):
     client_id = db.Column(db.Integer, db.ForeignKey('clients.id'), nullable=True)
     
     __table_args__ = (
-        db.UniqueConstraint('categorie', 'niveau', name='u_categorie_niveau'),
+        db.UniqueConstraint('client_id', 'categorie', 'niveau', name='u_client_categorie_niveau'),
     )
     
     def __repr__(self):
