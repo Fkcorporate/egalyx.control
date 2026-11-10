@@ -66,7 +66,7 @@
                     <div class="d-flex justify-content-between align-items-center">
                         <div>
                             <h6 class="mb-0">Utilisateurs</h6>
-                            <h2 class="mt-2 mb-0">{{ total_utilisateurs or 0 }}</h2>
+                            <h2 class="mt-2 mb-0">{{ total_utilisateurs|default(0, true)|int }}</h2>
                         </div>
                         <i class="fas fa-users fa-3x opacity-50"></i>
                     </div>
@@ -98,10 +98,6 @@
                     </thead>
                     <tbody>
                         {% for client in clients %}
-                        {# --- Calculs robustes (gère None, 0, chaînes, division par zéro) --- #}
-                        {% set nb_util = client.nb_utilisateurs|default(0, true)|int %}
-                        {% set max_util = client.max_utilisateurs|default(0, true)|int %}
-                        {% set percentage = ((nb_util / max_util) * 100)|round|int if max_util > 0 else 0 %}
                         <tr>
                             <td>
                                 <div class="d-flex align-items-center">
@@ -117,8 +113,8 @@
                             </td>
                             <td>
                                 {% set plan_colors = {'standard': 'info', 'premium': 'warning', 'enterprise': 'success'} %}
-                                <span class="badge bg-{{ plan_colors.get(client.plan, 'secondary') }}">
-                                    {{ (client.plan or 'N/A')|upper }}
+                                <span class="badge bg-{{ plan_colors.get(client.plan|default('', true), 'secondary') }}">
+                                    {{ client.plan|default('', true)|upper }}
                                 </span>
                             </td>
                             <td>
@@ -126,7 +122,7 @@
                                 <code>{{ client.sous_domaine }}</code>
                                 <br>
                                 <small class="text-muted">
-                                    <a href="http://{{ client.sous_domaine }}" target="_blank" rel="noopener">
+                                    <a href="http://{{ client.sous_domaine }}" target="_blank">
                                         <i class="fas fa-external-link-alt fa-xs"></i> tester
                                     </a>
                                 </small>
@@ -136,16 +132,15 @@
                             </td>
                             <td>
                                 <div class="d-flex align-items-center">
+                                    {% set nb_util = client.nb_utilisateurs|default(0, true)|int %}
+                                    {% set max_util = client.max_utilisateurs|default(0, true)|int %}
                                     <span class="me-2">
-                                        {{ nb_util }} / {{ client.max_utilisateurs if client.max_utilisateurs is not none else '∞' }}
+                                        {{ nb_util }} / {% if max_util > 0 %}{{ max_util }}{% else %}∞{% endif %}
                                     </span>
                                     <div class="progress flex-grow-1" style="height: 5px;">
+                                        {% set percentage = ((nb_util / max_util) * 100)|round|int if max_util > 0 else 0 %}
                                         <div class="progress-bar bg-{{ 'danger' if percentage >= 100 else 'success' }}"
-                                             style="width: {{ percentage }}%"
-                                             role="progressbar"
-                                             aria-valuenow="{{ percentage }}"
-                                             aria-valuemin="0"
-                                             aria-valuemax="100"></div>
+                                             style="width: {{ percentage }}%"></div>
                                     </div>
                                 </div>
                             </td>
@@ -164,7 +159,7 @@
                                 {% endif %}
                             </td>
                             <td>
-                                <small>{{ client.created_at|format_date if client.created_at else '—' }}</small>
+                                <small>{{ client.created_at|format_date }}</small>
                             </td>
                             <td>
                                 <div class="btn-group btn-group-sm">
@@ -172,13 +167,19 @@
                                        class="btn btn-outline-primary" title="Voir détails">
                                         <i class="fas fa-eye"></i>
                                     </a>
+                                    {% if url_exists('modules_client.page') %}
+                                    <a href="{{ url_for('modules_client.page', client_id=client.id) }}"
+                                       class="btn btn-outline-primary" title="Modules activés">
+                                        <i class="fas fa-puzzle-piece"></i>
+                                    </a>
+                                    {% endif %}
                                     <button type="button" class="btn btn-outline-info dropdown-toggle dropdown-toggle-split"
                                             data-bs-toggle="dropdown" title="Plus d'actions">
                                         <i class="fas fa-ellipsis-h"></i>
                                     </button>
                                     <ul class="dropdown-menu dropdown-menu-end">
                                         <li>
-                                            <a class="dropdown-item" href="#" onclick="switchToClient({{ client.id }}, {{ client.nom|tojson }})">
+                                            <a class="dropdown-item" href="#" onclick="switchToClient({{ client.id }}, {{ client.nom|tojson|forceescape }})">
                                                 <i class="fas fa-user-shield me-2 text-warning"></i>Voir comme ce client
                                             </a>
                                         </li>
@@ -190,13 +191,13 @@
                                         <li><hr class="dropdown-divider"></li>
                                         {% if client.is_active %}
                                         <li>
-                                            <a class="dropdown-item text-warning" href="#" onclick="suspendreClient({{ client.id }}, {{ client.nom|tojson }})">
+                                            <a class="dropdown-item text-warning" href="#" onclick="suspendreClient({{ client.id }}, {{ client.nom|tojson|forceescape }})">
                                                 <i class="fas fa-pause me-2"></i>Suspendre
                                             </a>
                                         </li>
                                         {% else %}
                                         <li>
-                                            <a class="dropdown-item text-success" href="#" onclick="reactiverClient({{ client.id }}, {{ client.nom|tojson }})">
+                                            <a class="dropdown-item text-success" href="#" onclick="reactiverClient({{ client.id }}, {{ client.nom|tojson|forceescape }})">
                                                 <i class="fas fa-play me-2"></i>Réactiver
                                             </a>
                                         </li>
@@ -207,14 +208,14 @@
                         </tr>
 
                         <!-- Modal Tester sous-domaine -->
-                        <div class="modal fade" id="testSubdomainModal{{ client.id }}" tabindex="-1" aria-hidden="true">
+                        <div class="modal fade" id="testSubdomainModal{{ client.id }}" tabindex="-1">
                             <div class="modal-dialog">
                                 <div class="modal-content">
                                     <div class="modal-header bg-info text-white">
                                         <h5 class="modal-title">
                                             <i class="fas fa-globe me-2"></i>Tester sous-domaine
                                         </h5>
-                                        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Fermer"></button>
+                                        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
                                     </div>
                                     <div class="modal-body">
                                         {% if client.sous_domaine %}
@@ -224,7 +225,7 @@
                                             <button class="btn btn-outline-secondary" type="button" onclick="copyToClipboard('http://{{ client.sous_domaine }}:5000')">
                                                 <i class="fas fa-copy"></i>
                                             </button>
-                                            <a href="http://{{ client.sous_domaine }}:5000" target="_blank" rel="noopener" class="btn btn-primary">
+                                            <a href="http://{{ client.sous_domaine }}:5000" target="_blank" class="btn btn-primary">
                                                 <i class="fas fa-external-link-alt"></i> Ouvrir
                                             </a>
                                         </div>
@@ -235,7 +236,7 @@
                                         </p>
                                         <pre class="bg-light p-2"><code>127.0.0.1   {{ client.sous_domaine }}</code></pre>
                                         {% else %}
-                                        <div class="alert alert-warning mb-0">
+                                        <div class="alert alert-warning">
                                             <i class="fas fa-exclamation-triangle me-2"></i>
                                             Aucun sous-domaine configuré pour ce client.
                                         </div>
@@ -296,45 +297,30 @@ function reactiverClient(clientId, clientName) {
 }
 
 function copyToClipboard(text) {
-    if (navigator.clipboard && navigator.clipboard.writeText) {
-        navigator.clipboard.writeText(text).then(function () {
-            showToast('Copié dans le presse-papier', 'success');
-        }).catch(function () {
-            showToast('Impossible de copier', 'danger');
-        });
-    } else {
-        // Fallback pour anciens navigateurs
-        var ta = document.createElement('textarea');
-        ta.value = text;
-        document.body.appendChild(ta);
-        ta.select();
-        try {
-            document.execCommand('copy');
-            showToast('Copié dans le presse-papier', 'success');
-        } catch (e) {
-            showToast('Impossible de copier', 'danger');
-        }
-        document.body.removeChild(ta);
-    }
+    navigator.clipboard.writeText(text).then(() => {
+        showToast('Copié dans le presse-papier', 'success');
+    });
 }
 
-function showToast(message, type) {
-    type = type || 'success';
-    var toastContainer = document.querySelector('.toast-container');
-    if (!toastContainer) return;
-    var toast = document.createElement('div');
-    toast.className = 'toast align-items-center text-white bg-' + type + ' border-0 show';
+function showToast(message, type = 'success') {
+    const toastContainer = document.querySelector('.toast-container');
+    const toast = document.createElement('div');
+    toast.className = `toast align-items-center text-white bg-${type} border-0 show`;
     toast.setAttribute('role', 'alert');
-    toast.innerHTML =
-        '<div class="d-flex">' +
-            '<div class="toast-body">' +
-                '<i class="fas fa-' + (type === 'success' ? 'check-circle' : 'exclamation-circle') + ' me-2"></i>' +
-                message +
-            '</div>' +
-            '<button type="button" class="btn-close btn-close-white me-2 m-auto" data-bs-dismiss="toast" aria-label="Fermer"></button>' +
-        '</div>';
+    toast.innerHTML = `
+        <div class="d-flex">
+            <div class="toast-body">
+                <i class="fas fa-${type === 'success' ? 'check-circle' : 'exclamation-circle'} me-2"></i>
+                ${message}
+            </div>
+            <button type="button" class="btn-close btn-close-white me-2 m-auto" data-bs-dismiss="toast"></button>
+        </div>
+    `;
     toastContainer.appendChild(toast);
-    setTimeout(function () { toast.remove(); }, 3000);
+
+    setTimeout(() => {
+        toast.remove();
+    }, 3000);
 }
 </script>
 {% endblock %}
