@@ -34,7 +34,7 @@ LIBELLES = {
     'can_manage_campaigns': 'Gérer les campagnes de contrôle', 'can_view_campaigns': 'Voir les campagnes de contrôle',
     'can_conduct_campaigns': 'Réaliser les campagnes de contrôle',
     'can_view_controle_interne_n2': 'Voir le contrôle interne N2', 'can_manage_controle_interne_n2': 'Gérer le contrôle interne N2',
-    'can_manage_quality': 'Gérer la qualité', 'can_manage_quality_plans': 'Gérer les plans qualité',
+    'can_view_quality': 'Voir la qualité', 'can_manage_quality': 'Gérer la qualité', 'can_manage_quality_plans': 'Gérer les plans qualité',
     'can_manage_quality_audits': 'Gérer les audits qualité', 'can_manage_audit': 'Gérer les audits',
     'can_view_reports': "Voir les rapports d'audit", 'can_manage_audit_program': "Gérer le programme d'audit",
     'can_manage_action_plans': "Gérer les plans d'action", 'can_view_action_plans': "Voir les plans d'action",
@@ -67,7 +67,9 @@ ICONES = {'cartographie': 'fa-map', 'kri': 'fa-gauge-high', 'incidents': 'fa-tri
 # « gérer » donne « voir »
 IMPLIQUE = {'can_manage_recommandations': 'can_view_recommandations', 'can_manage_controle_interne_n2': 'can_view_controle_interne_n2',
             'can_manage_campaigns': 'can_view_campaigns', 'can_conduct_campaigns': 'can_view_campaigns',
-            'can_manage_incidents': 'can_view_incidents', 'can_manage_bcp': 'can_view_bcp', 'can_manage_tickets': 'can_view_tickets',
+            'can_manage_incidents': 'can_view_incidents', 'can_manage_bcp': 'can_view_bcp', 'can_test_bcp': 'can_view_bcp',
+            'can_manage_quality': 'can_view_quality', 'can_manage_quality_plans': 'can_view_quality',
+            'can_manage_quality_audits': 'can_view_quality', 'can_manage_tickets': 'can_view_tickets',
             'can_manage_tiers': 'can_view_tiers', 'can_manage_action_plans': 'can_view_action_plans',
             'can_manage_regulatory': 'can_view_veille', 'can_manage_users': 'can_view_users_list'}
 

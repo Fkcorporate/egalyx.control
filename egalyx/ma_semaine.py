@@ -153,12 +153,21 @@ def taches(u, aujourd_hui=None):
                 ajout('Revue de procédure', a.nom, f"Version {a.version_courante or 0} · revue annuelle", a.date_revue_prevue,
                       _lien('logigrammes.suivi', activite_id=a.id))
 
+    def pca():
+        from egalyx import pca as _pca
+        _pca.taches(u, ajout, horizon, aujourd_hui, _lien)
+
+    def qualite():
+        from egalyx import qualite as _q
+        _q.taches(u, ajout, horizon, aujourd_hui, _lien)
+
     from egalyx.modules_client import permission_autorisee_par_module as module_ok
     # Une tâche n'apparaît que si le module correspondant est activé pour l'organisation
     for nom, f, perm in (('plans', plans, 'can_view_action_plans'), ('recommandations', recommandations, 'can_view_dashboard'),
                          ('évaluations', evaluations, 'can_manage_risks'), ('KRI', kri, 'can_manage_kri'),
                          ('tiers', tiers_revues, 'can_view_tiers'), ('alertes', alertes, 'can_manage_alertes'),
-                         ('campagnes', campagnes, 'can_manage_campaigns'), ('procédures', procedures, 'can_manage_logigram')):
+                         ('campagnes', campagnes, 'can_manage_campaigns'), ('procédures', procedures, 'can_manage_logigram'),
+                         ('PCA', pca, 'can_manage_bcp'), ('qualité', qualite, 'can_manage_quality')):
         if module_ok(u, perm):
             bloc(nom, f)
     t.sort(key=lambda x: (x['priorite'], x['echeance'] or date.max))

@@ -132,6 +132,8 @@ class Contexte:
             return True
         if self.actifs is not None and module not in self.actifs:
             return False                  # module non souscrit : jamais visible
+        if chemin.startswith(AUTOCONTROLE):
+            return True                   # ces pages vérifient elles-mêmes qui peut agir (valideur, responsable…)
         if self.operateur or (objet and methode == 'GET'):
             # Lien vers UN élément précis (son plan d'action, sa recommandation…) : la personne qui en a la charge
             # y a accès même sans la permission du module ; la page elle-même vérifie les droits.
@@ -144,6 +146,10 @@ class Contexte:
             codes.append('ia')
         return codes
 
+
+
+# Adresses dont les pages contrôlent elles-mêmes les droits (circuits de validation, responsables nommés)
+AUTOCONTROLE = ('/pca-suivi/', '/qualite-suivi/')
 
 def _attr(rx, attrs):
     m = rx.search(attrs)

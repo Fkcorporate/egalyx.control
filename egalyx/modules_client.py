@@ -37,7 +37,7 @@ CATALOGUE = [
     ('controle_n2', 'Contrôle interne de 2e niveau', 'Référentiel, planification et exécution des contrôles N2',
      'Contrôle interne', ('can_view_controle_interne_n2', 'can_manage_controle_interne_n2'), ()),
     ('qualite', 'Qualité', 'Plans et audits qualité',
-     'Contrôle interne', ('can_manage_quality', 'can_manage_quality_plans', 'can_manage_quality_audits'), ('qualite',)),
+     'Contrôle interne', ('can_view_quality', 'can_manage_quality', 'can_manage_quality_plans', 'can_manage_quality_audits'), ('qualite',)),
     ('audit', 'Audit interne', 'Missions, feuilles de travail, constatations, recommandations, rapports',
      'Audit interne', ('can_manage_audit', 'can_view_reports'), ('audit_interne',)),
     ('programme_audit', 'Programme d’audit', 'Planification pluriannuelle des missions',

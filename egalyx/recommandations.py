@@ -465,7 +465,8 @@ def fiche(source, reco_id):
               .order_by(m.SuiviRecommandation.created_at.desc()).all())
     return render_template('egalyx/recommandation_fiche.html', l=l, suivis=suivis, sources=SOURCES, statuts=STATUTS,
                            priorites=PRIORITES, peut_avancer=peut_avancer(l), peut_decider=peut_decider_cloture(l),
-                           est_gestionnaire=est_gestionnaire(type_=l['type']), base_layout=_gabarit_base())
+                           est_gestionnaire=est_gestionnaire(type_=l['type']), base_layout=_gabarit_base(),
+                           peut_effacer=peut_effacer_historique(l))
 
 
 @bp.route('/<source>/<int:reco_id>/avancement', methods=['POST'])
@@ -545,6 +546,66 @@ def cloture(source, reco_id):
     else:
         abort(400)
     m.db.session.commit()
+    return redirect(url_for('recommandations.fiche', source=source, reco_id=reco_id))
+
+
+def _supprimer_preuve(s):
+    if not s.fichier:
+        return
+    chemin = os.path.realpath(os.path.join(current_app.instance_path, s.fichier))
+    racine = os.path.realpath(os.path.join(current_app.instance_path, 'preuves_recommandations'))
+    if chemin.startswith(racine + os.sep) and os.path.exists(chemin):
+        try:
+            os.remove(chemin)
+        except OSError:
+            pass
+
+
+def peut_effacer_historique(l, u=None):
+    """Effacer l'historique : gestionnaire des recommandations de cette origine (ou admin de l'organisation)."""
+    return est_gestionnaire(u, type_=l['type'])
+
+
+@bp.route('/<source>/<int:reco_id>/historique/<int:suivi_id>/supprimer', methods=['POST'])
+@login_required
+def supprimer_suivi(source, reco_id, suivi_id):
+    """Supprime une ligne de l'historique (et sa preuve jointe). L'état de la recommandation ne change pas ;
+    la suppression elle-même reste inscrite au journal d'activité."""
+    m = _m()
+    _r, l = charger(source, reco_id)
+    if not peut_effacer_historique(l):
+        abort(403)
+    s = m.db.session.get(m.SuiviRecommandation, suivi_id)
+    if s is None or s.recommandation_id != reco_id or s.source != source or s.client_id != l['client_id']:
+        abort(404)
+    journaliser('historique_recommandation_supprime', {
+        'recommandation': l['reference'], 'source': source, 'action': s.action, 'progression': s.progression,
+        'commentaire': (s.commentaire or '')[:300], 'preuve': s.nom_fichier,
+        'date': s.created_at.isoformat() if s.created_at else None}, client_id=l['client_id'])
+    _supprimer_preuve(s)
+    m.db.session.delete(s)
+    m.db.session.commit()
+    flash("Ligne d'historique supprimée.", 'success')
+    return redirect(url_for('recommandations.fiche', source=source, reco_id=reco_id))
+
+
+@bp.route('/<source>/<int:reco_id>/historique/vider', methods=['POST'])
+@login_required
+def vider_historique(source, reco_id):
+    """Supprime tout l'historique d'une recommandation (et les preuves jointes)."""
+    m = _m()
+    _r, l = charger(source, reco_id)
+    if not peut_effacer_historique(l):
+        abort(403)
+    suivis = m.SuiviRecommandation.query.filter_by(source=source, recommandation_id=reco_id,
+                                                   client_id=l['client_id']).all()
+    for s in suivis:
+        _supprimer_preuve(s)
+        m.db.session.delete(s)
+    journaliser('historique_recommandation_vide', {'recommandation': l['reference'], 'source': source,
+                                                   'lignes': len(suivis)}, client_id=l['client_id'])
+    m.db.session.commit()
+    flash(f"Historique vidé ({len(suivis)} ligne(s)).", 'success')
     return redirect(url_for('recommandations.fiche', source=source, reco_id=reco_id))
 
 

@@ -51,8 +51,13 @@ def enregistrer_extensions(app, db, csrf=None, recalculer_cotations=None, constr
     audit_plus.enregistrer(app)             # audit : rapport provisoire/définitif, réponses, temps, indépendance
     from egalyx import logigrammes
     logigrammes.enregistrer(app)
+    from egalyx import pca, qualite
+    pca.enregistrer(app)                    # PCA : droits, circuit de validation, exercices, activations, documents
+    qualite.enregistrer(app)                # qualité : droits, validation des plans, non-conformités, revues
+    from egalyx import gestion_clients
+    gestion_clients.enregistrer(app)        # super admin : supprimer / réinitialiser / exporter un client, synchroniser les droits
     from egalyx import permissions_grille
-    permissions_grille.enregistrer(app)     # grille des permissions issue du catalogue ; modules non souscrits verrouillés            # logigrammes : versions, validation, couloirs, vérification, conversion
+    permissions_grille.enregistrer(app)     # grille des permissions issue du catalogue ; modules non souscrits verrouillés
     from egalyx import masquage
     masquage.enregistrer(app)               # liens, boutons, formulaires et blocs des fonctions indisponibles : retirés
     _filtres_min_max(app)                   # « [a, b]|min » et « valeur|min(borne) » fonctionnent tous les deux
