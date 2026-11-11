@@ -60,7 +60,7 @@ CATALOGUE = [
      'Outils', ('can_use_ia_analysis',), ('analyse_ia',)),
     ('api', 'API et intégrations', 'Clés API, webhooks, journaux d’appels',
      'Outils', ('can_manage_api', 'can_manage_webhooks', 'can_view_api_logs'), ('api_avancee',)),
-    ('support', 'Tickets de support', 'Demandes au support Egalyx',
+    ('support', 'Signalements (détection d’incidents)', 'Signalements des utilisateurs et du public, tri, conversion en incident',
      'Outils', ('can_view_tickets', 'can_manage_tickets'), ('tickets_support',)),
 ]
 MODULES = {m[0]: m for m in CATALOGUE}

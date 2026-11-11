@@ -129,7 +129,7 @@ ARTICLES = [
       '« comment déclarer un incident ? », « c’est quoi un KRI ? », ou une référence comme RSQ-2026-0012.',
       notes=['Il fonctionne même quand l’intelligence artificielle est désactivée : ses réponses viennent de ce guide et de vos données.',
              'Il ne montre que ce que vos permissions autorisent.',
-             'S’il ne sait pas répondre, il vous propose d’envoyer la question au support en un clic.',
+             'S’il ne sait pas répondre, il vous propose d’envoyer la question aux gestionnaires de votre organisation (réponse dans « Mes signalements »).',
              'Le bouton ↻ en haut de la fenêtre efface la conversation.'],
       mots=['assistant', 'chatbot', 'chat', 'bot', 'robot', 'discuter', 'question'],
       questions=['comment marche l assistant', 'que peux tu faire']),
@@ -483,7 +483,7 @@ ARTICLES = [
       'Gestion des incidents → Nouvel incident : description, date, gravité, impact, risque et dispositif concernés.',
       etapes=['Menu **Gestion des incidents** → **Nouvel incident**.',
               'Décrivez les faits (quoi, quand, où, qui a constaté), sans jugement sur les personnes.',
-              'Rattachez le **risque** et le **dispositif de maîtrise** concernés.',
+              'Rattachez le **risque** et le **dispositif de maîtrise** concernés, si vous les connaissez déjà ; sinon l’incident reste « à qualifier » (le risque sera exigé avant la résolution).',
               'Choisissez la **gravité** et estimez l’impact (financier, client, réglementaire, image).',
               'Enregistrez : le responsable est notifié, l’incident est suivi jusqu’à sa clôture.'],
       notes=['La gravité réduit automatiquement l’efficacité du dispositif concerné.',
@@ -500,7 +500,8 @@ ARTICLES = [
       etapes=['Le responsable passe l’incident **en cours** et documente l’analyse des causes.',
               'Il propose la résolution ; si une approbation est requise, l’incident passe **en attente d’approbation**.',
               'Après approbation : **résolu**, puis **fermé** une fois les actions correctives terminées.',
-              'Escalade si le délai est dépassé : niveau 1 support, niveau 2 superviseur, niveau 3 direction.'],
+              'Délai dépassé : l’incident est marqué et le responsable, le superviseur et les gestionnaires sont prévenus ; escalade automatique au niveau 2 (superviseur) puis 3 (direction) selon les délais de l’incident.',
+              'L’approbation de la résolution revient au superviseur, au directeur ou à un gestionnaire, jamais au responsable qui a résolu.'],
       notes=['Créez un plan d’action depuis l’incident pour éviter qu’il se reproduise.'],
       mots=['incident', 'incidents', 'statut', 'suivi', 'suivre', 'cloturer', 'fermer', 'resoudre', 'resolu', 'escalade', 'delai', 'sla', 'approbation', 'approuver', 'traite', 'longtemps', 'attente', 'relance'],
       liens=[('Incidents', 'liste_incidents')],
@@ -1001,12 +1002,31 @@ ARTICLES = [
       mots=['email', 'mail', 'mails', 'courriel', 'recois', 'recu', 'spam', 'indesirable', 'notification', 'envoi'],
       questions=['je ne recois pas les mails']),
 
-    A('support', 'depannage', 'Contacter le support Egalyx',
-      'Ouvrez un ticket (menu Support → Nouveau ticket) ou demandez à l’assistant d’envoyer votre question au support. '
-      'Indiquez la page, ce que vous faisiez, le message affiché, et joignez une capture d’écran.',
-      notes=['Vous suivez vos tickets dans Support → Mes tickets.'],
-      mots=['support', 'ticket', 'tickets', 'contacter', 'contact', 'aide', 'humain', 'conseiller', 'assistance', 'joindre', 'telephone', 'appeler', 'egalyx'],
-      liens=[('Nouveau ticket', 'nouveau_ticket_support'), ('Mes tickets', 'liste_tickets_support')]),
+    A('support', 'depannage', 'Signaler un problème ou contacter Egalyx',
+      'Un problème dans votre organisation (panne, erreur, incident constaté) : menu **Signaler un incident**. '
+      'Une question sur l’utilisation d’Egalyx : posez-la à l’assistant ; s’il ne sait pas répondre, il la transmet aux '
+      'gestionnaires de votre organisation. Pour l’abonnement, la facturation ou un problème de la plateforme : écrivez à Egalyx.',
+      etapes=['**Signaler un incident** : décrivez ce que vous avez constaté, où et quand ; joignez une capture si utile.',
+              'Suivez la suite donnée dans **Mes signalements** (reçu, pris en charge, transformé en incident, traité).',
+              'Écrire à Egalyx : bouton « Écrire à Egalyx » du centre d’aide (adresse réglable : EGALYX_EMAIL_SUPPORT).'],
+      notes=['Fraude, corruption, harcèlement : utilisez le dispositif d’alerte confidentiel, pas un signalement.',
+             'Les gestionnaires des signalements trient et transforment en incident ce qui le mérite ; vous êtes prévenu.'],
+      mots=['support', 'ticket', 'tickets', 'signaler', 'signalement', 'signalements', 'contacter', 'contact', 'aide',
+            'humain', 'conseiller', 'assistance', 'joindre', 'telephone', 'appeler', 'egalyx', 'panne', 'probleme'],
+      liens=[('Signaler un incident', 'signalements.nouveau'), ('Mes signalements', 'signalements.miens')]),
+
+    A('signalements_gerer', 'maitrise', 'Trier les signalements et les transformer en incidents',
+      'Menu **Signalements** : les problèmes signalés par les utilisateurs (et par le lien public, s’il est activé). '
+      'Triez, puis cochez « Convertir en incident » pour ce qui le mérite : l’incident est créé « à qualifier ».',
+      etapes=['Ouvrez **Signalements → Tous les signalements** ; les nouveaux apparaissent aussi dans « Ma semaine ».',
+              'Traitez : pris en charge, traité ; ou convertissez en incident (il faut aussi « Gérer les incidents »).',
+              'Dans l’incident créé : rattachez le risque (obligatoire avant la résolution) et, si possible, le dispositif.',
+              '**Lien public** : à activer pour les personnes sans compte (prestataires, visiteurs) ; régénérez-le s’il circule trop.'],
+      notes=['Les badges « Question » signalent les questions transmises par l’assistant, à traiter comme une demande d’aide.',
+             'Le déclarant est prévenu quand son signalement est pris en charge, transformé en incident ou classé.'],
+      mots=['signalement', 'signalements', 'ticket', 'tickets', 'trier', 'convertir', 'incident', 'lien', 'public', 'anonyme'],
+      liens=[('Signalements', 'liste_tickets_support'), ('Lien public', 'signalements.parametres')],
+      perms=['can_view_tickets', 'can_manage_tickets']),
 
     # ==================================================================
     # SUPER ADMINISTRATEUR

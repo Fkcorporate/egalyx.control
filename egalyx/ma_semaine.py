@@ -161,13 +161,22 @@ def taches(u, aujourd_hui=None):
         from egalyx import qualite as _q
         _q.taches(u, ajout, horizon, aujourd_hui, _lien)
 
+    def incidents():
+        from egalyx import incidents as _i
+        _i.taches(u, ajout, horizon, aujourd_hui, _lien)
+
+    def signalements():
+        from egalyx import signalements as _s
+        _s.taches(u, ajout, horizon, aujourd_hui, _lien)
+
     from egalyx.modules_client import permission_autorisee_par_module as module_ok
     # Une tâche n'apparaît que si le module correspondant est activé pour l'organisation
     for nom, f, perm in (('plans', plans, 'can_view_action_plans'), ('recommandations', recommandations, 'can_view_dashboard'),
                          ('évaluations', evaluations, 'can_manage_risks'), ('KRI', kri, 'can_manage_kri'),
                          ('tiers', tiers_revues, 'can_view_tiers'), ('alertes', alertes, 'can_manage_alertes'),
                          ('campagnes', campagnes, 'can_manage_campaigns'), ('procédures', procedures, 'can_manage_logigram'),
-                         ('PCA', pca, 'can_manage_bcp'), ('qualité', qualite, 'can_manage_quality')):
+                         ('PCA', pca, 'can_manage_bcp'), ('qualité', qualite, 'can_manage_quality'),
+                         ('incidents', incidents, 'can_view_incidents'), ('signalements', signalements, 'can_view_tickets')):
         if module_ok(u, perm):
             bloc(nom, f)
     t.sort(key=lambda x: (x['priorite'], x['echeance'] or date.max))

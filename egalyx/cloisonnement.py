@@ -95,7 +95,8 @@ ACTIONS_PAR_LIEN = {'cloturer_campagne_cartographie', 'cloturer_campagne_specifi
 ECRITURE_PAR_CONSULTATION = {'support', 'pilotage'}
 CHAMPS_RESPONSABLE = ('responsable_id', 'created_by', 'createur_id', 'referent_pre_evaluation_id', 'evaluateur_final_id',
                       'responsable_resolution_id', 'responsable_mesure_id', 'auditeur_id', 'utilisateur_id', 'user_id',
-                      'evaluateur_id', 'valideur_id', 'controleur_id', 'validateur_requis_id')
+                      'evaluateur_id', 'valideur_id', 'controleur_id', 'validateur_requis_id',
+                      'superviseur_id', 'directeur_id')
 
 
 def _dans_liste(valeur, uid):

@@ -612,6 +612,8 @@ def taches(u, ajout, horizon, aujourd_hui, lien):
 
 
 def enregistrer(app):
+    from egalyx.commun import exempter_controle_ancien
+    exempter_controle_ancien(app, DROITS)
     import models as m
     from sqlalchemy import event
     from sqlalchemy.orm import Session

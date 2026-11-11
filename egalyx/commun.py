@@ -169,3 +169,26 @@ def jeton_lien_valide():
         return True
     except Exception:
         return False
+
+
+# ---------------------------------------------------------------- ancien contrôle des permissions d'app.py
+# check_permissions_middleware (app.py) associe en dur une page à UNE permission (ex. détail d'un incident =
+# « Gérer les incidents »). Les modules refondus (incidents, signalements, PCA, qualité) appliquent leur propre
+# grille de droits, plus fine : leurs pages sont retirées de cet ancien contrôle.
+ENDPOINTS_GERES = set()
+
+
+def exempter_controle_ancien(app, endpoints):
+    ENDPOINTS_GERES.update(endpoints)
+    liste = app.before_request_funcs.setdefault(None, [])
+    for i, f in enumerate(liste):
+        nom = getattr(f, '__name__', '')
+        if nom in ('check_permissions_middleware', 'check_permissions_middleware_complete') \
+                and not getattr(f, '_egalyx', False):
+            def enveloppe(_f=f):
+                if request.endpoint in ENDPOINTS_GERES:
+                    return None
+                return _f()
+            enveloppe.__name__ = nom
+            enveloppe._egalyx = True
+            liste[i] = enveloppe

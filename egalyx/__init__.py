@@ -54,6 +54,9 @@ def enregistrer_extensions(app, db, csrf=None, recalculer_cotations=None, constr
     from egalyx import pca, qualite
     pca.enregistrer(app)                    # PCA : droits, circuit de validation, exercices, activations, documents
     qualite.enregistrer(app)                # qualité : droits, validation des plans, non-conformités, revues
+    from egalyx import incidents, signalements
+    incidents.enregistrer(app)              # incidents : droits, délais (SLA), risque/dispositif facultatifs, Ma semaine
+    signalements.enregistrer(app)           # signalements (ex-support) : déclarant, suivi, lien public protégé
     from egalyx import gestion_clients
     gestion_clients.enregistrer(app)        # super admin : supprimer / réinitialiser / exporter un client, synchroniser les droits
     from egalyx import permissions_grille
