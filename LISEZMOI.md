@@ -66,6 +66,48 @@ Autres corrections :
 
 **Évaluation triphasée** (et écran d'évaluation de l'opérateur) : les couleurs de la maîtrise étaient inversées (« Insuffisant » en vert). Elles vont maintenant du rouge (1 Insuffisant) au vert (5 Excellent), y compris dans les listes de choix des phases de validation et de confirmation.
 
+## Incidents et signalements (v6.5)
+
+**Mise à jour** : sauvegarder la base, copier les fichiers, redémarrer. Au démarrage : colonnes ajoutées
+(`ticket_support.declarant_id`, `clients.signalement_public`, `clients.signalement_jeton`) et, dans `incidents`,
+risque et dispositif rendus facultatifs (PostgreSQL / MySQL : ALTER ; SQLite : recopie de la table, sans perte).
+
+**Incidents** (`egalyx/incidents.py`)
+- Droits identiques sur toutes les pages et API : voir = « Voir / Gérer / Escalader / Résoudre les incidents » ;
+  déclarer, qualifier, archiver = « Gérer » ; escalader = « Escalader » ou « Gérer » (ou responsable / superviseur /
+  directeur de l'incident) ; résoudre = « Résoudre » ou « Gérer » (ou le responsable). Avant : « Gérer les audits » était
+  exigé presque partout, et un ancien contrôle d'app.py demandait « Gérer les incidents » même pour consulter.
+- Boutons de la fiche (modifier, escalader, approuver, rouvrir, archiver) alignés sur ces droits. Approbation : jamais
+  par le responsable qui a résolu (`EGALYX_INCIDENT_DOUBLE_REGARD=0` pour assouplir).
+- Risque et dispositif facultatifs à la déclaration (incident « à qualifier ») ; le risque est exigé avant la résolution.
+- Délais (SLA) : date limite calculée, incident marqué « délai dépassé » et responsable, superviseur, gestionnaires
+  prévenus une fois (vérifié toutes les 10 min pendant l'utilisation ; `flask verifier-incidents`). L'escalade
+  automatique horaire existante (services/escalade_service.py) est conservée.
+- API `/api/incidents` et `/api/incidents/<id>` réparées (erreur serveur systématique).
+- Historique : approbation, résolution, réouverture, rattachement d'un dispositif et analyse IA étaient construits mais
+  jamais enregistrés ; ils le sont.
+- « Ma semaine » : incidents à traiter, à qualifier, à approuver, en souffrance (délai dépassé, sans responsable), escaladés.
+
+**Signalements** (ex-« Support », `egalyx/signalements.py`) : le canal de détection des incidents de chaque client.
+- Tout utilisateur connecté signale (« Signaler un incident », menu et espace opérateur) ; toujours dans SA propre
+  organisation (avant : l'adresse choisissait l'organisation ; sans adresse, un visiteur anonyme voyait le formulaire
+  du premier client et ses directions). « Mes signalements » montre la suite donnée.
+- Lien public pour les personnes sans compte : désactivé par défaut ; activable par l'admin ou un gestionnaire des
+  signalements (Signalements → Lien public) ; lien secret régénérable ; champ piège, délai minimal, 5 envois/heure.
+  **Les anciens liens publics (`/support/ticket/nouveau?client=…`) ne fonctionnent plus** : activez le lien public et
+  diffusez le nouveau.
+- Détail d'un signalement (nom, e-mail, téléphone) réservé aux gestionnaires et au déclarant. Convertir en incident
+  exige « Gérer les tickets » + « Gérer les incidents » ; la conversion fonctionne (elle échouait : risque et dispositif
+  obligatoires) ; le déclarant d'origine reste déclarant de l'incident ; l'origine est inscrite à son historique.
+- Notifications : nouveau signalement → gestionnaires ; pris en charge / converti / classé → déclarant.
+- Les questions transmises par l'assistant portent le badge « Question ». Le centre d'aide propose « Écrire à Egalyx »
+  (`EGALYX_EMAIL_SUPPORT`, défaut contact@egalyx.com).
+- Le formulaire renvoie vers le dispositif d'alerte confidentiel pour les signalements éthiques, si ce module est actif.
+
+**Aussi** : les pages PCA et qualité étaient soumises au même ancien contrôle (ex. « Gérer les PCA » exigé pour voir un
+plan) ; elles n'appliquent plus que leur propre grille. Les détails de ticket et analyses PCA d'un élément inexistant
+répondent « introuvable » au lieu d'une erreur serveur.
+
 ## PCA, qualité, gestion des clients, historique des recommandations (v6.4)
 
 **Mise à jour** : sauvegarder la base (`flask sauvegarder`), remplacer les fichiers livrés, redémarrer. Les nouvelles

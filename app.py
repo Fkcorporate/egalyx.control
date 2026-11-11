@@ -44380,7 +44380,7 @@ def export_incidents_pdf():
 def liste_incidents():
     """Liste des incidents avec recherche avancée et statistiques par direction/service"""
     
-    if not current_user.has_permission('can_manage_audit'):
+    if not __import__('egalyx.incidents', fromlist=['droit']).droit():
         flash('Permission requise', 'error')
         return redirect(url_for('dashboard'))
     
@@ -44583,12 +44583,12 @@ def api_incident_lier_dispositif(incident_id):
         impact = IncidentDispositifService.evaluer_impact_sur_dispositif(incident_id, dispositif_id)
         
         # Journaliser
-        IncidentHistorique(
+        db.session.add(IncidentHistorique(
             incident_id=incident_id,
             action='lier_dispositif',
             details=f"Dispositif {dispositif.reference} lié. Impact: {impact.get('perte_efficacite', 0)} points",
             utilisateur_id=current_user.id
-        )
+        ))
         db.session.commit()
         
         return jsonify({
@@ -44611,7 +44611,7 @@ def nouvel_incident():
     from services.incident_ia_service import IncidentIAService
     from models import Direction, Service
     
-    if not current_user.has_permission('can_manage_audit'):
+    if not __import__('egalyx.incidents', fromlist=['droit']).droit():
         flash('Permission requise', 'error')
         return redirect(url_for('liste_incidents'))
     
@@ -45299,12 +45299,12 @@ def resoudre_incident(id):
             db.session.commit()
 
             # ========== 5. JOURNALISER ==========
-            IncidentHistorique(
+            db.session.add(IncidentHistorique(
                 incident_id=id,
                 action='resolution',
                 details=f"Statut: {ancien_statut} → {incident.statut} | Approbation: {incident.approbation_statut}",
                 utilisateur_id=current_user.id
-            )
+            ))
             db.session.commit()
 
             # ========== 6. NOTIFICATION ==========
@@ -45375,12 +45375,12 @@ def reouvrir_incident(id):
         
         db.session.commit()
         
-        IncidentHistorique(
+        db.session.add(IncidentHistorique(
             incident_id=id,
             action='reouverture',
             details=f"Réouverture de {ancien_statut} → en_cours",
             utilisateur_id=current_user.id
-        )
+        ))
         db.session.commit()
         
         flash(f'✅ Incident {incident.reference} réouvert avec succès', 'success')
@@ -45433,13 +45433,13 @@ def approuver_incident(id):
                 flash('⚠️ Incident rejeté - Retour en cours pour corrections', 'warning')
             
             # Journaliser
-            IncidentHistorique(
+            db.session.add(IncidentHistorique(
                 incident_id=id,
                 action=f'approbation_{form.approbation.data}',
                 details=form.commentaire.data,
                 utilisateur_id=current_user.id,
                 created_at=datetime.utcnow()
-            )
+            ))
             db.session.commit()
             
             return redirect(url_for('detail_incident', id=id))
@@ -45519,7 +45519,7 @@ def api_escalader_incident(id):
     incident = get_client_object_or_404(Incident, id)
     
     # Vérifier les permissions
-    if not current_user.has_permission('can_manage_audit'):
+    if not __import__('egalyx.incidents', fromlist=['droit']).droit():
         return jsonify({'success': False, 'error': 'Permission non autorisée'}), 403
     
     data = request.get_json()
@@ -45554,7 +45554,7 @@ def api_retro_escalader_incident(id):
     """API pour rétro-escalader un incident (redescendre d'un niveau)"""
     incident = get_client_object_or_404(Incident, id)
     
-    if not current_user.has_permission('can_manage_audit'):
+    if not __import__('egalyx.incidents', fromlist=['droit']).droit():
         return jsonify({'success': False, 'error': 'Permission non autorisée'}), 403
     
     data = request.get_json()
@@ -45604,7 +45604,7 @@ def archiver_incident(id):
         flash('Accès non autorisé', 'error')
         return redirect(url_for('liste_incidents'))
     
-    if not current_user.has_permission('can_archive_data'):
+    if not __import__('egalyx.incidents', fromlist=['droit']).droit():
         flash('Permission requise pour archiver', 'error')
         return redirect(url_for('detail_incident', id=id))
     
@@ -45632,7 +45632,7 @@ def restaurer_incident(id):
         flash('Accès non autorisé', 'error')
         return redirect(url_for('incidents_archives'))
     
-    if not current_user.has_permission('can_archive_data'):
+    if not __import__('egalyx.incidents', fromlist=['droit']).droit():
         flash('Permission requise', 'error')
         return redirect(url_for('incidents_archives'))
     
@@ -45652,7 +45652,7 @@ def restaurer_incident(id):
 def incidents_archives():
     """Liste des incidents archivés"""
     
-    if not current_user.has_permission('can_archive_data'):
+    if not __import__('egalyx.incidents', fromlist=['droit']).droit():
         flash('Permission requise', 'error')
         return redirect(url_for('liste_incidents'))
     
@@ -46197,12 +46197,12 @@ def analyse_ia_incident(id):
         db.session.commit()
         
         # Journaliser
-        IncidentHistorique(
+        db.session.add(IncidentHistorique(
             incident_id=id,
             action='analyse_ia',
             details=json.dumps({'score': incident.ia_score_confiance}),
             utilisateur_id=current_user.id
-        )
+        ))
         db.session.commit()
         
         flash(f'Analyse IA terminée (score: {incident.ia_score_confiance}%)', 'success')
@@ -46232,7 +46232,7 @@ def from_json_filter(value):
 def dashboard_ia_incidents():
     """Dashboard d'analyse IA des incidents"""
     
-    if not current_user.has_permission('can_manage_audit'):
+    if not __import__('egalyx.incidents', fromlist=['droit']).droit():
         flash('Permission requise', 'error')
         return redirect(url_for('dashboard'))
     
@@ -46446,7 +46446,7 @@ def api_stats_incidents():
 def dashboard_incidents_avance():
     """Dashboard avancé des incidents par direction/service"""
     
-    if not current_user.has_permission('can_manage_audit'):
+    if not __import__('egalyx.incidents', fromlist=['droit']).droit():
         flash('Permission requise', 'error')
         return redirect(url_for('dashboard'))
     
@@ -47218,6 +47218,8 @@ def archiver_ticket(ticket_id):
         
         return jsonify({'success': True, 'message': 'Ticket archivé avec succès'})
         
+    except HTTPException:
+        raise
     except Exception as e:
         db.session.rollback()
         print(f"❌ Erreur archivage ticket: {e}")
@@ -47250,6 +47252,8 @@ def restaurer_ticket(ticket_id):
         
         return jsonify({'success': True, 'message': 'Ticket restauré avec succès'})
         
+    except HTTPException:
+        raise
     except Exception as e:
         db.session.rollback()
         return jsonify({'success': False, 'error': str(e)}), 500
@@ -47292,6 +47296,8 @@ def supprimer_definitivement_ticket(ticket_id):
         
         return jsonify({'success': True, 'message': 'Ticket supprimé définitivement'})
         
+    except HTTPException:
+        raise
     except Exception as e:
         db.session.rollback()
         print(f"❌ Erreur suppression définitive ticket: {e}")
@@ -47331,6 +47337,8 @@ def details_ticket(ticket_id):
             }
         })
         
+    except HTTPException:
+        raise
     except Exception as e:
         return jsonify({'success': False, 'error': str(e)}), 500
 
@@ -47368,6 +47376,8 @@ def convertir_ticket_en_incident(ticket_id):
             'redirect_url': url_for('detail_incident', id=incident.id)
         })
         
+    except HTTPException:
+        raise
     except Exception as e:
         db.session.rollback()
         print(f"❌ Erreur conversion ticket: {e}")
@@ -109772,8 +109782,8 @@ def _assistant_proposer_ticket(question, texte=None):
     lignes = [texte or "Je n'ai pas trouvé de réponse sûre à votre question."]
     if proches:
         lignes.append("Ces fiches du centre d'aide s'en approchent peut-être (cliquez pour les voir).")
-    lignes.append("Sinon, je peux **transmettre votre question au support** : il vous répondra dans votre espace "
-                  "« Mes tickets ».")
+    lignes.append("Sinon, je peux **transmettre votre question aux gestionnaires de votre organisation** : "
+                  "vous suivrez la réponse dans « Mes signalements ».")
     actions = [_assistant_action("Centre d'aide", "aide.accueil", "fa-life-ring")]
     return _assistant_reponse("\n".join(lignes), actions=actions,
                               suggestions=[ASSISTANT_CONFIRMATION_TICKET] + proches[:3], intention="incompris")
@@ -111009,6 +111019,19 @@ def _cli_references_par_client(appliquer):
 # tiers & LCB-FT, signature interne, paiement, export, documentation API,
 # éditeur d'organigramme, paramètres de risque, sauvegardes et mise à jour du schéma.
 # ============================================================================
+# Contrôle d'installation : app.py appelle ces modules ; s'ils manquent, on le dit clairement au démarrage
+# (sinon les pages concernées tombent en erreur « No module named … »).
+_EGALYX_REQUIS = ('incidents', 'signalements', 'gestion_clients', 'pca', 'qualite', 'recommandations', 'commun',
+                  'modules_client', 'permissions_grille', 'masquage', 'double_auth', 'langue')
+_egalyx_manquants = [n for n in _EGALYX_REQUIS
+                     if not os.path.exists(os.path.join(os.path.dirname(os.path.abspath(__file__)), 'egalyx', n + '.py'))]
+if _egalyx_manquants:
+    raise RuntimeError(
+        "Installation incomplète : fichiers absents du dossier egalyx/ : "
+        + ', '.join(n + '.py' for n in _egalyx_manquants)
+        + ". Copiez TOUT le contenu du paquet de mise à jour (dossier egalyx compris), par exemple avec "
+          "« python3 installer_mise_a_jour.py <dossier du projet> », puis relancez.")
+
 from egalyx import enregistrer_extensions as _egalyx_enregistrer
 _egalyx_enregistrer(app, db, csrf=csrf, recalculer_cotations=recalculer_toutes_cotations,
                    construire_dashboard=construire_dashboard_strategique)

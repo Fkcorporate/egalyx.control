@@ -9129,6 +9129,8 @@ class Client(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     nom = db.Column(db.String(200), nullable=False)
     reference = db.Column(db.String(50), unique=True, nullable=False)
+    signalement_public = db.Column(db.Boolean, default=False)      # lien public de signalement d'incidents activé
+    signalement_jeton = db.Column(db.String(64), nullable=True)     # partie secrète de ce lien (régénérable)
     description = db.Column(db.Text)
     
     # Informations de contact
@@ -16123,8 +16125,9 @@ class Incident(db.Model):
     sla_viole = db.Column(db.Boolean, default=False)
     
     # ==================== 🔥 LIENS MÉTIER (DOUBLE RATTACHEMENT) 🔥 ====================
-    risque_id = db.Column(db.Integer, db.ForeignKey('risques.id'), nullable=False)
-    dispositif_id = db.Column(db.Integer, db.ForeignKey('dispositifs_maitrise.id'), nullable=False)
+    # Facultatifs à la déclaration (incident « à qualifier ») ; le risque est exigé avant la résolution (egalyx/incidents.py)
+    risque_id = db.Column(db.Integer, db.ForeignKey('risques.id'), nullable=True)
+    dispositif_id = db.Column(db.Integer, db.ForeignKey('dispositifs_maitrise.id'), nullable=True)
     plan_action_id = db.Column(db.Integer, db.ForeignKey('plans_action.id'))
     
     # ==================== ACTEURS ====================
@@ -16671,6 +16674,7 @@ class TicketSupport(db.Model):
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
     traite_par_id = db.Column(db.Integer, db.ForeignKey('user.id'))
+    declarant_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=True)   # utilisateur connecté qui a signalé
     
     # ==================== RELATIONS ====================
     # ✅ Relation simple vers Incident (unidirectionnelle)
@@ -16764,7 +16768,7 @@ class TicketSupport(db.Model):
             type_incident='technique',
             gravite=gravite,
             date_occurrence=self.created_at,
-            declare_par_id=user_id,
+            declare_par_id=self.declarant_id or user_id,     # le déclarant d'origine reste le déclarant
             client_id=self.client_id,
             created_by=user_id,
             source='ticket',
@@ -16820,10 +16824,13 @@ class TicketSupport(db.Model):
             else:
                 print(f"⚠️ Fichier source non trouvé: {source_path}")
         
-        # Lier le ticket à l'incident
+        # Lier le ticket à l'incident (et garder la trace dans l'historique de l'incident)
         self.incident_id = incident.id
         self.statut = 'traite'
         self.updated_at = datetime.utcnow()
+        db.session.add(IncidentHistorique(incident_id=incident.id, action='cree_depuis_signalement',
+                                          details=f"Issu du signalement {self.reference} ({self.client_nom}).",
+                                          utilisateur_id=user_id, created_at=datetime.utcnow()))
         
         db.session.commit()
         
