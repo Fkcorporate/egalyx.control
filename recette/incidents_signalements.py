@@ -115,6 +115,44 @@ if nid:
     r, t = go('resp_incidents', 'get', f'/incident/{nid}')
     verif('La fiche d\'un incident sans risque s\'affiche', r.status_code == 200, f'{r.status_code} {socle.cause(A)}')
 
+print('--- Coût estimé et temps d\'arrêt (impossibles à saisir)')
+r, t = go('resp_incidents', 'get', f'/incident/{iid}/modifier')
+verif('Le formulaire de modification propose coût et temps d\'arrêt', 'name="cout_estime"' in t and 'name="temps_arret_heures"' in t,
+      f'{r.status_code} {socle.cause(A)}')
+r, t = go('resp_incidents', 'get', '/incident/nouveau')
+verif('… la déclaration aussi', 'name="cout_estime"' in t)
+with A.app.app_context():
+    from egalyx.incidents import appliquer_impacts, _montant
+    verif('Montants saisis à la française reconnus', _montant('1 500 000') == 1500000 and _montant('1500,50') == 1500.5
+          and _montant('1.500.000') == 1500000 and _montant('2 000 FCFA') == 2000)
+r, t = go('resp_incidents', 'get', f'/incident/{iid}/modifier')
+champs = dict(re.findall(r'name="([a-z_]+)"[^>]*value="([^"]*)"', t))
+selects = {n: (re.search(r'<option[^>]*selected[^>]*value="([^"]*)"|<option[^>]*value="([^"]*)"[^>]*selected', b) or re.search(r'value="([^"]*)"', b))
+           for n, b in re.findall(r'<select[^>]*name="([a-z_]+)"[^>]*>(.*?)</select>', t, re.S)}
+donnees = {k: v for k, v in champs.items() if k not in ('csrf_token',)}
+for n, m_ in selects.items():
+    if m_:
+        donnees[n] = next(g for g in m_.groups() if g is not None)
+_types = re.search(r'<select[^>]*name="type_incident"[^>]*>(.*?)</select>', t, re.S)
+_premier_type = next((v for v in re.findall(r'value="([^"]+)"', _types.group(1)) if v), '') if _types else ''
+if not donnees.get('type_incident'):
+    donnees['type_incident'] = _premier_type
+donnees.update({'titre': 'Panne serveur', 'cout_estime': '1 500 000', 'temps_arret_heures': '2', 'temps_arret_minutes': '30'})
+r, _ = go('resp_incidents', 'post', f'/incident/{iid}/modifier', data=donnees)
+x = obj(M.Incident, iid)
+verif('Modification : coût et temps d\'arrêt enregistrés', x.cout_estime == 1500000 and x.temps_arret == 150,
+      f'{r.status_code} {x.cout_estime} {x.temps_arret} {socle.cause(A)}')
+r, t = go('resp_incidents', 'get', f'/incident/{iid}')
+verif('La fiche les affiche (plus « Non évalué »)', '1\u202f500\u202f000' in t and '2 h 30 min' in t, str(r.status_code))
+donnees.update({'cout_estime': 'beaucoup'})
+go('resp_incidents', 'post', f'/incident/{iid}/modifier', data=donnees)
+verif('Montant illisible : ignoré, l\'ancien est gardé', obj(M.Incident, iid).cout_estime == 1500000)
+r, t = go('resp_incidents', 'put', f'/api/incidents/{iid}', json={'cout_estime': 2000000, 'temps_arret': 90})
+x = obj(M.Incident, iid)
+verif('API : coût et temps d\'arrêt acceptés', x.cout_estime == 2000000 and x.temps_arret == 90, f'{r.status_code} {t[:100]}')
+r, t = go('resp_incidents', 'get', '/incidents')
+verif('Liste des incidents affichée avec les totaux', r.status_code == 200, f'{r.status_code} {socle.cause(A)}')
+
 print('--- Escalade et approbation')
 r, t = go('escaladeur', 'post', f'/api/incident/{iid}/escalader', json={'raison': 'Pas de réponse'})
 verif('« Escalader les incidents » permet d\'escalader', obj(M.Incident, iid).niveau_escalade == 2, f'{r.status_code} {t[:120]}')
