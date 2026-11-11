@@ -1,0 +1,49 @@
+{# Barre de suivi du plan qualité : validation, alertes, indicateurs de traitement (egalyx/qualite.py). #}
+{% if qualite_suivi is defined %}{% set s = qualite_suivi(plan) %}
+<div class="card mb-4 shadow-sm" data-sans-masquage>
+  <div class="card-body">
+    <div class="d-flex flex-wrap align-items-center gap-2">
+      <span class="badge {{ 'bg-success' if s.etat == 'valide' else ('bg-info text-dark' if s.etat == 'en_relecture' else 'bg-secondary') }} fs-6">{{ s.libelle }}</span>
+      <span class="small text-muted">
+        {% if s.valideur %}Valideur désigné : <strong>{{ s.valideur.username }}</strong>{% else %}Aucun valideur désigné (un gestionnaire qualité valide){% endif %}
+        {% if plan.est_valide and s.valide_par %} · validé le {{ plan.date_validation.strftime('%d/%m/%Y') if plan.date_validation }} par {{ s.valide_par.username }}{% endif %}
+        {% if plan.date_prochaine_revue %} · prochaine revue de direction : {{ plan.date_prochaine_revue.strftime('%d/%m/%Y') }}{% endif %}
+      </span>
+      <div class="ms-auto d-flex flex-wrap gap-2">
+        {% if s.gerer and s.etat == 'brouillon' %}
+        <form method="POST" action="{{ url_for('qualite_suivi.soumettre', plan_id=plan.id) }}"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+          <button class="btn btn-sm btn-primary"><i class="fas fa-paper-plane me-1"></i>Soumettre à validation</button></form>
+        {% endif %}
+        {% if s.peut_valider %}
+        <form method="POST" action="{{ url_for('qualite_suivi.valider', plan_id=plan.id) }}"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+          <button class="btn btn-sm btn-success"><i class="fas fa-check me-1"></i>Valider le plan</button></form>
+        <button class="btn btn-sm btn-outline-danger" type="button" data-bs-toggle="collapse" data-bs-target="#qRenvoi"><i class="fas fa-rotate-left me-1"></i>Renvoyer</button>
+        {% endif %}
+      </div>
+    </div>
+    {% if s.peut_valider %}
+    <div class="collapse mt-2" id="qRenvoi">
+      <form method="POST" action="{{ url_for('qualite_suivi.renvoyer', plan_id=plan.id) }}" class="d-flex gap-2">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <input class="form-control form-control-sm" name="motif" placeholder="Ce qu'il faut revoir (obligatoire)" required>
+        <button class="btn btn-sm btn-danger">Renvoyer</button>
+      </form>
+    </div>
+    {% endif %}
+    <div class="mt-2">{% for niveau, texte in s.alertes %}<div class="alert alert-{{ niveau }} py-1 px-2 mb-1 small">{{ texte }}</div>{% endfor %}</div>
+    <div class="d-flex flex-wrap gap-4 small mt-2">
+      <span><strong>{{ s.nb_nc_ouvertes }}</strong> non-conformité(s) ouverte(s)</span>
+      <span><strong>{{ s.nb_actions_terminees }}/{{ s.nb_actions }}</strong> action(s) d'amélioration terminée(s)</span>
+      {% if s.gerer and s.etat != 'valide' %}
+      <form method="POST" action="{{ url_for('qualite_suivi.choisir_valideur', plan_id=plan.id) }}" class="d-flex gap-1 align-items-center ms-auto">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <label class="text-muted me-1">Valideur :</label>
+        <select class="form-select form-select-sm" name="valideur_id" style="max-width: 220px;"><option value="">— Un gestionnaire qualité —</option>
+          {% for u in s.valideurs %}<option value="{{ u.id }}" {% if plan.valideur_id == u.id %}selected{% endif %}>{{ u.username }}</option>{% endfor %}</select>
+        <button class="btn btn-sm btn-outline-primary">OK</button>
+      </form>
+      {% endif %}
+    </div>
+  </div>
+</div>
+{% endif %}

@@ -1,0 +1,46 @@
+{# Suppression / réinitialisation d'un client (super admin) — partagé par la liste et la fiche client. #}
+<script>
+(function () {
+  function jeton() {
+    var m = document.querySelector('meta[name="csrf-token"]') || document.querySelector('input[name="csrf_token"]');
+    return m ? (m.content || m.value || '') : '';
+  }
+  function message(texte, type) {
+    if (typeof showToast === 'function') { showToast(texte, type); } else { alert(texte); }
+  }
+  async function confirmerParNom(clientId, nom, action) {
+    var detail = '';
+    try {
+      var r = await fetch('/api/client/' + clientId + '/apercu-suppression');
+      var d = await r.json();
+      if (d.success) {
+        var lignes = Object.entries(d.tables).sort(function (a, b) { return b[1] - a[1]; }).slice(0, 8)
+          .map(function (e) { return '  • ' + e[0] + ' : ' + e[1]; }).join('\n');
+        detail = '\n\nÉléments concernés : ' + d.total + '\n' + lignes + (Object.keys(d.tables).length > 8 ? '\n  • …' : '');
+      }
+    } catch (e) { /* aperçu facultatif */ }
+    var texte = action === 'terminate'
+      ? 'SUPPRIMER DÉFINITIVEMENT le client « ' + nom + ' » et toutes ses données (utilisateurs compris).' + detail +
+        '\n\nConseil : exportez ses données avant.\n\nPour confirmer, retapez le nom exact du client :'
+      : 'RÉINITIALISER les données de « ' + nom + ' » (risques, audits, contrôles, plans…). Le client, ses utilisateurs, ' +
+        'son organigramme et ses réglages sont conservés.\n\nPour confirmer, retapez le nom exact du client :';
+    var saisie = window.prompt(texte, '');
+    if (saisie === null) { return; }
+    if (saisie.trim() !== String(nom).trim()) { message('Nom différent : rien n’a été fait.', 'warning'); return; }
+    var rep = await fetch('/api/client/' + clientId + '/' + action, {
+      method: 'POST', headers: {'Content-Type': 'application/json', 'X-CSRFToken': jeton()},
+      body: JSON.stringify({confirmation: saisie})
+    });
+    var res = {};
+    try { res = await rep.json(); } catch (e) { res = {success: false, error: 'Réponse inattendue du serveur (' + rep.status + ').'}; }
+    if (res.success) {
+      message(res.message, 'success');
+      setTimeout(function () { window.location.href = action === 'terminate' ? '/super-admin/clients' : window.location.href; }, 1500);
+    } else {
+      message(res.error || 'Échec.', 'error');
+    }
+  }
+  window.supprimerClientDefinitivement = function (clientId, nom) { return confirmerParNom(clientId, nom, 'terminate'); };
+  window.reinitialiserClient = function (clientId, nom) { return confirmerParNom(clientId, nom, 'reset-data'); };
+})();
+</script>

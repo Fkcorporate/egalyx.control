@@ -1,0 +1,141 @@
+{# Barre de suivi du PCA : circuit de validation, alertes, exercices, activations, liens, documents (egalyx/pca.py). #}
+{% if pca_suivi is defined %}{% set s = pca_suivi(plan) %}
+<div id="pca-suivi" class="card mb-4 shadow-sm" data-sans-masquage>
+  <div class="card-body">
+    <div class="d-flex flex-wrap align-items-center gap-2 mb-2">
+      <span class="badge {{ 'bg-success' if s.statut == 'valide' else ('bg-info text-dark' if s.statut == 'en_relecture' else 'bg-secondary') }} fs-6">{{ s.libelle }}</span>
+      <span class="text-muted small">Version {{ plan.version or '1.0' }}
+        {% if s.valideur %} · valideur désigné : <strong>{{ s.valideur.username }}</strong>{% else %} · aucun valideur désigné{% endif %}
+        {% if plan.valide_le and s.valide_par %} · validé le {{ plan.valide_le.strftime('%d/%m/%Y') }} par {{ s.valide_par.username }}{% endif %}
+        {% if plan.date_validite %} · valable jusqu'au {{ plan.date_validite.strftime('%d/%m/%Y') }}{% endif %}
+      </span>
+      <div class="ms-auto d-flex flex-wrap gap-2">
+        {% if s.gerer and s.statut in ['en_redaction', none, ''] %}
+        <form method="POST" action="{{ url_for('pca.soumettre', plan_id=plan.id) }}"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+          <button class="btn btn-sm btn-primary"><i class="fas fa-paper-plane me-1"></i>Soumettre à validation</button></form>
+        {% endif %}
+        {% if s.peut_valider %}
+        <form method="POST" action="{{ url_for('pca.valider', plan_id=plan.id) }}"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+          <button class="btn btn-sm btn-success"><i class="fas fa-check me-1"></i>Valider le plan</button></form>
+        <button class="btn btn-sm btn-outline-danger" type="button" data-bs-toggle="collapse" data-bs-target="#pcaRenvoi"><i class="fas fa-rotate-left me-1"></i>Renvoyer</button>
+        {% endif %}
+        {% if s.peut_activer and not s.activation_en_cours %}
+        <button class="btn btn-sm btn-danger" type="button" data-bs-toggle="collapse" data-bs-target="#pcaActiver"><i class="fas fa-bolt me-1"></i>Déclencher le PCA</button>
+        {% endif %}
+      </div>
+    </div>
+    {% if s.peut_valider %}
+    <div class="collapse mb-2" id="pcaRenvoi">
+      <form method="POST" action="{{ url_for('pca.renvoyer', plan_id=plan.id) }}" class="d-flex gap-2">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <input class="form-control form-control-sm" name="motif" placeholder="Ce qu'il faut revoir (obligatoire)" required>
+        <button class="btn btn-sm btn-danger">Renvoyer en rédaction</button>
+      </form>
+    </div>
+    {% endif %}
+    {% if s.peut_activer and not s.activation_en_cours %}
+    <div class="collapse mb-2" id="pcaActiver">
+      <form method="POST" action="{{ url_for('pca.activer', plan_id=plan.id) }}" class="row g-2">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <div class="col-md-6"><input class="form-control form-control-sm" name="motif" placeholder="Raison du déclenchement (sinistre, panne…)" required></div>
+        <div class="col-md-4"><select class="form-select form-select-sm" name="incident_id"><option value="">— Incident lié (facultatif) —</option>
+          {% for i in s.choix.incidents or [] %}<option value="{{ i.id }}">{{ i.reference }} — {{ i.titre|truncate(50) }}</option>{% endfor %}</select></div>
+        <div class="col-md-2"><button class="btn btn-sm btn-danger w-100">Déclencher</button></div>
+      </form>
+    </div>
+    {% endif %}
+    {% if s.activation_en_cours %}
+    <div class="alert alert-danger d-flex flex-wrap align-items-center gap-2 py-2">
+      <i class="fas fa-bolt"></i><strong>PCA en cours d'activation</strong> depuis le {{ s.activation_en_cours.debut.strftime('%d/%m/%Y %H:%M') }} : {{ s.activation_en_cours.motif }}
+      {% if s.peut_activer %}
+      <form method="POST" action="{{ url_for('pca.cloturer_activation', activation_id=s.activation_en_cours.id) }}" class="ms-auto d-flex gap-2">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <input class="form-control form-control-sm" name="bilan" placeholder="Bilan (facultatif)">
+        <button class="btn btn-sm btn-light">Retour à la normale</button>
+      </form>
+      {% endif %}
+    </div>
+    {% endif %}
+    {% for niveau, texte in s.alertes %}<div class="alert alert-{{ niveau }} py-1 px-2 mb-1 small">{{ texte }}</div>{% endfor %}
+
+    <div class="row g-3 mt-1">
+      <div class="col-md-3"><div class="small text-muted">RTO (délai d'arrêt maximal)</div>
+        <div class="fw-semibold">{{ ('%g h'|format(s.rto)) if s.rto is not none else (plan.delai_arret_max or '—') }}</div></div>
+      <div class="col-md-3"><div class="small text-muted">RPO (perte de données maximale)</div>
+        <div class="fw-semibold">{{ ('%g h'|format(s.rpo)) if s.rpo is not none else (plan.perte_donnees_max or '—') }}</div></div>
+      <div class="col-md-3"><div class="small text-muted">Dernier test</div>
+        <div class="fw-semibold">{{ plan.date_dernier_test.strftime('%d/%m/%Y') if plan.date_dernier_test else 'jamais' }}</div></div>
+      <div class="col-md-3"><div class="small text-muted">Reprise lors du dernier test</div>
+        <div class="fw-semibold">{% if s.dernier_resultat %}{{ '%g'|format(s.dernier_resultat.duree_reprise_heures) }} h
+          {% if s.rto is not none %}<span class="badge {{ 'bg-success' if s.dernier_resultat.duree_reprise_heures <= s.rto else 'bg-danger' }}">{{ 'RTO respecté' if s.dernier_resultat.duree_reprise_heures <= s.rto else 'RTO dépassé' }}</span>{% endif %}
+          {% else %}—{% endif %}</div></div>
+    </div>
+
+    <ul class="nav nav-tabs mt-3 small" role="tablist">
+      <li class="nav-item"><a class="nav-link active" data-bs-toggle="tab" href="#pcaEx">Exercices ({{ s.exercices|length }})</a></li>
+      <li class="nav-item"><a class="nav-link" data-bs-toggle="tab" href="#pcaLiens">Risques et processus ({{ s.risques|length + s.processus|length }})</a></li>
+      <li class="nav-item"><a class="nav-link" data-bs-toggle="tab" href="#pcaAct">Activations ({{ s.activations|length }})</a></li>
+      <li class="nav-item"><a class="nav-link" data-bs-toggle="tab" href="#pcaDocs">Documents ({{ s.documents|length }})</a></li>
+    </ul>
+    <div class="tab-content border border-top-0 p-3">
+      <div class="tab-pane fade show active" id="pcaEx">
+        {% if s.exercices %}
+        <table class="table table-sm align-middle mb-0">
+          <thead><tr><th>Exercice</th><th>Date</th><th>Statut</th><th>Note</th><th>Reprise</th><th></th></tr></thead>
+          <tbody>{% for e in s.exercices %}
+            <tr><td>{{ e.reference }} — {{ e.nom }}</td><td>{{ e.date_exercice.strftime('%d/%m/%Y') if e.date_exercice else '' }}</td>
+              <td>{{ {'planifie': 'Planifié', 'realise': 'Réalisé', 'reporte': 'Reporté', 'annule': 'Annulé'}.get(e.statut, e.statut) }}</td>
+              <td>{{ e.note if e.note is not none else '—' }}{% if e.note is not none %}/100{% endif %}</td>
+              <td>{% if e.duree_reprise_heures is not none %}{{ '%g'|format(e.duree_reprise_heures) }} h{% if s.rto is not none %} <span class="badge {{ 'bg-success' if e.duree_reprise_heures <= s.rto else 'bg-danger' }}">{{ '≤' if e.duree_reprise_heures <= s.rto else '>' }} RTO</span>{% endif %}{% else %}—{% endif %}</td>
+              <td class="text-end">{% if s.tester %}<a class="btn btn-sm btn-outline-primary" href="{{ url_for('pca.resultat', exercice_id=e.id) }}">{{ 'Saisir le résultat' if e.statut == 'planifie' else 'Résultat' }}</a>{% endif %}</td></tr>
+          {% endfor %}</tbody>
+        </table>
+        {% else %}<p class="text-muted small mb-0">Aucun exercice.{% if s.tester %} <a href="{{ url_for('nouvel_exercice_pca', plan_id=plan.id) }}">Planifier un exercice</a>{% endif %}</p>{% endif %}
+      </div>
+      <div class="tab-pane fade" id="pcaLiens">
+        <div class="row">
+          <div class="col-md-6"><div class="small fw-semibold mb-1">Risques de la cartographie couverts</div>
+            {% for r in s.risques %}<div class="small"><a href="{{ url_for('detail_risque', id=r.id) }}">{{ r.reference }}</a> — {{ r.intitule }}</div>{% else %}<div class="small text-muted">Aucun.</div>{% endfor %}</div>
+          <div class="col-md-6"><div class="small fw-semibold mb-1">Processus métier couverts</div>
+            {% for x in s.processus %}<div class="small"><a href="{{ url_for('detail_processus_metier', id=x.id) }}">{{ x.reference }}</a> — {{ x.nom }}</div>{% else %}<div class="small text-muted">Aucun.</div>{% endfor %}</div>
+        </div>
+        {% if s.gerer %}
+        <form method="POST" action="{{ url_for('pca.liens', plan_id=plan.id) }}" class="row g-2 mt-2">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+          <div class="col-md-5"><select class="form-select form-select-sm" name="risque_ids" multiple size="5">
+            {% for r in s.choix.risques or [] %}<option value="{{ r.id }}" {% if r.id in (plan.risque_ids or []) %}selected{% endif %}>{{ r.reference }} — {{ r.intitule|truncate(60) }}</option>{% endfor %}</select></div>
+          <div class="col-md-5"><select class="form-select form-select-sm" name="processus_ids" multiple size="5">
+            {% for x in s.choix.processus or [] %}<option value="{{ x.id }}" {% if x.id in (plan.processus_ids or []) %}selected{% endif %}>{{ x.reference }} — {{ x.nom|truncate(60) }}</option>{% endfor %}</select></div>
+          <div class="col-md-2"><button class="btn btn-sm btn-primary w-100">Enregistrer</button><div class="form-text">Ctrl + clic pour plusieurs</div></div>
+        </form>
+        {% endif %}
+      </div>
+      <div class="tab-pane fade" id="pcaAct">
+        {% for a in s.activations %}
+          <div class="small border-bottom py-1"><strong>{{ a.debut.strftime('%d/%m/%Y %H:%M') }}</strong> — {{ a.motif }}
+            {% if a.fin %} · durée {{ '%g'|format(a.duree_heures()) }} h{% if s.rto is not none %} <span class="badge {{ 'bg-success' if a.duree_heures() <= s.rto else 'bg-danger' }}">{{ 'RTO respecté' if a.duree_heures() <= s.rto else 'RTO dépassé' }}</span>{% endif %}{% if a.bilan %} · {{ a.bilan }}{% endif %}{% else %} · <span class="text-danger">en cours</span>{% endif %}
+            {% if a.incident_id %} · <a href="{{ url_for('detail_incident', id=a.incident_id) }}">incident lié</a>{% endif %}</div>
+        {% else %}<p class="text-muted small mb-0">Le plan n'a jamais été déclenché.</p>{% endfor %}
+      </div>
+      <div class="tab-pane fade" id="pcaDocs">
+        {% for d in s.documents %}
+          <div class="small d-flex align-items-center gap-2 border-bottom py-1"><i class="fas fa-file"></i>
+            <a href="{{ url_for('pca.telecharger_document', document_id=d.id) }}">{{ d.nom_fichier }}</a>
+            <span class="text-muted">{{ d.categorie }} · {{ (d.taille / 1024)|round|int }} ko · {{ d.uploaded_at.strftime('%d/%m/%Y') if d.uploaded_at }}</span>
+            {% if s.gerer %}<form method="POST" action="{{ url_for('pca.supprimer_document', document_id=d.id) }}" class="ms-auto" onsubmit="return confirm('Supprimer ce document ?');"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><button class="btn btn-sm btn-link text-danger p-0">Supprimer</button></form>{% endif %}
+          </div>
+        {% else %}<p class="text-muted small">Aucun document.</p>{% endfor %}
+        {% if s.gerer %}
+        <form method="POST" action="{{ url_for('pca.ajouter_document', plan_id=plan.id) }}" enctype="multipart/form-data" class="row g-2 mt-2">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+          <div class="col-md-5"><input type="file" class="form-control form-control-sm" name="fichier" required></div>
+          <div class="col-md-3"><select class="form-select form-select-sm" name="categorie"><option value="document">Document</option><option value="procedure">Procédure</option><option value="schema">Schéma</option><option value="rapport">Rapport</option></select></div>
+          <div class="col-md-2"><input class="form-control form-control-sm" name="description" placeholder="Description"></div>
+          <div class="col-md-2"><button class="btn btn-sm btn-primary w-100">Ajouter</button></div>
+        </form>
+        {% endif %}
+      </div>
+    </div>
+  </div>
+</div>
+{% endif %}
