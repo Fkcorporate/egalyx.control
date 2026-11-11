@@ -213,6 +213,29 @@ def etapes_demarrage(cid):
     nb_eval = compte(EvaluationRisque.query.join(Risque, Risque.id == EvaluationRisque.risque_id)
                      .filter(Risque.client_id == cid))
     p = ParametresRisque.query.filter_by(client_id=cid).first()
+
+    def nieme(q, colonne, rang=1):
+        """Date du rang-ième objet (jalon : quand l'étape a été atteinte)."""
+        try:
+            r = q.filter(colonne.isnot(None)).order_by(colonne.asc()).offset(rang - 1).first()
+            return getattr(r, colonne.key, None) if r is not None else None
+        except Exception:
+            return None
+    date_eval = EvaluationRisque.date_pre_evaluation
+    jalons = [
+        min([d for d in (nieme(Direction.query.filter_by(client_id=cid), Direction.created_at),
+                         nieme(Pole.query.filter_by(client_id=cid), Pole.created_at)) if d] or [None], key=lambda x: x or datetime.max),
+        nieme(User.query.filter_by(client_id=cid, is_active=True), User.created_at, 2),
+        None,
+        nieme(Cartographie.query.filter_by(client_id=cid), Cartographie.created_at),
+        nieme(Risque.query.filter_by(client_id=cid, is_archived=False), Risque.created_at, 10),
+        nieme(EvaluationRisque.query.join(Risque, Risque.id == EvaluationRisque.risque_id).filter(Risque.client_id == cid),
+              date_eval, max(1, min(nb_risques, 10))),
+        getattr(p, 'updated_at', None),
+        nieme(Processus.query.filter_by(client_id=cid), Processus.created_at),
+        nieme(Tiers.query.filter_by(client_id=cid), Tiers.created_at),
+        nieme(Audit.query.filter_by(client_id=cid), Audit.created_at),
+    ]
     e = [
         ('Décrire l’organisation', 'Pays, pôles et directions : la base des cartographies et du tableau de bord par entité.',
          compte(Direction.query.filter_by(client_id=cid)) > 0 or compte(Pole.query.filter_by(client_id=cid)) > 0,
@@ -223,8 +246,8 @@ def etapes_demarrage(cid):
          bool(admins) and all(getattr(a, 'totp_actif', False) for a in admins), _lien('securite_compte.index')),
         ('Créer une cartographie', 'Une cartographie par direction, processus ou entité.',
          compte(Cartographie.query.filter_by(client_id=cid, is_archived=False)) > 0, _lien('liste_cartographies')),
-        ('Identifier au moins 10 risques', 'Partez de la bibliothèque sectorielle : 84 risques types prêts à importer.',
-         nb_risques >= 10, _lien('bibliotheque.page')),
+        ('Identifier au moins 10 risques', 'Importez votre cartographie Excel telle quelle, ou partez de la bibliothèque '
+         'sectorielle (84 risques types et leurs contrôles).', nb_risques >= 10, _lien('import_carto.page') or _lien('bibliotheque.page')),
         ('Évaluer les risques', 'Impact, probabilité et niveau de maîtrise : cotation brute et nette.',
          nb_eval > 0 and nb_eval >= min(nb_risques, 10), _lien('liste_cartographies')),
         ('Fixer l’appétence au risque', 'Le score net maximal accepté par la direction, global et par catégorie.',
@@ -236,9 +259,24 @@ def etapes_demarrage(cid):
         ('Planifier un audit', 'Premier audit interne ou mission de contrôle.',
          compte(Audit.query.filter_by(client_id=cid)) > 0, _lien('nouvel_audit')),
     ]
-    etapes = [{'titre': a, 'aide': b, 'fait': bool(c), 'lien': d} for a, b, c, d in e]
+    from models import Client
+    client = Client.query.get(cid)
+    ouverture = getattr(client, 'created_at', None)
+
+    def jours(d):
+        if not d or not ouverture:
+            return None
+        return max(0, (d - ouverture).days)
+    etapes = [{'titre': a, 'aide': b, 'fait': bool(c), 'lien': d,
+               'atteint_le': jalons[i] if c else None, 'jours': jours(jalons[i]) if c else None}
+              for i, (a, b, c, d) in enumerate(e)]
+    if _lien('bibliotheque.page') and etapes[4]['lien'] != _lien('bibliotheque.page'):
+        etapes[4]['lien_bis'] = (_lien('bibliotheque.page'), 'Bibliothèque')
     faites = sum(1 for x in etapes if x['fait'])
-    return {'etapes': etapes, 'faites': faites, 'total': len(etapes),
+    # Délai de mise en valeur : de l'ouverture du compte à la première cartographie évaluée
+    valeur = etapes[5]['jours'] if etapes[5]['fait'] else None
+    return {'etapes': etapes, 'faites': faites, 'total': len(etapes), 'ouverture': ouverture,
+            'jours_ouverture': jours(datetime.utcnow()), 'delai_valeur': valeur,
             'pourcentage': round(100 * faites / len(etapes))}
 
 

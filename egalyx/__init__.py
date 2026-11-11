@@ -34,6 +34,12 @@ def enregistrer_extensions(app, db, csrf=None, recalculer_cotations=None, constr
     demo.enregistrer(app)
     rapport_comite.enregistrer(app, construire_dashboard=construire_dashboard)
     bibliotheque.enregistrer(app)
+    from egalyx import import_cartographie
+    import_cartographie.enregistrer(app)
+    from egalyx import alertes_incidents
+    alertes_incidents.enregistrer(app)
+    from egalyx import identite
+    identite.enregistrer(app)
     recherche.enregistrer(app)
     ma_semaine.enregistrer(app)
     automatismes.enregistrer(app)

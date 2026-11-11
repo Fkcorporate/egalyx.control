@@ -80,11 +80,12 @@ ARTICLES = [
               'Créez l’organisation : pays, pôles, directions, services.',
               'Ajustez les paramètres de cotation (seuils, appétence) dans **Paramètres → Risques**.',
               'Créez les utilisateurs et attribuez rôles et permissions.',
-              'Créez la première cartographie, ou importez des risques depuis la **Bibliothèque de risques** de votre secteur.',
+              'Importez votre cartographie Excel telle quelle (**Importer une cartographie**), ou partez de la **Bibliothèque de risques** de votre secteur (risques et contrôles types).',
               'Ajoutez les dispositifs de maîtrise, puis évaluez les risques.',
               'Créez les KRI et les plans d’action prioritaires.'],
       mots=['mise', 'route', 'parametrage', 'installation', 'configurer', 'initialiser', 'onboarding', 'demarrage', 'lancer'],
-      liens=[('Mise en route', 'ma_semaine.demarrage'), ('Bibliothèque de risques', 'bibliotheque.page')],
+      liens=[('Mise en route', 'ma_semaine.demarrage'), ('Importer une cartographie', 'import_carto.page'),
+             ('Bibliothèque de risques', 'bibliotheque.page')],
       pour='admin',
       questions=['comment configurer l outil', 'comment parametrer egalyx', 'premiers parametrages']),
 
@@ -324,6 +325,50 @@ ARTICLES = [
       liens=[('Paramètres des risques', 'parametres_risque.page')],
       perms=['can_manage_settings'], pour='admin',
       questions=['changer les seuils de criticite', 'definir l appetence au risque']),
+
+    A('identite_organisation', 'admin', 'Afficher le nom et le logo de mon organisation',
+      'Le nom affiché et le logo apparaissent en haut de l’outil, dans l’objet des e-mails d’alerte et sur le '
+      'rapport au comité d’audit.',
+      etapes=['Menu du compte → **Identité de l’organisation**.',
+              'Saisissez un nom court (sigle, 30 caractères) et, si vous le souhaitez, déposez votre logo.',
+              'Enregistrez : l’en-tête change immédiatement pour tous les utilisateurs de l’organisation.'],
+      notes=['Logo : PNG, JPEG ou WebP, 1 Mo au maximum, de préférence horizontal sur fond transparent.'],
+      mots=['logo', 'nom', 'identite', 'marque', 'personnaliser', 'entete', 'sigle'],
+      liens=[('Identité de l’organisation', 'identite.page')], pour='admin',
+      questions=['mettre mon logo', 'changer le nom affiche', 'personnaliser l outil']),
+
+    A('alertes_incidents', 'maitrise', 'Régler les e-mails d’alerte des incidents',
+      'Les alertes (délai dépassé, escalade) s’affichent toujours dans l’application ; leur copie par e-mail se règle '
+      'par organisation et est désactivée tant qu’elle n’a pas été activée.',
+      etapes=['Incidents → bouton **Alertes e-mail**.',
+              'Activez l’envoi, choisissez les événements et les destinataires (responsable, superviseur, gestionnaires).',
+              'Ajoutez si besoin des adresses supplémentaires (boîte du risk manager, astreinte).'],
+      notes=['Chacun peut arrêter ces e-mails pour lui-même avec le lien en bas de chaque alerte.',
+             'Plusieurs délais dépassés en même temps donnent un seul e-mail récapitulatif.'],
+      mots=['alerte', 'email', 'e-mail', 'mail', 'notification', 'delai', 'depasse', 'sla', 'escalade', 'desabonner'],
+      liens=[('Alertes e-mail des incidents', 'alertes_incidents.page')],
+      perms=['can_manage_incidents'], pour='tous',
+      questions=['je recois des mails d alerte incident', 'arreter les emails de delai depasse', 'configurer les alertes incidents']),
+
+    A('import_cartographie', 'risques', 'Importer ma cartographie Excel existante',
+      'Déposez le fichier tel que vous l’utilisez : Egalyx trouve le tableau, reconnaît les colonnes par leur titre et '
+      'vous montre ce qui sera créé avant tout enregistrement.',
+      etapes=['Menu **Importer une cartographie** : déposez le fichier .xlsx ou .csv.',
+              'Vérifiez l’aperçu : colonnes reconnues, cotations converties sur 1 à 5, anomalies et doublons signalés.',
+              'Corrigez une colonne mal reconnue si besoin, puis « Actualiser l’aperçu ».',
+              'Choisissez la cartographie (existante ou nouvelle) et cliquez sur **Importer**.',
+              'Complétez les dispositifs créés (type, fréquence, responsable) et lancez l’évaluation.'],
+      notes=['Échelles acceptées : 1 à 5, 1 à 10 (ramenée sur 5), ou en mots (faible, moyen, élevé…). Pour une échelle '
+             'sur 3 ou 4, indiquez-la dans le titre de colonne : « Impact (1-4) ».',
+             'Plusieurs contrôles dans une cellule : séparez-les par « ; » ou un retour à la ligne ; chacun devient un '
+             'dispositif de maîtrise non évalué.',
+             'Une cotation absente ou illisible donne une valeur provisoire 3 × 3, signalée sur le risque.',
+             'Votre référence de risque est conservée si elle est libre ; le responsable est rattaché s’il correspond à un '
+             'utilisateur (identifiant, e-mail ou nom).'],
+      mots=['import', 'importer', 'excel', 'xlsx', 'csv', 'cartographie', 'reprise', 'migration', 'fichier', 'existant'],
+      liens=[('Importer une cartographie', 'import_carto.page'), ('Bibliothèque de risques', 'bibliotheque.page')],
+      perms=['can_manage_risks'], pour='admin',
+      questions=['importer ma cartographie excel', 'reprendre mon fichier de risques', 'comment importer mes risques']),
 
     A('import_export_admin', 'admin', 'Importer des données en masse',
       'Les risques d’un secteur s’importent depuis la Bibliothèque de risques ; les autres données depuis '

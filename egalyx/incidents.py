@@ -231,9 +231,13 @@ def verifier_delais(client_id=None):
             m.db.session.add(m.IncidentHistorique(incident_id=i.id, action='sla_depasse', created_at=maintenant,
                                                   details=f"Délai de traitement de {i.sla_heures} h dépassé "
                                                           f"(limite {i.sla_date_limite.strftime('%d/%m/%Y %H:%M')})."))
+            retard = maintenant - i.sla_date_limite
+            retard_txt = (f'{retard.days} j' if retard.days else f'{max(1, retard.seconds // 3600)} h')
             _notifier([i.responsable_resolution_id, i.superviseur_id] + _gestionnaires(i.client_id),
                       f'Délai dépassé : {i.reference}',
-                      f"L'incident « {i.titre} » n'est pas résolu dans le délai prévu ({i.sla_heures} h).", i)
+                      f"L'incident « {i.titre} » (gravité {i.gravite or 'non définie'}) n'est pas résolu dans le délai "
+                      f"prévu de {i.sla_heures} h : limite le {i.sla_date_limite.strftime('%d/%m/%Y à %H:%M')} (UTC), "
+                      f"retard de {retard_txt}.", i)
     # Résolu après la date limite : le dépassement est conservé pour les statistiques
     for i in q.filter(m.Incident.statut.in_(FINIS), m.Incident.sla_viole.isnot(True),
                       m.Incident.sla_date_limite.isnot(None), m.Incident.date_resolution.isnot(None)).all():
@@ -516,7 +520,8 @@ def enregistrer_impacts(app):
 
 # ---------------------------------------------------------------- e-mails (délais dépassés, escalades)
 # Les alertes restaient dans l'application. Une copie par e-mail est envoyée pour les notifications d'incident
-# importantes (délai dépassé, escalade), après l'enregistrement et en arrière-plan. Désactivable :
+# importantes (délai dépassé, escalade), après l'enregistrement et en arrière-plan, SEULEMENT si l'organisation l'a
+# activée (Incidents → Alertes e-mail : événements, destinataires, désabonnement). Interrupteur général du serveur :
 # EGALYX_INCIDENTS_EMAIL=0. Sans SMTP configuré (egalyx/courriel.py), rien n'est envoyé.
 TYPES_COURRIEL = ('incident', 'escalade')
 
@@ -528,26 +533,97 @@ def _a_envoyer(n):
     return getattr(n, 'type_notification', None) in TYPES_COURRIEL or 'scalade' in titre or titre.startswith('Délai dépassé')
 
 
+def _role_dans_incident(inc, uid):
+    if inc is not None and uid == getattr(inc, 'responsable_resolution_id', None):
+        return 'responsable'
+    if inc is not None and uid in (getattr(inc, 'superviseur_id', None), getattr(inc, 'directeur_id', None)):
+        return 'superviseur'
+    return 'gestionnaire'
+
+
 def _courriels_apres_flush(session_, _ctx):
+    """Copie par e-mail selon les réglages de l'organisation (egalyx/alertes_incidents.py) : désactivée par défaut."""
     if os.environ.get('EGALYX_INCIDENTS_EMAIL', '1') != '1':
         return
     m = _m()
     nouvelles = [n for n in session_.new if isinstance(n, m.Notification) and _a_envoyer(n)]
     if not nouvelles:
         return
+    from egalyx.alertes_incidents import reglages
     base = (os.environ.get('EGALYX_URL_PUBLIQUE') or '').rstrip('/')
+    desabo = f'{base}/incidents/alertes/me-desabonner' if base else ''
+    # Les délais dépassés sont regroupés : un seul e-mail par personne et par vérification (au premier passage,
+    # tous les incidents anciens encore ouverts dépassent d'un coup : sans regroupement, une rafale d'e-mails).
+    # les délais sont cumulés dans la session jusqu'au commit (verifier_delais peut provoquer plusieurs flushs)
+    delais, autres, cache = session_.info.setdefault('egalyx_delais_incidents', {}), [], {}
     with session_.no_autoflush:
         for n in nouvelles:
-            u = session_.get(m.User, n.destinataire_id) if n.destinataire_id else None
-            if u is None or not getattr(u, 'email', None) or getattr(u, 'is_active', True) is False:
+            inc = session_.get(m.Incident, n.entite_id) if n.entite_id else None
+            cid = n.client_id or getattr(inc, 'client_id', None)
+            if cid not in cache:
+                cache[cid] = reglages(cid, session_)
+                try:
+                    from egalyx.identite import nom_affiche
+                    cache[('nom', cid)] = nom_affiche(cid) or 'Egalyx'
+                except Exception:  # noqa: BLE001
+                    cache[('nom', cid)] = 'Egalyx'
+            r = cache[cid]
+            prefixe = f"[{cache[('nom', cid)]}]"
+            evenement = 'delai' if (n.titre or '').startswith('Délai dépassé') else 'escalade'
+            if not r.get('actif') or evenement not in (r.get('evenements') or []):
                 continue
+            u = session_.get(m.User, n.destinataire_id) if n.destinataire_id else None
             lien = f'{base}/incident/{n.entite_id}' if base and n.entite_id else ''
-            texte = f"{n.message or ''}\n\n{('Voir l’incident : ' + lien) if lien else ''}\n\n— Egalyx Control"
-            session_.info.setdefault('egalyx_courriels_incidents', []).append((u.email, f'[Egalyx] {n.titre}', texte))
+            dests = []
+            if (u is not None and getattr(u, 'email', None) and getattr(u, 'is_active', True) is not False
+                    and u.id not in (r.get('desabonnes') or [])
+                    and _role_dans_incident(inc, u.id) in (r.get('roles') or [])):
+                dests.append(u.email.lower())
+            # adresses supplémentaires : une fois par incident et par événement
+            cle = (n.entite_id, evenement)
+            if cle not in cache.setdefault(('vus', cid), set()):
+                cache[('vus', cid)].add(cle)
+                dests += [a for a in (r.get('adresses') or []) if a]
+            for email in dests:
+                if evenement == 'delai':
+                    lot = delais.setdefault(email, [])
+                    if all(x[0] != n.entite_id for x in lot):
+                        lot.append((n.entite_id, n.titre or '', n.message or '', lien, prefixe))
+                elif (email, n.entite_id, n.titre) not in [(e, x.entite_id, x.titre) for e, x, _l, _p in autres]:
+                    autres.append((email, n, lien, prefixe))
+    session_.info['egalyx_pied_incidents'] = pied = ("\n\nVous recevez cet e-mail selon les réglages d'alerte des incidents de votre organisation."
+            + (f"\nNe plus recevoir ces e-mails : {desabo}" if desabo else '') + "\n\n— Egalyx Control")
+    for email, n, lien, prefixe in autres:
+        texte = f"{n.message or ''}\n\n{('Voir l’incident : ' + lien) if lien else ''}" + pied
+        session_.info.setdefault('egalyx_courriels_incidents', []).append((email, f'{prefixe} {n.titre}', texte))
+
+
+def _courriels_delais(delais, pied):
+    """Un e-mail par personne : l'alerte seule, ou un récapitulatif si plusieurs incidents dépassent ensemble."""
+    envois = []
+    for email, lot in delais.items():
+        prefixe = lot[0][4]
+        if len(lot) == 1:
+            _id, titre, message, lien, _p = lot[0]
+            sujet = f'{prefixe} {titre}'
+            corps = f"{message}\n\n{('Voir l’incident : ' + lien) if lien else ''}"
+        else:
+            sujet = f'{prefixe} {len(lot)} incidents ont dépassé leur délai de traitement'
+            lignes = [f"- {titre.replace('Délai dépassé : ', '')} — {message}" + (f"\n  {lien}" if lien else '')
+                      for _id, titre, message, lien, _p in lot[:50]]
+            if len(lot) > 50:
+                lignes.append(f'… et {len(lot) - 50} autre(s) : voir la liste des incidents dans Egalyx.')
+            corps = 'Les incidents suivants ne sont pas résolus dans le délai prévu :\n\n' + '\n'.join(lignes)
+        envois.append((email, sujet, corps + "\n\nUne seule alerte est envoyée par incident." + pied))
+    return envois
 
 
 def _courriels_apres_commit(session_):
-    envois = session_.info.pop('egalyx_courriels_incidents', None)
+    envois = session_.info.pop('egalyx_courriels_incidents', None) or []
+    delais = session_.info.pop('egalyx_delais_incidents', None)
+    pied = session_.info.pop('egalyx_pied_incidents', '')
+    if delais:
+        envois = envois + _courriels_delais(delais, pied)
     if not envois:
         return
     try:
@@ -569,7 +645,8 @@ def _courriels_apres_commit(session_):
 
 
 def _courriels_apres_rollback(session_):
-    session_.info.pop('egalyx_courriels_incidents', None)
+    for k in ('egalyx_courriels_incidents', 'egalyx_delais_incidents', 'egalyx_pied_incidents'):
+        session_.info.pop(k, None)
 
 
 def enregistrer_courriels():
