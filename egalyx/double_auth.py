@@ -32,7 +32,30 @@ MAX_TENTATIVES = 5
 # Pages accessibles tant que la 2FA n'est pas validée / pas encore activée
 _LIBRES = {'static', 'logout', 'login', 'login_fullscreen', 'home',
            'securite_compte.verification', 'securite_compte.activer', 'securite_compte.codes_secours',
-           'securite_compte.index'}
+           'securite_compte.index',
+           # fichiers chargés par les pages (traduction, etc.) : sans donnée privée, nécessaires à la page de code
+           'langue.dictionnaire', 'langue.changer'}
+
+# Ressources chargées par une page (scripts, styles, images…) : jamais une destination après le code de sécurité.
+_EXTENSIONS_RESSOURCES = ('.js', '.css', '.map', '.json', '.png', '.jpg', '.jpeg', '.gif', '.svg', '.ico', '.webp',
+                          '.woff', '.woff2', '.ttf', '.txt', '.xml', '.webmanifest')
+_PREFIXES_RESSOURCES = ('/static/', '/langue/', '/api/', '/favicon', '/manifest', '/service-worker', '/sw.js')
+
+
+def destination_valable(chemin):
+    """Vrai seulement pour une page interne vers laquelle on peut revenir après le code de sécurité."""
+    if not chemin or not chemin.startswith('/') or chemin.startswith('//'):
+        return False
+    base = chemin.split('?', 1)[0].lower()
+    return not base.endswith(_EXTENSIONS_RESSOURCES) and not base.startswith(_PREFIXES_RESSOURCES)
+
+
+def _navigation_de_page():
+    """Le navigateur ouvre une page (et non un script, une image ou un appel en arrière-plan)."""
+    dest = request.headers.get('Sec-Fetch-Dest')
+    if dest:
+        return dest in ('document', 'iframe')
+    return 'text/html' in (request.headers.get('Accept') or 'text/html')
 
 
 def obligatoire_pour(u):
@@ -82,7 +105,7 @@ def _nouveaux_codes(u):
 
 def _destination_apres():
     cible = session.pop('2fa_suite', None)
-    if cible and cible.startswith('/') and not cible.startswith('//'):
+    if destination_valable(cible):
         return cible
     return url_for('dashboard')
 
@@ -101,8 +124,10 @@ def garde_double_auth():
             return None
         if json_attendu:
             return jsonify({'erreur': 'double_authentification_requise'}), 401
-        if request.method == 'GET':
+        if request.method == 'GET' and _navigation_de_page() and destination_valable(request.full_path):
             session['2fa_suite'] = request.full_path.rstrip('?')
+        elif request.method == 'GET' and not _navigation_de_page():
+            return ('', 401)          # ressource demandée avant le code : pas de redirection, destination conservée
         return redirect(url_for('securite_compte.verification'))
     if obligatoire_pour(current_user) and not session.get('auth_sso'):   # SSO : MFA assurée par le fournisseur
         if json_attendu:
