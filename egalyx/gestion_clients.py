@@ -342,5 +342,117 @@ def synchroniser_client(client_id):
     return jsonify(success=True, message=f'Permissions de {len(users)} utilisateur(s) synchronisées.')
 
 
+# ---------------------------------------------------------------- modification d'un client (super admin)
+SOUS_DOMAINES_RESERVES = {'www', 'api', 'admin', 'app', 'mail', 'smtp', 'ftp', 'static', 'cdn', 'egalyx', 'support',
+                          'aide', 'help', 'status', 'login', 'auth', 'super-admin', 'localhost'}
+RE_SOUS_DOMAINE = __import__('re').compile(r'^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$')
+
+
+def verifier_sous_domaine(valeur, client_id):
+    """Renvoie (valeur normalisée ou None, message d'erreur ou None)."""
+    from models import Client, EnvironnementClient
+    v = (valeur or '').strip().lower()
+    if v.startswith(('http://', 'https://')):
+        v = v.split('://', 1)[1]
+    v = v.split('.')[0] if '.' in v else v
+    if not v:
+        return None, None
+    if not RE_SOUS_DOMAINE.match(v):
+        return None, ('Sous-domaine invalide : lettres minuscules, chiffres et tirets uniquement (sans accent ni espace), '
+                      'sans tiret au début ni à la fin.')
+    if v in SOUS_DOMAINES_RESERVES:
+        return None, f'Le sous-domaine « {v} » est réservé.'
+    autre = Client.query.filter(Client.sous_domaine == v, Client.id != client_id).first()
+    env = EnvironnementClient.query.filter(EnvironnementClient.sous_domaine == v,
+                                           EnvironnementClient.client_id != client_id).first()
+    if autre is not None or env is not None:
+        return None, f'Le sous-domaine « {v} » est déjà utilisé par un autre client.'
+    return v, None
+
+
+def modifier_client(id):
+    """Formulaire « Modifier le client » de la fiche (onglet Configuration).
+
+    Corrige l'ancienne version, qui désactivait le client à chaque enregistrement (champ is_active absent du
+    formulaire), ignorait le sous-domaine et écrasait la formule par une liste figée. L'activation passe par
+    Suspendre / Réactiver, la formule par « Changer formule » (modules et limites synchronisés).
+    """
+    from flask import flash, redirect, url_for
+    from models import db, Client, EnvironnementClient, JournalActiviteClient
+    client = Client.query.get_or_404(id)
+    retour = redirect(url_for('super_admin_client_detail', id=id) + '#configuration')
+    f = request.form
+    erreurs = []
+    nom = ' '.join((f.get('nom') or client.nom or '').split())[:200]
+    if not nom:
+        erreurs.append('Le nom du client est obligatoire.')
+    email = (f.get('contact_email') or '').strip()[:120]
+    if email and not __import__('re').match(r'^[^@\s]+@[^@\s]+\.[^@\s]+$', email):
+        erreurs.append('Adresse e-mail de contact invalide.')
+    sous_domaine, err = verifier_sous_domaine(f.get('sous_domaine'), client.id)
+    if err:
+        erreurs.append(err)
+    domaine = (f.get('domaine') or '').strip().lower()[:200] or None
+    if domaine and Client.query.filter(Client.domaine == domaine, Client.id != client.id).first():
+        erreurs.append(f'Le domaine « {domaine} » est déjà utilisé par un autre client.')
+    limites = {}
+    for champ in ('max_utilisateurs', 'max_risques', 'max_audits'):
+        v = (f.get(champ) or '').strip()
+        if v:
+            try:
+                limites[champ] = max(1, int(v))
+            except ValueError:
+                erreurs.append(f'Valeur invalide pour {champ.replace("max_", "le nombre maximal de ")}.')
+    if erreurs:
+        for e in erreurs:
+            flash(e, 'danger')
+        return retour
+
+    avant = {k: getattr(client, k, None) for k in ('nom', 'contact_nom', 'contact_email', 'contact_telephone',
+                                                   'description', 'domaine', 'sous_domaine', 'max_utilisateurs',
+                                                   'max_risques', 'max_audits')}
+    client.nom = nom
+    if 'contact_nom' in f:
+        client.contact_nom = (f.get('contact_nom') or '').strip()[:100] or None
+    if 'contact_email' in f:
+        client.contact_email = email or None
+    if 'contact_telephone' in f:
+        client.contact_telephone = (f.get('contact_telephone') or '').strip()[:20] or None
+    if 'description' in f:
+        client.description = (f.get('description') or '').strip() or None
+    if 'domaine' in f:
+        client.domaine = domaine
+    if 'sous_domaine' in f:
+        client.sous_domaine = sous_domaine
+        for env in EnvironnementClient.query.filter_by(client_id=client.id).all():
+            env.sous_domaine = sous_domaine
+            if sous_domaine:
+                env.url_acces = f'https://{sous_domaine}.egalyx.com'
+    for k, v in limites.items():
+        setattr(client, k, v)
+    client.updated_at = datetime.utcnow()
+    apres = {k: getattr(client, k, None) for k in avant}
+    modifs = {k: {'avant': avant[k], 'apres': apres[k]} for k in avant if avant[k] != apres[k]}
+    try:
+        if modifs:
+            db.session.add(JournalActiviteClient(client_id=client.id, utilisateur_id=current_user.id,
+                                                 action='modification_client',
+                                                 details={'par': current_user.username, 'modifications': modifs},
+                                                 ip_address=request.remote_addr))
+        db.session.commit()
+    except Exception as e:  # noqa: BLE001
+        db.session.rollback()
+        flash(f'Enregistrement impossible : {e}', 'danger')
+        return retour
+    if not modifs:
+        flash('Aucune modification.', 'info')
+    else:
+        lib = {'nom': 'nom', 'contact_nom': 'contact', 'contact_email': 'e-mail', 'contact_telephone': 'téléphone',
+               'description': 'description', 'domaine': 'domaine', 'sous_domaine': 'sous-domaine',
+               'max_utilisateurs': 'limite utilisateurs', 'max_risques': 'limite risques', 'max_audits': 'limite audits'}
+        flash('Client mis à jour : ' + ', '.join(lib[k] for k in modifs) + '.', 'success')
+    return retour
+
+
 def enregistrer(app):
     app.register_blueprint(bp)
