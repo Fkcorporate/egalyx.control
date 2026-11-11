@@ -22,6 +22,7 @@ ETAPES = [
     ('Super admin : supprimer / réinitialiser / exporter un client', 'gestion_clients.py', []),
     ('Recommandations : suppression de l\'historique', 'historique_recommandations.py', []),
     ('Connexion en anglais avec double authentification', 'connexion_langue.py', []),
+    ('Incidents et signalements : droits, délais, conversion, lien public', 'incidents_signalements.py', []),
     ('KRI : modules du client contre formule ; scripts des pages intacts', 'kri_formule.py', []),
     ('Sécurité des décisions par rôle', 'securite.py', []),
     ('Pages sans identifiant, 6 rôles', 'balayage.py', ['superadmin', 'admin_a', 'gestionnaire', 'validateur', 'operateur', 'lecteur']),
