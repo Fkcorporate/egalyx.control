@@ -113,6 +113,12 @@ colonnes du PCA et de la qualité et la table `activations_pca` sont ajoutées a
 - **Exporter** : un zip, une table par fichier JSON, sans mots de passe ni secrets 2FA. À faire avant une suppression.
 - Un super admin ne peut pas supprimer l'organisation de son propre compte.
 
+**Connexion** : en anglais, après le code de sécurité, on était renvoyé sur le fichier de traduction
+(`/langue/dictionnaire-en.js`) au lieu de la page demandée : le chargement de ce fichier par la page du code était pris
+pour une navigation et remplaçait la destination. Désormais seules les vraies pages internes sont retenues comme
+destination (ni script, ni image, ni API, ni autre site), et le dictionnaire se charge librement. Le paramètre `next`
+de la connexion par mot de passe suit la même règle : il acceptait aussi une adresse externe (redirection ouverte).
+
 **Registre des recommandations** : sur la fiche, le gestionnaire des recommandations (de l'origine concernée) peut
 supprimer une ligne d'historique (et sa preuve jointe) ou vider tout l'historique. L'avancement et le statut ne changent
 pas ; la suppression reste inscrite au journal d'activité.

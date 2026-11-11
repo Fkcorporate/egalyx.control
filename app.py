@@ -105586,6 +105586,9 @@ def login_fullscreen():
             
             login_user(user, remember=form.remember_me.data)
             next_page = request.args.get('next')
+            from egalyx.double_auth import destination_valable as _dest_ok
+            if not _dest_ok(next_page):
+                next_page = None   # page interne seulement (ni script, ni autre site)
             
             log_activity(user.id, 'connexion', f"Utilisateur {user.username} connecté")
             
