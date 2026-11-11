@@ -151,14 +151,64 @@ from egalyx import courriel
 envoyes = []
 courriel.est_configure = lambda: True
 courriel.envoyer = lambda dest, sujet, texte, **k: envoyes.append((dest[0], sujet)) or True
+def incidents_en_retard(*nums):
+    with A.app.app_context():
+        for k in nums:
+            db.session.add(M.Incident(reference=f'INC-X{k}', titre=f'Ancien incident {k}', client_id=1, statut='ouvert',
+                                      gravite='moyenne', created_by=ids['gestionnaire'],
+                                      responsable_resolution_id=ids['gestionnaire'], sla_heures=24,
+                                      created_at=datetime.utcnow() - timedelta(days=60),
+                                      date_detection=datetime.utcnow() - timedelta(days=60)))
+        db.session.commit()
+        from egalyx.incidents import verifier_delais
+        n = verifier_delais()
+    time.sleep(0.7)
+    return n
+
+
+with A.app.app_context():
+    mail_g = db.session.get(M.User, ids['gestionnaire']).email.lower()
+n = incidents_en_retard(2)
+verif('Par défaut (non réglé) : délai dépassé notifié dans l\'application, aucun e-mail', n >= 1 and not envoyes, str(envoyes[:3]))
+
+r, t = go('lecteur', 'get', '/incidents/alertes/')
+verif('Lecteur : réglages des alertes refusés', r.status_code in (302, 403), str(r.status_code))
+r, t = go('admin_a', 'get', '/incidents/alertes/')
+verif('Admin : page des réglages affichée', r.status_code == 200 and 'Qui reçoit' in t, f'{r.status_code} {socle.cause(A)}')
+r, t = go('gestionnaire', 'get', '/incidents')
+verif('Bouton « Alertes e-mail » sur la liste des incidents', '/incidents/alertes/' in t, str(r.status_code))
+r, _ = go('admin_a', 'post', '/incidents/alertes/', data={'actif': '1', 'ev_delai': '1', 'ev_escalade': '1',
+                                                         'role_responsable': '1',
+                                                         'adresses': 'risques@egalyx-recette.fr, pas-une-adresse'})
+with A.app.app_context():
+    from egalyx.alertes_incidents import reglages
+    rg = reglages(1)
+verif('Réglages enregistrés (adresse invalide écartée)', rg['actif'] and rg['roles'] == ['responsable']
+      and rg['adresses'] == ['risques@egalyx-recette.fr'], str(rg))
+
+envoyes.clear()
+incidents_en_retard(3, 4)
+verif('Activé : un e-mail récapitulatif au responsable', sum(1 for d, s in envoyes if d == mail_g) == 1
+      and any(d == mail_g and 'incidents ont dépassé' in s for d, s in envoyes), str(envoyes))
+verif('Adresse supplémentaire destinataire', any(d == 'risques@egalyx-recette.fr' for d, s in envoyes), str(envoyes))
+envoyes.clear()
 with A.app.app_context():
     from egalyx.incidents import verifier_delais
     verifier_delais()
-time.sleep(1)
-with A.app.app_context():
-    mail_g = db.session.get(M.User, ids['gestionnaire']).email
-verif('Délai dépassé : e-mail envoyé aux personnes concernées', any(d == mail_g and 'Délai dépassé' in s for d, s in envoyes),
-      str(envoyes[:3]))
+time.sleep(0.5)
+verif('Deuxième vérification : aucun nouvel e-mail (une alerte par incident)', not envoyes, str(envoyes))
+
+r, _ = go('gestionnaire', 'post', '/incidents/alertes/me-desabonner', data={})
+envoyes.clear()
+incidents_en_retard(5)
+verif('Désabonné : plus d\'e-mail pour lui, l\'adresse supplémentaire reste', not any(d == mail_g for d, s in envoyes)
+      and any(d == 'risques@egalyx-recette.fr' for d, s in envoyes), str(envoyes))
+go('gestionnaire', 'post', '/incidents/alertes/me-desabonner', data={'reprendre': '1'})
+
+go('admin_a', 'post', '/incidents/alertes/', data={'ev_delai': '1', 'role_responsable': '1'})
+envoyes.clear()
+incidents_en_retard(6)
+verif('Désactivé : plus aucun e-mail', not envoyes, str(envoyes))
 
 print(f'\n{sum(res)}/{len(res)} vérifications réussies')
 sys.exit(0 if all(res) else 1)

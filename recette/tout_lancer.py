@@ -24,6 +24,8 @@ ETAPES = [
     ('Connexion en anglais avec double authentification', 'connexion_langue.py', []),
     ('Incidents et signalements : droits, délais, conversion, lien public', 'incidents_signalements.py', []),
     ('Dispositifs et plans d\'action des risques ; exports et e-mails des incidents', 'maitrise_plans.py', []),
+    ('Démarrage en une semaine : bibliothèque, import Excel, jalons', 'demarrage_import.py', []),
+    ('Identité de l\'organisation : nom affiché et logo', 'identite.py', []),
     ('KRI : modules du client contre formule ; scripts des pages intacts', 'kri_formule.py', []),
     ('Sécurité des décisions par rôle', 'securite.py', []),
     ('Pages sans identifiant, 6 rôles', 'balayage.py', ['superadmin', 'admin_a', 'gestionnaire', 'validateur', 'operateur', 'lecteur']),
