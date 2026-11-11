@@ -1,0 +1,99 @@
+{% extends "base.html" %}
+{% import "_macros/page.html" as pg %}
+{% block title %}Aperçu de l'import{% endblock %}
+{% block styles %}{{ pg.styles() }}<style>
+  .imp-anom { color: var(--bs-danger); font-size: .8rem; }
+  .imp-table td { vertical-align: top; }
+  .imp-ignoree { opacity: .55; }
+  .imp-note { display: inline-flex; width: 1.6rem; height: 1.6rem; border-radius: 6px; align-items: center; justify-content: center; font-weight: 700; font-size: .8rem; background: var(--bs-tertiary-bg); }
+</style>{% endblock %}
+{% block content %}
+<div class="container-fluid">
+  {{ pg.entete('Aperçu de l\'import', 'fa-file-excel', d.nom_fichier ~ ' — feuille « ' ~ d.feuille ~ ' », en-tête en ligne ' ~ (d.entete + 1), retour=url_for('import_carto.page')) }}
+  <div class="row g-2 mb-3">
+    <div class="col-6 col-md">{{ pg.kpi('Risques à créer', resume.risques, 'primary') }}</div>
+    <div class="col-6 col-md">{{ pg.kpi('Dispositifs de maîtrise', resume.controles) }}</div>
+    <div class="col-6 col-md">{{ pg.kpi('Doublons', resume.doublons, 'warning' if resume.doublons else none) }}</div>
+    <div class="col-6 col-md">{{ pg.kpi('Lignes avec anomalie', resume.anomalies, 'danger' if resume.anomalies else none) }}</div>
+  </div>
+  <form method="post" id="formImport">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    {% call pg.carte('Correspondance des colonnes', aide='Corrigez une colonne mal reconnue puis cliquez sur « Actualiser l\'aperçu ».') %}
+      <div class="row g-2">
+        {% if d.feuilles|length > 1 %}
+        <div class="col-md-3"><label class="form-label small mb-1" for="feuille">Feuille</label>
+          <select class="form-select form-select-sm" id="feuille" name="feuille">{% for f in d.feuilles %}<option {% if f == d.feuille %}selected{% endif %}>{{ f }}</option>{% endfor %}</select></div>
+        {% endif %}
+        <div class="col-md-2"><label class="form-label small mb-1" for="entete">Ligne d'en-tête</label>
+          <input class="form-control form-control-sm" type="number" min="1" max="{{ table|length }}" id="entete" name="entete" value="{{ d.entete + 1 }}"></div>
+      </div>
+      <div class="row g-2 mt-1">
+        {% for code, libelle, _s in champs %}
+        <div class="col-md-3 col-lg-2"><label class="form-label small mb-1" for="col_{{ code }}">{{ libelle }}</label>
+          <select class="form-select form-select-sm {% if code in d.mapping %}border-success{% endif %}" id="col_{{ code }}" name="col_{{ code }}">
+            <option value="">— aucune —</option>
+            {% for e in entetes %}<option value="{{ loop.index0 }}" {% if d.mapping.get(code) == loop.index0 %}selected{% endif %}>{{ e or ('Colonne ' ~ loop.index) }}</option>{% endfor %}
+          </select></div>
+        {% endfor %}
+      </div>
+      {% if maxi.impact or maxi.probabilite %}<div class="pg-second mt-2">Échelle détectée :
+        {% if maxi.impact %}impact sur {{ maxi.impact|int }}{% endif %}{% if maxi.probabilite %}, probabilité sur {{ maxi.probabilite|int }}{% endif %} — ramenées sur 1 à 5 (indiquez l'échelle dans le titre de colonne, par exemple « Impact (1-4) », si elle diffère).</div>{% endif %}
+      <button class="btn btn-sm btn-outline-secondary mt-2" name="action" value="actualiser"><i class="fas fa-rotate me-1"></i>Actualiser l'aperçu</button>
+    {% endcall %}
+
+    {% call pg.carte('Ce qui sera créé', aide=(total > 200) and ('200 premières lignes sur ' ~ total) or none) %}
+      {% if 'intitule' not in d.mapping %}
+        <div class="alert alert-warning small mb-0">Aucune colonne n'a été reconnue comme intitulé du risque : choisissez-la ci-dessus.</div>
+      {% elif not lignes %}
+        {{ pg.vide('Aucune ligne de risque sous l\'en-tête.') }}
+      {% else %}
+      <div class="table-responsive"><table class="pg-table imp-table">
+        <thead><tr><th>Ligne</th><th>Réf.</th><th>Risque</th><th class="text-center">I × P</th><th>Dispositifs</th><th>Responsable</th><th>Remarques</th></tr></thead>
+        <tbody>
+        {% for l in lignes %}
+          <tr class="{{ 'imp-ignoree' if l.ignoree or l.doublon }}">
+            <td class="text-secondary">{{ l.ligne }}</td>
+            <td class="small">{{ l.reference or '' }}</td>
+            <td>{% if l.intitule %}<strong>{{ l.intitule }}</strong>{% endif %}<div class="pg-second">{{ l.categorie or '' }}{% if l.processus %} · {{ l.processus }}{% endif %}</div></td>
+            <td class="text-center text-nowrap">{% if not l.ignoree %}<span class="imp-note">{{ l.impact or '?' }}</span> × <span class="imp-note">{{ l.probabilite or '?' }}</span>{% endif %}</td>
+            <td class="small">{% if l.controles %}<ul class="mb-0 ps-3">{% for c in l.controles %}<li>{{ c }}</li>{% endfor %}</ul>{% endif %}</td>
+            <td class="small">{% if l.responsable %}{{ l.responsable }}{% if l.responsable_id %} <i class="fas fa-check text-success" title="Utilisateur reconnu"></i>{% endif %}{% endif %}</td>
+            <td>{% if l.doublon %}<span class="badge text-bg-warning">Doublon : {{ l.doublon }}</span>{% endif %}
+              {% for a in l.anomalies %}<div class="imp-anom">{{ a }}</div>{% endfor %}
+              {% if not l.ignoree and (not l.impact or not l.probabilite) %}<div class="pg-second">Cotation manquante : 3 × 3 provisoire, à revoir à l'évaluation</div>{% endif %}</td>
+          </tr>
+        {% endfor %}
+        </tbody>
+      </table></div>
+      {% endif %}
+    {% endcall %}
+
+    {% call pg.carte('Importer') %}
+      <div class="d-flex gap-2 flex-wrap align-items-end">
+        <div><label class="form-label small mb-1" for="carto">Dans la cartographie</label>
+          <select class="form-select form-select-sm" id="carto" name="cartographie_id" style="min-width: 300px;">
+            <option value="nouvelle" selected>➕ Nouvelle cartographie</option>
+            {% for c in cartos %}<option value="{{ c.id }}">{{ c.nom }}</option>{% endfor %}</select></div>
+        <div id="blocNouvelle"><label class="form-label small mb-1" for="nouvelle_nom">Nom</label>
+          <input class="form-control form-control-sm" id="nouvelle_nom" name="nouvelle_nom" value="{{ nom_defaut }}" style="min-width: 260px;"></div>
+        <div class="form-check mb-1"><input class="form-check-input" type="checkbox" id="creer_dispositifs" name="creer_dispositifs" value="1" checked>
+          <label class="form-check-label small" for="creer_dispositifs">Créer les dispositifs de maîtrise</label></div>
+        <input type="hidden" name="ignorer_doublons" value="0">
+        <div class="form-check mb-1"><input class="form-check-input" type="checkbox" id="ignorer_doublons" name="ignorer_doublons" value="1" checked>
+          <label class="form-check-label small" for="ignorer_doublons">Ignorer les doublons</label></div>
+        <button class="btn btn-sm btn-primary" name="action" value="importer" {% if 'intitule' not in d.mapping %}disabled{% endif %}>
+          <i class="fas fa-file-import me-1"></i>Importer</button>
+      </div>
+      <div class="pg-second mt-2">Impact et probabilité sont des valeurs de départ ; les dispositifs sont créés « non évalués ». Fichier conservé 24 h le temps de l'import, puis supprimé.</div>
+    {% endcall %}
+  </form>
+</div>
+{% endblock %}
+{% block scripts %}
+<script>
+  (function () {
+    var sel = document.getElementById('carto'), bloc = document.getElementById('blocNouvelle');
+    if (sel && bloc) { sel.addEventListener('change', function () { bloc.style.display = sel.value === 'nouvelle' ? '' : 'none'; }); }
+  })();
+</script>
+{% endblock %}

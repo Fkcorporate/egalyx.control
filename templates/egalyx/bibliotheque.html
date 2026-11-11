@@ -8,7 +8,11 @@
 </style>{% endblock %}
 {% block content %}
 <div class="container-fluid">
-  {{ pg.entete('Bibliothèque de risques', 'fa-book-open', '84 risques types rédigés par secteur, avec leurs causes, conséquences et référentiels — à importer dans vos cartographies') }}
+  {{ pg.entete('Bibliothèque de risques', 'fa-book-open', '84 risques types et 190 contrôles types rédigés par secteur — pour démarrer une cartographie en quelques minutes') }}
+  {% if url_exists is defined and url_exists('import_carto.page') %}
+  <div class="alert alert-light border small d-flex gap-2 align-items-center"><i class="fas fa-file-excel text-success"></i>
+    <div>Vous avez déjà une cartographie dans Excel ? <a href="{{ url_for('import_carto.page') }}">Importez-la telle quelle</a> : les colonnes sont reconnues automatiquement.</div></div>
+  {% endif %}
   <div class="bib-secteurs">
     {% for code, s in secteurs.items() %}
     <a class="btn btn-sm {{ 'btn-primary' if code == secteur else 'btn-outline-secondary' }}" href="{{ url_for('bibliotheque.page', secteur=code) }}">{{ s.nom }} <span class="badge text-bg-light ms-1">{{ s.risques|length }}</span></a>
@@ -24,7 +28,9 @@
         {% for r in risques %}
           <tr>
             <td><input class="form-check-input choix" type="checkbox" name="risques" value="{{ r.index }}" checked aria-label="{{ r.intitule }}"></td>
-            <td><strong>{{ r.intitule }}</strong><div class="pg-second">{{ r.categorie }}</div></td>
+            <td><strong>{{ r.intitule }}</strong><div class="pg-second">{{ r.categorie }}</div>
+              {% if r.controles %}<details class="small mt-1"><summary class="text-secondary">{{ r.controles|length }} contrôle(s) type(s)</summary>
+                <ul class="mb-0 ps-3">{% for c in r.controles %}<li>{{ c.nom }} <span class="text-secondary">· {{ c.type }}, {{ c.frequence|lower }}</span></li>{% endfor %}</ul></details>{% endif %}</td>
             <td class="small">{{ r.cause }}</td>
             <td class="small">{{ r.consequences }}</td>
             <td class="text-center text-nowrap"><span class="bib-note">{{ r.impact }}</span> × <span class="bib-note">{{ r.probabilite }}</span>
@@ -36,25 +42,29 @@
       </table></div>
     {% endcall %}
     {% call pg.carte('Importer la sélection') %}
-      {% if cartos %}
       <div class="d-flex gap-2 flex-wrap align-items-end">
         <div><label class="form-label small mb-1" for="carto">Dans la cartographie</label>
           <select class="form-select form-select-sm" id="carto" name="cartographie_id" required style="min-width: 320px;">
-            {% for c in cartos %}<option value="{{ c.id }}">{{ c.nom }}</option>{% endfor %}</select></div>
+            <option value="nouvelle" {% if not cartos %}selected{% endif %}>➕ Nouvelle cartographie</option>
+            {% for c in cartos %}<option value="{{ c.id }}" {% if loop.first %}selected{% endif %}>{{ c.nom }}</option>{% endfor %}</select></div>
+        <div id="blocNouvelle" {% if cartos %}style="display:none"{% endif %}><label class="form-label small mb-1" for="nouvelle_nom">Nom</label>
+          <input class="form-control form-control-sm" id="nouvelle_nom" name="nouvelle_nom" value="Cartographie {{ secteurs[secteur].nom }}" style="min-width: 260px;"></div>
+        <div class="form-check mb-1"><input class="form-check-input" type="checkbox" id="avec_controles" name="avec_controles" value="1" checked>
+          <label class="form-check-label small" for="avec_controles">Ajouter aussi les contrôles types</label></div>
         <button class="btn btn-sm btn-primary"><i class="fas fa-file-import me-1"></i>Importer <span id="nbChoix">{{ risques|length }}</span> risque(s)</button>
       </div>
-      <div class="pg-second mt-2">Les risques déjà présents dans la cartographie (même intitulé) sont ignorés. Impact et probabilité sont des valeurs de départ :
-        l’évaluation (brute et nette) reste à faire par les propriétaires de risques.</div>
-      {% else %}
-      <p class="small mb-0">Créez d’abord une cartographie, puis revenez importer ces risques.
-        <a href="{{ url_for('liste_cartographies') }}">Cartographies</a></p>
-      {% endif %}
+      <div class="pg-second mt-2">Les risques déjà présents dans la cartographie (même intitulé) sont ignorés. Impact et probabilité sont des valeurs de départ ;
+        les contrôles types sont créés « non évalués » : désignez leurs responsables et mesurez leur efficacité.</div>
     {% endcall %}
   </form>
 </div>
 {% endblock %}
 {% block scripts %}
 <script>
+  (function () {
+    var sel = document.getElementById('carto'), bloc = document.getElementById('blocNouvelle');
+    if (sel && bloc) { sel.addEventListener('change', function () { bloc.style.display = sel.value === 'nouvelle' ? '' : 'none'; }); }
+  })();
   (function () {
     var cases = document.querySelectorAll('.choix'), tout = document.getElementById('tout'), nb = document.getElementById('nbChoix');
     function maj() { var n = Array.prototype.filter.call(cases, function (c) { return c.checked; }).length; if (nb) nb.textContent = n; tout.checked = n === cases.length; tout.indeterminate = n > 0 && n < cases.length; }

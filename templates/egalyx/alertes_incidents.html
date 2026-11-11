@@ -1,0 +1,45 @@
+{% extends "base.html" %}
+{% import "_macros/page.html" as pg %}
+{% block title %}Alertes e-mail des incidents{% endblock %}
+{% block styles %}{{ pg.styles() }}{% endblock %}
+{% block content %}
+<div class="container" style="max-width: 860px;">
+  {{ pg.entete('Alertes e-mail des incidents', 'fa-envelope', 'Les notifications dans l\'application ne changent pas : ces réglages décident seulement des copies envoyées par e-mail', retour=url_for('liste_incidents')) }}
+  {% if not smtp %}<div class="alert alert-warning small"><i class="fas fa-triangle-exclamation me-1"></i>L'envoi d'e-mails n'est pas configuré sur le serveur : aucun e-mail ne partira, quels que soient ces réglages.</div>{% endif %}
+  <form method="post">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    {% call pg.carte('Envoi') %}
+      <div class="form-check form-switch">
+        <input class="form-check-input" type="checkbox" role="switch" id="actif" name="actif" value="1" {% if r.actif %}checked{% endif %}>
+        <label class="form-check-label" for="actif"><strong>Envoyer les alertes des incidents par e-mail</strong></label>
+      </div>
+      <div class="pg-second mt-1">Désactivé : personne ne reçoit d'e-mail ; les alertes restent dans la cloche de notifications et dans « Ma semaine ».</div>
+    {% endcall %}
+    {% call pg.carte('Quels événements') %}
+      {% for code, libelle, aide in evenements %}
+      <div class="form-check mb-1"><input class="form-check-input" type="checkbox" id="ev_{{ code }}" name="ev_{{ code }}" value="1" {% if code in r.evenements %}checked{% endif %}>
+        <label class="form-check-label" for="ev_{{ code }}">{{ libelle }} <span class="pg-second">— {{ aide }}</span></label></div>
+      {% endfor %}
+    {% endcall %}
+    {% call pg.carte('Qui reçoit l\'e-mail') %}
+      {% for code, libelle in roles %}
+      <div class="form-check mb-1"><input class="form-check-input" type="checkbox" id="role_{{ code }}" name="role_{{ code }}" value="1" {% if code in r.roles %}checked{% endif %}>
+        <label class="form-check-label" for="role_{{ code }}">{{ libelle }}</label></div>
+      {% endfor %}
+      <label class="form-label small mt-2 mb-1" for="adresses">Adresses supplémentaires (boîte du risk manager, astreinte…)</label>
+      <textarea class="form-control form-control-sm" id="adresses" name="adresses" rows="2" placeholder="risques@exemple.com, astreinte@exemple.com">{{ r.adresses|join(', ') }}</textarea>
+      <div class="pg-second mt-1">20 adresses au maximum, séparées par une virgule ou un retour à la ligne. Une seule alerte par incident ; les délais dépassés sont regroupés en un e-mail.</div>
+    {% endcall %}
+    <button class="btn btn-primary btn-sm"><i class="fas fa-save me-1"></i>Enregistrer</button>
+  </form>
+  {% call pg.carte('Personnes désabonnées', aide='Chacun peut arrêter les e-mails pour lui-même avec le lien présent en bas de chaque alerte.') %}
+    {% if desabonnes %}<ul class="small mb-2">{% for u in desabonnes %}<li>{{ u.username }} <span class="text-secondary">{{ u.email }}</span></li>{% endfor %}</ul>
+    {% else %}<div class="pg-second mb-2">Personne.</div>{% endif %}
+    <form method="post" action="{{ url_for('alertes_incidents.desabonner') }}">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      {% if moi_desabonne %}<input type="hidden" name="reprendre" value="1"><button class="btn btn-sm btn-outline-success">Recevoir de nouveau ces e-mails moi-même</button>
+      {% else %}<button class="btn btn-sm btn-outline-secondary">Ne plus recevoir ces e-mails moi-même</button>{% endif %}
+    </form>
+  {% endcall %}
+</div>
+{% endblock %}
