@@ -66,6 +66,32 @@ Autres corrections :
 
 **Évaluation triphasée** (et écran d'évaluation de l'opérateur) : les couleurs de la maîtrise étaient inversées (« Insuffisant » en vert). Elles vont maintenant du rouge (1 Insuffisant) au vert (5 Excellent), y compris dans les listes de choix des phases de validation et de confirmation.
 
+## Dispositifs de maîtrise et plans d'action des risques (v6.6)
+
+**Mise à jour** : copier les fichiers (script `installer_mise_a_jour.py`), redémarrer. Aucun changement de base.
+
+- **Droits** (`egalyx/maitrise.py`) : deux permissions exigées n'existaient nulle part (« can_manage_plans »,
+  « can_manage_controls ») ; seul le créateur pouvait modifier un plan ou un dispositif ; tout membre, opérateurs
+  compris, lisait dispositifs, plans et statistiques. Désormais :
+  dispositifs — voir = droits de la cartographie ou responsable / créateur ; vérifications et documents = « Gérer les
+  risques » ou responsable du dispositif ; créer, modifier, évaluer, statut, archiver = « Gérer les risques » ;
+  plans des risques (et plans indépendants, sous-actions) — voir = « Voir / Gérer les plans d'action » ou « Gérer les
+  risques » ou responsable / créateur ; statut, avancement, sous-actions = gestionnaires ou responsable ; réattribuer,
+  archiver, supprimer = « Gérer les plans d'action » ou « Gérer les risques ».
+  Programmes annuels de contrôle (/controle/programme…) : droits du contrôle interne N2 (même permission fantôme avant).
+- **Vérifications** : « Non conforme » −2 points d'efficacité, « À corriger » / « À améliorer » −1 (minimum 1), avec
+  historique ; niveau de maîtrise suggéré recalculé sur les évaluations non confirmées du risque (alerte d'écart).
+  Prochaine vérification selon la fréquence (3 / 6 / 12 mois) au lieu de 6 mois pour tous ; 30 jours après un échec.
+- **« Ma semaine »** : dispositifs à vérifier (responsable ; gestionnaires des risques pour ceux sans responsable).
+- **Corrigé** : page d'un plan sans risque (issu d'un audit) en erreur ; comparatif des dispositifs
+  (/dispositifs/benchmark et son rapport) en erreur à chaque ouverture (méthode inexistante) ; 5 adresses des plans
+  des risques déclarées deux fois (versions mortes retirées).
+- **« ISO 31010 »** retiré : la norme ne prescrit pas la formule 60 % efficacité / 40 % couverture ; présentée comme
+  formule Egalyx indicative.
+- **Incidents** : coût estimé, coût réel, temps d'arrêt et dépassement de délai dans les exports Excel et CSV ;
+  copie par e-mail des alertes (délai dépassé, escalade) si le SMTP est configuré (`EGALYX_INCIDENTS_EMAIL=0` pour
+  désactiver ; `EGALYX_URL_PUBLIQUE` pour le lien dans l'e-mail).
+
 ## Incidents et signalements (v6.5)
 
 **Mise à jour** : sauvegarder la base, copier les fichiers, redémarrer. Au démarrage : colonnes ajoutées

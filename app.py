@@ -32055,7 +32055,7 @@ def archiver_dispositif(dispositif_id):
         return redirect(url_for('detail_dispositif', dispositif_id=dispositif_id))
     
     # Vérifier les permissions
-    if not current_user.has_permission('can_archive_data'):
+    if not __import__('egalyx.maitrise', fromlist=['droit']).droit():
         flash('Vous n\'avez pas la permission d\'archiver', 'error')
         return redirect(url_for('detail_dispositif', dispositif_id=dispositif_id))
     
@@ -32082,7 +32082,7 @@ def desarchiver_dispositif(dispositif_id):
         return redirect(url_for('liste_dispositifs_risque', risque_id=dispositif.risque_id))
     
     # Vérifier les permissions
-    if not current_user.has_permission('can_archive_data'):
+    if not __import__('egalyx.maitrise', fromlist=['droit']).droit():
         flash('Vous n\'avez pas la permission de désarchiver', 'error')
         return redirect(url_for('liste_dispositifs_risque', risque_id=dispositif.risque_id))
     
@@ -32104,7 +32104,7 @@ def dispositifs_archives():
     """Lister tous les dispositifs de maîtrise archivés"""
     
     # Vérifier la permission
-    if not current_user.has_permission('can_archive_data'):
+    if not __import__('egalyx.maitrise', fromlist=['droit']).droit():
         flash('Permission non autorisée', 'error')
         return redirect(url_for('dashboard'))
     
@@ -32558,8 +32558,7 @@ def modifier_plan_action_risque(plan_id):
         return redirect(url_for('detail_plan_action_risque', plan_id=plan_id))
     
     # Vérifier les permissions
-    if (current_user.id != plan_action.created_by and 
-        not current_user.has_permission('can_manage_plans')):
+    if (not __import__('egalyx.maitrise', fromlist=['droit']).droit()):
         flash('Vous n\'êtes pas autorisé à modifier ce plan d\'action', 'error')
         return redirect(url_for('detail_plan_action_risque', plan_id=plan_id))
     
@@ -32815,8 +32814,7 @@ def nouveau_sous_action_risque(plan_id):
         return redirect(url_for('detail_plan_action_risque', plan_id=plan_id))
     
     # Vérifier les permissions
-    if (current_user.id != plan_action.created_by and 
-        not current_user.has_permission('can_manage_plans')):
+    if (not __import__('egalyx.maitrise', fromlist=['droit']).droit()):
         flash('Vous n\'êtes pas autorisé à ajouter des sous-actions', 'error')
         return redirect(url_for('detail_plan_action_risque', plan_id=plan_id))
     
@@ -32886,8 +32884,7 @@ def archiver_plan_risque(plan_id):
         return redirect(url_for('detail_plan_action_risque', plan_id=plan_id))
     
     # Vérifier les permissions
-    if (current_user.id != plan_action.created_by and 
-        not current_user.has_permission('can_manage_plans')):
+    if (not __import__('egalyx.maitrise', fromlist=['droit']).droit()):
         flash('Vous n\'êtes pas autorisé à archiver ce plan', 'error')
         return redirect(url_for('detail_plan_action_risque', plan_id=plan_id))
     
@@ -32962,8 +32959,7 @@ def desarchiver_plan_risque(plan_id):
         return redirect(url_for('detail_plan_action_risque', plan_id=plan_id))
     
     # Vérifier les permissions
-    if (current_user.id != plan_action.created_by and 
-        not current_user.has_permission('can_manage_plans')):
+    if (not __import__('egalyx.maitrise', fromlist=['droit']).droit()):
         flash('Vous n\'êtes pas autorisé à désarchiver ce plan', 'error')
         return redirect(url_for('detail_plan_action_risque', plan_id=plan_id))
     
@@ -34541,8 +34537,7 @@ def changer_statut_dispositif(dispositif_id):
         return redirect(url_for('detail_dispositif', dispositif_id=dispositif_id))
     
     # Vérifier les permissions
-    if (current_user.id != dispositif.created_by and 
-        not current_user.has_permission('can_manage_controls')):
+    if (not __import__('egalyx.maitrise', fromlist=['droit']).droit()):
         flash('Vous n\'êtes pas autorisé à modifier ce dispositif', 'error')
         return redirect(url_for('detail_dispositif', dispositif_id=dispositif_id))
     
@@ -35381,8 +35376,7 @@ def changer_statut_plan_risque(plan_id):
         return redirect(url_for('detail_plan_action_risque', plan_id=plan_id))
     
     # Vérifier les permissions
-    if (current_user.id != plan_action.created_by and 
-        not current_user.has_permission('can_manage_plans')):
+    if (not __import__('egalyx.maitrise', fromlist=['droit']).droit()):
         flash('Vous n\'êtes pas autorisé à modifier ce plan', 'error')
         return redirect(url_for('detail_plan_action_risque', plan_id=plan_id))
     
@@ -35497,7 +35491,7 @@ def changer_progression_plan(plan_id):
     if not (current_user.is_client_admin or 
             current_user.id == plan.created_by or 
             current_user.id == plan.responsable_id or
-            current_user.has_permission('can_manage_action_plans')):
+            __import__('egalyx.maitrise', fromlist=['droit']).droit()):
         return jsonify({'success': False, 'error': 'Permission insuffisante'}), 403
     
     try:
@@ -35528,50 +35522,7 @@ def changer_progression_plan(plan_id):
         return jsonify({'success': False, 'error': str(e)}), 500
 
 
-@app.route('/plan-action-risque/<int:plan_id>/changer-statut-rapide', methods=['POST'])
-@login_required
-def changer_statut_plan_rapide(plan_id):
-    """Changer le statut d'un plan d'action rapidement"""
-    plan = PlanAction.query.get_or_404(plan_id)
-    
-    if not check_client_access(plan):
-        return jsonify({'success': False, 'error': 'Accès non autorisé'}), 403
-    
-    if not current_user.can_edit_plan(plan):
-        return jsonify({'success': False, 'error': 'Permission insuffisante'}), 403
-    
-    data = request.get_json()
-    nouveau_statut = data.get('statut')
-    
-    if nouveau_statut not in ['en_attente', 'en_cours', 'termine', 'suspendu', 'annule']:
-        return jsonify({'success': False, 'error': 'Statut invalide'}), 400
-    
-    ancien_statut = plan.statut
-    plan.statut = nouveau_statut
-    plan.updated_at = datetime.utcnow()
-    
-    # Journaliser le changement
-    journal = JournalActivite(
-        utilisateur_id=current_user.id,
-        action='changement_statut_plan',
-        details={
-            'plan_id': plan.id,
-            'plan_reference': plan.reference,
-            'ancien_statut': ancien_statut,
-            'nouveau_statut': nouveau_statut
-        },
-        entite_type='plan_action',
-        entite_id=plan.id,
-        client_id=current_user.client_id
-    )
-    
-    try:
-        db.session.add(journal)
-        db.session.commit()
-        return jsonify({'success': True, 'message': 'Statut mis à jour'})
-    except Exception as e:
-        db.session.rollback()
-        return jsonify({'success': False, 'error': str(e)}), 500
+# (changer_statut_plan_rapide : doublon d'une adresse déjà déclarée plus haut, jamais appelé — retiré)
 
 @app.route('/plan-action-risque/<int:plan_id>/changer-responsable-rapide', methods=['POST'])
 @login_required
@@ -35621,128 +35572,9 @@ def changer_responsable_plan_rapide(plan_id):
         return jsonify({'success': False, 'error': str(e)}), 500
 
 
-@app.route('/plan-action-risque/<int:plan_id>/archiver', methods=['POST'])
-@login_required
-def archiver_plan_action_risque(plan_id):
-    """Archiver un plan d'action"""
-    plan = PlanAction.query.get_or_404(plan_id)
-    
-    if not check_client_access(plan):
-        flash('Accès non autorisé', 'error')
-        return redirect(url_for('voir_plans_action_risque', risque_id=plan.risque_id))
-    
-    if not current_user.can_edit_plan(plan):
-        flash('Permission insuffisante pour archiver ce plan', 'error')
-        return redirect(url_for('voir_plans_action_risque', risque_id=plan.risque_id))
-    
-    plan.is_archived = True
-    plan.archived_at = datetime.utcnow()
-    plan.archived_by = current_user.id
-    plan.updated_at = datetime.utcnow()
-    
-    # Journaliser
-    journal = JournalActivite(
-        utilisateur_id=current_user.id,
-        action='archivage_plan_action',
-        details={
-            'plan_id': plan.id,
-            'plan_reference': plan.reference,
-            'risque_id': plan.risque_id,
-            'risque_reference': plan.risque.reference if plan.risque else None
-        },
-        entite_type='plan_action',
-        entite_id=plan.id,
-        client_id=current_user.client_id
-    )
-    
-    try:
-        db.session.add(journal)
-        db.session.commit()
-        flash('Plan d\'action archivé avec succès', 'success')
-    except Exception as e:
-        db.session.rollback()
-        flash(f'Erreur lors de l\'archivage: {str(e)}', 'error')
-    
-    return redirect(url_for('voir_plans_action_risque', risque_id=plan.risque_id))
+# (archiver_plan_action_risque : doublon d'une adresse déjà déclarée plus haut, jamais appelé — retiré)
 
-
-@app.route('/plan-action-risque/<int:plan_id>/supprimer', methods=['DELETE'])
-@login_required
-def supprimer_plan_action_risque(plan_id):
-    """Supprimer définitivement un plan d'action"""
-    plan = PlanAction.query.get_or_404(plan_id)
-    risque_id = plan.risque_id
-    
-    if not check_client_access(plan):
-        return jsonify({'success': False, 'error': 'Accès non autorisé'}), 403
-    
-    # Seuls admin client et super admin peuvent supprimer
-    if not (current_user.role == 'super_admin' or current_user.is_client_admin):
-        return jsonify({'success': False, 'error': 'Permission insuffisante'}), 403
-    
-    try:
-        db.session.delete(plan)
-        db.session.commit()
-        
-        # Déterminer la redirection
-        voir_archives = request.args.get('archives', 'non') == 'oui'
-        if voir_archives:
-            redirect_url = url_for('voir_plans_action_risque', risque_id=risque_id, archives='oui')
-        else:
-            redirect_url = url_for('voir_plans_action_risque', risque_id=risque_id)
-            
-        return jsonify({
-            'success': True, 
-            'message': 'Plan d\'action supprimé',
-            'redirect': redirect_url
-        })
-    except Exception as e:
-        db.session.rollback()
-        return jsonify({'success': False, 'error': str(e)}), 500
-
-@app.route('/plan-action-risque/<int:plan_id>/desarchiver', methods=['POST'])
-@login_required
-def desarchiver_plan_action_risque(plan_id):
-    """Désarchiver un plan d'action"""
-    plan = PlanAction.query.get_or_404(plan_id)
-    
-    if not check_client_access(plan):
-        flash('Accès non autorisé', 'error')
-        return redirect(url_for('voir_plans_action_risque', risque_id=plan.risque_id, archives='oui'))
-    
-    if not current_user.can_edit_plan(plan):
-        flash('Permission insuffisante pour désarchiver ce plan', 'error')
-        return redirect(url_for('voir_plans_action_risque', risque_id=plan.risque_id, archives='oui'))
-    
-    plan.is_archived = False
-    plan.archived_at = None
-    plan.archived_by = None
-    plan.updated_at = datetime.utcnow()
-    
-    # Journaliser
-    journal = JournalActivite(
-        utilisateur_id=current_user.id,
-        action='desarchivage_plan_action',
-        details={
-            'plan_id': plan.id,
-            'plan_reference': plan.reference,
-            'risque_id': plan.risque_id,
-            'risque_reference': plan.risque.reference if plan.risque else None
-        },
-        entite_type='plan_action',
-        entite_id=plan.id,
-        client_id=current_user.client_id
-    )
-    
-    try:
-        db.session.add(journal)
-        db.session.commit()
-        flash('Plan d\'action désarchivé avec succès', 'success')
-    except Exception as e:
-        db.session.rollback()
-        flash(f'Erreur lors du désarchivage: {str(e)}', 'error')
-    
-    return redirect(url_for('voir_plans_action_risque', risque_id=plan.risque_id, archives='oui'))
+# (supprimer_plan_action_risque : doublon d'une adresse déjà déclarée plus haut, jamais appelé — retiré)
 
 @app.route('/sous-action-risque/<int:sous_action_id>/modifier', methods=['GET', 'POST'])
 @login_required
@@ -35758,7 +35590,7 @@ def modifier_sous_action_risque(sous_action_id):
     # Vérifier les permissions
     if (current_user.id != plan_action.created_by and 
         current_user.id != sous_action.responsable_id and
-        not current_user.has_permission('can_manage_plans')):
+        not __import__('egalyx.maitrise', fromlist=['droit']).droit()):
         flash('Vous n\'êtes pas autorisé à modifier cette sous-action', 'error')
         return redirect(url_for('detail_plan_action_risque', plan_id=plan_action.id))
     
@@ -35802,8 +35634,7 @@ def terminer_plan_complet_risque(plan_id):
         return redirect(url_for('detail_plan_action_risque', plan_id=plan_id))
     
     # Vérifier les permissions
-    if (current_user.id != plan_action.created_by and 
-        not current_user.has_permission('can_manage_plans')):
+    if (not __import__('egalyx.maitrise', fromlist=['droit']).droit()):
         flash('Vous n\'êtes pas autorisé à terminer ce plan', 'error')
         return redirect(url_for('detail_plan_action_risque', plan_id=plan_id))
     
@@ -35876,8 +35707,7 @@ def supprimer_sous_action_risque(sous_action_id):
         return jsonify({'success': False, 'error': 'Accès non autorisé'}), 403
     
     # Vérifier les permissions
-    if (current_user.id != plan_action.created_by and 
-        not current_user.has_permission('can_manage_plans')):
+    if (not __import__('egalyx.maitrise', fromlist=['droit']).droit()):
         return jsonify({'success': False, 'error': 'Permission insuffisante'}), 403
     
     try:
@@ -36050,21 +35880,7 @@ def changer_progression_sous_action(sous_action_id):
         db.session.rollback()
         return jsonify({'success': False, 'error': str(e)}), 500
 
-@app.route('/plan-action-risque/<int:plan_id>/progression-detail', methods=['GET'])
-@login_required
-def progression_detail_plan(plan_id):
-    """Obtenir les détails de progression d'un plan"""
-    plan = PlanAction.query.get_or_404(plan_id)
-    
-    if not check_client_access(plan):
-        return jsonify({'success': False, 'error': 'Accès non autorisé'}), 403
-    
-    details = plan.get_progression_detail()
-    
-    return jsonify({
-        'success': True,
-        'details': details
-    })
+# (progression_detail_plan : doublon d'une adresse déjà déclarée plus haut, jamais appelé — retiré)
 
 @app.route('/plan-action-risque/<int:plan_id>/set-progression-fixe', methods=['POST'])
 @login_required
@@ -36377,8 +36193,11 @@ def ajouter_verification_dispositif(dispositif_id):
         
         # Mettre à jour le dispositif
         dispositif.date_derniere_verification = verification.date_verification
-        dispositif.prochaine_verification = verification.date_verification + timedelta(days=180)  # +6 mois
         dispositif.updated_at = datetime.utcnow()
+        # Prochaine vérification selon la fréquence ; efficacité baissée si la vérification est défavorable,
+        # niveau de maîtrise suggéré recalculé sur les évaluations en cours (egalyx/maitrise.py)
+        __import__('egalyx.maitrise', fromlist=['apres_verification']).apres_verification(
+            dispositif, verification.resultat, verification.date_verification, current_user.id)
         
         # Si non conforme, suggérer un plan d'action
         if verification.resultat == 'Non conforme':
@@ -41841,8 +41660,7 @@ def modifier_plan_action_independant(plan_id):
         return redirect(url_for('dashboard'))
     
     # Vérifier les permissions
-    if (current_user.id != plan_action.created_by and 
-        not current_user.has_permission('can_manage_plans')):
+    if (not __import__('egalyx.maitrise', fromlist=['droit']).droit()):
         flash('Vous n\'êtes pas autorisé à modifier ce plan d\'action', 'error')
         return redirect(url_for('detail_plan_action_independant', plan_id=plan_id))
     
@@ -41906,8 +41724,7 @@ def archiver_plan_action_independant(plan_id):
         return redirect(url_for('detail_plan_action_independant', plan_id=plan_id))
     
     # Vérifier les permissions
-    if (current_user.id != plan_action.created_by and 
-        not current_user.has_permission('can_manage_plans')):
+    if (not __import__('egalyx.maitrise', fromlist=['droit']).droit()):
         flash('Vous n\'êtes pas autorisé à archiver ce plan', 'error')
         return redirect(url_for('detail_plan_action_independant', plan_id=plan_id))
     
@@ -41937,7 +41754,7 @@ def desarchiver_plan_action_independant(plan_id):
         flash('Accès non autorisé', 'error')
         return redirect(url_for('detail_plan_action_independant', plan_id=plan_id))
     
-    if not current_user.has_permission('can_manage_plans'):
+    if not __import__('egalyx.maitrise', fromlist=['droit']).droit():
         flash('Vous n\'êtes pas autorisé à désarchiver ce plan', 'error')
         return redirect(url_for('detail_plan_action_independant', plan_id=plan_id))
     
@@ -42495,7 +42312,7 @@ def get_taux_reduction(niveau_maitrise):
 def calculer_maitrise_depuis_dmr(dispositifs):
     """
     Calcule un niveau de maîtrise suggéré (1-5) à partir des DMR du risque.
-    Formule ISO 31010 : 60 % efficacité + 40 % couverture, pondérée par type.
+    Formule Egalyx (indicative, non normative) : 60 % efficacité + 40 % couverture, pondérée par type.
     Retourne un float (ex: 3.0) ou None si aucun dispositif évalué.
     """
     if not dispositifs:
@@ -44098,7 +43915,8 @@ def export_incidents_excel():
         headers = ['Référence', 'Titre', 'Description', 'Type', 'Gravité', 'Statut',
                    'Date occurrence', 'Date détection', 'Date résolution', 'Délai (jours)',
                    'Cause racine', 'Actions correctives', 'Leçons apprises',
-                   'Risque associé', 'Responsable', 'SLA (heures)', 'Niveau escalade']
+                   'Risque associé', 'Responsable', 'SLA (heures)', 'Niveau escalade',
+                   'Coût estimé', 'Coût réel', "Temps d'arrêt (min)", 'Délai dépassé']
         
         # Style des en-têtes
         header_font = Font(bold=True, color="FFFFFF")
@@ -44129,17 +43947,21 @@ def export_incidents_excel():
             ws1.cell(row=row, column=15, value=incident.responsable.username if incident.responsable else '')
             ws1.cell(row=row, column=16, value=incident.sla_heures or '')
             ws1.cell(row=row, column=17, value=incident.get_niveau_escalade_label())
+            ws1.cell(row=row, column=18, value=incident.cout_estime or None)
+            ws1.cell(row=row, column=19, value=incident.impact_financier_reel or None)
+            ws1.cell(row=row, column=20, value=incident.temps_arret or None)
+            ws1.cell(row=row, column=21, value='oui' if incident.sla_viole else 'non')
             
             # Colorer la ligne selon la gravité
             if incident.gravite == 'critique':
-                for col in range(1, 18):
+                for col in range(1, 22):
                     ws1.cell(row, col).fill = PatternFill(start_color="FFE5E5", end_color="FFE5E5", fill_type="solid")
             elif incident.gravite == 'elevee':
-                for col in range(1, 18):
+                for col in range(1, 22):
                     ws1.cell(row, col).fill = PatternFill(start_color="FFF3CD", end_color="FFF3CD", fill_type="solid")
         
         # Ajuster les colonnes
-        for col in range(1, 18):
+        for col in range(1, 22):
             ws1.column_dimensions[openpyxl.utils.get_column_letter(col)].width = 18
         
         # ========== FEUILLE 2 : STATISTIQUES ==========
@@ -44258,7 +44080,8 @@ def export_incidents_csv():
             'Référence', 'Titre', 'Description', 'Type', 'Gravité', 'Statut',
             'Date occurrence', 'Date détection', 'Date résolution', 'Délai (jours)',
             'Cause racine', 'Actions correctives', 'Leçons apprises',
-            'Risque associé', 'Responsable', 'SLA (heures)', 'Niveau escalade'
+            'Risque associé', 'Responsable', 'SLA (heures)', 'Niveau escalade',
+            'Coût estimé', 'Coût réel', "Temps d'arrêt (min)", 'Délai dépassé'
         ]
         writer.writerow(headers)
         
@@ -44281,7 +44104,11 @@ def export_incidents_csv():
                 incident.risque.reference if incident.risque else '',
                 incident.responsable.username if incident.responsable else '',
                 incident.sla_heures or '',
-                incident.get_niveau_escalade_label()
+                incident.get_niveau_escalade_label(),
+                incident.cout_estime if incident.cout_estime else '',
+                incident.impact_financier_reel if incident.impact_financier_reel else '',
+                incident.temps_arret if incident.temps_arret else '',
+                'oui' if incident.sla_viole else 'non'
             ])
         
         output.seek(0)
@@ -57281,7 +57108,7 @@ def supprimer_exercice_pca(exercice_id):
 
 @app.route('/controle/programmes')
 @login_required
-@permission_required('can_manage_controls')
+@permission_required('can_view_controle_interne_n2')
 def liste_programmes():
     """Liste des programmes annuels de contrôle"""
     programmes = get_client_filter(ProgrammeControle).order_by(ProgrammeControle.annee.desc()).all()
@@ -57290,7 +57117,7 @@ def liste_programmes():
 
 @app.route('/controle/programme/nouveau', methods=['GET', 'POST'])
 @login_required
-@permission_required('can_manage_controls')
+@permission_required('can_manage_controle_interne_n2')
 def nouveau_programme():
     """Créer un nouveau programme"""
     if request.method == 'POST':
@@ -57351,7 +57178,7 @@ def detail_programme(id):
 
 @app.route('/controle/programme/<int:id>/modifier', methods=['GET', 'POST'])
 @login_required
-@permission_required('can_manage_controls')
+@permission_required('can_manage_controle_interne_n2')
 def modifier_programme(id):
     """Modifier un programme"""
     programme = get_client_object_or_404(ProgrammeControle, id)
@@ -57376,7 +57203,7 @@ def modifier_programme(id):
 
 @app.route('/controle/programme/<int:id>/activer', methods=['POST'])
 @login_required
-@permission_required('can_manage_controls')
+@permission_required('can_manage_controle_interne_n2')
 def activer_programme(id):
     """Activer un programme (le rendre actif)"""
     programme = get_client_object_or_404(ProgrammeControle, id)
@@ -57390,7 +57217,7 @@ def activer_programme(id):
 
 @app.route('/controle/programme/<int:id>/archiver', methods=['POST'])
 @login_required
-@permission_required('can_manage_controls')
+@permission_required('can_manage_controle_interne_n2')
 def archiver_programme(id):
     """Archiver un programme"""
     programme = get_client_object_or_404(ProgrammeControle, id)
@@ -57635,7 +57462,7 @@ def realiser_tache(id):
 
 @app.route('/controle/mission/nouvelle', methods=['GET', 'POST'])
 @login_required
-@permission_required('can_manage_controls')
+@permission_required('can_manage_controle_interne_n2')
 def nouvelle_mission():
     """Créer une nouvelle mission"""
     programme_id = request.args.get('programme_id', type=int)
@@ -71249,8 +71076,7 @@ def nouveau_sous_action_independant(plan_id):
         return redirect(url_for('liste_plans_action_independants'))
     
     # Vérifier les permissions
-    if (current_user.id != plan_action.created_by and 
-        not current_user.has_permission('can_manage_plans')):
+    if (not __import__('egalyx.maitrise', fromlist=['droit']).droit()):
         flash('Vous n\'êtes pas autorisé à ajouter des sous-actions', 'error')
         return redirect(url_for('detail_plan_action_independant', plan_id=plan_id))
     
@@ -111021,7 +110847,7 @@ def _cli_references_par_client(appliquer):
 # ============================================================================
 # Contrôle d'installation : app.py appelle ces modules ; s'ils manquent, on le dit clairement au démarrage
 # (sinon les pages concernées tombent en erreur « No module named … »).
-_EGALYX_REQUIS = ('incidents', 'signalements', 'gestion_clients', 'pca', 'qualite', 'recommandations', 'commun',
+_EGALYX_REQUIS = ('incidents', 'signalements', 'maitrise', 'gestion_clients', 'pca', 'qualite', 'recommandations', 'commun',
                   'modules_client', 'permissions_grille', 'masquage', 'double_auth', 'langue')
 _egalyx_manquants = [n for n in _EGALYX_REQUIS
                      if not os.path.exists(os.path.join(os.path.dirname(os.path.abspath(__file__)), 'egalyx', n + '.py'))]
