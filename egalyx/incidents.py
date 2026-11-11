@@ -391,9 +391,123 @@ def enregistrer(app):
     app.before_request(_garde)
     app.before_request(_verification_periodique)
     rendre_liens_facultatifs(app)
+    enregistrer_impacts(app)
     app.jinja_env.globals['incident_peut_resoudre'] = peut_resoudre
 
     @app.cli.command('verifier-incidents')
     def _cli():
         """Calcule les délais des incidents et marque les dépassements."""
         print(f'{verifier_delais()} incident(s) nouvellement en dépassement de délai.')
+
+
+# ---------------------------------------------------------------- coûts et temps d'arrêt
+# Ces champs existaient (fiche, tableaux de bord, totaux) mais aucun formulaire ni API ne permettait de les saisir :
+# ils restaient « Non évalué » et les totaux à zéro. Ils sont saisis dans la déclaration, la modification et la
+# résolution (templates/incidents/_impacts.html), et acceptés par l'API (cout_estime, temps_arret en minutes,
+# impact_financier_reel).
+SAISIE_IMPACTS = {'nouvel_incident', 'modifier_incident', 'resoudre_incident', 'api_creer_incident',
+                  'api_modifier_incident', 'api_resoudre_incident'}
+SYMBOLES = {'EUR': '€', 'XOF': 'FCFA', 'XAF': 'FCFA', 'USD': '$', 'GBP': '£', 'MAD': 'MAD', 'TND': 'TND', 'GNF': 'GNF',
+            'CDF': 'FC', 'NGN': '₦', 'GHS': 'GH₵', 'KES': 'KSh', 'CHF': 'CHF', 'CAD': 'CA$'}
+
+
+def _montant(texte):
+    """« 1 500 000 », « 1500,50 », « 1.500.000 » → nombre ; vide → None ; invalide → ValueError."""
+    t = (texte or '').strip().replace(' ', '').replace(' ', '').replace(' ', '')
+    for symbole in ('€', 'FCFA', 'CFA', 'F', '$'):
+        t = t.replace(symbole, '')
+    if not t:
+        return None
+    if t.count('.') > 1 and ',' not in t:
+        t = t.replace('.', '')
+    if ',' in t and '.' in t:
+        t = t.replace('.', '').replace(',', '.') if t.rfind(',') > t.rfind('.') else t.replace(',', '')
+    t = t.replace(',', '.')
+    v = float(t)
+    if v < 0:
+        raise ValueError('négatif')
+    return v
+
+
+def _entier(texte):
+    t = (str(texte) if texte is not None else '').strip()
+    if not t:
+        return 0
+    v = int(float(t.replace(',', '.')))
+    if v < 0:
+        raise ValueError('négatif')
+    return v
+
+
+def appliquer_impacts(incident, donnees, depuis_json=False):
+    """Met à jour coût estimé, coût réel et temps d'arrêt à partir d'un formulaire ou d'un JSON.
+    Un champ absent ne change rien ; un champ vidé efface la valeur."""
+    erreurs = []
+    for champ in ('cout_estime', 'impact_financier_reel'):
+        if champ in donnees:
+            try:
+                setattr(incident, champ, _montant(str(donnees.get(champ) or '')))
+            except ValueError:
+                erreurs.append('coût estimé' if champ == 'cout_estime' else 'coût réel')
+    try:
+        if depuis_json and 'temps_arret' in donnees:
+            incident.temps_arret = _entier(donnees.get('temps_arret')) or None
+        elif 'temps_arret_heures' in donnees or 'temps_arret_minutes' in donnees:
+            h, mn = _entier(donnees.get('temps_arret_heures')), _entier(donnees.get('temps_arret_minutes'))
+            incident.temps_arret = (h * 60 + mn) or None
+    except ValueError:
+        erreurs.append("temps d'arrêt")
+    return erreurs
+
+
+def _impacts_avant_flush(session_, _ctx, _inst):
+    if not has_request_context() or request.endpoint not in SAISIE_IMPACTS or request.method not in ('POST', 'PUT'):
+        return
+    m = _m()
+    json_ = request.is_json
+    donnees = (request.get_json(silent=True) or {}) if json_ else request.form
+    if not any(k in donnees for k in ('cout_estime', 'impact_financier_reel', 'temps_arret', 'temps_arret_heures',
+                                       'temps_arret_minutes')):
+        return
+    for obj in list(session_.new) + list(session_.dirty):
+        if isinstance(obj, m.Incident) and not getattr(obj, '_egalyx_impacts_faits', False):
+            obj._egalyx_impacts_faits = True
+            erreurs = appliquer_impacts(obj, donnees, depuis_json=json_)
+            if erreurs and not json_:
+                flash("Montant ou durée ignoré (format non reconnu) : " + ', '.join(erreurs)
+                      + ". Exemple : 1 500 000 ou 1500,50.", 'warning')
+
+
+def devise_client(client_id=None):
+    """Devise de l'organisation (celle de son abonnement), affichée avec son symbole usuel."""
+    m = _m()
+    cid = client_id or (getattr(current_user, 'client_id', None) if has_request_context() else None)
+    code = None
+    if cid and hasattr(m, 'AbonnementClient'):
+        try:
+            a = m.AbonnementClient.query.filter_by(client_id=cid).order_by(m.AbonnementClient.id.desc()).first()
+            code = (a.devise or '').upper() if a else None
+        except Exception:  # noqa: BLE001
+            code = None
+    code = code or os.environ.get('EGALYX_DEVISE', 'EUR').upper()
+    return SYMBOLES.get(code, code)
+
+
+def montant_affiche(v):
+    """1500000.5 → « 1 500 000,50 » ; entier → sans décimales."""
+    if v is None:
+        return ''
+    entier = float(v).is_integer()
+    texte = f'{float(v):,.0f}' if entier else f'{float(v):,.2f}'
+    return texte.replace(',', ' ').replace('.', ',')
+
+
+def enregistrer_impacts(app):
+    import models as m
+    from sqlalchemy import event
+    from sqlalchemy.orm import Session
+    if not getattr(m, '_egalyx_impacts_flush', False):
+        event.listen(Session, 'before_flush', _impacts_avant_flush)
+        m._egalyx_impacts_flush = True
+    app.jinja_env.globals['devise_incidents'] = devise_client
+    app.jinja_env.globals['montant_incident'] = montant_affiche
