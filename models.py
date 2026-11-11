@@ -88,6 +88,11 @@ class User(UserMixin, db.Model):
     # Multi-tenant
     client_id = db.Column(db.Integer, db.ForeignKey('clients.id'))
     is_client_admin = db.Column(db.Boolean, default=False)
+
+    @property
+    def is_super_admin(self):
+        """Raccourci utilisé par plusieurs routes de gestion des clients (absent auparavant : erreur 500)."""
+        return self.role == 'super_admin'
     can_manage_users = db.Column(db.Boolean, default=False)
     can_view_users_list = db.Column(db.Boolean, default=False)
 

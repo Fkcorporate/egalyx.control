@@ -66,6 +66,67 @@ Autres corrections :
 
 **Évaluation triphasée** (et écran d'évaluation de l'opérateur) : les couleurs de la maîtrise étaient inversées (« Insuffisant » en vert). Elles vont maintenant du rouge (1 Insuffisant) au vert (5 Excellent), y compris dans les listes de choix des phases de validation et de confirmation.
 
+## Fiche client du super admin : corrections (v6.10)
+
+- Tous les boutons de la fiche client étaient inactifs : une erreur de syntaxe JavaScript (nom du client échappé
+  dans un script) bloquait tout le script de la page. Corrigé.
+- « Modifier le client » (onglet Configuration) : le sous-domaine est enfin enregistré (format vérifié, mots
+  réservés et doublons refusés, environnements mis à jour) ; le nom, le contact, la description, le domaine et les
+  limites sont modifiables. L'ancien enregistrement **désactivait le client** à chaque fois et écrasait sa
+  formule : corrigé (statut par Suspendre / Réactiver, formule par « Changer formule »). Chaque modification est
+  journalisée avec l'avant / après.
+- Boutons « activer / désactiver un utilisateur », « supprimer un utilisateur » et « maintenance d'un
+  environnement » : erreur 500 corrigée (attribut `is_super_admin` absent du modèle User).
+- « Réinitialiser le mot de passe admin » échouait au hasard (un essai sur trois environ : caractère spécial
+  généré non accepté par la règle) : corrigé, ainsi que les deux autres générateurs de mot de passe.
+
+## Nom et logo de chaque organisation dans l'outil (v6.9)
+
+- En haut de l'outil : « Egalyx | [logo] Nom affiché » de l'organisation. Le super admin voit l'organisation
+  qu'il consulte, avec un badge « consultation » quand ce n'est pas la sienne.
+- Réglage : menu du compte → **Identité de l'organisation** (`/organisation/identite/`, administrateur du client),
+  ou par le super admin dès la **création du client** (champs « Nom affiché » et « Logo ») et depuis la fiche du
+  client (bouton « Nom affiché et logo »).
+- Nom affiché : 30 caractères (sigle) ; par défaut, le nom du client raccourci.
+- Logo : PNG, JPEG ou WebP, 1 Mo au plus, réencodé en PNG ≤ 400 × 160 (SVG refusé : risque de script), rangé
+  dans `instance/logos/client_<id>.png`, servi seulement aux utilisateurs de l'organisation et au super admin.
+  Pensez à sauvegarder `instance/logos` avec la base.
+- Repris dans l'objet des e-mails d'alerte des incidents (« [SIB] Délai dépassé : … ») et sur la couverture du
+  rapport au comité d'audit (pied de page « Réalisé avec Egalyx »).
+- Stockage : `clients.logo` et `client_configurations.preferences` (aucune nouvelle table). Pillow est utilisé s'il
+  est installé (sinon seuls les PNG sont acceptés).
+
+## E-mails d'alerte des incidents : réglés par organisation (v6.8)
+
+Les e-mails « Délai dépassé » et « Escalade » ne partent plus que si l'organisation les a activés
+(**Incidents → Alertes e-mail**, `/incidents/alertes/`, administrateur ou gestionnaire des incidents).
+Désactivés par défaut ; les notifications dans l'application ne changent pas.
+Réglages : événements (délai dépassé, escalade), destinataires (responsable de résolution, superviseur /
+direction, gestionnaires des incidents), jusqu'à 20 adresses supplémentaires. Chaque e-mail contient un lien
+de désabonnement personnel (`/incidents/alertes/me-desabonner`). Plusieurs délais dépassés en même temps → un
+seul e-mail récapitulatif par personne. Stockage : `client_configurations.preferences` (aucune nouvelle table).
+`EGALYX_INCIDENTS_EMAIL=0` coupe tout sur le serveur.
+
+## Démarrage en une semaine : import Excel, contrôles types, jalons (v6.7)
+
+Aucun changement de base de données, aucune nouvelle dépendance (openpyxl était déjà requis).
+
+- **Importer une cartographie** (menu, `/cartographie-import/`, permission *Gérer les risques*) : le client dépose
+  son Excel ou CSV tel quel. La feuille et la ligne d'en-tête sont trouvées seules (titre ou logo au-dessus du
+  tableau acceptés) ; les colonnes sont reconnues par leur titre (« Libellé du risque », « Gravité »,
+  « Fréquence », « Contrôles existants », « Propriétaire »…) et peuvent être corrigées. Aperçu avant tout
+  enregistrement : cotations converties sur 1 à 5 (1-5, 1-10, mots ; 1-3 ou 1-4 si le titre l'indique),
+  anomalies, doublons. À l'import : référence du client conservée si libre, score calculé, un dispositif
+  de maîtrise « non évalué » par contrôle listé (séparés par « ; » ou retour à la ligne), responsable rattaché
+  s'il correspond à un utilisateur. Cotation absente → 3 × 3 provisoire, signalée. Fichier analysé gardé 24 h
+  dans `instance/imports_cartographie`, supprimé après import ; jeton lié à l'utilisateur et à l'organisation.
+  Modèle Excel vierge téléchargeable.
+- **Bibliothèque** : 190 contrôles types (préventifs, détectifs…) pour les 84 risques types ; option
+  « Ajouter aussi les contrôles types » et création d'une nouvelle cartographie directement depuis la page.
+- **Mise en route** : chaque étape affiche sa date et son délai (J+n depuis l'ouverture du compte) ; le délai
+  jusqu'à la première cartographie évaluée mesure le « temps jusqu'à la valeur ».
+- Recette : `recette/demarrage_import.py` (31 vérifications).
+
 ## Dispositifs de maîtrise et plans d'action des risques (v6.6)
 
 **Mise à jour** : copier les fichiers (script `installer_mise_a_jour.py`), redémarrer. Aucun changement de base.

@@ -7116,7 +7116,7 @@ def creer_admin_client(client, form_data):
             secrets.choice(string.ascii_lowercase),
             secrets.choice(string.ascii_uppercase),
             secrets.choice(string.digits),
-            secrets.choice("!@#$%^&*()_+-="),
+            secrets.choice("!@#$%&*?"),
         ]
         all_chars = string.ascii_letters + string.digits + "!@#$%^&*()_+-="
         for _ in range(8):
@@ -17375,7 +17375,7 @@ def super_admin_nouveau_client():
             secrets.choice(lowercase),
             secrets.choice(uppercase),
             secrets.choice(digits),
-            secrets.choice(special)
+            secrets.choice("!@#$%&*?")  # accepté par la règle du mot de passe
         ]
         
         # Remplir le reste
@@ -18485,53 +18485,8 @@ def super_admin_my_profile():
 @login_required
 @super_admin_required
 def super_admin_update_client(id):
-    """Mettre à jour un client"""
-    client = Client.query.get_or_404(id)
-    
-    try:
-        client.contact_email = request.form.get('contact_email', client.contact_email)
-        client.contact_nom = request.form.get('contact_nom', client.contact_nom)
-        client.contact_telephone = request.form.get('contact_telephone', client.contact_telephone)
-        client.plan = request.form.get('plan', client.plan)
-        client.max_utilisateurs = int(request.form.get('max_utilisateurs', client.max_utilisateurs))
-        client.max_risques = int(request.form.get('max_risques', client.max_risques))
-        client.max_audits = int(request.form.get('max_audits', client.max_audits))
-        client.domaine = request.form.get('domaine', client.domaine)
-        client.description = request.form.get('description', client.description)
-        client.is_active = request.form.get('is_active') == 'true'
-        client.updated_at = datetime.utcnow()
-        
-        db.session.commit()
-        
-        # Journaliser
-        journal = JournalActiviteClient(
-            client_id=client.id,
-            utilisateur_id=current_user.id,
-            action='modification_client',
-            details={
-                'par': current_user.username,
-                'champs_modifies': {
-                    'contact_email': client.contact_email,
-                    'plan': client.plan,
-                    'max_utilisateurs': client.max_utilisateurs,
-                    'max_risques': client.max_risques,
-                    'max_audits': client.max_audits,
-                    'domaine': client.domaine,
-                    'is_active': client.is_active
-                }
-            },
-            ip_address=request.remote_addr if request else None
-        )
-        db.session.add(journal)
-        db.session.commit()
-        
-        flash('Client mis à jour avec succès', 'success')
-        
-    except Exception as e:
-        db.session.rollback()
-        flash(f'Erreur mise à jour: {str(e)}', 'error')
-    
-    return redirect(url_for('super_admin_client_detail', id=id))
+    """Mettre à jour un client : voir egalyx/gestion_clients.modifier_client (sous-domaine, nom, contact, limites)."""
+    return __import__('egalyx.gestion_clients', fromlist=['modifier_client']).modifier_client(id)
 
 @app.route('/super-admin/client/<int:id>/suspendre')
 @login_required
@@ -18804,7 +18759,7 @@ def api_reset_client_admin_password(client_id):
             secrets.choice(string.ascii_lowercase),
             secrets.choice(string.ascii_uppercase),
             secrets.choice(string.digits),
-            secrets.choice("!@#$%^&*()_+-="),
+            secrets.choice("!@#$%&*?"),
         ]
         
         # Ajouter des caractères aléatoires pour atteindre 12+
@@ -22567,6 +22522,7 @@ def utility_processor():
     
     return dict(get_file_size=get_file_size)
 
+
 # ========================
 # OPTIMISATIONS PERFORMANCE
 # ========================
@@ -22578,14 +22534,14 @@ def add_header(response):
     response.headers['X-Content-Type-Options'] = 'nosniff'
     response.headers['X-Frame-Options'] = 'SAMEORIGIN'
     response.headers['X-XSS-Protection'] = '1; mode=block'
-
+    
     # Cache pour les assets statiques
     if 'Cache-Control' not in response.headers:
         if response.mimetype in ['text/css', 'application/javascript', 'image/', 'font/']:
             response.headers['Cache-Control'] = 'public, max-age=31536000'  # 1 an
         else:
             response.headers['Cache-Control'] = 'no-store, no-cache, must-revalidate, max-age=0'
-
+    
     return response
 
 # Compression Gzip (si possible)
@@ -22600,31 +22556,21 @@ except ImportError:
 try:
     from flask_limiter import Limiter
     from flask_limiter.util import get_remote_address
-
+    
     limiter = Limiter(
         app=app,
         key_func=get_remote_address,
         default_limits=["200 per hour", "50 per minute"]
     )
-
-    # ✅ Exemptions CORRECTES : on passe les VUES (fonctions) ou les Blueprints,
-    # pas des strings. Flask-Limiter exempte déjà /static/ automatiquement.
-    # On protège chaque exemption pour éviter une AttributeError si la vue
-    # n'existe pas encore au moment de l'import.
-
-    # 'static' est déjà exempté par défaut → inutile de l'ajouter.
-    # Pour les autres vues, on récupère l'objet via app.view_functions :
-
-    for endpoint in ("login", "health"):
-        vue = app.view_functions.get(endpoint)
-        if vue is not None:
-            limiter.exempt(vue)
-        else:
-            print(f"⚠️ Endpoint '{endpoint}' introuvable, exemption ignorée")
-
+    
+    # Exceptions pour les pages importantes
+    limiter.exempt("static")
+    limiter.exempt("login")
+    limiter.exempt("health")
     print("✅ Rate limiting activé")
 except ImportError:
     print("⚠️ Flask-Limiter non disponible")
+
 # Endpoint de santé pour Render
 @app.route('/health')
 def health_check():
@@ -110856,7 +110802,7 @@ def _cli_references_par_client(appliquer):
 # ============================================================================
 # Contrôle d'installation : app.py appelle ces modules ; s'ils manquent, on le dit clairement au démarrage
 # (sinon les pages concernées tombent en erreur « No module named … »).
-_EGALYX_REQUIS = ('incidents', 'signalements', 'maitrise', 'gestion_clients', 'pca', 'qualite', 'recommandations', 'commun',
+_EGALYX_REQUIS = ('incidents', 'alertes_incidents', 'identite', 'import_cartographie', 'bibliotheque_controles', 'signalements', 'maitrise', 'gestion_clients', 'pca', 'qualite', 'recommandations', 'commun',
                   'modules_client', 'permissions_grille', 'masquage', 'double_auth', 'langue')
 _egalyx_manquants = [n for n in _EGALYX_REQUIS
                      if not os.path.exists(os.path.join(os.path.dirname(os.path.abspath(__file__)), 'egalyx', n + '.py'))]
