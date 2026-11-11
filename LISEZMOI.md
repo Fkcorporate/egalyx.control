@@ -88,6 +88,12 @@ risque et dispositif rendus facultatifs (PostgreSQL / MySQL : ALTER ; SQLite : r
   jamais enregistrés ; ils le sont.
 - « Ma semaine » : incidents à traiter, à qualifier, à approuver, en souffrance (délai dépassé, sans responsable), escaladés.
 
+- **Coût estimé, coût réel, temps d'arrêt** : affichés sur la fiche et totalisés dans les tableaux de bord, mais aucun
+  formulaire ne permettait de les saisir (« Non évalué », totaux à zéro). Bloc « Coûts et temps d'arrêt » ajouté à la
+  déclaration, la modification et la résolution (coût réel) ; API : `cout_estime`, `impact_financier_reel`,
+  `temps_arret` (minutes). Montants saisis librement (« 1 500 000 », « 1500,50 »). Devise affichée : celle de
+  l'abonnement du client (XOF → FCFA…), sinon `EGALYX_DEVISE` (défaut EUR) — plus de « € » imposé.
+
 **Signalements** (ex-« Support », `egalyx/signalements.py`) : le canal de détection des incidents de chaque client.
 - Tout utilisateur connecté signale (« Signaler un incident », menu et espace opérateur) ; toujours dans SA propre
   organisation (avant : l'adresse choisissait l'organisation ; sans adresse, un visiteur anonyme voyait le formulaire
