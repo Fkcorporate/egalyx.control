@@ -54,6 +54,7 @@ from flask_wtf.csrf import CSRFProtect, generate_csrf
 from flask_migrate import Migrate
 from werkzeug.utils import secure_filename
 from werkzeug.security import generate_password_hash, check_password_hash
+from werkzeug.exceptions import HTTPException
 from markupsafe import escape, Markup
 from sqlalchemy import event, and_, or_, not_, text
 from apscheduler.schedulers.background import BackgroundScheduler
@@ -5336,12 +5337,6 @@ def check_permissions_middleware():
         'export_dashboard_csv': 'can_export_data',
         
         # ==================== QUALITÉ ====================
-        'liste_plans_qualite': 'can_manage_quality',
-        'nouveau_plan_qualite': 'can_manage_quality',
-        'editer_plan_qualite': 'can_manage_quality',
-        'detail_plan_qualite': 'can_manage_quality',
-        'supprimer_plan_qualite': 'can_manage_quality',
-        'archiver_plan_qualite': 'can_manage_quality',
         
         # ==================== CAMPAGNES DE CONTRÔLE ====================
         'liste_campagnes_controle': 'can_manage_campaigns',
@@ -5352,12 +5347,6 @@ def check_permissions_middleware():
         'exporter_campagne_controle': 'can_manage_campaigns',
         
         # ==================== PLANS DE CONTINUITÉ (PCA) ====================
-        'liste_plans_pca': 'can_manage_bcp',
-        'nouveau_plan_pca': 'can_manage_bcp',
-        'detail_plan_pca': 'can_manage_bcp',
-        'editer_plan_pca': 'can_manage_bcp',
-        'supprimer_plan_pca': 'can_manage_bcp',
-        'tester_plan_pca': 'can_manage_bcp',
         
         # ==================== GESTION DES INCIDENTS ====================
         'liste_incidents': 'can_manage_incidents',
@@ -22578,9 +22567,11 @@ def utility_processor():
     
     return dict(get_file_size=get_file_size)
 
+
 # ========================
 # OPTIMISATIONS PERFORMANCE
 # ========================
+
 # Middleware pour les performances
 @app.after_request
 def add_header(response):
@@ -22588,16 +22579,14 @@ def add_header(response):
     response.headers['X-Content-Type-Options'] = 'nosniff'
     response.headers['X-Frame-Options'] = 'SAMEORIGIN'
     response.headers['X-XSS-Protection'] = '1; mode=block'
-
+    
     # Cache pour les assets statiques
     if 'Cache-Control' not in response.headers:
-        mimetype = response.mimetype or ''
-        if (mimetype in ('text/css', 'application/javascript', 'text/javascript')
-                or mimetype.startswith(('image/', 'font/'))):
+        if response.mimetype in ['text/css', 'application/javascript', 'image/', 'font/']:
             response.headers['Cache-Control'] = 'public, max-age=31536000'  # 1 an
         else:
             response.headers['Cache-Control'] = 'no-store, no-cache, must-revalidate, max-age=0'
-
+    
     return response
 
 # Compression Gzip (si possible)
@@ -22612,26 +22601,20 @@ except ImportError:
 try:
     from flask_limiter import Limiter
     from flask_limiter.util import get_remote_address
-
+    
     limiter = Limiter(
         app=app,
         key_func=get_remote_address,
-        default_limits=["200 per hour", "50 per minute"],
-        # storage_uri="redis://..."  # recommandé en prod (sinon stockage en mémoire, par worker)
+        default_limits=["200 per hour", "50 per minute"]
     )
-
-    # Exceptions pour les pages importantes (évalué à chaque requête,
-    # donc peu importe que login/health_check soient définies plus bas)
-    @limiter.request_filter
-    def exempt_routes():
-        return request.endpoint in ("static", "login", "health_check")
-
+    
+    # Exceptions pour les pages importantes
+    limiter.exempt("static")
+    limiter.exempt("login")
+    limiter.exempt("health")
     print("✅ Rate limiting activé")
 except ImportError:
     print("⚠️ Flask-Limiter non disponible")
-except Exception as e:
-    # Un souci de config du limiter ne doit pas empêcher l'app de démarrer
-    print(f"⚠️ Rate limiting non activé: {e}")
 
 # Endpoint de santé pour Render
 @app.route('/health')
@@ -56142,7 +56125,7 @@ def nouveau_logigramme():
 def liste_plans_pca():
     """Liste des plans de continuité d'activité"""
     
-    if not current_user.has_permission('can_manage_audit'):
+    if not __import__('egalyx.pca', fromlist=['droit']).droit():
         flash('Accès non autorisé.', 'error')
         return redirect(url_for('dashboard'))
     
@@ -56197,7 +56180,7 @@ def liste_plans_pca():
 def nouveau_plan_pca():
     """Créer un nouveau plan PCA"""
     
-    if not current_user.has_permission('can_manage_audit'):
+    if not __import__('egalyx.pca', fromlist=['droit']).droit():
         flash('Accès non autorisé.', 'error')
         return redirect(url_for('dashboard'))
     
@@ -56224,18 +56207,16 @@ def nouveau_plan_pca():
     
     if form.validate_on_submit():
         try:
-            # Générer référence
+            # Référence : celle saisie si elle est libre dans l'organisation, sinon numérotation PCA-AAAA-NNN
+            # propre à l'organisation (avant : la saisie était ignorée et le compteur partagé entre clients)
             annee = datetime.now().year
-            dernier = PlanContinuiteActivite.query.filter(
-                PlanContinuiteActivite.reference.like(f'PCA-{annee}-%')
-            ).order_by(PlanContinuiteActivite.reference.desc()).first()
-            
-            if dernier:
-                num = int(dernier.reference.split('-')[-1]) + 1
-            else:
-                num = 1
-            
-            reference = f"PCA-{annee}-{num:03d}"
+            _cid = current_user.client_id
+            reference = (form.reference.data or '').strip()
+            if not reference or PlanContinuiteActivite.query.filter_by(client_id=_cid, reference=reference).first():
+                _refs = [r for (r,) in db.session.query(PlanContinuiteActivite.reference).filter(
+                    PlanContinuiteActivite.client_id == _cid, PlanContinuiteActivite.reference.like(f'PCA-{annee}-%')).all()]
+                _nums = [int(r.rsplit('-', 1)[-1]) for r in _refs if r.rsplit('-', 1)[-1].isdigit()]
+                reference = f"PCA-{annee}-{(max(_nums) + 1) if _nums else 1:03d}"
             
             # Traiter les champs JSON
             processus_critiques = [p.strip() for p in form.processus_critiques.data.split('\n') if p.strip()] if form.processus_critiques.data else []
@@ -56302,7 +56283,7 @@ def modifier_action_pca(action_id):
     else:
         action = ActionPCA.query.filter_by(id=action_id, client_id=current_user.client_id).first_or_404()
     
-    if not current_user.has_permission('can_manage_audit'):
+    if not __import__('egalyx.pca', fromlist=['droit']).droit():
         flash('Accès non autorisé.', 'error')
         return redirect(url_for('dashboard'))
     
@@ -56689,7 +56670,7 @@ def supprimer_action_pca(action_id):
     else:
         action = ActionPCA.query.filter_by(id=action_id, client_id=current_user.client_id).first_or_404()
     
-    if not current_user.has_permission('can_manage_audit'):
+    if not __import__('egalyx.pca', fromlist=['droit']).droit():
         return jsonify({'success': False, 'error': 'Accès non autorisé'}), 403
     
     try:
@@ -57086,6 +57067,8 @@ def api_analyser_plan_pca(plan_id):
             'analyse': resultat
         })
         
+    except HTTPException:
+        raise
     except Exception as e:
         current_app.logger.error(f"Erreur analyse plan PCA: {e}")
         return jsonify({'success': False, 'error': str(e)}), 500
@@ -57163,6 +57146,8 @@ def api_pca_suggestions_actions(plan_id):
             'count': len(suggestions)
         })
         
+    except HTTPException:
+        raise
     except Exception as e:
         current_app.logger.error(f"Erreur suggestions actions PCA: {e}")
         return jsonify({'success': False, 'error': str(e)}), 500
@@ -57191,6 +57176,8 @@ def api_pca_suggestions_exercices(plan_id):
             'count': len(suggestions)
         })
         
+    except HTTPException:
+        raise
     except Exception as e:
         current_app.logger.error(f"Erreur suggestions exercices PCA: {e}")
         return jsonify({'success': False, 'error': str(e)}), 500
@@ -57205,7 +57192,7 @@ def modifier_exercice_pca(exercice_id):
     else:
         exercice = ExercicePCA.query.filter_by(id=exercice_id, client_id=current_user.client_id).first_or_404()
     
-    if not current_user.has_permission('can_manage_audit'):
+    if not __import__('egalyx.pca', fromlist=['droit']).droit():
         flash('Accès non autorisé.', 'error')
         return redirect(url_for('detail_plan_pca', plan_id=exercice.plan_id))
     
@@ -57255,7 +57242,7 @@ def supprimer_exercice_pca(exercice_id):
     else:
         exercice = ExercicePCA.query.filter_by(id=exercice_id, client_id=current_user.client_id).first_or_404()
     
-    if not current_user.has_permission('can_manage_audit'):
+    if not __import__('egalyx.pca', fromlist=['droit']).droit():
         return jsonify({'success': False, 'error': 'Accès non autorisé'}), 403
     
     try:
@@ -61878,7 +61865,7 @@ def liste_plans_qualite():
     """Liste des plans qualité avec multi-tenant"""
     
     # Vérification des permissions
-    if not current_user.has_permission('can_manage_audit') and not current_user.has_permission('can_manage_quality'):
+    if not __import__('egalyx.qualite', fromlist=['droit']).droit():
         flash('Accès non autorisé.', 'error')
         return redirect(url_for('dashboard'))
     
@@ -62055,7 +62042,7 @@ def debug_qualite_direct_query():
 def nouveau_plan_qualite():
     """Créer un nouveau plan qualité pour une fonction"""
     
-    if not current_user.has_permission('can_manage_audit') and not current_user.has_permission('can_manage_quality'):
+    if not __import__('egalyx.qualite', fromlist=['droit']).droit():
         flash('Accès non autorisé.', 'error')
         return redirect(url_for('dashboard'))
     
@@ -62135,7 +62122,7 @@ def nouveau_plan_qualite():
                 objectifs_qualite=objectifs_list,
                 indicateurs_cles=indicateurs_list,
                 statut=form.statut.data,
-                est_valide=form.est_valide.data,
+                est_valide=False,   # validation par le circuit de la fiche (egalyx/qualite.py)
                 procedures_applicables=form.procedures_applicables.data,
                 frequence_controles=form.frequence_controles.data,
                 responsable_conformite_id=form.responsable_conformite_id.data if form.responsable_conformite_id.data != 0 else None,
@@ -62232,7 +62219,7 @@ def modifier_plan_qualite(plan_id):
     # CORRIGÉ : Utiliser get_client_object_or_404 comme dans l'exemple KRI
     plan = get_client_object_or_404(PlanQualiteFonction, plan_id)
     
-    if not current_user.has_permission('can_manage_audit') and not current_user.has_permission('can_manage_quality'):
+    if not __import__('egalyx.qualite', fromlist=['droit']).droit():
         flash('Accès non autorisé.', 'error')
         return redirect(url_for('dashboard'))
     
@@ -62345,13 +62332,8 @@ def modifier_plan_qualite(plan_id):
             elif form.type_fonction.data == 'service' and form.service_id.data:
                 plan.service_id = form.service_id.data
             
-            # Gestion de la validation
-            if form.est_valide.data and not plan.est_valide:
-                plan.valider(current_user.id)
-            elif not form.est_valide.data and plan.est_valide:
-                plan.est_valide = False
-                plan.date_validation = None
-                plan.valide_par_id = None
+            # Validation : uniquement par le circuit de la fiche (egalyx/qualite.py) — la case du formulaire est ignorée
+            # (avant : plan.valider() n'existait pas et l'enregistrement échouait dès que la case était cochée)
             
             plan.updated_at = datetime.utcnow()
             db.session.commit()
@@ -62620,7 +62602,7 @@ def nouvelle_formation_qualite(plan_id):
     from datetime import datetime
     import json
     
-    if not current_user.has_permission('can_manage_audit') and not current_user.has_permission('can_manage_quality'):
+    if not __import__('egalyx.qualite', fromlist=['droit']).droit():
         flash('Accès non autorisé.', 'error')
         return redirect(url_for('dashboard'))
     
@@ -63017,7 +62999,7 @@ def rapport_complet_plan_qualite(plan_id):
         return jsonify(rapport)
     
     # Version HTML pour affichage
-    return render_template('qualite/rapport_complet.html', rapport=rapport, plan=plan)
+    return render_template('qualite/rapport_complet.html', rapport=rapport, plan=plan, now=datetime.now())
 
 @app.route('/qualite/plan/<int:plan_id>/rapport-pdf')
 @login_required
@@ -63171,7 +63153,7 @@ def nouvelle_non_conformite(plan_id):
     from models import PlanQualiteFonction, NonConformite
     from forms_qualite import NonConformiteForm
     
-    if not current_user.has_permission('can_manage_audit') and not current_user.has_permission('can_manage_quality'):
+    if not __import__('egalyx.qualite', fromlist=['droit']).droit():
         flash('Accès non autorisé.', 'error')
         return redirect(url_for('dashboard'))
     
@@ -63355,7 +63337,7 @@ def nouvel_audit_qualite(plan_id):
     from datetime import datetime
     import json
     
-    if not current_user.has_permission('can_manage_audit') and not current_user.has_permission('can_manage_quality'):
+    if not __import__('egalyx.qualite', fromlist=['droit']).droit():
         flash('Accès non autorisé.', 'error')
         return redirect(url_for('dashboard'))
     
@@ -64243,7 +64225,7 @@ def nouvelle_reunion_qualite(plan_id):
     from datetime import datetime
     import json
     
-    if not current_user.has_permission('can_manage_audit') and not current_user.has_permission('can_manage_quality'):
+    if not __import__('egalyx.qualite', fromlist=['droit']).droit():
         flash('Accès non autorisé.', 'error')
         return redirect(url_for('dashboard'))
     
@@ -64314,7 +64296,7 @@ def nouvelle_reunion_qualite(plan_id):
 def cartographie_qualite():
     """Cartographie des plans qualité par fonction"""
     
-    if not current_user.has_permission('can_manage_audit') and not current_user.has_permission('can_manage_quality'):
+    if not __import__('egalyx.qualite', fromlist=['droit']).droit():
         flash('Accès non autorisé.', 'error')
         return redirect(url_for('dashboard'))
     
@@ -64425,7 +64407,7 @@ def cartographie_qualite():
 def liste_cartographie_risques():
     """Liste de la cartographie des risques par fonction"""
     
-    if not current_user.has_permission('can_manage_audit') and not current_user.has_permission('can_manage_quality'):
+    if not __import__('egalyx.qualite', fromlist=['droit']).droit():
         flash('Accès non autorisé.', 'error')
         return redirect(url_for('dashboard'))
     
@@ -65563,7 +65545,7 @@ def export_all_cartographie_risques_excel():
 def nouvelle_cartographie_risque():
     """Ajouter un risque dans la cartographie"""
     
-    if not current_user.has_permission('can_manage_audit') and not current_user.has_permission('can_manage_quality'):
+    if not __import__('egalyx.qualite', fromlist=['droit']).droit():
         flash('Accès non autorisé.', 'error')
         return redirect(url_for('dashboard'))
     
@@ -65619,7 +65601,7 @@ def modifier_cartographie_risque(id):
     else:
         risque = CartographieRisqueFonction.query.filter_by(id=id, client_id=current_user.client_id).first_or_404()
     
-    if not current_user.has_permission('can_manage_audit') and not current_user.has_permission('can_manage_quality'):
+    if not __import__('egalyx.qualite', fromlist=['droit']).droit():
         flash('Accès non autorisé.', 'error')
         return redirect(url_for('dashboard'))
     
@@ -65671,7 +65653,7 @@ def supprimer_cartographie_risque(id):
     else:
         risque = CartographieRisqueFonction.query.filter_by(id=id, client_id=current_user.client_id).first_or_404()
     
-    if not current_user.has_permission('can_manage_audit') and not current_user.has_permission('can_manage_quality'):
+    if not __import__('egalyx.qualite', fromlist=['droit']).droit():
         return jsonify({'error': 'Accès non autorisé'}), 403
     
     try:
@@ -66021,7 +66003,7 @@ def nouvelle_action_amelioration(plan_id):
     
     plan = get_client_object_or_404(PlanQualiteFonction, plan_id)
     
-    if not current_user.has_permission('can_manage_audit') and not current_user.has_permission('can_manage_quality'):
+    if not __import__('egalyx.qualite', fromlist=['droit']).droit():
         flash('Accès non autorisé.', 'error')
         return redirect(url_for('detail_plan_qualite', plan_id=plan_id))
     
@@ -66115,7 +66097,7 @@ def modifier_action_amelioration(action_id):
     action = get_client_object_or_404(ActionAmeliorationQualite, action_id)
     plan = action.plan_qualite
     
-    if not current_user.has_permission('can_manage_audit') and not current_user.has_permission('can_manage_quality'):
+    if not __import__('egalyx.qualite', fromlist=['droit']).droit():
         flash('Accès non autorisé.', 'error')
         return redirect(url_for('dashboard'))
     
@@ -66190,7 +66172,7 @@ def changer_statut_action_qualite(action_id):
     """API: Changer rapidement le statut d'une action (pour AJAX)"""
     action = get_client_object_or_404(ActionAmeliorationQualite, action_id)
     
-    if not current_user.has_permission('can_manage_audit'):
+    if not __import__('egalyx.qualite', fromlist=['droit']).droit():
         return jsonify({'success': False, 'error': 'Permission non autorisée'}), 403
     
     data = request.get_json()

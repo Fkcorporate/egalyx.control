@@ -192,6 +192,7 @@ class User(UserMixin, db.Model):
         # Plans de continuité (PCA/BCP)
         'can_manage_bcp': False,
         'can_view_bcp': False,
+        'can_view_quality': False,
         'can_test_bcp': False,
         
         # Incidents
@@ -8176,7 +8177,7 @@ class ParametreEvaluation(db.Model):
     client_id = db.Column(db.Integer, db.ForeignKey('clients.id'), nullable=True)
     
     __table_args__ = (
-        db.UniqueConstraint('client_id', 'categorie', 'niveau', name='u_client_categorie_niveau'),
+        db.UniqueConstraint('categorie', 'niveau', name='u_categorie_niveau'),
     )
     
     def __repr__(self):
@@ -13249,6 +13250,11 @@ class PlanQualiteFonction(db.Model):
     est_valide = db.Column(db.Boolean, default=False)
     date_validation = db.Column(db.DateTime, nullable=True)
     valide_par_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=True)
+    # Circuit de validation (egalyx/qualite.py) : brouillon → en_relecture → valide (par le valideur désigné)
+    valideur_id = db.Column(db.Integer, nullable=True)
+    soumis_le = db.Column(db.DateTime, nullable=True)
+    soumis_par_id = db.Column(db.Integer, nullable=True)
+    motif_renvoi = db.Column(db.Text, nullable=True)
     
     # NOUVEAU: Score de robustesse (0-100)
     score_robustesse = db.Column(db.Integer, default=0)
@@ -13916,6 +13922,8 @@ class NonConformite(db.Model):
     date_ouverture = db.Column(db.DateTime, default=datetime.utcnow)
     date_cloture = db.Column(db.DateTime)
     responsable_id = db.Column(db.Integer, db.ForeignKey('user.id'))
+    verifie_par_id = db.Column(db.Integer, nullable=True)          # qui a vérifié l'efficacité
+    echeance_traitement = db.Column(db.Date, nullable=True)
     
     # 🔥 AJOUTER CES CHAMPS
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
@@ -14362,6 +14370,8 @@ class ActionAmeliorationQualite(db.Model):
     commentaire_realisation = db.Column(db.Text, nullable=True)
     
     responsable_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=True)
+    non_conformite_id = db.Column(db.Integer, nullable=True)       # action née d'une non-conformité
+    audit_qualite_id = db.Column(db.Integer, nullable=True)        # ou d'un audit qualité
     
     is_archived = db.Column(db.Boolean, default=False)
     archived_at = db.Column(db.DateTime, nullable=True)
@@ -15799,7 +15809,18 @@ class PlanContinuiteActivite(db.Model):
     # ============================================
     # STATUT
     # ============================================
-    statut = db.Column(db.String(30), default='en_redaction')  # en_redaction, en_relecture, valide, obsolète, archive
+    statut = db.Column(db.String(30), default='en_redaction')
+    # Circuit de validation (egalyx/pca.py) : en_redaction → en_relecture → valide
+    soumis_le = db.Column(db.DateTime, nullable=True)
+    soumis_par_id = db.Column(db.Integer, nullable=True)
+    valide_le = db.Column(db.DateTime, nullable=True)
+    valide_par_id = db.Column(db.Integer, nullable=True)
+    motif_renvoi = db.Column(db.Text, nullable=True)
+    # Objectifs chiffrés (déduits du texte RTO / RPO) et liens avec le reste de l'outil
+    rto_heures = db.Column(db.Float, nullable=True)
+    rpo_heures = db.Column(db.Float, nullable=True)
+    risque_ids = db.Column(db.JSON, nullable=True)
+    processus_ids = db.Column(db.JSON, nullable=True)  # en_redaction, en_relecture, valide, obsolète, archive
     niveau_maturite = db.Column(db.Integer, default=1)  # 1-5
     
     # ============================================
@@ -15960,7 +15981,10 @@ class ExercicePCA(db.Model):
     actions_correctives = db.Column(db.JSON, default=[])
     
     note = db.Column(db.Integer)  # Note sur 100
-    statut = db.Column(db.String(20), default='planifie')  # planifie, realise, annule, reporte
+    statut = db.Column(db.String(20), default='planifie')
+    duree_reprise_heures = db.Column(db.Float, nullable=True)      # temps réel de reprise constaté
+    resultat_saisi_le = db.Column(db.DateTime, nullable=True)
+    resultat_saisi_par_id = db.Column(db.Integer, nullable=True)  # planifie, realise, annule, reporte
     
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
@@ -15973,6 +15997,26 @@ class ExercicePCA(db.Model):
     
     def __repr__(self):
         return f'<ExercicePCA {self.reference}>'
+
+
+class ActivationPCA(db.Model):
+    """Déclenchement réel du PCA (incident majeur, sinistre) : durée constatée comparée au RTO."""
+    __tablename__ = 'activations_pca'
+    id = db.Column(db.Integer, primary_key=True)
+    plan_id = db.Column(db.Integer, db.ForeignKey('plans_continuite_activite.id'), nullable=False)
+    client_id = db.Column(db.Integer, db.ForeignKey('clients.id'), nullable=False)
+    incident_id = db.Column(db.Integer, nullable=True)
+    motif = db.Column(db.Text, nullable=False)
+    debut = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
+    fin = db.Column(db.DateTime, nullable=True)
+    bilan = db.Column(db.Text, nullable=True)
+    declenche_par_id = db.Column(db.Integer, nullable=True)
+    cloture_par_id = db.Column(db.Integer, nullable=True)
+
+    def duree_heures(self):
+        if not self.fin or not self.debut:
+            return None
+        return round((self.fin - self.debut).total_seconds() / 3600.0, 1)
 
 
 class DocumentPCA(db.Model):
