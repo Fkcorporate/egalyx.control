@@ -130,5 +130,55 @@ with A.app.app_context():
 r, t = go('admin_a', 'get', '/dashboard')
 verif('L\'admin du client réinitialisé se connecte toujours', r.status_code == 200, str(r.status_code))
 
+print('--- Fiche du client : modification, boutons')
+with A.app.app_context():
+    cid_a = db.session.get(M.User, ids['admin_a']).client_id
+    autre = M.Client(nom='Client Témoin', reference='REC-T', is_active=True)
+    db.session.add(autre)
+    db.session.flush()
+    cid_b = autre.id
+    db.session.add(socle.creer(M.EnvironnementClient, client_id=cid_a, nom='Production', sous_domaine='ancien-a', statut='actif'))
+    db.session.commit()
+    env_id = M.EnvironnementClient.query.filter_by(client_id=cid_a).first().id
+r, t = go('superadmin', 'get', f'/super-admin/client/{cid_a}')
+verif('Fiche : script sans nom échappé (boutons fonctionnels)', '&#34;' not in t.split('function resetClientData', 1)[-1][:200],
+      t.split('function resetClientData', 1)[-1][:120])
+r, _ = go('superadmin', 'post', f'/super-admin/client/{cid_a}/update',
+          data={'nom': 'Banque Recette SA', 'sous_domaine': 'Banque-Sahel', 'contact_email': 'contact@egalyx-recette.fr',
+                'contact_nom': 'M. Diallo', 'contact_telephone': '+225 01', 'description': 'Pilote', 'domaine': '',
+                'max_utilisateurs': '25', 'max_risques': '500', 'max_audits': '30'})
+with A.app.app_context():
+    db.session.expire_all()
+    cl = db.session.get(M.Client, cid_a)
+    env = db.session.get(M.EnvironnementClient, env_id)
+    verif('Modification enregistrée (nom, sous-domaine en minuscules, contact, limites)',
+          cl.nom == 'Banque Recette SA' and cl.sous_domaine == 'banque-sahel' and cl.contact_nom == 'M. Diallo'
+          and cl.max_utilisateurs == 25, f'{r.status_code} {cl.nom} {cl.sous_domaine} {socle.cause(A)}')
+    verif('Le client reste actif après enregistrement', cl.is_active is True)
+    verif('Sous-domaine repris dans l\'environnement', env.sous_domaine == 'banque-sahel'
+          and env.url_acces == 'https://banque-sahel.egalyx.com', f'{env.sous_domaine} {env.url_acces}')
+    jr = M.JournalActiviteClient.query.filter_by(client_id=cid_a, action='modification_client').order_by(M.JournalActiviteClient.id.desc()).first()
+    verif('Modification journalisée avec avant / après', jr is not None and 'sous_domaine' in (jr.details or {}).get('modifications', {}))
+for valeur, attendu in [('banque sahel', 'invalide'), ('-abc', 'invalide'), ('www', 'réservé')]:
+    go('superadmin', 'post', f'/super-admin/client/{cid_a}/update', data={'nom': 'Banque Recette SA', 'sous_domaine': valeur})
+    with A.app.app_context():
+        db.session.expire_all()
+        verif(f'Sous-domaine « {valeur} » refusé ({attendu})', db.session.get(M.Client, cid_a).sous_domaine == 'banque-sahel')
+go('superadmin', 'post', f'/super-admin/client/{cid_b}/update', data={'nom': 'Client Témoin', 'sous_domaine': 'banque-sahel'})
+with A.app.app_context():
+    db.session.expire_all()
+    verif('Sous-domaine déjà pris par un autre client refusé', db.session.get(M.Client, cid_b).sous_domaine != 'banque-sahel')
+r, _ = go('admin_a', 'post', f'/super-admin/client/{cid_a}/update', data={'nom': 'Pirate'})
+verif('Admin client : modification refusée', r.status_code in (302, 403), str(r.status_code))
+c_sa = socle.navigateur(A, ids['superadmin'])
+r = appel(c_sa, 'post', f'/api/client/environment/{env_id}/maintenance', json={})
+verif('Bouton « maintenance » de l\'environnement : plus d\'erreur 500', r.status_code < 500, f'{r.status_code} {r.data[:120]}')
+r1 = appel(c_sa, 'post', f'/api/client/user/{ids["lecteur"]}/toggle', json={})
+r2 = appel(c_sa, 'post', f'/api/client/user/{ids["lecteur"]}/toggle', json={})
+verif('Bouton activer / désactiver un utilisateur : plus d\'erreur 500', r1.status_code == 200 and r2.status_code == 200,
+      f'{r1.status_code} {r2.status_code} {r1.data[:120]}')
+codes = [appel(c_sa, 'post', f'/api/client/{cid_a}/reset-admin-password', json={}).status_code for _ in range(25)]
+verif('Réinitialisation du mot de passe admin : 25 essais sans échec', set(codes) == {200}, str(codes))
+
 print(f'\n{sum(res)}/{len(res)} vérifications réussies')
 sys.exit(0 if all(res) else 1)
