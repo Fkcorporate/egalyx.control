@@ -22534,14 +22534,14 @@ def add_header(response):
     response.headers['X-Content-Type-Options'] = 'nosniff'
     response.headers['X-Frame-Options'] = 'SAMEORIGIN'
     response.headers['X-XSS-Protection'] = '1; mode=block'
-    
+
     # Cache pour les assets statiques
     if 'Cache-Control' not in response.headers:
         if response.mimetype in ['text/css', 'application/javascript', 'image/', 'font/']:
             response.headers['Cache-Control'] = 'public, max-age=31536000'  # 1 an
         else:
             response.headers['Cache-Control'] = 'no-store, no-cache, must-revalidate, max-age=0'
-    
+
     return response
 
 # Compression Gzip (si possible)
@@ -22556,21 +22556,32 @@ except ImportError:
 try:
     from flask_limiter import Limiter
     from flask_limiter.util import get_remote_address
-    
+
     limiter = Limiter(
         app=app,
         key_func=get_remote_address,
         default_limits=["200 per hour", "50 per minute"]
     )
-    
-    # Exceptions pour les pages importantes
-    limiter.exempt("static")
-    limiter.exempt("login")
-    limiter.exempt("health")
+
+    # ✅ Exemptions CORRECTES : on passe les VUES (fonctions) ou les Blueprints,
+    # pas des strings. Flask-Limiter exempte déjà /static/ automatiquement.
+    # On protège chaque exemption pour éviter une AttributeError si la vue
+    # n'existe pas encore au moment de l'import.
+
+    # 'static' est déjà exempté par défaut → inutile de l'ajouter.
+    # Pour les autres vues, on récupère l'objet via app.view_functions :
+
+    for endpoint in ("login", "health"):
+        vue = app.view_functions.get(endpoint)
+        if vue is not None:
+            limiter.exempt(vue)
+        else:
+            print(f"⚠️ Endpoint '{endpoint}' introuvable, exemption ignorée")
+
     print("✅ Rate limiting activé")
 except ImportError:
     print("⚠️ Flask-Limiter non disponible")
-
+    
 # Endpoint de santé pour Render
 @app.route('/health')
 def health_check():
