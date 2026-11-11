@@ -161,6 +161,10 @@ def taches(u, aujourd_hui=None):
         from egalyx import qualite as _q
         _q.taches(u, ajout, horizon, aujourd_hui, _lien)
 
+    def dispositifs():
+        from egalyx import maitrise as _d
+        _d.taches(u, ajout, horizon, aujourd_hui, _lien)
+
     def incidents():
         from egalyx import incidents as _i
         _i.taches(u, ajout, horizon, aujourd_hui, _lien)
@@ -176,7 +180,7 @@ def taches(u, aujourd_hui=None):
                          ('tiers', tiers_revues, 'can_view_tiers'), ('alertes', alertes, 'can_manage_alertes'),
                          ('campagnes', campagnes, 'can_manage_campaigns'), ('procédures', procedures, 'can_manage_logigram'),
                          ('PCA', pca, 'can_manage_bcp'), ('qualité', qualite, 'can_manage_quality'),
-                         ('incidents', incidents, 'can_view_incidents'), ('signalements', signalements, 'can_view_tickets')):
+                         ('incidents', incidents, 'can_view_incidents'), ('dispositifs', dispositifs, 'can_manage_risks'), ('signalements', signalements, 'can_view_tickets')):
         if module_ok(u, perm):
             bloc(nom, f)
     t.sort(key=lambda x: (x['priorite'], x['echeance'] or date.max))

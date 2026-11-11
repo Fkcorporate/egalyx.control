@@ -445,6 +445,12 @@ ARTICLES = [
               'Fréquence (quotidien, mensuel…), responsable, preuve attendue.',
               'Efficacité (1 à 5) et couverture : elles déterminent le niveau de maîtrise et donc le score net.'],
       notes=['Un incident rattaché au dispositif fait automatiquement baisser son efficacité selon sa gravité.',
+             'Une vérification « Non conforme » retire 2 points d’efficacité, « À corriger » ou « À améliorer » 1 point ; '
+             'le niveau de maîtrise suggéré des évaluations en cours est recalculé et l’écart avec la maîtrise saisie est signalé.',
+             'Prochaine vérification : 3 mois (contrôles permanents à mensuels), 6 mois (trimestriels), 1 an (semestriels, '
+             'annuels) ; 30 jours après une vérification défavorable. Elle apparaît dans « Ma semaine » du responsable.',
+             'Le responsable désigné du dispositif peut le consulter et enregistrer ses vérifications et documents ; '
+             'créer, modifier, évaluer ou archiver demande « Gérer les risques ».',
              'Les dispositifs testés en campagne de contrôle ou en contrôle N2 voient leur efficacité confirmée ou revue.'],
       mots=['dispositif', 'dispositifs', 'dmr', 'maitrise', 'controle', 'controles', 'mesure', 'barriere', 'ajouter', 'creer', 'lier', 'efficacite', 'couverture'],
       liens=[('Cartographies', 'liste_cartographies')],

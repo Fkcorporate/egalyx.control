@@ -392,6 +392,7 @@ def enregistrer(app):
     app.before_request(_verification_periodique)
     rendre_liens_facultatifs(app)
     enregistrer_impacts(app)
+    enregistrer_courriels()
     app.jinja_env.globals['incident_peut_resoudre'] = peut_resoudre
 
     @app.cli.command('verifier-incidents')
@@ -511,3 +512,72 @@ def enregistrer_impacts(app):
         m._egalyx_impacts_flush = True
     app.jinja_env.globals['devise_incidents'] = devise_client
     app.jinja_env.globals['montant_incident'] = montant_affiche
+
+
+# ---------------------------------------------------------------- e-mails (délais dépassés, escalades)
+# Les alertes restaient dans l'application. Une copie par e-mail est envoyée pour les notifications d'incident
+# importantes (délai dépassé, escalade), après l'enregistrement et en arrière-plan. Désactivable :
+# EGALYX_INCIDENTS_EMAIL=0. Sans SMTP configuré (egalyx/courriel.py), rien n'est envoyé.
+TYPES_COURRIEL = ('incident', 'escalade')
+
+
+def _a_envoyer(n):
+    if getattr(n, 'entite_type', None) != 'incident':
+        return False
+    titre = (getattr(n, 'titre', '') or '')
+    return getattr(n, 'type_notification', None) in TYPES_COURRIEL or 'scalade' in titre or titre.startswith('Délai dépassé')
+
+
+def _courriels_apres_flush(session_, _ctx):
+    if os.environ.get('EGALYX_INCIDENTS_EMAIL', '1') != '1':
+        return
+    m = _m()
+    nouvelles = [n for n in session_.new if isinstance(n, m.Notification) and _a_envoyer(n)]
+    if not nouvelles:
+        return
+    base = (os.environ.get('EGALYX_URL_PUBLIQUE') or '').rstrip('/')
+    with session_.no_autoflush:
+        for n in nouvelles:
+            u = session_.get(m.User, n.destinataire_id) if n.destinataire_id else None
+            if u is None or not getattr(u, 'email', None) or getattr(u, 'is_active', True) is False:
+                continue
+            lien = f'{base}/incident/{n.entite_id}' if base and n.entite_id else ''
+            texte = f"{n.message or ''}\n\n{('Voir l’incident : ' + lien) if lien else ''}\n\n— Egalyx Control"
+            session_.info.setdefault('egalyx_courriels_incidents', []).append((u.email, f'[Egalyx] {n.titre}', texte))
+
+
+def _courriels_apres_commit(session_):
+    envois = session_.info.pop('egalyx_courriels_incidents', None)
+    if not envois:
+        return
+    try:
+        from egalyx import courriel
+        if not courriel.est_configure():
+            return
+    except Exception:  # noqa: BLE001
+        return
+    import threading
+
+    def _envoyer(lot):
+        from egalyx import courriel
+        for dest, sujet, texte in lot:
+            try:
+                courriel.envoyer([dest], sujet, texte)
+            except Exception:  # noqa: BLE001
+                pass
+    threading.Thread(target=_envoyer, args=(envois,), daemon=True).start()
+
+
+def _courriels_apres_rollback(session_):
+    session_.info.pop('egalyx_courriels_incidents', None)
+
+
+def enregistrer_courriels():
+    import models as m
+    from sqlalchemy import event
+    from sqlalchemy.orm import Session
+    if not getattr(m, '_egalyx_incidents_courriels', False):
+        event.listen(Session, 'after_flush', _courriels_apres_flush)
+        event.listen(Session, 'after_commit', _courriels_apres_commit)
+        event.listen(Session, 'after_soft_rollback', lambda s, _t: _courriels_apres_rollback(s))
+        m._egalyx_incidents_courriels = True
