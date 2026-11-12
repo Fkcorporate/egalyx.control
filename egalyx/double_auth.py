@@ -346,7 +346,7 @@ def organisation():
     actifs = [u for u in users if u.is_active]
     return render_template('egalyx/2fa_organisation.html', users=users, tous=reglage_organisation(cid),
                            nb_actives=sum(1 for u in actifs if u.totp_actif), nb_actifs=len(actifs),
-                           guide_url=url_for('.guide', _external=True), obligatoire_pour=obligatoire_pour)
+                           guide_url=__import__('egalyx.bienvenue', fromlist=['url_guide']).url_guide(), obligatoire_pour=obligatoire_pour)
 
 
 def enregistrer(app):
