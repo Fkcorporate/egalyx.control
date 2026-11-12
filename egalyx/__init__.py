@@ -65,6 +65,10 @@ def enregistrer_extensions(app, db, csrf=None, recalculer_cotations=None, constr
     notifications_prefs.enregistrer(app)    # « Mes notifications » : application / e-mail / résumé quotidien
     from egalyx import application_mobile
     application_mobile.enregistrer(app)     # installable sur téléphone : manifeste, icônes, service worker
+    from egalyx import anti_spam_contact
+    anti_spam_contact.enregistrer(app, csrf=csrf)   # formulaire de contact du site : question, champ piège, limite par IP
+    from egalyx import blog
+    blog.enregistrer(app)                   # blog public : vrais articles, catégories, sitemap, SEO
     try:                                    # paquet optionnel « nouvelle apparence » (classique / nouvelle au choix)
         from egalyx import apparence
         apparence.enregistrer(app)
