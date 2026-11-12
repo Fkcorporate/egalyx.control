@@ -3,42 +3,153 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <meta name="csrf-token" content="{{ csrf_token() }}">
-  <title>{% block title %}Connexion{% endblock %} — Egalyx Control</title>
+  <meta name="robots" content="noindex, nofollow">
+  {#- Mise en page commune des pages d'accès : connexion, mot de passe oublié / réinitialisé / à changer, double
+      authentification, accès suspendu, page publique d'alerte.
+      Sur l'adresse d'un client (https://<client>.egalyx.com) ou quand la page reçoit « client », le panneau de gauche
+      prend le logo, le nom, la couleur et le message du client (egalyx/connexion_client.py) ; sinon la marque Egalyx.
+      Blocs conservés : title, styles, cadre, logo, content, pied, scripts (+ marque, sous_titre). -#}
+  {% set m = marque_connexion(client if client is defined else None) if marque_connexion is defined else None %}
+  {% set couleur = m.couleur if m else '#13294B' %}
+  <meta name="theme-color" content="{{ couleur }}">
+  <title>{% block title %}Connexion{% endblock %} — {{ m.nom if m else 'Egalyx' }}</title>
   <link rel="icon" type="image/png" sizes="32x32" href="/static/favicon/favicon-32x32.png">
+  <link rel="manifest" href="/manifest.webmanifest">
+  <link rel="apple-touch-icon" href="/application/icone-180.png">
   <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
   {% include "_partials/securite_client.html" %}
   <style>
-    body { min-height: 100vh; display: flex; align-items: center; justify-content: center; padding: 2rem 1rem;
-           background: linear-gradient(135deg, #0f1f3d 0%, #1A3C6B 55%, #2a5a9a 100%); font-family: -apple-system, "Segoe UI", Roboto, Arial, sans-serif; }
-    .auth-carte { width: 100%; max-width: 440px; background: #fff; border-radius: 16px; padding: 2rem 2rem 1.75rem; box-shadow: 0 20px 50px rgba(0,0,0,.25); }
-    .auth-logo { font-weight: 800; font-size: 1.35rem; color: #1A3C6B; letter-spacing: -.01em; margin-bottom: 1.25rem; display: flex; align-items: center; gap: .5rem; }
-    .auth-logo img { max-height: 40px; }
-    .auth-carte h1 { font-size: 1.3rem; font-weight: 700; margin-bottom: .35rem; }
-    .auth-sous { color: #6b7280; font-size: .92rem; margin-bottom: 1.25rem; }
-    .auth-pied { text-align: center; margin-top: 1.25rem; font-size: .85rem; color: rgba(255,255,255,.75); }
-    .auth-pied a { color: #fff; }
+    :root{--c:{{ couleur }};--texte:#0F172A;--second:#475467;--pale:#667085;--bord:#D0D5DD;--fond:#F5F7FA}
+    body{margin:0;font-family:"Inter","Segoe UI",system-ui,-apple-system,Roboto,Arial,sans-serif;color:var(--texte);-webkit-font-smoothing:antialiased}
+    /* --- Pages qui gardent l'ancienne carte centrée (ex. page publique d'alerte) --- */
+    body:not(:has(> .auth-page)){min-height:100vh;display:flex;align-items:center;justify-content:center;padding:2rem 1rem;background:linear-gradient(135deg,#0f1f3d 0%,#1A3C6B 55%,#2a5a9a 100%)}
+    body:not(:has(> .auth-page)) .auth-carte{width:100%;max-width:440px;background:#fff;border-radius:16px;padding:2rem 2rem 1.75rem;box-shadow:0 20px 50px rgba(0,0,0,.25)}
+    body:not(:has(> .auth-page)) .auth-logo{font-weight:800;font-size:1.35rem;color:#1A3C6B;margin-bottom:1.25rem;display:flex;align-items:center;gap:.5rem}
+    body:not(:has(> .auth-page)) .auth-pied{text-align:center;margin-top:1.25rem;font-size:.85rem;color:rgba(255,255,255,.75)}
+    .auth-logo img{max-height:40px}
+    /* --- Mise en page en deux panneaux --- */
+    .auth-page{min-height:100vh;display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);background:var(--fond)}
+    .auth-marque{position:relative;isolation:isolate;overflow:hidden;display:flex;flex-direction:column;justify-content:space-between;padding:clamp(2rem,5vw,4rem);color:#fff;background:var(--c)}
+    .auth-marque::before{content:"";position:absolute;inset:0;z-index:-1;background:linear-gradient(160deg,rgba(255,255,255,.12),rgba(0,0,0,.3))}
+    .auth-marque::after{content:"";position:absolute;inset:0;z-index:-1;background-image:linear-gradient(rgba(255,255,255,.07) 1px,transparent 1px),linear-gradient(90deg,rgba(255,255,255,.07) 1px,transparent 1px);background-size:48px 48px;-webkit-mask-image:radial-gradient(ellipse 80% 70% at 20% 10%,#000 10%,transparent 70%);mask-image:radial-gradient(ellipse 80% 70% at 20% 10%,#000 10%,transparent 70%)}
+    .m-logo{width:88px;height:88px;border-radius:22px;background:#fff;display:grid;place-items:center;overflow:hidden;box-shadow:0 18px 40px -18px rgba(0,0,0,.55)}
+    .m-logo img{max-width:78%;max-height:78%;object-fit:contain}
+    .m-logo span{font-weight:800;font-size:1.8rem;line-height:1;color:var(--c)}
+    .m-logo svg{width:52px;height:52px}
+    .auth-marque h1.m-nom{margin:1.75rem 0 .6rem;font-size:clamp(2rem,3.6vw,3rem);line-height:1.08;letter-spacing:-.02em;font-weight:750;color:#fff}
+    .m-espace{font-size:1.05rem;opacity:.86}
+    .m-accueil{margin-top:1.5rem;max-width:30rem;padding:1rem 1.15rem;border-radius:14px;background:rgba(255,255,255,.12);border:1px solid rgba(255,255,255,.22)}
+    .m-points{list-style:none;margin:2rem 0 0;padding:0;display:grid;gap:.7rem;font-size:.97rem;opacity:.92}
+    .m-points i{width:1.5rem;opacity:.85}
+    .m-pied{display:flex;align-items:center;gap:.5rem;font-size:.85rem;opacity:.75;margin-top:2.5rem}
+    .m-pied svg{width:16px;height:16px}
+    .auth-acces{display:flex;align-items:center;justify-content:center;padding:clamp(1.5rem,5vw,4rem)}
+    .auth-page .auth-carte{width:min(100%,430px)}
+    .auth-page .auth-logo{display:none}
+    .auth-page .auth-carte h1,.auth-page .auth-carte h2.titre{font-size:1.65rem;font-weight:700;letter-spacing:-.01em;margin:0 0 .35rem;color:var(--texte)}
+    .auth-sous{margin:0 0 1.6rem;color:var(--second)}
+    .auth-page .form-label,.auth-page label.form-label{font-weight:600;font-size:.93rem;margin-bottom:.4rem}
+    .auth-page .form-control{min-height:50px;border-radius:12px;border-color:var(--bord);padding:.7rem 1rem}
+    .auth-page .form-control:focus{border-color:var(--c);box-shadow:0 0 0 4px color-mix(in srgb,var(--c) 18%,transparent)}
+    .champ-ic{position:relative}
+    .champ-ic>i.ic{position:absolute;left:.95rem;top:50%;translate:0 -50%;color:var(--pale);pointer-events:none}
+    .champ-ic>.form-control{padding-left:2.6rem;padding-right:2.9rem}
+    .voir{position:absolute;right:.35rem;top:50%;translate:0 -50%;width:40px;height:40px;border:0;background:none;color:var(--pale);border-radius:8px}
+    .voir:hover{color:var(--texte)}
+    .auth-page .btn-primary,.auth-page .btn-marque{display:flex;align-items:center;justify-content:center;gap:.55rem;width:100%;min-height:52px;border:0;border-radius:12px;background:var(--c);color:#fff;font-weight:650;font-size:1.02rem;box-shadow:0 12px 24px -14px var(--c)}
+    .auth-page .btn-primary:hover,.auth-page .btn-marque:hover{filter:brightness(1.08);background:var(--c);color:#fff}
+    .auth-page a{color:var(--c);font-weight:600;text-decoration:none}
+    .auth-page a:hover{text-decoration:underline}
+    .auth-page .alert{border-radius:12px;font-size:.95rem}
+    .regles{list-style:none;padding:0;margin:.5rem 0 1rem;display:grid;grid-template-columns:1fr 1fr;gap:.25rem .75rem;font-size:.85rem;color:var(--pale)}
+    .regles li::before{content:"○";margin-right:.4rem}
+    .regles li.ok{color:#067647}.regles li.ok::before{content:"●"}
+    .aide-acces{margin-top:1.6rem;padding-top:1.25rem;border-top:1px solid #EAECF0;display:grid;gap:.6rem;font-size:.92rem;color:var(--second)}
+    .aide-acces i{width:1.2rem;color:var(--pale)}
+    .auth-page .auth-pied{margin-top:1.4rem;font-size:.82rem;color:var(--pale);text-align:center}
+    .auth-page .auth-pied a{color:var(--pale);font-weight:500}
+    @media (max-width:860px){
+      .auth-page{grid-template-columns:1fr}
+      .auth-marque{padding:1.6rem 1.5rem 1.5rem}
+      .auth-marque h1.m-nom{margin-top:1rem;font-size:1.7rem}
+      .m-logo{width:60px;height:60px;border-radius:16px}.m-logo svg{width:36px;height:36px}
+      .m-points,.m-pied{display:none}
+      .m-accueil{margin-top:1rem}
+    }
   </style>
   {% block styles %}{% endblock %}
 </head>
 <body>
-  {# Les pages qui ont leur propre mise en page (ex. auth/client_login.html) redéfinissent « cadre ». #}
-  {% block cadre %}
-  <div style="width: 100%; max-width: 440px;">
+{% block cadre %}
+<div class="auth-page">
+  <aside class="auth-marque" aria-label="{{ m.nom if m else 'Egalyx' }}">
+    {% block marque %}
+    <div>
+      <div class="m-logo">
+        {% if m and m.logo_url %}<img src="{{ m.logo_url }}" alt="Logo {{ m.nom }}">
+        {% elif m %}<span aria-hidden="true">{{ m.initiales }}</span>
+        {% else %}<svg viewBox="0 0 24 24" aria-hidden="true"><path fill="#13294B" d="M12 2 20 5v6c0 5-3.4 9.3-8 11-4.6-1.7-8-6-8-11V5z"/><path fill="#60A5FA" d="M12 4.2 18 6.4V11c0 3.9-2.5 7.3-6 8.8z"/></svg>{% endif %}
+      </div>
+      <h1 class="m-nom">{{ m.nom if m else 'Egalyx' }}</h1>
+      <div class="m-espace">{% if m %}Espace contrôle interne, audit et gestion des risques{% else %}Le contrôle interne, simple et maîtrisé.{% endif %}</div>
+      {% if m and m.message %}<div class="m-accueil">{{ m.message }}</div>{% endif %}
+      <ul class="m-points">
+        {% if m %}
+        <li><i class="fas fa-shield-halved" aria-hidden="true"></i>Accès réservé aux utilisateurs de {{ m.nom }}</li>
+        <li><i class="fas fa-mobile-screen-button" aria-hidden="true"></i>Double authentification par code sur téléphone</li>
+        <li><i class="fas fa-lock" aria-hidden="true"></i>Données propres à votre organisation</li>
+        {% else %}
+        <li><i class="fas fa-map" aria-hidden="true"></i>Cartographie des risques et contrôles de niveau 2</li>
+        <li><i class="fas fa-clipboard-check" aria-hidden="true"></i>Audit interne et suivi des recommandations</li>
+        <li><i class="fas fa-mobile-screen-button" aria-hidden="true"></i>Double authentification et données cloisonnées</li>
+        {% endif %}
+      </ul>
+    </div>
+    <div class="m-pied">
+      {% if m %}<svg viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M12 2 20 5v6c0 5-3.4 9.3-8 11-4.6-1.7-8-6-8-11V5z"/></svg>Propulsé par Egalyx
+      {% else %}© {{ 2026 }} Egalyx · <a href="/home" style="color:#fff;font-weight:500">egalyx.com</a>{% endif %}
+    </div>
+    {% endblock %}
+  </aside>
+  <main class="auth-acces">
     <div class="auth-carte">
-      <div class="auth-logo">{% block logo %}<i class="fas fa-shield-halved"></i> Egalyx Control{% endblock %}</div>
+      <div class="auth-logo">{% block logo %}<i class="fas fa-shield-halved"></i> {{ m.nom if m else 'Egalyx' }}{% endblock %}</div>
       {% with messages = get_flashed_messages(with_categories=true) %}
         {% for cat, msg in messages %}
-          <div class="alert alert-{{ 'danger' if cat in ('error', 'danger') else (cat if cat in ('success', 'warning', 'info') else 'info') }} py-2 small" role="alert">{{ msg }}</div>
+          {% if not (cat == 'success' and msg.startswith('Bienvenue')) %}
+          <div class="alert alert-{{ 'danger' if cat in ('error', 'danger') else (cat if cat in ('success', 'warning', 'info') else 'info') }} py-2" role="alert">{{ msg }}</div>
+          {% endif %}
         {% endfor %}
       {% endwith %}
       {% block content %}{% endblock %}
+      <div class="auth-pied">{% block pied %}{% if m and m.contact %}<i class="fas fa-headset me-1"></i>Besoin d'aide ? {{ m.contact }}{% else %}Connexion sécurisée · <a href="/confidentialite">Confidentialité</a>{% endif %}{% endblock %}</div>
     </div>
-    <div class="auth-pied">{% block pied %}Egalyx Control{% endblock %}</div>
-  </div>
-  {% endblock %}
-  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
-  {% block scripts %}{% endblock %}
+  </main>
+</div>
+{% endblock %}
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
+<script>
+/* Afficher / masquer le mot de passe (boutons .voir) et règles de mot de passe (ul.regles[data-pour]) */
+(function () {
+  document.querySelectorAll('.voir[data-pour]').forEach(function (b) {
+    var p = document.getElementById(b.dataset.pour); if (!p) return;
+    b.addEventListener('click', function () {
+      var v = p.type === 'password'; p.type = v ? 'text' : 'password';
+      b.setAttribute('aria-pressed', String(v)); b.setAttribute('aria-label', v ? 'Masquer le mot de passe' : 'Afficher le mot de passe');
+      b.firstElementChild.className = v ? 'fas fa-eye-slash' : 'fas fa-eye';
+    });
+  });
+  var R = { len: function (v) { return v.length >= 12; }, maj: function (v) { return /[A-Z]/.test(v); }, min: function (v) { return /[a-z]/.test(v); },
+            chi: function (v) { return /\d/.test(v); }, spe: function (v) { return /[!@#$%^&*(),.?":{}|<>]/.test(v); }, esp: function (v) { return v && !/\s/.test(v); } };
+  document.querySelectorAll('ul.regles[data-pour]').forEach(function (ul) {
+    var c = document.getElementById(ul.dataset.pour); if (!c) return;
+    c.addEventListener('input', function () {
+      ul.querySelectorAll('li[data-r]').forEach(function (li) { li.classList.toggle('ok', !!R[li.dataset.r](c.value)); });
+    });
+  });
+})();
+</script>
+{% block scripts %}{% endblock %}
 </body>
 </html>
