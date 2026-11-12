@@ -66,6 +66,19 @@ Autres corrections :
 
 **Évaluation triphasée** (et écran d'évaluation de l'opérateur) : les couleurs de la maîtrise étaient inversées (« Insuffisant » en vert). Elles vont maintenant du rouge (1 Insuffisant) au vert (5 Excellent), y compris dans les listes de choix des phases de validation et de confirmation.
 
+## Adresse d'accès des clients (sous-domaines) (v6.11)
+
+- Le lien d'accès affiché pour un client était une adresse de développement (`http://sonapie:5000`) : il est
+  maintenant `https://sonapie.egalyx.com` partout (fiche, liste, fenêtre « Tester sous-domaine »).
+  Le domaine se règle par `EGALYX_DOMAINE` (par défaut `egalyx.com`).
+- La reconnaissance de l'adresse (`sonapie.egalyx.com` → client) comparait l'hôte complet au sous-domaine
+  enregistré (« sonapie ») : aucun client n'aurait été trouvé. Corrigé (majuscules et port tolérés, anciens
+  enregistrements et sous-domaines portés seulement par l'environnement reconnus).
+- À la création d'un client, le sous-domaine est aussi enregistré sur le client (il ne l'était que sur
+  l'environnement).
+- Pour que les adresses fonctionnent : enregistrement DNS générique `*.egalyx.com` vers le serveur et certificat
+  HTTPS couvrant `*.egalyx.com`.
+
 ## Fiche client du super admin : corrections (v6.10)
 
 - Tous les boutons de la fiche client étaient inactifs : une erreur de syntaxe JavaScript (nom du client échappé

@@ -46,13 +46,27 @@ def main():
             else:
                 nouveaux.append(rel)
             os.makedirs(os.path.dirname(cible), exist_ok=True)
-            shutil.copy2(source, cible)
+            shutil.copyfile(source, cible)      # date du jour : aucun cache .pyc ancien ne peut être repris
     print(f"{len(copies)} fichier(s) remplacé(s) (anciennes versions dans {os.path.basename(sauvegarde)}/), "
           f"{len(nouveaux)} nouveau(x) :")
     for rel in sorted(nouveaux):
         print('   +', rel)
 
+    # caches Python compilés : supprimés pour que les nouveaux fichiers soient relus au démarrage
+    for racine, dossiers, _f in os.walk(projet):
+        if 'venv' in racine.split(os.sep) or '.venv' in racine.split(os.sep) or 'site-packages' in racine:
+            continue
+        if os.path.basename(racine) == '__pycache__' and os.path.relpath(racine, projet).split(os.sep)[0] in ('egalyx', '__pycache__'):
+            shutil.rmtree(racine, ignore_errors=True)
+    pyc_app = os.path.join(projet, '__pycache__')
+    if os.path.isdir(pyc_app):
+        shutil.rmtree(pyc_app, ignore_errors=True)
+
     erreurs = []
+    import filecmp
+    for rel in copies + nouveaux:
+        if not filecmp.cmp(os.path.join(ICI, rel), os.path.join(projet, rel), shallow=False):
+            erreurs.append(f'{rel} : la copie diffère du paquet (fichier verrouillé ? droits ?)')
     for rel in copies + nouveaux:
         if rel.endswith('.py'):
             try:
@@ -75,7 +89,9 @@ def main():
         for e in erreurs:
             print('   -', e)
         sys.exit(2)
-    print('\nInstallation vérifiée : tous les fichiers sont en place. Redémarrez l\'application.')
+    version = os.path.basename(ICI)
+    print(f'\nInstallation vérifiée ({version}) : {len(copies) + len(nouveaux)} fichiers identiques au paquet.')
+    print('ARRÊTEZ complètement le serveur (Ctrl+C) puis relancez-le : un serveur resté ouvert garde l\'ancien code.')
 
 
 if __name__ == '__main__':

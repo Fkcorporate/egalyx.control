@@ -6881,8 +6881,7 @@ def detect_client_subdomain():
     if request.path.startswith('/error/') or request.path == '/client-not-found':
         return
     
-    host = request.host.split(':')[0]
-    print(f"🔍 Hôte détecté: {host}")
+    host = request.host.split(':')[0].lower()
     
     # === MODE DÉVELOPPEMENT LOCAL ===
     if host in ['localhost', '127.0.0.1', '0.0.0.0']:
@@ -6890,44 +6889,28 @@ def detect_client_subdomain():
         return
     
     # === SOUS-DOMAINE DÉTECTÉ ===
-    parts = host.split('.')
-    if len(parts) > 2:  # Au moins 3 parties: sous-domaine + domaine
-        subdomain = parts[0]
-        domain = '.'.join(parts[1:])
-        
-        print(f"📌 Sous-domaine: {subdomain}, Domaine: {domain}")
-        
-        # Ignorer les sous-domaines système
-        system_subdomains = ['www', 'api', 'admin', 'mail', 'superadmin', 'dashboard', 'app', 'auth']
-        if subdomain in system_subdomains:
-            print(f"⏭️ Ignorer sous-domaine système: {subdomain}")
-            return
-        
-        # Chercher le client par sous-domaine
-        client = Client.query.filter_by(sous_domaine=host).first()
-        
-        if client:
-            # Stocker le client dans g pour toute la requête
-            g.current_client = client
-            g.client_id = client.id
-            g.subdomain = subdomain
-            
-            print(f"✅ Client trouvé: {client.nom} (ID: {client.id})")
-            
-            # Si utilisateur non connecté, stocker le client pour la page de login
-            if not current_user.is_authenticated:
-                session['requested_client_id'] = client.id
-                session['requested_subdomain'] = subdomain
-        else:
-            print(f"❌ Aucun client trouvé pour {host}")
-            g.current_client = None
-            
-            # 🔥 REDIRIGER VERS UNE PAGE D'ERREUR SPÉCIFIQUE
-            # Vérifier si on est sur une route qui n'est pas déjà une erreur
-            if not request.path.startswith('/client-not-found'):
-                return render_template('errors/client_not_found.html', 
-                                     subdomain=subdomain,
-                                     host=host), 404
+    # sonapie.egalyx.com → client dont le sous-domaine est « sonapie » (ou, pour les anciens enregistrements, l'hôte
+    # complet ; ou celui de son environnement). Le domaine principal (egalyx.com, www.egalyx.com) n'est pas un client.
+    from egalyx.gestion_clients import client_par_hote, domaine_principal, normaliser_sous_domaine
+    dom = domaine_principal()
+    if host == dom or not host.endswith('.' + dom):
+        return
+    subdomain = normaliser_sous_domaine(host)
+    system_subdomains = ['www', 'api', 'admin', 'mail', 'superadmin', 'dashboard', 'app', 'auth']
+    if not subdomain or subdomain in system_subdomains:
+        return
+    client = client_par_hote(host)
+    if client:
+        g.current_client = client
+        g.client_id = client.id
+        g.subdomain = subdomain
+        if not current_user.is_authenticated:
+            session['requested_client_id'] = client.id
+            session['requested_subdomain'] = subdomain
+    else:
+        g.current_client = None
+        if not request.path.startswith('/client-not-found'):
+            return render_template('errors/client_not_found.html', subdomain=subdomain, host=host), 404
 
 # ==================== ROUTE POUR PAGE CLIENT NON TROUVÉ ====================
 
@@ -6940,7 +6923,10 @@ def client_not_found():
 def inject_client_context():
     """Injecte des variables client dans tous les templates"""
     client = getattr(g, 'current_client', None)
+    from egalyx.gestion_clients import sous_domaine_du_client, url_client
     return {
+        'url_client': url_client,                       # https://<sous-domaine>.egalyx.com
+        'sous_domaine_du_client': sous_domaine_du_client,
         'current_client': client,
         'client_subdomain': getattr(g, 'subdomain', None),
         'is_client_domain': client is not None
@@ -7855,7 +7841,7 @@ def super_admin_add_environment(id):
             client_id=client.id,
             nom=nom,
             sous_domaine=sous_domaine,
-            url_acces=f"https://{sous_domaine}",
+            url_acces=__import__('egalyx.gestion_clients', fromlist=['url_client']).url_client(sous_domaine),
             statut='actif',
             created_at=datetime.utcnow(),
             updated_at=datetime.utcnow()
@@ -17470,6 +17456,8 @@ def super_admin_nouveau_client():
                 sous_domaine_value = f"{base}-{compteur}"
                 print(f"🔄 Sous-domaine déjà pris, nouveau: {sous_domaine_value}")
             
+            client.sous_domaine = sous_domaine_value  # aussi sur le client (lien d'accès, reconnaissance de l'adresse)
+
             # ===== 3. CRÉER L'ENVIRONNEMENT AVEC LE SOUS-DOMAINE =====
             env = EnvironnementClient(
                 client_id=client.id,
@@ -22534,14 +22522,14 @@ def add_header(response):
     response.headers['X-Content-Type-Options'] = 'nosniff'
     response.headers['X-Frame-Options'] = 'SAMEORIGIN'
     response.headers['X-XSS-Protection'] = '1; mode=block'
-
+    
     # Cache pour les assets statiques
     if 'Cache-Control' not in response.headers:
         if response.mimetype in ['text/css', 'application/javascript', 'image/', 'font/']:
             response.headers['Cache-Control'] = 'public, max-age=31536000'  # 1 an
         else:
             response.headers['Cache-Control'] = 'no-store, no-cache, must-revalidate, max-age=0'
-
+    
     return response
 
 # Compression Gzip (si possible)
@@ -22556,32 +22544,21 @@ except ImportError:
 try:
     from flask_limiter import Limiter
     from flask_limiter.util import get_remote_address
-
+    
     limiter = Limiter(
         app=app,
         key_func=get_remote_address,
         default_limits=["200 per hour", "50 per minute"]
     )
-
-    # ✅ Exemptions CORRECTES : on passe les VUES (fonctions) ou les Blueprints,
-    # pas des strings. Flask-Limiter exempte déjà /static/ automatiquement.
-    # On protège chaque exemption pour éviter une AttributeError si la vue
-    # n'existe pas encore au moment de l'import.
-
-    # 'static' est déjà exempté par défaut → inutile de l'ajouter.
-    # Pour les autres vues, on récupère l'objet via app.view_functions :
-
-    for endpoint in ("login", "health"):
-        vue = app.view_functions.get(endpoint)
-        if vue is not None:
-            limiter.exempt(vue)
-        else:
-            print(f"⚠️ Endpoint '{endpoint}' introuvable, exemption ignorée")
-
+    
+    # Exceptions pour les pages importantes
+    limiter.exempt("static")
+    limiter.exempt("login")
+    limiter.exempt("health")
     print("✅ Rate limiting activé")
 except ImportError:
     print("⚠️ Flask-Limiter non disponible")
-    
+
 # Endpoint de santé pour Render
 @app.route('/health')
 def health_check():
