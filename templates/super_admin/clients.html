@@ -102,17 +102,25 @@
                         </tr>
                     </thead>
                     <tbody>
+                        {% set _ind_tous = indicateurs_clients() if indicateurs_clients is defined else {} %}
                         {% for client in clients %}
-                        <tr>
+                        {% set _ind = _ind_tous.get(client.id, {}) %}
+                        {% set _ident = identite_client(client.id) if identite_client is defined else none %}
+                        <tr{% if _ind.a_surveiller %} class="table-warning-subtle" style="--bs-table-bg: rgba(var(--bs-warning-rgb), .08);"{% endif %}>
                             <td>
                                 <div class="d-flex align-items-center">
-                                    <div class="avatar-sm bg-primary bg-opacity-10 text-primary rounded-circle d-flex align-items-center justify-content-center me-3">
-                                        <i class="fas fa-building"></i>
+                                    {% if _ident and _ident.logo_url %}
+                                    <img src="{{ _ident.logo_url }}" alt="" class="me-3 rounded" style="width: 40px; height: 40px; object-fit: contain; background: #fff; border: 1px solid #e5e7eb;">
+                                    {% else %}
+                                    <div class="avatar-sm bg-primary bg-opacity-10 text-primary rounded d-flex align-items-center justify-content-center me-3 fw-bold" style="width: 40px; height: 40px; font-size: .8rem;">
+                                        {{ ((_ident.nom_court if _ident else client.nom) or '?')[:3]|upper }}
                                     </div>
+                                    {% endif %}
                                     <div>
-                                        <strong>{{ client.nom }}</strong>
+                                        <strong style="font-size: 1.02rem;">{{ client.nom }}</strong>
                                         <br>
-                                        <small class="text-muted">{{ client.reference }}</small>
+                                        <small class="text-muted">{{ client.reference }}{% if _ident and _ident.nom_court and _ident.nom_court != client.nom %} · {{ _ident.nom_court }}{% endif %}</small>
+                                        {% if _ind.a_surveiller %}<div class="small text-warning-emphasis fw-semibold"><i class="fas fa-triangle-exclamation me-1"></i>À surveiller : {{ _ind.a_surveiller|join(', ') }}</div>{% endif %}
                                     </div>
                                 </div>
                             </td>
@@ -137,20 +145,24 @@
                             </td>
                             <td>
                                 <div class="d-flex align-items-center">
-                                    <span class="me-2">{{ client.nb_utilisateurs|default(0, true) }} / {{ client.max_utilisateurs|default('∞', true) }}</span>
+                                    {% set _nb = _ind.utilisateurs if _ind else client.nb_utilisateurs|default(0, true) %}
+                                    <span class="me-2">{{ _nb }} / {{ client.max_utilisateurs|default('∞', true) }}</span>
                                     <div class="progress flex-grow-1" style="height: 5px;">
-                                        {% set percentage = (client.nb_utilisateurs|default(0, true) / client.max_utilisateurs * 100) if client.max_utilisateurs else 0 %}
+                                        {% set percentage = (_nb / client.max_utilisateurs * 100) if client.max_utilisateurs else 0 %}
                                         <div class="progress-bar bg-{{ 'danger' if percentage >= 100 else 'success' }}" 
                                              style="width: {{ percentage|round }}%"></div>
                                     </div>
                                 </div>
+                                {% if _ind.utilisateurs %}<small class="text-muted"><i class="fas fa-mobile-screen-button me-1"></i>double auth. {{ _ind.double_auth }} %</small>{% endif %}
                             </td>
                             <td>
-                                {% if client.derniere_activite %}
-                                <small class="text-muted">{{ client.derniere_activite|format_date }}</small>
+                                {% set _der = _ind.derniere_connexion or client.derniere_activite %}
+                                {% if _der %}
+                                <small class="text-muted">{{ _der|format_date }}</small>
                                 {% else %}
                                 <span class="text-muted">Aucune</span>
                                 {% endif %}
+                                {% if _ind.demarrage is not none and _ind.demarrage is defined %}<br><small class="text-muted">Mise en route {{ _ind.demarrage }} %{% if _ind.delai_valeur is not none and _ind.delai_valeur is defined %} · 1re éval. J+{{ _ind.delai_valeur }}{% endif %}</small>{% endif %}
                             </td>
                             <td>
                                 {% if client.is_active %}
