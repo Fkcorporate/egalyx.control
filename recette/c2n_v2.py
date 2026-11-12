@@ -201,5 +201,18 @@ verif('Fiche du dispositif : plans d\'action du contrôle N2', r.status_code == 
 r, t = go('admin_a', 'get', f'/risque/{RK}')
 verif('Fiche du risque : plans d\'action du contrôle N2', r.status_code == 200 and 'PAC2N-V2' in t, f'{r.status_code} {socle.cause(A)}')
 
+with A.app.app_context():
+    pmoi = creer(M.PlanAction, reference='PA-SANS-ORG', nom='Plan sans organisation', client_id=None,
+                 created_by=ids['admin_a'], statut='a_faire', responsable_id=ids['gestionnaire'],
+                 date_fin_prevue=dt.date.today() - dt.timedelta(days=30))
+    db.session.commit()
+r, t = go('gestionnaire', 'get', '/plans-action/registre/?moi=1&retard=1')
+verif('« Mes plans » + « En retard » : mes plans en retard, même sans organisation (comme Ma semaine)',
+      r.status_code == 200 and 'PA-SANS-ORG' in t and 'PA-RISQ-V2' not in t, f'{r.status_code} {socle.cause(A)}')
+r, t = go('admin_b', 'get', '/plans-action/registre/')
+verif('… sans les montrer aux autres', 'PA-SANS-ORG' not in t)
+r, t = go('superadmin', 'get', '/plans-action/registre/')
+verif('Super-admin : tous les plans', r.status_code == 200 and 'PAC2N-V2' in t and 'PA-RISQ-V2' in t, f'{r.status_code} {socle.cause(A)}')
+
 print(f'\n{sum(res)}/{len(res)} vérifications réussies')
 sys.exit(0 if all(res) else 1)

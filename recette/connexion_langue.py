@@ -45,6 +45,17 @@ with c.session_transaction() as s:
     suite = s.get('2fa_suite')
 verif('Un script chargé avant le code ne remplace pas la destination', suite == '/kri' and r.status_code in (401, 404), f'{r.status_code} {suite}')
 
+for nom_cas, h in (('service worker (Sec-Fetch-Dest vide)', {'Sec-Fetch-Dest': 'empty', 'Sec-Fetch-Mode': 'same-origin',
+                                                        'Accept': 'text/html,application/xhtml+xml,*/*;q=0.8'}),
+                   ('navigation sans Sec-Fetch-Dest', {'Sec-Fetch-Mode': 'navigate', 'Accept': 'text/html'})):
+    r = appel(c, 'get', '/', headers=h)
+    verif(f'Page « / » avant le code via {nom_cas} : renvoi vers le code (jamais une page blanche 401)',
+          r.status_code == 302 and 'verification' in (r.headers.get('Location') or ''), str(r.status_code))
+r = appel(c, 'get', '/x.json', headers={'Sec-Fetch-Dest': 'empty', 'Accept': 'application/json'})
+verif('Appel en arrière-plan avant le code : 401, sans redirection', r.status_code == 401, str(r.status_code))
+with c.session_transaction() as s:
+    s['2fa_suite'] = '/kri'
+
 from egalyx.double_auth import destination_valable
 verif('Destinations refusées : fichiers, API, autre site',
       not any(destination_valable(x) for x in ('/langue/dictionnaire-en.js?v=a8', '/static/app.css', '/api/x',

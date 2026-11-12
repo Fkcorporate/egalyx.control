@@ -29,6 +29,7 @@ ETAPES = [
     ('Photo de profil et double authentification de l\'organisation', 'profil_2fa.py', []),
     ('Contrôle interne N2 relié à la cartographie, méthode de test, ménage', 'c2n_cartographie.py', []),
     ('Contrôle interne N2 : réglages, échantillon, plans d\'action réunis', 'c2n_v2.py', []),
+    ('Mes notifications, application installable, À traiter, clients', 'notifications_mobile.py', []),
     ('KRI : modules du client contre formule ; scripts des pages intacts', 'kri_formule.py', []),
     ('Sécurité des décisions par rôle', 'securite.py', []),
     ('Pages sans identifiant, 6 rôles', 'balayage.py', ['superadmin', 'admin_a', 'gestionnaire', 'validateur', 'operateur', 'lecteur']),
