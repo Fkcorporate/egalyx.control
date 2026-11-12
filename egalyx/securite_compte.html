@@ -1,0 +1,70 @@
+{% extends "base.html" %}
+{% import "_macros/page.html" as pg %}
+{% block title %}Sécurité du compte{% endblock %}
+{% block styles %}{{ pg.styles() }}{% endblock %}
+{% block content %}
+<div class="container" style="max-width: 900px;">
+  {{ pg.entete('Sécurité du compte', 'fa-user-shield', u.email) }}
+
+  {% call pg.carte('Double authentification') %}
+    {% if u.totp_actif %}
+      <p class="mb-2"><span class="badge text-bg-success me-2">Activée</span>depuis le {{ pg.date(u.totp_active_le) }}.
+        Codes de secours restants : <strong>{{ codes_restants }}</strong>{% if codes_restants <= 2 %} <span class="text-danger">— générez-en de nouveaux</span>{% endif %}.</p>
+      <div class="row g-3 mt-1">
+        <div class="col-md-6">
+          <form method="post" action="{{ url_for('securite_compte.codes_secours') }}" class="border rounded p-3 h-100">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            <div class="fw-semibold mb-2">Nouveaux codes de secours</div>
+            <p class="small text-secondary">Les anciens codes ne fonctionneront plus.</p>
+            <div class="input-group input-group-sm">
+              <input class="form-control" name="code" inputmode="numeric" maxlength="6" placeholder="Code de l’application" required>
+              <button class="btn btn-outline-primary" type="submit">Générer</button>
+            </div>
+          </form>
+        </div>
+        <div class="col-md-6">
+          {% if obligatoire %}
+          <div class="border rounded p-3 h-100 small text-secondary"><i class="fas fa-lock me-1"></i>Obligatoire pour les administrateurs : la double authentification ne peut pas être désactivée sur ce compte.</div>
+          {% else %}
+          <form method="post" action="{{ url_for('securite_compte.desactiver') }}" class="border rounded p-3 h-100">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            <div class="fw-semibold mb-2">Désactiver</div>
+            <input class="form-control form-control-sm mb-2" type="password" name="mot_de_passe" placeholder="Mot de passe" autocomplete="current-password" required>
+            <div class="input-group input-group-sm">
+              <input class="form-control" name="code" maxlength="9" placeholder="Code ou code de secours" required>
+              <button class="btn btn-outline-danger" type="submit">Désactiver</button>
+            </div>
+          </form>
+          {% endif %}
+        </div>
+      </div>
+    {% else %}
+      <p><span class="badge text-bg-secondary me-2">Désactivée</span>Votre compte n’est protégé que par le mot de passe.
+        {% if session.get('auth_sso') %}Vous êtes connecté par {{ session.get('auth_sso')|capitalize }} : l’authentification forte est assurée par ce fournisseur.{% endif %}</p>
+      <a class="btn btn-primary btn-sm" href="{{ url_for('securite_compte.activer') }}"><i class="fas fa-mobile-screen-button me-1"></i>Activer la double authentification</a>
+    {% endif %}
+  {% endcall %}
+
+  {% if (current_user.is_client_admin or current_user.role == 'super_admin') and url_exists('securite_compte.organisation') and current_user.client_id %}
+  {% call pg.carte('Mon organisation') %}
+    <p class="small mb-2">Exiger la double authentification pour tous, voir qui l'a activée, réinitialiser un téléphone perdu, envoyer le guide aux nouveaux utilisateurs.</p>
+    <a class="btn btn-sm btn-outline-primary" href="{{ url_for('securite_compte.organisation') }}"><i class="fas fa-users-gear me-1"></i>Double authentification de l'organisation</a>
+  {% endcall %}
+  {% endif %}
+
+  {% call pg.carte('Connexion unique (SSO)') %}
+    {% if fournisseurs_sso %}
+      <p class="small mb-2">Vous pouvez vous connecter avec votre compte professionnel :
+        {% for f in fournisseurs_sso %}<strong>{{ f.nom }}</strong>{{ ', ' if not loop.last }}{% endfor %},
+        à condition que l’adresse e-mail soit la même que celle de votre compte Egalyx ({{ u.email }}).</p>
+    {% else %}
+      <p class="small text-secondary mb-0">La connexion par Microsoft ou Google n’est pas activée sur cette plateforme.</p>
+    {% endif %}
+  {% endcall %}
+
+  {% call pg.carte('Mot de passe') %}
+    <p class="small mb-2">Dernier changement : {{ pg.date(u.password_changed_at) }}.</p>
+    <a class="btn btn-outline-secondary btn-sm" href="{{ url_for('profil_utilisateur') }}">Modifier dans mon profil</a>
+  {% endcall %}
+</div>
+{% endblock %}
