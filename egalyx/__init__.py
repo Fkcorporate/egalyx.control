@@ -40,6 +40,8 @@ def enregistrer_extensions(app, db, csrf=None, recalculer_cotations=None, constr
     alertes_incidents.enregistrer(app)
     from egalyx import identite
     identite.enregistrer(app)
+    from egalyx import photo_profil
+    photo_profil.enregistrer(app)
     recherche.enregistrer(app)
     ma_semaine.enregistrer(app)
     automatismes.enregistrer(app)

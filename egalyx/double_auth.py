@@ -32,7 +32,7 @@ MAX_TENTATIVES = 5
 # Pages accessibles tant que la 2FA n'est pas validée / pas encore activée
 _LIBRES = {'static', 'logout', 'login', 'login_fullscreen', 'home',
            'securite_compte.verification', 'securite_compte.activer', 'securite_compte.codes_secours',
-           'securite_compte.index',
+           'securite_compte.index', 'securite_compte.guide',
            # fichiers chargés par les pages (traduction, etc.) : sans donnée privée, nécessaires à la page de code
            'langue.dictionnaire', 'langue.changer'}
 
@@ -58,7 +58,21 @@ def _navigation_de_page():
     return 'text/html' in (request.headers.get('Accept') or 'text/html')
 
 
+def reglage_organisation(client_id):
+    """True si l'organisation exige la double authentification pour TOUS ses utilisateurs."""
+    if not client_id:
+        return False
+    try:
+        from models import ClientConfiguration
+        conf = ClientConfiguration.query.filter_by(client_id=client_id).first()
+        return bool(((conf.preferences or {}).get('securite') or {}).get('2fa_tous')) if conf else False
+    except Exception:  # noqa: BLE001
+        return False
+
+
 def obligatoire_pour(u):
+    if getattr(u, 'role', None) != 'super_admin' and reglage_organisation(getattr(u, 'client_id', None)):
+        return True
     if os.environ.get('EGALYX_2FA_OBLIGATOIRE_ADMINS', '1') != '1':
         return False
     return est_admin_client(u)
@@ -132,7 +146,9 @@ def garde_double_auth():
     if obligatoire_pour(current_user) and not session.get('auth_sso'):   # SSO : MFA assurée par le fournisseur
         if json_attendu:
             return jsonify({'erreur': 'double_authentification_a_activer'}), 403
-        flash("Votre rôle d'administrateur exige la double authentification. Activez-la pour continuer.", 'warning')
+        flash("Votre organisation exige la double authentification. Activez-la pour continuer : cela prend 2 minutes."
+              if reglage_organisation(getattr(current_user, 'client_id', None)) else
+              "Votre rôle d'administrateur exige la double authentification. Activez-la pour continuer.", 'warning')
         return redirect(url_for('securite_compte.activer'))
     return None
 
@@ -292,8 +308,51 @@ def reinitialiser(user_id):
     return redirect(request.referrer or url_for('dashboard'))
 
 
+@bp.route('/guide')
+def guide():
+    """Guide pas à pas, public et imprimable, à envoyer aux nouveaux utilisateurs (aucune donnée personnelle)."""
+    return render_template('egalyx/2fa_guide.html')
+
+
+@bp.route('/organisation', methods=['GET', 'POST'])
+@connexion_requise
+def organisation():
+    """Administrateur du client (ou super admin) : exiger la 2FA pour tous, suivre qui l'a activée, réinitialiser."""
+    from flask import abort
+    from models import db, User, ClientConfiguration
+    from egalyx.commun import client_id_courant
+    if not (est_admin_client() or est_super_admin()):
+        abort(403)
+    cid = client_id_courant()
+    if not cid:
+        abort(404)
+    if request.method == 'POST':
+        conf = ClientConfiguration.query.filter_by(client_id=cid).first()
+        if conf is None:
+            conf = ClientConfiguration(client_id=cid, couleurs={}, preferences={})
+            db.session.add(conf)
+        prefs = dict(conf.preferences or {})
+        sec = dict(prefs.get('securite') or {})
+        sec['2fa_tous'] = request.form.get('2fa_tous') == '1'
+        prefs['securite'] = sec
+        conf.preferences = prefs
+        journaliser('2fa_reglage_organisation', {'obligatoire_pour_tous': sec['2fa_tous']}, client_id=cid)
+        db.session.commit()
+        flash('Double authentification obligatoire pour tous les utilisateurs : à leur prochaine connexion, chacun '
+              'sera guidé pour l\'activer.' if sec['2fa_tous'] else
+              'Double authentification : obligatoire pour les administrateurs seulement.', 'success')
+        return redirect(url_for('.organisation', client_id=cid if est_super_admin() else None))
+    users = User.query.filter_by(client_id=cid).order_by(User.is_active.desc(), User.username).all()
+    actifs = [u for u in users if u.is_active]
+    return render_template('egalyx/2fa_organisation.html', users=users, tous=reglage_organisation(cid),
+                           nb_actives=sum(1 for u in actifs if u.totp_actif), nb_actifs=len(actifs),
+                           guide_url=url_for('.guide', _external=True), obligatoire_pour=obligatoire_pour)
+
+
 def enregistrer(app):
+    from egalyx.commun import exempter_controle_ancien
     app.register_blueprint(bp)
+    exempter_controle_ancien(app, {'securite_compte.guide', 'securite_compte.organisation'})
     app.before_request(garde_double_auth)
     user_logged_in.connect(_a_la_connexion, app)
     user_logged_out.connect(_a_la_deconnexion, app)
