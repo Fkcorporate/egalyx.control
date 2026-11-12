@@ -541,7 +541,53 @@ def modifier_client(id):
     return retour
 
 
+def indicateurs_clients():
+    """Pour la liste des clients (super admin), calculé une fois par page :
+    {client_id: {utilisateurs, double_auth (%), derniere_connexion, demarrage (%), a_surveiller: [raisons]}}."""
+    from flask import g
+    if hasattr(g, '_egalyx_indicateurs_clients'):
+        return g._egalyx_indicateurs_clients
+    from datetime import datetime as _dt, timedelta as _td
+    from sqlalchemy import func
+    from models import db, User, Client
+    out = {}
+    lignes = db.session.query(User.client_id, func.count(User.id),
+                              func.sum(db.case((User.totp_actif.is_(True), 1), else_=0)),
+                              func.max(User.last_login)) \
+        .filter(User.client_id.isnot(None), User.is_active.is_(True), User.role != 'super_admin') \
+        .group_by(User.client_id).all()
+    for cid, n, n2fa, derniere in lignes:
+        out[cid] = {'utilisateurs': n or 0, 'double_auth': round(100 * (n2fa or 0) / n) if n else 0,
+                    'derniere_connexion': derniere}
+    try:
+        from egalyx.ma_semaine import etapes_demarrage
+    except Exception:  # noqa: BLE001
+        etapes_demarrage = None
+    for c in Client.query.all():
+        d = out.setdefault(c.id, {'utilisateurs': 0, 'double_auth': 0, 'derniere_connexion': None})
+        d['demarrage'] = None
+        if etapes_demarrage is not None:
+            try:
+                e = etapes_demarrage(c.id)
+                d['demarrage'], d['delai_valeur'] = e['pourcentage'], e.get('delai_valeur')
+            except Exception:  # noqa: BLE001
+                db.session.rollback()
+        raisons = []
+        if c.is_active:
+            if not d['derniere_connexion'] or d['derniere_connexion'] < _dt.utcnow() - _td(days=30):
+                raisons.append('aucune connexion depuis 30 jours')
+            if d['utilisateurs'] and d['double_auth'] < 50:
+                raisons.append(f"double authentification {d['double_auth']} %")
+            if d.get('demarrage') is not None and d['demarrage'] < 50 and c.created_at and \
+                    c.created_at < _dt.utcnow() - _td(days=14):
+                raisons.append('mise en route bloquée')
+        d['a_surveiller'] = raisons
+    g._egalyx_indicateurs_clients = out
+    return out
+
+
 def enregistrer(app):
     app.register_blueprint(bp)
+    app.jinja_env.globals['indicateurs_clients'] = indicateurs_clients
     app.jinja_env.globals['url_client'] = url_client
     app.jinja_env.globals['sous_domaine_du_client'] = sous_domaine_du_client

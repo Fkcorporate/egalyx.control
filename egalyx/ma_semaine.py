@@ -286,5 +286,15 @@ def demarrage():
     return render_template('egalyx/demarrage.html', d=etapes_demarrage(client_id_courant()))
 
 
+def a_traiter(limite=5):
+    """Points prioritaires de l'utilisateur connecté (en retard, puis à faire sous 7 jours) pour le tableau de bord."""
+    try:
+        lst = [t for t in taches(current_user) if t['priorite'] <= 1]
+    except Exception:  # noqa: BLE001
+        return {'items': [], 'total': 0}
+    return {'items': lst[:limite], 'total': len(lst)}
+
+
 def enregistrer(app):
     app.register_blueprint(bp)
+    app.jinja_env.globals['a_traiter'] = a_traiter

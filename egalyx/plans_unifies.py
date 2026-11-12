@@ -10,7 +10,7 @@ Chacun ne voit que ce que ses droits permettent (plans des risques, N2) ou ce do
 """
 from datetime import date
 
-from flask import Blueprint, abort, render_template, request, url_for
+from flask import Blueprint, abort, render_template, request, session, url_for
 from flask_login import current_user
 
 bp = Blueprint('plans_unifies', __name__, url_prefix='/plans-action/registre')
@@ -19,6 +19,9 @@ TERMINES = {'termine', 'terminé', 'realise', 'réalisé', 'clos', 'cloture', 'c
             'acheve', 'achevé', 'ferme', 'fermé', 'valide', 'validé', 'done'}
 ANNULES = {'annule', 'annulé', 'abandonne', 'abandonné'}
 EN_COURS = {'en_cours', 'en cours', 'demarre', 'démarré', 'in_progress', 'en_retard'}
+
+
+from sqlalchemy import or_
 
 
 def _m():
@@ -100,8 +103,8 @@ def lignes(client_id, filtre_source=None, filtre_etat=None, moi=False, retard=Fa
 
     if filtre_source in (None, '', 'risques'):
         q = m.PlanAction.query.filter(m.PlanAction.is_archived.isnot(True))
-        if client_id:
-            q = q.filter(m.PlanAction.client_id == client_id)
+        if client_id:   # plans de l'organisation + ceux dont on est responsable (comme « Ma semaine »)
+            q = q.filter(or_(m.PlanAction.client_id == client_id, m.PlanAction.responsable_id == uid))
         for p in q.all():
             if not (voir_risques or p.responsable_id == uid):
                 continue
@@ -120,8 +123,8 @@ def lignes(client_id, filtre_source=None, filtre_etat=None, moi=False, retard=Fa
     if filtre_source in (None, '', 'n2'):
         liens = _rattachements_n2(client_id)
         q = m.PlanActionC2N.query.filter(m.PlanActionC2N.is_archived.isnot(True))
-        if client_id:
-            q = q.filter(m.PlanActionC2N.client_id == client_id)
+        if client_id:   # plans de l'organisation + ceux dont on est responsable (comme « Ma semaine »)
+            q = q.filter(or_(m.PlanActionC2N.client_id == client_id, m.PlanActionC2N.responsable_id == uid))
         for p in q.all():
             if not (voir_n2 or p.responsable_id == uid):
                 continue
@@ -158,6 +161,8 @@ def page():
     if not getattr(current_user, 'is_authenticated', False):
         abort(401)
     cid = client_id_courant()
+    if getattr(current_user, 'is_super_admin', False) and not (request.args.get('client_id') or session.get('viewing_client_id')):
+        cid = None          # super-admin hors « Voir comme ce client » : tous les plans, comme les autres listes
     source = request.args.get('source') or ''
     etat_f = request.args.get('etat') or ''
     moi = request.args.get('moi') == '1'

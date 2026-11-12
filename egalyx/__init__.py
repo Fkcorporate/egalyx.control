@@ -61,6 +61,15 @@ def enregistrer_extensions(app, db, csrf=None, recalculer_cotations=None, constr
     c2n_echantillon.enregistrer(app)        # échantillon N2 élément par élément, tirage aléatoire tracé
     from egalyx import plans_unifies
     plans_unifies.enregistrer(app)          # registre unique : plans des risques + plans du contrôle N2
+    from egalyx import notifications_prefs
+    notifications_prefs.enregistrer(app)    # « Mes notifications » : application / e-mail / résumé quotidien
+    from egalyx import application_mobile
+    application_mobile.enregistrer(app)     # installable sur téléphone : manifeste, icônes, service worker
+    try:                                    # paquet optionnel « nouvelle apparence » (classique / nouvelle au choix)
+        from egalyx import apparence
+        apparence.enregistrer(app)
+    except ImportError:
+        pass
     from egalyx import menage
     menage.enregistrer(app)                 # ancien module programmes/missions → N2 ; pages de test réservées
     from egalyx import recommandations, kri_suivi, audit_plus

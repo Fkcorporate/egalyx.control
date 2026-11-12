@@ -337,6 +337,18 @@ ARTICLES = [
       liens=[('Identité de l’organisation', 'identite.page')], pour='admin',
       questions=['mettre mon logo', 'changer le nom affiche', 'personnaliser l outil']),
 
+    A('application_telephone', 'admin', 'Installer Egalyx sur mon téléphone',
+      'Egalyx s’installe comme une application, sans passer par un magasin : icône sur l’écran d’accueil, plein écran, '
+      'ouverture sur « Ma semaine », raccourci « Signaler un incident ».',
+      etapes=['Android (Chrome) : ouvrez Egalyx, menu du compte → **Installer l’application** (ou menu ⋮ → Installer).',
+              'iPhone (Safari) : ouvrez Egalyx, bouton Partager → **Sur l’écran d’accueil**.',
+              'Ordinateur (Chrome, Edge) : icône d’installation dans la barre d’adresse.'],
+      notes=['Aucune donnée n’est conservée sur le téléphone : sans réseau, une page « hors ligne » s’affiche.',
+             'Les notifications par e-mail et le résumé quotidien se règlent dans « Mes notifications ».'],
+      mots=['application', 'mobile', 'telephone', 'android', 'iphone', 'installer', 'ecran', 'accueil', 'pwa'],
+      liens=[('Mes notifications', 'preferences_notifications')], pour='tous',
+      questions=['installer egalyx sur mon telephone', 'application mobile', 'egalyx sur iphone']),
+
     A('alertes_incidents', 'maitrise', 'Régler les e-mails d’alerte des incidents',
       'Les alertes (délai dépassé, escalade) s’affichent toujours dans l’application ; leur copie par e-mail se règle '
       'par organisation et est désactivée tant qu’elle n’a pas été activée.',

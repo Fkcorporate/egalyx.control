@@ -53,8 +53,10 @@ def destination_valable(chemin):
 def _navigation_de_page():
     """Le navigateur ouvre une page (et non un script, une image ou un appel en arrière-plan)."""
     dest = request.headers.get('Sec-Fetch-Dest')
-    if dest:
-        return dest in ('document', 'iframe')
+    if dest in ('document', 'iframe') or request.headers.get('Sec-Fetch-Mode') == 'navigate':
+        return True
+    # Page rechargée via le service worker de l'application (certains navigateurs envoient alors « empty ») :
+    # le navigateur demande toujours du HTML pour une page, jamais pour un appel en arrière-plan.
     return 'text/html' in (request.headers.get('Accept') or 'text/html')
 
 
