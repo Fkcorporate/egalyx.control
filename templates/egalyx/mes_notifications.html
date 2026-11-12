@@ -1,0 +1,63 @@
+{% extends "base.html" %}
+{% import "_macros/page.html" as pg %}
+{% block title %}Mes notifications{% endblock %}
+{% block styles %}{{ pg.styles() }}{% endblock %}
+{% block content %}
+<div class="container" style="max-width: 980px;">
+  {{ pg.entete('Mes notifications', 'fa-bell', 'Choisissez comment être prévenu. Tout reste toujours visible dans la cloche et dans « Ma semaine ».') }}
+  <form method="post">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    {% call pg.carte() %}
+      <div class="row g-3">
+        <div class="col-md-6"><div class="small fw-semibold">Adresse de réception</div>
+          <div>{{ current_user.email }}</div>
+          <div class="pg-second">L'adresse de votre compte (modifiable dans « Mon profil »).</div></div>
+        <div class="col-md-6"><label class="small fw-semibold" for="heure_resume">Résumé quotidien envoyé à</label>
+          <select class="form-select form-select-sm mt-1" id="heure_resume" name="heure_resume" style="max-width: 160px;">
+            {% for h in heures %}<option value="{{ h }}" {% if r.heure_resume == h %}selected{% endif %}>{{ h }} h 00</option>{% endfor %}
+          </select>
+          <div class="pg-second">Nouvelles notifications des types cochés + vos points « Ma semaine » en retard ou à faire sous 7 jours.</div></div>
+      </div>
+    {% endcall %}
+    {% call pg.carte() %}
+      <div class="table-responsive"><table class="pg-table">
+        <thead><tr><th>Événement</th><th class="text-center" style="width:130px">Dans l'application</th><th class="text-center" style="width:130px">E-mail immédiat</th><th class="text-center" style="width:130px">Résumé quotidien</th></tr></thead>
+        <tbody>
+        {% for code, libelle, groupe in evenements %}{% set v = r.evenements[code] %}
+          <tr>
+            <td>{{ libelle }}{% if code == 'incident_alerte' %}<div class="pg-second">E-mail immédiat réglé par votre organisation (Incidents → Alertes e-mail).</div>{% elif v.email_impose or v.resume_impose %}<div class="pg-second">Imposé par votre organisation.</div>{% endif %}</td>
+            <td class="text-center"><input class="form-check-input" type="checkbox" checked disabled aria-label="{{ libelle }} : dans l'application"></td>
+            <td class="text-center">{% if code == 'incident_alerte' %}<span class="pg-second">—</span>{% else %}
+              <input class="form-check-input" type="checkbox" name="email_{{ code }}" value="1" {% if v.email %}checked{% endif %} {% if v.email_impose %}disabled{% endif %} aria-label="{{ libelle }} : e-mail immédiat">
+              {% if v.email_impose %}<input type="hidden" name="email_{{ code }}" value="1">{% endif %}{% endif %}</td>
+            <td class="text-center"><input class="form-check-input" type="checkbox" name="resume_{{ code }}" value="1" {% if v.resume %}checked{% endif %} {% if v.resume_impose %}disabled{% endif %} aria-label="{{ libelle }} : résumé quotidien">
+              {% if v.resume_impose %}<input type="hidden" name="resume_{{ code }}" value="1">{% endif %}</td>
+          </tr>
+        {% endfor %}
+        </tbody>
+      </table></div>
+      <button class="btn btn-primary btn-sm mt-2">Enregistrer</button>
+    {% endcall %}
+  </form>
+
+  {% if peut_imposer %}
+  <form method="post">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <input type="hidden" name="action" value="organisation">
+    {% call pg.carte('Pour toute l\'organisation', aide='Ce que vous cochez ici s\'applique à chaque utilisateur, qui ne peut pas le retirer.') %}
+      <div class="table-responsive"><table class="pg-table">
+        <thead><tr><th>Événement</th><th class="text-center" style="width:150px">Imposer l'e-mail immédiat</th><th class="text-center" style="width:150px">Imposer le résumé</th></tr></thead>
+        <tbody>
+        {% for code, libelle, groupe in evenements if code != 'incident_alerte' %}{% set i = imposes.get(code, {}) %}
+          <tr><td>{{ libelle }}</td>
+            <td class="text-center"><input class="form-check-input" type="checkbox" name="imp_email_{{ code }}" value="1" {% if i.email %}checked{% endif %} aria-label="Imposer l'e-mail : {{ libelle }}"></td>
+            <td class="text-center"><input class="form-check-input" type="checkbox" name="imp_resume_{{ code }}" value="1" {% if i.resume %}checked{% endif %} aria-label="Imposer le résumé : {{ libelle }}"></td></tr>
+        {% endfor %}
+        </tbody>
+      </table></div>
+      <button class="btn btn-outline-primary btn-sm mt-2">Enregistrer pour l'organisation</button>
+    {% endcall %}
+  </form>
+  {% endif %}
+</div>
+{% endblock %}

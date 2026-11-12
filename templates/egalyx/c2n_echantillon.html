@@ -1,0 +1,86 @@
+{% extends "base.html" %}
+{% import "_macros/page.html" as pg %}
+{% block title %}Échantillon — {{ pl.reference }}{% endblock %}
+{% block styles %}{{ pg.styles() }}<style>
+  .ech-table td { vertical-align: top; }
+  .ech-table .form-control, .ech-table .form-select { font-size: .85rem; }
+  tr.ech-anomalie { background: rgba(var(--bs-danger-rgb), .05); }
+  tr.ech-conforme { background: rgba(var(--bs-success-rgb), .04); }
+</style>{% endblock %}
+{% block content %}
+<div class="container-fluid">
+  {{ pg.entete('Échantillon testé', 'fa-list-check', pl.reference ~ (' — ' ~ pl.referentiel.code_controle ~ ' · ' ~ pl.referentiel.nom if pl.referentiel else ''), retour=url_for('c2n_detail_planification', id=pl.id)) }}
+  <div class="row g-2 mb-3">
+    <div class="col-6 col-md-3">{{ pg.kpi('Éléments', stats.total ~ (' / ' ~ taille_proposee if taille_proposee else '')) }}</div>
+    <div class="col-6 col-md-3">{{ pg.kpi('Testés', stats.testes, 'success' if stats.total and stats.testes == stats.total else none) }}</div>
+    <div class="col-6 col-md-3">{{ pg.kpi('Anomalies', stats.anomalies, 'danger' if stats.anomalies else none) }}</div>
+    <div class="col-6 col-md-3">{{ pg.kpi('Preuves jointes', stats.preuves) }}</div>
+  </div>
+  {% if ex and ex.tirage_echantillon %}{% set t = ex.tirage_echantillon %}
+  <div class="alert alert-light border small"><i class="fas fa-dice me-1"></i>Tirage aléatoire ({{ t.methode }}) : <strong>{{ t.taille }}</strong> élément(s) parmi <strong>{{ t.population }}</strong>,
+    le {{ t.le|replace('T', ' à ') }} par {{ t.par }} — graine <code>{{ t.graine }}</code> (le même tirage peut être refait à l'identique).</div>
+  {% endif %}
+
+  {% if modifiable %}
+  <div class="row g-3 mb-1">
+    <div class="col-lg-7">
+      {% call pg.carte('Tirer l\'échantillon au hasard', aide='Collez la population à tester : une référence par ligne (numéros de dossiers, de factures, d\'opérations…), par exemple copiée depuis un export Excel.') %}
+        <form method="post">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+          <textarea class="form-control form-control-sm" name="population" rows="5" placeholder="FAC-2026-0001&#10;FAC-2026-0002&#10;…" aria-label="Population"></textarea>
+          <div class="d-flex gap-2 align-items-end mt-2">
+            <div><label class="form-label small mb-1" for="taille">Taille</label>
+              <input class="form-control form-control-sm" type="number" min="1" id="taille" name="taille" value="{{ taille_proposee or '' }}" style="width: 110px;"></div>
+            <button class="btn btn-sm btn-primary" name="action" value="tirer"><i class="fas fa-dice me-1"></i>Tirer au hasard</button>
+          </div>
+          {% if fourchette %}<div class="pg-second mt-1">Contrôle {{ frequence|lower }} : {{ fourchette[0] }}{% if fourchette[1] != fourchette[0] %} à {{ fourchette[1] }}{% endif %} élément(s) habituellement.</div>{% endif %}
+        </form>
+      {% endcall %}
+    </div>
+    <div class="col-lg-5">
+      {% call pg.carte('Ajouter des éléments choisis') %}
+        <form method="post">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+          <textarea class="form-control form-control-sm" name="references" rows="3" placeholder="Une référence par ligne" aria-label="Références"></textarea>
+          <button class="btn btn-sm btn-outline-primary mt-2" name="action" value="ajouter"><i class="fas fa-plus me-1"></i>Ajouter</button>
+        </form>
+      {% endcall %}
+    </div>
+  </div>
+  {% endif %}
+
+  {% call pg.carte('Éléments et résultats', lien=url_for('c2n_echantillon.export', pid=pl.id) if elements else none, libelle_lien='Export CSV') %}
+    {% if not elements %}
+      {{ pg.vide('Aucun élément : tirez l\'échantillon ou ajoutez des éléments.') }}
+    {% else %}
+    <form method="post" enctype="multipart/form-data">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <div class="table-responsive"><table class="pg-table ech-table">
+        <thead><tr><th>N°</th><th>Référence</th><th style="width:130px">Résultat</th><th>Anomalie : motif / criticité</th><th>Commentaire</th><th>Preuve</th>{% if modifiable %}<th></th>{% endif %}</tr></thead>
+        <tbody>
+        {% for e in elements %}
+          <tr class="{{ 'ech-' ~ e.resultat }}">
+            <td class="text-secondary">{{ e.numero or loop.index }}</td>
+            <td><strong>{{ e.reference }}</strong>{% if e.teste_le %}<div class="pg-second">testé le {{ e.teste_le.strftime('%d/%m/%Y') }}</div>{% endif %}</td>
+            <td>{% if modifiable %}<select class="form-select form-select-sm" name="res_{{ e.id }}" aria-label="Résultat">
+                {% for c, l in resultats %}<option value="{{ c }}" {% if e.resultat == c %}selected{% endif %}>{{ l }}</option>{% endfor %}</select>
+                {% else %}{{ dict(resultats)[e.resultat] if e.resultat in dict(resultats) else e.resultat }}{% endif %}</td>
+            <td>{% if modifiable %}<input class="form-control form-control-sm mb-1" name="motif_{{ e.id }}" value="{{ e.motif or '' }}" placeholder="Motif (si anomalie)" aria-label="Motif">
+                <select class="form-select form-select-sm" name="crit_{{ e.id }}" aria-label="Criticité"><option value="">Criticité…</option>
+                {% for c, l in criticites %}<option value="{{ c }}" {% if e.criticite == c %}selected{% endif %}>{{ l }}</option>{% endfor %}</select>
+                {% elif e.resultat == 'anomalie' %}{{ e.motif }} <span class="badge text-bg-light border">{{ dict(criticites).get(e.criticite, '') }}</span>{% endif %}</td>
+            <td>{% if modifiable %}<textarea class="form-control form-control-sm" name="com_{{ e.id }}" rows="2" aria-label="Commentaire">{{ e.commentaire or '' }}</textarea>{% else %}{{ e.commentaire or '' }}{% endif %}</td>
+            <td class="small">{% if e.preuve_fichier %}<a href="{{ url_for('c2n_echantillon.preuve', eid=e.id) }}"><i class="fas fa-paperclip me-1"></i>{{ e.preuve_nom }}</a>{% endif %}
+                {% if modifiable %}<input class="form-control form-control-sm mt-1" type="file" name="preuve_{{ e.id }}" aria-label="Preuve">{% endif %}</td>
+            {% if modifiable %}<td><div class="form-check" title="Retirer de l'échantillon"><input class="form-check-input" type="checkbox" name="suppr_{{ e.id }}" value="1" id="s{{ e.id }}"><label class="form-check-label small" for="s{{ e.id }}">Retirer</label></div></td>{% endif %}
+          </tr>
+        {% endfor %}
+        </tbody>
+      </table></div>
+      {% if modifiable %}<button class="btn btn-sm btn-primary mt-2" name="action" value="enregistrer"><i class="fas fa-save me-1"></i>Enregistrer les résultats</button>
+        <span class="pg-second ms-2">Les totaux de l'exécution (contrôlés, conformes, anomalies, taux) sont recalculés ; chaque anomalie rejoint la liste des anomalies du contrôle.</span>{% endif %}
+    </form>
+    {% endif %}
+  {% endcall %}
+</div>
+{% endblock %}
