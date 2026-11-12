@@ -1,0 +1,55 @@
+{% extends "base.html" %}
+{% import "_macros/page.html" as pg %}
+{% block title %}Double authentification de l'organisation{% endblock %}
+{% block styles %}{{ pg.styles() }}{% endblock %}
+{% block content %}
+<div class="container" style="max-width: 980px;">
+  {{ pg.entete('Double authentification de l\'organisation', 'fa-user-shield', 'Exiger un code de téléphone à la connexion, suivre qui l\'a activé, réinitialiser un téléphone perdu') }}
+  <div class="row g-2 mb-3">
+    <div class="col-6 col-md-3">{{ pg.kpi('Activée', nb_actives ~ ' / ' ~ nb_actifs, 'success' if nb_actives == nb_actifs else 'warning') }}</div>
+  </div>
+  {% call pg.carte('Règle') %}
+    <form method="post">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <div class="form-check form-switch">
+        <input class="form-check-input" type="checkbox" role="switch" id="tous" name="2fa_tous" value="1" {% if tous %}checked{% endif %}>
+        <label class="form-check-label" for="tous"><strong>Obligatoire pour tous les utilisateurs</strong></label>
+      </div>
+      <div class="pg-second mt-1">Sinon : obligatoire pour les administrateurs seulement. Une fois exigée, chacun est guidé pour l'activer à sa prochaine connexion (il ne peut rien faire d'autre avant).</div>
+      {% if not current_user.totp_actif and current_user.role != 'super_admin' %}<div class="alert alert-warning small mt-2 mb-0">Vous n'avez pas encore activé la double authentification : si vous l'exigez pour tous, vous serez vous aussi guidé pour l'activer tout de suite.</div>{% endif %}
+      <button class="btn btn-sm btn-primary mt-2">Enregistrer</button>
+    </form>
+  {% endcall %}
+  {% call pg.carte('Guide à envoyer aux utilisateurs') %}
+    <p class="small mb-2">Page publique, sans donnée personnelle, imprimable : applications à installer, étapes, que faire en cas de téléphone perdu.</p>
+    <div class="input-group input-group-sm" style="max-width: 640px;">
+      <input class="form-control" id="guideUrl" value="{{ guide_url }}" readonly>
+      <button class="btn btn-outline-secondary" type="button" onclick="navigator.clipboard && navigator.clipboard.writeText(document.getElementById('guideUrl').value)"><i class="far fa-copy me-1"></i>Copier</button>
+      <a class="btn btn-outline-primary" href="{{ url_for('securite_compte.guide') }}" target="_blank" rel="noopener">Ouvrir</a>
+    </div>
+  {% endcall %}
+  {% call pg.carte('Utilisateurs') %}
+    <div class="table-responsive"><table class="pg-table">
+      <thead><tr><th>Utilisateur</th><th>Rôle</th><th>Double authentification</th><th>Dernière connexion</th><th></th></tr></thead>
+      <tbody>
+      {% for u in users %}
+        <tr class="{{ '' if u.is_active else 'text-secondary' }}">
+          <td><strong>{{ u.username }}</strong><div class="pg-second">{{ u.email }}</div></td>
+          <td class="small">{{ u.get_role_display_name() }}{% if not u.is_active %} · <em>désactivé</em>{% endif %}</td>
+          <td>{% if u.totp_actif %}<span class="badge text-bg-success">Activée</span><div class="pg-second">le {{ pg.date(u.totp_active_le) }}</div>
+              {% elif obligatoire_pour(u) %}<span class="badge text-bg-warning">À activer</span><div class="pg-second">demandée à la prochaine connexion</div>
+              {% else %}<span class="badge text-bg-secondary">Non activée</span>{% endif %}</td>
+          <td class="small">{{ pg.date(u.last_login) if u.last_login else 'Jamais' }}</td>
+          <td class="text-end">{% if u.totp_actif and u.id != current_user.id %}
+            <form method="post" action="{{ url_for('securite_compte.reinitialiser', user_id=u.id) }}" class="d-inline"
+                  onsubmit="return confirm('Réinitialiser la double authentification de {{ u.username }} ?\n\nIl la réactivera avec son propre téléphone à sa prochaine connexion.');">
+              <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+              <button class="btn btn-sm btn-outline-dark" title="Téléphone perdu ou changé"><i class="fas fa-mobile-alt me-1"></i>Réinitialiser</button>
+            </form>{% endif %}</td>
+        </tr>
+      {% endfor %}
+      </tbody>
+    </table></div>
+  {% endcall %}
+</div>
+{% endblock %}
