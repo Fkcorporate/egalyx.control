@@ -1,0 +1,243 @@
+{% extends "base.html" %}
+{% import "_macros/page.html" as pg %}
+{#- Analyse de la cartographie (egalyx/ia_cartographie.py). Chiffres calculés ; texte rédigé par l'IA clairement signalé. -#}
+{% block title %}Analyse — {{ cartographie.nom }}{% endblock %}
+{% block styles %}
+{{ super() }}
+{{ pg.styles() }}
+<style>
+  .ia-wrap { max-width: 1180px; }
+  .ia-score { display: grid; grid-template-columns: 210px 1fr; gap: 1.5rem; align-items: center; }
+  @media (max-width: 768px) { .ia-score { grid-template-columns: 1fr; } }
+  .ia-anneau { --p: 0; --c: #B42318; width: 170px; height: 170px; border-radius: 50%; margin: 0 auto; display: grid; place-items: center;
+               background: conic-gradient(var(--c) calc(var(--p) * 1%), var(--bs-tertiary-bg) 0); }
+  .ia-anneau > div { width: 136px; height: 136px; border-radius: 50%; background: var(--bs-body-bg); display: grid; place-items: center; text-align: center; }
+  .ia-anneau strong { font-size: 2.6rem; line-height: 1; font-variant-numeric: tabular-nums; }
+  .ia-anneau small { color: var(--bs-secondary-color); font-size: .78rem; }
+  .ia-niv { display: inline-block; font-weight: 650; font-size: .8rem; border-radius: 999px; padding: .18rem .65rem; }
+  .ia-niv.excellent { background: #DCFAE6; color: #085D3A; } .ia-niv.bon { background: #E0F2FE; color: #0B4A6F; }
+  .ia-niv.moyen { background: #FEF0C7; color: #93370D; } .ia-niv.faible { background: #FEE4E2; color: #912018; }
+  .ia-crit { display: grid; grid-template-columns: 1fr 120px 64px; gap: .35rem 1rem; align-items: center; font-size: .9rem; padding: .55rem 0; border-bottom: 1px solid var(--bs-border-color); }
+  .ia-crit:last-child { border-bottom: 0; }
+  .ia-crit .ia-det { grid-column: 1 / -1; color: var(--bs-secondary-color); font-size: .8rem; margin-top: -.15rem; }
+  .ia-crit .ia-det b { color: var(--bs-body-color); font-weight: 600; }
+  .ia-jauge { height: 7px; background: var(--bs-tertiary-bg); border-radius: 4px; overflow: hidden; }
+  .ia-jauge > span { display: block; height: 100%; border-radius: 4px; }
+  .ia-pts { text-align: right; font-variant-numeric: tabular-nums; font-weight: 600; white-space: nowrap; }
+  .ia-bloc-ia { border: 1px solid #C7D7FE; background: linear-gradient(180deg, #F5F8FF, var(--bs-body-bg) 70%); }
+  :root[data-bs-theme="dark"] .ia-bloc-ia { border-color: #2D3E70; background: var(--bs-body-bg); }
+  .ia-etiquette { display: inline-flex; align-items: center; gap: .35rem; font-size: .72rem; font-weight: 650; text-transform: uppercase; letter-spacing: .04em;
+                  border-radius: 6px; padding: .2rem .5rem; }
+  .ia-etiquette.ia { background: #EEF4FF; color: #3538CD; } .ia-etiquette.calc { background: var(--bs-tertiary-bg); color: var(--bs-secondary-color); }
+  .ia-synthese { font-size: .98rem; line-height: 1.6; margin: .25rem 0 1rem; }
+  .ia-prio { border-left: 3px solid #6172F3; padding: .1rem 0 .1rem .9rem; margin-bottom: 1rem; }
+  .ia-prio h3 { font-size: .95rem; font-weight: 650; margin: 0 0 .25rem; }
+  .ia-prio p { margin: 0 0 .35rem; font-size: .88rem; color: var(--bs-secondary-color); }
+  .ia-prio ul, .ia-reco ul { margin: 0 0 .35rem; padding-left: 1.1rem; font-size: .88rem; }
+  .ia-ref { display: inline-block; font-size: .78rem; font-weight: 600; border: 1px solid var(--bs-border-color); border-radius: 6px; padding: .05rem .4rem;
+            margin: 0 .25rem .25rem 0; text-decoration: none; color: var(--bs-body-color); background: var(--bs-body-bg); }
+  .ia-ref:hover { border-color: var(--bs-primary); color: var(--bs-primary); }
+  .ia-reco { border: 1px solid var(--bs-border-color); border-radius: 10px; padding: .85rem 1rem; margin-bottom: .7rem; }
+  .ia-reco-tete { display: flex; justify-content: space-between; gap: .75rem; align-items: flex-start; }
+  .ia-reco h3 { font-size: .95rem; font-weight: 650; margin: 0; }
+  .ia-reco p { margin: .3rem 0 .45rem; font-size: .88rem; color: var(--bs-secondary-color); }
+  .ia-prio-badge { font-size: .7rem; font-weight: 700; border-radius: 999px; padding: .15rem .55rem; white-space: nowrap; }
+  .ia-prio-badge.critique { background: #FEE4E2; color: #912018; } .ia-prio-badge.elevee { background: #FFEAD5; color: #93370D; }
+  .ia-prio-badge.moyenne { background: #FEF7C3; color: #7A5C00; } .ia-prio-badge.basse { background: var(--bs-tertiary-bg); color: var(--bs-secondary-color); }
+  .ia-filtres .btn { font-size: .8rem; }
+  .ia-dist { display: grid; grid-template-columns: 110px 1fr 40px; gap: .5rem .75rem; align-items: center; font-size: .88rem; }
+  .ia-note { font-size: .78rem; color: var(--bs-secondary-color); }
+  @media print {
+    .ia-bloc-ia { background: none !important; } .ia-reco, .ia-prio { break-inside: avoid; }
+    .navbar, .sidebar-compact, .sidebar-expanded, footer, .ia-ignorer, #assistant-egalyx { display: none !important; }
+  }
+</style>
+{% endblock %}
+
+{% block content %}
+{%- set couleurs = {'excellent': '#079455', 'bon': '#0086C9', 'moyen': '#DC6803', 'faible': '#D92D20'} -%}
+{%- set libelles = {'excellent': 'Maturité élevée', 'bon': 'Bonne maturité', 'moyen': 'Maturité moyenne', 'faible': 'Maturité faible'} -%}
+{%- set libelles_prio = {'critique': 'Critique', 'elevee': 'Élevée', 'moyenne': 'Moyenne', 'basse': 'Basse'} -%}
+<div class="container-fluid ia-wrap py-3">
+  {% call pg.entete('Analyse de la cartographie', 'fa-brain', cartographie.nom, retour=url_for('detail_cartographie', id=cartographie.id), libelle_retour='Cartographie') %}
+    <button type="button" class="btn btn-sm btn-outline-primary" id="ia-rafraichir"><i class="fas fa-rotate me-1"></i>Rafraîchir</button>
+    <button type="button" class="btn btn-sm btn-outline-secondary" onclick="window.print()"><i class="fas fa-file-pdf me-1"></i>PDF</button>
+  {% endcall %}
+
+  {# ---------------------------------------------------------------- score calculé #}
+  <div class="pg-carte">
+    <div class="pg-carte-titre"><h2>Score de maturité</h2><span class="ia-etiquette calc"><i class="fas fa-calculator"></i>Calculé à partir de vos données</span></div>
+    <div class="ia-score">
+      <div class="text-center">
+        <div class="ia-anneau" style="--p: {{ score.score }}; --c: {{ couleurs[score.niveau] }}" role="img" aria-label="Score {{ score.score }} sur 100">
+          <div><div><strong>{{ score.score }}</strong><br><small>sur 100</small></div></div>
+        </div>
+        <div class="mt-2"><span class="ia-niv {{ score.niveau }}">{{ libelles[score.niveau] }}</span></div>
+        <div class="ia-note mt-2">{{ score.message }}</div>
+      </div>
+      <div>
+        {% for c in score.criteres %}
+        {%- set p = (c.points / c.max * 100) if c.max else 0 -%}
+        <div class="ia-crit">
+          <div>{{ c.libelle }}</div>
+          <div class="ia-jauge" title="{{ p|round|int }} %"><span style="width: {{ p }}%; background: {{ '#079455' if p >= 80 else ('#DC6803' if p >= 40 else '#D92D20') }}"></span></div>
+          <div class="ia-pts">{{ '%g'|format(c.points) }} / {{ c.max }}</div>
+          <div class="ia-det">{{ c.detail }}{% if c.conseil %} — <b>{{ c.conseil }}</b>{% endif %}</div>
+        </div>
+        {% endfor %}
+      </div>
+    </div>
+  </div>
+
+  <div class="pg-kpis">
+    {{ pg.kpi('Risques', stats.risques) }}
+    {{ pg.kpi('Évalués', stats.taux_evaluation ~ ' %') }}
+    {{ pg.kpi('Couverts par un dispositif', stats.taux_couverture ~ ' %') }}
+    {{ pg.kpi('Critiques', stats.distribution.critique, '#D92D20' if stats.distribution.critique else none) }}
+    {{ pg.kpi("Plans en retard", stats.plans_en_retard, '#DC6803' if stats.plans_en_retard else none) }}
+    {{ pg.kpi('Incidents (12 mois)', stats.incidents) }}
+  </div>
+
+  {# ---------------------------------------------------------------- partie rédigée par l'IA #}
+  {% if ia.etat != 'vide' %}
+  <div class="pg-carte ia-bloc-ia">
+    <div class="pg-carte-titre">
+      <h2><i class="fas fa-wand-magic-sparkles me-2" style="color:#6172F3"></i>Lecture de l'analyste IA</h2>
+      <span class="ia-etiquette ia"><i class="fas fa-robot"></i>Rédigé par l'IA</span>
+    </div>
+    {% if ia.etat == 'ok' %}
+      {% set r = ia.resultat %}
+      {% if ia.avertissement %}<div class="alert alert-warning py-2 small">{{ ia.avertissement }}</div>{% endif %}
+      {% if r.synthese %}<p class="ia-synthese">{{ r.synthese }}</p>{% endif %}
+      {% if r.points_forts %}
+        <div class="mb-3"><div class="fw-semibold small mb-1 text-success"><i class="fas fa-circle-check me-1"></i>Points forts</div>
+        <ul class="small mb-0">{% for p in r.points_forts %}<li>{{ p }}</li>{% endfor %}</ul></div>
+      {% endif %}
+      {% for p in r.priorites %}
+      <div class="ia-prio">
+        <h3>{{ loop.index }}. {{ p.titre }}</h3>
+        {% if p.pourquoi %}<p>{{ p.pourquoi }}</p>{% endif %}
+        {% if p.actions %}<ul>{% for a in p.actions %}<li>{{ a }}</li>{% endfor %}</ul>{% endif %}
+        {% for ref in p.references %}{% if refs.get(ref) %}<a class="ia-ref" href="{{ url_for('detail_risque', id=refs[ref]) }}">{{ ref }}</a>{% endif %}{% endfor %}
+      </div>
+      {% endfor %}
+      <div class="ia-note">
+        Analyse rédigée par {{ ia.modele }} le {{ ia.date[8:10] }}/{{ ia.date[5:7] }}/{{ ia.date[0:4] }} à {{ ia.date[11:16] }} (UTC), à partir des seules données ci-dessous.
+        Les références citées ont été vérifiées. À relire avant toute décision.
+      </div>
+    {% elif ia.etat == 'indisponible' %}
+      <p class="mb-0 text-secondary"><i class="fas fa-circle-info me-1"></i>{{ ia.raison }} Le score et les recommandations ci-dessous sont calculés et restent complets.</p>
+    {% else %}
+      <p class="mb-0 text-secondary"><i class="fas fa-triangle-exclamation me-1"></i>{{ ia.raison }}</p>
+    {% endif %}
+    <details class="mt-3 pg-no-print">
+      <summary class="ia-note" style="cursor:pointer">Données transmises à l'IA ({{ envoi.risques_prioritaires|length }} risques prioritaires, statistiques, constats calculés — aucune description, aucun nom de personne)</summary>
+      <pre class="pg-pre mt-2">{{ envoi|tojson(indent=1) }}</pre>
+    </details>
+  </div>
+  {% endif %}
+
+  {# ---------------------------------------------------------------- recommandations calculées #}
+  <div class="pg-carte">
+    <div class="pg-carte-titre"><h2>Recommandations ({{ recommandations|length }})</h2><span class="ia-etiquette calc"><i class="fas fa-calculator"></i>Calculées à partir de vos données</span></div>
+    {% if recommandations %}
+    <div class="ia-filtres d-flex gap-2 flex-wrap mb-3 pg-no-print" role="group" aria-label="Filtrer par priorité">
+      <button class="btn btn-sm btn-primary" data-f="">Toutes</button>
+      {% for k, v in libelles_prio.items() %}{% set nb = recommandations|selectattr('priorite', 'equalto', k)|list|length %}{% if nb %}
+      <button class="btn btn-sm btn-outline-secondary" data-f="{{ k }}">{{ v }} ({{ nb }})</button>{% endif %}{% endfor %}
+    </div>
+    {% for r in recommandations %}
+    <div class="ia-reco" data-prio="{{ r.priorite }}">
+      <div class="ia-reco-tete">
+        <div><span class="ia-prio-badge {{ r.priorite }} me-2">{{ libelles_prio[r.priorite] }}</span><h3 class="d-inline">{{ r.titre }}</h3></div>
+        {% if r.code != 'vide' %}
+        <button type="button" class="btn btn-sm btn-link text-secondary p-0 ia-ignorer" data-id="{{ r.id }}" title="Masquer cette recommandation pour toute l'organisation"><i class="fas fa-eye-slash"></i></button>
+        {% endif %}
+      </div>
+      <p>{{ r.description }}</p>
+      <ul>{% for a in r.actions %}<li>{{ a }}</li>{% endfor %}</ul>
+      {% if r.risques %}
+      <div>{% for x in r.risques %}<a class="ia-ref" href="{{ url_for('detail_risque', id=x.id) }}" title="{{ x.intitule }}{% if x.niveau %} — {{ x.niveau }}{% endif %}">{{ x.reference }}</a>{% endfor %}
+      {% if r.nb_risques > r.risques|length %}<span class="ia-note">et {{ r.nb_risques - r.risques|length }} autre(s)</span>{% endif %}</div>
+      {% endif %}
+    </div>
+    {% endfor %}
+    {% else %}
+      {{ pg.vide('Aucune recommandation : la cartographie est bien tenue.', 'fa-circle-check') }}
+    {% endif %}
+    {% if recommandations_ignorees %}
+    <details class="mt-2 pg-no-print"><summary class="ia-note" style="cursor:pointer">{{ recommandations_ignorees|length }} recommandation(s) masquée(s)</summary>
+      {% for r in recommandations_ignorees %}
+      <div class="d-flex justify-content-between align-items-center border-bottom py-2 small">
+        <span>{{ r.titre }}</span>
+        <button type="button" class="btn btn-sm btn-outline-secondary ia-retablir" data-id="{{ r.id }}">Rétablir</button>
+      </div>
+      {% endfor %}
+    </details>
+    {% endif %}
+  </div>
+
+  {# ---------------------------------------------------------------- répartition #}
+  <div class="row g-3">
+    <div class="col-lg-6">
+      {% call pg.carte('Risques évalués par niveau', aide=stats.evalues ~ ' évalué(s) sur ' ~ stats.risques) %}
+        {% if stats.evalues %}
+        <div class="ia-dist">
+          {% for k, coul in (('critique', '#D92D20'), ('eleve', '#F79009'), ('moyen', '#FDB022'), ('faible', '#17B26A')) %}
+          {%- set v = stats.distribution[k] -%}
+          <div>{{ niveaux[k] }}</div>
+          <div class="ia-jauge" style="height:10px"><span style="width: {{ (v / stats.evalues * 100) if stats.evalues else 0 }}%; background: {{ coul }}"></span></div>
+          <div class="ia-pts">{{ v }}</div>
+          {% endfor %}
+          {% if stats.distribution.non_classe %}<div>Autre libellé</div><div></div><div class="ia-pts">{{ stats.distribution.non_classe }}</div>{% endif %}
+        </div>
+        {% else %}{{ pg.vide('Aucun risque évalué pour l\'instant.', 'fa-chart-bar') }}{% endif %}
+      {% endcall %}
+    </div>
+    <div class="col-lg-6">
+      {% call pg.carte('Risques par catégorie') %}
+        {% if stats.categories %}
+        <div class="ia-dist">
+          {% for c, v in stats.categories.items() %}{% if loop.index <= 8 %}
+          <div class="text-truncate" title="{{ c }}">{{ c }}</div>
+          <div class="ia-jauge" style="height:10px"><span style="width: {{ v / stats.risques * 100 }}%; background: var(--bs-primary)"></span></div>
+          <div class="ia-pts">{{ v }}</div>
+          {% endif %}{% endfor %}
+        </div>
+        {% else %}{{ pg.vide('Aucun risque.', 'fa-layer-group') }}{% endif %}
+      {% endcall %}
+    </div>
+  </div>
+  <p class="ia-note mt-1">Méthode du score : évaluation 30 pts · évaluations de moins de 12 mois 10 · couverture par dispositif 25 · risques élevés/critiques avec plan d'action 20 · plans dans les délais 5 · incidents sur risques maîtrisés 10. Les niveaux sont lus dans la dernière évaluation validée de chaque risque.</p>
+</div>
+{% endblock %}
+
+{% block scripts %}
+{{ super() }}
+<script>
+(function () {
+  const jeton = document.querySelector('meta[name="csrf-token"]')?.content || '{{ csrf_token() }}';
+  const poster = (url) => fetch(url, {method: 'POST', headers: {'X-CSRFToken': jeton, 'Content-Type': 'application/json', 'Accept': 'application/json'}, body: '{}'})
+    .then(r => r.json().catch(() => ({success: false})));
+  const b = document.getElementById('ia-rafraichir');
+  if (b) b.addEventListener('click', () => {
+    b.disabled = true; b.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>Analyse en cours…';
+    poster('{{ url_for("api_ia_rafraichir", cartographie_id=cartographie.id) }}').then(d => {
+      if (d && d.success) { location.reload(); }
+      else { b.disabled = false; b.innerHTML = '<i class="fas fa-rotate me-1"></i>Rafraîchir'; alert((d && (d.message || d.error)) || 'Analyse impossible pour le moment.'); }
+    });
+  });
+  document.querySelectorAll('.ia-ignorer').forEach(x => x.addEventListener('click', () => {
+    poster('/api/ia/suggestion/' + encodeURIComponent(x.dataset.id) + '/ignorer').then(d => { if (d.success) location.reload(); });
+  }));
+  document.querySelectorAll('.ia-retablir').forEach(x => x.addEventListener('click', () => {
+    poster('/api/ia/suggestion/' + encodeURIComponent(x.dataset.id) + '/retablir').then(d => { if (d.success) location.reload(); });
+  }));
+  document.querySelectorAll('.ia-filtres [data-f]').forEach(f => f.addEventListener('click', () => {
+    document.querySelectorAll('.ia-filtres [data-f]').forEach(y => { y.classList.toggle('btn-primary', y === f); y.classList.toggle('btn-outline-secondary', y !== f); });
+    document.querySelectorAll('.ia-reco').forEach(r => { r.style.display = (!f.dataset.f || r.dataset.prio === f.dataset.f) ? '' : 'none'; });
+  }));
+  {% if imprimer %}window.addEventListener('load', () => setTimeout(() => window.print(), 400));{% endif %}
+})();
+</script>
+{% endblock %}
