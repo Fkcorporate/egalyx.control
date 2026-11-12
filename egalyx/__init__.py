@@ -13,6 +13,8 @@ journal = logging.getLogger('egalyx')
 def enregistrer_extensions(app, db, csrf=None, recalculer_cotations=None, construire_dashboard=None):
     from egalyx import (base_donnees, double_auth, sso, parametres_risque, alerte, tiers, signature,
                         paiement, export_donnees, api_doc, organigramme)
+    from egalyx import garde_mot_de_passe
+    garde_mot_de_passe.enregistrer(app)     # SÉCURITÉ : un mauvais mot de passe ne doit jamais ouvrir de session
     base_donnees.enregistrer(app, db)
     from egalyx import cloisonnement
     cloisonnement.enregistrer(app)          # isolation des organisations sur toutes les routes
@@ -69,6 +71,8 @@ def enregistrer_extensions(app, db, csrf=None, recalculer_cotations=None, constr
     anti_spam_contact.enregistrer(app, csrf=csrf)   # formulaire de contact du site : question, champ piège, limite par IP
     from egalyx import blog
     blog.enregistrer(app)                   # blog public : vrais articles, catégories, sitemap, SEO
+    from egalyx import connexion_client
+    connexion_client.enregistrer(app)       # page de connexion aux couleurs du client (https://<client>.egalyx.com)
     try:                                    # paquet optionnel « nouvelle apparence » (classique / nouvelle au choix)
         from egalyx import apparence
         apparence.enregistrer(app)
