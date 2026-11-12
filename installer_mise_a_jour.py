@@ -19,6 +19,7 @@ from datetime import datetime
 
 ICI = os.path.dirname(os.path.abspath(__file__))
 IGNORER = {'installer_mise_a_jour.py', 'A_LIRE_MISE_A_JOUR.txt', '.DS_Store'}
+OPTIONNELS = {'apparence'}          # modules livrés à part (paquet « nouvelle apparence »)
 
 
 def main():
@@ -78,7 +79,7 @@ def main():
     for ligne in re.findall(r'^\s*from egalyx import ([^\n#]+)', init, re.M):
         for nom in ligne.replace('(', ' ').replace(')', ' ').split(','):
             nom = nom.strip().split(' as ')[0].strip()
-            if nom and nom.isidentifier() and nom != 'enregistrer_extensions':
+            if nom and nom.isidentifier() and nom != 'enregistrer_extensions' and nom not in OPTIONNELS:
                 attendus.add(nom)
     for nom in sorted(attendus):
         if not (os.path.isfile(os.path.join(projet, 'egalyx', nom + '.py'))

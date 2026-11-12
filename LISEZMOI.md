@@ -66,6 +66,25 @@ Autres corrections :
 
 **Évaluation triphasée** (et écran d'évaluation de l'opérateur) : les couleurs de la maîtrise étaient inversées (« Insuffisant » en vert). Elles vont maintenant du rouge (1 Insuffisant) au vert (5 Excellent), y compris dans les listes de choix des phases de validation et de confirmation.
 
+## Notifications, application installable, « À traiter », clients (v6.15)
+
+- **Mes notifications** (`/notifications/preferences`, menu du compte) : par type d'événement, dans l'application
+  (toujours), e-mail immédiat, résumé quotidien à l'heure choisie (7 h, 8 h, 12 h, 17 h). Par défaut : application
+  seulement. L'administrateur du client peut **imposer** l'e-mail ou le résumé pour un type (ligne verrouillée
+  chez chacun). E-mails vers l'adresse du compte uniquement. Résumé : nouvelles notifications retenues + « Ma
+  semaine » (en retard, sous 7 jours), un par jour (envoi automatique, ou `flask envoyer-resumes`). Les alertes
+  délai / escalade des incidents gardent leurs réglages d'organisation. Remplace l'ancienne page, dont les choix
+  n'étaient utilisés par aucun envoi. `EGALYX_EMAIL_NOTIFICATIONS=0` coupe ces e-mails.
+- **Application installable** (Android, iPhone, ordinateur) : `/manifest.webmanifest`, icônes générées
+  (`instance/application/`), `/sw.js` (le réseau d'abord ; aucune page de données en cache), `/hors-ligne`,
+  bouton « Installer l'application » dans le menu du compte ; aide « Installer Egalyx sur mon téléphone ».
+  L'ancien lien `/static/favicon/site.webmanifest` (404) est remplacé.
+- **Tableau de bord** : bloc « À traiter » en tête (retards et échéances sous 7 jours, lien vers « Ma semaine »).
+- **Liste des clients (super admin)** : logo, nom court, nombre réel d'utilisateurs, taux de double
+  authentification, dernière connexion, mise en route (%, J+n), clients « à surveiller » signalés.
+- Emplacement prévu pour le paquet optionnel « nouvelle apparence » (sans lui, rien ne change).
+- Recette : `recette/notifications_mobile.py` (26 vérifications).
+
 ## Contrôle interne N2 : réglages, échantillon, plans d'action réunis (v6.14)
 
 - **Réglages par organisation** (`/c2n/reglages/`, menu N2 → Réglages ; admin ou gestionnaire N2) : seuils de

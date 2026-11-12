@@ -22571,6 +22571,7 @@ try:
 except ImportError:
     print("⚠️ Flask-Limiter non disponible")
 
+
 # Endpoint de santé pour Render
 @app.route('/health')
 def health_check():
@@ -110804,7 +110805,7 @@ def _cli_references_par_client(appliquer):
 # ============================================================================
 # Contrôle d'installation : app.py appelle ces modules ; s'ils manquent, on le dit clairement au démarrage
 # (sinon les pages concernées tombent en erreur « No module named … »).
-_EGALYX_REQUIS = ('incidents', 'c2n_cartographie', 'c2n_echantillon', 'plans_unifies', 'menage', 'alertes_incidents', 'identite', 'photo_profil', 'bienvenue', 'import_cartographie', 'bibliotheque_controles', 'signalements', 'maitrise', 'gestion_clients', 'pca', 'qualite', 'recommandations', 'commun',
+_EGALYX_REQUIS = ('incidents', 'application_mobile', 'notifications_prefs', 'c2n_cartographie', 'c2n_echantillon', 'plans_unifies', 'menage', 'alertes_incidents', 'identite', 'photo_profil', 'bienvenue', 'import_cartographie', 'bibliotheque_controles', 'signalements', 'maitrise', 'gestion_clients', 'pca', 'qualite', 'recommandations', 'commun',
                   'modules_client', 'permissions_grille', 'masquage', 'double_auth', 'langue')
 _egalyx_manquants = [n for n in _EGALYX_REQUIS
                      if not os.path.exists(os.path.join(os.path.dirname(os.path.abspath(__file__)), 'egalyx', n + '.py'))]
@@ -110828,6 +110829,7 @@ _EGALYX_SIGNATURES = {
     'circuit_controle': ('def _cartographie',),
     'c2n_cartographie': ('def appliquer', 'def annuler', 'def reglages'),
     'c2n_echantillon': ('def synchroniser',),
+    'notifications_prefs': ('def envoyer_resumes',),
 }
 _egalyx_anciens = []
 for _n, _sigs in _EGALYX_SIGNATURES.items():
@@ -110844,6 +110846,37 @@ if _egalyx_anciens:
         + ', '.join(_egalyx_anciens)
         + ". Arrêtez le serveur, relancez « python3 installer_mise_a_jour.py <dossier du projet> » depuis le DERNIER "
           "paquet reçu, vérifiez que le script affiche « Installation vérifiée », puis relancez.")
+
+# Pages manquantes : un module récent sans sa page (ex. nouveau fichier oublié lors de l'envoi vers Render)
+# donnait une erreur 500 « TemplateNotFound ». On le signale clairement au démarrage.
+def _egalyx_pages_manquantes():
+    import re as _re
+    _racine = os.path.dirname(os.path.abspath(__file__))
+    _manq = set()
+    _dossier = os.path.join(_racine, 'egalyx')
+    for _nom in sorted(os.listdir(_dossier)):
+        if not _nom.endswith('.py'):
+            continue
+        try:
+            with open(os.path.join(_dossier, _nom), encoding='utf-8') as _f:
+                _txt = _f.read()
+        except OSError:
+            continue
+        for _t in _re.findall(r"""['"](egalyx/[A-Za-z0-9_]+\.html)['"]""", _txt):
+            if not _t.startswith('egalyx/_apparence') and not os.path.exists(os.path.join(_racine, 'templates', _t)):
+                _manq.add('templates/' + _t)
+    for _t in ('egalyx/_plans_n2_lies.html',):
+        if not os.path.exists(os.path.join(_racine, 'templates', _t)):
+            _manq.add('templates/' + _t)
+    return sorted(_manq)
+
+
+_egalyx_pages_absentes = _egalyx_pages_manquantes()
+if _egalyx_pages_absentes:
+    raise RuntimeError(
+        "Installation incomplète : pages absentes : " + ', '.join(_egalyx_pages_absentes)
+        + ". Relancez « python3 installer_mise_a_jour.py <dossier du projet> » depuis le DERNIER paquet reçu. "
+          "Sur Render : vérifiez que ces NOUVEAUX fichiers ont bien été envoyés (git add -A, puis commit et push).")
 
 from egalyx import enregistrer_extensions as _egalyx_enregistrer
 _egalyx_enregistrer(app, db, csrf=csrf, recalculer_cotations=recalculer_toutes_cotations,
