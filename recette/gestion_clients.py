@@ -168,6 +168,36 @@ go('superadmin', 'post', f'/super-admin/client/{cid_b}/update', data={'nom': 'Cl
 with A.app.app_context():
     db.session.expire_all()
     verif('Sous-domaine déjà pris par un autre client refusé', db.session.get(M.Client, cid_b).sous_domaine != 'banque-sahel')
+r, t = go('superadmin', 'get', f'/super-admin/client/{cid_a}')
+verif('Lien d\'accès : https://banque-sahel.egalyx.com (plus de :5000)', 'href="https://banque-sahel.egalyx.com"' in t
+      and ':5000' not in t, '')
+r, t = go('superadmin', 'get', '/super-admin/clients')
+verif('Liste des clients : même lien', 'https://banque-sahel.egalyx.com' in t and ':5000' not in t)
+anonyme = A.app.test_client()
+r = anonyme.get('/auth/login_fullscreen', headers={'Host': 'banque-sahel.egalyx.com'})
+verif('banque-sahel.egalyx.com reconnu (page de connexion, pas « client introuvable »)', r.status_code == 200,
+      str(r.status_code))
+r = anonyme.get('/auth/login_fullscreen', headers={'Host': 'BANQUE-SAHEL.egalyx.com:443'})
+verif('Majuscules et port tolérés', r.status_code == 200, str(r.status_code))
+r = anonyme.get('/auth/login_fullscreen', headers={'Host': 'inconnu.egalyx.com'})
+verif('Sous-domaine inconnu : page « client introuvable »', r.status_code == 404, str(r.status_code))
+r = anonyme.get('/auth/login_fullscreen', headers={'Host': 'egalyx.com'})
+verif('Domaine principal : inchangé', r.status_code == 200, str(r.status_code))
+with A.app.app_context():
+    from egalyx.gestion_clients import client_par_hote, url_client
+    env_seul = M.Client(nom='Ancien client', reference='REC-ANC', is_active=True)
+    db.session.add(env_seul)
+    db.session.flush()
+    db.session.add(socle.creer(M.EnvironnementClient, client_id=env_seul.id, nom='Prod', sous_domaine='ancien-client', statut='actif'))
+    db.session.commit()
+    momo = M.Client(nom='Client Test', reference='TEST-MOMO', is_active=True, sous_domaine='https://Momo.egalyx.com/')
+    db.session.add(momo)
+    db.session.commit()
+    verif('Sous-domaine enregistré sous une autre forme (« https://Momo.egalyx.com/ ») : reconnu',
+          client_par_hote('momo.egalyx.com') is not None and client_par_hote('momo.egalyx.com').id == momo.id)
+    verif('Ancien client (sous-domaine seulement sur l\'environnement) : reconnu et lien correct',
+          client_par_hote('ancien-client.egalyx.com').id == env_seul.id
+          and url_client(env_seul) == 'https://ancien-client.egalyx.com')
 r, _ = go('admin_a', 'post', f'/super-admin/client/{cid_a}/update', data={'nom': 'Pirate'})
 verif('Admin client : modification refusée', r.status_code in (302, 403), str(r.status_code))
 c_sa = socle.navigateur(A, ids['superadmin'])

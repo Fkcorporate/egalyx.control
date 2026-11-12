@@ -101,6 +101,8 @@ r, _ = go('superadmin', 'post', '/super-admin/client/nouveau', data={
     'identite_nom_court': 'NBS', 'identite_logo': (jpg, 'logo.jpg')}, content_type='multipart/form-data')
 with A.app.app_context():
     nouveau = M.Client.query.filter_by(reference='NBS-01').first()
+    verif('Sous-domaine enregistré aussi sur le client à la création', nouveau is not None and nouveau.sous_domaine == 'nbs',
+          nouveau.sous_domaine if nouveau else '')
     verif('Client créé avec son nom affiché et son logo (JPEG converti)', nouveau is not None and nouveau.logo == f'client_{nouveau.id}.png'
           and nom_affiche(nouveau.id) == 'NBS', f'{r.status_code} {socle.cause(A)}')
 r, t = go('superadmin', 'get', f'/super-admin/client/{cid_b}')
