@@ -10,7 +10,7 @@ from datetime import datetime, timedelta
 # Initialisation du client OpenAI (si la clé est disponible)
 OPENAI_API_KEY = os.environ.get("OPENAI_API_KEY")
 client = None
-if OPENAI_API_KEY and OPENAI_API_KEY != "mode-simulation" and not OPENAI_API_KEY.startswith("sk-proj-"):
+if OPENAI_API_KEY and OPENAI_API_KEY != "mode-simulation" and OPENAI_API_KEY.startswith("sk-") and len(OPENAI_API_KEY) >= 30:  # toutes les clés OpenAI actuelles (sk-proj-…, sk-svcacct-…)
     try:
         client = OpenAI(api_key=OPENAI_API_KEY)
         print("✅ OpenAI client initialisé avec succès")
