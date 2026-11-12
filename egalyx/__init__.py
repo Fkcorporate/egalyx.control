@@ -48,6 +48,8 @@ def enregistrer_extensions(app, db, csrf=None, recalculer_cotations=None, constr
     pages_cassees.enregistrer(app)       # /ci (301 vers l'accueil), /debug/create-user-form (404)
     from egalyx import kri_sources_securite
     kri_sources_securite.enregistrer(app)  # SÉCURITÉ : sources KRI réservées au super-admin, ni SQLite, ni fichier, ni réseau interne
+    from egalyx import ia_cartographie
+    ia_cartographie.enregistrer(app)       # analyse de cartographie : score calculé + rédaction IA vérifiée
     from egalyx import bienvenue
     bienvenue.enregistrer(app)          # e-mail de bienvenue (accès, identifiant, guide de double authentification)
     recherche.enregistrer(app)
