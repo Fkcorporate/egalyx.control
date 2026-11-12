@@ -111,6 +111,20 @@
     {# CAS 3 : GRILLE DE CARTES ADAPTATIVE                          #}
     {# ========================================================== #}
     <div class="row mb-4">
+{# Une couleur par carte : (couleur, couleur foncée, teinte pâle) — dégradé d'en-tête, barre, pastille et flèche assortis #}
+        {% set palette = {
+            'risques':      ('#2563EB', '#1E3A8A', '#EFF4FF'),
+            'kri':          ('#059669', '#065F46', '#ECFDF5'),
+            'logigrammes':  ('#0891B2', '#155E75', '#ECFEFF'),
+            'veille':       ('#D97706', '#92400E', '#FFFBEB'),
+            'incidents':    ('#DC2626', '#7F1D1D', '#FEF2F2'),
+            'tickets':      ('#DB2777', '#831843', '#FDF2F8'),
+            'campagnes':    ('#7C3AED', '#4C1D95', '#F5F3FF'),
+            'audit':        ('#0284C7', '#0C4A6E', '#F0F9FF'),
+            'plans_action': ('#0D9488', '#134E4A', '#F0FDFA'),
+            'controle_n2':  ('#4F46E5', '#312E81', '#EEF2FF'),
+            'pca':          ('#EA580C', '#7C2D12', '#FFF7ED'),
+        } %}
         {% for mod in modules_visibles %}
             {# --- Déterminer les valeurs selon le module --- #}
             {% set valeur_principale = 0 %}
@@ -204,9 +218,11 @@
 
             {# --- CARTE --- #}
             <div class="col-xl-3 col-md-6 mb-4 fade-in">
-                <div class="fk-card clickable-card h-100"
+                {% set pal = palette.get(mod.key) %}
+                <div class="fk-card clickable-card carte-couleur h-100"
+                     {% if pal %}style="--cc: {{ pal[0] }}; --cc-fonce: {{ pal[1] }}; --cc-pale: {{ pal[2] }};"{% endif %}
                      onclick="location.href='{{ url_for(mod.lien) if url_exists(mod.lien) else '#' }}'">
-                    <div class="fk-card-header" style="background: {{ mod.gradient }};">
+                    <div class="fk-card-header" style="background: {{ ('linear-gradient(135deg, ' ~ pal[0] ~ ' 0%, ' ~ pal[1] ~ ' 100%)') if pal else mod.gradient }};">
                         <div class="d-flex justify-content-between align-items-center">
                             <div>
                                 <h6 class="mb-2 text-white-75">{{ mod.titre }}</h6>
@@ -233,14 +249,14 @@
                             <small class="fw-semibold">{{ pourcentage }}%</small>
                         </div>
                         <div class="progress" style="height: 8px;">
-                            <div class="progress-bar bg-gradient-info"
+                            <div class="progress-bar {{ 'cc-barre' if pal else 'bg-gradient-info' }}"
                                  style="width: {{ pourcentage }}%;"></div>
                         </div>
                         <div class="mt-3 d-flex justify-content-between align-items-center">
-                            <span class="badge fk-badge fk-badge-primary">
+                            <span class="badge fk-badge {{ 'cc-pastille' if pal else 'fk-badge-primary' }}">
                                 <i class="fas {{ badge_icone }} me-1"></i>{{ badge_texte }}
                             </span>
-                            <i class="fas fa-arrow-right text-muted"></i>
+                            <i class="fas fa-arrow-right {{ 'cc-fleche' if pal else 'text-muted' }}"></i>
                         </div>
                     </div>
                 </div>
@@ -250,9 +266,9 @@
         {# --- Carte Score NET (uniquement si risques accessibles) --- #}
         {% if data.score_risque_moyen is defined and url_exists('dashboard_risques') %}
         <div class="col-xl-3 col-md-6 mb-4 fade-in">
-            <div class="fk-card clickable-card h-100"
+            <div class="fk-card clickable-card carte-couleur h-100" style="--cc: #334155; --cc-fonce: #0F172A; --cc-pale: #F1F5F9;"
                  onclick="location.href='{{ url_for('dashboard_risques') }}'">
-                <div class="fk-card-header" style="background: linear-gradient(135deg, #0ea5e9 0%, #0369a1 100%);">
+                <div class="fk-card-header" style="background: linear-gradient(135deg, #334155 0%, #0F172A 100%);">
                     <div class="d-flex justify-content-between align-items-center">
                         <div>
                             <h6 class="mb-2 text-white-75">SCORE NET MOYEN</h6>
@@ -276,10 +292,10 @@
                              style="width: {{ (data.score_risque_moyen / 25 * 100)|round(1) }}%;"></div>
                     </div>
                     <div class="mt-3 d-flex justify-content-between align-items-center">
-                        <span class="badge fk-badge fk-badge-primary">
+                        <span class="badge fk-badge cc-pastille">
                             <i class="fas fa-chart-line me-1"></i>Vue d'ensemble
                         </span>
-                        <i class="fas fa-arrow-right text-muted"></i>
+                        <i class="fas fa-arrow-right cc-fleche"></i>
                     </div>
                 </div>
             </div>
@@ -864,6 +880,25 @@ document.addEventListener('DOMContentLoaded', function() {
 .fk-card { transition: all 0.3s ease; }
 .fk-card:hover { transform: translateY(-4px); box-shadow: 0 10px 25px rgba(0,0,0,0.08); }
 .clickable-card { cursor: pointer; }
+/* Cartes colorées : une couleur par module */
+.carte-couleur { border: 1px solid #E5E7EB; border-radius: 14px; overflow: hidden; transition: transform .18s ease, box-shadow .18s ease, border-color .18s ease; }
+.carte-couleur:hover { transform: translateY(-3px); box-shadow: 0 12px 28px -12px var(--cc, #2563EB); border-color: var(--cc, #2563EB); }
+.carte-couleur > .fk-card-header { position: relative; padding: 1.15rem 1.25rem; border: 0; }
+.carte-couleur > .fk-card-header::after { content: ""; position: absolute; right: -40px; top: -40px; width: 140px; height: 140px;
+    border-radius: 50%; background: rgba(255, 255, 255, .08); pointer-events: none; }
+.carte-couleur > .fk-card-header h6 { font-size: .74rem; font-weight: 700; letter-spacing: .08em; color: rgba(255, 255, 255, .82) !important; }
+.carte-couleur > .fk-card-header h2 { font-size: 2rem; letter-spacing: -.02em; }
+.carte-couleur > .fk-card-header .icon-circle { background: rgba(255, 255, 255, .18) !important; border: 1px solid rgba(255, 255, 255, .25);
+    border-radius: 12px !important; backdrop-filter: blur(2px); }
+.carte-couleur .cc-barre { background: var(--cc) !important; border-radius: 4px; }
+.carte-couleur .progress { background: var(--cc-pale, #F1F5F9) !important; border-radius: 4px; }
+.carte-couleur .cc-pastille { background: var(--cc-pale) !important; color: var(--cc-fonce) !important; border: 1px solid color-mix(in srgb, var(--cc) 25%, transparent);
+    font-weight: 600; border-radius: 999px; padding: .35rem .7rem; }
+.carte-couleur .cc-fleche { color: var(--cc) !important; transition: transform .18s ease; }
+.carte-couleur:hover .cc-fleche { transform: translateX(3px); }
+[data-bs-theme="dark"] .carte-couleur { border-color: #1F2937; }
+[data-bs-theme="dark"] .carte-couleur .cc-pastille { background: color-mix(in srgb, var(--cc) 18%, transparent) !important; color: #F8FAFC !important; }
+[data-bs-theme="dark"] .carte-couleur .progress { background: rgba(255, 255, 255, .08) !important; }
 .critique-item:hover { transform: translateX(3px); filter: brightness(1.02); }
 .cartographie-item { transition: all 0.3s ease; border-color: #e2e8f0 !important; }
 .cartographie-item:hover { border-color: #3b82f6 !important; box-shadow: 0 2px 8px rgba(59,130,246,0.1); }
