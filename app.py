@@ -18056,7 +18056,7 @@ def send_client_creation_email(client, admin_user, admin_password, env=None):
         {admin_user.username} · {admin_password}
         
         Connectez-vous et personnalisez votre mot de passe.
-        
+        {__import__('egalyx.bienvenue', fromlist=['texte_2fa']).texte_2fa()}
         — L'équipe Egalyx
         """
         
@@ -18224,6 +18224,7 @@ def send_client_creation_email(client, admin_user, admin_password, env=None):
                     <div class="security-note">
                         <p style="margin-bottom: 8px;"><strong>🔐 Première connexion</strong></p>
                         <p style="font-size: 14px;">Pour des raisons de sécurité, vous devrez modifier votre mot de passe dès la première connexion. Ces identifiants sont personnels et confidentiels.</p>
+                        {__import__('egalyx.bienvenue', fromlist=['texte_2fa_html']).texte_2fa_html()}
                     </div>
                     
                     <p style="margin-top: 32px; font-size: 14px; color: #5b6e8c;">
@@ -22510,6 +22511,7 @@ def utility_processor():
     
     return dict(get_file_size=get_file_size)
 
+
 # ========================
 # OPTIMISATIONS PERFORMANCE
 # ========================
@@ -22521,14 +22523,14 @@ def add_header(response):
     response.headers['X-Content-Type-Options'] = 'nosniff'
     response.headers['X-Frame-Options'] = 'SAMEORIGIN'
     response.headers['X-XSS-Protection'] = '1; mode=block'
-
+    
     # Cache pour les assets statiques
     if 'Cache-Control' not in response.headers:
         if response.mimetype in ['text/css', 'application/javascript', 'image/', 'font/']:
             response.headers['Cache-Control'] = 'public, max-age=31536000'  # 1 an
         else:
             response.headers['Cache-Control'] = 'no-store, no-cache, must-revalidate, max-age=0'
-
+    
     return response
 
 # Compression Gzip (si possible)
@@ -22543,28 +22545,17 @@ except ImportError:
 try:
     from flask_limiter import Limiter
     from flask_limiter.util import get_remote_address
-
+    
     limiter = Limiter(
         app=app,
         key_func=get_remote_address,
         default_limits=["200 per hour", "50 per minute"]
     )
-
-    # ✅ Exemptions CORRECTES : on passe les VUES (fonctions) ou les Blueprints,
-    # pas des strings. Flask-Limiter exempte déjà /static/ automatiquement.
-    # On protège chaque exemption pour éviter une AttributeError si la vue
-    # n'existe pas encore au moment de l'import.
-
-    # 'static' est déjà exempté par défaut → inutile de l'ajouter.
-    # Pour les autres vues, on récupère l'objet via app.view_functions :
-
-    for endpoint in ("login", "health"):
-        vue = app.view_functions.get(endpoint)
-        if vue is not None:
-            limiter.exempt(vue)
-        else:
-            print(f"⚠️ Endpoint '{endpoint}' introuvable, exemption ignorée")
-
+    
+    # Exceptions pour les pages importantes
+    limiter.exempt("static")
+    limiter.exempt("login")
+    limiter.exempt("health")
     print("✅ Rate limiting activé")
 except ImportError:
     print("⚠️ Flask-Limiter non disponible")
@@ -110800,7 +110791,7 @@ def _cli_references_par_client(appliquer):
 # ============================================================================
 # Contrôle d'installation : app.py appelle ces modules ; s'ils manquent, on le dit clairement au démarrage
 # (sinon les pages concernées tombent en erreur « No module named … »).
-_EGALYX_REQUIS = ('incidents', 'alertes_incidents', 'identite', 'import_cartographie', 'bibliotheque_controles', 'signalements', 'maitrise', 'gestion_clients', 'pca', 'qualite', 'recommandations', 'commun',
+_EGALYX_REQUIS = ('incidents', 'alertes_incidents', 'identite', 'photo_profil', 'bienvenue', 'import_cartographie', 'bibliotheque_controles', 'signalements', 'maitrise', 'gestion_clients', 'pca', 'qualite', 'recommandations', 'commun',
                   'modules_client', 'permissions_grille', 'masquage', 'double_auth', 'langue')
 _egalyx_manquants = [n for n in _EGALYX_REQUIS
                      if not os.path.exists(os.path.join(os.path.dirname(os.path.abspath(__file__)), 'egalyx', n + '.py'))]
@@ -110810,6 +110801,33 @@ if _egalyx_manquants:
         + ', '.join(n + '.py' for n in _egalyx_manquants)
         + ". Copiez TOUT le contenu du paquet de mise à jour (dossier egalyx compris), par exemple avec "
           "« python3 installer_mise_a_jour.py <dossier du projet> », puis relancez.")
+
+# Contrôle de version : un fichier ancien à côté d'un app.py récent (installation partielle) faisait planter des pages
+# au hasard. Chaque module doit contenir ce dont app.py et les pages ont besoin ; sinon, arrêt clair au démarrage.
+_EGALYX_SIGNATURES = {
+    'gestion_clients': ('def sous_domaine_du_client', 'def url_client', 'def modifier_client', 'def client_par_hote'),
+    'identite': ('def logo_data_uri', 'def nom_affiche'),
+    'alertes_incidents': ('def reglages',),
+    'incidents': ('def _courriels_delais',),
+    'import_cartographie': ('def echelle(valeurs, titre',),
+    'bibliotheque': ('def creer_controles',),
+    'ma_semaine': ('jours_ouverture',),
+}
+_egalyx_anciens = []
+for _n, _sigs in _EGALYX_SIGNATURES.items():
+    try:
+        with open(os.path.join(os.path.dirname(os.path.abspath(__file__)), 'egalyx', _n + '.py'), encoding='utf-8') as _f:
+            _txt = _f.read()
+    except OSError:
+        continue
+    if any(_sg not in _txt for _sg in _sigs):
+        _egalyx_anciens.append(_n + '.py')
+if _egalyx_anciens:
+    raise RuntimeError(
+        "Installation incomplète : ces fichiers du dossier egalyx/ sont d'une ancienne version : "
+        + ', '.join(_egalyx_anciens)
+        + ". Arrêtez le serveur, relancez « python3 installer_mise_a_jour.py <dossier du projet> » depuis le DERNIER "
+          "paquet reçu, vérifiez que le script affiche « Installation vérifiée », puis relancez.")
 
 from egalyx import enregistrer_extensions as _egalyx_enregistrer
 _egalyx_enregistrer(app, db, csrf=csrf, recalculer_cotations=recalculer_toutes_cotations,

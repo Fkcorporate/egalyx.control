@@ -66,6 +66,25 @@ Autres corrections :
 
 **Évaluation triphasée** (et écran d'évaluation de l'opérateur) : les couleurs de la maîtrise étaient inversées (« Insuffisant » en vert). Elles vont maintenant du rouge (1 Insuffisant) au vert (5 Excellent), y compris dans les listes de choix des phases de validation et de confirmation.
 
+## Photo de profil et double authentification guidée (v6.12)
+
+- **Photo de profil** : « Mon profil » → Ajouter / Changer / Retirer (PNG, JPEG, WebP, 2 Mo). Recadrée en
+  256 × 256, réencodée en PNG (métadonnées et position GPS supprimées, SVG refusé), rangée dans
+  `instance/avatars/`, visible seulement par l'organisation et le super admin ; affichée dans l'en-tête.
+- **Double authentification de l'organisation** (`/compte/securite/organisation`, admin du client ou super admin
+  depuis la fiche client) : « Obligatoire pour tous les utilisateurs » (sinon : administrateurs seulement), suivi
+  de qui l'a activée, bouton Réinitialiser, lien du guide.
+- **Guide public et imprimable** `/compte/securite/guide` : applications à installer (FreeOTP, Google, Microsoft,
+  liens Android / iPhone), étapes, codes de secours, téléphone perdu. À envoyer aux nouveaux utilisateurs.
+- Page d'activation : liens directs vers les applications, consigne « ne scannez pas avec le téléphone de
+  quelqu'un d'autre ».
+- **Envoi automatique** : l'e-mail de création du client contient la section double authentification et le lien
+  du guide ; chaque utilisateur créé ensuite reçoit un e-mail de bienvenue (adresse d'accès, identifiant, jamais le
+  mot de passe ; guide si la double authentification lui est demandée). `EGALYX_EMAIL_BIENVENUE=0` pour couper ;
+  `EGALYX_URL_PUBLIQUE` fixe l'adresse du guide (par défaut https://egalyx.com).
+- Stockage de la règle : `client_configurations.preferences['securite']` (aucune nouvelle table).
+- Hébergement (Render…) : `instance/` (logos, photos) doit être sur un disque persistant.
+
 ## Adresse d'accès des clients (sous-domaines) (v6.11)
 
 - Le lien d'accès affiché pour un client était une adresse de développement (`http://sonapie:5000`) : il est
