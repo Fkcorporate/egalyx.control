@@ -31,7 +31,15 @@ PAS_ARTICLES = {'index', 'article', 'article-template', 'auteur', 'categorie', '
 SUSPENDUES = {'egalyx-avis-clients-certifies', 'avis-certifies-clients-egalyx-2026', 'logiciel-audit-interne-avis-clients',
               'avis-retours-clients-egalyx-alternatives'}
 # Doublons fusionnés : l'ancienne adresse renvoie (301) vers la version complète, Google garde un seul article.
-FUSIONS = {'conformite-rgpd-logiciel-gestion-risques': 'conformite-rgpd-logiciel-risques'}
+FUSIONS = {'conformite-rgpd-logiciel-gestion-risques': 'conformite-rgpd-logiciel-risques',
+           # anciens liens de la page d'accueil (articles qui n'ont jamais existé)
+           'comment-ia-transforme-audit-interne': 'ia-audit-interne-2026',
+           'cartographie-risques-methodologie': 'cartographie-risques-entreprise-methode-2026',
+           'nouveautes-ohada-2024': 'mise-en-conformite-ohada-entreprises-ivoiriennes'}
+# « Dernières publications » de la page d'accueil : ces articles d'abord (avec leur image), sinon les plus récents
+A_LA_UNE = [('ia-audit-interne-2026', '/static/images/blog-ia-audit.jpg'),
+            ('cartographie-risques-entreprise-methode-2026', '/static/images/blog-cartographie.jpg'),
+            ('mise-en-conformite-ohada-entreprises-ivoiriennes', '/static/images/blog-conformite.jpg')]
 
 CATEGORIES = [   # (code, libellé, description, mots déclencheurs dans l'adresse) — l'ordre compte
     ('cybersecurite', 'Cybersécurité', 'Risques cyber, sécurité informatique et protection des données en entreprise.', ('cyber', 'securite', 'iot')),
@@ -252,3 +260,13 @@ def enregistrer(app):
 
     exempter_controle_ancien(app, {'blog_index', 'blog_categorie', 'blog_article', 'sitemap'})
     app.jinja_env.globals['blog_categories_liste'] = CATEGORIES
+
+    def blog_a_la_une(n=3):
+        arts, vus = [], set()
+        for slug, image in A_LA_UNE:
+            a = _par_slug(app, slug)
+            if a:
+                arts.append(dict(a, image=image)); vus.add(slug)
+        arts += [a for a in catalogue(app) if a['slug'] not in vus][:max(0, n - len(arts))]
+        return arts[:n]
+    app.jinja_env.globals['blog_a_la_une'] = blog_a_la_une
