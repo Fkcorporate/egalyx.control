@@ -210,5 +210,41 @@ verif('Bouton activer / désactiver un utilisateur : plus d\'erreur 500', r1.sta
 codes = [appel(c_sa, 'post', f'/api/client/{cid_a}/reset-admin-password', json={}).status_code for _ in range(25)]
 verif('Réinitialisation du mot de passe admin : 25 essais sans échec', set(codes) == {200}, str(codes))
 
+print('--- Double authentification : réinitialisation par un administrateur')
+def activer_2fa(uid):
+    with A.app.app_context():
+        u = db.session.get(M.User, uid)
+        u.totp_actif, u.totp_secret_chiffre, u.totp_codes_secours = True, 'secret-de-test', ['x']
+        db.session.commit()
+
+
+def etat_2fa(uid):
+    with A.app.app_context():
+        db.session.expire_all()
+        return db.session.get(M.User, uid).totp_actif
+
+
+activer_2fa(ids['admin_a'])
+r, t = go('superadmin', 'get', f'/super-admin/client/{cid_a}')
+verif('Fiche client : bouton « Réinitialiser la double authentification » pour un compte qui l\'a activée',
+      f'id="f2fa{ids["admin_a"]}"' in t and f'/2fa/reinitialiser/{ids["admin_a"]}' in t)
+r, t2 = go('superadmin', 'get', '/admin/utilisateurs')
+verif('« Tous les utilisateurs » : bouton et badge 2FA, tous clients confondus', f'id="f2fa{ids["admin_a"]}"' in t2
+      and '2FA</span>' in t2, f'{r.status_code} {socle.cause(A)}')
+r, t3 = go('superadmin', 'get', '/super-admin/clients')
+verif('Liste des clients : lien « Tous les utilisateurs »', '/admin/utilisateurs' in t3)
+verif('Pas de bouton pour un compte sans double authentification', f'id="f2fa{ids["lecteur"]}"' not in t)
+r, _ = go('superadmin', 'post', f'/compte/securite/2fa/reinitialiser/{ids["admin_a"]}', data={})
+verif('Super admin : double authentification de l\'admin du client réinitialisée', etat_2fa(ids['admin_a']) is False,
+      f'{r.status_code} {socle.cause(A)}')
+activer_2fa(ids['lecteur'])
+r, t = go('admin_a', 'get', '/client-admin/utilisateurs')
+verif('Admin client : bouton visible dans la gestion des utilisateurs', f'id="f2fa{ids["lecteur"]}"' in t, str(r.status_code))
+go('admin_a', 'post', f'/compte/securite/2fa/reinitialiser/{ids["lecteur"]}', data={})
+verif('Admin client : réinitialise un membre de son organisation', etat_2fa(ids['lecteur']) is False)
+activer_2fa(ids['lecteur'])
+go('gestionnaire', 'post', f'/compte/securite/2fa/reinitialiser/{ids["lecteur"]}', data={})
+verif('Utilisateur non admin : refusé', etat_2fa(ids['lecteur']) is True)
+
 print(f'\n{sum(res)}/{len(res)} vérifications réussies')
 sys.exit(0 if all(res) else 1)
