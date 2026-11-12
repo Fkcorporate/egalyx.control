@@ -130,6 +130,11 @@ verif('Page hors ligne publique', r.status_code == 200 and 'Pas de connexion'.en
 r, t = go('gestionnaire', 'get', '/dashboard')
 verif('Pages : manifeste, icône iPhone, bouton « Installer l\'application »', 'href="/manifest.webmanifest"' in t
       and '/application/icone-180.png' in t and 'btnInstallerApp' in t)
+verif('« Installer l\'application » toujours visible dans le menu, avec la page d\'aide en secours',
+      '<li id="liInstallerApp">' in t and 'data-aide="/aide/fiche/application_telephone"' in t)
+r2, t2 = go('lecteur', 'get', '/aide/fiche/application_telephone')
+verif('Page d\'aide « Installer Egalyx sur mon téléphone » (iPhone, Android, ordinateur, Mac)', r2.status_code == 200
+      and 'Sur l’écran d’accueil' in t2 and 'Ajouter au Dock' in t2, str(r2.status_code))
 
 print('--- Tableau de bord : plus de bloc « À traiter » (retiré à la demande)')
 verif('Tableau de bord sans « À traiter »', r.status_code == 200 and 'id="aTraiter"' not in t, f'{r.status_code} {socle.cause(A)}')
