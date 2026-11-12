@@ -66,6 +66,47 @@ Autres corrections :
 
 **Évaluation triphasée** (et écran d'évaluation de l'opérateur) : les couleurs de la maîtrise étaient inversées (« Insuffisant » en vert). Elles vont maintenant du rouge (1 Insuffisant) au vert (5 Excellent), y compris dans les listes de choix des phases de validation et de confirmation.
 
+## Contrôle interne N2 : réglages, échantillon, plans d'action réunis (v6.14)
+
+- **Réglages par organisation** (`/c2n/reglages/`, menu N2 → Réglages ; admin ou gestionnaire N2) : seuils de
+  conclusion (par défaut 95 / 80 / 60 %) et tailles d'échantillon proposées par fréquence ; « Rétablir les valeurs
+  par défaut ». Stockage : `client_configurations.preferences['c2n']`.
+- **Échantillon élément par élément** (`/c2n/planification/<id>/echantillon`) : tirage aléatoire simple sans remise
+  sur la population collée (graine, taille de la population, date et auteur conservés : tirage reproductible),
+  ajout manuel, résultat / motif / criticité / commentaire / preuve par élément, export CSV. Les totaux de
+  l'exécution sont calculés depuis l'échantillon (champs verrouillés sur la page d'exécution) et chaque élément en
+  anomalie devient une anomalie détectée. Lecture seule une fois la planification soumise ou validée. Preuves dans
+  `instance/preuves_c2n/<organisation>/`. Nouvelle table `c2n_elements_echantillon` (créée au démarrage).
+- **Registre unique des plans d'action** (`/plans-action/registre/`) : plans des risques et plans du N2 ensemble,
+  filtres origine / statut / mes plans / en retard. Un plan N2 est rattaché au contrôle et donc aux dispositifs et
+  risques testés : il apparaît sur la fiche du dispositif et sur celle du risque.
+- Page de planification N2 : l'aperçu du contrôle choisi ne s'affichait jamais (variable non déclarée et morceau de
+  code collé hors fonction) : corrigé.
+- Recette : `recette/c2n_v2.py` (33 vérifications).
+
+## Contrôle interne N2 relié à la cartographie, méthode de test (v6.13)
+
+- **Référentiel N2 → cartographie** : chaque contrôle désigne, dans une liste, les dispositifs de maîtrise (et risques)
+  qu'il teste ; anciens référentiels : les « [R-001] intitulé » du texte libre sont reconnus.
+- **Effet d'une validation** (dans le N2 ou depuis la campagne rattachée) : vérification « Contrôle N2 » sur chaque
+  dispositif testé, puis règle des dispositifs (Conforme : inchangé ; À améliorer / À corriger : −1 ;
+  Non conforme : −2 et nouvelle vérification à 30 jours), niveau de maîtrise suggéré du risque recalculé, historique.
+  Résultat = le plus défavorable entre le taux (≥ 95 % conforme, 80–95 à améliorer, 60–80 à corriger, < 60 non
+  conforme) et la gravité de la déficience (mineure conforme, significative à corriger, majeure non conforme).
+  **Réouverture** : effet annulé (efficacité rétablie si personne ne l'a changée), puis réappliqué à la nouvelle
+  validation — jamais de double pénalité.
+- **Méthode de test** : type (conception / efficacité / les deux) ; taille d'échantillon proposée selon la fréquence
+  d'exécution du contrôle (automatique 1, plusieurs fois par jour 25–60, quotidien 20–40, hebdomadaire 5–15,
+  mensuel 2–5, trimestriel 2, semestriel 1–2, annuel 1 ; repères usuels à adapter au risque) ; gravité de la
+  déficience (choisie, ou déduite des anomalies : critique → majeure, majeur → significative, mineur → mineure).
+  Visible sur la planification, l'exécution, le détail et dans les rapports PDF (section « Méthode de test et effet
+  sur la cartographie »).
+- **Ménage** : l'ancien module « programmes / missions / tâches de contrôle » renvoie vers la planification N2
+  (données conservées) ; les pages /test-… ne sont accessibles qu'au super admin.
+- Base : colonnes ajoutées automatiquement au démarrage (référentiel : risques_ids, dispositifs_ids,
+  frequence_execution ; planification : type_test, taille_echantillon ; exécution : gravite_deficience,
+  impact_cartographie). Recette : `recette/c2n_cartographie.py` (27 vérifications).
+
 ## Photo de profil et double authentification guidée (v6.12)
 
 - **Photo de profil** : « Mon profil » → Ajouter / Changer / Retirer (PNG, JPEG, WebP, 2 Mo). Recadrée en

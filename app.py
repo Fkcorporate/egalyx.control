@@ -22511,6 +22511,7 @@ def utility_processor():
     
     return dict(get_file_size=get_file_size)
 
+
 # ========================
 # OPTIMISATIONS PERFORMANCE
 # ========================
@@ -77046,6 +77047,7 @@ def generer_html_rapport_complet(planification, recommandations, non_conformites
     
     # ==================== OBJECTIF ET PÉRIMÈTRE ====================
     html += f'''
+        {__import__('egalyx.c2n_cartographie', fromlist=['section_rapport']).section_rapport(planification)}
     <div class="section">
         <div class="section-title">🎯 OBJECTIF ET PÉRIMÈTRE</div>
         <div class="card-white">
@@ -77253,6 +77255,7 @@ def generer_html_rapport_executif(planification, recommandations, stats, current
             </div>
         </div>
         
+        {__import__('egalyx.c2n_cartographie', fromlist=['section_rapport']).section_rapport(planification)}
         <div class="section">
             <div class="section-title">✅ SYNTHÈSE</div>
             <div class="conclusion">
@@ -110801,7 +110804,7 @@ def _cli_references_par_client(appliquer):
 # ============================================================================
 # Contrôle d'installation : app.py appelle ces modules ; s'ils manquent, on le dit clairement au démarrage
 # (sinon les pages concernées tombent en erreur « No module named … »).
-_EGALYX_REQUIS = ('incidents', 'alertes_incidents', 'identite', 'photo_profil', 'bienvenue', 'import_cartographie', 'bibliotheque_controles', 'signalements', 'maitrise', 'gestion_clients', 'pca', 'qualite', 'recommandations', 'commun',
+_EGALYX_REQUIS = ('incidents', 'c2n_cartographie', 'c2n_echantillon', 'plans_unifies', 'menage', 'alertes_incidents', 'identite', 'photo_profil', 'bienvenue', 'import_cartographie', 'bibliotheque_controles', 'signalements', 'maitrise', 'gestion_clients', 'pca', 'qualite', 'recommandations', 'commun',
                   'modules_client', 'permissions_grille', 'masquage', 'double_auth', 'langue')
 _egalyx_manquants = [n for n in _EGALYX_REQUIS
                      if not os.path.exists(os.path.join(os.path.dirname(os.path.abspath(__file__)), 'egalyx', n + '.py'))]
@@ -110822,6 +110825,9 @@ _EGALYX_SIGNATURES = {
     'import_cartographie': ('def echelle(valeurs, titre',),
     'bibliotheque': ('def creer_controles',),
     'ma_semaine': ('jours_ouverture',),
+    'circuit_controle': ('def _cartographie',),
+    'c2n_cartographie': ('def appliquer', 'def annuler', 'def reglages'),
+    'c2n_echantillon': ('def synchroniser',),
 }
 _egalyx_anciens = []
 for _n, _sigs in _EGALYX_SIGNATURES.items():

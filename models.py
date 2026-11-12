@@ -18945,6 +18945,11 @@ class ReferentielControle(db.Model):
     metier = db.Column(db.String(100))
     objectif = db.Column(db.Text)
     risques_couverts = db.Column(db.Text)
+    # Rattachement structuré à la cartographie (egalyx/c2n_cartographie.py) : identifiants des risques et des
+    # dispositifs de maîtrise testés par ce contrôle ; fréquence d'exécution du contrôle (taille d'échantillon)
+    risques_ids = db.Column(db.JSON)
+    dispositifs_ids = db.Column(db.JSON)
+    frequence_execution = db.Column(db.String(30))
     frequence = db.Column(db.String(20))
     
     # Clés étrangères
@@ -18979,6 +18984,8 @@ class PlanificationControle(db.Model):
     perimetre = db.Column(db.String(500))
     date_prevue = db.Column(db.Date, nullable=False)
     statut = db.Column(db.String(20), default='a_faire', index=True)
+    type_test = db.Column(db.String(20), default='efficacite')   # conception | efficacite | les_deux
+    taille_echantillon = db.Column(db.Integer)                      # taille recommandée retenue
     version = db.Column(db.Integer, default=1, nullable=False)
 
     # ============================================
@@ -19732,6 +19739,9 @@ class ExecutionControle(db.Model):
     commentaires = db.Column(db.Text)
     conclusion = db.Column(db.Text)
     taux_conformite = db.Column(db.Float, default=0)
+    gravite_deficience = db.Column(db.String(20))          # aucune | mineure | significative | majeure
+    impact_cartographie = db.Column(db.JSON)                # effets appliqués aux dispositifs à la validation
+    tirage_echantillon = db.Column(db.JSON)                 # tirage aléatoire : population, taille, graine, date, auteur
     pieces_justificatives = db.Column(db.Text)
     version = db.Column(db.Integer, default=1, nullable=False)
 
@@ -19820,6 +19830,26 @@ class ExecutionControle(db.Model):
     
     def __repr__(self):
         return f'<ExecutionControle {self.id}>'
+
+
+class ElementEchantillonN2(db.Model):
+    """Élément de l'échantillon d'un contrôle N2 (egalyx/c2n_echantillon.py) : ce qui a été testé, le résultat, la preuve."""
+    __tablename__ = 'c2n_elements_echantillon'
+    id = db.Column(db.Integer, primary_key=True)
+    execution_id = db.Column(db.Integer, db.ForeignKey('execution_controle.id'), nullable=False, index=True)
+    client_id = db.Column(db.Integer, db.ForeignKey('clients.id'), index=True)
+    numero = db.Column(db.Integer)
+    reference = db.Column(db.String(200), nullable=False)       # n° de dossier, de facture, d'opération…
+    resultat = db.Column(db.String(20), default='a_tester')     # a_tester | conforme | anomalie
+    motif = db.Column(db.String(300))
+    criticite = db.Column(db.String(20))                        # mineur | majeur | critique (si anomalie)
+    commentaire = db.Column(db.Text)
+    preuve_fichier = db.Column(db.String(300))
+    preuve_nom = db.Column(db.String(200))
+    anomalie_id = db.Column(db.Integer)                         # anomalie détectée correspondante
+    teste_par_id = db.Column(db.Integer, db.ForeignKey('user.id'))
+    teste_le = db.Column(db.DateTime)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
 
 
 class ValidationControle(db.Model):
