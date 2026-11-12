@@ -129,8 +129,12 @@
                         <tr>
                             <th style="min-width: 250px;"> {{ t("Tâche") }} </th>
                             <th style="min-width: 100px;"> {{ t("Responsable") }} </th>
-                            {% set date_debut = plan.date_debut or plan.sous_actions|map(attribute='date_debut')|select|first|default(datetime.utcnow().date()) %}
-                            {% set date_fin = plan.date_fin_prevue or plan.sous_actions|map(attribute='date_fin_prevue')|select|last|default(datetime.utcnow().date() + timedelta(days=30)) %}
+                            {# Bornes du Gantt : listes triées (un générateur ne se lit pas « à l'envers ») #}
+                            {% set _debuts = plan.sous_actions|map(attribute='date_debut')|select|list|sort %}
+                            {% set _fins = plan.sous_actions|map(attribute='date_fin_prevue')|select|list|sort %}
+                            {% set date_debut = plan.date_debut or (_debuts|first if _debuts else datetime.utcnow().date()) %}
+                            {% set date_fin = plan.date_fin_prevue or (_fins|last if _fins else date_debut + timedelta(days=30)) %}
+                            {% set date_fin = [date_fin, date_debut]|max %}
                             {% set nb_jours = (date_fin - date_debut).days + 1 %}
                             
                             {% for i in range(nb_jours) %}
@@ -165,7 +169,7 @@
                                 <td class="gantt-cell">
                                     {% if plan.date_debut and plan.date_fin_prevue %}
                                         {% if current_date >= plan.date_debut and current_date <= plan.date_fin_prevue %}
-                                            {% set progression_jour = ((current_date - plan.date_debut).days / (plan.date_fin_prevue - plan.date_debut).days * 100)|int %}
+                                            {% set progression_jour = ((current_date - plan.date_debut).days / ([(plan.date_fin_prevue - plan.date_debut).days, 1]|max) * 100)|int %}
                                             <div class="gantt-bar" style="background-color: 
                                                 {% if plan.statut == 'termine' %}#28a745
                                                 {% elif plan.statut == 'en_cours' %}#ffc107
@@ -214,7 +218,7 @@
                                 <td class="gantt-cell">
                                     {% if sous_action.date_debut and sous_action.date_fin_prevue %}
                                         {% if current_date >= sous_action.date_debut and current_date <= sous_action.date_fin_prevue %}
-                                            {% set progression_jour = ((current_date - sous_action.date_debut).days / (sous_action.date_fin_prevue - sous_action.date_debut).days * 100)|int %}
+                                            {% set progression_jour = ((current_date - sous_action.date_debut).days / ([(sous_action.date_fin_prevue - sous_action.date_debut).days, 1]|max) * 100)|int %}
                                             <div class="gantt-bar" style="background-color: 
                                                 {% if sous_action.statut == 'termine' %}#28a745
                                                 {% elif sous_action.statut == 'en_cours' %}#ffc107
