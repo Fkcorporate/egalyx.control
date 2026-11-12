@@ -60,6 +60,16 @@ db = SQLAlchemy()
 
 
 # -------------------- USER --------------------
+
+class _ResultatMotDePasse(tuple):
+    """(succès, message) qui vaut aussi True/False dans un « if » : un mauvais mot de passe n'ouvre jamais de session."""
+    def __new__(cls, succes, message=''):
+        return super().__new__(cls, (bool(succes), message))
+
+    def __bool__(self):
+        return self[0]
+
+
 class User(UserMixin, db.Model):
     __tablename__ = 'user'
     
@@ -728,7 +738,7 @@ class User(UserMixin, db.Model):
         # 1. VÉRIFIER SI LE COMPTE EST BLOQUÉ
         if self.is_blocked:
             if self.locked_until and self.locked_until > datetime.utcnow():
-                return False, f"Compte temporairement bloqué jusqu'au {self.locked_until.strftime('%d/%m/%Y %H:%M')}"
+                return _ResultatMotDePasse(False, f"Compte temporairement bloqué jusqu'au {self.locked_until.strftime('%d/%m/%Y %H:%M')}")
             elif self.locked_until and self.locked_until <= datetime.utcnow():
                 # Débloquer automatiquement
                 self.is_blocked = False
@@ -736,7 +746,7 @@ class User(UserMixin, db.Model):
                 self.failed_login_attempts = 0
                 self.lock_reason = None
             else:
-                return False, "Ce compte est bloqué. Contactez l'administrateur."
+                return _ResultatMotDePasse(False, "Ce compte est bloqué. Contactez l'administrateur.")
         
         # 2. VÉRIFIER LE MOT DE PASSE
         is_valid = check_password_hash(self.password_hash, password)
@@ -744,7 +754,7 @@ class User(UserMixin, db.Model):
         if is_valid:
             self.failed_login_attempts = 0
             self.last_failed_login = None
-            return True, "Connexion réussie"
+            return _ResultatMotDePasse(True, "Connexion réussie")
         
         # Échec : incrémenter le compteur
         self.failed_login_attempts += 1
@@ -755,18 +765,18 @@ class User(UserMixin, db.Model):
             self.is_blocked = True
             self.blocked_at = datetime.utcnow()
             self.blocked_reason = "Trop de tentatives de connexion échouées (10+)"
-            return False, "Compte bloqué pour sécurité. Contactez l'administrateur."
+            return _ResultatMotDePasse(False, "Compte bloqué pour sécurité. Contactez l'administrateur.")
         
         elif self.failed_login_attempts >= 5:
             self.locked_until = datetime.utcnow() + timedelta(minutes=30)
             self.lock_reason = f"Trop de tentatives échouées ({self.failed_login_attempts})"
-            return False, f"Trop de tentatives. Compte bloqué 30 minutes."
+            return _ResultatMotDePasse(False, f"Trop de tentatives. Compte bloqué 30 minutes.")
         
         elif self.failed_login_attempts >= 3:
-            return False, f"Mot de passe incorrect. Tentative {self.failed_login_attempts}/5"
+            return _ResultatMotDePasse(False, f"Mot de passe incorrect. Tentative {self.failed_login_attempts}/5")
         
         else:
-            return False, "Nom d'utilisateur ou mot de passe incorrect"
+            return _ResultatMotDePasse(False, "Nom d'utilisateur ou mot de passe incorrect")
 
     @property
     def est_operateur(self):
