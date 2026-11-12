@@ -14,8 +14,7 @@ Réglages (administrateur du client) : /organisation/page-connexion
 """
 import re
 
-from flask import (Blueprint, abort, flash, g, get_flashed_messages, redirect, render_template, request, session,
-                   url_for)
+from flask import Blueprint, abort, flash, g, redirect, render_template, request, session, url_for
 from flask_login import current_user, logout_user
 
 bp = Blueprint('connexion_client', __name__, url_prefix='/organisation/page-connexion')
@@ -68,8 +67,7 @@ def _contexte(client):
     r = reglages(client.id)
     return {'client': client, 'ident': ident, 'reglages': r, 'sso': sso,
             'initiales': ''.join(w[0] for w in (ident.get('nom_court') or client.nom).split()[:2]).upper(),
-            'actif': getattr(client, 'is_active', True) is not False,
-            'messages': get_flashed_messages(with_categories=True)}
+            'actif': getattr(client, 'is_active', True) is not False}
 
 
 def page(client, statut=200, nom_saisi='', apercu=False):
@@ -93,9 +91,27 @@ def _compte_d_un_autre_client(nom, client):
     return getattr(u, 'client_id', None) != client.id
 
 
+def marque_connexion(client=None):
+    """Marque des pages d'accès (base_auth.html) : celle du client de l'adresse (ou du client donné), sinon None (Egalyx)."""
+    try:
+        client = client or client_de_la_page()
+        if client is None:
+            return None
+        from egalyx.identite import identite
+        ident = identite(client.id) or {}
+        nom = ident.get('nom_court') or client.nom
+        r = reglages(client.id)
+        return {'nom': nom, 'nom_complet': client.nom, 'logo_url': ident.get('logo_url'), 'couleur': r['couleur'],
+                'message': r['message'], 'contact': r['contact'],
+                'initiales': ''.join(w[0] for w in nom.split()[:2]).upper()}
+    except Exception:  # noqa: BLE001
+        return None
+
+
 def enregistrer(app):
     from egalyx.commun import exempter_controle_ancien
     app.register_blueprint(bp)
+    app.jinja_env.globals['marque_connexion'] = marque_connexion
     exempter_controle_ancien(app, {'connexion_client.reglage'})
 
     origine = app.view_functions.get('login_fullscreen')
