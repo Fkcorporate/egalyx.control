@@ -98,5 +98,61 @@ go('superadmin', 'post', f'/compte/securite/organisation?client_id={cid_a}', dat
 r = appel(socle.navigateur(A, ids['lecteur']), 'get', '/dashboard')
 verif('Règle retirée : l\'utilisateur accède de nouveau', r.status_code == 200, str(r.status_code))
 
+print('--- E-mail de bienvenue automatique')
+import time
+from egalyx import courriel
+envoyes = []
+courriel.est_configure = lambda: True
+courriel.envoyer = lambda dest, sujet, texte, **k: envoyes.append((dest[0], sujet, texte, k.get('html') or '')) or True
+from werkzeug.security import generate_password_hash
+
+
+def nouvel_utilisateur(nom, client_id, role='utilisateur', admin=False):
+    with A.app.app_context():
+        u = M.User(username=nom, email=f'{nom}@egalyx-recette.fr', role=role, client_id=client_id, is_active=True,
+                   is_client_admin=admin, password_hash=generate_password_hash('Xx1!xxxxxx'))
+        db.session.add(u)
+        db.session.commit()
+    time.sleep(0.5)
+
+
+nouvel_utilisateur('nouvelle.recrue', cid_a)
+m = [e for e in envoyes if e[0] == 'nouvelle.recrue@egalyx-recette.fr']
+verif('Nouvel utilisateur : e-mail de bienvenue (adresse, identifiant, sans mot de passe)', len(m) == 1
+      and 'Identifiant : nouvelle.recrue' in m[0][2] and 'Xx1!' not in m[0][2] and 'Adresse :' in m[0][2], str(envoyes))
+verif('Utilisateur simple, règle non active : pas de section double authentification', m and 'Double authentification' not in m[0][2])
+envoyes.clear()
+import os
+_avant = os.environ.get('EGALYX_2FA_OBLIGATOIRE_ADMINS')
+os.environ['EGALYX_2FA_OBLIGATOIRE_ADMINS'] = '1'          # réglage de production
+nouvel_utilisateur('nouvel.admin', cid_a, role='admin', admin=True)
+if _avant is None:
+    os.environ.pop('EGALYX_2FA_OBLIGATOIRE_ADMINS')
+else:
+    os.environ['EGALYX_2FA_OBLIGATOIRE_ADMINS'] = _avant
+m = [e for e in envoyes if e[0] == 'nouvel.admin@egalyx-recette.fr']
+verif('Administrateur : guide de double authentification inclus (texte et HTML)', m and '/compte/securite/guide' in m[0][2]
+      and 'FreeOTP' in m[0][3], str(m)[:300])
+go('superadmin', 'post', f'/compte/securite/organisation?client_id={cid_a}', data={'2fa_tous': '1'})
+envoyes.clear()
+nouvel_utilisateur('autre.recrue', cid_a)
+m = [e for e in envoyes if e[0] == 'autre.recrue@egalyx-recette.fr']
+verif('Organisation « obligatoire pour tous » : guide inclus pour chacun', m and '/compte/securite/guide' in m[0][2], str(m)[:200])
+go('superadmin', 'post', f'/compte/securite/organisation?client_id={cid_a}', data={})
+envoyes.clear()
+with A.app.app_context():
+    cl = M.Client(nom='Client Neuf', reference='NEUF-1', is_active=True)
+    db.session.add(cl)
+    db.session.flush()
+    db.session.add(M.User(username='admin.neuf', email='admin.neuf@egalyx-recette.fr', role='admin', client_id=cl.id,
+                          is_active=True, is_client_admin=True, password_hash=generate_password_hash('Xx1!xxxxxx')))
+    db.session.commit()
+time.sleep(0.5)
+verif('Compte créé avec le client : pas de doublon (déjà dans l\'e-mail de création du client)',
+      not any(e[0] == 'admin.neuf@egalyx-recette.fr' for e in envoyes), str(envoyes))
+with A.app.app_context():
+    from egalyx.bienvenue import texte_2fa_html
+    verif('E-mail de création du client : section double authentification et guide', '/compte/securite/guide' in texte_2fa_html())
+
 print(f'\n{sum(res)}/{len(res)} vérifications réussies')
 sys.exit(0 if all(res) else 1)
