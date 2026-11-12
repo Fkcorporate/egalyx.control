@@ -75,9 +75,8 @@ verif('… mais n\'en change pas le statut', obj(M.DispositifMaitrise, did).stat
 r, _ = go('resp_dmr', 'get', f'/plan-action-risque/{pid}')
 verif('Le responsable du plan le consulte', r.status_code == 200, f'{r.status_code} {socle.cause(A)}')
 r, _ = go('admin_a', 'get', '/controle/programmes')
-verif('Programmes de contrôle : ouverts avec les droits du contrôle N2 (permission fantôme avant)', r.status_code == 200,
-      f'{r.status_code} {socle.cause(A)}')
-
+verif('Anciens programmes de contrôle : renvoyés vers la planification du N2 (module remplacé)', r.status_code == 302
+      and '/c2n/planification' in (r.headers.get('Location') or ''), str(r.status_code))
 print('--- Vérifications')
 r, _ = go('resp_dmr', 'post', f'/dispositif/{did}/verification/ajouter', data={
     'date_verification': date.today().isoformat(), 'type_verification': 'Test', 'resultat': 'Non conforme',
