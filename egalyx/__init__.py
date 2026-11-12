@@ -55,6 +55,14 @@ def enregistrer_extensions(app, db, csrf=None, recalculer_cotations=None, constr
     aide.enregistrer(app)                   # centre d'aide /aide + base de connaissances de l'assistant
     from egalyx import circuit_controle
     circuit_controle.enregistrer(app)       # circuit unique campagnes de contrôle ↔ contrôle interne N2
+    from egalyx import c2n_cartographie
+    c2n_cartographie.enregistrer(app)       # N2 ↔ cartographie (dispositifs testés), méthode de test
+    from egalyx import c2n_echantillon
+    c2n_echantillon.enregistrer(app)        # échantillon N2 élément par élément, tirage aléatoire tracé
+    from egalyx import plans_unifies
+    plans_unifies.enregistrer(app)          # registre unique : plans des risques + plans du contrôle N2
+    from egalyx import menage
+    menage.enregistrer(app)                 # ancien module programmes/missions → N2 ; pages de test réservées
     from egalyx import recommandations, kri_suivi, audit_plus
     recommandations.enregistrer(app)        # registre unique des recommandations (audit, N2, externes)
     kri_suivi.enregistrer(app)              # KRI : fraîcheur des mesures, seuils cohérents et historisés

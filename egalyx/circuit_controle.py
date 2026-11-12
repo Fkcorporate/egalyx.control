@@ -337,7 +337,9 @@ def valider(campagne, u, commentaire=''):
         if not ok:
             return False, msg
     nb_nc = _finaliser_validation(campagne, u, commentaire)
-    return True, f"Campagne validée : {nb_nc} non-conformité(s) créée(s) dans le N2."
+    nb_dm = _cartographie(pl, u, 'appliquer')
+    return True, f"Campagne validée : {nb_nc} non-conformité(s) créée(s) dans le N2." + \
+        (f" {nb_dm} dispositif(s) de maîtrise mis à jour dans la cartographie." if nb_dm else '')
 
 
 def rejeter(campagne, u, raison):
@@ -373,10 +375,13 @@ def rouvrir(campagne, u, raison):
     ancien = campagne.statut
     if pl is not None:
         if pl.statut in ('valide', 'rejete'):
+            etait_valide = pl.statut == 'valide'
             with _SansPropagation(pl):
                 ok, msg = pl.rouvrir(u, raison)
             if not ok:
                 return False, msg
+            if etait_valide:
+                _cartographie(pl, u, 'annuler', raison)
         if pl.statut in ('a_faire', 'soumis'):
             avant = pl.statut
             pl.statut = 'en_cours'
@@ -417,7 +422,20 @@ def _campagne_de(pl):
         return None
 
 
+def _cartographie(pl, u, action, raison=''):
+    """Effet du contrôle N2 sur les dispositifs de maîtrise (egalyx/c2n_cartographie.py)."""
+    if pl is None:
+        return 0
+    try:
+        from egalyx import c2n_cartographie as cc
+        return cc.appliquer(pl, u) if action == 'appliquer' else cc.annuler(pl, u, raison)
+    except Exception as e:      # la décision reste valable ; l'effet sera visible sur la fiche
+        print(f"⚠️ Contrôle N2 → cartographie : {e}")
+        return 0
+
+
 def apres_validation_n2(pl, u, commentaire=None, *a, **k):
+    _cartographie(pl, u, 'appliquer')
     c = _campagne_de(pl)
     if c is not None and c.statut == 'en_attente_validation':
         _finaliser_validation(c, u, commentaire)
@@ -430,6 +448,7 @@ def apres_rejet_n2(pl, u, raison=None, *a, **k):
 
 
 def apres_reouverture_n2(pl, u, raison=None, *a, **k):
+    _cartographie(pl, u, 'annuler', raison or '')
     c = _campagne_de(pl)
     if c is not None and c.statut in ('termine', 'rejete'):
         retirees, conservees = _retirer_nc_ouvertes(c)
