@@ -1,40 +1,48 @@
-EGALYX — SÉCURITÉ DU MODULE KRI (SOURCES DE DONNÉES)   *** À DÉPLOYER EN PRIORITÉ ***
-=====================================================================================
+EGALYX — ANALYSE IA DE LA CARTOGRAPHIE (nouvelle version)
+=========================================================
 
-LA FAILLE
-  Un administrateur client ou un gestionnaire pouvait créer une « source de données »
-  SQLite pointant vers la base d'Egalyx et lire les données de TOUTES les organisations.
-  Une source « Fichier » lisait n'importe quel fichier du serveur ; une source « API »
-  pouvait appeler le réseau interne, sans délai maximum.
+Page : Cartographie > Analyse IA  (/cartographie/<n°>/analyse-ia)
 
-CE QUI CHANGE
-  1. Les écrans et API « Sources de données » sont réservés au super-administrateur.
-     Sur la fiche d'un KRI, les autres utilisateurs voient : « La collecte automatique
-     est paramétrée par l'équipe Egalyx sur demande ».
-  2. Refusés pour tout le monde, même le super-admin, même pour une source déjà en base :
-     SQLite, fichiers du serveur, API non https, adresses internes / privées
-     (127.0.0.1, 10.x, 192.168.x, 169.254.x…), bases PostgreSQL/MySQL internes.
-     Requête SQL : une seule lecture (SELECT).
-  3. Appels API : 15 s maximum, pas de redirection, 5 Mo maximum.
-  4. Messages d'erreur génériques à l'écran (le détail va dans le journal du serveur).
-  5. Formules de calcul : plus d'eval, seulement + - * / % et sum, len, min, max, abs, round.
-  6. Statistiques d'un KRI : la dernière valeur est la plus récente PAR DATE.
-  7. Les deux routes en double de /kri/<id>/modifier utilisent la vraie page de modification.
+LE PRINCIPE : les chiffres ne viennent jamais de l'IA
+  1. Score de maturité sur 100, CALCULÉ : même données => même score. Détail par critère :
+       risques évalués 30 · évaluations < 12 mois 10 · couverture par un dispositif 25 ·
+       risques élevés/critiques avec plan d'action 20 · plans dans les délais 5 ·
+       incidents sur des risques maîtrisés 10
+     Chaque critère dit « comment gagner des points ». Une cartographie vide vaut 0.
+  2. Recommandations CALCULÉES (11 règles) avec les risques concernés en liens cliquables :
+     risques graves sans contrôle, sans plan d'action, cotés faibles malgré des incidents,
+     plans en retard, risques jamais évalués ou évalués il y a plus d'un an, contrôles
+     inefficaces ou jamais testés, risques critiques sans KRI, catégories manquantes…
+     Elles s'affichent toujours, même sans IA.
+  3. « Lecture de l'analyste IA » : l'IA rédige la synthèse, les points forts et les
+     priorités à partir de ces seules données. Les références de risques qu'elle cite
+     sont vérifiées : une référence inventée est retirée.
+  4. Transparence : « Rédigé par l'IA » / « Calculé », modèle et date affichés, et le
+     détail exact des données envoyées (aucune description, aucun nom de personne).
+  5. Rapide et économique : le résultat est gardé 24 h et refait dès que les données
+     changent. « Rafraîchir » relance vraiment l'analyse. Délai maximum 45 s ; si l'IA
+     ne répond pas, la page reste complète (et garde la dernière analyse).
+  6. « Masquer » une recommandation est enregistré pour toute l'organisation et peut
+     être annulé (« Rétablir »). Bouton PDF.
 
-Fichiers : egalyx/kri_sources_securite.py (nouveau), egalyx/__init__.py,
-templates/kri/detail.html, recette/kri_sources.py (30 contrôles)
+AUTRES CORRECTIONS
+  - Les clés OpenAI actuelles (sk-proj-…) étaient REFUSÉES dans 4 services : l'IA ne
+    tournait jamais. Corrigé dans services/ia_cartographie_service.py, ia_qualite_service.py,
+    ia_analyse_ultra.py, ia_pca_service.py.
+  - Pied de page : « © 2024 - Version 4.2.1 » devient « © 2026 » (templates/base.html).
+
+RÉGLAGES SUR RENDER (Environment)
+  OPENAI_API_KEY   = votre clé (sk-proj-…)            obligatoire pour la partie IA
+  EGALYX_IA_MODELE = gpt-4o-mini (par défaut)          facultatif
+  Qui y a accès : comme avant — IA activée (super-admin > Intelligence artificielle),
+  module « Analyse IA » du client, permission « Utiliser l'analyse IA ».
+
+À FAIRE DE VOTRE CÔTÉ (données envoyées à OpenAI)
+  - Mentionner OpenAI comme sous-traitant dans votre politique de confidentialité et
+    vos contrats clients ; accepter les conditions de traitement des données (DPA)
+    dans votre compte OpenAI. N'activer le module que pour les clients d'accord.
 
 INSTALLATION
   python3 installer_mise_a_jour.py /chemin/vers/votre/projet
-  git add egalyx/kri_sources_securite.py egalyx/__init__.py templates/kri/detail.html recette
-  git commit -m "Sécurité : sources de données KRI" && git push
-
-APRÈS LE DÉPLOIEMENT (conseillé)
-  - Dans Render > Logs, cherchez « /kri/sources » pour savoir si quelqu'un a déjà
-    créé ou exécuté une source. En super-admin, ouvrez /kri/sources et supprimez
-    toute source SQLite ou Fichier que vous ne connaissez pas.
-  - Si une telle source existe : changez SECRET_KEY et les autres clés du .env sur Render.
-
-NETTOYAGE (facultatif) : supprimer les copies de pages inutiles
-  git rm "templates/kri/"*.backup "templates/kri/"*"backup copie" "templates/kri/form copie.html" "templates/kri/liste copie.html"
-  git commit -m "Nettoyage des copies KRI" && git push
+  git add egalyx templates/egalyx/ia_cartographie.html templates/base.html services recette
+  git commit -m "Analyse IA de la cartographie" && git push
