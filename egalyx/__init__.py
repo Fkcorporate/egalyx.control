@@ -44,6 +44,8 @@ def enregistrer_extensions(app, db, csrf=None, recalculer_cotations=None, constr
     identite.enregistrer(app)
     from egalyx import photo_profil
     photo_profil.enregistrer(app)
+    from egalyx import pages_cassees
+    pages_cassees.enregistrer(app)       # /ci (301 vers l'accueil), /debug/create-user-form (404)
     from egalyx import bienvenue
     bienvenue.enregistrer(app)          # e-mail de bienvenue (accès, identifiant, guide de double authentification)
     recherche.enregistrer(app)
