@@ -130,11 +130,62 @@
                             </div>
                         </div>
                         
+                        <!-- Rattachement à la cartographie (egalyx/c2n_cartographie.py) -->
+                        {% set _cc = c2n_choix_cartographie(referentiel if referentiel is defined else none) %}
+                        <div class="form-section" id="rattachementCarto">
+                            <h6 class="section-title">
+                                <i class="fas fa-link me-2 text-primary"></i>
+                                Dispositifs de maîtrise testés
+                            </h6>
+                            <p class="small text-muted mb-2">Cochez les dispositifs de la cartographie que ce contrôle teste. À chaque contrôle validé,
+                                leur efficacité et leur prochaine vérification sont mises à jour (non conforme → efficacité −2, nouvelle vérification à 30 jours),
+                                et le niveau de maîtrise suggéré du risque est recalculé.</p>
+                            {% if _cc.risques %}
+                            <input type="search" class="form-control form-control-sm mb-2" placeholder="Filtrer (référence, risque, dispositif)…" id="filtreCarto" aria-label="Filtrer">
+                            <div class="border rounded p-2" style="max-height: 320px; overflow-y: auto;" id="listeCarto">
+                                {% for item in _cc.risques %}
+                                <div class="carto-risque mb-2" data-texte="{{ (item.r.reference ~ ' ' ~ item.r.intitule ~ ' ' ~ (item.dispositifs|map(attribute='nom')|join(' ')))|lower }}">
+                                    <div class="form-check">
+                                        <input class="form-check-input" type="checkbox" name="risque_ids" value="{{ item.r.id }}" id="rk{{ item.r.id }}"
+                                               {% if item.r.id in _cc.choisis_r or (item.dispositifs|selectattr('id', 'in', _cc.choisis_d)|list) %}checked{% endif %}>
+                                        <label class="form-check-label fw-semibold" for="rk{{ item.r.id }}">{{ item.r.reference }} — {{ item.r.intitule }}</label>
+                                    </div>
+                                    {% for d in item.dispositifs %}
+                                    <div class="form-check ms-4">
+                                        <input class="form-check-input carto-dm" type="checkbox" name="dm_ids" value="{{ d.id }}" id="dm{{ d.id }}" data-risque="{{ item.r.id }}"
+                                               {% if d.id in _cc.choisis_d %}checked{% endif %}>
+                                        <label class="form-check-label small" for="dm{{ d.id }}">{{ d.reference }} · {{ d.nom }}
+                                            <span class="text-muted">({{ d.frequence or 'fréquence ?' }}{% if d.efficacite_reelle %}, efficacité {{ d.efficacite_reelle }}/5{% endif %})</span></label>
+                                    </div>
+                                    {% else %}
+                                    <div class="ms-4 small text-muted">Aucun dispositif de maîtrise pour ce risque.</div>
+                                    {% endfor %}
+                                </div>
+                                {% endfor %}
+                            </div>
+                            {% else %}
+                            <div class="alert alert-light small mb-0">Aucun risque dans vos cartographies : créez ou importez d'abord une cartographie.</div>
+                            {% endif %}
+                            <div class="row mt-3">
+                                <div class="col-md-6">
+                                    <label class="form-label fw-semibold" for="frequence_execution">Fréquence d'exécution du contrôle</label>
+                                    <select class="form-select" name="frequence_execution" id="frequence_execution">
+                                        <option value="">Selon les dispositifs cochés</option>
+                                        {% set _fe = referentiel.frequence_execution if referentiel is defined and referentiel else none %}
+                                        {% for code, libelle, fourchette, valeur in c2n_frequences %}
+                                        <option value="{{ code }}" {% if _fe == code %}selected{% endif %}>{{ libelle }} — échantillon {{ fourchette[0] }}{% if fourchette[1] != fourchette[0] %} à {{ fourchette[1] }}{% endif %}</option>
+                                        {% endfor %}
+                                    </select>
+                                    <small class="text-muted">Sert à proposer la taille d'échantillon de chaque test (repères usuels, à adapter au risque).</small>
+                                </div>
+                            </div>
+                        </div>
+
                         <!-- Dans la section des risques couverts -->
                         <div class="form-section">
                             <h6 class="section-title">
                                 <i class="fas fa-shield-alt me-2 text-primary"></i>
-                                Risques couverts
+                                Risques couverts (texte libre, facultatif)
                             </h6>
                             
                             <!-- Sélecteur de cartographie -->
@@ -251,6 +302,20 @@ document.addEventListener('DOMContentLoaded', function() {
     // Gestion des risques
     let selectedRisks = [];
     
+    // Rattachement à la cartographie : filtre, et cocher un dispositif coche son risque
+    (function () {
+        var f = document.getElementById('filtreCarto');
+        if (f) f.addEventListener('input', function () {
+            var q = this.value.toLowerCase();
+            document.querySelectorAll('.carto-risque').forEach(function (b) { b.style.display = b.dataset.texte.indexOf(q) >= 0 ? '' : 'none'; });
+        });
+        document.querySelectorAll('.carto-dm').forEach(function (c) {
+            c.addEventListener('change', function () {
+                if (this.checked) { var r = document.getElementById('rk' + this.dataset.risque); if (r) r.checked = true; }
+            });
+        });
+    })();
+
     // Charger les risques d'une cartographie
     document.getElementById('loadRisquesBtn')?.addEventListener('click', function() {
         const cartoId = document.getElementById('cartographieSelect').value;

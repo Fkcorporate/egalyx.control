@@ -294,6 +294,45 @@
                             </div>
                         </div>
                         
+                        <!-- Méthode de test (egalyx/c2n_cartographie.py) -->
+                        {% set _pl = planification if planification is defined else none %}
+                        {% set _ech = c2n_echantillons_par_referentiel(form.referentiel_id.choices|map('first')|list) %}
+                        <div class="form-section">
+                            <h6 class="section-title"><i class="fas fa-vial me-2 text-primary"></i>Méthode de test</h6>
+                            <div class="row">
+                                <div class="col-md-6 mb-3">
+                                    <label class="form-label fw-semibold" for="type_test">Type de test</label>
+                                    <select class="form-select" name="type_test" id="type_test">
+                                        {% for code, libelle, aide in c2n_types_test %}
+                                        <option value="{{ code }}" title="{{ aide }}" {% if (_pl.type_test if _pl else 'efficacite') == code %}selected{% endif %}>{{ libelle }}</option>
+                                        {% endfor %}
+                                    </select>
+                                    <small class="text-muted">Conception : le contrôle couvre-t-il le risque ? Efficacité : est-il appliqué sur la période ?</small>
+                                </div>
+                                <div class="col-md-6 mb-3">
+                                    <label class="form-label fw-semibold" for="taille_echantillon">Taille d'échantillon</label>
+                                    <input type="number" min="1" class="form-control" name="taille_echantillon" id="taille_echantillon"
+                                           value="{{ _pl.taille_echantillon if _pl and _pl.taille_echantillon else '' }}" placeholder="proposée selon le contrôle">
+                                    <small class="text-muted" id="aideEchantillon">Choisissez le contrôle : la taille est proposée selon sa fréquence d'exécution.</small>
+                                </div>
+                            </div>
+                        </div>
+                        <script>
+                          (function () {
+                            var ech = {{ _ech|tojson }};
+                            var sel = document.getElementById('referentielSelect'), champ = document.getElementById('taille_echantillon'),
+                                aide = document.getElementById('aideEchantillon'), vol = document.querySelector('[name="volume_previsionnel"]');
+                            function maj() {
+                              var e = sel ? ech[sel.value] : null;
+                              if (!e || !e.taille) { aide.textContent = e ? "Fréquence d'exécution inconnue : précisez-la dans le référentiel ou rattachez-y des dispositifs." : "Choisissez le contrôle : la taille est proposée selon sa fréquence d'exécution."; return; }
+                              aide.textContent = 'Contrôle ' + e.frequence.toLowerCase() + ' : ' + e.min + (e.max !== e.min ? ' à ' + e.max : '') + ' élément(s) habituellement, ' + e.taille + ' proposé(s)' + (e.nb_dispositifs ? ' — ' + e.nb_dispositifs + ' dispositif(s) de maîtrise testé(s).' : '.');
+                              if (!champ.value) { champ.placeholder = e.taille; }
+                              if (vol && !vol.value) { vol.placeholder = e.taille; }
+                            }
+                            if (sel) { sel.addEventListener('change', maj); maj(); }
+                          })();
+                        </script>
+
                         <hr>
                         <div class="d-flex justify-content-between">
                             <a href="{{ url_for('c2n_liste_planifications') }}" class="btn btn-secondary">
@@ -359,6 +398,7 @@ document.addEventListener('DOMContentLoaded', function() {
     // ============================================
     // DONNÉES DES RÉFÉRENTIELS DEPUIS LE SERVEUR
     // ============================================
+    const referentielsData = {};   // n'était pas déclaré : tout l'aperçu du contrôle choisi s'arrêtait là
 // Dans la section des données des référentiels, remplacez par :
 
     {% if referentiels_data %}
@@ -691,20 +731,5 @@ document.addEventListener('DOMContentLoaded', function() {
     filterPoles();
     updatePreview();
 });
-// Dans la fonction updatePreview(), ajoutez :
-const objectifText = data.objectif || 'Non spécifié';
-const objectifElement = document.getElementById('previewObjectifText');
-const voirBtn = document.getElementById('voirObjectifBtn');
-
-if (objectifText.length > 100) {
-    objectifElement.textContent = objectifText.substring(0, 100) + '...';
-    voirBtn.style.display = 'inline-block';
-    voirBtn.onclick = function() {
-        alert(objectifText);
-    };
-} else {
-    objectifElement.textContent = objectifText;
-    voirBtn.style.display = 'none';
-}
 </script>
 {% endblock %}

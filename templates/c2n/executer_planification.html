@@ -161,6 +161,10 @@
                 {{ planification.referentiel.nom }}
                 <code class="ms-2">{{ planification.referentiel.code_controle }}</code>
             </p>
+            {% set _s0 = c2n_synthese(planification) if c2n_synthese is defined else none %}
+            {% if _s0 %}<p class="small mb-0 mt-1"><span class="badge bg-light text-dark border">{{ _s0.type_test }}</span>
+              {% if _s0.taille_retenue or _s0.taille_recommandee %}<span class="badge bg-light text-dark border">Échantillon : {{ _s0.taille_retenue or _s0.taille_recommandee }}{% if _s0.fourchette %} (repère {{ _s0.fourchette[0] }}{% if _s0.fourchette[1] != _s0.fourchette[0] %}–{{ _s0.fourchette[1] }}{% endif %}){% endif %}</span>{% endif %}
+              {% for d in _s0.dispositifs %}<span class="badge bg-primary-subtle text-primary-emphasis">{{ d.reference }}</span> {% endfor %}</p>{% endif %}
         </div>
         <a href="{{ url_for('c2n_detail_planification', id=planification.id) }}" 
            class="btn btn-outline-secondary rounded-pill">
@@ -168,6 +172,12 @@
         </a>
     </div>
 
+{% set _ech = c2n_echantillon_resume(planification) if c2n_echantillon_resume is defined else none %}
+<div class="alert {{ 'alert-info' if _ech else 'alert-light border' }} small d-flex justify-content-between align-items-center">
+    <span><i class="fas fa-list-check me-1"></i>{% if _ech %}Volumes calculés depuis l'échantillon : {{ _ech.testes }} élément(s) testé(s) sur {{ _ech.total }}, {{ _ech.anomalies }} anomalie(s), {{ _ech.preuves }} preuve(s).
+        {% else %}Suivez l'échantillon élément par élément (tirage au hasard, résultat et preuve de chaque élément) : les volumes seront calculés pour vous.{% endif %}</span>
+    <a class="btn btn-sm btn-outline-primary" href="{{ url_for('c2n_echantillon.page', pid=planification.id) }}">{% if _ech %}Ouvrir l'échantillon{% else %}Gérer l'échantillon{% endif %}</a>
+</div>
 <form method="POST" id="executionForm">
     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
     <input type="hidden" name="version" value="{{ planification.version }}">
@@ -186,7 +196,7 @@
                             <label class="form-label fw-semibold">Dossiers contrôlés <span class="text-danger">*</span></label>
                             <input type="number" name="volume_controle" id="volume_controle"
                                    class="form-control form-control-lg"
-                                   value="{{ execution.volume_controle or 0 }}" min="0" required>
+                                   value="{{ execution.volume_controle or 0 }}" min="0" required {% if _ech %}readonly title="Calculé depuis l'échantillon"{% endif %}>
                         </div>
                         
                         <div class="col-md-6">
@@ -195,7 +205,7 @@
                             </label>
                             <input type="number" name="nb_conformes" id="nb_conformes"
                                    class="form-control form-control-lg"
-                                   value="{{ execution.nb_conformes or 0 }}" min="0" required>
+                                   value="{{ execution.nb_conformes or 0 }}" min="0" required {% if _ech %}readonly title="Calculé depuis l'échantillon"{% endif %}>
                         </div>
                         
                         <div class="col-md-6">
@@ -303,6 +313,21 @@
                                   placeholder="Observations...">{{ execution.commentaires or '' }}</textarea>
                     </div>
                     
+                    {% set _syn = c2n_synthese(planification) if c2n_synthese is defined else none %}
+                    <div class="mb-3">
+                        <label class="form-label fw-semibold" for="gravite_deficience">Gravité de la déficience</label>
+                        <select class="form-select" name="gravite_deficience" id="gravite_deficience">
+                            <option value="">Selon les anomalies saisies (critique → majeure, majeur → significative, mineur → mineure)</option>
+                            {% for code, libelle in c2n_gravites %}
+                            <option value="{{ code }}" {% if execution and execution.gravite_deficience == code %}selected{% endif %}>{{ libelle }}</option>
+                            {% endfor %}
+                        </select>
+                        {% if _syn and _syn.dispositifs %}
+                        <small class="text-muted">À la validation, {{ _syn.dispositifs|length }} dispositif(s) de maîtrise seront mis à jour :
+                            taux ≥ 95 % conforme · 80–95 % à améliorer (−1) · 60–80 % à corriger (−1) · &lt; 60 % ou déficience majeure non conforme (−2).</small>
+                        {% endif %}
+                    </div>
+
                     <div class="mb-3">
                         <label class="form-label fw-semibold">Conclusion</label>
                         <textarea name="conclusion" class="form-control" rows="3"
