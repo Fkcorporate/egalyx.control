@@ -10,6 +10,7 @@ Les liens qui pointent vers ces lignes depuis des lignes conservées (journaux d
 On ne travaille qu'avec les tables et colonnes qui existent vraiment dans la base. Tout se fait dans une seule
 transaction : en cas d'erreur, rien n'est supprimé.
 """
+import os
 import io
 import json
 import zipfile
@@ -342,6 +343,94 @@ def synchroniser_client(client_id):
     return jsonify(success=True, message=f'Permissions de {len(users)} utilisateur(s) synchronisées.')
 
 
+# ---------------------------------------------------------------- adresse d'accès d'un client
+def domaine_principal():
+    """Domaine sous lequel sont créés les sous-domaines clients (EGALYX_DOMAINE, par défaut egalyx.com)."""
+    return (os.environ.get('EGALYX_DOMAINE') or 'egalyx.com').strip().lower().lstrip('.')
+
+
+def normaliser_sous_domaine(valeur):
+    """« https://SONAPIE.egalyx.com/ » → « sonapie »."""
+    v = (valeur or '').strip().lower()
+    if '://' in v:
+        v = v.split('://', 1)[1]
+    v = v.split('/')[0].split(':')[0]
+    dom = domaine_principal()
+    if v.endswith('.' + dom):
+        v = v[:-len(dom) - 1]
+    return v.split('.')[0] if v else ''
+
+
+def sous_domaine_du_client(client):
+    """Sous-domaine du client : le sien, sinon celui de son environnement (les clients créés avant cette version n'en
+    avaient que sur l'environnement)."""
+    if client is None:
+        return None
+    sd = normaliser_sous_domaine(getattr(client, 'sous_domaine', None))
+    if sd:
+        return sd
+    try:
+        from models import EnvironnementClient
+        env = EnvironnementClient.query.filter(EnvironnementClient.client_id == client.id,
+                                               EnvironnementClient.sous_domaine.isnot(None)).first()
+        return normaliser_sous_domaine(env.sous_domaine) if env else None
+    except Exception:  # noqa: BLE001
+        return None
+
+
+def url_client(client_ou_sd):
+    """https://sonapie.egalyx.com (ou None si pas de sous-domaine)."""
+    sd = client_ou_sd if isinstance(client_ou_sd, str) else sous_domaine_du_client(client_ou_sd)
+    sd = normaliser_sous_domaine(sd)
+    return f'https://{sd}.{domaine_principal()}' if sd else None
+
+
+_CACHE_HOTES = {'quand': 0.0, 'table': {}}
+
+
+def _table_sous_domaines():
+    """{sous-domaine normalisé: client_id}, d'après les clients puis leurs environnements, quelle que soit la forme
+    enregistrée (« momo », « momo.egalyx.com », « https://Momo.egalyx.com/ »…). Mise en cache 60 s."""
+    import time as _t
+    if _t.time() - _CACHE_HOTES['quand'] < 60 and _CACHE_HOTES['table']:
+        return _CACHE_HOTES['table']
+    from models import Client, EnvironnementClient
+    table = {}
+    for cid, sd in EnvironnementClient.query.with_entities(EnvironnementClient.client_id, EnvironnementClient.sous_domaine) \
+            .filter(EnvironnementClient.sous_domaine.isnot(None)).all():
+        n = normaliser_sous_domaine(sd)
+        if n:
+            table.setdefault(n, cid)
+    for cid, sd in Client.query.with_entities(Client.id, Client.sous_domaine).filter(Client.sous_domaine.isnot(None)).all():
+        n = normaliser_sous_domaine(sd)
+        if n:
+            table[n] = cid                      # le sous-domaine du client l'emporte sur celui d'un environnement
+    _CACHE_HOTES.update(quand=_t.time(), table=table)
+    return table
+
+
+def vider_cache_hotes():
+    _CACHE_HOTES.update(quand=0.0, table={})
+
+
+def client_par_hote(hote):
+    """Client correspondant à l'hôte de la requête (momo.egalyx.com → client dont le sous-domaine est « momo »)."""
+    from models import Client
+    sd = normaliser_sous_domaine(hote)
+    if not sd:
+        return None
+    cid = _table_sous_domaines().get(sd)
+    if cid is None:
+        vider_cache_hotes()                     # sous-domaine peut-être tout juste enregistré
+        cid = _table_sous_domaines().get(sd)
+    return Client.query.get(cid) if cid is not None else None
+
+
+def db_lower(colonne):
+    from sqlalchemy import func
+    return func.lower(colonne)
+
+
 # ---------------------------------------------------------------- modification d'un client (super admin)
 SOUS_DOMAINES_RESERVES = {'www', 'api', 'admin', 'app', 'mail', 'smtp', 'ftp', 'static', 'cdn', 'egalyx', 'support',
                           'aide', 'help', 'status', 'login', 'auth', 'super-admin', 'localhost'}
@@ -351,10 +440,7 @@ RE_SOUS_DOMAINE = __import__('re').compile(r'^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9]
 def verifier_sous_domaine(valeur, client_id):
     """Renvoie (valeur normalisée ou None, message d'erreur ou None)."""
     from models import Client, EnvironnementClient
-    v = (valeur or '').strip().lower()
-    if v.startswith(('http://', 'https://')):
-        v = v.split('://', 1)[1]
-    v = v.split('.')[0] if '.' in v else v
+    v = normaliser_sous_domaine(valeur)
     if not v:
         return None, None
     if not RE_SOUS_DOMAINE.match(v):
@@ -427,7 +513,7 @@ def modifier_client(id):
         for env in EnvironnementClient.query.filter_by(client_id=client.id).all():
             env.sous_domaine = sous_domaine
             if sous_domaine:
-                env.url_acces = f'https://{sous_domaine}.egalyx.com'
+                env.url_acces = url_client(sous_domaine)
     for k, v in limites.items():
         setattr(client, k, v)
     client.updated_at = datetime.utcnow()
@@ -444,6 +530,7 @@ def modifier_client(id):
         db.session.rollback()
         flash(f'Enregistrement impossible : {e}', 'danger')
         return retour
+    vider_cache_hotes()
     if not modifs:
         flash('Aucune modification.', 'info')
     else:
@@ -456,3 +543,5 @@ def modifier_client(id):
 
 def enregistrer(app):
     app.register_blueprint(bp)
+    app.jinja_env.globals['url_client'] = url_client
+    app.jinja_env.globals['sous_domaine_du_client'] = sous_domaine_du_client
