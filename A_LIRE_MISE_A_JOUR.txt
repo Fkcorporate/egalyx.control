@@ -1,25 +1,40 @@
-EGALYX — CORRECTION DES 3 PAGES EN ERREUR
-=========================================
+EGALYX — SÉCURITÉ DU MODULE KRI (SOURCES DE DONNÉES)   *** À DÉPLOYER EN PRIORITÉ ***
+=====================================================================================
 
-1. Diagramme de Gantt d'un plan d'action (/plan-action/<n°>/gantt)
-   Plantait selon les dates des sous-actions, et aussi quand un plan
-   commençait et finissait le même jour. Corrigé dans templates/audit/gantt.html.
+LA FAILLE
+  Un administrateur client ou un gestionnaire pouvait créer une « source de données »
+  SQLite pointant vers la base d'Egalyx et lire les données de TOUTES les organisations.
+  Une source « Fichier » lisait n'importe quel fichier du serveur ; une source « API »
+  pouvait appeler le réseau interne, sans délai maximum.
 
-2. /ci et /cote-divoire
-   La page plantait : il lui manquait des données, et son formulaire envoyait
-   vers une adresse qui n'existe pas (/api/contact-ci). Elle affichait aussi un
-   bureau à Cocody, des numéros, des témoignages et des certifications à vérifier.
-   Elle redirige maintenant (301, bon pour le référencement) vers l'accueil,
-   rubrique Contact. On pourra refaire une vraie page Côte d'Ivoire avec vos
-   informations exactes.
+CE QUI CHANGE
+  1. Les écrans et API « Sources de données » sont réservés au super-administrateur.
+     Sur la fiche d'un KRI, les autres utilisateurs voient : « La collecte automatique
+     est paramétrée par l'équipe Egalyx sur demande ».
+  2. Refusés pour tout le monde, même le super-admin, même pour une source déjà en base :
+     SQLite, fichiers du serveur, API non https, adresses internes / privées
+     (127.0.0.1, 10.x, 192.168.x, 169.254.x…), bases PostgreSQL/MySQL internes.
+     Requête SQL : une seule lecture (SELECT).
+  3. Appels API : 15 s maximum, pas de redirection, 5 Mo maximum.
+  4. Messages d'erreur génériques à l'écran (le détail va dans le journal du serveur).
+  5. Formules de calcul : plus d'eval, seulement + - * / % et sum, len, min, max, abs, round.
+  6. Statistiques d'un KRI : la dernière valeur est la plus récente PAR DATE.
+  7. Les deux routes en double de /kri/<id>/modifier utilisent la vraie page de modification.
 
-3. /debug/create-user-form
-   Outil de développement resté en ligne : il répond maintenant « page introuvable » (404).
-
-Fichiers : egalyx/pages_cassees.py (nouveau), egalyx/__init__.py,
-templates/audit/gantt.html, recette/pages_cassees.py
+Fichiers : egalyx/kri_sources_securite.py (nouveau), egalyx/__init__.py,
+templates/kri/detail.html, recette/kri_sources.py (30 contrôles)
 
 INSTALLATION
   python3 installer_mise_a_jour.py /chemin/vers/votre/projet
-  git add egalyx/pages_cassees.py egalyx/__init__.py templates/audit/gantt.html recette
-  git commit -m "Correction Gantt, /ci, page debug" && git push
+  git add egalyx/kri_sources_securite.py egalyx/__init__.py templates/kri/detail.html recette
+  git commit -m "Sécurité : sources de données KRI" && git push
+
+APRÈS LE DÉPLOIEMENT (conseillé)
+  - Dans Render > Logs, cherchez « /kri/sources » pour savoir si quelqu'un a déjà
+    créé ou exécuté une source. En super-admin, ouvrez /kri/sources et supprimez
+    toute source SQLite ou Fichier que vous ne connaissez pas.
+  - Si une telle source existe : changez SECRET_KEY et les autres clés du .env sur Render.
+
+NETTOYAGE (facultatif) : supprimer les copies de pages inutiles
+  git rm "templates/kri/"*.backup "templates/kri/"*"backup copie" "templates/kri/form copie.html" "templates/kri/liste copie.html"
+  git commit -m "Nettoyage des copies KRI" && git push
