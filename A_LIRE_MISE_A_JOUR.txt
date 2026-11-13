@@ -1,32 +1,42 @@
-EGALYX — FICHE CARTOGRAPHIE RAPIDE + RÉGLAGE « QUI PEUT CLÔTURER UNE CAMPAGNE »
-==============================================================================
+EGALYX — NOTIFICATIONS SUR TÉLÉPHONE ET ORDINATEUR + PASTILLE SUR L'ICÔNE
+=========================================================================
 
-1. Fiche d'une cartographie : beaucoup plus rapide
-   Mesure (80 risques, 2 dispositifs chacun) :
-     avant : 2,3 s, 979 requêtes à la base, 2,7 Mo de page
-     après : 0,2 s, 35 requêtes, 65 Ko transmis (page compressée)
-   Ce qui a changé (l'affichage et les chiffres sont strictement identiques, vérifié automatiquement) :
-     - les 4 matrices ne sont plus redessinées à chaque visite : elles sont chargées comme images
-       séparées, en parallèle, et gardées en cache tant que les cotations ne changent pas
-       (dossier instance/cache_matrices, nettoyé automatiquement) ;
-     - les évaluations, dispositifs et indicateurs sont chargés en une fois au lieu d'un par risque ;
-     - plus d'écriture en base à chaque visite quand rien n'a changé.
-   Bonus pour tout l'outil : les pages sont désormais compressées avant l'envoi (souvent 10 à 25 fois
-   plus légères), ce qui accélère surtout sur téléphone et connexion lente.
-   (Désactivable avec la variable EGALYX_COMPRESSION=0 si besoin.)
+Chaque utilisateur, dans Mes notifications → « Sur vos appareils » :
+  - « Activer sur cet appareil » : les notifications d'Egalyx arrivent comme celles du téléphone ou de
+    l'ordinateur, même quand Egalyx est fermé. Un clic ouvre directement la notification dans Egalyx ;
+  - choisit les événements qui déclenchent une notification (incidents, validations, échéances, KRI…) ;
+  - « Pastille sur l'icône » (oui / non) : le nombre de notifications non lues sur l'icône Egalyx installée ;
+  - « Contenu discret » : seulement « Nouvelle notification Egalyx », rien de confidentiel sur l'écran verrouillé ;
+  - voit ses appareils activés, peut en retirer un, et « Envoyer un test ».
 
-2. Clôture des campagnes d'évaluation : nouveau réglage
-   Paramètres des risques → « Clôture des campagnes d'évaluation » (droit « Gérer les paramètres ») :
-     - Tous les utilisateurs ayant accès à la cartographie (PAR DÉFAUT : comportement actuel, inchangé) ;
-     - Les gestionnaires des risques et les administrateurs ;
-     - Les administrateurs de l'organisation uniquement.
-   Le réglage s'applique au bouton « Clôturer » (masqué) et aux liens directs (refusés avec un message).
-   Chaque organisation a son propre réglage.
+Où ça marche :
+  - Mac : Chrome, Edge, ou Safari avec Egalyx ajouté au Dock (macOS 14 et plus) ;
+  - Windows, Android : Chrome, Edge, Firefox ;
+  - iPhone / iPad (iOS 16.4 et plus) : uniquement depuis Egalyx installé sur l'écran d'accueil.
 
-Tests : recette/carto_rapide.py (35 vérifications) ; suite complète : 0 page en erreur, 0 fuite.
+Technique : protocole Web Push standard (chiffré de bout en bout jusqu'à l'appareil), sans service payant ni
+bibliothèque supplémentaire (le module « cryptography », déjà utilisé par les connecteurs KRI, suffit).
+Aucune modification de la base de données.
+
+RECOMMANDÉ SUR RENDER (sinon la clé change à chaque déploiement ; les appareils se réabonnent alors
+d'eux-mêmes à la visite suivante, mais il vaut mieux une clé fixe) :
+  1. Générez une clé une fois, sur votre ordinateur, dans le dossier du projet :
+       python3 -c "from cryptography.hazmat.primitives.asymmetric import ec; import base64; k=ec.generate_private_key(ec.SECP256R1()); print(base64.urlsafe_b64encode(k.private_numbers().private_value.to_bytes(32,'big')).rstrip(b'=').decode())"
+  2. Sur Render → votre service → Environment, ajoutez :
+       EGALYX_VAPID_CLE_PRIVEE = (la valeur affichée)
+       EGALYX_VAPID_CONTACT    = mailto:votre-adresse@votre-domaine (adresse de contact pour Apple / Google)
+  Ne partagez jamais cette clé.
+EGALYX_PUSH=0 coupe tous les envois.
+
+Si la page affiche « Le serveur ne peut pas encore envoyer de notifications » : ajoutez les lignes
+« cryptography » et « requests » au fichier requirements.txt utilisé par Render, puis redéployez.
+
+Tests : recette/notifications_push.py (29 vérifications, chiffrement vérifié avec l'implémentation de
+référence) ; suite complète : 0 page en erreur, 0 fuite.
 
 INSTALLATION
   python3 installer_mise_a_jour.py /chemin/vers/votre/projet
-  git add egalyx templates recette/carto_rapide.py
-  git commit -m "Fiche cartographie rapide, compression, réglage de clôture" && git push
-Puis arrêtez complètement le serveur et relancez-le.
+  git add egalyx templates recette/notifications_push.py
+  git commit -m "Notifications sur appareils et pastille" && git push
+Puis arrêtez complètement le serveur et relancez-le. Ensuite, sur chaque appareil : fermez puis rouvrez
+l'application Egalyx une fois (pour charger la nouvelle version du service worker).
