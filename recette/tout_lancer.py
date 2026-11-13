@@ -39,6 +39,7 @@ ETAPES = [
     ('Fiche cartographie rapide, matrices, clôture des campagnes', 'carto_rapide.py', []),
     ('Notifications sur les appareils (push, pastille)', 'notifications_push.py', []),
     ('Centre d’aide : guide illustré pas à pas', 'guide_illustre.py', []),
+    ('Structure de l’organisation, collaborateurs, organigramme', 'structure_orga.py', []),
 ]
 BRUIT = ('🟢', '🔐', '📋', '✅', '⚠', '❌', '   ', '🔧', '🔒')
 ok_global = True
