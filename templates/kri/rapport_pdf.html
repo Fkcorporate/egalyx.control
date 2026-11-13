@@ -1,796 +1,135 @@
 <!DOCTYPE html>
+{#- Rapport PDF d'un KRI / KPI (WeasyPrint). Données : egalyx/kri_fiche.py (rapport_pdf). Aucun commentaire n'est tronqué. -#}
+{% set unite = kri.unite_mesure or '' %}
+{% set nom_type = 'KPI' if f.est_kpi else 'KRI' %}
+{% set ei = f.etat_info %}
+{% macro n(v) -%}{{ ('%g'|format(v|round(2))) if v is not none else '—' }}{%- endmacro %}
+{% set CATS = {'operationnel': 'Opérationnel', 'financier': 'Financier', 'conformite': 'Conformité', 'securite': 'Sécurité', 'technologique': 'Technologique', 'rh': 'Ressources humaines', 'qualite': 'Qualité', 'strategique': 'Stratégique', 'commercial': 'Commercial', 'environnemental': 'Environnemental', 'social': 'Social', 'autre': 'Autre'} %}
 <html lang="fr">
 <head>
-    <meta charset="UTF-8">
-    <title>Rapport {{ kri.get_type_display() }} - {{ kri.nom }}</title>
-    <style>
-        /* ============================================
-           RAPPORT KRI / KPI
-           Identité graphique : navy / or, cohérente avec
-           le rapport de cartographie des risques.
-           ============================================ */
-
-        :root {
-            --navy: #13233F;
-            --gold: #8A6D3B;
-            --gold-light: #B99B5B;
-            --cream: #F7F4ED;
-            --ink: #2C3542;
-            --muted: #6B7280;
-            --line: #E4E0D6;
-
-            --critical: #B3261E;
-            --high: #B8620A;
-            --medium: #2361A8;
-            --low: #1E7A4C;
-            --na: #8A8F98;
-        }
-
-        * { box-sizing: border-box; margin: 0; padding: 0; }
-
-        @page {
-            size: A4;
-            margin: 2.4cm 1.6cm 2cm 1.6cm;
-
-            @top-center {
-                content: "{{ kri.get_type_display() }} — {{ kri.nom }}";
-                font-size: 7.5pt;
-                letter-spacing: 0.04em;
-                text-transform: uppercase;
-                color: var(--muted);
-                font-family: 'Helvetica', 'Arial', sans-serif;
-                border-bottom: 0.5pt solid var(--line);
-                padding-bottom: 6pt;
-            }
-
-            @bottom-center {
-                content: "{{ kri.nom }}  ·  Page " counter(page) " / " counter(pages);
-                font-size: 7.5pt;
-                color: var(--muted);
-                font-family: 'Helvetica', 'Arial', sans-serif;
-            }
-        }
-
-        body {
-            font-family: 'Helvetica', 'Arial', sans-serif;
-            line-height: 1.55;
-            color: var(--ink);
-            font-size: 9.5pt;
-        }
-
-        h1, h2, h3 { font-family: 'Georgia', 'Times New Roman', serif; font-weight: 700; }
-
-        h2 {
-            color: var(--navy);
-            font-size: 14.5pt;
-            margin: 0 0 14pt 0;
-            padding-bottom: 8pt;
-            border-bottom: 1.5pt solid var(--navy);
-            position: relative;
-        }
-        h2::after {
-            content: "";
-            position: absolute;
-            left: 0; bottom: -1.5pt;
-            width: 42pt; height: 1.5pt;
-            background: var(--gold);
-        }
-
-        h3 {
-            color: var(--navy);
-            font-size: 10.5pt;
-            margin: 0 0 10pt 0;
-            padding-left: 9pt;
-            border-left: 3pt solid var(--gold);
-        }
-
-        p { margin: 0 0 8pt 0; }
-
-        /* ============================================
-           EN-TÊTE DU DOCUMENT
-           ============================================ */
-        .cover {
-            background: var(--navy);
-            color: #F5F1E6;
-            margin: -2.4cm -1.6cm 22pt -1.6cm;
-            padding: 2.4cm 1.8cm 1.8cm 1.8cm;
-        }
-        .cover-eyebrow {
-            font-size: 8pt;
-            letter-spacing: 0.12em;
-            text-transform: uppercase;
-            color: var(--gold-light);
-            margin-bottom: 10pt;
-        }
-        .cover-title {
-            font-size: 22pt;
-            font-weight: 700;
-            margin: 0 0 6pt 0;
-            line-height: 1.2;
-        }
-        .cover-subtitle {
-            font-size: 10.5pt;
-            font-style: italic;
-            color: #D9D2BE;
-            margin: 0 0 16pt 0;
-        }
-        .cover-badge {
-            display: inline-block;
-            padding: 3pt 12pt;
-            border-radius: 10pt;
-            font-size: 7.5pt;
-            font-weight: 700;
-            text-transform: uppercase;
-            letter-spacing: 0.06em;
-        }
-        .cover-badge.kri { background: #E27C74; color: #3B1210; }
-        .cover-badge.kpi { background: #7FC79B; color: #0F2E1C; }
-
-        /* ============================================
-           MÉTADONNÉES
-           ============================================ */
-        .meta-panel {
-            background: #FFFFFF;
-            border: 0.75pt solid var(--line);
-            border-radius: 6pt;
-            padding: 14pt 18pt;
-            margin-bottom: 20pt;
-        }
-        .meta-grid { display: flex; flex-wrap: wrap; }
-        .meta-item {
-            width: 33.33%;
-            padding: 7pt 12pt 7pt 0;
-            box-sizing: border-box;
-        }
-        .meta-label {
-            font-size: 7.3pt;
-            color: var(--muted);
-            text-transform: uppercase;
-            letter-spacing: 0.06em;
-            display: block;
-            margin-bottom: 2pt;
-        }
-        .meta-value { font-size: 9.8pt; font-weight: 600; color: var(--navy); }
-
-        /* ============================================
-           SECTIONS / CARTES
-           ============================================ */
-        .section { margin-bottom: 24pt; }
-        .card {
-            background: #FFFFFF;
-            border: 0.75pt solid var(--line);
-            border-radius: 6pt;
-            overflow: hidden;
-            margin-bottom: 14pt;
-        }
-        .card-header {
-            background: var(--cream);
-            padding: 8pt 14pt;
-            border-bottom: 0.75pt solid var(--line);
-            font-weight: 700;
-            font-size: 8.5pt;
-            color: var(--navy);
-            text-transform: uppercase;
-            letter-spacing: 0.04em;
-        }
-        .card-body { padding: 14pt; }
-        .card-container { display: flex; gap: 14pt; }
-        .card-container .card { flex: 1; margin-bottom: 0; }
-
-        /* ============================================
-           RÉSUMÉ OBJECTIF / ÉCART
-           ============================================ */
-        .summary-box {
-            background: var(--cream);
-            border-left: 3pt solid var(--gold);
-            border-radius: 0 6pt 6pt 0;
-            padding: 14pt 18pt;
-            margin-bottom: 20pt;
-        }
-        .summary-title {
-            font-size: 7.8pt;
-            color: var(--gold);
-            font-weight: 700;
-            text-transform: uppercase;
-            letter-spacing: 0.08em;
-            margin-bottom: 10pt;
-        }
-        .summary-row { display: flex; justify-content: space-between; align-items: flex-end; }
-        .summary-col { flex: 1; }
-        .summary-col.center { text-align: center; }
-        .summary-col.right { text-align: right; }
-        .summary-label { font-size: 8pt; color: var(--muted); margin-bottom: 3pt; }
-        .summary-value { font-size: 15pt; font-weight: 700; color: var(--navy); }
-        .summary-value.big { font-size: 17pt; }
-        .summary-footer { margin-top: 12pt; text-align: center; }
-
-        /* ============================================
-           BADGES D'ÉTAT
-           ============================================ */
-        .badge-etat {
-            display: inline-block;
-            padding: 2.5pt 9pt;
-            border-radius: 9pt;
-            font-size: 7.3pt;
-            font-weight: 700;
-            text-transform: uppercase;
-            letter-spacing: 0.03em;
-            color: #FFFFFF;
-        }
-        .badge-normal   { background: var(--low); }
-        .badge-alerte   { background: var(--high); }
-        .badge-critique { background: var(--critical); }
-        .badge-hors-cible { background: var(--critical); }
-        .badge-success  { background: var(--low); }
-        .badge-warning  { background: var(--high); }
-        .badge-info     { background: var(--medium); }
-
-        /* ============================================
-           SEUILS ET CIBLES
-           ============================================ */
-        .thresholds { display: flex; gap: 12pt; }
-        .threshold-item {
-            flex: 1;
-            text-align: center;
-            padding: 13pt 8pt;
-            border-radius: 5pt;
-            background: #FFFFFF;
-            border: 0.75pt solid var(--line);
-            border-top: 2.5pt solid var(--stat-color, var(--navy));
-        }
-        .threshold-item.cible    { --stat-color: var(--medium); }
-        .threshold-item.alerte   { --stat-color: var(--high); }
-        .threshold-item.critique { --stat-color: var(--critical); }
-        .threshold-label { font-size: 7.5pt; color: var(--muted); text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 5pt; }
-        .threshold-value { font-size: 13pt; font-weight: 700; color: var(--stat-color, var(--navy)); }
-
-        /* ============================================
-           STATISTIQUES
-           ============================================ */
-        .stats-grid { display: flex; gap: 10pt; }
-        .stat-box {
-            flex: 1;
-            text-align: center;
-            padding: 14pt 8pt;
-            border-radius: 5pt;
-            background: #FFFFFF;
-            border: 0.75pt solid var(--line);
-            border-top: 2.5pt solid var(--navy);
-        }
-        .stat-value { font-family: 'Georgia', serif; font-size: 17pt; font-weight: 700; color: var(--navy); line-height: 1.1; }
-        .stat-label { font-size: 7.5pt; color: var(--muted); text-transform: uppercase; letter-spacing: 0.05em; margin-top: 4pt; }
-        .stat-unit  { font-size: 7.3pt; color: #9AA0A8; margin-top: 2pt; }
-
-        .trend-row { display: flex; align-items: center; gap: 12pt; }
-        .trend-icon {
-            width: 26pt; height: 26pt;
-            border-radius: 26pt;
-            display: flex; align-items: center; justify-content: center;
-            font-size: 13pt; font-weight: 700; color: #fff;
-            flex-shrink: 0;
-        }
-        .trend-icon.hausse { background: var(--critical); }
-        .trend-icon.baisse { background: var(--low); }
-        .trend-icon.stable { background: var(--high); }
-
-        /* ============================================
-           GRAPHIQUE D'ÉVOLUTION
-           ============================================ */
-        .chart-frame {
-            text-align: center;
-            background: var(--cream);
-            border: 0.75pt solid var(--line);
-            border-radius: 6pt;
-            padding: 16pt;
-        }
-        .chart-frame img { max-width: 100%; height: auto; border-radius: 4pt; }
-
-        .chart-legend {
-            display: flex;
-            justify-content: center;
-            flex-wrap: wrap;
-            gap: 16pt;
-            margin-top: 12pt;
-            padding-top: 12pt;
-            border-top: 0.5pt solid var(--line);
-            font-size: 7.8pt;
-            color: var(--ink);
-        }
-        .chart-legend-item { display: flex; align-items: center; gap: 5pt; }
-        .chart-legend-dot  { display: inline-block; width: 8pt; height: 8pt; border-radius: 50%; }
-        .chart-legend-line { display: inline-block; width: 16pt; height: 2.5pt; border-radius: 2pt; }
-
-        .chart-metrics { display: flex; gap: 10pt; margin-top: 14pt; }
-        .chart-metric {
-            flex: 1;
-            text-align: center;
-            background: #FFFFFF;
-            border: 0.75pt solid var(--line);
-            border-radius: 5pt;
-            padding: 10pt 8pt;
-        }
-        .chart-metric-value { font-size: 13pt; font-weight: 700; color: var(--navy); }
-        .chart-metric-label { font-size: 7pt; color: var(--muted); text-transform: uppercase; letter-spacing: 0.05em; margin-top: 3pt; }
-        .chart-metric-unit  { font-size: 7pt; color: #9AA0A8; }
-
-        .empty-chart {
-            text-align: center;
-            padding: 34pt 16pt;
-            color: var(--muted);
-        }
-        .empty-chart-title { font-size: 10pt; font-weight: 700; color: var(--navy); margin-bottom: 4pt; }
-        .empty-chart-desc  { font-size: 8.3pt; }
-
-        /* ============================================
-           BARRE D'ÉCART
-           ============================================ */
-        .progress-container {
-            width: 100%;
-            background: linear-gradient(90deg, var(--low), var(--high), var(--critical));
-            border-radius: 10pt;
-            height: 8pt;
-            position: relative;
-            margin: 10pt 0;
-        }
-        .progress-marker {
-            position: absolute;
-            top: -3pt;
-            width: 2.5pt;
-            height: 14pt;
-            background: var(--navy);
-            border-radius: 2pt;
-        }
-
-        /* ============================================
-           TABLEAUX
-           ============================================ */
-        .table-wrap { margin-top: 8pt; }
-        table { width: 100%; border-collapse: collapse; font-size: 8.6pt; table-layout: fixed; }
-        thead { display: table-header-group; }
-        tbody tr { page-break-inside: avoid; }
-        th {
-            background: var(--navy);
-            color: #F5F1E6;
-            font-weight: 600;
-            font-size: 7.5pt;
-            text-transform: uppercase;
-            letter-spacing: 0.04em;
-            padding: 7pt 8pt;
-            text-align: left;
-        }
-        td { padding: 7pt 8pt; border-bottom: 0.5pt solid var(--line); vertical-align: top; overflow-wrap: break-word; }
-        tbody tr:nth-child(even) { background: #FAF9F5; }
-
-        .ecart-value { font-weight: 700; }
-        .ecart-explication { font-size: 7pt; color: var(--muted); margin-top: 2pt; }
-
-        /* ============================================
-           DIVERS
-           ============================================ */
-        .note {
-            font-size: 8.3pt;
-            color: var(--navy);
-            background: var(--cream);
-            border-left: 2.5pt solid var(--gold);
-            padding: 8pt 11pt;
-            margin-top: 12pt;
-        }
-        .text-muted { color: var(--muted); }
-        .mt-3 { margin-top: 12pt; }
-
-        .footer {
-            margin-top: 30pt;
-            padding-top: 12pt;
-            border-top: 0.5pt solid var(--line);
-            text-align: center;
-            color: var(--muted);
-            font-size: 7.8pt;
-        }
-
-        .page-break { page-break-before: always; }
-        .no-break { page-break-inside: avoid; }
-    </style>
+<meta charset="utf-8">
+<title>Rapport {{ nom_type }} — {{ kri.nom }}</title>
+<style>
+  @page { size: A4; margin: 18mm 15mm 18mm 15mm;
+          @top-left { content: "{{ (client.nom if client else 'Egalyx')|replace('"', '') }} · Rapport {{ nom_type }}"; font: 8pt "DejaVu Sans", sans-serif; color: #667085; }
+          @top-right { content: "{{ kri.nom|replace('"', '')|truncate(60) }}"; font: 8pt "DejaVu Sans", sans-serif; color: #667085; }
+          @bottom-left { content: "Généré le {{ genere_le.strftime('%d/%m/%Y à %H:%M') }} UTC par {{ auteur.username }} · Egalyx"; font: 7.5pt "DejaVu Sans", sans-serif; color: #98A2B3; }
+          @bottom-right { content: "Page " counter(page) " / " counter(pages); font: 7.5pt "DejaVu Sans", sans-serif; color: #98A2B3; } }
+  * { box-sizing: border-box; }
+  body { font-family: "DejaVu Sans", Arial, sans-serif; font-size: 9pt; color: #101828; line-height: 1.45; margin: 0; }
+  h1 { font-size: 17pt; margin: 4pt 0 3pt; color: #0B1F3A; }
+  h2 { font-size: 10.5pt; margin: 16pt 0 6pt; color: #0B1F3A; padding-bottom: 4pt; border-bottom: 1.5pt solid #1D4ED8; }
+  .sur-titre { font-size: 8pt; color: #1D4ED8; font-weight: bold; letter-spacing: .06em; text-transform: uppercase; }
+  .meta { color: #475467; font-size: 8.5pt; }
+  .meta span { margin-right: 12pt; }
+  .pastille { display: inline-block; border-radius: 10pt; padding: 1.5pt 7pt; font-size: 8pt; font-weight: bold; }
+  .bandeau { display: flex; gap: 8pt; margin-top: 10pt; }
+  .bloc { flex: 1; border: 0.8pt solid #EAECF0; border-radius: 6pt; padding: 7pt 9pt; }
+  .bloc .lib { font-size: 7pt; color: #667085; text-transform: uppercase; letter-spacing: .05em; font-weight: bold; }
+  .bloc .val { font-size: 15pt; font-weight: bold; margin-top: 2pt; }
+  .bloc .val small { font-size: 8.5pt; color: #667085; font-weight: normal; }
+  .principal { border-left: 3.5pt solid {{ ei[1] }}; }
+  .jauge { height: 7pt; border-radius: 4pt; margin: 8pt 0 3pt; position: relative; }
+  .curseur { position: absolute; top: -3pt; width: 2.5pt; height: 13pt; background: #101828; }
+  .grad { display: flex; justify-content: space-between; font-size: 7pt; color: #667085; }
+  .projection { margin-top: 8pt; padding: 6pt 8pt; border-radius: 5pt; background: #F9FAFB; font-weight: bold; }
+  .graph { border: 0.8pt solid #EAECF0; border-radius: 6pt; padding: 6pt; }
+  table { width: 100%; border-collapse: collapse; }
+  thead { display: table-header-group; }
+  th { background: #F2F4F7; color: #344054; font-size: 7.5pt; text-transform: uppercase; letter-spacing: .04em; text-align: left; padding: 5pt 6pt; }
+  td { padding: 5pt 6pt; border-bottom: 0.6pt solid #EAECF0; vertical-align: top; }
+  tr { page-break-inside: avoid; }
+  .num { text-align: right; white-space: nowrap; }
+  .comm { white-space: pre-wrap; word-wrap: break-word; overflow-wrap: anywhere; color: #344054; }
+  .auto { font-size: 6.5pt; font-weight: bold; color: #3538CD; background: #EEF4FF; border-radius: 3pt; padding: 0 3pt; }
+  dl { display: grid; grid-template-columns: 34mm 1fr; gap: 4pt 10pt; margin: 0; }
+  dt { color: #667085; } dd { margin: 0; white-space: pre-wrap; }
+  .deux { display: flex; gap: 10pt; } .deux > div { flex: 1; }
+  .note { font-size: 7.5pt; color: #667085; }
+</style>
 </head>
 <body>
+  <div class="sur-titre">{{ nom_type }} · {{ client.nom if client else '' }}</div>
+  <h1>{{ kri.nom }}</h1>
+  <div class="meta">
+    <span class="pastille" style="background:{{ ei[2] }};color:{{ ei[1] }}">{{ ei[0] }}</span>
+    <span class="pastille" style="background:#F2F4F7;color:{{ f.fraicheur_info[1] }}">{{ f.fraicheur_info[0] }}</span>
+    {% if kri.risque %}<span>Risque : <b>{{ kri.risque.reference }}</b> — {{ kri.risque.intitule }}</span>{% endif %}
+    {% if kri.responsable_mesure %}<span>Responsable : {{ kri.responsable_mesure.username }}</span>{% endif %}
+    {% if kri.frequence_mesure %}<span>Mesure {{ kri.frequence_mesure }}</span>{% endif %}
+  </div>
 
-    <!-- ========================================================
-         EN-TÊTE DU DOCUMENT
-         ======================================================== -->
-    <div class="cover no-break">
-        <div class="cover-eyebrow">Rapport d'indicateur · {% if kri.type_indicateur == 'kri' %}Indicateur de risque{% else %}Indicateur de performance{% endif %}</div>
-        <div class="cover-title">{{ kri.nom }}</div>
-        <div class="cover-subtitle">Rapport généré le {{ date_generation.strftime('%d %B %Y à %H:%M') }}</div>
-        <span class="cover-badge {{ kri.type_indicateur }}">{{ kri.get_type_display() }}</span>
+  <div class="bandeau">
+    <div class="bloc principal">
+      <div class="lib">Dernière valeur</div>
+      <div class="val" style="color:{{ ei[1] }}">{{ n(f.derniere.valeur) if f.derniere else '—' }} <small>{{ unite }}</small></div>
+      <div class="note">{% if f.derniere %}le {{ f.derniere.date_mesure.strftime('%d/%m/%Y') }}{% if f.variation is not none %} · {{ '%+g'|format(f.variation|round(2)) }} · {{ f.tendance[1] }}{% endif %}{% endif %}</div>
     </div>
+    <div class="bloc"><div class="lib">Mesures</div><div class="val">{{ f.stats.nb }}</div><div class="note">dont {{ f.stats.nb_alertes }} en alerte</div></div>
+    <div class="bloc"><div class="lib">Moyenne</div><div class="val">{{ n(f.stats.moyenne) }} <small>{{ unite }}</small></div><div class="note">min {{ n(f.stats.min) }} · max {{ n(f.stats.max) }}</div></div>
+    <div class="bloc"><div class="lib">Seuils</div>
+      <div class="note" style="margin-top:3pt">{% if kri.seuil_cible is not none %}Cible <b style="color:#079455">{{ n(kri.seuil_cible) }}</b><br>{% endif %}
+        Alerte <b style="color:#DC6803">{{ n(kri.seuil_alerte) }}</b><br>Critique <b style="color:#D92D20">{{ n(kri.seuil_critique) }}</b><br>
+        Risque si la valeur {{ 'baisse' if kri.sens_evaluation_seuil == 'inferieur' else 'monte' }}</div></div>
+  </div>
 
-    <!-- ========================================================
-         MÉTADONNÉES
-         ======================================================== -->
-    <div class="meta-panel no-break">
-        <div class="meta-grid">
-            <div class="meta-item">
-                <span class="meta-label">Référence</span>
-                <span class="meta-value">{{ kri.nom }}</span>
-            </div>
-            <div class="meta-item">
-                <span class="meta-label">Unité</span>
-                <span class="meta-value">{{ kri.unite_mesure or 'Non spécifiée' }}</span>
-            </div>
-            <div class="meta-item">
-                <span class="meta-label">Fréquence</span>
-                <span class="meta-value">{{ kri.frequence_mesure|title or 'Non définie' }}</span>
-            </div>
-            <div class="meta-item">
-                <span class="meta-label">Responsable</span>
-                <span class="meta-value">{{ kri.responsable_mesure.username if kri.responsable_mesure else 'Non assigné' }}</span>
-            </div>
-            <div class="meta-item">
-                <span class="meta-label">Catégorie</span>
-                <span class="meta-value">{{ kri.categorie|title or 'Non catégorisé' }}</span>
-            </div>
-            <div class="meta-item">
-                <span class="meta-label">Source</span>
-                <span class="meta-value">{{ kri.source_donnees or 'Non spécifiée' }}</span>
-            </div>
-        </div>
-    </div>
+  {% if f.derniere and kri.seuil_alerte is not none and kri.seuil_critique is not none %}
+    {% set a, c = kri.seuil_alerte, kri.seuil_critique %}
+    {% set bas = [a, c, f.derniere.valeur, f.stats.min]|min %}{% set haut = [a, c, f.derniere.valeur, f.stats.max]|max %}
+    {% set m = ((haut - bas) * 0.12) or 1 %}{% set bas = bas - m %}{% set haut = haut + m %}
+    {% set pa = (a - bas) / (haut - bas) * 100 %}{% set pc = (c - bas) / (haut - bas) * 100 %}{% set pv = (f.derniere.valeur - bas) / (haut - bas) * 100 %}
+    {% if kri.sens_evaluation_seuil == 'inferieur' %}{% set fond = 'linear-gradient(90deg,#F04438 0%,#F04438 ' ~ pc ~ '%,#F79009 ' ~ pc ~ '%,#F79009 ' ~ pa ~ '%,#17B26A ' ~ pa ~ '%,#17B26A 100%)' %}
+    {% else %}{% set fond = 'linear-gradient(90deg,#17B26A 0%,#17B26A ' ~ pa ~ '%,#F79009 ' ~ pa ~ '%,#F79009 ' ~ pc ~ '%,#F04438 ' ~ pc ~ '%,#F04438 100%)' %}{% endif %}
+    <div class="jauge" style="background:{{ fond }}"><div class="curseur" style="left:{{ pv }}%"></div></div>
+    <div class="grad"><span>{{ '%g'|format(bas|round(2)) }}</span><span>position de la dernière valeur par rapport aux seuils</span><span>{{ '%g'|format(haut|round(2)) }}</span></div>
+  {% endif %}
+  {% if f.projection %}<div class="projection" style="color:{{ f.projection.couleur }}">{{ f.projection.texte }} <span class="note" style="font-weight:normal">(tendance linéaire des 6 dernières mesures — ce n'est pas une prévision certaine)</span></div>{% endif %}
 
-    <!-- ========================================================
-         RÉSUMÉ OBJECTIF VS RÉALISÉ (KPI uniquement)
-         ======================================================== -->
-    {% if derniere_mesure and kri.type_indicateur == 'kpi' and kri.seuil_cible and difference_cible is not none %}
-    <div class="summary-box no-break">
-        <div class="summary-title">Objectif vs réalisé</div>
-        <div class="summary-row">
-            <div class="summary-col">
-                <div class="summary-label">Objectif</div>
-                <div class="summary-value">{{ "%.2f"|format(kri.seuil_cible) }} {{ kri.unite_mesure }}</div>
-            </div>
-            <div class="summary-col center">
-                <div class="summary-label">Écart</div>
-                <div class="summary-value big" style="color:
-                    {% if interpretation %}
-                        {% if interpretation.couleur == 'warning' %}var(--high)
-                        {% elif interpretation.couleur == 'danger' %}var(--critical)
-                        {% elif interpretation.couleur == 'success' %}var(--low)
-                        {% else %}var(--medium){% endif %}
-                    {% endif %};">
-                    {{ "%+.2f"|format(difference_cible) }} {{ kri.unite_mesure }}
-                </div>
-            </div>
-            <div class="summary-col right">
-                <div class="summary-label">Réalisé</div>
-                <div class="summary-value">{{ "%.2f"|format(derniere_mesure.valeur) }} {{ kri.unite_mesure }}</div>
-            </div>
-        </div>
-        <div class="summary-footer">
-            <span class="badge-etat
-                {% if interpretation %}
-                    {% if interpretation.statut == 'sous_performance' %}badge-alerte
-                    {% elif interpretation.statut == 'performance' %}badge-success
-                    {% else %}badge-info{% endif %}
-                {% endif %}">
-                {{ interpretation.message if interpretation else '' }}
-            </span>
-            <span class="text-muted" style="margin-left: 8pt; font-size: 8pt;">{{ interpretation.explication if interpretation else '' }}</span>
-        </div>
-    </div>
-    {% endif %}
+  {% if svg %}
+  <h2>Évolution</h2>
+  <div class="graph">{{ svg|safe }}</div>
+  {% endif %}
 
-    <!-- ========================================================
-         DESCRIPTION
-         ======================================================== -->
-    {% if kri.description %}
-    <div class="section no-break">
-        <h2>Description</h2>
-        <div class="card">
-            <div class="card-body">{{ kri.description|nl2br }}</div>
-        </div>
-    </div>
-    {% endif %}
+  {% if kri.description or kri.formule_calcul or kri.source_donnees or kri.categorie %}
+  <h2>Définition</h2>
+  <dl>
+    {% if kri.description %}<dt>Description</dt><dd>{{ kri.description }}</dd>{% endif %}
+    {% if kri.formule_calcul %}<dt>Mode de calcul</dt><dd>{{ kri.formule_calcul }}</dd>{% endif %}
+    {% if kri.categorie %}<dt>Catégorie</dt><dd>{{ CATS.get(kri.categorie, kri.categorie) }}</dd>{% endif %}
+    {% if kri.source_donnees %}<dt>Source</dt><dd>{{ kri.source_donnees }}</dd>{% endif %}
+    {% for l, o in f.connexions %}<dt>Collecte auto.</dt><dd>{{ o.nom }}{% if l.source.derniere_execution %} — dernier relevé le {{ l.source.derniere_execution.strftime('%d/%m/%Y') }}{% endif %}</dd>{% endfor %}
+  </dl>
+  {% endif %}
 
-    <!-- ========================================================
-         SEUILS ET CIBLES
-         ======================================================== -->
-    <div class="section no-break">
-        <h2>Seuils et cibles</h2>
+  <h2>Historique complet des mesures ({{ f.lignes|length }})</h2>
+  {% if f.lignes %}
+  <table>
+    <thead><tr><th style="width:17mm">Date</th><th class="num" style="width:22mm">Valeur</th><th class="num" style="width:17mm">Variation</th><th style="width:21mm">État</th><th>Commentaire</th></tr></thead>
+    <tbody>
+    {% for l in f.lignes %}{% set m = l.mesure %}{% set e = f.etats.get(l.etat, f.etats.inconnu) %}
+      <tr>
+        <td>{{ m.date_mesure.strftime('%d/%m/%Y') }}</td>
+        <td class="num"><b>{{ n(m.valeur) }}</b> {{ unite }}</td>
+        <td class="num">{{ ('%+g'|format(l.variation|round(2))) if l.variation is not none else '—' }}</td>
+        <td><span class="pastille" style="background:{{ e[2] }};color:{{ e[1] }}">{{ e[0] }}</span></td>
+        <td class="comm">{% if l.auto %}<span class="auto">AUTO</span> {{ m.commentaire[15:]|trim }}{% else %}{{ m.commentaire or '' }}{% endif %}</td>
+      </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  {% else %}<p class="note">Aucune mesure enregistrée.</p>{% endif %}
 
-        <div class="thresholds">
-            {% if kri.type_indicateur == 'kpi' and kri.seuil_cible %}
-            <div class="threshold-item cible">
-                <div class="threshold-label">Cible</div>
-                <div class="threshold-value">{{ "%.2f"|format(kri.seuil_cible) }} {{ kri.unite_mesure }}</div>
-            </div>
-            {% endif %}
-            {% if kri.seuil_alerte %}
-            <div class="threshold-item alerte">
-                <div class="threshold-label">Seuil d'alerte</div>
-                <div class="threshold-value">{{ "%.2f"|format(kri.seuil_alerte) }} {{ kri.unite_mesure }}</div>
-            </div>
-            {% endif %}
-            {% if kri.seuil_critique %}
-            <div class="threshold-item critique">
-                <div class="threshold-label">Seuil critique</div>
-                <div class="threshold-value">{{ "%.2f"|format(kri.seuil_critique) }} {{ kri.unite_mesure }}</div>
-            </div>
-            {% endif %}
-        </div>
+  {% if f.fichiers %}
+  <h2>Pièces justificatives ({{ f.fichiers|length }})</h2>
+  <table><thead><tr><th>Fichier</th><th>Description</th><th style="width:22mm">Ajouté le</th></tr></thead><tbody>
+    {% for fi in f.fichiers %}<tr><td>{{ fi.nom_fichier }}</td><td class="comm">{{ fi.description or '' }}</td><td>{{ fi.created_at.strftime('%d/%m/%Y') if fi.created_at }}</td></tr>{% endfor %}
+  </tbody></table>
+  {% endif %}
 
-        <div class="note">
-            <strong>Sens d'évaluation.</strong> {{ kri.get_description_sens_evaluation() }}
-        </div>
-    </div>
-
-    <!-- ========================================================
-         DERNIÈRE MESURE ET ÉTAT
-         ======================================================== -->
-    {% if derniere_mesure %}
-    <div class="section no-break">
-        <h2>Dernière mesure</h2>
-
-        <div class="card-container">
-            <div class="card">
-                <div class="card-header">Valeur actuelle</div>
-                <div class="card-body">
-                    <div style="font-size: 22pt; font-weight: 700; color: var(--navy); font-family: 'Georgia', serif;">
-                        {{ "%.2f"|format(derniere_mesure.valeur) }}
-                        <span style="font-size: 10pt; color: var(--muted); font-family: 'Helvetica', sans-serif;">{{ kri.unite_mesure }}</span>
-                    </div>
-                    <div style="margin-top: 8pt;">
-                        <span class="badge-etat {% if kri.get_etat_alerte(derniere_mesure.valeur) in ['critique', 'hors_cible'] %}badge-critique{% elif kri.get_etat_alerte(derniere_mesure.valeur) in ['alerte', 'sous_performance'] %}badge-alerte{% else %}badge-normal{% endif %}">
-                            {{ kri.get_libelle_etat(derniere_mesure.valeur) }}
-                        </span>
-                    </div>
-                </div>
-            </div>
-
-            <div class="card">
-                <div class="card-header">Date de mesure</div>
-                <div class="card-body">
-                    <div style="font-size: 15pt; font-weight: 700; color: var(--navy);">
-                        {{ derniere_mesure.date_mesure.strftime('%d/%m/%Y') }}
-                    </div>
-                    <div class="text-muted" style="font-size: 8.5pt; margin-top: 3pt;">
-                        {{ derniere_mesure.date_mesure.strftime('%H:%M') }}
-                    </div>
-                </div>
-            </div>
-        </div>
-
-        {% if kri.type_indicateur == 'kpi' and kri.seuil_cible and difference_cible is not none %}
-        <div class="card mt-3">
-            <div class="card-header">Écart par rapport à la cible</div>
-            <div class="card-body">
-                <div class="progress-container">
-                    {% set amplitude = (kri.seuil_critique - kri.seuil_cible) if kri.seuil_critique else kri.seuil_cible * 0.5 %}
-                    {% if amplitude and amplitude != 0 %}
-                        {% set ratio = (difference_cible / amplitude) %}
-                        {% set position = 50 + (ratio * 50) %}
-                        {% if position < 0 %}{% set position = 0 %}{% endif %}
-                        {% if position > 100 %}{% set position = 100 %}{% endif %}
-                    {% else %}
-                        {% set position = 50 %}
-                    {% endif %}
-                    <div class="progress-marker" style="left: {{ position|round }}%;"></div>
-                </div>
-
-                <div style="text-align: center; margin-top: 10pt;">
-                    <div style="font-size: 15pt; font-weight: 700; color:
-                        {% if interpretation %}
-                            {% if interpretation.couleur == 'warning' %}var(--high)
-                            {% elif interpretation.couleur == 'danger' %}var(--critical)
-                            {% elif interpretation.couleur == 'success' %}var(--low)
-                            {% else %}var(--medium){% endif %}
-                        {% endif %};">
-                        {{ "%+.2f"|format(difference_cible) }} {{ kri.unite_mesure }}
-                    </div>
-                    <div style="margin-top: 5pt;">
-                        <span class="badge-etat
-                            {% if interpretation %}
-                                {% if interpretation.statut == 'sous_performance' %}badge-alerte
-                                {% elif interpretation.statut == 'performance' %}badge-success
-                                {% else %}badge-info{% endif %}
-                            {% endif %}">
-                            {{ interpretation.message if interpretation else '' }}
-                        </span>
-                    </div>
-                    <div class="text-muted" style="margin-top: 6pt; font-size: 8pt;">
-                        {{ interpretation.explication if interpretation else '' }}
-                    </div>
-                </div>
-            </div>
-        </div>
-        {% endif %}
-    </div>
-    {% endif %}
-
-    <!-- ========================================================
-         STATISTIQUES GLOBALES
-         ======================================================== -->
-    {% if statistiques and statistiques.nb_mesures > 0 %}
-    <div class="section no-break">
-        <h2>Statistiques globales</h2>
-
-        <div class="stats-grid">
-            <div class="stat-box">
-                <div class="stat-value">{{ "%.2f"|format(statistiques.moyenne) }}</div>
-                <div class="stat-label">Moyenne</div>
-                <div class="stat-unit">{{ kri.unite_mesure }}</div>
-            </div>
-            <div class="stat-box">
-                <div class="stat-value">{{ "%.2f"|format(statistiques.minimum) }}</div>
-                <div class="stat-label">Minimum</div>
-                <div class="stat-unit">{{ kri.unite_mesure }}</div>
-            </div>
-            <div class="stat-box">
-                <div class="stat-value">{{ "%.2f"|format(statistiques.maximum) }}</div>
-                <div class="stat-label">Maximum</div>
-                <div class="stat-unit">{{ kri.unite_mesure }}</div>
-            </div>
-            <div class="stat-box">
-                <div class="stat-value">{{ statistiques.nb_mesures }}</div>
-                <div class="stat-label">Mesures</div>
-                <div class="stat-unit">au total</div>
-            </div>
-        </div>
-
-        <div class="card mt-3">
-            <div class="card-header">Tendance</div>
-            <div class="card-body">
-                <div class="trend-row">
-                    <div class="trend-icon {{ statistiques.tendance }}">
-                        {% if statistiques.tendance == 'hausse' %}↑{% elif statistiques.tendance == 'baisse' %}↓{% else %}→{% endif %}
-                    </div>
-                    <strong style="font-size: 11pt; color: var(--navy);">
-                        {% if statistiques.tendance == 'hausse' %}En hausse{% elif statistiques.tendance == 'baisse' %}En baisse{% else %}Stable{% endif %}
-                    </strong>
-                </div>
-            </div>
-        </div>
-    </div>
-    {% endif %}
-
-    <!-- ========================================================
-         GRAPHIQUE D'ÉVOLUTION
-         ======================================================== -->
-    <div class="section page-break">
-        <h2>Évolution de l'indicateur</h2>
-
-        {% if graphique_base64 %}
-        <div class="chart-frame no-break">
-            <img src="data:image/png;base64,{{ graphique_base64 }}" alt="Graphique d'évolution - {{ kri.nom }}">
-
-            <div class="chart-legend">
-                <div class="chart-legend-item">
-                    <span class="chart-legend-dot" style="background-color: {{ '#B3261E' if kri.type_indicateur == 'kri' else '#1E7A4C' }};"></span>
-                    <span>Valeurs mesurées</span>
-                </div>
-                {% if kri.seuil_alerte %}
-                <div class="chart-legend-item">
-                    <span class="chart-legend-line" style="background-color: var(--high);"></span>
-                    <span>Seuil d'alerte : {{ "%.2f"|format(kri.seuil_alerte) }} {{ kri.unite_mesure }}</span>
-                </div>
-                {% endif %}
-                {% if kri.seuil_critique %}
-                <div class="chart-legend-item">
-                    <span class="chart-legend-line" style="background-color: var(--critical);"></span>
-                    <span>Seuil critique : {{ "%.2f"|format(kri.seuil_critique) }} {{ kri.unite_mesure }}</span>
-                </div>
-                {% endif %}
-                {% if kri.type_indicateur == 'kpi' and kri.seuil_cible %}
-                <div class="chart-legend-item">
-                    <span class="chart-legend-line" style="background-color: var(--medium);"></span>
-                    <span>Cible : {{ "%.2f"|format(kri.seuil_cible) }} {{ kri.unite_mesure }}</span>
-                </div>
-                {% endif %}
-            </div>
-        </div>
-
-        {% if statistiques and statistiques.nb_mesures > 0 %}
-        <div class="chart-metrics">
-            <div class="chart-metric">
-                <div class="chart-metric-value">{{ "%.2f"|format(statistiques.moyenne) }}</div>
-                <div class="chart-metric-label">Moyenne</div>
-                <div class="chart-metric-unit">{{ kri.unite_mesure }}</div>
-            </div>
-            <div class="chart-metric">
-                <div class="chart-metric-value">{{ "%.2f"|format(statistiques.minimum) }}</div>
-                <div class="chart-metric-label">Minimum</div>
-                <div class="chart-metric-unit">{{ kri.unite_mesure }}</div>
-            </div>
-            <div class="chart-metric">
-                <div class="chart-metric-value">{{ "%.2f"|format(statistiques.maximum) }}</div>
-                <div class="chart-metric-label">Maximum</div>
-                <div class="chart-metric-unit">{{ kri.unite_mesure }}</div>
-            </div>
-            <div class="chart-metric">
-                <div class="chart-metric-value">{{ statistiques.nb_mesures }}</div>
-                <div class="chart-metric-label">Mesures</div>
-                <div class="chart-metric-unit">au total</div>
-            </div>
-        </div>
-        {% endif %}
-
-        {% else %}
-        <div class="card no-break">
-            <div class="card-body">
-                <div class="empty-chart">
-                    <div class="empty-chart-title">Pas assez de données</div>
-                    <div class="empty-chart-desc">Au moins 2 mesures sont nécessaires pour afficher le graphique d'évolution.</div>
-                </div>
-            </div>
-        </div>
-        {% endif %}
-    </div>
-
-    <!-- ========================================================
-         HISTORIQUE DES MESURES
-         ======================================================== -->
-    {% if mesures %}
-    <div class="section page-break">
-        <h2>Historique des mesures</h2>
-
-        <div class="table-wrap">
-            <table>
-                <colgroup>
-                    <col style="width:16%"><col style="width:16%"><col style="width:14%">
-                    <col style="width:29%"><col style="width:25%">
-                </colgroup>
-                <thead>
-                    <tr>
-                        <th>Date</th>
-                        <th>Valeur</th>
-                        <th>État</th>
-                        <th>Écart cible</th>
-                        <th>Commentaire</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    {% for mesure in mesures %}
-                    <tr>
-                        <td>{{ mesure.date_mesure.strftime('%d/%m/%Y %H:%M') }}</td>
-                        <td><strong>{{ "%.2f"|format(mesure.valeur) }}</strong> {{ kri.unite_mesure }}</td>
-                        <td>
-                            <span class="badge-etat {% if kri.get_etat_alerte(mesure.valeur, mesure.date_mesure) in ['critique', 'hors_cible'] %}badge-critique{% elif kri.get_etat_alerte(mesure.valeur, mesure.date_mesure) in ['alerte', 'sous_performance'] %}badge-alerte{% else %}badge-normal{% endif %}">
-                                {{ kri.get_libelle_etat(mesure.valeur, mesure.date_mesure) }}
-                            </span>
-                        </td>
-                        <td>
-                            {% if kri.type_indicateur == 'kpi' and kri.seuil_cible %}
-                                {% set diff = kri.get_difference_cible(mesure.valeur) %}
-                                {% set interp = kri.get_interpretation_difference(mesure.valeur) %}
-                                {% if diff is not none %}
-                                    <div class="ecart-value" style="
-                                        {% if interp %}
-                                            {% if interp.couleur == 'warning' %}color: var(--high);
-                                            {% elif interp.couleur == 'danger' %}color: var(--critical);
-                                            {% elif interp.couleur == 'success' %}color: var(--low);
-                                            {% else %}color: var(--medium);{% endif %}
-                                        {% endif %}">
-                                        {{ "%+.2f"|format(diff) }} {{ kri.unite_mesure }}
-                                    </div>
-                                    {% if interp %}
-                                    <div class="ecart-explication">{{ interp.message }} — {{ interp.explication }}</div>
-                                    {% endif %}
-                                {% else %}—{% endif %}
-                            {% else %}—{% endif %}
-                        </td>
-                        <td>{{ mesure.commentaire|truncate(50) if mesure.commentaire else '—' }}</td>
-                    </tr>
-                    {% endfor %}
-                </tbody>
-            </table>
-        </div>
-    </div>
-    {% endif %}
-
-    <!-- ========================================================
-         PIED DE PAGE
-         ======================================================== -->
-    <div class="footer">
-        <div>Rapport généré automatiquement le {{ date_generation.strftime('%d/%m/%Y') }}</div>
-        <div>Document confidentiel — {{ kri.nom }}</div>
-    </div>
-
+  {% if kri.notes_internes %}
+  <h2>Notes internes</h2>
+  <p class="comm">{{ kri.notes_internes }}</p>
+  {% endif %}
+  <p class="note" style="margin-top:14pt">Chaque mesure est jugée avec les seuils en vigueur à sa date. Les mesures marquées AUTO proviennent d'une collecte automatique.</p>
 </body>
 </html>

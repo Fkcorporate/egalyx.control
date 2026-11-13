@@ -1,1276 +1,293 @@
 {% extends "base.html" %}
-
-{% block title %}{% if action == 'modifier' %}Modifier l'indicateur{% else %}Nouvel indicateur{% endif %} - Egalyx{% endblock %}
+{% import "_macros/page.html" as pg %}
+{#- Création / modification d'un KRI ou KPI — même présentation que la fiche (kri/detail.html).
+    Champs envoyés (inchangés) : type_indicateur, risque_id, nom, unite_mesure, description, formule_calcul,
+    frequence_mesure, responsable_mesure_id, sens_evaluation_seuil, seuil_cible, seuil_alerte, seuil_critique,
+    categorie, source_donnees, notes_internes. -#}
+{% set modif = action == 'modifier' and kri %}
+{% set src = kri if modif else none %}
+{% macro val(nom, defaut='') -%}
+  {%- if request.method == 'POST' and request.form.get(nom) is not none -%}{{ request.form.get(nom) }}
+  {%- elif src is not none and src[nom] is not none -%}{{ ('%g'|format(src[nom])) if src[nom] is number else src[nom] }}
+  {%- else -%}{{ defaut }}{%- endif -%}
+{%- endmacro %}
+{% set type_courant = (request.form.get('type_indicateur') or (src.type_indicateur if src else none) or type_preselectionne|default(none) or 'kri') %}
+{% set sens_courant = (request.form.get('sens_evaluation_seuil') or (src.sens_evaluation_seuil if src else none) or 'superieur') %}
+{% set risque_courant = (request.form.get('risque_id') or (src.risque_id if src else none) or risque_id|default(none) or '')|string %}
+{% block title %}{{ 'Modifier ' ~ kri.nom if modif else 'Nouvel indicateur' }}{% endblock %}
+{% block styles %}
+{{ super() }}
+{{ pg.styles() }}
+<style>
+  .kx { max-width: 1240px; }
+  .kx .form-label { font-weight: 600; font-size: .88rem; margin-bottom: .35rem; }
+  .kx .form-control, .kx .form-select { border-radius: 10px; }
+  .kx .form-text { font-size: .78rem; }
+  .kx-choix { display: grid; grid-template-columns: 1fr 1fr; gap: .6rem; }
+  .kx-choix input { display: none; }
+  .kx-choix label { border: 1.5px solid var(--bs-border-color); border-radius: 12px; padding: .8rem .95rem; cursor: pointer; display: flex; gap: .7rem;
+                    align-items: flex-start; transition: border-color .15s, background .15s; margin: 0; }
+  .kx-choix label:hover { border-color: #84ADFF; }
+  .kx-choix input:checked + label { border-color: #1D4ED8; background: #EFF4FF; }
+  :root[data-bs-theme="dark"] .kx-choix input:checked + label { background: rgba(29,78,216,.15); }
+  .kx-choix label i { font-size: 1.15rem; color: #1D4ED8; margin-top: .1rem; width: 1.3rem; text-align: center; }
+  .kx-choix label b { display: block; font-size: .92rem; }
+  .kx-choix label span { display: block; font-size: .78rem; color: var(--bs-secondary-color); line-height: 1.35; }
+  .kx-seuils { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: .75rem; }
+  .kx-seuil { border-radius: 12px; padding: .75rem .85rem; border: 1px solid var(--bs-border-color); }
+  .kx-seuil .form-label { font-size: .78rem; text-transform: uppercase; letter-spacing: .04em; }
+  .kx-apercu { position: sticky; top: 1rem; }
+  .kx-jauge { height: 10px; border-radius: 6px; margin: 1rem 0 .35rem; background: var(--bs-tertiary-bg); }
+  .kx-grad { display: flex; justify-content: space-between; font-size: .72rem; color: var(--bs-secondary-color); font-variant-numeric: tabular-nums; }
+  .kx-msg { font-size: .82rem; border-radius: 10px; padding: .55rem .7rem; margin-top: .75rem; }
+  .kx-msg.ko { background: #FEF3F2; color: #B42318; } .kx-msg.ok { background: #ECFDF3; color: #067647; }
+  .kx-pied { border-top: 1px solid var(--bs-border-color); padding: 1rem 0 0; margin-top: .5rem; padding-right: 0; }
+  .kx-sugg { border: 1px solid var(--bs-border-color); border-radius: 10px; padding: .7rem .8rem; margin-bottom: .6rem; }
+  .kx-sugg b { font-size: .9rem; } .kx-sugg p { font-size: .8rem; color: var(--bs-secondary-color); margin: .25rem 0 .45rem; }
+  .kx-ia { border-color: #C7D7FE; background: linear-gradient(180deg, #F5F8FF, var(--bs-body-bg) 80%); }
+  :root[data-bs-theme="dark"] .kx-ia { background: var(--bs-body-bg); }
+</style>
+{% endblock %}
 
 {% block content %}
-<div class="container-fluid px-4 py-4">
-    <div class="row">
-        <div class="col-lg-10 mx-auto">
-            <!-- ========== EN-TÊTE ========== -->
-            <div class="d-flex justify-content-between align-items-center mb-5">
-                <div>
-                    <div class="d-flex align-items-center gap-2 mb-3">
-                        <a href="{{ url_for('liste_kri') }}" class="text-decoration-none" style="color: #64748b;">
-                            <i class="fas fa-arrow-left me-1"></i>
-                            <span class="small">Indicateurs</span>
-                        </a>
-                        <span class="small" style="color: #94a3b8;">/</span>
-                        <span class="small" style="color: #2563eb;">
-                            {% if action == 'modifier' %}
-                                Modifier
-                            {% else %}
-                                Nouvel indicateur
-                            {% endif %}
-                        </span>
-                    </div>
-                    
-                    <div class="d-flex align-items-center gap-3">
-                        <div class="p-3 rounded-2" style="background: #2563eb;">
-                            <i class="fas {% if action == 'modifier' %}fa-edit{% else %}fa-plus{% endif %} text-white fa-lg"></i>
-                        </div>
-                        <div>
-                            <h1 class="fw-bold mt-1 mb-0" style="color: #0f172a; font-size: 2rem;">
-                                {% if action == 'modifier' %}
-                                    Modifier l'indicateur
-                                {% else %}
-                                    Nouvel indicateur
-                                {% endif %}
-                            </h1>
-                            <p class="mt-1 mb-0" style="color: #64748b;">
-                                <i class="fas fa-info-circle me-1" style="color: #2563eb;"></i>
-                                {% if action == 'modifier' %}
-                                    Modifiez les paramètres de votre indicateur
-                                {% else %}
-                                    Créez un KRI (indicateur de risque) ou un KPI (indicateur de performance)
-                                {% endif %}
-                            </p>
-                        </div>
-                    </div>
-                    <div class="mt-3" style="height: 3px; width: 80px; background: #2563eb; border-radius: 2px;"></div>
-                </div>
+<div class="container-fluid kx py-3">
+  {{ pg.entete(('Modifier l\'indicateur' if modif else 'Nouvel indicateur'), 'fa-gauge-high',
+               (kri.nom if modif else 'KRI (risque) ou KPI (performance), avec ses seuils et sa fréquence de mesure'),
+               retour=(url_for('detail_kri', kri_id=kri.id) if modif else url_for('liste_kri')),
+               libelle_retour=('Fiche' if modif else 'Liste')) }}
+
+  <form method="post" id="kx-form" novalidate
+        action="{% if modif %}{{ url_for('modifier_kri', kri_id=kri.id) }}{% else %}{{ url_for('creer_kri_depuis_liste') }}{% endif %}">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <div class="row g-3">
+      <div class="col-xl-8">
+        {% call pg.carte('Type d\'indicateur') %}
+          <div class="kx-choix">
+            <input type="radio" name="type_indicateur" id="kx-kri" value="kri" {{ 'checked' if type_courant != 'kpi' }}>
+            <label for="kx-kri"><i class="fas fa-shield-halved"></i><div><b>KRI — indicateur de risque</b><span>Alerte quand l'exposition à un risque augmente.</span></div></label>
+            <input type="radio" name="type_indicateur" id="kx-kpi" value="kpi" {{ 'checked' if type_courant == 'kpi' }}>
+            <label for="kx-kpi"><i class="fas fa-bullseye"></i><div><b>KPI — indicateur de performance</b><span>Suit l'atteinte d'une cible.</span></div></label>
+          </div>
+        {% endcall %}
+
+        {% call pg.carte('Identification') %}
+          <div class="row g-3">
+            <div class="col-md-8">
+              <label class="form-label" for="kx-nom">Nom de l'indicateur <span class="text-danger">*</span></label>
+              <input class="form-control" id="kx-nom" name="nom" value="{{ val('nom') }}" required maxlength="200" placeholder="Ex. : Taux de rotation du personnel">
             </div>
-
-            <!-- ========== BANDEAU IA ========== -->
-            {% if action != 'modifier' %}
-            <div class="card border-0 shadow-sm mb-4" style="border-radius: 16px; background: linear-gradient(135deg, #2563eb10, #1e40af10);">
-                <div class="card-body p-4">
-                    <div class="d-flex align-items-start gap-4">
-                        <div class="rounded-circle p-3 d-flex align-items-center justify-content-center" style="background: #2563eb; width: 64px; height: 64px;">
-                            <i class="fas fa-robot fa-2x text-white"></i>
-                        </div>
-                        <div class="flex-grow-1">
-                            <h5 class="fw-semibold mb-2" style="color: #0f172a;">Génération assistée par IA</h5>
-                            <p class="mb-3" style="color: #334155;">Laissez l'IA vous suggérer des KRI pertinents basés sur le risque sélectionné.</p>
-                            <button type="button" class="btn px-4 py-2 d-inline-flex align-items-center gap-2" id="btnLancerIA" {% if not risques_disponibles %}disabled{% endif %}
-                                    style="border-radius: 10px; background: #2563eb; color: white; border: none; box-shadow: 0 4px 12px rgba(37, 99, 235, 0.3);">
-                                <i class="fas fa-magic"></i>
-                                Générer avec IA
-                            </button>
-                            {% if not risques_disponibles %}
-                            <small class="d-block mt-2" style="color: #64748b;">
-                                <i class="fas fa-info-circle me-1" style="color: #2563eb;"></i>
-                                Aucun risque disponible. Créez d'abord des risques dans la cartographie.
-                            </small>
-                            {% endif %}
-                        </div>
-                    </div>
-                </div>
+            <div class="col-md-4">
+              <label class="form-label" for="kx-unite">Unité</label>
+              <input class="form-control" id="kx-unite" name="unite_mesure" value="{{ val('unite_mesure') }}" maxlength="50" placeholder="%, nombre, jours, k€…" list="kx-unites">
+              <datalist id="kx-unites"><option value="%"><option value="nombre"><option value="jours"><option value="heures"><option value="k€"><option value="€"><option value="ratio"></datalist>
             </div>
-            {% endif %}
-
-            <!-- ========== FORMULAIRE PRINCIPAL ========== -->
-            <div class="card border-0 shadow-sm" style="border-radius: 16px; overflow: hidden;">
-                <div class="card-header bg-transparent p-4" style="border-bottom: 1px solid #e2e8f0;">
-                    <h5 class="fw-semibold mb-0" style="color: #0f172a;">
-                        <i class="fas fa-{% if action == 'modifier' %}edit{% else %}plus-circle{% endif %} me-2" style="color: #2563eb;"></i>
-                        {% if action == 'modifier' %}
-                            Modifier {{ kri.get_type_display() if kri else 'indicateur' }} : {{ kri.nom if kri else '' }}
-                        {% else %}
-                            Nouvel indicateur
-                        {% endif %}
-                    </h5>
-                </div>
-                
-                <div class="card-body p-4">
-                    <form method="POST" 
-                          action="{% if action == 'modifier' %}{{ url_for('modifier_kri', kri_id=kri.id) }}{% else %}{{ url_for('creer_kri_depuis_liste') }}{% endif %}">
-                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-
-                        <!-- ========== SECTION TYPE D'INDICATEUR ========== -->
-                            <div class="row g-4 mb-4">
-                                <div class="col-md-6">
-                                    <span class="text-uppercase small fw-semibold mb-2 d-block" style="color: #64748b;">Type d'indicateur <span class="text-danger">*</span></span>
-                                    <div class="btn-group w-100" role="group">
-                                        <input type="radio" class="btn-check" name="type_indicateur" id="type_kri" value="kri" autocomplete="off"
-                                            {% if (action == 'modifier' and kri and kri.type_indicateur == 'kri') or (action != 'modifier' and request.args.get('type') != 'kpi') %}checked{% endif %}>
-                                        <label class="btn px-4 py-3" for="type_kri"
-                                            style="border-radius: 12px 0 0 12px; 
-                                                    background: {% if (action == 'modifier' and kri and kri.type_indicateur == 'kri') or (action != 'modifier' and request.args.get('type') != 'kpi') %}#b91c1c{% else %}#f8fafc{% endif %}; 
-                                                    color: {% if (action == 'modifier' and kri and kri.type_indicateur == 'kri') or (action != 'modifier' and request.args.get('type') != 'kpi') %}white{% else %}#334155{% endif %}; 
-                                                    border: 1px solid {% if (action == 'modifier' and kri and kri.type_indicateur == 'kri') or (action != 'modifier' and request.args.get('type') != 'kpi') %}#b91c1c{% else %}#e2e8f0{% endif %};">
-                                            <div>
-                                                <i class="fas fa-exclamation-triangle me-2"></i>KRI
-                                                <br><small class="{% if (action == 'modifier' and kri and kri.type_indicateur == 'kri') or (action != 'modifier' and request.args.get('type') != 'kpi') %}text-white-50{% else %}text-muted{% endif %}">Indicateur de Risque</small>
-                                            </div>
-                                        </label>
-                                        
-                                        <input type="radio" class="btn-check" name="type_indicateur" id="type_kpi" value="kpi" autocomplete="off"
-                                            {% if (action == 'modifier' and kri and kri.type_indicateur == 'kpi') or (action != 'modifier' and request.args.get('type') == 'kpi') %}checked{% endif %}>
-                                        <label class="btn px-4 py-3" for="type_kpi"
-                                            style="border-radius: 0 12px 12px 0; 
-                                                    background: {% if (action == 'modifier' and kri and kri.type_indicateur == 'kpi') or (action != 'modifier' and request.args.get('type') == 'kpi') %}#059669{% else %}#f8fafc{% endif %}; 
-                                                    color: {% if (action == 'modifier' and kri and kri.type_indicateur == 'kpi') or (action != 'modifier' and request.args.get('type') == 'kpi') %}white{% else %}#334155{% endif %}; 
-                                                    border: 1px solid {% if (action == 'modifier' and kri and kri.type_indicateur == 'kpi') or (action != 'modifier' and request.args.get('type') == 'kpi') %}#059669{% else %}#e2e8f0{% endif %};">
-                                            <div>
-                                                <i class="fas fa-chart-line me-2"></i>KPI
-                                                <br><small class="{% if (action == 'modifier' and kri and kri.type_indicateur == 'kpi') or (action != 'modifier' and request.args.get('type') == 'kpi') %}text-white-50{% else %}text-muted{% endif %}">Indicateur de Performance</small>
-                                            </div>
-                                        </label>
-                                    </div>
-                                </div>
-                            </div>
-                            
-                            <div class="col-md-6">
-                                <span class="text-uppercase small fw-semibold mb-2 d-block" style="color: #64748b;" id="labelAssociation">
-                                    {% if action == 'modifier' and kri and kri.type_indicateur == 'kpi' %}
-                                        Processus ou projet associé (optionnel)
-                                    {% else %}
-                                        Risque associé (recommandé)
-                                    {% endif %}
-                                </span>
-                                
-                                <select class="form-select border-0 bg-light px-4 py-3" name="risque_id" id="risqueSelect" style="border-radius: 12px;">
-                                    <option value="">Non associé (indicateur indépendant)</option>
-                                    {% for risque in risques_disponibles %}
-                                        <option value="{{ risque.id }}" 
-                                                {% if (action == 'modifier' and kri and kri.risque_id == risque.id) or (action != 'modifier' and risque_id and risque.id == risque_id|int) %}selected{% endif %}>
-                                            {{ risque.reference if risque.reference else 'N/R' }} - {{ risque.intitule if risque.intitule else 'Sans titre' }}
-                                            {% if risque.is_archived %}[Archivé]{% endif %}
-                                        </option>
-                                    {% else %}
-                                        <option value="" disabled>Aucun risque disponible</option>
-                                    {% endfor %}
-                                </select>
-                                
-                                <small class="d-block mt-2" style="color: #64748b;">
-                                    <i class="fas fa-info-circle me-1" style="color: #2563eb;"></i>
-                                    <span id="aideAssociation">
-                                        {% if action == 'modifier' and kri and kri.type_indicateur == 'kpi' %}
-                                            Les KPI peuvent être associés à un processus ou projet
-                                        {% else %}
-                                            Les KRI sont généralement associés à un risque, mais peuvent être indépendants
-                                        {% endif %}
-                                    </span>
-                                </small>
-                            </div>
-                        </div>
-
-                        <!-- ========== SECTION NOM ET UNITÉ ========== -->
-                        <div class="row g-4 mb-4">
-                            <div class="col-md-8">
-                                <span class="text-uppercase small fw-semibold mb-2 d-block" style="color: #64748b;">Nom de l'indicateur <span class="text-danger">*</span></span>
-                                <input type="text" class="form-control border-0 bg-light px-4 py-3" name="nom" id="nom_indicateur"
-                                       value="{% if action == 'modifier' and kri %}{{ kri.nom }}{% elif risque_associe %}{{ risque_associe.reference }} - KRI{% else %}{{ request.form.get('nom', '') }}{% endif %}" 
-                                       placeholder="Ex: Taux d'erreur, Niveau de satisfaction client..." required style="border-radius: 12px;">
-                            </div>
-                            <div class="col-md-4">
-                                <span class="text-uppercase small fw-semibold mb-2 d-block" style="color: #64748b;">Unité de mesure</span>
-                                <div class="input-group">
-                                    <input type="text" class="form-control border-0 bg-light px-4 py-3" name="unite_mesure" id="unite_mesure"
-                                           value="{% if action == 'modifier' and kri %}{{ kri.unite_mesure or '' }}{% else %}{{ request.form.get('unite_mesure', '') }}{% endif %}"
-                                           placeholder="%, €, jours..." style="border-radius: 12px 0 0 12px;">
-                                    <span class="input-group-text border-0 bg-light" style="border-radius: 0 12px 12px 0;">unité</span>
-                                </div>
-                            </div>
-                        </div>
-
-                        <!-- ========== SECTION DESCRIPTION ET FORMULE ========== -->
-                        <div class="mb-4">
-                            <span class="text-uppercase small fw-semibold mb-2 d-block" style="color: #64748b;">Description</span>
-                            <textarea class="form-control border-0 bg-light px-4 py-3" name="description" rows="3"
-                                      placeholder="Décrivez l'indicateur, son objectif et sa méthode de calcul..." style="border-radius: 12px;">{% if action == 'modifier' and kri %}{{ kri.description or '' }}{% else %}{{ request.form.get('description', '') }}{% endif %}</textarea>
-                        </div>
-                        
-                        <div class="mb-4">
-                            <span class="text-uppercase small fw-semibold mb-2 d-block" style="color: #64748b;">Formule ou méthode de calcul</span>
-                            <textarea class="form-control border-0 bg-light px-4 py-3" name="formule_calcul" rows="2"
-                                      placeholder="Ex: (Nombre d'erreurs / Nombre total de transactions) × 100" style="border-radius: 12px;">{% if action == 'modifier' and kri %}{{ kri.formule_calcul or '' }}{% else %}{{ request.form.get('formule_calcul', '') }}{% endif %}</textarea>
-                        </div>
-
-                        <!-- ========== SECTION FRÉQUENCE ET RESPONSABLE ========== -->
-                        <div class="row g-4 mb-4">
-                            <div class="col-md-6">
-                                <span class="text-uppercase small fw-semibold mb-2 d-block" style="color: #64748b;">Fréquence de mesure <span class="text-danger">*</span></span>
-                                <select class="form-select border-0 bg-light px-4 py-3" name="frequence_mesure" id="frequence_mesure" required style="border-radius: 12px;">
-                                    <option value="">Sélectionnez...</option>
-                                    <option value="quotidien" {% if (action == 'modifier' and kri and kri.frequence_mesure == 'quotidien') or request.form.get('frequence_mesure') == 'quotidien' %}selected{% endif %}>⏰ Quotidien</option>
-                                    <option value="hebdomadaire" {% if (action == 'modifier' and kri and kri.frequence_mesure == 'hebdomadaire') or request.form.get('frequence_mesure') == 'hebdomadaire' %}selected{% endif %}>📅 Hebdomadaire</option>
-                                    <option value="mensuel" {% if (action == 'modifier' and kri and kri.frequence_mesure == 'mensuel') or (not request.form.get('frequence_mesure') and not (action == 'modifier' and kri)) or request.form.get('frequence_mesure') == 'mensuel' %}selected{% endif %}>📆 Mensuel</option>
-                                    <option value="bimestriel" {% if (action == 'modifier' and kri and kri.frequence_mesure == 'bimestriel') or request.form.get('frequence_mesure') == 'bimestriel' %}selected{% endif %}>📊 Bimestriel</option>
-                                    <option value="trimestriel" {% if (action == 'modifier' and kri and kri.frequence_mesure == 'trimestriel') or request.form.get('frequence_mesure') == 'trimestriel' %}selected{% endif %}>📈 Trimestriel</option>
-                                    <option value="semestriel" {% if (action == 'modifier' and kri and kri.frequence_mesure == 'semestriel') or request.form.get('frequence_mesure') == 'semestriel' %}selected{% endif %}>📉 Semestriel</option>
-                                    <option value="annuel" {% if (action == 'modifier' and kri and kri.frequence_mesure == 'annuel') or request.form.get('frequence_mesure') == 'annuel' %}selected{% endif %}>🗓️ Annuel</option>
-                                    <option value="ponctuel" {% if (action == 'modifier' and kri and kri.frequence_mesure == 'ponctuel') or request.form.get('frequence_mesure') == 'ponctuel' %}selected{% endif %}>⚡ Ponctuel</option>
-                                </select>
-                            </div>
-                            <div class="col-md-6">
-                                <span class="text-uppercase small fw-semibold mb-2 d-block" style="color: #64748b;">Responsable de mesure</span>
-                                <select class="form-select border-0 bg-light px-4 py-3" name="responsable_mesure_id" id="responsable_mesure_id" style="border-radius: 12px;">
-                                    <option value="">Sélectionnez un responsable</option>
-                                    {% for user in utilisateurs %}
-                                        <option value="{{ user.id }}" 
-                                                {% if (action == 'modifier' and kri and kri.responsable_mesure_id == user.id) or (request.form.get('responsable_mesure_id')|int == user.id) %}selected{% endif %}>
-                                            👤 {{ user.username }} ({{ user.role }})
-                                        </option>
-                                    {% else %}
-                                        <option value="" disabled>Aucun utilisateur disponible</option>
-                                    {% endfor %}
-                                </select>
-                            </div>
-                        </div>
-
-                        <!-- ========== SECTION SEUILS ========== -->
-                        <div class="card border-0 shadow-sm mb-4" style="border-radius: 16px; background: #f8fafc;">
-                            <div class="card-header bg-transparent p-4" style="border-bottom: 1px solid #e2e8f0;">
-                                <h6 class="fw-semibold mb-0" style="color: #0f172a;">
-                                    <i class="fas fa-bell me-2" style="color: #2563eb;"></i>
-                                    Seuils d'alerte et cibles
-                                </h6>
-                            </div>
-                            <div class="card-body p-4">
-                                <!-- Sens d'évaluation -->
-                                <div class="row g-4 mb-4">
-                                    <div class="col-md-6">
-                                        <span class="text-uppercase small fw-semibold mb-2 d-block" style="color: #64748b;">Sens d'évaluation des seuils <span class="text-danger">*</span></span>
-                                        <select class="form-select border-0 bg-white px-4 py-3" name="sens_evaluation_seuil" id="sensEvaluation" required style="border-radius: 12px;">
-                                            <option value="superieur" 
-                                                    {% if (action == 'modifier' and kri and kri.sens_evaluation_seuil == 'superieur') or (action != 'modifier' and request.form.get('sens_evaluation_seuil') != 'inferieur') %}selected{% endif %}>
-                                                ⬆️ Risque/sous-performance si valeur > seuil
-                                            </option>
-                                            <option value="inferieur"
-                                                    {% if (action == 'modifier' and kri and kri.sens_evaluation_seuil == 'inferieur') or request.form.get('sens_evaluation_seuil') == 'inferieur' %}selected{% endif %}>
-                                                ⬇️ Risque/sous-performance si valeur < seuil
-                                            </option>
-                                        </select>
-                                    </div>
-                                    <div class="col-md-6">
-                                        <div class="p-3 rounded-2" style="background: #dbeafe;">
-                                            <div class="d-flex align-items-start gap-2">
-                                                <i class="fas fa-info-circle mt-1" style="color: #2563eb;"></i>
-                                                <small style="color: #334155;">
-                                                    <span id="aideSens">Pour les KRI : valeur élevée = risque élevé<br>Ex: Taux d'erreur, Retards...</span>
-                                                </small>
-                                            </div>
-                                        </div>
-                                    </div>
-                                </div>
-                                
-                                <!-- Seuils -->
-                                <div class="row g-4">
-                                    <!-- Seuil cible (uniquement pour KPI) -->
-                                    <div class="col-md-4" id="seuil-cible-container" style="display: {% if (action == 'modifier' and kri and kri.type_indicateur == 'kpi') or (action != 'modifier' and request.args.get('type') == 'kpi') %}block{% else %}none{% endif %};">
-                                        <span class="text-uppercase small fw-semibold mb-2 d-block" style="color: #64748b;">
-                                            <i class="fas fa-bullseye text-info me-1"></i>Seuil cible (pour KPI)
-                                        </span>
-                                        <div class="input-group">
-                                            <input type="number" step="0.01" class="form-control border-0 bg-white px-4 py-3" name="seuil_cible" 
-                                                   id="seuilCible"
-                                                   value="{% if action == 'modifier' and kri %}{{ kri.seuil_cible or '' }}{% else %}{{ request.form.get('seuil_cible', '') }}{% endif %}"
-                                                   placeholder="Valeur cible à atteindre" style="border-radius: 12px 0 0 12px;">
-                                            <span class="input-group-text border-0 bg-white" id="uniteCible" style="border-radius: 0 12px 12px 0;">
-                                                {% if action == 'modifier' and kri and kri.unite_mesure %}
-                                                    {{ kri.unite_mesure }}
-                                                {% elif request.form.get('unite_mesure') %}
-                                                    {{ request.form.get('unite_mesure') }}
-                                                {% endif %}
-                                            </span>
-                                        </div>
-                                        <small class="d-block mt-2" style="color: #64748b;">Objectif à atteindre pour ce KPI</small>
-                                    </div>
-
-                                    <!-- Seuil d'alerte -->
-                                    <div class="col-md-4">
-                                        <span class="text-uppercase small fw-semibold mb-2 d-block" style="color: #64748b;">
-                                            <i class="fas fa-exclamation-triangle text-warning me-1"></i>Seuil d'alerte
-                                        </span>
-                                        <div class="input-group">
-                                            <input type="number" step="0.01" class="form-control border-0 bg-white px-4 py-3" name="seuil_alerte" 
-                                                   id="seuilAlerte"
-                                                   value="{% if action == 'modifier' and kri %}{{ kri.seuil_alerte or '' }}{% else %}{{ request.form.get('seuil_alerte', '') }}{% endif %}"
-                                                   placeholder="0.00" style="border-radius: 12px 0 0 12px;">
-                                            <span class="input-group-text border-0 bg-white" id="uniteAlerte" style="border-radius: 0 12px 12px 0;">
-                                                {% if action == 'modifier' and kri and kri.unite_mesure %}
-                                                    {{ kri.unite_mesure }}
-                                                {% elif request.form.get('unite_mesure') %}
-                                                    {{ request.form.get('unite_mesure') }}
-                                                {% endif %}
-                                            </span>
-                                        </div>
-                                        <small class="d-block mt-2" style="color: #64748b;">
-                                            <span id="texteSeuilAlerte">Déclenche une surveillance renforcée</span>
-                                        </small>
-                                    </div>
-
-                                    <!-- Seuil critique -->
-                                    <div class="col-md-4">
-                                        <span class="text-uppercase small fw-semibold mb-2 d-block" style="color: #64748b;">
-                                            <i class="fas fa-skull-crossbones text-danger me-1"></i>Seuil critique
-                                        </span>
-                                        <div class="input-group">
-                                            <input type="number" step="0.01" class="form-control border-0 bg-white px-4 py-3" name="seuil_critique" 
-                                                   id="seuilCritique"
-                                                   value="{% if action == 'modifier' and kri %}{{ kri.seuil_critique or '' }}{% else %}{{ request.form.get('seuil_critique', '') }}{% endif %}"
-                                                   placeholder="0.00" style="border-radius: 12px 0 0 12px;">
-                                            <span class="input-group-text border-0 bg-white" id="uniteCritique" style="border-radius: 0 12px 12px 0;">
-                                                {% if action == 'modifier' and kri and kri.unite_mesure %}
-                                                    {{ kri.unite_mesure }}
-                                                {% elif request.form.get('unite_mesure') %}
-                                                    {{ request.form.get('unite_mesure') }}
-                                                {% endif %}
-                                            </span>
-                                        </div>
-                                        <small class="d-block mt-2" style="color: #64748b;">
-                                            <span id="texteSeuilCritique">Nécessite une action immédiate</span>
-                                        </small>
-                                    </div>
-                                </div>
-
-                                <!-- Visualisation des seuils -->
-                                <div class="mt-4 p-3 rounded-2" style="background: white;">
-                                    <small class="d-block mb-2" style="color: #64748b;">Interprétation des seuils :</small>
-                                    <div class="row text-center g-2">
-                                        <div class="col-3" id="zone-cible" style="display: none;">
-                                            <span class="badge px-3 py-2" style="background: #0891b2; color: white; border-radius: 20px;">Cible</span>
-                                            <div class="mt-1 small" style="color: #334155;" id="zoneCibleTexte">Valeur cible</div>
-                                        </div>
-                                        <div class="col-4" id="zone-normale">
-                                            <span class="badge px-3 py-2" style="background: #059669; color: white; border-radius: 20px;">Normal</span>
-                                            <div class="mt-1 small" style="color: #334155;" id="zoneNormaleTexte">Valeur acceptable</div>
-                                        </div>
-                                        <div class="col-4" id="zone-alerte">
-                                            <span class="badge px-3 py-2" style="background: #b45309; color: white; border-radius: 20px;">Alerte</span>
-                                            <div class="mt-1 small" style="color: #334155;" id="zoneAlerteTexte">Surveillance requise</div>
-                                        </div>
-                                        <div class="col-4" id="zone-critique">
-                                            <span class="badge px-3 py-2" style="background: #b91c1c; color: white; border-radius: 20px;">Critique</span>
-                                            <div class="mt-1 small" style="color: #334155;" id="zoneCritiqueTexte">Action immédiate</div>
-                                        </div>
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
-
-                        <!-- ========== SECTION MÉTADONNÉES ========== -->
-                        <div class="card border-0 shadow-sm mb-4" style="border-radius: 16px; background: #f8fafc;">
-                            <div class="card-header bg-transparent p-4" style="border-bottom: 1px solid #e2e8f0;">
-                                <h6 class="fw-semibold mb-0" style="color: #0f172a;">
-                                    <i class="fas fa-cog me-2" style="color: #2563eb;"></i>
-                                    Métadonnées supplémentaires
-                                </h6>
-                            </div>
-                            <div class="card-body p-4">
-                                <div class="row g-4">
-                                    <div class="col-md-6">
-                                        <span class="text-uppercase small fw-semibold mb-2 d-block" style="color: #64748b;">Catégorie</span>
-                                        <select class="form-select border-0 bg-white px-4 py-3" name="categorie" id="categorie" style="border-radius: 12px;">
-                                            <option value="">Sélectionnez...</option>
-                                            <option value="operationnel" {% if (action == 'modifier' and kri and kri.categorie == 'operationnel') or request.form.get('categorie') == 'operationnel' %}selected{% endif %}>⚙️ Opérationnel</option>
-                                            <option value="financier" {% if (action == 'modifier' and kri and kri.categorie == 'financier') or request.form.get('categorie') == 'financier' %}selected{% endif %}>💰 Financier</option>
-                                            <option value="qualite" {% if (action == 'modifier' and kri and kri.categorie == 'qualite') or request.form.get('categorie') == 'qualite' %}selected{% endif %}>⭐ Qualité</option>
-                                            <option value="securite" {% if (action == 'modifier' and kri and kri.categorie == 'securite') or request.form.get('categorie') == 'securite' %}selected{% endif %}>🛡️ Sécurité</option>
-                                            <option value="conformite" {% if (action == 'modifier' and kri and kri.categorie == 'conformite') or request.form.get('categorie') == 'conformite' %}selected{% endif %}>⚖️ Conformité</option>
-                                            <option value="rh" {% if (action == 'modifier' and kri and kri.categorie == 'rh') or request.form.get('categorie') == 'rh' %}selected{% endif %}>👥 Ressources Humaines</option>
-                                            <option value="technologique" {% if (action == 'modifier' and kri and kri.categorie == 'technologique') or request.form.get('categorie') == 'technologique' %}selected{% endif %}>💻 Technologique</option>
-                                            <option value="strategique" {% if (action == 'modifier' and kri and kri.categorie == 'strategique') or request.form.get('categorie') == 'strategique' %}selected{% endif %}>🎯 Stratégique</option>
-                                            <option value="commercial" {% if (action == 'modifier' and kri and kri.categorie == 'commercial') or request.form.get('categorie') == 'commercial' %}selected{% endif %}>📊 Commercial</option>
-                                            <option value="environnemental" {% if (action == 'modifier' and kri and kri.categorie == 'environnemental') or request.form.get('categorie') == 'environnemental' %}selected{% endif %}>🌱 Environnemental</option>
-                                            <option value="social" {% if (action == 'modifier' and kri and kri.categorie == 'social') or request.form.get('categorie') == 'social' %}selected{% endif %}>🤝 Social</option>
-                                            <option value="autre" {% if (action == 'modifier' and kri and kri.categorie == 'autre') or request.form.get('categorie') == 'autre' %}selected{% endif %}>📌 Autre</option>
-                                        </select>
-                                    </div>
-                                    <div class="col-md-6">
-                                        <span class="text-uppercase small fw-semibold mb-2 d-block" style="color: #64748b;">Source des données</span>
-                                        <input type="text" class="form-control border-0 bg-white px-4 py-3" name="source_donnees" id="source_donnees"
-                                               value="{% if action == 'modifier' and kri %}{{ kri.source_donnees or '' }}{% else %}{{ request.form.get('source_donnees', '') }}{% endif %}"
-                                               placeholder="Ex: SAP, Excel, API..." style="border-radius: 12px;">
-                                    </div>
-                                </div>
-                                
-                                <div class="mt-4">
-                                    <span class="text-uppercase small fw-semibold mb-2 d-block" style="color: #64748b;">Notes internes</span>
-                                    <textarea class="form-control border-0 bg-white px-4 py-3" name="notes_internes" rows="2" id="notes_internes" style="border-radius: 12px;">{% if action == 'modifier' and kri %}{{ kri.notes_internes or '' }}{% else %}{{ request.form.get('notes_internes', '') }}{% endif %}</textarea>
-                                    <small class="d-block mt-2" style="color: #64748b;">
-                                        <i class="fas fa-info-circle me-1" style="color: #2563eb;"></i>
-                                        Informations réservées aux gestionnaires de l'indicateur
-                                    </small>
-                                </div>
-                            </div>
-                        </div>
-
-                        <!-- ========== BOUTONS D'ACTION ========== -->
-                        <div class="d-flex gap-3 justify-content-between">
-                            <div>
-                                {% if action == 'modifier' and kri %}
-                                    <a href="{{ url_for('detail_kri', kri_id=kri.id) }}" class="btn px-4 py-2 d-inline-flex align-items-center gap-2"
-                                       style="border-radius: 10px; background: #f8fafc; color: #334155; border: 1px solid #e2e8f0;">
-                                        <i class="fas fa-times"></i>Annuler
-                                    </a>
-                                {% else %}
-                                    <a href="{{ url_for('liste_kri') }}" class="btn px-4 py-2 d-inline-flex align-items-center gap-2"
-                                       style="border-radius: 10px; background: #f8fafc; color: #334155; border: 1px solid #e2e8f0;">
-                                        <i class="fas fa-times"></i>Annuler
-                                    </a>
-                                {% endif %}
-                            </div>
-                            <div>
-                                {% if action == 'modifier' %}
-                                    <button type="submit" class="btn px-4 py-2 d-inline-flex align-items-center gap-2"
-                                            style="border-radius: 10px; background: #2563eb; color: white; border: none; box-shadow: 0 4px 12px rgba(37, 99, 235, 0.3);">
-                                        <i class="fas fa-save"></i>Enregistrer les modifications
-                                    </button>
-                                {% else %}
-                                    <button type="submit" class="btn px-4 py-2 d-inline-flex align-items-center gap-2"
-                                            style="border-radius: 10px; background: #2563eb; color: white; border: none; box-shadow: 0 4px 12px rgba(37, 99, 235, 0.3);">
-                                        <i class="fas fa-plus-circle"></i>Créer l'indicateur
-                                    </button>
-                                {% endif %}
-                            </div>
-                        </div>
-                    </form>
-                </div>
+            <div class="col-md-8">
+              <label class="form-label" for="kx-risque">Risque associé</label>
+              <select class="form-select" id="kx-risque" name="risque_id">
+                <option value="">Aucun (indicateur indépendant)</option>
+                {% for r in risques_disponibles or [] %}
+                <option value="{{ r.id }}" {{ 'selected' if r.id|string == risque_courant }}>{{ r.reference or 'N/R' }} — {{ (r.intitule or 'Sans titre')|truncate(90) }}{{ ' [archivé]' if r.is_archived }}</option>
+                {% endfor %}
+              </select>
             </div>
-
-            <!-- ========== GUIDE KRI / KPI ========== -->
-            <div class="card border-0 shadow-sm mt-4" style="border-radius: 16px; overflow: hidden;">
-                <div class="card-header bg-transparent p-4" style="border-bottom: 1px solid #e2e8f0;">
-                    <h5 class="fw-semibold mb-0" style="color: #0f172a;">
-                        <i class="fas fa-question-circle me-2" style="color: #2563eb;"></i>
-                        Guide des indicateurs KRI et KPI
-                    </h5>
-                </div>
-                <div class="card-body p-4">
-                    <div class="row">
-                        <div class="col-md-6 mb-3 mb-md-0">
-                            <div class="p-4 rounded-3 h-100" style="background: #fee2e2; border-left: 4px solid #b91c1c;">
-                                <div class="d-flex align-items-center gap-3 mb-3">
-                                    <div class="rounded-circle p-3" style="background: #b91c1c; width: 48px; height: 48px;">
-                                        <i class="fas fa-exclamation-triangle text-white"></i>
-                                    </div>
-                                    <h6 class="fw-bold mb-0" style="color: #b91c1c;">KRI - Indicateur de Risque</h6>
-                                </div>
-                                <p style="color: #7f1d1d;">Les KRI (Key Risk Indicators) sont des mesures qui signalent une augmentation potentielle du risque.</p>
-                                
-                                <ul class="mb-3" style="color: #7f1d1d;">
-                                    <li class="mb-2">⚠️ Surveillent les risques identifiés</li>
-                                    <li class="mb-2">📈 Valeur élevée = risque élevé</li>
-                                    <li class="mb-2">🔴 Seuils d'alerte et critique</li>
-                                    <li class="mb-2">🎯 Associés à la cartographie des risques</li>
-                                </ul>
-                                
-                                <div class="mt-3 p-2 rounded-2" style="background: rgba(185, 28, 28, 0.1);">
-                                    <small style="color: #7f1d1d;"><i class="fas fa-lightbulb me-1"></i>Exemples : Taux d'incidents, Nombre de non-conformités, Retards de livraison</small>
-                                </div>
-                            </div>
-                        </div>
-                        
-                        <div class="col-md-6">
-                            <div class="p-4 rounded-3 h-100" style="background: #dcfce7; border-left: 4px solid #059669;">
-                                <div class="d-flex align-items-center gap-3 mb-3">
-                                    <div class="rounded-circle p-3" style="background: #059669; width: 48px; height: 48px;">
-                                        <i class="fas fa-chart-line text-white"></i>
-                                    </div>
-                                    <h6 class="fw-bold mb-0" style="color: #059669;">KPI - Indicateur de Performance</h6>
-                                </div>
-                                <p style="color: #166534;">Les KPI (Key Performance Indicators) mesurent l'efficacité et la performance des processus.</p>
-                                
-                                <ul class="mb-3" style="color: #166534;">
-                                    <li class="mb-2">✅ Mesurent l'atteinte des objectifs</li>
-                                    <li class="mb-2">📊 Valeur élevée = bonne performance</li>
-                                    <li class="mb-2">🎯 Seuil cible à atteindre</li>
-                                    <li class="mb-2">⚙️ Associés aux processus métier</li>
-                                </ul>
-                                
-                                <div class="mt-3 p-2 rounded-2" style="background: rgba(5, 150, 105, 0.1);">
-                                    <small style="color: #166534;"><i class="fas fa-lightbulb me-1"></i>Exemples : Taux de satisfaction, Productivité, Délais de traitement</small>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-                </div>
+            <div class="col-md-4">
+              <label class="form-label" for="kx-cat">Catégorie</label>
+              {% set cat = val('categorie') %}
+              <select class="form-select" id="kx-cat" name="categorie">
+                <option value="">—</option>
+                {% for v, l in (('operationnel', 'Opérationnel'), ('financier', 'Financier'), ('conformite', 'Conformité'), ('securite', 'Sécurité'),
+                                ('technologique', 'Technologique'), ('rh', 'Ressources humaines'), ('qualite', 'Qualité'), ('strategique', 'Stratégique'),
+                                ('commercial', 'Commercial'), ('environnemental', 'Environnemental'), ('social', 'Social'), ('autre', 'Autre')) %}
+                <option value="{{ v }}" {{ 'selected' if cat == v }}>{{ l }}</option>
+                {% endfor %}
+              </select>
             </div>
+            <div class="col-12">
+              <label class="form-label" for="kx-desc">Description</label>
+              <textarea class="form-control" id="kx-desc" name="description" rows="2" placeholder="Ce que mesure l'indicateur et pourquoi il est suivi">{{ val('description') }}</textarea>
+            </div>
+            <div class="col-12">
+              <label class="form-label" for="kx-formule">Mode de calcul</label>
+              <textarea class="form-control font-monospace" style="font-size:.85rem" id="kx-formule" name="formule_calcul" rows="2" maxlength="300" placeholder="Ex. : départs du mois / effectif moyen × 100">{{ val('formule_calcul') }}</textarea>
+            </div>
+          </div>
+        {% endcall %}
+
+        {% call pg.carte('Seuils', aide='Ils déclenchent les alertes et la couleur de l\'indicateur') %}
+          <div class="kx-choix mb-3">
+            <input type="radio" name="sens_evaluation_seuil" id="kx-sup" value="superieur" {{ 'checked' if sens_courant != 'inferieur' }}>
+            <label for="kx-sup"><i class="fas fa-arrow-trend-up"></i><div><b>Plus c'est haut, plus c'est risqué</b><span>Ex. : incidents, retards, départs.</span></div></label>
+            <input type="radio" name="sens_evaluation_seuil" id="kx-inf" value="inferieur" {{ 'checked' if sens_courant == 'inferieur' }}>
+            <label for="kx-inf"><i class="fas fa-arrow-trend-down"></i><div><b>Plus c'est bas, plus c'est risqué</b><span>Ex. : taux de sauvegarde, trésorerie, disponibilité.</span></div></label>
+          </div>
+          <div class="kx-seuils">
+            <div class="kx-seuil" id="kx-bloc-cible" style="border-color:#ABEFC6">
+              <label class="form-label" for="kx-cible" style="color:#079455">Cible (KPI)</label>
+              <input type="number" step="any" class="form-control" id="kx-cible" name="seuil_cible" value="{{ val('seuil_cible') }}">
+            </div>
+            <div class="kx-seuil" style="border-color:#FEDF89">
+              <label class="form-label" for="kx-alerte" style="color:#DC6803">Seuil d'alerte</label>
+              <input type="number" step="any" class="form-control" id="kx-alerte" name="seuil_alerte" value="{{ val('seuil_alerte') }}">
+            </div>
+            <div class="kx-seuil" style="border-color:#FECDCA">
+              <label class="form-label" for="kx-critique" style="color:#D92D20">Seuil critique</label>
+              <input type="number" step="any" class="form-control" id="kx-critique" name="seuil_critique" value="{{ val('seuil_critique') }}">
+            </div>
+          </div>
+          <div id="kx-coherence" class="kx-msg" hidden></div>
+          {% if modif %}<p class="pg-second mt-2 mb-0"><i class="fas fa-clock-rotate-left me-1"></i>Si vous changez un seuil, l'ancien est conservé : les mesures passées restent jugées avec les seuils de leur époque.</p>{% endif %}
+        {% endcall %}
+
+        {% call pg.carte('Mesure') %}
+          <div class="row g-3">
+            <div class="col-md-6">
+              <label class="form-label" for="kx-freq">Fréquence de mesure <span class="text-danger">*</span></label>
+              {% set fr = val('frequence_mesure', 'mensuel') %}
+              <select class="form-select" id="kx-freq" name="frequence_mesure" required>
+                {% for v, l in (('quotidien', 'Quotidienne'), ('hebdomadaire', 'Hebdomadaire'), ('mensuel', 'Mensuelle'), ('bimestriel', 'Bimestrielle'),
+                                ('trimestriel', 'Trimestrielle'), ('semestriel', 'Semestrielle'), ('annuel', 'Annuelle'), ('ponctuel', 'Ponctuelle')) %}
+                <option value="{{ v }}" {{ 'selected' if fr == v }}>{{ l }}</option>
+                {% endfor %}
+              </select>
+              <div class="form-text">Au-delà de cette période sans mesure, l'indicateur passe « en retard ».</div>
+            </div>
+            <div class="col-md-6">
+              <label class="form-label" for="kx-resp">Responsable de la mesure</label>
+              {% set resp = val('responsable_mesure_id')|string %}
+              <select class="form-select" id="kx-resp" name="responsable_mesure_id">
+                <option value="">—</option>
+                {% for u in utilisateurs or [] %}
+                <option value="{{ u.id }}" {{ 'selected' if u.id|string == resp }}>{{ (u.prenom ~ ' ' ~ u.nom) if (u.prenom is defined and u.prenom and u.nom is defined and u.nom) else u.username }}</option>
+                {% endfor %}
+              </select>
+            </div>
+            <div class="col-md-6">
+              <label class="form-label" for="kx-source">Source de la donnée</label>
+              <input class="form-control" id="kx-source" name="source_donnees" value="{{ val('source_donnees') }}" maxlength="100" placeholder="Ex. : SIRH, extraction mensuelle de la paie">
+              <div class="form-text">Pour une mise à jour automatique : fiche de l'indicateur › « Connecter un outil ».</div>
+            </div>
+            <div class="col-md-6">
+              <label class="form-label" for="kx-notes">Notes internes</label>
+              <textarea class="form-control" id="kx-notes" name="notes_internes" rows="2">{{ val('notes_internes') }}</textarea>
+            </div>
+          </div>
+        {% endcall %}
+      </div>
+
+      <div class="col-xl-4">
+        <div class="kx-apercu">
+          {% call pg.carte('Aperçu') %}
+            <div class="d-flex gap-2 align-items-center mb-1">
+              <span class="badge rounded-pill" id="kx-ap-type" style="background:#EEF4FF;color:#3538CD">KRI</span>
+              <span class="small text-secondary" id="kx-ap-freq"></span>
+            </div>
+            <div class="fw-bold" id="kx-ap-nom" style="font-size:1.05rem">—</div>
+            <div class="kx-jauge" id="kx-ap-jauge"></div>
+            <div class="kx-grad"><span id="kx-ap-min"></span><span id="kx-ap-seuils">Renseignez les seuils</span><span id="kx-ap-max"></span></div>
+            <div class="small text-secondary mt-3" id="kx-ap-sens"></div>
+          {% endcall %}
+
+          {% if ia_active is defined and ia_active() %}
+          <div class="pg-carte kx-ia" id="kx-ia">
+            <div class="pg-carte-titre"><h2><i class="fas fa-wand-magic-sparkles me-2" style="color:#6172F3"></i>Suggestions IA</h2></div>
+            <p class="small text-secondary mb-2">À partir du risque choisi, l'IA propose des indicateurs avec seuils et mode de calcul. Vous choisissez, puis ajustez.</p>
+            <button type="button" class="btn btn-outline-primary btn-sm w-100" id="kx-ia-btn"><i class="fas fa-wand-magic-sparkles me-1"></i>Proposer des indicateurs</button>
+            <div id="kx-ia-liste" class="mt-3"></div>
+          </div>
+          {% endif %}
+
+          {% call pg.carte('Bonnes pratiques') %}
+            <ul class="small text-secondary ps-3 mb-0">
+              <li>Un indicateur = une seule donnée mesurable, toujours calculée de la même façon.</li>
+              <li>Seuil d'alerte : moment d'agir. Seuil critique : moment d'escalader.</li>
+              <li>Choisissez une fréquence que le responsable peut tenir.</li>
+            </ul>
+          {% endcall %}
         </div>
+      </div>
     </div>
-</div>
 
-<!-- ========== MODAL IA POUR GÉNÉRER DES KRI ========== -->
-<div class="modal fade" id="modalKriIA" tabindex="-1" aria-hidden="true">
-    <div class="modal-dialog modal-lg modal-dialog-centered">
-        <div class="modal-content border-0" style="border-radius: 20px; box-shadow: 0 25px 50px -12px rgba(0,0,0,0.25);">
-            <div class="p-4" style="background: #2563eb; border-radius: 20px 20px 0 0;">
-                <div class="d-flex align-items-center gap-3">
-                    <div class="rounded-circle bg-white p-2" style="width: 48px; height: 48px;">
-                        <i class="fas fa-robot fa-lg" style="color: #2563eb;"></i>
-                    </div>
-                    <div>
-                        <h5 class="fw-bold text-white mb-1">Suggestions pour votre KRI</h5>
-                    </div>
-                    <button type="button" class="btn-close btn-close-white ms-auto" data-bs-dismiss="modal"></button>
-                </div>
-            </div>
-            
-            <div class="modal-body p-4" id="kriIAContent">
-                <div class="text-center py-5" id="kriIALoading">
-                    <div class="spinner-border" style="color: #2563eb;" role="status">
-                        <span class="visually-hidden">Chargement...</span>
-                    </div>
-                    <p class="mt-3" style="color: #64748b;">Analyse en cours pour générer des suggestions pertinentes...</p>
-                </div>
-            </div>
-            
-            <div class="modal-footer border-0 p-4 pt-0">
-                <button type="button" class="btn w-100 py-2 mb-2" data-bs-dismiss="modal"
-                        style="border-radius: 10px; background: #f8fafc; color: #334155; border: 1px solid #e2e8f0;">
-                    <i class="fas fa-times me-2"></i>Annuler
-                </button>
-                <button type="button" class="btn w-100 py-2" id="btnAppliquerKriIA" disabled
-                        style="border-radius: 10px; background: #2563eb; color: white; border: none;">
-                    <i class="fas fa-check me-2"></i>Appliquer cette suggestion
-                </button>
-            </div>
-        </div>
+    <div class="kx-pied d-flex justify-content-end gap-2">
+      <a class="btn btn-outline-secondary" href="{{ url_for('detail_kri', kri_id=kri.id) if modif else url_for('liste_kri') }}">Annuler</a>
+      <button class="btn btn-primary" id="kx-enregistrer"><i class="fas fa-check me-1"></i>{{ 'Enregistrer les modifications' if modif else 'Créer l\'indicateur' }}</button>
     </div>
-</div>
-
-<!-- ========== MODAL DE PERSONNALISATION IA ========== -->
-<div class="modal fade" id="modalPersonnalisationIA" tabindex="-1" aria-hidden="true">
-    <div class="modal-dialog modal-lg modal-dialog-centered">
-        <div class="modal-content border-0" style="border-radius: 20px; box-shadow: 0 25px 50px -12px rgba(0,0,0,0.25);">
-            <div class="p-4" style="background: #b45309; border-radius: 20px 20px 0 0;">
-                <div class="d-flex align-items-center gap-3">
-                    <div class="rounded-circle bg-white p-2" style="width: 48px; height: 48px;">
-                        <i class="fas fa-edit fa-lg" style="color: #b45309;"></i>
-                    </div>
-                    <div>
-                        <h5 class="fw-bold text-white mb-1">Personnaliser la suggestion</h5>
-                    </div>
-                    <button type="button" class="btn-close btn-close-white ms-auto" data-bs-dismiss="modal"></button>
-                </div>
-            </div>
-            
-            <div class="modal-body p-4" id="personnalisationIAContent">
-                <!-- Contenu chargé dynamiquement -->
-            </div>
-            
-            <div class="modal-footer border-0 p-4 pt-0">
-                <button type="button" class="btn w-100 py-2 mb-2" data-bs-dismiss="modal"
-                        style="border-radius: 10px; background: #f8fafc; color: #334155; border: 1px solid #e2e8f0;">
-                    <i class="fas fa-times me-2"></i>Annuler
-                </button>
-                <button type="button" class="btn w-100 py-2" id="btnSauvegarderPersonnalisation"
-                        style="border-radius: 10px; background: #b45309; color: white; border: none;">
-                    <i class="fas fa-save me-2"></i>Sauvegarder
-                </button>
-            </div>
-        </div>
-    </div>
+  </form>
 </div>
 {% endblock %}
 
 {% block scripts %}
+{{ super() }}
 <script>
-document.addEventListener('DOMContentLoaded', function() {
-    // ============================================
-    // ÉLÉMENTS DOM
-    // ============================================
-    const typeKRI = document.getElementById('type_kri');
-    const typeKPI = document.getElementById('type_kpi');
-    const labelAssociation = document.getElementById('labelAssociation');
-    const aideAssociation = document.getElementById('aideAssociation');
-    const sensEvaluation = document.getElementById('sensEvaluation');
-    const aideSens = document.getElementById('aideSens');
-    const texteSeuilAlerte = document.getElementById('texteSeuilAlerte');
-    const texteSeuilCritique = document.getElementById('texteSeuilCritique');
-    const uniteMesureInput = document.getElementById('unite_mesure');
-    const uniteAlerte = document.getElementById('uniteAlerte');
-    const uniteCritique = document.getElementById('uniteCritique');
-    const uniteCible = document.getElementById('uniteCible');
-    const seuilCibleContainer = document.getElementById('seuil-cible-container');
-    const zoneCible = document.getElementById('zone-cible');
-    const zoneNormaleTexte = document.getElementById('zoneNormaleTexte');
-    const zoneAlerteTexte = document.getElementById('zoneAlerteTexte');
-    const zoneCritiqueTexte = document.getElementById('zoneCritiqueTexte');
-    const zoneCibleTexte = document.getElementById('zoneCibleTexte');
-    const zoneNormaleDiv = document.getElementById('zone-normale');
-    const zoneAlerteDiv = document.getElementById('zone-alerte');
-    const zoneCritiqueDiv = document.getElementById('zone-critique');
-    const risqueSelect = document.getElementById('risqueSelect');
-    const btnLancerIA = document.getElementById('btnLancerIA');
-    const btnAppliquerKriIA = document.getElementById('btnAppliquerKriIA');
-    const btnSauvegarderPersonnalisation = document.getElementById('btnSauvegarderPersonnalisation');
-    
-    // ============================================
-    // VARIABLES GLOBALES
-    // ============================================
-    let suggestionsKriIA = [];
-    let suggestionSelectionnee = null;
-    let risqueIdCourant = null;
-    
-    // ============================================
-    // FONCTIONS DE MISE À JOUR
-    // ============================================
-    
-    function mettreAJourTypeIndicateur() {
-        const typeSelectionne = typeKRI.checked ? 'kri' : 'kpi';
-        
-        // Mettre à jour le label d'association
-        if (typeSelectionne === 'kpi') {
-            labelAssociation.textContent = 'Processus ou projet associé (optionnel)';
-            aideAssociation.textContent = 'Les KPI peuvent être associés à un processus ou projet';
-            texteSeuilAlerte.textContent = 'Indique une sous-performance';
-            texteSeuilCritique.textContent = 'Indique une performance hors cible';
-        } else {
-            labelAssociation.textContent = 'Risque associé (recommandé)';
-            aideAssociation.textContent = 'Les KRI sont généralement associés à un risque, mais peuvent être indépendants';
-            texteSeuilAlerte.textContent = 'Déclenche une surveillance renforcée';
-            texteSeuilCritique.textContent = 'Nécessite une action immédiate';
-        }
-        
-        // Afficher/masquer le champ seuil cible
-        if (seuilCibleContainer) {
-            seuilCibleContainer.style.display = typeSelectionne === 'kpi' ? 'block' : 'none';
-        }
-        
-        // Afficher/masquer la zone cible dans la visualisation
-        if (zoneCible) {
-            zoneCible.style.display = typeSelectionne === 'kpi' ? 'block' : 'none';
-        }
-        
-        // Ajuster les colonnes de visualisation
-        if (typeSelectionne === 'kpi') {
-            if (zoneNormaleDiv) zoneNormaleDiv.className = 'col-3';
-            if (zoneAlerteDiv) zoneAlerteDiv.className = 'col-3';
-            if (zoneCritiqueDiv) zoneCritiqueDiv.className = 'col-3';
-        } else {
-            if (zoneNormaleDiv) zoneNormaleDiv.className = 'col-4';
-            if (zoneAlerteDiv) zoneAlerteDiv.className = 'col-4';
-            if (zoneCritiqueDiv) zoneCritiqueDiv.className = 'col-4';
-        }
-        
-        mettreAJourAideSens();
-        mettreAJourZonesSeuils();
-    }
-    
-    function mettreAJourAideSens() {
-        if (!sensEvaluation) return;
-        
-        const typeSelectionne = typeKRI.checked ? 'kri' : 'kpi';
-        const sens = sensEvaluation.value;
-        
-        if (typeSelectionne === 'kpi') {
-            if (sens === 'inferieur') {
-                aideSens.innerHTML = 'Pour les KPI où une faible valeur est une sous-performance<br>Ex: Taux de satisfaction, Niveau de service...';
-            } else {
-                aideSens.innerHTML = 'Pour les KPI où une valeur élevée est une sous-performance<br>Ex: Coûts, Délais, Erreurs...';
-            }
-        } else {
-            if (sens === 'inferieur') {
-                aideSens.innerHTML = 'Pour les KRI où une faible valeur est un risque<br>Ex: Niveau de service, Satisfaction client...';
-            } else {
-                aideSens.innerHTML = 'Pour les KRI standard : valeur élevée = risque élevé<br>Ex: Taux d\'erreur, Retards, Coûts...';
-            }
-        }
-    }
-    
-    function mettreAJourZonesSeuils() {
-        if (!sensEvaluation) return;
-        
-        const typeSelectionne = typeKRI.checked ? 'kri' : 'kpi';
-        const sens = sensEvaluation.value;
-        
-        if (typeSelectionne === 'kpi') {
-            if (zoneCibleTexte) zoneCibleTexte.textContent = 'Valeur cible';
-            
-            if (sens === 'inferieur') {
-                if (zoneNormaleTexte) zoneNormaleTexte.textContent = 'Valeur ≥ seuil alerte';
-                if (zoneAlerteTexte) zoneAlerteTexte.textContent = 'Seuil critique ≤ valeur < seuil alerte';
-                if (zoneCritiqueTexte) zoneCritiqueTexte.textContent = 'Valeur < seuil critique';
-            } else {
-                if (zoneNormaleTexte) zoneNormaleTexte.textContent = 'Valeur ≤ seuil alerte';
-                if (zoneAlerteTexte) zoneAlerteTexte.textContent = 'Seuil alerte < valeur ≤ seuil critique';
-                if (zoneCritiqueTexte) zoneCritiqueTexte.textContent = 'Valeur > seuil critique';
-            }
-        } else {
-            if (sens === 'inferieur') {
-                if (zoneNormaleTexte) zoneNormaleTexte.textContent = 'Valeur > seuil alerte';
-                if (zoneAlerteTexte) zoneAlerteTexte.textContent = 'Seuil critique < valeur ≤ seuil alerte';
-                if (zoneCritiqueTexte) zoneCritiqueTexte.textContent = 'Valeur ≤ seuil critique';
-            } else {
-                if (zoneNormaleTexte) zoneNormaleTexte.textContent = 'Valeur < seuil alerte';
-                if (zoneAlerteTexte) zoneAlerteTexte.textContent = 'Seuil alerte ≤ valeur < seuil critique';
-                if (zoneCritiqueTexte) zoneCritiqueTexte.textContent = 'Valeur ≥ seuil critique';
-            }
-        }
-    }
-    
-    function mettreAJourUnites() {
-        const unite = uniteMesureInput ? uniteMesureInput.value : '';
-        if (unite) {
-            if (uniteAlerte) uniteAlerte.textContent = unite;
-            if (uniteCritique) uniteCritique.textContent = unite;
-            if (uniteCible) uniteCible.textContent = unite;
-        } else {
-            if (uniteAlerte) uniteAlerte.textContent = '';
-            if (uniteCritique) uniteCritique.textContent = '';
-            if (uniteCible) uniteCible.textContent = '';
-        }
-    }
-    
-    // ============================================
-    // ÉCOUTEURS D'ÉVÉNEMENTS
-    // ============================================
-    
-    if (typeKRI) typeKRI.addEventListener('change', mettreAJourTypeIndicateur);
-    if (typeKPI) typeKPI.addEventListener('change', mettreAJourTypeIndicateur);
-    
-    if (sensEvaluation) {
-        sensEvaluation.addEventListener('change', function() {
-            mettreAJourAideSens();
-            mettreAJourZonesSeuils();
-        });
-    }
-    
-    if (uniteMesureInput) {
-        uniteMesureInput.addEventListener('input', mettreAJourUnites);
-    }
-    
-    // ============================================
-    // INITIALISATION
-    // ============================================
-    
-    mettreAJourTypeIndicateur();
-    mettreAJourUnites();
-    
-    // Initialiser l'unité de mesure si elle existe déjà
-    {% if action == 'modifier' and kri and kri.unite_mesure %}
-        if (uniteAlerte) uniteAlerte.textContent = '{{ kri.unite_mesure }}';
-        if (uniteCritique) uniteCritique.textContent = '{{ kri.unite_mesure }}';
-        if (uniteCible) uniteCible.textContent = '{{ kri.unite_mesure }}';
-    {% elif request.form.get('unite_mesure') %}
-        if (uniteAlerte) uniteAlerte.textContent = '{{ request.form.get('unite_mesure') }}';
-        if (uniteCritique) uniteCritique.textContent = '{{ request.form.get('unite_mesure') }}';
-        if (uniteCible) uniteCible.textContent = '{{ request.form.get('unite_mesure') }}';
-    {% endif %}
-    
-    // ============================================
-    // GESTION DU BOUTON IA
-    // ============================================
-    
-    if (btnLancerIA && risqueSelect) {
-        btnLancerIA.addEventListener('click', function() {
-            const risqueId = risqueSelect.value;
-            if (!risqueId) {
-                showToast('Veuillez sélectionner un risque', 'warning');
-                return;
-            }
-            lancerGeneration();
-        });
-        
-        risqueSelect.addEventListener('change', function() {
-            if (this.value) {
-                btnLancerIA.disabled = false;
-                btnLancerIA.title = '';
-            } else {
-                btnLancerIA.disabled = true;
-                btnLancerIA.title = 'Veuillez d\'abord sélectionner un risque';
-            }
-        });
-        
-        btnLancerIA.disabled = !risqueSelect.value;
-    }
-    
-    if (btnAppliquerKriIA) {
-        btnAppliquerKriIA.addEventListener('click', appliquerSuggestion);
-    }
-    
-    // ============================================
-    // FONCTIONS IA
-    // ============================================
-    
-    async function lancerGeneration() {
-        const risqueId = risqueSelect.value;
-        
-        if (!risqueId) {
-            showToast('Veuillez sélectionner un risque', 'warning');
-            return;
-        }
-        
-        risqueIdCourant = risqueId;
-        
-        // Afficher la modale
-        const modal = new bootstrap.Modal(document.getElementById('modalKriIA'));
-        modal.show();
-        
-        // Réinitialiser le contenu
-        const container = document.getElementById('kriIAContent');
-        if (container) {
-            container.innerHTML = `
-                <div class="text-center py-5" id="kriIALoading">
-                    <div class="spinner-border" style="color: #2563eb;" role="status">
-                        <span class="visually-hidden">Chargement...</span>
-                    </div>
-                    <p class="mt-3" style="color: #64748b;">Génération des suggestions en cours...</p>
-                </div>
-            `;
-        }
-        
-        // Simuler un délai pour l'effet de chargement
-        setTimeout(() => {
-            // Suggestions de test
-            suggestionsKriIA = [
-                {
-                    nom: 'Taux d\'incidents opérationnels',
-                    description: 'Mesure le nombre d\'incidents survenus dans les processus opérationnels',
-                    formule_calcul: '(Nombre d\'incidents / Période) × 100',
-                    unite_mesure: '%',
-                    categorie: 'operationnel',
-                    seuil_alerte: 5.0,
-                    seuil_critique: 10.0,
-                    sens_evaluation_seuil: 'superieur',
-                    frequence_mesure: 'mensuel',
-                    justification: 'Indicateur clé pour la surveillance des risques opérationnels'
-                },
-                {
-                    nom: 'Taux de non-conformités',
-                    description: 'Pourcentage de non-conformités détectées',
-                    formule_calcul: '(Nombre de NC / Total contrôles) × 100',
-                    unite_mesure: '%',
-                    categorie: 'conformite',
-                    seuil_alerte: 3.0,
-                    seuil_critique: 7.0,
-                    sens_evaluation_seuil: 'superieur',
-                    frequence_mesure: 'trimestriel',
-                    justification: 'Surveille le niveau de conformité aux exigences'
-                }
-            ];
-            
-            afficherSuggestions(suggestionsKriIA, false);
-        }, 1500);
-    }
-    
-    function afficherSuggestions(suggestions, isIA = false) {
-        const container = document.getElementById('kriIAContent');
-        if (!container) return;
-        
-        if (!suggestions || suggestions.length === 0) {
-            container.innerHTML = `
-                <div class="alert alert-warning p-4 text-center" style="background: #fee2e2; color: #b91c1c; border-radius: 12px;">
-                    <i class="fas fa-exclamation-triangle fa-2x mb-3"></i>
-                    <p>Aucune suggestion n'a pu être générée.</p>
-                </div>
-            `;
-            return;
-        }
-        
-        let html = `
-            <div class="alert mb-4 p-3 rounded-2" style="background: ${isIA ? '#dbeafe' : '#e0f2fe'};">
-                <div class="d-flex align-items-center gap-2">
-                    <i class="fas ${isIA ? 'fa-robot' : 'fa-database'}" style="color: ${isIA ? '#2563eb' : '#0891b2'};"></i>
-                    <span style="color: ${isIA ? '#1e40af' : '#155e75'};">
-                        <strong>${suggestions.length} suggestions</strong> générées pour ce risque.
-                    </span>
-                </div>
-            </div>
-            
-            <div class="accordion" id="accordionKriIA" style="border-radius: 12px;">
-        `;
-        
-        suggestions.forEach((suggestion, index) => {
-            const accordionId = `suggestion${index}`;
-            const isFirst = index === 0;
-            
-            html += `
-                <div class="accordion-item border-0 mb-2" style="background: transparent;">
-                    <h2 class="accordion-header">
-                        <button class="accordion-button ${isFirst ? '' : 'collapsed'} bg-light px-4 py-3" 
-                                type="button" 
-                                data-bs-toggle="collapse" 
-                                data-bs-target="#${accordionId}"
-                                onclick="window.selectionnerSuggestionKriIA(${index})"
-                                style="border-radius: 12px; background: #f8fafc; color: #0f172a;">
-                            <div class="form-check me-3">
-                                <input class="form-check-input" type="radio" 
-                                       name="suggestionSelectionnee" 
-                                       id="radio${index}"
-                                       ${isFirst ? 'checked' : ''}
-                                       style="accent-color: #2563eb;">
-                            </div>
-                            <div class="flex-grow-1">
-                                <strong style="color: #0f172a;">${suggestion.nom}</strong>
-                                <div class="small" style="color: #64748b;">
-                                    ${suggestion.categorie} • ${suggestion.unite_mesure} • ${suggestion.frequence_mesure}
-                                </div>
-                            </div>
-                        </button>
-                    </h2>
-                    <div id="${accordionId}" 
-                         class="accordion-collapse collapse ${isFirst ? 'show' : ''}" 
-                         data-bs-parent="#accordionKriIA">
-                        <div class="accordion-body p-3">
-                            <p style="color: #334155;"><strong>Description:</strong> ${suggestion.description}</p>
-                            <p style="color: #334155;"><strong>Formule:</strong> <code style="background: #f1f5f9; padding: 2px 6px; border-radius: 4px;">${suggestion.formule_calcul}</code></p>
-                            <p style="color: #334155;"><strong>Seuils:</strong> Alerte: ${suggestion.seuil_alerte} ${suggestion.unite_mesure}, Critique: ${suggestion.seuil_critique} ${suggestion.unite_mesure}</p>
-                            <p style="color: #64748b;"><small>${suggestion.justification}</small></p>
-                            
-                            <div class="d-flex gap-2 mt-3">
-                                <button class="btn btn-sm px-3 py-2" 
-                                        onclick="window.previsualiserSuggestion(${index})"
-                                        style="border-radius: 8px; background: #f8fafc; color: #2563eb; border: 1px solid #e2e8f0;">
-                                    <i class="fas fa-eye me-1"></i>Prévisualiser
-                                </button>
-                                <button class="btn btn-sm px-3 py-2" 
-                                        onclick="window.personnaliserSuggestion(${index})"
-                                        style="border-radius: 8px; background: #f8fafc; color: #b45309; border: 1px solid #e2e8f0;">
-                                    <i class="fas fa-edit me-1"></i>Personnaliser
-                                </button>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-            `;
-        });
-        
-        html += `</div>`;
-        container.innerHTML = html;
-        
-        if (suggestions.length > 0) {
-            window.selectionnerSuggestionKriIA(0);
-        }
-    }
-    
-    // Fonctions globales
-    window.selectionnerSuggestionKriIA = function(index) {
-        suggestionSelectionnee = suggestionsKriIA[index];
-        document.querySelectorAll('input[name="suggestionSelectionnee"]').forEach((radio, i) => {
-            radio.checked = (i === index);
-        });
-        if (btnAppliquerKriIA) {
-            btnAppliquerKriIA.disabled = false;
-        }
-    };
-    
-    window.previsualiserSuggestion = function(index) {
-        const suggestion = suggestionsKriIA[index];
-        
-        document.getElementById('nom_indicateur').value = suggestion.nom;
-        document.querySelector('textarea[name="description"]').value = suggestion.description;
-        document.querySelector('textarea[name="formule_calcul"]').value = suggestion.formule_calcul;
-        document.getElementById('unite_mesure').value = suggestion.unite_mesure;
-        document.getElementById('categorie').value = suggestion.categorie;
-        document.getElementById('seuilAlerte').value = suggestion.seuil_alerte;
-        document.getElementById('seuilCritique').value = suggestion.seuil_critique;
-        document.getElementById('frequence_mesure').value = suggestion.frequence_mesure;
-        document.getElementById('sensEvaluation').value = suggestion.sens_evaluation_seuil;
-        
-        mettreAJourUnites();
-        showToast('✅ Suggestion prévisualisée dans le formulaire', 'success');
-    };
-    
-    window.personnaliserSuggestion = function(index) {
-        const suggestion = suggestionsKriIA[index];
-        const modalContent = document.getElementById('personnalisationIAContent');
-        
-        modalContent.innerHTML = `
-            <div class="row g-3">
-                <div class="col-12">
-                    <label class="form-label fw-semibold small text-uppercase" style="color: #64748b;">Nom</label>
-                    <input type="text" class="form-control border-0 bg-light px-4 py-3" id="edit_nom" value="${suggestion.nom}" style="border-radius: 12px;">
-                </div>
-                <div class="col-12">
-                    <label class="form-label fw-semibold small text-uppercase" style="color: #64748b;">Description</label>
-                    <textarea class="form-control border-0 bg-light px-4 py-3" id="edit_description" rows="2" style="border-radius: 12px;">${suggestion.description}</textarea>
-                </div>
-                <div class="col-6">
-                    <label class="form-label fw-semibold small text-uppercase" style="color: #64748b;">Seuil alerte</label>
-                    <input type="number" class="form-control border-0 bg-light px-4 py-3" id="edit_alerte" value="${suggestion.seuil_alerte}" style="border-radius: 12px;">
-                </div>
-                <div class="col-6">
-                    <label class="form-label fw-semibold small text-uppercase" style="color: #64748b;">Seuil critique</label>
-                    <input type="number" class="form-control border-0 bg-light px-4 py-3" id="edit_critique" value="${suggestion.seuil_critique}" style="border-radius: 12px;">
-                </div>
-            </div>
-        `;
-        
-        const modal = new bootstrap.Modal(document.getElementById('modalPersonnalisationIA'));
-        modal.show();
-        
-        btnSauvegarderPersonnalisation.onclick = function() {
-            suggestion.nom = document.getElementById('edit_nom').value;
-            suggestion.description = document.getElementById('edit_description').value;
-            suggestion.seuil_alerte = parseFloat(document.getElementById('edit_alerte').value);
-            suggestion.seuil_critique = parseFloat(document.getElementById('edit_critique').value);
-            
-            modal.hide();
-            afficherSuggestions(suggestionsKriIA, true);
-            showToast('✅ Suggestion personnalisée', 'success');
-        };
-    };
-    
-    async function appliquerSuggestion() {
-        if (!suggestionSelectionnee) {
-            showToast('Veuillez sélectionner une suggestion', 'warning');
-            return;
-        }
-        
-        if (!risqueIdCourant) {
-            showToast('Erreur: risque non défini', 'error');
-            return;
-        }
-        
-        const btn = btnAppliquerKriIA;
-        const originalText = btn.innerHTML;
-        btn.disabled = true;
-        btn.innerHTML = '<i class="fas fa-spinner fa-spin me-2"></i>Création...';
-        
-        // Simuler un appel API réussi
-        setTimeout(() => {
-            const modal = bootstrap.Modal.getInstance(document.getElementById('modalKriIA'));
-            if (modal) modal.hide();
-            
-            showToast('✅ KRI créé avec succès !', 'success');
-            
-            setTimeout(() => {
-                window.location.href = '/kri/liste';
-            }, 1500);
-            
-            btn.disabled = false;
-            btn.innerHTML = originalText;
-        }, 1000);
-    }
-    
-    // ============================================
-    // FONCTION TOAST
-    // ============================================
-    
-    function showToast(message, type = 'info') {
-        let toastContainer = document.getElementById('toast-container');
-        if (!toastContainer) {
-            toastContainer = document.createElement('div');
-            toastContainer.id = 'toast-container';
-            toastContainer.className = 'toast-container position-fixed top-0 end-0 p-3';
-            toastContainer.style.zIndex = '9999';
-            document.body.appendChild(toastContainer);
-        }
-        
-        const colors = {
-            'success': '#059669', 'error': '#b91c1c', 
-            'warning': '#b45309', 'info': '#2563eb'
-        };
-        const icons = {
-            'success': 'fa-check-circle', 'error': 'fa-exclamation-circle',
-            'warning': 'fa-exclamation-triangle', 'info': 'fa-info-circle'
-        };
-        
-        const toast = document.createElement('div');
-        toast.className = `toast align-items-center border-0`;
-        toast.setAttribute('role', 'alert');
-        toast.style.background = colors[type];
-        toast.style.color = 'white';
-        toast.style.borderRadius = '12px';
-        toast.innerHTML = `
-            <div class="d-flex">
-                <div class="toast-body">
-                    <i class="fas ${icons[type]} me-2"></i>${message}
-                </div>
-                <button type="button" class="btn-close btn-close-white me-2 m-auto" data-bs-dismiss="toast"></button>
-            </div>
-        `;
-        
-        toastContainer.appendChild(toast);
-        new bootstrap.Toast(toast, { autohide: true, delay: 5000 }).show();
-        toast.addEventListener('hidden.bs.toast', () => toast.remove());
-    }
-    
-    // Exposer les fonctions globalement
-    window.showToast = showToast;
-});
-// ============================================
-// GESTION DES COULEURS DES BOUTONS KRI/KPI
-// ============================================
-function updateButtonColors() {
-    const isKriSelected = document.getElementById('type_kri').checked;
-    const isKpiSelected = document.getElementById('type_kpi').checked;
-    
-    const btnKri = document.querySelector('label[for="type_kri"]');
-    const btnKpi = document.querySelector('label[for="type_kpi"]');
-    
-    if (btnKri && btnKpi) {
-        // Bouton KRI
-        btnKri.style.background = isKriSelected ? '#b91c1c' : '#f8fafc';
-        btnKri.style.color = isKriSelected ? 'white' : '#334155';
-        btnKri.style.borderColor = isKriSelected ? '#b91c1c' : '#e2e8f0';
-        
-        // Petit texte dans le bouton KRI
-        const smallKri = btnKri.querySelector('small');
-        if (smallKri) {
-            smallKri.className = isKriSelected ? 'text-white-50' : 'text-muted';
-        }
-        
-        // Bouton KPI
-        btnKpi.style.background = isKpiSelected ? '#059669' : '#f8fafc';
-        btnKpi.style.color = isKpiSelected ? 'white' : '#334155';
-        btnKpi.style.borderColor = isKpiSelected ? '#059669' : '#e2e8f0';
-        
-        // Petit texte dans le bouton KPI
-        const smallKpi = btnKpi.querySelector('small');
-        if (smallKpi) {
-            smallKpi.className = isKpiSelected ? 'text-white-50' : 'text-muted';
-        }
-    }
-}
+(function () {
+  const $ = (id) => document.getElementById(id);
+  const num = (id) => { const v = $(id).value.trim().replace(',', '.'); return v === '' ? null : parseFloat(v); };
+  const freqLib = {quotidien: 'mesure quotidienne', hebdomadaire: 'mesure hebdomadaire', mensuel: 'mesure mensuelle', bimestriel: 'mesure bimestrielle',
+                   trimestriel: 'mesure trimestrielle', semestriel: 'mesure semestrielle', annuel: 'mesure annuelle', ponctuel: 'mesure ponctuelle'};
 
-// Ajouter les écouteurs d'événements
-document.getElementById('type_kri').addEventListener('change', function() {
-    updateButtonColors();
-    mettreAJourTypeIndicateur(); // Votre fonction existante
-});
+  function maj() {
+    const kpi = $('kx-kpi').checked, bas = $('kx-inf').checked;
+    const a = num('kx-alerte'), c = num('kx-critique'), u = $('kx-unite').value.trim();
+    $('kx-bloc-cible').style.display = kpi ? '' : 'none';
+    $('kx-ap-type').textContent = kpi ? 'KPI' : 'KRI';
+    $('kx-ap-nom').textContent = $('kx-nom').value.trim() || '—';
+    $('kx-ap-freq').textContent = freqLib[$('kx-freq').value] || '';
+    $('kx-ap-sens').innerHTML = '<i class="fas fa-circle-info me-1"></i>Le risque augmente quand la valeur <strong>' + (bas ? 'baisse' : 'monte') + '</strong>.';
+    // cohérence (même règle que l'enregistrement)
+    const msg = $('kx-coherence'); let err = null;
+    if (a !== null && c !== null) {
+      if (!bas && a >= c) err = "Le risque augmente quand la valeur monte : le seuil d'alerte (" + a + ') doit être inférieur au seuil critique (' + c + ').';
+      if (bas && a <= c) err = "Le risque augmente quand la valeur baisse : le seuil d'alerte (" + a + ') doit être supérieur au seuil critique (' + c + ').';
+    }
+    msg.hidden = (a === null || c === null);
+    msg.className = 'kx-msg ' + (err ? 'ko' : 'ok');
+    msg.innerHTML = err ? '<i class="fas fa-triangle-exclamation me-1"></i>' + err : '<i class="fas fa-check me-1"></i>Seuils cohérents.';
+    $('kx-enregistrer').disabled = !!err;
+    // jauge
+    const j = $('kx-ap-jauge');
+    if (a !== null && c !== null && !err) {
+      const bmin = Math.min(a, c), bmax = Math.max(a, c), m = (bmax - bmin) * 0.6 || 1, lo = bmin - m, hi = bmax + m;
+      const pa = (a - lo) / (hi - lo) * 100, pc = (c - lo) / (hi - lo) * 100;
+      j.style.background = bas
+        ? `linear-gradient(90deg,#F04438 0%,#F04438 ${pc}%,#F79009 ${pc}%,#F79009 ${pa}%,#17B26A ${pa}%,#17B26A 100%)`
+        : `linear-gradient(90deg,#17B26A 0%,#17B26A ${pa}%,#F79009 ${pa}%,#F79009 ${pc}%,#F04438 ${pc}%,#F04438 100%)`;
+      $('kx-ap-min').textContent = +lo.toFixed(2); $('kx-ap-max').textContent = +hi.toFixed(2);
+      $('kx-ap-seuils').textContent = 'alerte ' + a + (u ? ' ' + u : '') + ' · critique ' + c + (u ? ' ' + u : '');
+    } else {
+      j.style.background = ''; $('kx-ap-min').textContent = ''; $('kx-ap-max').textContent = '';
+      $('kx-ap-seuils').textContent = 'Renseignez les seuils';
+    }
+  }
+  document.querySelectorAll('#kx-form input, #kx-form select, #kx-form textarea').forEach(e => { e.addEventListener('input', maj); e.addEventListener('change', maj); });
+  maj();
 
-document.getElementById('type_kpi').addEventListener('change', function() {
-    updateButtonColors();
-    mettreAJourTypeIndicateur(); // Votre fonction existante
-});
-
-// Initialiser les couleurs au chargement
-updateButtonColors();
+  // Suggestions IA (vraies, via le service d'IA ; masquées si l'IA est coupée)
+  const btn = $('kx-ia-btn'), liste = $('kx-ia-liste');
+  const esc = (t) => String(t ?? '').replace(/[&<>"']/g, c => ({'&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'}[c]));
+  if (btn) btn.addEventListener('click', () => {
+    const rid = $('kx-risque').value;
+    if (!rid) { liste.innerHTML = '<div class="small text-secondary"><i class="fas fa-circle-info me-1"></i>Choisissez d\'abord le risque associé.</div>'; return; }
+    btn.disabled = true; btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>Analyse du risque…';
+    fetch('/api/risque/' + rid + '/generer-kris-ia', {headers: {'Accept': 'application/json'}})
+      .then(r => r.json().catch(() => ({success: false})))
+      .then(d => {
+        btn.disabled = false; btn.innerHTML = '<i class="fas fa-rotate me-1"></i>Proposer d\'autres indicateurs';
+        if (!d.success || !(d.suggestions || []).length) { liste.innerHTML = '<div class="small text-secondary">' + esc(d.error || d.message || 'Aucune suggestion pour ce risque.') + '</div>'; return; }
+        liste.innerHTML = d.suggestions.slice(0, 5).map((s, i) => '<div class="kx-sugg"><b>' + esc(s.nom) + '</b><p>' + esc(s.description || '')
+          + (s.seuil_alerte != null ? '<br>Alerte ' + esc(s.seuil_alerte) + ' · critique ' + esc(s.seuil_critique) + ' ' + esc(s.unite_mesure || '') : '')
+          + '</p><button type="button" class="btn btn-sm btn-primary" data-i="' + i + '">Utiliser</button></div>').join('')
+          + '<div class="small text-secondary">Rédigé par l\'IA : vérifiez les seuils avant d\'enregistrer.</div>';
+        liste.querySelectorAll('[data-i]').forEach(b => b.addEventListener('click', () => {
+          const s = d.suggestions[+b.dataset.i], mettre = (id, v) => { if (v !== undefined && v !== null && v !== '') $(id).value = v; };
+          mettre('kx-nom', s.nom); mettre('kx-desc', s.description); mettre('kx-formule', s.formule_calcul); mettre('kx-unite', s.unite_mesure);
+          mettre('kx-alerte', s.seuil_alerte); mettre('kx-critique', s.seuil_critique);
+          if (s.sens_evaluation_seuil === 'inferieur') $('kx-inf').checked = true; else if (s.sens_evaluation_seuil) $('kx-sup').checked = true;
+          if (s.frequence_mesure && [...$('kx-freq').options].some(o => o.value === s.frequence_mesure)) $('kx-freq').value = s.frequence_mesure;
+          if (s.categorie && [...$('kx-cat').options].some(o => o.value === s.categorie)) $('kx-cat').value = s.categorie;
+          maj(); window.scrollTo({top: 0, behavior: 'smooth'});
+        }));
+      })
+      .catch(() => { btn.disabled = false; btn.innerHTML = '<i class="fas fa-wand-magic-sparkles me-1"></i>Proposer des indicateurs'; });
+  });
+})();
 </script>
-
-<style>
-/* ========== STYLES PERSONNALISÉS ========== */
-.btn, .card, .accordion-item {
-    transition: all 0.3s ease;
-}
-
-.btn:hover {
-    transform: translateY(-2px);
-    box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05) !important;
-}
-
-.card:hover {
-    transform: translateY(-4px);
-    box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04) !important;
-}
-
-.accordion-button:not(.collapsed) {
-    background: #f8fafc !important;
-    color: #0f172a !important;
-    box-shadow: none !important;
-}
-
-.accordion-button:focus {
-    box-shadow: none !important;
-    border-color: #e2e8f0 !important;
-}
-
-.form-control:focus, .form-select:focus {
-    box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.1);
-    border-color: #2563eb;
-    outline: none;
-}
-
-.form-check-input:checked {
-    background-color: #2563eb;
-    border-color: #2563eb;
-}
-
-/* ========== MODE SOMBRE ========== */
-[data-bs-theme="dark"] {
-    color-scheme: dark;
-}
-
-[data-bs-theme="dark"] body {
-    background: #0f172a;
-    color: #e2e8f0;
-}
-
-[data-bs-theme="dark"] .card {
-    background: #1e293b !important;
-    border-color: #334155 !important;
-}
-
-[data-bs-theme="dark"] h1, 
-[data-bs-theme="dark"] h5, 
-[data-bs-theme="dark"] h6 {
-    color: #f1f5f9 !important;
-}
-
-[data-bs-theme="dark"] .text-muted,
-[data-bs-theme="dark"] small:not(.text-white) {
-    color: #94a3b8 !important;
-}
-
-[data-bs-theme="dark"] .bg-light {
-    background: #334155 !important;
-}
-
-[data-bs-theme="dark"] [style*="background: #f8fafc"] {
-    background: #334155 !important;
-}
-
-[data-bs-theme="dark"] [style*="color: #0f172a"] {
-    color: #f1f5f9 !important;
-}
-
-[data-bs-theme="dark"] [style*="color: #334155"] {
-    color: #e2e8f0 !important;
-}
-
-[data-bs-theme="dark"] [style*="color: #64748b"] {
-    color: #94a3b8 !important;
-}
-
-[data-bs-theme="dark"] .form-control,
-[data-bs-theme="dark"] .form-select {
-    background: #334155 !important;
-    border-color: #475569 !important;
-    color: #f1f5f9 !important;
-}
-
-[data-bs-theme="dark"] .form-control::placeholder {
-    color: #94a3b8;
-}
-
-[data-bs-theme="dark"] .input-group-text {
-    background: #334155 !important;
-    border-color: #475569 !important;
-    color: #94a3b8 !important;
-}
-
-[data-bs-theme="dark"] .modal-content {
-    background: #1e293b;
-}
-
-[data-bs-theme="dark"] .accordion-button {
-    background: #334155 !important;
-    color: #f1f5f9 !important;
-}
-
-[data-bs-theme="dark"] .accordion-body {
-    background: #1e293b !important;
-}
-
-/* ========== RESPONSIVE ========== */
-@media (max-width: 768px) {
-    .btn-group .btn {
-        font-size: 0.9rem;
-        padding: 0.75rem;
-    }
-    
-    .btn-group .btn small {
-        font-size: 0.7rem;
-    }
-    
-    .row.g-4 {
-        gap: 1rem;
-    }
-}
-</style>
 {% endblock %}
