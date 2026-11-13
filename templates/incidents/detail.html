@@ -491,8 +491,14 @@
                     <!-- ========== ANALYSE IA ========== -->
                     {% if incident.analyse_ia %}
                     <hr>
-                    <h5 class="mt-3"><i class="fas fa-robot me-2"></i> Analyse IA <small class="text-muted">(score de confiance: {{ incident.ia_score_confiance }}%)</small></h5>
                     {% set analyse = incident.analyse_ia|from_json if incident.analyse_ia else {} %}
+                    {% set _orig = analyse.origine if analyse.origine else ('ancienne' if analyse.score_confiance else 'automatique') %}
+                    <h5 class="mt-3 d-flex align-items-center flex-wrap gap-2">
+                      <span><i class="fas fa-{{ 'wand-magic-sparkles' if _orig == 'ia' else 'gears' }} me-2"></i>{{ "Analyse de l'incident" }}</span>
+                      {% if _orig == 'ia' %}<span class="badge rounded-pill" style="background:#EFF4FF;color:#1D4ED8;font-weight:600">Rédigée par l'IA{% if analyse.modele %} · {{ analyse.modele }}{% endif %}</span>
+                      {% else %}<span class="badge rounded-pill" style="background:#F2F4F7;color:#344054;font-weight:600">Analyse automatique, sans IA</span>{% endif %}
+                    </h5>
+
                     
                     {% if analyse.causes_probables %}
                     <div class="info-group mb-3">
@@ -516,16 +522,16 @@
                     </div>
                     {% endif %}
                     
-                    <div class="alert alert-{{ 'success' if incident.ia_score_confiance >= 80 else 'warning' if incident.ia_score_confiance >= 60 else 'secondary' }}">
-                        <i class="fas fa-chart-line me-2"></i> 
-                        <strong>Confiance IA:</strong> {{ incident.ia_score_confiance }}%
-                        {% if incident.ia_score_confiance >= 80 %}
-                            - Analyse fiable
-                        {% elif incident.ia_score_confiance >= 60 %}
-                            - Analyse à confirmer
-                        {% else %}
-                            - Analyse à prendre avec précaution
-                        {% endif %}
+                    {% if analyse.delai_estime and analyse.delai_estime not in ('Non estimé', 'Non estimable') %}
+                    <p class="small mb-2"><strong>Délai de résolution estimé :</strong> {{ analyse.delai_estime }}</p>{% endif %}
+                    {% if analyse.informations_manquantes %}
+                    <p class="small mb-2"><strong>Informations à compléter :</strong> {{ analyse.informations_manquantes|join(' · ') }}</p>{% endif %}
+                    <div class="alert alert-light border small mb-0">
+                      <i class="fas fa-circle-info me-1"></i>
+                      {% if _orig == 'ia' %}Pistes rédigées par l'IA à partir des seules informations de l'incident : à vérifier avant toute décision.
+                      {% elif _orig == 'ancienne' %}Cette analyse a été produite par une ancienne version de l'outil qui n'utilisait pas réellement l'IA : relancez l'analyse.
+                      {% else %}L'IA n'était pas disponible : ces pistes viennent de règles simples (cause, actions, gravité, rattachement au risque).{% endif %}
+                      {% if ia_active is not defined or ia_active() %}<a href="{{ url_for('analyse_ia_incident', id=incident.id) }}" class="ms-1">Relancer l'analyse</a>{% endif %}
                     </div>
                     {% endif %}
                     
@@ -619,7 +625,7 @@
                             <!-- Analyse IA -->
                             {% if not incident.analyse_ia %}
                             <a href="{{ url_for('analyse_ia_incident', id=incident.id) }}" class="btn btn-secondary">
-                                <i class="fas fa-robot me-1"></i> Analyser IA
+                                <i class="fas fa-wand-magic-sparkles me-1"></i> Analyser avec l'IA
                             </a>
                             {% endif %}
                             
