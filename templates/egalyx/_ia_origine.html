@@ -1,0 +1,45 @@
+{#- Avertit l'utilisateur quand une proposition « IA » vient en réalité de règles automatiques (origine « automatique »).
+    Les réponses JSON concernées portent « origine » et « origine_libelle » (egalyx/ia_moteur.py). -#}
+<div id="egIaOrigine" role="status" aria-live="polite" style="position:fixed;left:1rem;bottom:1rem;z-index:2000;max-width:420px;display:none">
+  <div style="display:flex;gap:.7rem;align-items:flex-start;background:var(--bs-body-bg,#fff);border:1px solid var(--bs-border-color,#D0D5DD);border-left:4px solid #475467;border-radius:10px;
+              box-shadow:0 10px 24px -8px rgba(16,24,40,.25);padding:.75rem .9rem;font-size:.85rem;color:var(--bs-body-color,#344054)">
+    <i class="fas fa-gears" style="color:#475467;margin-top:.15rem"></i>
+    <div style="flex:1"><strong style="display:block;color:var(--bs-emphasis-color,#101828);margin-bottom:.1rem">Proposition automatique, sans IA</strong><span id="egIaOrigineTexte"></span></div>
+    <button type="button" aria-label="Fermer" onclick="document.getElementById('egIaOrigine').style.display='none'"
+            style="border:0;background:none;color:#667085;font-size:1rem;line-height:1;padding:0">&times;</button>
+  </div>
+</div>
+<script>
+(function () {
+  if (window.__egIaOrigine) return; window.__egIaOrigine = true;
+  var minuteur = null;
+  function signaler(d) {
+    if (!d || typeof d !== 'object' || d.origine !== 'automatique') return;
+    var bloc = document.getElementById('egIaOrigine'); if (!bloc) return;
+    document.getElementById('egIaOrigineTexte').textContent = d.origine_libelle ||
+      "L'IA n'est pas disponible : cette proposition vient de règles prédéfinies.";
+    bloc.style.display = 'block';
+    clearTimeout(minuteur); minuteur = setTimeout(function () { bloc.style.display = 'none'; }, 12000);
+  }
+  window.egIaSignaler = signaler;
+  if (window.fetch) {
+    var fetchOrigine = window.fetch;
+    window.fetch = function () {
+      return fetchOrigine.apply(this, arguments).then(function (r) {
+        try {
+          if ((r.headers.get('content-type') || '').indexOf('application/json') !== -1) {
+            r.clone().json().then(signaler).catch(function () {});
+          }
+        } catch (e) {}
+        return r;
+      });
+    };
+  }
+  function brancherJQuery() {
+    if (!window.jQuery) return false;
+    jQuery(document).ajaxComplete(function (e, xhr) { if (xhr && xhr.responseJSON) signaler(xhr.responseJSON); });
+    return true;
+  }
+  if (!brancherJQuery()) document.addEventListener('DOMContentLoaded', brancherJQuery);
+})();
+</script>
