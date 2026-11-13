@@ -1,0 +1,440 @@
+{% extends "base.html" %}
+{% block title %}Structure de l'organisation — {{ racine.nom }}{% endblock %}
+{% block styles %}{{ super() }}
+<style>
+  .so { --so-bord: #e2e8f0; --so-doux: #64748b; --so-fond: #f8fafc; --so-carte: #fff; --so-texte: #0f172a; --so-ligne: #cbd5e1; color: var(--so-texte); max-width: 1480px; }
+  [data-bs-theme="dark"] .so, body.dark-mode .so { --so-bord: #1f2a44; --so-doux: #94a3b8; --so-fond: #0b1220; --so-carte: #111a2e; --so-texte: #e2e8f0; --so-ligne: #334155; }
+  .so h1 { font-family: 'Inter', system-ui, sans-serif; font-size: 1.5rem; font-weight: 750; letter-spacing: -.015em; margin: 0; }
+  .so-tete { display: flex; align-items: flex-end; gap: 1rem; flex-wrap: wrap; margin-bottom: 1.1rem; }
+  .so-tete .so-sous { color: var(--so-doux); font-size: .9rem; margin-top: .2rem; }
+  .so-tete .so-actions { margin-left: auto; display: flex; gap: .5rem; flex-wrap: wrap; align-items: center; }
+  .so-btn { display: inline-flex; align-items: center; gap: .45rem; font-size: .875rem; font-weight: 550; padding: .5rem .85rem; border-radius: 10px;
+            border: 1px solid var(--so-bord); background: var(--so-carte); color: var(--so-texte); text-decoration: none; cursor: pointer; line-height: 1.2; }
+  .so-btn:hover { border-color: #93c5fd; color: #1d4ed8; }
+  .so-btn.primaire { background: linear-gradient(135deg, #1e3a8a, #2563eb); color: #fff; border-color: transparent; }
+  .so-btn.primaire:hover { filter: brightness(1.07); color: #fff; }
+  .so-menu { position: relative; }
+  .so-menu-liste { position: absolute; right: 0; top: calc(100% + 6px); min-width: 230px; background: var(--so-carte); border: 1px solid var(--so-bord);
+                   border-radius: 12px; box-shadow: 0 12px 32px rgba(15, 23, 42, .16); padding: .35rem; z-index: 30; display: none; }
+  .so-menu.ouvert .so-menu-liste { display: block; }
+  .so-menu-liste a { display: flex; gap: .6rem; align-items: center; padding: .5rem .65rem; border-radius: 8px; color: var(--so-texte); text-decoration: none; font-size: .88rem; }
+  .so-menu-liste a:hover { background: var(--so-fond); }
+  .so-menu-liste a i { width: 1.1rem; text-align: center; color: #2563eb; }
+
+  .so-kpis { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: .7rem; margin-bottom: 1rem; }
+  .so-kpi { background: var(--so-carte); border: 1px solid var(--so-bord); border-radius: 14px; padding: .8rem .95rem; display: flex; gap: .75rem; align-items: center; }
+  .so-kpi i { width: 2.4rem; height: 2.4rem; border-radius: 11px; display: flex; align-items: center; justify-content: center; flex: none; font-size: 1rem; color: #fff; }
+  .so-kpi b { display: block; font-size: 1.35rem; font-weight: 750; line-height: 1.1; font-variant-numeric: tabular-nums; }
+  .so-kpi span { display: block; font-size: .78rem; color: var(--so-doux); font-weight: 550; text-transform: uppercase; letter-spacing: .03em; }
+  .so-kpi small { display: block; font-size: .76rem; color: var(--so-doux); }
+  .so-kpi.alerte b { color: #b45309; }
+
+  .so-panneau { background: var(--so-carte); border: 1px solid var(--so-bord); border-radius: 14px; overflow: hidden; }
+  .so-barre { display: flex; gap: .55rem; flex-wrap: wrap; align-items: center; padding: .7rem .8rem; border-bottom: 1px solid var(--so-bord); background: var(--so-fond); }
+  .so-chercher { position: relative; flex: 1 1 280px; max-width: 420px; }
+  .so-chercher i { position: absolute; left: .75rem; top: 50%; transform: translateY(-50%); color: var(--so-doux); font-size: .85rem; }
+  .so-chercher input { width: 100%; padding: .5rem .75rem .5rem 2.1rem; border: 1px solid var(--so-bord); border-radius: 10px; font-size: .9rem; background: var(--so-carte); color: inherit; }
+  .so-chercher input:focus, .so-select:focus { outline: 0; border-color: #60a5fa; box-shadow: 0 0 0 3px rgba(37, 99, 235, .15); }
+  .so-select { padding: .48rem 2rem .48rem .7rem; border: 1px solid var(--so-bord); border-radius: 10px; font-size: .88rem; background-color: var(--so-carte); color: inherit; }
+  .so-barre .so-droite { margin-left: auto; display: flex; gap: .45rem; flex-wrap: wrap; }
+  .so-barre .so-btn { padding: .42rem .7rem; font-size: .83rem; }
+  .so-btn[aria-pressed="true"] { background: #eff6ff; border-color: #93c5fd; color: #1d4ed8; }
+
+  table.so-table { width: 100%; border-collapse: collapse; font-size: .9rem; }
+  .so-table thead th { position: sticky; top: 0; background: var(--so-carte); z-index: 2; font-size: .72rem; text-transform: uppercase; letter-spacing: .05em;
+                       color: var(--so-doux); font-weight: 650; padding: .6rem .8rem; border-bottom: 1px solid var(--so-bord); white-space: nowrap; }
+  .so-table td { padding: .55rem .8rem; border-bottom: 1px solid var(--so-bord); vertical-align: middle; }
+  .so-table tbody tr:hover td { background: color-mix(in srgb, #2563eb 4%, var(--so-carte)); }
+  .so-table tr.cache { display: none; }
+  .so-table tr.n-organisation td { background: var(--so-fond); }
+  .so-table tr.n-pays td { background: color-mix(in srgb, #0f766e 5%, var(--so-carte)); }
+  .so-table tr.trouve td { background: #fffbeb !important; }
+  .so-num { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
+
+  .so-entite { display: flex; align-items: center; gap: .55rem; min-width: 280px; }
+  .so-indent { flex: none; display: flex; align-self: stretch; }
+  .so-indent span { width: 22px; position: relative; }
+  .so-indent span::before { content: ''; position: absolute; left: 10px; top: -.6rem; bottom: -.6rem; border-left: 1px solid var(--so-ligne); }
+  .so-indent span.coin::before { bottom: 50%; }
+  .so-indent span.coin::after { content: ''; position: absolute; left: 10px; width: 10px; top: 50%; border-top: 1px solid var(--so-ligne); }
+  .so-indent span.vide::before { display: none; }
+  .so-plier { flex: none; width: 22px; height: 22px; border-radius: 6px; border: 1px solid var(--so-bord); background: var(--so-carte); color: var(--so-doux);
+              display: inline-flex; align-items: center; justify-content: center; font-size: .65rem; cursor: pointer; padding: 0; transition: transform .15s; }
+  .so-plier:hover { color: #1d4ed8; border-color: #93c5fd; }
+  tr.ferme .so-plier i { transform: rotate(-90deg); }
+  .so-plier-vide { flex: none; width: 22px; }
+  .so-ico { flex: none; width: 30px; height: 30px; border-radius: 9px; display: inline-flex; align-items: center; justify-content: center; color: #fff; font-size: .8rem;
+            background: var(--c, #1e3a8a); box-shadow: inset 0 -2px 0 rgba(0, 0, 0, .12); }
+  .so-nom { font-weight: 650; line-height: 1.25; }
+  .so-nom small { display: block; font-weight: 500; font-size: .76rem; color: var(--so-doux); }
+  tr.n-organisation .so-nom { font-size: 1rem; }
+  tr.n-service .so-nom { font-weight: 600; }
+  .so-drapeau { font-size: 1.05rem; margin-right: .15rem; }
+
+  .so-qui { display: flex; align-items: center; gap: .55rem; min-width: 200px; }
+  .so-av { flex: none; width: 32px; height: 32px; border-radius: 50%; display: inline-flex; align-items: center; justify-content: center; font-size: .72rem; font-weight: 700;
+           background: #e0e7ff; color: #3730a3; overflow: hidden; }
+  .so-av img { width: 100%; height: 100%; object-fit: cover; }
+  .so-av.manuel { background: #f1f5f9; color: #475569; border: 1px dashed #cbd5e1; }
+  .so-qui b { display: block; font-weight: 600; font-size: .88rem; line-height: 1.2; }
+  .so-qui small { display: block; color: var(--so-doux); font-size: .76rem; }
+  .so-vacant { display: inline-flex; align-items: center; gap: .35rem; font-size: .78rem; font-weight: 600; color: #b45309; background: #fffbeb; border: 1px dashed #f59e0b;
+               padding: .22rem .55rem; border-radius: 999px; }
+  .so-tiret { color: var(--so-doux); }
+  .so-pastille { display: inline-flex; align-items: center; gap: .3rem; font-size: .8rem; color: var(--so-doux); }
+  .so-pastille b { color: var(--so-texte); font-weight: 650; }
+
+  .so-act { display: flex; gap: .25rem; justify-content: flex-end; }
+  .so-act a, .so-act button { width: 32px; height: 32px; border-radius: 8px; border: 1px solid transparent; background: transparent; color: var(--so-doux);
+                               display: inline-flex; align-items: center; justify-content: center; font-size: .85rem; cursor: pointer; text-decoration: none; }
+  .so-act a:hover, .so-act button:hover { background: var(--so-fond); border-color: var(--so-bord); color: #1d4ed8; }
+  .so-act .danger:hover { color: #b91c1c; background: #fef2f2; border-color: #fecaca; }
+  .so-act .so-menu-liste { min-width: 210px; }
+
+  tr.so-membres td { padding: .1rem .8rem .7rem; border-bottom: 1px solid var(--so-bord); }
+  .so-chips { display: flex; flex-wrap: wrap; gap: .35rem; }
+  .so-chip { display: inline-flex; align-items: center; gap: .4rem; padding: .18rem .55rem .18rem .2rem; border-radius: 999px; background: var(--so-fond); border: 1px solid var(--so-bord); font-size: .8rem; }
+  .so-chip .so-av { width: 22px; height: 22px; font-size: .58rem; }
+  .so-chip small { color: var(--so-doux); }
+  .so .masque-membres tr.so-membres { display: none; }
+
+  .so-sans { margin-top: 1rem; }
+  .so-sans summary { cursor: pointer; font-weight: 600; font-size: .92rem; padding: .7rem .9rem; list-style: none; display: flex; align-items: center; gap: .5rem; }
+  .so-sans summary::-webkit-details-marker { display: none; }
+  .so-sans summary .so-compte { background: #fef3c7; color: #92400e; border-radius: 999px; padding: .05rem .55rem; font-size: .78rem; }
+  .so-sans ul { list-style: none; margin: 0; padding: 0 .9rem .7rem; display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: .4rem; }
+  .so-sans li { display: flex; align-items: center; gap: .55rem; padding: .45rem .55rem; border: 1px solid var(--so-bord); border-radius: 10px; }
+  .so-sans li a { margin-left: auto; font-size: .8rem; font-weight: 600; text-decoration: none; }
+  .so-sans li span small { display: block; color: var(--so-doux); font-size: .75rem; }
+
+  .so-vide { text-align: center; padding: 3rem 1rem; }
+  .so-vide > i { font-size: 2.2rem; color: #2563eb; }
+  .so-pied { display: flex; gap: 1rem; flex-wrap: wrap; align-items: center; padding: .6rem .9rem; font-size: .8rem; color: var(--so-doux); background: var(--so-fond); }
+  .so-pied a { color: inherit; }
+  .so-aucun { display: none; padding: 1.4rem; text-align: center; color: var(--so-doux); }
+
+  dialog.so-dialogue { border: 0; border-radius: 16px; padding: 0; width: min(480px, 92vw); box-shadow: 0 24px 60px rgba(15, 23, 42, .3); color: var(--so-texte); background: var(--so-carte); }
+  dialog.so-dialogue::backdrop { background: rgba(15, 23, 42, .45); }
+  .so-dialogue .corps { padding: 1.2rem 1.3rem .6rem; }
+  .so-dialogue h2 { font-size: 1.08rem; font-weight: 700; margin: 0 0 .5rem; }
+  .so-dialogue p { font-size: .9rem; color: var(--so-doux); margin: 0 0 .4rem; }
+  .so-dialogue .erreur { background: #fef2f2; color: #991b1b; border: 1px solid #fecaca; border-radius: 10px; padding: .6rem .75rem; font-size: .86rem; display: none; }
+  .so-dialogue .pied { display: flex; justify-content: flex-end; gap: .5rem; padding: .8rem 1.3rem 1.1rem; }
+  .so-btn.danger { background: #dc2626; color: #fff; border-color: #dc2626; }
+  .so-btn.danger:hover { background: #b91c1c; color: #fff; }
+
+  @media (max-width: 900px) { .so-col-carto, .so-col-eff { display: none; } }
+  @media print {
+    .so-actions, .so-barre, .so-act, .so-col-act, .so-plier, .so-sans, .so-pied, .eg-chat-btn, #egChatBtn, .lang-toggle-main, .language-widget { display: none !important; }
+    .so-table tr.cache { display: table-row !important; }
+    .so-panneau { border: 0; }
+  }
+</style>
+{% endblock %}
+
+{% macro avatar(p) -%}
+  {%- if p and p.photo -%}<span class="so-av"><img src="{{ p.photo }}" alt=""></span>
+  {%- elif p -%}<span class="so-av {{ '' if p.compte is not defined or p.compte else 'manuel' }}">{{ p.initiales }}</span>{%- endif -%}
+{%- endmacro %}
+
+{% block content %}
+<div class="container-fluid so" id="so">
+  <div class="so-tete">
+    <div>
+      <h1><i class="fas fa-sitemap me-2" style="color:#2563eb"></i>Structure de l'organisation</h1>
+      <div class="so-sous">{{ racine.nom }} — pays, pôles et filiales, directions et services, avec leurs responsables et leurs collaborateurs.</div>
+    </div>
+    <div class="so-actions">
+      {% if url_organigramme %}<a class="so-btn" href="{{ url_organigramme }}"><i class="fas fa-diagram-project"></i>Organigramme</a>{% endif %}
+      {% if url_utilisateurs %}<a class="so-btn" href="{{ url_utilisateurs }}"><i class="fas fa-user-group"></i>Collaborateurs</a>{% endif %}
+      {% if url_archives %}<a class="so-btn" href="{{ url_archives }}"><i class="fas fa-box-archive"></i>Archives</a>{% endif %}
+      {% if peut_gerer and ajouter %}
+      <div class="so-menu" data-menu>
+        <button type="button" class="so-btn primaire" aria-haspopup="true" aria-expanded="false"><i class="fas fa-plus"></i>Ajouter<i class="fas fa-chevron-down" style="font-size:.7rem"></i></button>
+        <div class="so-menu-liste" role="menu">
+          {% for libelle, url, icone in ajouter %}<a role="menuitem" href="{{ url }}"><i class="fas {{ icone }}"></i>{{ libelle }}</a>{% endfor %}
+        </div>
+      </div>
+      {% endif %}
+    </div>
+  </div>
+
+  <div class="so-kpis">
+    {% if stats.pays %}<div class="so-kpi"><i class="fas fa-earth-africa" style="background:#0f766e"></i><div><span>Pays</span><b>{{ stats.pays }}</b></div></div>{% endif %}
+    {% if stats.poles %}<div class="so-kpi"><i class="fas fa-layer-group" style="background:#4f46e5"></i><div><span>Pôles / filiales</span><b>{{ stats.poles }}</b></div></div>{% endif %}
+    <div class="so-kpi"><i class="fas fa-sitemap" style="background:#1e3a8a"></i><div><span>Directions</span><b>{{ stats.directions }}</b></div></div>
+    <div class="so-kpi"><i class="fas fa-users-gear" style="background:#0284c7"></i><div><span>Services</span><b>{{ stats.services }}</b></div></div>
+    <div class="so-kpi"><i class="fas fa-user-group" style="background:#475569"></i><div><span>Collaborateurs</span><b>{{ stats.rattaches }}<span style="display:inline;text-transform:none;font-size:.85rem;letter-spacing:0"> / {{ stats.collaborateurs }}</span></b><small>rattachés à une entité</small></div></div>
+    <div class="so-kpi {{ 'alerte' if stats.vacants }}"><i class="fas fa-user-plus" style="background:{{ '#d97706' if stats.vacants else '#059669' }}"></i><div><span>À pourvoir</span><b>{{ stats.vacants }}</b><small>postes de responsable</small></div></div>
+  </div>
+
+  {% if not racine.enfants %}
+  <div class="so-panneau so-vide">
+    <i class="fas fa-sitemap"></i>
+    <h2 class="h5 mt-3">Votre structure est vide</h2>
+    <p class="text-secondary mb-3">Commencez par vos directions. Ajoutez des pays et des pôles si votre organisation en a, puis les services de chaque direction.</p>
+    {% if peut_gerer %}{% for libelle, url, icone in ajouter %}<a class="so-btn {{ 'primaire' if loop.last }} me-1" href="{{ url }}"><i class="fas {{ icone }}"></i>{{ libelle }}</a>{% endfor %}{% endif %}
+  </div>
+  {% else %}
+  <div class="so-panneau" id="soPanneau">
+    <div class="so-barre" role="toolbar" aria-label="Filtrer la structure">
+      <label class="so-chercher"><i class="fas fa-magnifying-glass"></i>
+        <input type="search" id="soChercher" placeholder="Chercher une entité, un responsable, un collaborateur…" autocomplete="off" aria-label="Chercher"></label>
+      {% if pays|length > 1 %}
+      <select class="so-select" id="soPays" aria-label="Pays">
+        <option value="">Tous les pays</option>
+        {% for p in pays %}<option value="{{ p.cle }}">{{ p.drapeau or '' }} {{ p.nom }}</option>{% endfor %}
+      </select>
+      {% endif %}
+      <div class="so-droite">
+        <button type="button" class="so-btn" id="soDeplier"><i class="fas fa-angles-down"></i>Tout déplier</button>
+        <button type="button" class="so-btn" id="soReplier"><i class="fas fa-angles-up"></i>Replier les services</button>
+        <button type="button" class="so-btn" id="soMembres" aria-pressed="false"><i class="fas fa-user-group"></i>Collaborateurs</button>
+        <button type="button" class="so-btn" id="soExporter" title="Télécharger la structure (Excel / CSV)"><i class="fas fa-file-arrow-down"></i>Exporter</button>
+      </div>
+    </div>
+    <div class="table-responsive masque-membres" id="soZone">
+      <table class="so-table" id="soTable">
+        <thead><tr>
+          <th scope="col">Entité</th>
+          <th scope="col">Responsable</th>
+          <th scope="col" class="so-num so-col-eff" title="Collaborateurs rattachés à l'entité et à ses sous-entités">Collaborateurs</th>
+          <th scope="col" class="so-num so-col-carto" title="Cartographies et risques du périmètre">Cartos · risques</th>
+          <th scope="col" class="so-col-act"><span class="visually-hidden">Actions</span></th>
+        </tr></thead>
+        <tbody>
+        {% for l in lignes %}
+          {% set derniers = [] %}
+          <tr class="n-{{ l.type }}" data-cle="{{ l.cle }}" data-parent="{{ l.parent or '' }}" data-type="{{ l.type }}" data-prof="{{ l.profondeur }}"
+              data-cherche="{{ (l.nom ~ ' ' ~ (l.responsable.nom if l.responsable else '') ~ ' ' ~ (l.membres|map(attribute='nom')|join(' ')) ~ ' ' ~ (l.equipe|join(' ')))|lower }}"
+              data-nom="{{ l.nom }}" data-niveau="{{ l.libelle_type }}" data-resp="{{ l.responsable.nom if l.responsable else '' }}"
+              data-fonction="{{ l.responsable.poste if l.responsable and l.responsable.poste else '' }}"
+              data-eff="{{ l.total_effectif }}" data-cartos="{{ l.total_cartos }}" data-risques="{{ l.total_risques }}">
+            <td>
+              <div class="so-entite">
+                {% if l.profondeur > 1 %}<span class="so-indent" aria-hidden="true">{% for _ in range(l.profondeur - 1) %}<span></span>{% endfor %}</span>{% endif %}
+                {% if l.nb_enfants %}
+                <button type="button" class="so-plier" aria-expanded="true" aria-label="Plier / déplier {{ l.nom }}"><i class="fas fa-chevron-down"></i></button>
+                {% elif l.profondeur > 0 %}<span class="so-plier-vide"></span>{% endif %}
+                <span class="so-ico" style="--c: {{ l.couleur }}" title="{{ l.libelle_type }}"><i class="fas {{ l.icone }}"></i></span>
+                <div class="so-nom">{% if l.drapeau %}<span class="so-drapeau">{{ l.drapeau }}</span>{% endif %}{{ l.nom }}
+                  <small>{{ l.libelle_type }}{% if l.resume_sous %} · {{ l.resume_sous }}{% endif %}</small></div>
+              </div>
+            </td>
+            <td>
+              {% if l.responsable %}
+              <div class="so-qui">{{ avatar(l.responsable) }}<div><b>{{ l.responsable.nom }}</b><small>{{ l.responsable.poste or l.role }}{% if l.responsable.compte is defined and not l.responsable.compte %} · sans compte{% endif %}</small></div></div>
+              {% elif l.a_responsable %}
+              <span class="so-vacant"><i class="fas fa-user-plus"></i>À pourvoir</span>
+              {% else %}<span class="so-tiret">—</span>{% endif %}
+            </td>
+            <td class="so-num so-col-eff">
+              {% if l.total_effectif %}<span class="so-pastille" title="{{ l.effectif }} directement rattaché(s)"><i class="fas fa-user-group"></i><b>{{ l.total_effectif }}</b></span>{% else %}<span class="so-tiret">0</span>{% endif %}
+            </td>
+            <td class="so-num so-col-carto">
+              {% if l.total_cartos or l.total_risques %}<span class="so-pastille"><b>{{ l.total_cartos }}</b> · <b>{{ l.total_risques }}</b></span>{% else %}<span class="so-tiret">—</span>{% endif %}
+            </td>
+            <td class="so-col-act">
+              <div class="so-act">
+                {% if l.actions.ajouter|length == 1 %}
+                  <a href="{{ l.actions.ajouter[0][1] }}" title="Ajouter {{ l.actions.ajouter[0][0]|lower }}" aria-label="Ajouter {{ l.actions.ajouter[0][0]|lower }} à {{ l.nom }}"><i class="fas fa-plus"></i></a>
+                {% elif l.actions.ajouter|length > 1 %}
+                  <div class="so-menu" data-menu><button type="button" title="Ajouter" aria-label="Ajouter sous {{ l.nom }}" aria-haspopup="true" aria-expanded="false"><i class="fas fa-plus"></i></button>
+                    <div class="so-menu-liste" role="menu">{% for libelle, url, icone in l.actions.ajouter %}<a role="menuitem" href="{{ url }}"><i class="fas {{ icone }}"></i>{{ libelle }}</a>{% endfor %}</div></div>
+                {% endif %}
+                {% if l.actions.utilisateur %}<a href="{{ l.actions.utilisateur }}" title="Créer un collaborateur dans {{ l.nom }}" aria-label="Créer un collaborateur dans {{ l.nom }}"><i class="fas fa-user-plus"></i></a>{% endif %}
+                {% if url_organigramme and l.type != 'organisation' %}<a href="{{ url_organigramme }}#{{ l.cle }}" title="Voir dans l'organigramme" aria-label="Voir {{ l.nom }} dans l'organigramme"><i class="fas fa-diagram-project"></i></a>{% endif %}
+                {% if l.actions.modifier %}<a href="{{ l.actions.modifier }}" title="Modifier" aria-label="Modifier {{ l.nom }}"><i class="fas fa-pen"></i></a>{% endif %}
+                {% if l.actions.archiver %}<button type="button" class="danger" title="Archiver" aria-label="Archiver {{ l.nom }}"
+                        data-archiver="{{ l.actions.archiver }}" data-methode="{{ l.actions.archiver_methode }}" data-nom="{{ l.nom }}" data-niveau="{{ l.libelle_type|lower }}"
+                        data-sous="{{ l.nb_enfants }}"><i class="fas fa-box-archive"></i></button>{% endif %}
+              </div>
+            </td>
+          </tr>
+          {% if l.membres or l.equipe %}
+          <tr class="so-membres" data-membres-de="{{ l.cle }}" data-parent="{{ l.cle }}">
+            <td colspan="5" style="padding-left: {{ 1.6 + l.profondeur * 1.38 }}rem">
+              <div class="so-chips">
+                {% for p in l.membres %}<span class="so-chip">{{ avatar(p) }}{{ p.nom }}{% if p.poste %}<small>· {{ p.poste }}</small>{% endif %}</span>{% endfor %}
+                {% for nom in l.equipe %}<span class="so-chip"><span class="so-av manuel">{{ nom[:1]|upper }}</span>{{ nom }}<small>· sans compte</small></span>{% endfor %}
+              </div>
+            </td>
+          </tr>
+          {% endif %}
+        {% endfor %}
+        </tbody>
+      </table>
+      <div class="so-aucun" id="soAucun"><i class="fas fa-magnifying-glass me-1"></i>Aucune entité ni personne ne correspond à votre recherche.</div>
+    </div>
+    <div class="so-pied">
+      <span><i class="fas fa-circle-info me-1"></i>Les collaborateurs et les risques sont cumulés vers le haut : une direction compte aussi ceux de ses services.</span>
+      {% if url_cartes %}<a class="ms-auto" href="{{ url_cartes }}">Ancienne vue en cartes (équipes des services)</a>{% endif %}
+    </div>
+  </div>
+
+  {% if sans_rattachement %}
+  <details class="so-panneau so-sans" {{ 'open' if sans_rattachement|length <= 6 }}>
+    <summary><i class="fas fa-user-clock" style="color:#d97706"></i>Collaborateurs sans direction ni service <span class="so-compte">{{ sans_rattachement|length }}</span>
+      <small class="text-secondary fw-normal ms-1">— ils n'apparaissent pas dans l'organigramme</small></summary>
+    <ul>
+      {% for p in sans_rattachement %}<li>{{ avatar(p) }}<span>{{ p.nom }}<small>{{ p.poste or p.email }}</small></span>
+        {% if peut_rattacher %}<a href="{{ url_for('client_admin_editer_utilisateur', id=p.id) }}">Rattacher</a>{% endif %}</li>{% endfor %}
+    </ul>
+  </details>
+  {% endif %}
+  {% endif %}
+</div>
+
+<dialog class="so-dialogue" id="soDialogue" aria-labelledby="soDialogueTitre">
+  <div class="corps">
+    <h2 id="soDialogueTitre">Archiver</h2>
+    <p id="soDialogueTexte"></p>
+    <div class="erreur" id="soDialogueErreur" role="alert"></div>
+  </div>
+  <div class="pied">
+    <button type="button" class="so-btn" id="soAnnuler">Annuler</button>
+    <button type="button" class="so-btn danger" id="soConfirmer"><i class="fas fa-box-archive"></i>Archiver</button>
+  </div>
+</dialog>
+{% endblock %}
+
+{% block scripts %}{{ super() }}
+<script>
+(function () {
+  var table = document.getElementById('soTable');
+  // ---------- menus « Ajouter »
+  document.addEventListener('click', function (e) {
+    var m = e.target.closest('[data-menu]');
+    document.querySelectorAll('[data-menu].ouvert').forEach(function (x) {
+      if (x !== m) { x.classList.remove('ouvert'); var b = x.querySelector('button'); if (b) b.setAttribute('aria-expanded', 'false'); }
+    });
+    if (m && e.target.closest('button') && e.target.closest('button').parentNode === m) {
+      var o = m.classList.toggle('ouvert'); m.querySelector('button').setAttribute('aria-expanded', o ? 'true' : 'false');
+    }
+  });
+  document.addEventListener('keydown', function (e) { if (e.key === 'Escape') document.querySelectorAll('[data-menu].ouvert').forEach(function (x) { x.classList.remove('ouvert'); }); });
+  if (!table) return;
+
+  var lignes = Array.prototype.slice.call(table.querySelectorAll('tbody tr[data-cle]'));
+  var parCle = {}; lignes.forEach(function (r) { parCle[r.dataset.cle] = r; });
+  var membres = Array.prototype.slice.call(table.querySelectorAll('tr.so-membres'));
+
+  // ---------- traits de l'arborescence (dernier enfant = coin)
+  lignes.forEach(function (r) {
+    var traits = r.querySelectorAll('.so-indent > span'); if (!traits.length) return;
+    var anc = [], p = r.dataset.parent;
+    while (p && parCle[p] && parCle[p].dataset.prof > 0) { anc.unshift(parCle[p]); p = parCle[p].dataset.parent; }
+    // anc = ancêtres de profondeur ≥ 1 ; trait i : l'ancêtre de profondeur i+1 a-t-il des frères après lui ?
+    traits.forEach(function (t, i) {
+      var noeud = (i === traits.length - 1) ? r : anc[i + 1];
+      if (!noeud) return;
+      var freres = lignes.filter(function (x) { return x.dataset.parent === noeud.dataset.parent; });
+      var dernier = freres[freres.length - 1] === noeud;
+      if (i === traits.length - 1) t.className = dernier ? 'coin' : 'coin suite';
+      else if (dernier) t.className = 'vide';
+    });
+  });
+
+  // ---------- plier / déplier
+  function ancetresOuverts(r) {
+    var p = r.dataset.parent;
+    while (p) { var a = parCle[p]; if (!a) break; if (a.classList.contains('ferme')) return false; p = a.dataset.parent; }
+    return true;
+  }
+  function filtreActif() { return !!(document.getElementById('soChercher').value.trim() || (document.getElementById('soPays') || {}).value); }
+  function rafraichir() {
+    if (filtreActif()) return filtrer();
+    lignes.forEach(function (r) { r.classList.toggle('cache', !ancetresOuverts(r)); r.classList.remove('trouve'); });
+    membres.forEach(function (m) { var r = parCle[m.dataset.membresDe]; m.classList.toggle('cache', !r || r.classList.contains('cache') || r.classList.contains('ferme')); });
+    document.getElementById('soAucun').style.display = 'none';
+  }
+  function plier(r, ferme) {
+    r.classList.toggle('ferme', ferme);
+    var b = r.querySelector('.so-plier'); if (b) b.setAttribute('aria-expanded', ferme ? 'false' : 'true');
+  }
+  table.addEventListener('click', function (e) {
+    var b = e.target.closest('.so-plier'); if (!b) return;
+    var r = b.closest('tr'); plier(r, !r.classList.contains('ferme')); rafraichir();
+  });
+  document.getElementById('soDeplier').onclick = function () { lignes.forEach(function (r) { plier(r, false); }); rafraichir(); };
+  document.getElementById('soReplier').onclick = function () {
+    lignes.forEach(function (r) { plier(r, r.dataset.type === 'direction' && !!r.querySelector('.so-plier')); }); rafraichir();
+  };
+  // Grandes organisations : services repliés au départ
+  if (lignes.length > 60) document.getElementById('soReplier').click();
+
+  // ---------- collaborateurs
+  var bm = document.getElementById('soMembres'), zone = document.getElementById('soZone');
+  bm.onclick = function () { var on = bm.getAttribute('aria-pressed') !== 'true'; bm.setAttribute('aria-pressed', on ? 'true' : 'false'); zone.classList.toggle('masque-membres', !on); };
+
+  // ---------- recherche et filtre pays
+  function sansAccent(t) { return (t || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, ''); }
+  function filtrer() {
+    var q = sansAccent(document.getElementById('soChercher').value.trim());
+    var sel = document.getElementById('soPays'), pays = sel ? sel.value : '';
+    if (!q && !pays) return rafraichir();
+    var garder = {}, n = 0;
+    lignes.forEach(function (r) {
+      var dansPays = true;
+      if (pays) { dansPays = false; var p = r.dataset.cle; while (p) { if (p === pays) { dansPays = true; break; } p = parCle[p] ? parCle[p].dataset.parent : ''; } }
+      var ok = dansPays && (!q || sansAccent(r.dataset.cherche).indexOf(q) >= 0);
+      r.classList.toggle('trouve', !!(ok && q));
+      if (ok) { n++; garder[r.dataset.cle] = 1; var a = r.dataset.parent; while (a) { garder[a] = 1; a = parCle[a] ? parCle[a].dataset.parent : ''; } }
+      if (ok && pays && !q) { /* tout le sous-arbre du pays */ }
+    });
+    lignes.forEach(function (r) { r.classList.toggle('cache', !garder[r.dataset.cle]); });
+    membres.forEach(function (m) { m.classList.toggle('cache', !garder[m.dataset.membresDe]); });
+    document.getElementById('soAucun').style.display = n ? 'none' : 'block';
+  }
+  var minuterie;
+  document.getElementById('soChercher').addEventListener('input', function () { clearTimeout(minuterie); minuterie = setTimeout(filtrer, 120); });
+  var sp = document.getElementById('soPays'); if (sp) sp.addEventListener('change', filtrer);
+
+  // ---------- export (CSV lisible par Excel : séparateur « ; », UTF-8 avec BOM)
+  document.getElementById('soExporter').onclick = function () {
+    var chemin = {}, sortie = [['Niveau', 'Entité', 'Rattachée à', 'Chemin complet', 'Responsable', 'Fonction', 'Collaborateurs (cumul)', 'Cartographies', 'Risques']];
+    lignes.forEach(function (r) {
+      var parent = parCle[r.dataset.parent];
+      chemin[r.dataset.cle] = (parent && parent.dataset.prof > 0 ? chemin[parent.dataset.cle] + ' › ' : '') + r.dataset.nom;
+      if (r.dataset.type === 'organisation') return;
+      sortie.push([r.dataset.niveau, r.dataset.nom, parent ? parent.dataset.nom : '', chemin[r.dataset.cle], r.dataset.resp, r.dataset.fonction, r.dataset.eff, r.dataset.cartos, r.dataset.risques]);
+    });
+    var csv = '﻿' + sortie.map(function (l) { return l.map(function (v) { v = String(v == null ? '' : v); return /[;"\n]/.test(v) ? '"' + v.replace(/"/g, '""') + '"' : v; }).join(';'); }).join('\r\n');
+    var a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([csv], { type: 'text/csv;charset=utf-8' }));
+    a.download = 'structure_organisation.csv'; document.body.appendChild(a); a.click(); setTimeout(function () { URL.revokeObjectURL(a.href); a.remove(); }, 500);
+  };
+
+  // ---------- archiver
+  var dlg = document.getElementById('soDialogue'), cible = null;
+  var jeton = (document.querySelector('meta[name="csrf-token"]') || {}).content || '';
+  table.addEventListener('click', function (e) {
+    var b = e.target.closest('[data-archiver]'); if (!b) return;
+    cible = b;
+    document.getElementById('soDialogueTitre').textContent = 'Archiver « ' + b.dataset.nom + ' » ?';
+    var sous = parseInt(b.dataset.sous || '0', 10);
+    var texte = 'Elle disparaîtra de la structure et de l\'organigramme, mais son historique est conservé.';
+    if (sous && b.dataset.niveau === 'direction') texte += ' Ses ' + sous + ' service(s) disparaîtront avec elle.';
+    else if (sous) texte += ' Elle contient encore ' + sous + ' sous-entité(s) : archivez-les ou rattachez-les ailleurs d\'abord.';
+    document.getElementById('soDialogueTexte').textContent = texte;
+    var err = document.getElementById('soDialogueErreur'); err.style.display = 'none'; err.textContent = '';
+    document.getElementById('soConfirmer').disabled = false;
+    if (dlg.showModal) dlg.showModal(); else if (confirm(document.getElementById('soDialogueTitre').textContent)) document.getElementById('soConfirmer').click();
+  });
+  document.getElementById('soAnnuler').onclick = function () { dlg.close(); };
+  document.getElementById('soConfirmer').onclick = function () {
+    if (!cible) return;
+    var bouton = this; bouton.disabled = true;
+    fetch(cible.dataset.archiver, { method: cible.dataset.methode || 'DELETE', credentials: 'same-origin',
+      headers: { 'X-CSRFToken': jeton, 'X-Requested-With': 'XMLHttpRequest', 'Accept': 'application/json' } })
+      .then(function (r) { return r.json().catch(function () { return { success: r.ok }; }); })
+      .then(function (d) {
+        if (d && d.success) { location.reload(); return; }
+        var err = document.getElementById('soDialogueErreur');
+        err.textContent = (d && (d.error || d.message)) || 'L\'archivage a échoué.'; err.style.display = 'block'; bouton.disabled = true;
+      })
+      .catch(function () { var err = document.getElementById('soDialogueErreur'); err.textContent = 'Connexion impossible. Réessayez.'; err.style.display = 'block'; bouton.disabled = false; });
+  };
+  rafraichir();
+})();
+</script>
+{% endblock %}

@@ -1,0 +1,120 @@
+{# Rattachement d'un utilisateur à la structure + périmètre d'accès (egalyx/structure.py).
+   Avant l'include : {% set eg_cible = user %} (édition) ou {% set eg_cible = none %} (création). #}
+{% if eg_structure_choix is defined %}
+{% set _dirs = eg_structure_choix() %}
+{% set _aff = eg_affectation(eg_cible) if eg_cible and eg_cible.id else none %}
+{% set _per = (eg_cible.perimetre_acces if eg_cible and eg_cible.id and eg_cible.perimetre_acces else 'organisation') %}
+{# Création depuis la page « Structure » : ?direction_id= ou ?service_id= pré-choisit le rattachement #}
+{% set _pre_s = (request.args.get('service_id', '')|int(0)) if not _aff else 0 %}
+{% set _pre = namespace(d=((request.args.get('direction_id', '')|int(0)) if not _aff else 0)) %}
+{% if _pre_s %}{% for d in _dirs %}{% for s in d.services %}{% if s.id == _pre_s %}{% set _pre.d = d.id %}{% endif %}{% endfor %}{% endfor %}{% endif %}
+<div class="eg-aff card border-0 mb-3" id="egAffectation">
+  <input type="hidden" name="eg_affectation" value="1">
+  <div class="eg-aff-tete"><i class="fas fa-id-badge"></i><div><strong>Identité et place dans l'organisation</strong>
+    <span>Nom affiché dans l'organigramme et les listes, poste, direction et ce que la personne peut voir.</span></div></div>
+  <div class="row g-3 mb-3">
+    <div class="col-md-4">
+      <label class="form-label" for="egPrenom">Prénom</label>
+      <input class="form-control" type="text" name="eg_prenom" id="egPrenom" maxlength="80" autocomplete="off"
+             value="{{ eg_cible.prenom if eg_cible and eg_cible.id and eg_cible.prenom else '' }}" placeholder="Awa">
+    </div>
+    <div class="col-md-4">
+      <label class="form-label" for="egNom">Nom</label>
+      <input class="form-control" type="text" name="eg_nom" id="egNom" maxlength="80" autocomplete="off"
+             value="{{ eg_cible.nom if eg_cible and eg_cible.id and eg_cible.nom else '' }}" placeholder="Koné">
+    </div>
+    <div class="col-md-4">
+      <label class="form-label" for="egFonction">Fonction <span class="text-secondary fw-normal">(poste)</span></label>
+      <input class="form-control" type="text" name="eg_fonction" id="egFonction" maxlength="120" autocomplete="off"
+             value="{{ eg_cible.fonction if eg_cible and eg_cible.id and eg_cible.fonction else '' }}" placeholder="Directrice financière">
+    </div>
+  </div>
+  {% if not _dirs %}
+  <div class="eg-aff-vide"><i class="fas fa-circle-info me-1"></i>Aucune direction n'est encore créée.
+    {% if url_exists is not defined or url_exists('admin_directions') %}<a href="{{ url_for('admin_directions') }}">Créer les directions</a>{% endif %} pour rattacher les collaborateurs.</div>
+  {% else %}
+  <div class="row g-3">
+    <div class="col-md-6">
+      <label class="form-label" for="egDirection">Direction</label>
+      <select class="form-select" name="eg_direction_id" id="egDirection">
+        <option value="">— Non rattaché —</option>
+        {% set _poles = _dirs|map(attribute='pole')|unique|list %}
+        {% for p in _poles %}
+          {% if p %}<optgroup label="{{ p }}">{% endif %}
+          {% for d in _dirs if d.pole == p %}
+          <option value="{{ d.id }}" {{ 'selected' if (_aff and _aff.direction and _aff.direction.id == d.id) or (_pre.d == d.id) }}>{{ d.nom }}</option>
+          {% endfor %}
+          {% if p %}</optgroup>{% endif %}
+        {% endfor %}
+      </select>
+    </div>
+    <div class="col-md-6">
+      <label class="form-label" for="egService">Service <span class="text-secondary fw-normal">(facultatif)</span></label>
+      <select class="form-select" name="eg_service_id" id="egService">
+        <option value="">— Toute la direction —</option>
+        {% for d in _dirs %}{% for s in d.services %}
+        <option value="{{ s.id }}" data-direction="{{ d.id }}" {{ 'selected' if (_aff and _aff.service and _aff.service.id == s.id) or (_pre_s == s.id) }}>{{ s.nom }}</option>
+        {% endfor %}{% endfor %}
+      </select>
+    </div>
+  </div>
+  <div class="mt-3">
+    <label class="form-label mb-1">Ce que la personne peut voir</label>
+    <div class="eg-aff-per">
+      {% for code, libelle, aide in eg_perimetres %}
+      <label class="eg-aff-choix">
+        <input type="radio" name="eg_perimetre" value="{{ code }}" {{ 'checked' if _per == code }}>
+        <span><strong>{{ libelle }}</strong><small>{{ aide }}</small></span>
+      </label>
+      {% endfor %}
+    </div>
+    <div class="eg-aff-note"><i class="fas fa-shield-halved me-1"></i>Les administrateurs voient toujours toute l'organisation.
+      Une personne voit aussi tout ce dont elle est responsable, même hors de son périmètre.</div>
+    {% if eg_cible and eg_cible.id %}
+    <div class="eg-aff-note"><a href="{{ url_for('structure.responsabilites_page', id=eg_cible.id) }}"><i class="fas fa-people-arrows me-1"></i>Voir ses responsabilités en cours / les transférer</a></div>
+    {% endif %}
+    {% if _aff and _aff.incomplet %}
+    <div class="eg-aff-alerte"><i class="fas fa-triangle-exclamation me-1"></i>Périmètre « {{ _aff.perimetre_libelle }} » choisi mais rattachement incomplet : aucune limite n'est appliquée pour l'instant.</div>
+    {% endif %}
+  </div>
+  {% endif %}
+</div>
+<style>
+  .eg-aff { background: var(--bs-tertiary-bg, #f8fafc); border-radius: 12px !important; padding: 1rem 1.1rem; }
+  .eg-aff-tete { display: flex; gap: .75rem; align-items: flex-start; margin-bottom: .9rem; }
+  .eg-aff-tete > i { width: 2.1rem; height: 2.1rem; border-radius: 9px; background: linear-gradient(135deg, #1e3a8a, #2563eb); color: #fff; display: flex; align-items: center; justify-content: center; flex: none; }
+  .eg-aff-tete span { display: block; font-size: .85rem; color: var(--bs-secondary-color, #6b7280); }
+  .eg-aff-per { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: .5rem; }
+  .eg-aff-choix { display: flex; gap: .55rem; align-items: flex-start; border: 1px solid var(--bs-border-color, #e5e7eb); border-radius: 10px; padding: .55rem .7rem; cursor: pointer; background: var(--bs-body-bg, #fff); margin: 0; }
+  .eg-aff-choix:has(input:checked) { border-color: #2563eb; box-shadow: 0 0 0 2px rgba(37, 99, 235, .15); }
+  .eg-aff-choix input { margin-top: .25rem; }
+  .eg-aff-choix small { display: block; color: var(--bs-secondary-color, #6b7280); font-size: .78rem; line-height: 1.35; }
+  .eg-aff-note { font-size: .8rem; color: var(--bs-secondary-color, #6b7280); margin-top: .6rem; }
+  .eg-aff-alerte { font-size: .82rem; color: #92400e; background: #fef3c7; border-radius: 8px; padding: .45rem .7rem; margin-top: .5rem; }
+  .eg-aff-vide { font-size: .88rem; color: var(--bs-secondary-color, #6b7280); }
+</style>
+<script>
+(function () {
+  var d = document.getElementById('egDirection'), s = document.getElementById('egService');
+  if (!d || !s) return;
+  // Le champ texte « Département » est désormais rempli à partir du rattachement : on le masque.
+  var dep = document.querySelector('input[name="department"]');
+  if (dep) { var bloc = dep.closest('.col-md-6, .mb-3'); if (bloc) bloc.style.display = 'none'; }
+  function filtrer() {
+    var dir = d.value;
+    Array.prototype.forEach.call(s.options, function (o) {
+      if (!o.value) return;
+      var ok = !dir || o.dataset.direction === dir;
+      o.hidden = !ok; o.disabled = !ok;
+      if (!ok && o.selected) s.value = '';
+    });
+  }
+  s.addEventListener('change', function () {
+    var o = s.options[s.selectedIndex];
+    if (o && o.dataset.direction && d.value !== o.dataset.direction) { d.value = o.dataset.direction; filtrer(); }
+  });
+  d.addEventListener('change', filtrer);
+  filtrer();
+})();
+</script>
+{% endif %}

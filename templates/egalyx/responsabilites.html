@@ -1,0 +1,70 @@
+{% extends "base.html" %}
+{% import "_macros/page.html" as pg %}
+{% block title %}Responsabilités de {{ u.nom_affiche }} — Egalyx{% endblock %}
+{% block styles %}{{ super() }}{{ pg.styles() }}
+<style>
+  .rs-statut { display: inline-flex; align-items: center; gap: .4rem; font-size: .8rem; font-weight: 600; padding: .2rem .65rem; border-radius: 999px; }
+  .rs-statut.actif { background: #dcfce7; color: #166534; } .rs-statut.inactif { background: #fee2e2; color: #991b1b; }
+  .rs-cat { display: flex; gap: .8rem; align-items: flex-start; padding: .7rem .2rem; border-bottom: 1px solid var(--bs-border-color, #e5e7eb); margin: 0; cursor: pointer; }
+  .rs-cat:last-child { border-bottom: 0; }
+  .rs-cat input { margin-top: .3rem; }
+  .rs-cat .rs-n { margin-left: auto; font-weight: 700; color: #1e3a8a; background: #e0e7ff; border-radius: 999px; padding: .1rem .6rem; font-size: .85rem; }
+  .rs-cat small { display: block; color: var(--bs-secondary-color, #6b7280); }
+  .rs-ex { font-size: .8rem; color: var(--bs-secondary-color, #6b7280); margin-top: .2rem; }
+  .rs-pied { display: flex; flex-wrap: wrap; gap: 1rem; align-items: flex-end; }
+  .rs-pied .form-select { min-width: 260px; }
+</style>
+{% endblock %}
+{% block content %}
+<div class="container" style="max-width: 980px;">
+  {{ pg.entete('Responsabilités de ' ~ u.nom_affiche, 'fa-people-arrows', 'Ce qui est confié à cette personne et qui est encore en cours', retour=url_for('client_admin_utilisateurs') if url_exists is not defined or url_exists('client_admin_utilisateurs') else none, libelle_retour='Utilisateurs') }}
+
+  {% call pg.carte() %}
+  <div class="d-flex flex-wrap gap-4 align-items-center">
+    <div><div class="pg-second">Compte</div>
+      {% if u.is_active %}<span class="rs-statut actif"><i class="fas fa-circle-check"></i>Actif</span>
+      {% else %}<span class="rs-statut inactif"><i class="fas fa-ban"></i>Désactivé — ne peut plus se connecter, historique conservé</span>{% endif %}</div>
+    <div><div class="pg-second">E-mail</div>{{ u.email }}</div>
+    <div><div class="pg-second">Rattachement</div>{{ aff.libelle or 'Non rattaché' }}</div>
+    <div><div class="pg-second">Éléments en cours</div><strong>{{ total }}</strong></div>
+  </div>
+  {% endcall %}
+
+  {% if not categories %}
+    {% call pg.carte() %}{{ pg.vide('Aucune responsabilité en cours : rien à transférer.', 'fa-circle-check') }}{% endcall %}
+  {% else %}
+  <form method="post">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() if csrf_token is defined else '' }}">
+    {% call pg.carte('À transférer', aide='cochez ce qui doit changer de responsable') %}
+      {% for c in categories %}
+      <label class="rs-cat">
+        <input type="checkbox" class="form-check-input" name="categorie" value="{{ c.cle }}" checked>
+        <span><strong>{{ c.libelle }}</strong><small>en tant que : {{ c.role }}</small>
+          <span class="rs-ex">{{ c.exemples|join(' · ') }}{% if c.n > c.exemples|length %} …{% endif %}</span></span>
+        <span class="rs-n">{{ c.n }}</span>
+      </label>
+      {% endfor %}
+    {% endcall %}
+    {% call pg.carte('Nouveau responsable') %}
+    <div class="rs-pied">
+      <div>
+        <label class="form-label" for="rsCible">Personne qui reprend ces éléments</label>
+        <select class="form-select" name="nouveau_responsable" id="rsCible" required>
+          <option value="">— Choisir —</option>
+          {% for c in candidats %}<option value="{{ c.id }}">{{ c.nom_affiche }}{% if c.fonction %} — {{ c.fonction }}{% elif c.department %} — {{ c.department }}{% endif %}</option>{% endfor %}
+        </select>
+      </div>
+      {% if u.is_active %}
+      <div class="form-check mb-2">
+        <input class="form-check-input" type="checkbox" name="desactiver" value="1" id="rsDesac">
+        <label class="form-check-label" for="rsDesac">Désactiver aussi le compte de {{ u.nom_affiche }}</label>
+      </div>
+      {% endif %}
+      <button class="btn btn-primary ms-auto" type="submit"><i class="fas fa-people-arrows me-1"></i>Transférer</button>
+    </div>
+    <p class="pg-second mt-2 mb-0">Les éléments terminés, clôturés ou archivés ne bougent pas : ils restent attribués à {{ u.nom_affiche }} dans l'historique. La personne qui reprend reçoit une notification.</p>
+    {% endcall %}
+  </form>
+  {% endif %}
+</div>
+{% endblock %}

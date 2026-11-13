@@ -1,0 +1,521 @@
+{% extends "base.html" %}
+{% block title %}Organigramme — {{ racine.nom }}{% endblock %}
+{% block styles %}{{ super() }}
+<style>
+  .oc, .oc-fiche { --oc-ligne: #b8c4d6; --oc-fond: #f4f6fb; --oc-carte: #fff; --oc-texte: #0f172a; --oc-doux: #64748b; --oc-bord: #e2e8f0; }
+  [data-bs-theme="dark"] .oc, body.dark-mode .oc, [data-bs-theme="dark"] .oc-fiche, body.dark-mode .oc-fiche { --oc-ligne: #475569; --oc-fond: #0b1220; --oc-carte: #111a2e; --oc-texte: #e2e8f0; --oc-doux: #94a3b8; --oc-bord: #1f2a44; }
+  .oc { color: var(--oc-texte); }
+  .oc-tete { display: flex; align-items: center; gap: 1rem; flex-wrap: wrap; margin-bottom: 1rem; }
+  .oc-tete h1 { font-size: 1.45rem; font-weight: 750; margin: 0; letter-spacing: -.01em; }
+  .oc-tete .oc-sous { color: var(--oc-doux); font-size: .88rem; }
+  .oc-tete .oc-actions { margin-left: auto; display: flex; gap: .5rem; flex-wrap: wrap; }
+  .oc-kpis { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: .6rem; margin-bottom: .9rem; }
+  .oc-kpi { background: var(--oc-carte); border: 1px solid var(--oc-bord); border-radius: 12px; padding: .65rem .85rem; }
+  .oc-kpi b { display: block; font-size: 1.35rem; font-weight: 750; line-height: 1.15; }
+  .oc-kpi span { font-size: .74rem; color: var(--oc-doux); text-transform: uppercase; letter-spacing: .04em; font-weight: 600; }
+  .oc-kpi small { display: block; font-size: .75rem; color: var(--oc-doux); }
+  .oc-kpi.alerte b { color: #b45309; }
+  .oc-barre { display: flex; gap: .5rem; align-items: center; flex-wrap: wrap; background: var(--oc-carte); border: 1px solid var(--oc-bord); border-radius: 12px 12px 0 0; padding: .5rem .6rem; border-bottom: 0; }
+  .oc-chercher { position: relative; flex: 1 1 240px; max-width: 360px; }
+  .oc-chercher input { width: 100%; border: 1px solid var(--oc-bord); border-radius: 9px; padding: .42rem .7rem .42rem 2rem; background: var(--oc-fond); color: inherit; font-size: .9rem; }
+  .oc-chercher i { position: absolute; left: .65rem; top: 50%; transform: translateY(-50%); color: var(--oc-doux); font-size: .85rem; }
+  .oc-chercher .oc-res { position: absolute; right: .6rem; top: 50%; transform: translateY(-50%); font-size: .75rem; color: var(--oc-doux); }
+  .oc-groupe { display: inline-flex; border: 1px solid var(--oc-bord); border-radius: 9px; overflow: hidden; }
+  .oc-groupe button, .oc-bouton { background: var(--oc-carte); color: inherit; border: 0; padding: .38rem .6rem; font-size: .85rem; line-height: 1.2; }
+  .oc-groupe button + button { border-left: 1px solid var(--oc-bord); }
+  .oc-groupe button:hover, .oc-bouton:hover { background: var(--oc-fond); }
+  .oc-bouton { border: 1px solid var(--oc-bord); border-radius: 9px; }
+  .oc-bouton.actif { background: #1e3a8a; color: #fff; border-color: #1e3a8a; }
+  .oc-zoom-val { font-variant-numeric: tabular-nums; min-width: 3.2rem; text-align: center; font-size: .8rem; color: var(--oc-doux); }
+  .oc-vue { position: relative; height: calc(100vh - 290px); min-height: 520px; background: var(--oc-fond);
+            background-image: radial-gradient(circle, rgba(100,116,139,.18) 1px, transparent 1px); background-size: 22px 22px;
+            border: 1px solid var(--oc-bord); border-radius: 0 0 12px 12px; overflow: hidden; cursor: grab; touch-action: none; }
+  .oc-vue.glisse { cursor: grabbing; }
+  .oc-vue:fullscreen { height: 100vh; border-radius: 0; }
+  .oc-vue:fullscreen .oc-sortir { display: inline-flex; }
+  .oc-sortir { display: none; position: absolute; top: 12px; right: 12px; z-index: 5; align-items: center; gap: .4rem; background: var(--oc-carte); border: 1px solid var(--oc-bord);
+               border-radius: 10px; padding: .4rem .7rem; font-size: .82rem; cursor: pointer; color: inherit; }
+  .oc-astuce { position: absolute; left: 50%; top: 10px; transform: translateX(-50%); z-index: 4; font-size: .78rem; color: #1e3a8a; background: #eff6ff;
+               border: 1px solid #bfdbfe; border-radius: 999px; padding: .25rem .8rem; pointer-events: none; transition: opacity .4s; }
+  .oc-astuce.parti { opacity: 0; }
+  .oc ~ .eg-chat-btn, body:has(#oc) .eg-chat-btn, body:has(#oc) #egChatBtn, body:has(#oc) .lang-toggle-main, body:has(#oc) .language-widget { bottom: 22px; opacity: .55; }
+  body:has(#oc) .eg-chat-btn:hover, body:has(#oc) #egChatBtn:hover { opacity: 1; }
+  .oc-scene { position: absolute; left: 0; top: 0; transform-origin: 0 0; padding: 36px 48px 60px; will-change: transform; }
+  .oc-legende { position: absolute; left: 12px; bottom: 10px; display: flex; gap: .8rem; font-size: .74rem; color: var(--oc-doux); background: color-mix(in srgb, var(--oc-carte) 88%, transparent); padding: .3rem .6rem; border-radius: 8px; border: 1px solid var(--oc-bord); }
+  .oc-legende i { display: inline-block; width: .7rem; height: .7rem; border-radius: 3px; margin-right: .3rem; vertical-align: -1px; }
+  .oc-aide { position: absolute; right: 12px; bottom: 10px; font-size: .74rem; color: var(--oc-doux); }
+
+  /* ---- arbre ---- */
+  .oc-arbre, .oc-arbre ul { list-style: none; margin: 0; padding: 0; display: flex; justify-content: center; position: relative; }
+  .oc-arbre ul { padding-top: 26px; }
+  .oc-arbre li { position: relative; padding: 26px 9px 0; display: flex; flex-direction: column; align-items: center; }
+  .oc-arbre > li { padding-top: 0; }
+  .oc-arbre li::before, .oc-arbre li::after { content: ''; position: absolute; top: 0; right: 50%; width: 50%; height: 26px; border-top: 2px solid var(--oc-ligne); }
+  .oc-arbre li::after { right: auto; left: 50%; border-left: 2px solid var(--oc-ligne); }
+  .oc-arbre > li::before, .oc-arbre > li::after { display: none; }
+  .oc-arbre li:only-child::before { display: none; }
+  .oc-arbre li:only-child::after { border-top: 0; left: 50%; width: 0; }
+  .oc-arbre li:first-child::before, .oc-arbre li:last-child::after { border: 0 none; }
+  .oc-arbre li:last-child::before { border-right: 2px solid var(--oc-ligne); border-radius: 0 8px 0 0; }
+  .oc-arbre li:first-child::after { border-radius: 8px 0 0 0; }
+  .oc-arbre li:only-child::after { border-left: 2px solid var(--oc-ligne); border-radius: 0; }
+  .oc-arbre ul::before { content: ''; position: absolute; top: 0; left: 50%; height: 26px; border-left: 2px solid var(--oc-ligne); }
+  .oc-arbre li.ferme > ul, .oc-arbre li.ferme > .oc-pile { display: none; }
+
+  /* ---- carte ---- */
+  .oc-carte { position: relative; width: 236px; background: var(--oc-carte); border: 1px solid var(--oc-bord); border-radius: 14px;
+              box-shadow: 0 1px 2px rgba(15,23,42,.06), 0 6px 18px rgba(15,23,42,.06); text-align: left; cursor: pointer;
+              transition: box-shadow .15s, transform .15s, border-color .15s; overflow: visible; }
+  .oc-carte:hover { box-shadow: 0 2px 4px rgba(15,23,42,.08), 0 12px 28px rgba(30,58,138,.14); transform: translateY(-1px); }
+  .oc-carte:focus-visible { outline: 3px solid #93c5fd; outline-offset: 2px; }
+  .oc-carte::before { content: ''; position: absolute; left: 0; right: 0; top: 0; height: 5px; border-radius: 14px 14px 0 0; background: var(--c, #1e3a8a); }
+  .oc-carte .oc-c-corps { padding: .8rem .85rem .65rem; }
+  .oc-niveau { font-size: .66rem; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; color: var(--c, #1e3a8a); display: flex; align-items: center; gap: .35rem; }
+  .oc-nom { font-weight: 700; font-size: .96rem; line-height: 1.25; margin: .2rem 0 .55rem; word-break: break-word; }
+  .oc-resp { display: flex; align-items: center; gap: .55rem; padding: .45rem .5rem; border-radius: 10px; background: var(--oc-fond); }
+  .oc-resp .oc-qui { min-width: 0; }
+  .oc-resp .oc-qui b { display: block; font-size: .83rem; font-weight: 650; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .oc-resp .oc-qui small { display: block; font-size: .72rem; color: var(--oc-doux); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .oc-resp.vacant { background: transparent; border: 1.5px dashed #f59e0b; }
+  .oc-resp.vacant b { color: #b45309; }
+  .oc-av { flex: none; width: 34px; height: 34px; border-radius: 50%; display: inline-flex; align-items: center; justify-content: center; font-size: .76rem; font-weight: 700; color: #fff; background: var(--c, #1e3a8a); overflow: hidden; }
+  .oc-av img { width: 100%; height: 100%; object-fit: cover; }
+  .oc-av.manuel { background: #64748b; }
+  .oc-av.vide { background: transparent; color: #f59e0b; border: 1.5px dashed #f59e0b; }
+  .oc-chiffres { display: flex; gap: .35rem; flex-wrap: wrap; margin-top: .55rem; }
+  .oc-chiffres span { font-size: .72rem; color: var(--oc-doux); background: var(--oc-fond); border-radius: 6px; padding: .12rem .45rem; white-space: nowrap; }
+  .oc-chiffres i { margin-right: .25rem; opacity: .8; }
+  .oc-membres { display: none; flex-wrap: wrap; gap: .25rem; margin-top: .5rem; padding-top: .5rem; border-top: 1px dashed var(--oc-bord); }
+  .oc.avec-membres .oc-membres { display: flex; }
+  .oc-membres .oc-av { width: 24px; height: 24px; font-size: .6rem; }
+  .oc-membres .oc-plus { font-size: .7rem; color: var(--oc-doux); align-self: center; }
+  .oc-plier { position: absolute; left: 50%; bottom: -12px; transform: translateX(-50%); z-index: 2; height: 22px; min-width: 22px; padding: 0 .45rem;
+              border-radius: 999px; border: 1px solid var(--oc-bord); background: var(--oc-carte); color: var(--oc-doux); font-size: .68rem; font-weight: 700;
+              display: inline-flex; align-items: center; gap: .25rem; box-shadow: 0 1px 3px rgba(15,23,42,.12); }
+  .oc-plier:hover { color: #1e3a8a; border-color: #93c5fd; }
+  li.ferme > .oc-carte .oc-plier { background: #1e3a8a; color: #fff; border-color: #1e3a8a; }
+
+  /* racine */
+  .oc-carte.racine { width: 300px; text-align: center; background: linear-gradient(135deg, #0f172a, #1e3a8a 60%, #2563eb); color: #fff; border: 0; }
+  .oc-carte.racine::before { display: none; }
+  .oc-carte.racine .oc-niveau { color: #bfdbfe; justify-content: center; }
+  .oc-carte.racine .oc-nom { font-size: 1.15rem; margin-bottom: .4rem; }
+  .oc-carte.racine .oc-chiffres { justify-content: center; }
+  .oc-carte.racine .oc-chiffres span { background: rgba(255,255,255,.12); color: #e0e7ff; }
+  .oc-logo { max-height: 42px; max-width: 160px; margin: 0 auto .4rem; display: block; background: #fff; border-radius: 8px; padding: 4px 8px; }
+
+  /* services : pile verticale sous la direction (organigramme lisible même avec beaucoup de services) */
+  .oc-pile { position: relative; display: flex; flex-direction: column; gap: 10px; padding: 22px 0 0 26px; align-self: center; }
+  .oc-pile::before { content: ''; position: absolute; left: 10px; top: 0; bottom: 24px; border-left: 2px solid var(--oc-ligne); }
+  .oc-pile > .oc-carte::after { content: ''; position: absolute; left: -16px; top: 24px; width: 16px; border-top: 2px solid var(--oc-ligne); }
+  .oc-pile > .oc-carte { width: 214px; }
+  .oc-pile > .oc-carte .oc-nom { font-size: .88rem; margin-bottom: .4rem; }
+  .oc-pile > .oc-carte .oc-resp { padding: .35rem .45rem; }
+  .oc-pile > .oc-carte .oc-av { width: 28px; height: 28px; font-size: .68rem; }
+
+  /* recherche */
+  .oc-carte.trouve { border-color: #f59e0b; box-shadow: 0 0 0 3px rgba(245,158,11,.35), 0 12px 28px rgba(245,158,11,.18); }
+  .oc.recherche-active .oc-carte:not(.trouve):not(.racine) { opacity: .45; }
+  .oc-carte.choisi { border-color: #2563eb; box-shadow: 0 0 0 3px rgba(37,99,235,.3); }
+
+  /* fiche latérale */
+  .oc-fiche { position: fixed; top: 0; right: 0; bottom: 0; width: min(420px, 100vw); background: var(--oc-carte); color: var(--oc-texte);
+              box-shadow: -12px 0 40px rgba(15,23,42,.2); transform: translateX(105%); transition: transform .22s ease; z-index: 1060; display: flex; flex-direction: column; }
+  .oc-fiche.ouverte { transform: none; }
+  .oc-fiche-tete { padding: 1.1rem 1.2rem .9rem; border-bottom: 1px solid var(--oc-bord); position: relative; }
+  .oc-fiche-tete::before { content: ''; position: absolute; left: 0; right: 0; top: 0; height: 5px; background: var(--c, #1e3a8a); }
+  .oc-fiche-tete h2 { font-size: 1.15rem; font-weight: 750; margin: .25rem 2rem 0 0; }
+  .oc-fiche-fermer { position: absolute; right: .8rem; top: .9rem; border: 0; background: var(--oc-fond); color: inherit; width: 32px; height: 32px; border-radius: 8px; }
+  .oc-fiche-corps { padding: 1rem 1.2rem 1.4rem; overflow-y: auto; flex: 1; }
+  .oc-fiche h3 { font-size: .74rem; text-transform: uppercase; letter-spacing: .06em; color: var(--oc-doux); font-weight: 700; margin: 1.1rem 0 .45rem; }
+  .oc-fiche .oc-resp { background: var(--oc-fond); }
+  .oc-fiche-kpis { display: grid; grid-template-columns: repeat(3, 1fr); gap: .5rem; margin-top: .9rem; }
+  .oc-fiche-kpis div { background: var(--oc-fond); border-radius: 10px; padding: .5rem; text-align: center; }
+  .oc-fiche-kpis b { display: block; font-size: 1.15rem; }
+  .oc-fiche-kpis span { font-size: .7rem; color: var(--oc-doux); }
+  .oc-liste { list-style: none; padding: 0; margin: 0; }
+  .oc-liste li { display: flex; align-items: center; gap: .55rem; padding: .4rem 0; border-bottom: 1px solid var(--oc-bord); font-size: .88rem; }
+  .oc-liste li:last-child { border-bottom: 0; }
+  .oc-liste .oc-av { width: 28px; height: 28px; font-size: .66rem; }
+  .oc-liste small { color: var(--oc-doux); display: block; font-size: .75rem; }
+  .oc-liste a { text-decoration: none; }
+  .oc-liste .oc-n { margin-left: auto; font-size: .75rem; color: var(--oc-doux); }
+  .oc-fiche-actions { display: flex; flex-wrap: wrap; gap: .4rem; margin-top: 1rem; }
+  .oc-voile { position: fixed; inset: 0; background: rgba(15,23,42,.25); z-index: 1055; display: none; }
+  .oc-voile.ouvert { display: block; }
+  .oc-sans { margin-top: .9rem; }
+  .oc-sans summary { cursor: pointer; font-size: .88rem; color: var(--oc-doux); }
+  .oc-vide { text-align: center; padding: 3rem 1rem; }
+  .oc-vide i { font-size: 2.4rem; color: #94a3b8; }
+
+  /* impression : A3 paysage, toute la structure sur une page */
+  @media print {
+    @page { size: A3 landscape; margin: 10mm; }
+    body * { visibility: hidden; }
+    .oc-impression, .oc-impression * { visibility: visible; }
+    .oc-impression { position: absolute; left: 0; top: 0; width: 100%; }
+    .oc-barre, .oc-legende, .oc-aide, .oc-plier, .oc-fiche, .oc-voile, .oc-actions, .oc-kpis { display: none !important; }
+    .oc-vue { height: auto; min-height: 0; border: 0; overflow: visible; background: none; }
+    .oc-scene { position: relative; padding: 0; }
+    .oc-carte { box-shadow: none; break-inside: avoid; }
+    .oc-impression-titre { display: flex !important; }
+  }
+  .oc-impression-titre { display: none; justify-content: space-between; align-items: baseline; border-bottom: 2px solid #1e3a8a; margin-bottom: 8mm; padding-bottom: 3mm; }
+  .oc-impression-titre h1 { font-size: 18pt; margin: 0; color: #1e3a8a; }
+  .oc-impression-titre span { font-size: 9pt; color: #475569; }
+</style>
+{% endblock %}
+
+{% macro avatar(p, classe='') -%}
+  {%- if p and p.photo -%}<span class="oc-av {{ classe }}"><img src="{{ p.photo }}" alt=""></span>
+  {%- elif p -%}<span class="oc-av {{ classe }} {{ '' if p.compte else 'manuel' }}">{{ p.initiales }}</span>
+  {%- else -%}<span class="oc-av vide {{ classe }}"><i class="fas fa-user-plus"></i></span>{%- endif -%}
+{%- endmacro %}
+
+{% macro carte(n) -%}
+{% set icone = {'organisation': 'fa-building', 'pays': 'fa-earth-africa', 'pole': 'fa-layer-group', 'direction': 'fa-sitemap', 'service': 'fa-users-gear'}[n.type] %}
+{% set niveau = {'organisation': 'Organisation', 'pays': 'Pays', 'pole': 'Pôle / filiale', 'direction': 'Direction', 'service': 'Service'}[n.type] %}
+<div class="oc-carte {{ 'racine' if n.type == 'organisation' }}" style="--c: {{ n.couleur }}" tabindex="0" role="button"
+     data-cle="{{ n.cle }}" data-cherche="{{ (n.nom ~ ' ' ~ (n.responsable.nom if n.responsable else '') ~ ' ' ~ (n.membres|map(attribute='nom')|join(' ')) ~ ' ' ~ (n.equipe|join(' ')))|lower }}"
+     aria-label="{{ niveau }} {{ n.nom }} — ouvrir la fiche">
+  <div class="oc-c-corps">
+    {% if n.type == 'organisation' and n.logo %}<img class="oc-logo" src="{{ url_for('serve_upload', filename=n.logo) }}" alt="">{% endif %}
+    <div class="oc-niveau"><i class="fas {{ icone }}"></i>{% if n.drapeau %}<span>{{ n.drapeau }}</span>{% endif %}{{ niveau }}</div>
+    <div class="oc-nom">{{ n.nom }}</div>
+    {% if n.type not in ('organisation', 'pays') %}
+      {% if n.responsable %}
+      <div class="oc-resp">{{ avatar(n.responsable) }}<div class="oc-qui"><b title="{{ n.responsable.nom }}">{{ n.responsable.nom }}</b><small title="{{ n.responsable.poste or n.role }}">{{ n.responsable.poste or n.role }}</small></div></div>
+      {% else %}
+      <div class="oc-resp vacant">{{ avatar(none) }}<div class="oc-qui"><b>Poste à pourvoir</b><small>{{ n.role }}</small></div></div>
+      {% endif %}
+    {% endif %}
+    <div class="oc-chiffres">
+      {% if n.type == 'organisation' %}<span><i class="fas fa-sitemap"></i>{{ n.descendants }} entités</span>{% endif %}
+      <span title="Collaborateurs du périmètre"><i class="fas fa-user-group"></i>{{ n.total_effectif }}</span>
+      {% if n.total_cartos %}<span title="Cartographies du périmètre"><i class="fas fa-map"></i>{{ n.total_cartos }}</span>{% endif %}
+      {% if n.total_risques %}<span title="Risques du périmètre"><i class="fas fa-triangle-exclamation"></i>{{ n.total_risques }}</span>{% endif %}
+    </div>
+    {% if n.membres or n.equipe %}
+    <div class="oc-membres" aria-label="Collaborateurs">
+      {% for p in n.membres[:7] %}<span title="{{ p.nom }}">{{ avatar(p) }}</span>{% endfor %}
+      {% for nom in n.equipe[:(7 - n.membres[:7]|length) if n.membres|length < 7 else 0] %}<span class="oc-av manuel" title="{{ nom }}">{{ nom[:1]|upper }}</span>{% endfor %}
+      {% if n.effectif > 7 %}<span class="oc-plus">+{{ n.effectif - 7 }}</span>{% endif %}
+    </div>
+    {% endif %}
+  </div>
+  {% if n.enfants and n.type != 'organisation' %}
+  <button type="button" class="oc-plier" aria-label="Plier / déplier" title="Plier / déplier"><i class="fas fa-minus"></i>{{ n.enfants|length }}</button>
+  {% endif %}
+</div>
+{%- endmacro %}
+
+{% macro branche(n) -%}
+<li data-cle="{{ n.cle }}">
+  {{ carte(n) }}
+  {% if n.enfants %}
+    {% if n.type == 'direction' and n.enfants|selectattr('type', 'equalto', 'service')|list|length == n.enfants|length %}
+      <div class="oc-pile">{% for e in n.enfants %}{{ carte(e) }}{% endfor %}</div>
+    {% else %}
+      <ul>{% for e in n.enfants %}{{ branche(e) }}{% endfor %}</ul>
+    {% endif %}
+  {% endif %}
+</li>
+{%- endmacro %}
+
+{% block content %}
+<div class="container-fluid oc" id="oc" style="max-width: 1600px;">
+  <div class="oc-tete">
+    <div>
+      <h1><i class="fas fa-sitemap me-2" style="color:#2563eb"></i>Organigramme</h1>
+      <div class="oc-sous">{{ racine.nom }} · {{ stats.directions }} direction(s), {{ stats.services }} service(s){% if stats.poles %}, {{ stats.poles }} pôle(s){% endif %}{% if stats.pays %}, {{ stats.pays }} pays{% endif %}</div>
+    </div>
+    <div class="oc-actions">
+      {% if url_directions %}<a class="btn btn-outline-secondary btn-sm" href="{{ url_directions }}"><i class="fas fa-list-ul me-1"></i>Vue en liste</a>{% endif %}
+      {% if url_utilisateurs %}<a class="btn btn-outline-secondary btn-sm" href="{{ url_utilisateurs }}"><i class="fas fa-user-group me-1"></i>Collaborateurs</a>{% endif %}
+      {% if peut_gerer and url_config %}<a class="btn btn-outline-secondary btn-sm" href="{{ url_config }}"><i class="fas fa-image me-1"></i>Logo et nom</a>{% endif %}
+      <button class="btn btn-primary btn-sm" type="button" id="ocImprimer"><i class="fas fa-print me-1"></i>Imprimer / PDF</button>
+    </div>
+  </div>
+
+  <div class="oc-kpis">
+    {% if stats.pays %}<div class="oc-kpi"><span>Pays</span><b>{{ stats.pays }}</b></div>{% endif %}
+    {% if stats.poles %}<div class="oc-kpi"><span>Pôles / filiales</span><b>{{ stats.poles }}</b></div>{% endif %}
+    <div class="oc-kpi"><span>Directions</span><b>{{ stats.directions }}</b></div>
+    <div class="oc-kpi"><span>Services</span><b>{{ stats.services }}</b></div>
+    <div class="oc-kpi"><span>Collaborateurs</span><b>{{ stats.collaborateurs }}</b><small>{{ stats.rattaches }} rattaché(s) à une entité</small></div>
+    <div class="oc-kpi {{ 'alerte' if stats.vacants }}"><span>Encadrement</span><b>{{ stats.encadrement }} %</b><small>{{ stats.vacants }} poste(s) de responsable à pourvoir</small></div>
+  </div>
+
+  {% if not racine.enfants %}
+  <div class="oc-kpi oc-vide">
+    <i class="fas fa-sitemap"></i>
+    <h2 class="h5 mt-3">Votre organigramme est vide</h2>
+    <p class="text-secondary">Créez vos directions (et, si besoin, vos pays, pôles et services) : l'organigramme se construit tout seul.</p>
+    {% if peut_gerer and url_directions %}<a class="btn btn-primary" href="{{ url_directions }}"><i class="fas fa-plus me-1"></i>Créer la structure</a>{% endif %}
+  </div>
+  {% else %}
+  <div class="oc-barre" role="toolbar" aria-label="Outils de l'organigramme">
+    <label class="oc-chercher"><i class="fas fa-magnifying-glass"></i>
+      <input type="search" id="ocChercher" placeholder="Chercher une entité ou une personne…" aria-label="Chercher dans l'organigramme" autocomplete="off">
+      <span class="oc-res" id="ocRes"></span></label>
+    <div class="oc-groupe" aria-label="Zoom">
+      <button type="button" id="ocMoins" title="Dézoomer (−)"><i class="fas fa-minus"></i></button>
+      <button type="button" class="oc-zoom-val" id="ocZoomVal" title="Taille réelle (0)">100 %</button>
+      <button type="button" id="ocPlus" title="Zoomer (+)"><i class="fas fa-plus"></i></button>
+    </div>
+    <button type="button" class="oc-bouton" id="ocAjuster" title="Tout voir (F)"><i class="fas fa-expand me-1"></i>Tout voir</button>
+    <div class="oc-groupe">
+      <button type="button" id="ocDeplier" title="Tout déplier"><i class="fas fa-angles-down me-1"></i>Déplier</button>
+      <button type="button" id="ocReplier" title="Replier sur les directions"><i class="fas fa-angles-up me-1"></i>Replier</button>
+    </div>
+    <button type="button" class="oc-bouton" id="ocMembres" aria-pressed="false"><i class="fas fa-user-group me-1"></i>Collaborateurs</button>
+    <button type="button" class="oc-bouton ms-auto" id="ocPleinEcran" title="Plein écran"><i class="fas fa-up-right-and-down-left-from-center me-1"></i>Plein écran</button>
+  </div>
+  <div class="oc-vue" id="ocVue">
+    <div class="oc-scene oc-impression" id="ocScene">
+      <div class="oc-impression-titre"><h1>Organigramme — {{ racine.nom }}</h1><span>Édité le {{ datetime.now().strftime('%d/%m/%Y') if datetime is defined else '' }} · Egalyx Control</span></div>
+      <ul class="oc-arbre">{{ branche(racine) }}</ul>
+    </div>
+    <div class="oc-legende" aria-hidden="true">
+      {% if stats.pays %}<span><i style="background:#0f766e"></i>Pays</span>{% endif %}
+      {% if stats.poles %}<span><i style="background:#4f46e5"></i>Pôle</span>{% endif %}
+      <span><i style="background:#1e3a8a"></i>Direction</span><span><i style="background:#0284c7"></i>Service</span>
+      <span><i style="background:transparent;border:1.5px dashed #f59e0b"></i>Poste à pourvoir</span>
+    </div>
+    <div class="oc-aide">Glisser pour se déplacer · Ctrl + molette pour zoomer · clic sur une entité pour sa fiche</div>
+    <button type="button" class="oc-sortir" id="ocSortir"><i class="fas fa-down-left-and-up-right-to-center"></i>Quitter le plein écran</button>
+    <div class="oc-astuce parti" id="ocAstuce"><i class="fas fa-hand me-1"></i>Faites glisser pour voir le reste de l'organigramme</div>
+  </div>
+  {% if sans_rattachement %}
+  <details class="oc-sans">
+    <summary><i class="fas fa-user-clock me-1"></i>{{ sans_rattachement|length }} collaborateur(s) non rattaché(s) à une direction ou un service</summary>
+    <ul class="oc-liste mt-2" style="max-width:560px">
+      {% for p in sans_rattachement %}<li>{{ avatar(p) }}<span>{{ p.nom }}<small>{{ p.email }}</small></span>
+        {% if url_utilisateurs %}<a class="oc-n" href="{{ url_for('client_admin_editer_utilisateur', id=p.id) if peut_gerer else url_utilisateurs }}">Rattacher</a>{% endif %}</li>{% endfor %}
+    </ul>
+  </details>
+  {% endif %}
+  {% endif %}
+</div>
+
+<div class="oc-voile" id="ocVoile"></div>
+<aside class="oc-fiche" id="ocFiche" aria-hidden="true" aria-labelledby="ocFicheTitre">
+  <div class="oc-fiche-tete" id="ocFicheTete">
+    <div class="oc-niveau" id="ocFicheNiveau"></div>
+    <h2 id="ocFicheTitre"></h2>
+    <button type="button" class="oc-fiche-fermer" id="ocFicheFermer" aria-label="Fermer"><i class="fas fa-xmark"></i></button>
+  </div>
+  <div class="oc-fiche-corps" id="ocFicheCorps"></div>
+</aside>
+<script id="ocDonnees" type="application/json">{{ details|tojson }}</script>
+{% endblock %}
+
+{% block scripts %}{{ super() }}
+<script>
+(function () {
+  var vue = document.getElementById('ocVue'), scene = document.getElementById('ocScene');
+  if (!vue || !scene) return;
+  var racineOc = document.getElementById('oc');
+  var D = JSON.parse(document.getElementById('ocDonnees').textContent);
+  var etat = { z: 1, x: 0, y: 0 };
+  var NIVEAU = { organisation: 'Organisation', pays: 'Pays', pole: 'Pôle / filiale', direction: 'Direction', service: 'Service' };
+
+  function appliquer(anim) {
+    scene.style.transition = anim ? 'transform .25s ease' : 'none';
+    scene.style.transform = 'translate(' + etat.x + 'px,' + etat.y + 'px) scale(' + etat.z + ')';
+    document.getElementById('ocZoomVal').textContent = Math.round(etat.z * 100) + ' %';
+  }
+  function zoomer(f, cx, cy) {
+    var r = vue.getBoundingClientRect();
+    cx = cx == null ? r.width / 2 : cx; cy = cy == null ? r.height / 2 : cy;
+    var z = Math.min(2, Math.max(0.2, etat.z * f));
+    etat.x = cx - (cx - etat.x) * (z / etat.z); etat.y = cy - (cy - etat.y) * (z / etat.z); etat.z = z; appliquer(true);
+  }
+  function ajuster() {
+    var r = vue.getBoundingClientRect(), w = scene.scrollWidth, h = scene.scrollHeight;
+    var z = Math.min(1, (r.width - 20) / w, (r.height - 20) / h);
+    etat.z = Math.max(0.2, z); etat.x = (r.width - w * etat.z) / 2; etat.y = Math.max(8, (r.height - h * etat.z) / 2 * 0.4); appliquer(true);
+  }
+  function centrer(el) {
+    var r = vue.getBoundingClientRect(), b = el.getBoundingClientRect();
+    etat.x += (r.left + r.width / 2) - (b.left + b.width / 2); etat.y += (r.top + r.height / 3) - (b.top + b.height / 2); appliquer(true);
+  }
+  // ---- déplacement
+  var glisse = null;
+  vue.addEventListener('pointerdown', function (e) {
+    if (e.target.closest('.oc-carte, button, a, input')) return;
+    glisse = { x: e.clientX - etat.x, y: e.clientY - etat.y, id: e.pointerId }; vue.setPointerCapture(e.pointerId); vue.classList.add('glisse');
+  });
+  vue.addEventListener('pointermove', function (e) { if (!glisse) return; etat.x = e.clientX - glisse.x; etat.y = e.clientY - glisse.y; appliquer(false); });
+  function lacher() { glisse = null; vue.classList.remove('glisse'); }
+  vue.addEventListener('pointerup', lacher); vue.addEventListener('pointercancel', lacher);
+  vue.addEventListener('wheel', function (e) {
+    e.preventDefault();
+    if (e.ctrlKey || e.metaKey) { var r = vue.getBoundingClientRect(); zoomer(e.deltaY < 0 ? 1.12 : 1 / 1.12, e.clientX - r.left, e.clientY - r.top); }
+    else { etat.x -= e.deltaX; etat.y -= e.deltaY; appliquer(false); }
+  }, { passive: false });
+  document.getElementById('ocPlus').onclick = function () { zoomer(1.2); };
+  document.getElementById('ocMoins').onclick = function () { zoomer(1 / 1.2); };
+  document.getElementById('ocZoomVal').onclick = function () { etat.z = 1; ajuster(); etat.z = 1; appliquer(true); };
+  document.getElementById('ocAjuster').onclick = ajuster;
+
+  // ---- plier / déplier
+  scene.addEventListener('click', function (e) {
+    var b = e.target.closest('.oc-plier');
+    if (b) {
+      e.stopPropagation();
+      var li = b.closest('li'); li.classList.toggle('ferme');
+      b.querySelector('i').className = li.classList.contains('ferme') ? 'fas fa-plus' : 'fas fa-minus';
+      return;
+    }
+    var c = e.target.closest('.oc-carte'); if (c) ouvrir(c.dataset.cle, c);
+  });
+  scene.addEventListener('keydown', function (e) {
+    var c = e.target.closest('.oc-carte'); if (c && (e.key === 'Enter' || e.key === ' ')) { e.preventDefault(); ouvrir(c.dataset.cle, c); }
+  });
+  function tout(ouvert, niveau) {
+    scene.querySelectorAll('li[data-cle]').forEach(function (li) {
+      var type = li.dataset.cle.split('-')[0];
+      var fermer = !ouvert && (niveau ? type === niveau : true) && li.querySelector(':scope > ul, :scope > .oc-pile');
+      li.classList.toggle('ferme', !!fermer);
+      var i = li.querySelector(':scope > .oc-carte .oc-plier i'); if (i) i.className = fermer ? 'fas fa-plus' : 'fas fa-minus';
+    });
+  }
+  document.getElementById('ocDeplier').onclick = function () { tout(true); setTimeout(ajuster, 30); };
+  document.getElementById('ocReplier').onclick = function () { tout(false, 'direction'); setTimeout(ajuster, 30); };
+  var bm = document.getElementById('ocMembres');
+  bm.onclick = function () { var on = racineOc.classList.toggle('avec-membres'); bm.classList.toggle('actif', on); bm.setAttribute('aria-pressed', on); };
+
+  // ---- recherche
+  var champ = document.getElementById('ocChercher'), res = document.getElementById('ocRes'), trouves = [], rang = 0;
+  function sansAccent(t) { return (t || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase(); }
+  function chercher() {
+    var q = sansAccent(champ.value.trim());
+    scene.querySelectorAll('.oc-carte.trouve').forEach(function (c) { c.classList.remove('trouve'); });
+    trouves = []; rang = 0;
+    if (q.length < 2) { racineOc.classList.remove('recherche-active'); res.textContent = ''; return; }
+    scene.querySelectorAll('.oc-carte').forEach(function (c) { if (sansAccent(c.dataset.cherche).indexOf(q) >= 0) { c.classList.add('trouve'); trouves.push(c); } });
+    racineOc.classList.add('recherche-active');
+    res.textContent = trouves.length ? '1/' + trouves.length : 'aucun';
+    trouves.forEach(function (c) { var li = c.parentElement.closest('li'); while (li) { li.classList.remove('ferme'); li = li.parentElement.closest('li'); } });
+    if (trouves.length) setTimeout(function () { centrer(trouves[0]); }, 20);
+  }
+  champ.addEventListener('input', chercher);
+  champ.addEventListener('keydown', function (e) {
+    if (e.key === 'Enter' && trouves.length) { e.preventDefault(); rang = (rang + 1) % trouves.length; res.textContent = (rang + 1) + '/' + trouves.length; centrer(trouves[rang]); }
+    if (e.key === 'Escape') { champ.value = ''; chercher(); }
+  });
+
+  // ---- fiche
+  var fiche = document.getElementById('ocFiche'), voile = document.getElementById('ocVoile'), choisi = null;
+  function esc(t) { var d = document.createElement('div'); d.textContent = t == null ? '' : String(t); return d.innerHTML; }
+  function av(p) {
+    if (!p) return '<span class="oc-av vide"><i class="fas fa-user-plus"></i></span>';
+    if (p.photo) return '<span class="oc-av"><img src="' + esc(p.photo) + '" alt=""></span>';
+    return '<span class="oc-av ' + (p.compte === false ? 'manuel' : '') + '">' + esc(p.initiales) + '</span>';
+  }
+  function ouvrir(cle, el) {
+    var n = D[cle]; if (!n) return;
+    if (choisi) choisi.classList.remove('choisi'); choisi = el; if (el) el.classList.add('choisi');
+    document.getElementById('ocFicheTete').style.setProperty('--c', el ? getComputedStyle(el).getPropertyValue('--c') : '#1e3a8a');
+    document.getElementById('ocFicheNiveau').textContent = NIVEAU[n.type] || '';
+    document.getElementById('ocFicheTitre').textContent = n.nom;
+    var h = '';
+    if (n.type !== 'organisation' && n.type !== 'pays') {
+      h += '<h3>' + esc(n.role) + '</h3>';
+      h += n.responsable ? '<div class="oc-resp">' + av(n.responsable) + '<div class="oc-qui"><b>' + esc(n.responsable.nom) + '</b><small>' +
+           (n.responsable.poste ? esc(n.responsable.poste) + '<br>' : '') +
+           (n.responsable.email ? '<a href="mailto:' + esc(n.responsable.email) + '">' + esc(n.responsable.email) + '</a>' : 'sans compte dans Egalyx') + '</small></div></div>'
+         : '<div class="oc-resp vacant">' + av(null) + '<div class="oc-qui"><b>Poste à pourvoir</b><small>Aucun responsable désigné</small></div></div>';
+    }
+    h += '<div class="oc-fiche-kpis"><div><b>' + n.total_effectif + '</b><span>collaborateurs</span></div><div><b>' + n.total_cartos +
+         '</b><span>cartographies</span></div><div><b>' + n.total_risques + '</b><span>risques</span></div></div>';
+    if (n.description) h += '<h3>Mission</h3><p class="mb-0" style="font-size:.9rem">' + esc(n.description) + '</p>';
+    if (n.membres.length || n.equipe.length) {
+      h += '<h3>Collaborateurs (' + (n.membres.length + n.equipe.length) + ')</h3><ul class="oc-liste">';
+      n.membres.forEach(function (p) { h += '<li>' + av(p) + '<span>' + esc(p.nom) + '<small>' + esc(p.poste || p.email || '') + '</small></span></li>'; });
+      n.equipe.forEach(function (nom) { h += '<li><span class="oc-av manuel">' + esc(nom.charAt(0).toUpperCase()) + '</span><span>' + esc(nom) + '<small>membre de l’équipe (sans compte)</small></span></li>'; });
+      h += '</ul>';
+    }
+    if (n.enfants.length) {
+      h += '<h3>Entités rattachées (' + n.enfants.length + ')</h3><ul class="oc-liste">';
+      n.enfants.forEach(function (e) { h += '<li><i class="fas fa-angle-right" style="color:#94a3b8"></i><a href="#" data-aller="' + esc(e.cle) + '">' + esc(e.nom) + '</a><span class="oc-n">' + esc(NIVEAU[e.type]) + '</span></li>'; });
+      h += '</ul>';
+    }
+    if (n.cartos.length) {
+      h += '<h3>Cartographies</h3><ul class="oc-liste">';
+      n.cartos.forEach(function (c) { h += '<li><i class="fas fa-map" style="color:#2563eb"></i>' + (c.url ? '<a href="' + esc(c.url) + '">' + esc(c.nom) + '</a>' : esc(c.nom)) + '<span class="oc-n">' + c.risques + ' risque(s)</span></li>'; });
+      h += '</ul>';
+    }
+    if (n.actions.length) {
+      h += '<div class="oc-fiche-actions">';
+      n.actions.forEach(function (a) { h += '<a class="btn btn-sm btn-outline-primary" href="' + esc(a.url) + '"><i class="fas ' + esc(a.icone) + ' me-1"></i>' + esc(a.libelle) + '</a>'; });
+      h += '</div>';
+    }
+    document.getElementById('ocFicheCorps').innerHTML = h;
+    fiche.classList.add('ouverte'); voile.classList.add('ouvert'); fiche.setAttribute('aria-hidden', 'false');
+    document.getElementById('ocFicheFermer').focus();
+  }
+  function fermer() { fiche.classList.remove('ouverte'); voile.classList.remove('ouvert'); fiche.setAttribute('aria-hidden', 'true'); if (choisi) { choisi.classList.remove('choisi'); choisi.focus(); } }
+  document.getElementById('ocFicheFermer').onclick = fermer; voile.onclick = fermer;
+  document.getElementById('ocFicheCorps').addEventListener('click', function (e) {
+    var a = e.target.closest('[data-aller]'); if (!a) return; e.preventDefault();
+    var el = scene.querySelector('.oc-carte[data-cle="' + a.dataset.aller + '"]');
+    if (el) { var li = el.parentElement.closest('li'); while (li) { li.classList.remove('ferme'); li = li.parentElement.closest('li'); } centrer(el); ouvrir(a.dataset.aller, el); }
+  });
+  document.addEventListener('keydown', function (e) {
+    if (e.target.matches('input, textarea, select')) { return; }
+    if (e.key === 'Escape') fermer();
+    if (e.key === '+' || e.key === '=') zoomer(1.2);
+    if (e.key === '-') zoomer(1 / 1.2);
+    if (e.key === 'f' || e.key === 'F') ajuster();
+  });
+
+  // ---- impression : tout déplier, taille ajustée à une page A3 paysage
+  var avant = null;
+  function preparerImpression() {
+    avant = { t: scene.style.transform, ferme: Array.prototype.map.call(scene.querySelectorAll('li.ferme'), function (l) { return l; }) };
+    tout(true); scene.style.transition = 'none'; scene.style.transform = 'none';
+    var largeur = 1530, hauteur = 1010, w = scene.scrollWidth, h = scene.scrollHeight;
+    var z = Math.min(1, largeur / w, hauteur / h); scene.style.transform = 'scale(' + z + ')';
+  }
+  function finImpression() { if (!avant) return; avant.ferme.forEach(function (l) { l.classList.add('ferme'); }); scene.style.transform = avant.t; avant = null; }
+  window.addEventListener('beforeprint', preparerImpression); window.addEventListener('afterprint', finImpression);
+  document.getElementById('ocImprimer').onclick = function () { window.print(); };
+
+  // ---- plein écran
+  function pleinEcran() { if (document.fullscreenElement) document.exitFullscreen(); else if (vue.requestFullscreen) vue.requestFullscreen(); }
+  document.getElementById('ocPleinEcran').onclick = pleinEcran;
+  document.getElementById('ocSortir').onclick = pleinEcran;
+  document.addEventListener('fullscreenchange', function () { setTimeout(demarrer, 60); });
+
+  // ---- départ : lisible d'abord. Si tout ne tient pas à une taille confortable, on part du haut, centré, en taille lisible.
+  var LISIBLE = 0.78;
+  function demarrer() {
+    var r = vue.getBoundingClientRect(), w = scene.scrollWidth, h = scene.scrollHeight;
+    var z = Math.min(1, (r.width - 20) / w, (r.height - 20) / h);
+    if (z >= LISIBLE - 0.02) { ajuster(); return; }
+    var rac = scene.querySelector('.oc-carte.racine'), zActuel = etat.z || 1;
+    var bs = scene.getBoundingClientRect(), br = rac ? rac.getBoundingClientRect() : null;
+    var centre = br ? (br.left - bs.left + br.width / 2) / zActuel : w / 2;   // centre de la racine, en coordonnées de la scène
+    etat.z = LISIBLE; etat.x = r.width / 2 - centre * LISIBLE; etat.y = 6; appliquer(false);
+    var a = document.getElementById('ocAstuce'); a.classList.remove('parti'); setTimeout(function () { a.classList.add('parti'); }, 4500);
+  }
+  function allerA(cle) {
+    var el = scene.querySelector('.oc-carte[data-cle="' + cle + '"]'); if (!el) return false;
+    var li = el.parentElement.closest('li'); while (li) { li.classList.remove('ferme'); li = li.parentElement.closest('li'); }
+    if (etat.z < LISIBLE) { etat.z = LISIBLE; appliquer(false); }
+    setTimeout(function () { centrer(el); ouvrir(cle, el); }, 30);
+    return true;
+  }
+  if (scene.querySelectorAll('.oc-carte').length > 60) tout(false, 'direction');
+  requestAnimationFrame(function () {
+    demarrer();
+    var cle = decodeURIComponent((location.hash || '').slice(1));
+    if (cle) allerA(cle);
+  });
+  window.addEventListener('hashchange', function () { allerA(decodeURIComponent(location.hash.slice(1))); });
+  vue.addEventListener('pointerdown', function () { document.getElementById('ocAstuce').classList.add('parti'); });
+})();
+</script>
+{% endblock %}
