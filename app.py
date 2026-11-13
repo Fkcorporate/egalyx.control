@@ -77509,6 +77509,9 @@ def c2n_get_commentaires_plan(plan_id):
 # par les versions ci-dessous. Chaque bloc indique précisément ce qui
 # a changé par rapport à l'original.
 
+@app.route('/roadmap')
+def roadmap():
+    return render_template('roadmap.html')
 
 # ================================================================
 # 1. BUG BLOQUANT : created_by -> createur_id sur PlanActionC2N
