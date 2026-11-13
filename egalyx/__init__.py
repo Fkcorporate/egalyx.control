@@ -60,6 +60,8 @@ def enregistrer_extensions(app, db, csrf=None, recalculer_cotations=None, constr
     kri_connecteurs.enregistrer(app)       # KRI : 12 connecteurs (Jira, ServiceNow, Odoo, Google Sheets…) + relevé automatique
     from egalyx import kri_fiche
     kri_fiche.enregistrer(app)             # fiche KRI (valeur, jauge, graphique, historique) + suppression des sources en erreur
+    from egalyx import kri_ia
+    kri_ia.enregistrer(app)                # KRI : « Analyser avec l'IA » à la demande (soumis à l'interrupteur IA du super-admin)
     from egalyx import bienvenue
     bienvenue.enregistrer(app)          # e-mail de bienvenue (accès, identifiant, guide de double authentification)
     recherche.enregistrer(app)

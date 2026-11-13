@@ -81,7 +81,62 @@ def fiche_kri(kri, mesures):
         'serie': {'dates': [m.date_mesure.strftime('%d/%m/%Y') for m in ms[-60:]], 'valeurs': valeurs[-60:]},
         'lignes': lignes, 'fichiers': fichiers, 'connexions': connexions, 'etats': ETATS,
         'est_kpi': (kri.type_indicateur or 'kri') == 'kpi',
+        'projection': projection(kri, ms),
     }
+
+
+def projection(kri, ms):
+    """Tendance linéaire des 6 dernières mesures (au moins 3) : quand les seuils seront-ils franchis ?
+    Calcul pur, reproductible. {'texte', 'couleur', 'icone', 'jours_alerte', 'jours_critique', 'pente_par_mois'} ou None."""
+    pts = [(m.date_mesure, m.valeur) for m in ms if m.valeur is not None and m.date_mesure][-6:]
+    if len(pts) < 3:
+        return None
+    t0 = pts[0][0]
+    xs = [(d - t0).total_seconds() / 86400 for d, _ in pts]
+    ys = [v for _, v in pts]
+    n, mx, my = len(xs), sum(xs) / len(xs), sum(ys) / len(ys)
+    den = sum((x - mx) ** 2 for x in xs)
+    if den <= 0:
+        return None
+    pente = sum((x - mx) * (y - my) for x, y in zip(xs, ys)) / den        # par jour
+    derniere, d_der = ys[-1], pts[-1][0]
+    bas = (kri.sens_evaluation_seuil or 'superieur') == 'inferieur'
+    a, c = kri.seuil_alerte, kri.seuil_critique
+    franchi = (lambda v, s: s is not None and (v <= s if bas else v >= s))
+    ech = max(abs(my), 1e-9)
+    res = {'pente_par_mois': pente * 30, 'jours_alerte': None, 'jours_critique': None}
+    if franchi(derniere, c):
+        return dict(res, texte='Déjà au-delà du seuil critique.', couleur='#D92D20', icone='fa-circle-exclamation')
+    defavorable = (pente < 0) if bas else (pente > 0)
+    if abs(pente * 30) < ech * 0.01 or not defavorable:
+        return dict(res, texte=('Tendance favorable : aucun dépassement de seuil prévu.' if abs(pente * 30) >= ech * 0.01
+                                else 'Tendance stable : aucun dépassement de seuil prévu.'), couleur='#079455', icone='fa-shield-heart')
+
+    def jours(seuil):
+        if seuil is None or franchi(derniere, seuil):
+            return 0 if seuil is not None else None
+        j = (seuil - derniere) / pente
+        return j if j > 0 else None
+    ja, jc = jours(a), jours(c)
+    res.update(jours_alerte=ja, jours_critique=jc)
+    from datetime import timedelta
+
+    def quand(j):
+        d = d_der + timedelta(days=j)
+        mois = ('janvier', 'février', 'mars', 'avril', 'mai', 'juin', 'juillet', 'août', 'septembre', 'octobre', 'novembre', 'décembre')
+        return f"{mois[d.month - 1]} {d.year}" if j > 45 else f"dans environ {max(1, round(j))} jour(s)"
+    if jc is not None and jc > 365:
+        return dict(res, texte="Tendance défavorable, mais pas de franchissement du seuil critique prévu dans l'année.",
+                    couleur='#DC6803', icone='fa-arrow-trend-up' if not bas else 'fa-arrow-trend-down')
+    morceaux = []
+    if ja and ja > 0 and (jc is None or ja < jc):
+        morceaux.append(f"seuil d'alerte vers {quand(ja)}" if ja > 45 else f"seuil d'alerte {quand(ja)}")
+    if jc is not None:
+        morceaux.append(f"seuil critique vers {quand(jc)}" if jc > 45 else f"seuil critique {quand(jc)}")
+    if not morceaux:
+        return dict(res, texte='Tendance défavorable.', couleur='#DC6803', icone='fa-arrow-trend-up')
+    return dict(res, texte='Au rythme actuel : ' + ', puis '.join(morceaux) + '.', couleur='#D92D20' if (jc or 999) < 90 else '#DC6803',
+                icone='fa-hourglass-half')
 
 
 def raison_erreur(source):
