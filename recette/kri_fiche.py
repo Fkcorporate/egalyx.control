@@ -83,6 +83,30 @@ r = sa.post(f'/kri/sources/{sid}/supprimer', follow_redirects=True)
 with A.app.app_context():
     verif('super-admin : source supprimée, mesures conservées', db.session.get(M.SourceDonnee, sid) is None
           and M.MesureKRI.query.filter_by(kri_id=kid).count() >= 4, socle.cause(A))
+# ---- formulaires (création / modification) et PDF
+r = adm.get('/kri/nouveau'); t = r.get_data(as_text=True)
+verif('création : page OK, nouveau style', r.status_code == 200 and 'kx-form' in t and 'creer-depuis-liste' in t, f'{r.status_code} {socle.cause(A)}')
+r = adm.get(f'/kri/{kid}/modifier'); t = r.get_data(as_text=True)
+verif('modification : page OK, valeurs pré-remplies', r.status_code == 200 and 'value="Taux de rotation du personnel"' in t and 'value="12"' in t, f'{r.status_code} {socle.cause(A)}')
+verif('modification : sans IA pas de faux exemples', "Taux d'incidents opérationnels" not in t)
+r = adm.post('/kri/creer-depuis-liste', data={'type_indicateur': 'kpi', 'nom': 'Délai moyen de paiement', 'unite_mesure': 'jours',
+     'frequence_mesure': 'mensuel', 'sens_evaluation_seuil': 'superieur', 'seuil_cible': '30', 'seuil_alerte': '45', 'seuil_critique': '60',
+     'categorie': 'financier', 'risque_id': '', 'responsable_mesure_id': ''}, follow_redirects=True)
+with A.app.app_context():
+    nk = M.KRI.query.filter_by(nom='Délai moyen de paiement').first()
+    verif('création : KPI enregistré avec ses champs', nk is not None and nk.type_indicateur == 'kpi' and nk.seuil_cible == 30 and nk.seuil_critique == 60, socle.cause(A))
+r = adm.post(f'/kri/{kid}/modifier', data={'type_indicateur': 'kri', 'nom': 'Taux de rotation du personnel', 'unite_mesure': '%',
+     'frequence_mesure': 'mensuel', 'sens_evaluation_seuil': 'superieur', 'seuil_alerte': '9', 'seuil_critique': '12',
+     'risque_id': str(r.id) if False else '', 'description': 'Départs / effectif moyen', 'categorie': 'rh'}, follow_redirects=True)
+with A.app.app_context():
+    verif('modification : enregistrée', db.session.get(M.KRI, kid).seuil_alerte == 9, socle.cause(A))
+LONG = 'Hausse due aux départs du service comptable. ' * 12 + 'FIN-DU-COMMENTAIRE'
+with A.app.app_context():
+    db.session.add(M.MesureKRI(kri_id=kid, valeur=11, date_mesure=dt.datetime.utcnow(), client_id=cid, commentaire=LONG)); db.session.commit()
+r = adm.get(f'/kri/{kid}/rapport-pdf?html=1'); t = r.get_data(as_text=True)
+verif('rapport : commentaire long en entier', r.status_code == 200 and 'FIN-DU-COMMENTAIRE' in t and '<svg' in t, f'{r.status_code} {socle.cause(A)}')
+verif('rapport : autre organisation refusée', socle.navigateur(A, ids['admin_b']).get(f'/kri/{kid}/rapport-pdf').status_code == 404)
+open('/tmp/kri_rapport.html', 'w').write(t)
 ST = 'file:///home/claude/e2e/app/static/'
 open('/tmp/kf_fiche.html', 'w').write(adm.get(f'/kri/{kid}/detail').get_data(as_text=True).replace('src="/static/', 'src="' + ST).replace('href="/static/', 'href="' + ST))
 open('/tmp/kf_sources.html', 'w').write(sa.get('/kri/sources').get_data(as_text=True).replace('src="/static/', 'src="' + ST).replace('href="/static/', 'href="' + ST))
