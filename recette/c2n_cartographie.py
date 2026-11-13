@@ -211,7 +211,7 @@ verif('Page de test : introuvable pour un administrateur client', r.status_code 
 r = appel(A.app.test_client(), 'get', '/test-api')
 verif('Page de test : introuvable sans connexion', r.status_code == 404, str(r.status_code))
 r = appel(nav('superadmin'), 'get', '/test-multi-tenant')
-verif('Page de test : accessible au super admin', r.status_code != 404, str(r.status_code))
+verif('Page de test : introuvable aussi pour le super admin (13/11/2026 : routes de réparation fermées)', r.status_code == 404, str(r.status_code))
 
 print(f'\n{sum(res)}/{len(res)} vérifications réussies')
 sys.exit(0 if all(res) else 1)
