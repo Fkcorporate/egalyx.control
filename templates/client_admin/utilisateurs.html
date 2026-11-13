@@ -985,7 +985,7 @@
                                 <tr>
                                     <th>Utilisateur</th>
                                     <th>Rôle</th>
-                                    <th>Département</th>
+                                    <th>Direction / service</th>
                                     <th>Statut</th>
                                     <th>Date création</th>
                                     <th>Dernière connexion</th>
@@ -1019,9 +1019,9 @@
                                                 {% endif %}
                                             </div>
                                             <div>
-                                                <strong>{{ user.username }}</strong>
-                                                <br>
-                                                <small class="text-muted">{{ user.email }}</small>
+                                                <strong>{{ user.nom_affiche if user.nom_affiche is defined else user.username }}</strong>
+                                                {% if user.fonction %}<span class="d-block small" style="color:#334155">{{ user.fonction }}</span>{% endif %}
+                                                <small class="text-muted">{{ user.username }} · {{ user.email }}</small>
                                             </div>
                                         </div>
                                     </td>
@@ -1038,8 +1038,16 @@
                                             {% endif %}
                                         </span>
                                     </td>
-                                    <td data-label="Département">
-                                        {{ user.department or 'Non spécifié' }}
+                                    <td data-label="Direction / service">
+                                        {% set _aff = eg_affectation(user) if eg_affectation is defined else none %}
+                                        {% if _aff and _aff.direction %}
+                                        <span class="d-block fw-semibold" style="font-size:.88rem">{{ _aff.direction.nom }}</span>
+                                        {% if _aff.service %}<small class="text-muted d-block">{{ _aff.service.nom }}</small>{% endif %}
+                                        {% if _aff.perimetre != 'organisation' %}<span class="badge rounded-pill mt-1" style="background:#eff6ff;color:#1d4ed8;font-weight:600" title="Ce que la personne peut voir">Voit : {{ _aff.perimetre_libelle|lower }}</span>{% endif %}
+                                        {% elif _aff and _aff.dirige %}
+                                        <span class="d-block fw-semibold" style="font-size:.88rem">{{ _aff.dirige[0][1] }}</span><small class="text-muted">Responsable · {{ _aff.dirige[0][0]|lower }}</small>
+                                        {% elif user.department %}{{ user.department }}
+                                        {% else %}<span class="text-muted">Non rattaché</span>{% endif %}
                                     </td>
                                     <td data-label="Statut">
                                         {% if user.is_active %}
@@ -1114,7 +1122,7 @@
                                             <button class="btn btn-outline-danger delete-user"
                                                     data-user-id="{{ user.id }}"
                                                     data-username="{{ user.username }}"
-                                                    title="Supprimer">
+                                                    title="Retirer (désactiver et transférer ses responsabilités)">
                                                 <i class="fas fa-trash"></i>
                                             </button>
                                             {% elif user.id == current_user.id %}
@@ -1301,28 +1309,21 @@
     <div class="modal-dialog">
         <div class="modal-content">
             <div class="modal-header">
-                <h5 class="modal-title"><i class="fas fa-trash me-2" style="color: var(--danger);"></i>Suppression d'utilisateur</h5>
+                <h5 class="modal-title"><i class="fas fa-user-slash me-2" style="color: var(--danger);"></i>Désactiver un utilisateur</h5>
                 <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
             </div>
             <div class="modal-body">
-                <div class="alert alert-danger">
-                    <i class="fas fa-exclamation-triangle me-2"></i>
-                    <strong>Attention : Cette action est irréversible !</strong>
-                </div>
-                <p id="deleteUserMessage">Êtes-vous absolument sûr de vouloir supprimer cet utilisateur ?</p>
-                <ul class="text-danger small">
-                    <li><i class="fas fa-times-circle me-1"></i>Toutes les données associées seront perdues</li>
-                    <li><i class="fas fa-times-circle me-1"></i>L'utilisateur ne pourra plus se connecter</li>
-                    <li><i class="fas fa-times-circle me-1"></i>Cette action ne peut pas être annulée</li>
+                <p id="deleteUserMessage">Le compte sera désactivé.</p>
+                <ul class="list-unstyled small mb-0" style="line-height:1.9">
+                    <li><i class="fas fa-check-circle me-2" style="color:#059669"></i>La personne ne peut plus se connecter (ses sessions ouvertes sont fermées).</li>
+                    <li><i class="fas fa-check-circle me-2" style="color:#059669"></i>Son historique reste attribué : évaluations, validations, audits (traçabilité).</li>
+                    <li><i class="fas fa-check-circle me-2" style="color:#059669"></i>Vous transférez ensuite ses responsabilités en cours à quelqu'un d'autre.</li>
+                    <li><i class="fas fa-check-circle me-2" style="color:#059669"></i>Le compte peut être réactivé à tout moment.</li>
                 </ul>
-                <div class="alert alert-warning mt-3">
-                    <i class="fas fa-lightbulb me-2"></i>
-                    <small><strong>Conseil :</strong> Si vous souhaitez simplement empêcher l'accès, désactivez le compte plutôt que de le supprimer.</small>
-                </div>
             </div>
             <div class="modal-footer">
                 <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Annuler</button>
-                <button type="button" class="btn btn-modern-danger" id="confirmDeleteUser" style="background: var(--danger); color: white; border: none; border-radius: 30px; padding: 0.6rem 1.6rem;">Supprimer définitivement</button>
+                <button type="button" class="btn btn-modern-danger" id="confirmDeleteUser" style="background: var(--danger); color: white; border: none; border-radius: 30px; padding: 0.6rem 1.6rem;"><i class="fas fa-user-slash me-1"></i>Désactiver le compte</button>
             </div>
         </div>
     </div>
@@ -1449,7 +1450,7 @@ document.getElementById('confirmToggleUser').addEventListener('click', function(
     .then(data => {
         if (data.success) {
             showToast(data.message, 'success');
-            setTimeout(() => window.location.reload(), 1500);
+            setTimeout(() => { window.location.href = data.redirect || window.location.href; }, 1200);
         } else {
             showToast(data.error || 'Erreur lors de la modification', 'error');
         }
@@ -1473,9 +1474,7 @@ document.querySelectorAll('.delete-user').forEach(button => {
         currentUsername = this.dataset.username;
         
         document.getElementById('deleteUserMessage').innerHTML = `
-            Êtes-vous absolument sûr de vouloir supprimer l'utilisateur 
-            <strong class="text-danger">${currentUsername}</strong> ?<br><br>
-            <span class="text-muted">Cette action est définitive et ne peut pas être annulée.</span>
+            Le compte de <strong>${currentUsername}</strong> sera <strong>désactivé</strong>, pas effacé.
         `;
         
         const modal = new bootstrap.Modal(document.getElementById('deleteUserModal'));
@@ -1491,7 +1490,7 @@ document.getElementById('confirmDeleteUser').addEventListener('click', function(
     const originalText = btn.innerHTML;
     
     btn.disabled = true;
-    btn.innerHTML = '<i class="fas fa-spinner fa-spin me-1"></i>Suppression...';
+    btn.innerHTML = '<i class="fas fa-spinner fa-spin me-1"></i>Désactivation...';
     
     fetch(`/client-admin/utilisateur/${currentUserId}/supprimer`, {
         method: 'POST',
@@ -1507,7 +1506,7 @@ document.getElementById('confirmDeleteUser').addEventListener('click', function(
     .then(data => {
         if (data.success) {
             showToast(data.message, 'success');
-            setTimeout(() => window.location.reload(), 1500);
+            setTimeout(() => { window.location.href = data.redirect || window.location.href; }, 1200);
         } else {
             showToast(data.error || data.details || 'Erreur lors de la suppression', 'error');
         }
@@ -1527,29 +1526,29 @@ document.getElementById('confirmDeleteUser').addEventListener('click', function(
 // Exporter en CSV
 function exportUsersToCSV() {
     const rows = [
-        ['Nom', 'Email', 'Rôle', 'Département', 'Statut', 'Date création', 'Dernière connexion']
+        ['Nom', 'Identifiant', 'Fonction', 'Email', 'Rôle', 'Direction', 'Service', 'Statut', 'Date création', 'Dernière connexion']
     ];
     
     {% for user in users %}
     rows.push([
-        '{{ user.username }}',
-        '{{ user.email }}',
-        '{{ user.get_role_display_name() }}',
-        '{{ user.department or "" }}',
+        {% set _aff = eg_affectation(user) if eg_affectation is defined else none %}
+        {{ (user.nom_affiche if user.nom_affiche is defined else user.username)|tojson }},
+        {{ user.username|tojson }},
+        {{ (user.fonction or '')|tojson }},
+        {{ user.email|tojson }},
+        {{ user.get_role_display_name()|tojson }},
+        {{ ((_aff.direction.nom if _aff and _aff.direction else user.department) or '')|tojson }},
+        {{ ((_aff.service.nom if _aff and _aff.service else '') or '')|tojson }},
         '{{ "Actif" if user.is_active else "Inactif" }}',
         '{{ user.created_at.strftime("%d/%m/%Y") }}',
         '{% if user.last_login %}{{ user.last_login.strftime("%d/%m/%Y %H:%M") }}{% else %}Jamais{% endif %}'
     ]);
     {% endfor %}
     
-    let csvContent = "data:text/csv;charset=utf-8,";
-    rows.forEach(row => {
-        csvContent += row.map(cell => `"${cell.replace(/"/g, '""')}"`).join(";") + "\n";
-    });
-    
-    const encodedUri = encodeURI(csvContent);
+    // UTF-8 avec BOM : les accents s'affichent correctement dans Excel
+    const csvContent = "\ufeff" + rows.map(row => row.map(cell => `"${String(cell).replace(/"/g, '""')}"`).join(";")).join("\r\n");
     const link = document.createElement("a");
-    link.setAttribute("href", encodedUri);
+    link.setAttribute("href", URL.createObjectURL(new Blob([csvContent], { type: "text/csv;charset=utf-8" })));
     link.setAttribute("download", "utilisateurs_{{ client.reference if client else 'client' }}_{{ now.strftime('%Y%m%d_%H%M') }}.csv");
     document.body.appendChild(link);
     link.click();

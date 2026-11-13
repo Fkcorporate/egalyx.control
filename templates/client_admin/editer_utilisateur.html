@@ -583,6 +583,7 @@
                             </div>
                         </div>
                         
+                        {% set eg_cible = user %}{% include "egalyx/_affectation.html" %}
                         <!-- Template de permissions -->
                         {% if not is_self_edit %}
                         <div class="mb-3">
@@ -642,8 +643,8 @@
                             {% if not is_self_edit and user.id != current_user.id and not user.is_client_admin %}
                             <button type="button" 
                                     class="btn btn-modern-danger ms-auto"
-                                    onclick="confirmDeleteUser({{ user.id }}, '{{ user.username }}')">
-                                <i class="fas fa-trash me-2"></i>Supprimer
+                                    onclick="confirmDeleteUser({{ user.id }}, {{ user.username|tojson|forceescape }})">
+                                <i class="fas fa-user-slash me-2"></i>Désactiver le compte
                             </button>
                             {% endif %}
                         </div>
@@ -739,24 +740,21 @@
     <div class="modal-dialog">
         <div class="modal-content">
             <div class="modal-header">
-                <h5 class="modal-title"><i class="fas fa-trash me-2" style="color: var(--danger);"></i>Suppression d'utilisateur</h5>
+                <h5 class="modal-title"><i class="fas fa-user-slash me-2" style="color: var(--danger);"></i>Désactiver un utilisateur</h5>
                 <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
             </div>
             <div class="modal-body">
-                <div class="alert alert-danger">
-                    <i class="fas fa-exclamation-triangle me-2"></i>
-                    <strong>Attention : Cette action est irréversible !</strong>
-                </div>
-                <p id="deleteUserMessage">Êtes-vous absolument sûr de vouloir supprimer cet utilisateur ?</p>
-                <ul class="text-danger small">
-                    <li><i class="fas fa-times-circle me-1"></i>Toutes les données associées seront perdues</li>
-                    <li><i class="fas fa-times-circle me-1"></i>L'utilisateur ne pourra plus se connecter</li>
-                    <li><i class="fas fa-times-circle me-1"></i>Cette action ne peut pas être annulée</li>
+                <p id="deleteUserMessage">Le compte sera désactivé.</p>
+                <ul class="list-unstyled small mb-0" style="line-height:1.9">
+                    <li><i class="fas fa-check-circle me-2" style="color:#059669"></i>La personne ne peut plus se connecter (ses sessions ouvertes sont fermées).</li>
+                    <li><i class="fas fa-check-circle me-2" style="color:#059669"></i>Son historique reste attribué : évaluations, validations, audits (traçabilité).</li>
+                    <li><i class="fas fa-check-circle me-2" style="color:#059669"></i>Vous transférez ensuite ses responsabilités en cours à quelqu'un d'autre.</li>
+                    <li><i class="fas fa-check-circle me-2" style="color:#059669"></i>Le compte peut être réactivé à tout moment.</li>
                 </ul>
             </div>
             <div class="modal-footer">
                 <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Annuler</button>
-                <button type="button" class="btn btn-modern-danger" id="confirmDeleteUser">Supprimer définitivement</button>
+                <button type="button" class="btn btn-modern-danger" id="confirmDeleteUser"><i class="fas fa-user-slash me-1"></i>Désactiver le compte</button>
             </div>
         </div>
     </div>
@@ -806,7 +804,7 @@ document.addEventListener('DOMContentLoaded', function() {
 
 function confirmDeleteUser(userId, username) {
     document.getElementById('deleteUserMessage').innerHTML = 
-        `Êtes-vous absolument sûr de vouloir supprimer l'utilisateur <strong class="text-danger">${username}</strong> ?<br><br><span class="text-muted">Cette action est définitive et ne peut pas être annulée.</span>`;
+        `Le compte de <strong>${username}</strong> sera <strong>désactivé</strong>, pas effacé.`;
     
     document.getElementById('confirmDeleteUser').onclick = function() {
         deleteUser(userId);
@@ -821,7 +819,7 @@ function deleteUser(userId) {
     const originalText = btn.innerHTML;
     
     btn.disabled = true;
-    btn.innerHTML = '<i class="fas fa-spinner fa-spin me-1"></i>Suppression...';
+    btn.innerHTML = '<i class="fas fa-spinner fa-spin me-1"></i>Désactivation…';
     
     fetch(`/admin/utilisateur/${userId}/supprimer`, {
         method: 'POST',
@@ -835,7 +833,7 @@ function deleteUser(userId) {
         if (data.success) {
             showToast(data.message, 'success');
             setTimeout(() => {
-                window.location.href = "{{ url_for('client_admin_utilisateurs') }}";
+                window.location.href = data.redirect || "{{ url_for('client_admin_utilisateurs') }}";
             }, 1500);
         } else {
             showToast(data.error || 'Erreur lors de la suppression', 'error');
