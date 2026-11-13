@@ -5,8 +5,9 @@ Une seule vue, lisible, de toute la structure : organisation → pays → pôles
 Pour chaque entité : responsable (nom, fonction), collaborateurs rattachés (cumulés vers le haut), cartographies
 et risques du périmètre, et les actions (ajouter une sous-entité, modifier, archiver, voir dans l'organigramme).
 
-  GET /admin/directions            la page (même adresse qu'avant : menus et redirections inchangés)
-  GET /admin/directions/cartes     l'ancienne vue en cartes (gestion des équipes de service)
+  GET /admin/directions            la vue choisie par la personne : arborescence (défaut) ou cartes (ancienne vue)
+  GET /admin/directions?vue=arbre|cartes   bascule ; le choix est retenu (cookie, 1 an) pour les prochaines visites
+  GET /admin/directions/cartes     l'ancienne vue en cartes, directement
   GET /admin/services              redirige vers la page (l'ancienne adresse affichait « Direction non spécifiée »)
 
 Les formulaires existants (pays, pôle, direction, service) sont réutilisés ; ouverts depuis la page, ils
@@ -167,11 +168,37 @@ def _preremplir(reponse):
     return reponse
 
 
+COOKIE_VUE = 'eg_vue_structure'
+VUES = ('arbre', 'cartes')
+
+
+def _avec_choix(reponse, vue):
+    from flask import make_response
+    reponse = make_response(reponse)
+    if request.args.get('vue') in VUES or request.endpoint == 'admin_directions_cartes':
+        reponse.set_cookie(COOKIE_VUE, vue, max_age=365 * 24 * 3600, samesite='Lax', httponly=True,
+                           secure=request.is_secure)
+    return reponse
+
+
 def enregistrer(app):
     if 'admin_directions' in app.view_functions:
         ancienne = app.view_functions['admin_directions']
-        app.add_url_rule('/admin/directions/cartes', 'admin_directions_cartes', ancienne)
-        app.view_functions['admin_directions'] = login_required(page)
+
+        def cartes():
+            return _avec_choix(ancienne(), 'cartes')
+
+        def choisir():
+            vue = request.args.get('vue')
+            if vue not in VUES:
+                vue = request.cookies.get(COOKIE_VUE)
+            if vue == 'cartes':
+                return _avec_choix(ancienne(), 'cartes')
+            return _avec_choix(page(), 'arbre')
+
+        app.add_url_rule('/admin/directions/cartes', 'admin_directions_cartes', login_required(cartes))
+        app.view_functions['admin_directions'] = login_required(choisir)
+        app.config['EG_VUES_STRUCTURE'] = ('admin_directions_cartes',)
     else:
         app.add_url_rule('/admin/directions', 'admin_directions', login_required(page))
     if 'admin_services' in app.view_functions:
