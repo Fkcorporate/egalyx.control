@@ -111,6 +111,6 @@ for qui, cl, attendu in (('gestionnaire', g, False), ('super-admin', sa, True)):
     r = cl.get(f'/kri/{kid}'); t = r.get_data(as_text=True)
     if r.status_code in (301, 302):
         r = cl.get(r.headers['Location']); t = r.get_data(as_text=True)
-    verif(f'fiche KRI ({qui}) : bouton « Gérer les sources » {"visible" if attendu else "masqué"}',
-          r.status_code == 200 and (('Gérer les sources' in t) == attendu), f'{r.status_code} {socle.cause(A)}')
+    verif(f'fiche KRI ({qui}) : lien vers les sources techniques {"visible" if attendu else "masqué"}',
+          r.status_code == 200 and (('/kri/sources' in t) == attendu), f'{r.status_code} {socle.cause(A)}')
 print(f'\n{sum(res)}/{len(res)}')
