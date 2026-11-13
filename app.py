@@ -54093,9 +54093,6 @@ def test_logo():
     """
 
 
-@app.route('/roadmap')
-def roadmap():
-    return render_template('roadmap.html')
 
 @app.route('/admin/organigramme/logo/supprimer', methods=['POST'])
 @login_required
@@ -104182,9 +104179,7 @@ def operateur_plans_action():
                     )
                 )
             )
-        else:
-            # Si aucune direction autorisée, ne rien afficher
-            query = query.filter(PlanAction.id == -1)
+        # (aucune direction cochée = toute l'organisation, comme pour les risques)
         
         # ✅ FILTRE SERVICE VIA LE RISQUE ASSOCIÉ
         if perms.services_autorises:
@@ -107808,7 +107803,7 @@ def operateur_dashboard():
         # ============================================
         # 3. PLANS D'ACTION - AVEC FILTRES DE DIRECTION
         # ============================================
-        if perms.peut_creer_plans_action:
+        if perms.peut_voir_plans_action or perms.peut_creer_plans_action:
             query = PlanAction.query.filter_by(
                 client_id=current_user.client_id,
                 is_archived=False
@@ -107834,9 +107829,7 @@ def operateur_dashboard():
                         )
                     )
                 )
-            else:
-                # Si aucune direction autorisée, ne rien afficher
-                query = query.filter(PlanAction.id == -1)
+            # (aucune direction cochée = toute l'organisation, comme pour les risques)
             
             # ✅ FILTRE SERVICE VIA LE RISQUE ASSOCIÉ
             if perms.services_autorises:
