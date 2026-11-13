@@ -1,0 +1,49 @@
+{#- Chargé sur chaque page (utilisateur connecté) : pastille sur l'icône de l'application installée et réabonnement
+    automatique des notifications si la clé du serveur a changé. Voir egalyx/notifications_push.py. -#}
+<script>
+(function () {
+  if (window.__egPush || !('serviceWorker' in navigator)) return; window.__egPush = true;
+  const BASE = '/notifications/push';
+  const jeton = () => { const m = document.querySelector('meta[name="csrf-token"]'); return m ? m.content : ''; };
+  window.egPushEntetes = () => ({'Content-Type': 'application/json', 'Accept': 'application/json', 'X-CSRFToken': jeton()});
+  const versOctets = (b64) => { const s = (b64 + '='.repeat((4 - b64.length % 4) % 4)).replace(/-/g, '+').replace(/_/g, '/');
+    const r = atob(s); return Uint8Array.from(r, c => c.charCodeAt(0)); };
+  const versB64u = (buf) => btoa(String.fromCharCode(...new Uint8Array(buf))).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+
+  // Active les notifications sur cet appareil. demander=true : demande l'autorisation (à appeler depuis un clic).
+  window.egPushAbonner = async function (demander) {
+    if (!('PushManager' in window) || !('Notification' in window)) throw new Error("ce navigateur ne gère pas les notifications");
+    if (demander && Notification.permission === 'default') { if ((await Notification.requestPermission()) !== 'granted') return 'denied'; }
+    if (Notification.permission !== 'granted') return 'denied';
+    const d = await (await fetch(BASE + '/cle', {headers: {'Accept': 'application/json'}})).json();
+    if (!d.disponible) throw new Error("le serveur ne peut pas envoyer de notifications");
+    const reg = await navigator.serviceWorker.ready;
+    let sub = await reg.pushManager.getSubscription();
+    const cle = sub && sub.options && sub.options.applicationServerKey ? versB64u(sub.options.applicationServerKey) : null;
+    if (sub && cle && cle !== d.cle) { await sub.unsubscribe(); sub = null; }
+    if (!sub) sub = await reg.pushManager.subscribe({userVisibleOnly: true, applicationServerKey: versOctets(d.cle)});
+    const r = await fetch(BASE + '/abonner', {method: 'POST', headers: window.egPushEntetes(), body: JSON.stringify(sub.toJSON())});
+    const res = await r.json(); if (!res.success) throw new Error(res.error || 'enregistrement refusé');
+    return 'ok';
+  };
+
+  function majPastilleEtCle() {
+    fetch(BASE + '/compteur', {headers: {'Accept': 'application/json'}}).then(r => r.ok ? r.json() : null).then(d => {
+      if (!d) return;
+      if ('setAppBadge' in navigator) {
+        if (d.pastille && d.non_lues > 0) navigator.setAppBadge(d.non_lues).catch(() => {});
+        else navigator.clearAppBadge().catch(() => {});
+      }
+      // Clé du serveur changée (nouveau déploiement) : réabonnement silencieux si l'autorisation est déjà donnée.
+      if (d.cle && 'PushManager' in window && window.Notification && Notification.permission === 'granted') {
+        navigator.serviceWorker.ready.then(reg => reg.pushManager.getSubscription()).then(sub => {
+          const k = sub && sub.options && sub.options.applicationServerKey ? versB64u(sub.options.applicationServerKey) : null;
+          if (sub && k && k !== d.cle) window.egPushAbonner(false).catch(() => {});
+        }).catch(() => {});
+      }
+    }).catch(() => {});
+  }
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', majPastilleEtCle); else majPastilleEtCle();
+  document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') majPastilleEtCle(); });
+})();
+</script>

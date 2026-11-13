@@ -1,0 +1,137 @@
+{#- Mes notifications → « Sur vos appareils » : notifications du téléphone / de l'ordinateur et pastille sur l'icône.
+    Inclus dans egalyx/mes_notifications.html. -#}
+{% if push_reglages is defined %}{% set pr = push_reglages(current_user) %}
+<style>
+  .pa-etat { display: flex; gap: .9rem; align-items: center; flex-wrap: wrap; border: 1px solid var(--bs-border-color); border-radius: 12px; padding: .9rem 1.1rem; margin-bottom: 1rem; }
+  .pa-ic { width: 42px; height: 42px; border-radius: 11px; display: grid; place-items: center; background: #EFF6FF; color: #1E3A8A; font-size: 1.05rem; flex: none; }
+  .pa-etat.ok .pa-ic { background: #ECFDF3; color: #067647; }
+  .pa-etat.bloque .pa-ic { background: #FEF3F2; color: #B42318; }
+  .pa-txt { flex: 1; min-width: 220px; }
+  .pa-txt b { display: block; }
+  .pa-txt small { color: var(--bs-secondary-color); }
+  .pa-options { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: .6rem 1.2rem; }
+  .pa-options label { display: flex; gap: .55rem; align-items: flex-start; }
+  .pa-options small { display: block; color: var(--bs-secondary-color); }
+  .pa-app { display: flex; justify-content: space-between; align-items: center; gap: .8rem; padding: .55rem 0; border-bottom: 1px solid var(--bs-border-color); }
+  .pa-app:last-child { border-bottom: 0; }
+  .pa-moi { font-size: .7rem; font-weight: 700; color: #067647; background: #ECFDF3; border-radius: 999px; padding: .1rem .5rem; margin-left: .4rem; }
+</style>
+<div id="appareils"></div>
+{% call pg.carte('Sur vos appareils (téléphone, ordinateur)', aide="Recevez vos notifications même quand Egalyx est fermé") %}
+  {% if not push_disponible() %}
+    <div class="alert alert-warning small mb-0"><i class="fas fa-triangle-exclamation me-1"></i>Le serveur ne peut pas encore envoyer de notifications :
+      les modules Python « cryptography » et « requests » doivent être installés (ajoutez-les au fichier requirements.txt utilisé par votre hébergement, puis redéployez).</div>
+  {% else %}
+  <div class="pa-etat" id="paEtat">
+    <div class="pa-ic"><i class="fas fa-mobile-screen-button" id="paIcone"></i></div>
+    <div class="pa-txt"><b id="paTitre">Vérification de cet appareil…</b><small id="paDetail"></small></div>
+    <div class="d-flex gap-2 flex-wrap">
+      <button type="button" class="btn btn-primary btn-sm d-none" id="paActiver"><i class="fas fa-bell me-1"></i>Activer sur cet appareil</button>
+      <button type="button" class="btn btn-light btn-sm border d-none" id="paTester"><i class="fas fa-paper-plane me-1"></i>Envoyer un test</button>
+      <button type="button" class="btn btn-light btn-sm border d-none" id="paDesactiver"><i class="fas fa-bell-slash me-1"></i>Désactiver ici</button>
+    </div>
+  </div>
+
+  <form method="post" action="{{ url_for('notifications_push.enregistrer_reglages') }}">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <div class="pa-options mb-3">
+      <label><input class="form-check-input mt-1" type="checkbox" name="pastille" value="1" {% if pr.pastille %}checked{% endif %}>
+        <span><b>Pastille sur l'icône de l'application</b><small>Le nombre de notifications non lues s'affiche sur l'icône Egalyx installée.</small></span></label>
+      <label><input class="form-check-input mt-1" type="checkbox" name="discret" value="1" {% if pr.discret %}checked{% endif %}>
+        <span><b>Contenu discret</b><small>Affiche seulement « Nouvelle notification Egalyx », sans le détail (écran verrouillé).</small></span></label>
+    </div>
+    <div class="small fw-semibold mb-1">Événements qui déclenchent une notification sur vos appareils</div>
+    <div class="pa-options mb-2">
+      {% for code, libelle, groupe in evenements %}
+      <label><input class="form-check-input mt-1" type="checkbox" name="push_{{ code }}" value="1" {% if pr.evenements[code] %}checked{% endif %}><span>{{ libelle }}</span></label>
+      {% endfor %}
+    </div>
+    <button class="btn btn-primary btn-sm">Enregistrer</button>
+  </form>
+
+  {% if pr.abonnements %}
+  <div class="small fw-semibold mt-3 mb-1">Appareils activés ({{ pr.abonnements|length }})</div>
+  {% for a in pr.abonnements %}
+  <div class="pa-app" data-endpoint="{{ a.endpoint }}">
+    <span><i class="fas fa-{{ 'mobile-screen' if a.appareil and (a.appareil.startswith('iPhone') or a.appareil.startswith('Android')) else 'laptop' }} me-2 text-secondary"></i>{{ a.appareil or 'Appareil' }}
+      <span class="pa-moi d-none">Cet appareil</span>
+      <small class="text-secondary ms-1">activé le {{ (a.cree_le or '')[:10] }}</small></span>
+    <form method="post" action="{{ url_for('notifications_push.desabonner') }}" class="m-0">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><input type="hidden" name="endpoint" value="{{ a.endpoint }}">
+      <button class="btn btn-sm btn-link text-danger p-0">Retirer</button>
+    </form>
+  </div>
+  {% endfor %}
+  {% endif %}
+  <div class="pg-second mt-3">
+    iPhone / iPad : ouvrez Egalyx depuis son icône sur l'écran d'accueil (iOS 16.4 ou plus récent), puis activez ici.
+    Mac : Chrome, Edge, ou Safari avec Egalyx ajouté au Dock. Si vous avez refusé l'autorisation, réactivez-la dans les réglages
+    du navigateur (icône à gauche de l'adresse) ou du téléphone (Réglages → Notifications → Egalyx).
+  </div>
+  {% endif %}
+{% endcall %}
+
+{% if push_disponible() %}
+<script>
+(function () {
+  const $ = (id) => document.getElementById(id);
+  const etat = (classe, icone, titre, detail) => {
+    $('paEtat').className = 'pa-etat ' + (classe || ''); $('paIcone').className = 'fas fa-' + icone;
+    $('paTitre').textContent = titre; $('paDetail').textContent = detail || '';
+  };
+  const montrer = (...ids) => ['paActiver', 'paTester', 'paDesactiver'].forEach(i => $(i).classList.toggle('d-none', !ids.includes(i)));
+  const ios = /iphone|ipad|ipod/i.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+  const installee = (window.matchMedia && window.matchMedia('(display-mode: standalone)').matches) || navigator.standalone === true;
+
+  async function afficher() {
+    if (!('serviceWorker' in navigator) || !('PushManager' in window) || !('Notification' in window)) {
+      if (ios && !installee) etat('', 'house', "Installez d'abord Egalyx sur l'écran d'accueil",
+        "Sur iPhone et iPad, les notifications ne fonctionnent que depuis l'application installée : Safari → Partager → « Sur l'écran d'accueil », puis ouvrez Egalyx depuis son icône et revenez ici.");
+      else etat('bloque', 'ban', 'Ce navigateur ne prend pas en charge les notifications', 'Utilisez Chrome, Edge, Firefox ou Safari récent.');
+      montrer(); return;
+    }
+    if (Notification.permission === 'denied') {
+      etat('bloque', 'bell-slash', 'Notifications bloquées sur cet appareil',
+        "Vous avez refusé l'autorisation. Réactivez-la dans les réglages du navigateur ou du téléphone, puis rechargez la page.");
+      montrer(); return;
+    }
+    const reg = await navigator.serviceWorker.ready;
+    const sub = await reg.pushManager.getSubscription();
+    if (sub && Notification.permission === 'granted') {
+      document.querySelectorAll('.pa-app').forEach(l => { if (l.dataset.endpoint === sub.endpoint) l.querySelector('.pa-moi').classList.remove('d-none'); });
+      etat('ok', 'circle-check', 'Activées sur cet appareil', 'Vous recevrez ici vos notifications Egalyx, même application fermée.');
+      montrer('paTester', 'paDesactiver');
+    } else {
+      etat('', 'mobile-screen-button', 'Pas encore activées sur cet appareil', 'Cliquez sur « Activer » puis acceptez la demande du navigateur.');
+      montrer('paActiver');
+    }
+  }
+  $('paActiver').addEventListener('click', async () => {
+    $('paActiver').disabled = true;
+    try {
+      const resultat = await window.egPushAbonner(true);
+      if (resultat === 'denied') { await afficher(); return; }
+      window.location.hash = 'appareils'; window.location.reload();
+    } catch (e) { alert("Activation impossible : " + (e && e.message ? e.message : e)); }
+    finally { $('paActiver').disabled = false; }
+  });
+  $('paDesactiver').addEventListener('click', async () => {
+    const reg = await navigator.serviceWorker.ready; const sub = await reg.pushManager.getSubscription();
+    if (sub) {
+      await fetch('{{ url_for("notifications_push.desabonner") }}', {method: 'POST', headers: window.egPushEntetes(), body: JSON.stringify({endpoint: sub.endpoint})});
+      await sub.unsubscribe();
+    }
+    window.location.reload();
+  });
+  $('paTester').addEventListener('click', async () => {
+    $('paTester').disabled = true;
+    try {
+      const r = await fetch('{{ url_for("notifications_push.tester") }}', {method: 'POST', headers: window.egPushEntetes(), body: '{}'});
+      const d = await r.json(); alert(d.message || d.error || 'Envoyé.');
+    } finally { $('paTester').disabled = false; }
+  });
+  afficher().catch(() => etat('bloque', 'triangle-exclamation', 'Vérification impossible', 'Rechargez la page.'));
+})();
+</script>
+{% endif %}
+{% endif %}
