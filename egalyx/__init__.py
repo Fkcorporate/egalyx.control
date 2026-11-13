@@ -118,6 +118,13 @@ def enregistrer_extensions(app, db, csrf=None, recalculer_cotations=None, constr
     from egalyx import masquage
     masquage.enregistrer(app)               # liens, boutons, formulaires et blocs des fonctions indisponibles : retirés
     _filtres_min_max(app)                   # « [a, b]|min » et « valeur|min(borne) » fonctionnent tous les deux
+    try:                                   # paquet facultatif : fiche cartographie rapide (matrices en cache)
+        from egalyx import carto_rapide, compression, cloture_campagne
+        carto_rapide.enregistrer(app)
+        cloture_campagne.enregistrer(app)  # réglage : qui peut clôturer une campagne d'évaluation
+        compression.enregistrer(app)       # pages compressées (gzip) : beaucoup plus légères à télécharger
+    except ImportError:
+        pass
     try:                                   # paquet facultatif : la demande de changement d'offre part vraiment
         from egalyx import demande_offre, questionnaire_stats
         demande_offre.enregistrer(app)
