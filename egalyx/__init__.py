@@ -131,6 +131,8 @@ def enregistrer_extensions(app, db, csrf=None, recalculer_cotations=None, constr
         organigramme_structure.enregistrer(app)   # organigramme hiérarchique (pays → pôles → directions → services)
         from egalyx import structure_orga
         structure_orga.enregistrer(app)           # page « Structure de l'organisation » (/admin/directions)
+        from egalyx import operateurs
+        operateurs.enregistrer(app)               # espace opérateur : droits appliqués sur chaque page, écrans d'administration
     except ImportError:
         pass
     try:                                   # paquet facultatif : notifications sur téléphone / ordinateur + pastille
