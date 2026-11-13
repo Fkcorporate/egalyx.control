@@ -1,5 +1,6 @@
 {% extends "base.html" %}
 {% import "_macros/cotation.html" as cot %}
+{% import "_macros/page.html" as pg %}
 
 {% block title %}{{ programme.nom }} - Programme d'Audit - Egalyx{% endblock %}
 
@@ -68,475 +69,212 @@
     [data-bs-theme="dark"] .bg-light { background: #0f172a !important; }
 </style>
 
-<div class="container-fluid px-4 animate-in">
-    <!-- ========== EN-TÊTE ========== -->
-    <div class="d-flex justify-content-between align-items-center mb-5 flex-wrap gap-3">
-        <div>
-            <div class="d-flex align-items-center gap-2 mb-3">
-                <a href="{{ url_for('liste_programmes_audit') }}" class="text-decoration-none" style="color: #64748b;">
-                    <i class="fas fa-arrow-left me-1"></i>
-                    <span class="small">Programmes</span>
-                </a>
-                <span class="small" style="color: #94a3b8;">/</span>
-                <span class="small" style="color: var(--fk-accent);">{{ programme.nom }}</span>
-            </div>
-            
-            <div class="d-flex align-items-center gap-3">
-                <div class="p-3 rounded-2" style="background: var(--accent-gradient);">
-                    <i class="fas fa-calendar-alt text-white fa-lg"></i>
-                </div>
-                <div>
-                    <h1 class="fw-bold mt-1 mb-0" style="color: #0f172a; font-size: 2rem;">{{ programme.nom }}</h1>
-                    <div class="d-flex align-items-center gap-3 mt-2 flex-wrap">
-                        <span class="badge px-3 py-2 fw-normal" style="background: #f8fafc; color: var(--fk-accent); border: 1px solid #e2e8f0; border-radius: 20px;">
-                            <i class="fas fa-hashtag me-1" style="color: var(--fk-accent);"></i>{{ programme.reference }}
-                        </span>
-                        <span class="small" style="color: #64748b;">
-                            <i class="far fa-calendar me-1" style="color: var(--fk-accent);"></i>{{ programme.annee_debut }} - {{ programme.annee_fin }}
-                        </span>
-                        <span class="badge px-3 py-2 fw-normal" 
-                              style="background: {% if programme.statut == 'actif' %}#059669; color: white;{% elif programme.statut == 'en_elaboration' %}#7c3aed; color: white;{% else %}#64748b; color: white;{% endif %}; border-radius: 20px;">
-                            <i class="fas fa-{{ 'play-circle' if programme.statut == 'actif' else 'pen' if programme.statut == 'en_elaboration' else 'stop-circle' }} me-1"></i>
-                            {{ programme.statut|replace('_', ' ')|title }}
-                        </span>
-                    </div>
-                </div>
-            </div>
-            
-            <!-- Organisation cible -->
-            <div class="mt-3 d-flex flex-wrap gap-2">
-                {% if programme.pays %}
-                <span class="organisation-badge org-pays"><i class="fas fa-globe"></i> {{ programme.pays.nom }}</span>
-                {% endif %}
-                {% if programme.pole %}
-                <span class="organisation-badge org-pole"><i class="fas fa-layer-group"></i> {{ programme.pole.nom }}</span>
-                {% endif %}
-                {% if programme.direction %}
-                <span class="organisation-badge org-direction"><i class="fas fa-building"></i> {{ programme.direction.nom }}</span>
-                {% endif %}
-            </div>
-            
-            <div class="mt-3" style="height: 3px; width: 80px; background: var(--fk-accent); border-radius: 2px;"></div>
-        </div>
-        
-        <!-- Actions principales -->
-        <div class="d-flex gap-2 flex-wrap">
-            <a href="{{ url_for('chronogramme_programme', id=programme.id) }}" class="btn px-4 py-2 d-flex align-items-center gap-2" style="border-radius: 10px; background: white; color: var(--fk-accent); border: 1px solid #e2e8f0;">
-                <i class="fas fa-calendar-week" style="color: var(--fk-accent);"></i> <span class="d-none d-md-inline">Chronogramme</span>
-            </a>
-            
-            <div class="dropdown">
-                <button class="btn px-4 py-2 dropdown-toggle d-flex align-items-center gap-2" type="button" data-bs-toggle="dropdown" style="border-radius: 10px; background: white; color: #059669; border: 1px solid #e2e8f0;">
-                    <i class="fas fa-download" style="color: #059669;"></i> <span class="d-none d-md-inline">Exporter</span>
-                </button>
-                <ul class="dropdown-menu dropdown-menu-end border-0 shadow-sm" style="border-radius: 12px; padding: 8px;">
-                    <li><a class="dropdown-item py-2" href="{{ url_for('exporter_programme', id=programme.id, format='excel') }}"><i class="fas fa-file-excel me-2" style="color: #059669;"></i>Excel (.xlsx)</a></li>
-                    <li><a class="dropdown-item py-2" href="{{ url_for('exporter_programme', id=programme.id, format='csv') }}"><i class="fas fa-file-csv me-2" style="color: var(--fk-accent);"></i>CSV</a></li>
-                    <li><a class="dropdown-item py-2" href="{{ url_for('exporter_programme', id=programme.id, format='pdf') }}"><i class="fas fa-file-pdf me-2" style="color: #b91c1c;"></i>PDF</a></li>
-                </ul>
-            </div>
-            
-            <a href="{{ url_for('plan_pluie_programme', programme_id=programme.id) }}" class="btn px-4 py-2 d-flex align-items-center gap-2" style="border-radius: 10px; background: white; color: #b45309; border: 1px solid #e2e8f0;">
-                <i class="fas fa-umbrella" style="color: #b45309;"></i> <span class="d-none d-md-inline">Plan de repli</span>
-            </a>
-            
-            {% if programme.methode_generation in ['auto_risques', 'hybride'] %}
-            <button class="btn px-4 py-2 d-flex align-items-center gap-2" onclick="regenererMissions({{ programme.id }}); return false;" style="border-radius: 10px; background: white; color: #7c3aed; border: 1px solid #e2e8f0;">
-                <i class="fas fa-robot" style="color: #7c3aed;"></i> <span class="d-none d-md-inline">Régénérer</span>
-            </button>
-            {% endif %}
-            
-            <div class="dropdown">
-                <button class="btn px-4 py-2 dropdown-toggle d-flex align-items-center gap-2" type="button" data-bs-toggle="dropdown" style="border-radius: 10px; background: var(--accent-gradient); color: white; border: none; box-shadow: 0 4px 12px rgba(37, 99, 235, 0.3);">
-                    <i class="fas fa-cog"></i> <span class="d-none d-md-inline">Actions</span>
-                </button>
-                <ul class="dropdown-menu dropdown-menu-end border-0 shadow-sm" style="border-radius: 12px; padding: 8px;">
-                    <li><a class="dropdown-item py-2" href="#" data-bs-toggle="modal" data-bs-target="#addMissionModal"><i class="fas fa-plus-circle" style="color: var(--fk-accent); width: 20px;"></i>Ajouter une mission</a></li>
-                    <li><hr class="dropdown-divider"></li>
-                    <li><a class="dropdown-item py-2" href="#" onclick="openEditModal({{ programme.id }}); return false;"><i class="fas fa-edit" style="color: var(--fk-accent); width: 20px;"></i>Modifier le programme</a></li>
-                    <li><a class="dropdown-item py-2" href="#" onclick="dupliquerProgramme({{ programme.id }}); return false;"><i class="fas fa-copy" style="color: #0891b2; width: 20px;"></i>Dupliquer</a></li>
-                    <li><hr class="dropdown-divider"></li>
-                    {% if programme.statut == 'en_elaboration' %}
-                    <li><a class="dropdown-item py-2 text-success" href="#" onclick="openApproveModal({{ programme.id }}); return false;"><i class="fas fa-check-circle" style="color: #059669; width: 20px;"></i>Approuver le programme</a></li>
-                    {% elif programme.statut == 'actif' %}
-                    <li><a class="dropdown-item py-2 text-warning" href="#" onclick="openDesapprouverModal({{ programme.id }}); return false;"><i class="fas fa-ban" style="color: #b45309; width: 20px;"></i>Désapprouver</a></li>
-                    {% endif %}
-                    <li><hr class="dropdown-divider"></li>
-                    <li><a class="dropdown-item py-2 text-danger" href="#" onclick="openArchiveModal({{ programme.id }}); return false;"><i class="fas fa-archive" style="color: #b91c1c; width: 20px;"></i>Archiver</a></li>
-                </ul>
-            </div>
-        </div>
-    </div>
+{{ pg.styles() }}
+{#- ================= Présentation modernisée (2026-11) : en-tête, indicateurs, missions. Modals et scripts d'origine conservés. ================= -#}
+{% set ST_PROG = {'en_elaboration': ('En élaboration', '#6941C6', '#F4F3FF'), 'approuve': ('Approuvé', '#175CD3', '#EFF8FF'), 'actif': ('En exécution', '#067647', '#ECFDF3'),
+                  'cloture': ('Clôturé', '#475467', '#F2F4F7'), 'archive': ('Archivé', '#475467', '#F2F4F7')} %}
+{% set ST_MIS = {'planifie': ('Planifiée', '#475467', '#F2F4F7'), 'en_cours': ('En cours', '#175CD3', '#EFF8FF'), 'termine': ('Réalisée', '#067647', '#ECFDF3'),
+                 'realise': ('Réalisée', '#067647', '#ECFDF3'), 'realisee': ('Réalisée', '#067647', '#ECFDF3'), 'reporte': ('Reportée', '#B54708', '#FEF0C7'),
+                 'annule': ('Annulée', '#B42318', '#FEE4E2'), 'suspendu': ('Suspendue', '#B54708', '#FEF0C7')} %}
+{% set PRIO = {'critique': ('Critique', '#B42318', '#FEE4E2'), 'haute': ('Haute', '#B54708', '#FEF0C7'), 'elevee': ('Élevée', '#B54708', '#FEF0C7'),
+               'moyenne': ('Moyenne', '#175CD3', '#EFF8FF'), 'basse': ('Basse', '#475467', '#F2F4F7'), 'faible': ('Faible', '#475467', '#F2F4F7')} %}
+{% set sp = ST_PROG.get(programme.statut, ((programme.statut or '—')|replace('_', ' ')|capitalize, '#475467', '#F2F4F7')) %}
+{% set nb = missions_data|length %}
+{% set faites = missions_data|selectattr('statut', 'in', ['termine', 'realise', 'realisee'])|list|length %}
+{% set en_cours = missions_data|selectattr('statut', 'equalto', 'en_cours')|list|length %}
+{% set retard = missions_data|selectattr('est_en_retard')|rejectattr('statut', 'in', ['termine', 'realise', 'realisee', 'annule'])|list|length %}
+{% set jours = missions_data|sum(attribute='duree_estimee') %}
+<style>
+  .pd { max-width: 1320px; margin: 0 auto; padding: 1rem 1.25rem !important; }
+  .pd .card { box-shadow: none; }
+  .pd-tete { background: var(--bs-body-bg); border: 1px solid var(--bs-border-color); border-radius: 14px; padding: 1.1rem 1.3rem; margin-bottom: 1rem; }
+  .pd-fil { font-size: .82rem; color: var(--bs-secondary-color); margin-bottom: .5rem; } .pd-fil a { color: inherit; text-decoration: none; } .pd-fil a:hover { color: #1D4ED8; }
+  .pd-ligne { display: flex; justify-content: space-between; gap: 1rem; flex-wrap: wrap; align-items: flex-end; }
+  .pd-tete h1 { font-size: 1.4rem; font-weight: 750; margin: 0; color: var(--bs-emphasis-color); }
+  .pd-ref { font-size: .75rem; font-weight: 700; color: #1D4ED8; background: #EFF4FF; border-radius: 6px; padding: .15rem .45rem; margin-right: .5rem; vertical-align: middle; }
+  .pd-meta { display: flex; gap: .4rem 1.1rem; flex-wrap: wrap; font-size: .82rem; color: var(--bs-secondary-color); margin-top: .5rem; align-items: center; }
+  .pd-pastille { display: inline-block; font-size: .72rem; font-weight: 650; border-radius: 999px; padding: .15rem .6rem; white-space: nowrap; }
+  .pd-actions { display: flex; gap: .4rem; flex-wrap: wrap; }
+  .pd-actions .btn-light { background: var(--bs-body-bg); border: 1px solid var(--bs-border-color); color: var(--bs-body-color); }
+  .pd-actions .btn-light:hover { border-color: #84ADFF; color: #1D4ED8; }
+  .pd-kpis { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: .75rem; margin-bottom: 1rem; }
+  @media (max-width: 1100px) { .pd-kpis { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+  .pd-kpi { background: var(--bs-body-bg); border: 1px solid var(--bs-border-color); border-radius: 12px; padding: .9rem 1rem; }
+  .pd-kpi span { font-size: .7rem; font-weight: 650; text-transform: uppercase; letter-spacing: .04em; color: var(--bs-secondary-color); }
+  .pd-kpi b { display: block; font-size: 1.5rem; font-weight: 750; line-height: 1.15; margin-top: .1rem; font-variant-numeric: tabular-nums; }
+  .pd-kpi small { font-size: .75rem; color: var(--bs-secondary-color); }
+  .pd-barre { height: 6px; border-radius: 3px; background: var(--bs-tertiary-bg); overflow: hidden; margin-top: .45rem; } .pd-barre span { display: block; height: 100%; }
+  .pd-grille { display: grid; grid-template-columns: 2fr 1fr; gap: 1rem; margin-bottom: 1rem; }
+  @media (max-width: 1100px) { .pd-grille { grid-template-columns: 1fr; } }
+  .pd-repart { display: flex; height: 12px; border-radius: 6px; overflow: hidden; background: var(--bs-tertiary-bg); margin: .5rem 0 .4rem; }
+  .pd-leg { display: flex; flex-wrap: wrap; gap: .3rem 1rem; font-size: .78rem; color: var(--bs-secondary-color); } .pd-leg i { display: inline-block; width: 9px; height: 9px; border-radius: 2px; margin-right: .3rem; }
+  .pd-trims { display: grid; grid-template-columns: repeat(auto-fill, minmax(70px, 1fr)); gap: .35rem; margin-top: .75rem; }
+  .pd-trim { border: 1px solid var(--bs-border-color); border-radius: 8px; padding: .35rem .4rem; text-align: center; font-size: .72rem; color: var(--bs-secondary-color); }
+  .pd-trim b { display: block; font-size: 1rem; color: var(--bs-body-color); }
+  .pd-table { width: 100%; font-size: .87rem; }
+  .pd-table th { font-size: .7rem; text-transform: uppercase; letter-spacing: .04em; color: var(--bs-secondary-color); font-weight: 650; padding: .55rem .6rem; border-bottom: 1px solid var(--bs-border-color); white-space: nowrap; }
+  .pd-table td { padding: .7rem .6rem; border-bottom: 1px solid var(--bs-border-color); vertical-align: middle; }
+  .pd-table tbody tr:hover { background: var(--bs-tertiary-bg); }
+  .pd-table tr.pd-retard td:first-child { box-shadow: inset 3px 0 0 #F04438; }
+  .pd-mref { font-size: .72rem; font-weight: 700; color: var(--bs-secondary-color); }
+  .pd-titre { font-weight: 650; color: var(--bs-emphasis-color); text-decoration: none; } .pd-titre:hover { color: #1D4ED8; }
+  .pd-sous { font-size: .76rem; color: var(--bs-secondary-color); }
+  .pd-act .btn { border: 1px solid var(--bs-border-color); background: var(--bs-body-bg); color: var(--bs-body-color); }
+  .pd-act .btn:hover { border-color: #84ADFF; color: #1D4ED8; }
+  .pd-dl { display: grid; grid-template-columns: 150px 1fr; gap: .45rem 1rem; font-size: .88rem; margin: 0; } .pd-dl dt { color: var(--bs-secondary-color); font-weight: 500; } .pd-dl dd { margin: 0; }
+  #selectionBar { background: #EFF4FF; border: 1px solid #C7D7FE; border-radius: 10px; padding: .55rem .85rem; margin-bottom: .75rem; align-items: center; gap: .75rem; }
+</style>
 
-    <!-- ========== STATISTIQUES ========== -->
-    <div class="row g-4 mb-5">
-        <div class="col-xl-3 col-md-6">
-            <div class="card border-0 shadow-sm h-100 animate-in">
-                <div class="card-body p-4">
-                    <div class="d-flex align-items-center justify-content-between">
-                        <div>
-                            <span class="text-uppercase small fw-semibold mb-2 d-block" style="color: #64748b;">MISSIONS</span>
-                            <h2 class="fw-bold mb-0" style="color: #0f172a;">{{ programme.nb_missions }}</h2>
-                            <div class="mt-2">
-                                <small style="color: #64748b;"><i class="fas fa-check-circle me-1" style="color: #059669;"></i> {{ programme.nb_missions_realisees }} terminées</small>
-                            </div>
-                        </div>
-                        <div class="rounded-circle p-3 d-flex align-items-center justify-content-center" style="background: #e2e8f0; width: 64px; height: 64px;">
-                            <i class="fas fa-clipboard-list fa-2x" style="color: var(--fk-accent);"></i>
-                        </div>
-                    </div>
-                    <div class="progress mt-3" style="height: 6px; background: #e2e8f0; border-radius: 3px;">
-                        {% set pct = ((programme.nb_missions_realisees / programme.nb_missions * 100)|round) if programme.nb_missions > 0 else 0 %}
-                        <div class="progress-bar" style="width: {{ pct }}%; background: var(--fk-accent);"></div>
-                    </div>
-                </div>
-            </div>
+<div class="container-fluid pd">
+  <div class="pd-tete">
+    <div class="pd-fil"><a href="{{ url_for('liste_programmes_audit') }}"><i class="fas fa-arrow-left me-1"></i>Programmes d'audit</a></div>
+    <div class="pd-ligne">
+      <div>
+        <h1><span class="pd-ref">{{ programme.reference }}</span>{{ programme.nom }}</h1>
+        <div class="pd-meta">
+          <span class="pd-pastille" style="color:{{ sp[1] }};background:{{ sp[2] }}">{{ sp[0] }}</span>
+          <span><i class="fas fa-calendar me-1"></i>{{ programme.annee_debut }}{% if programme.annee_fin and programme.annee_fin != programme.annee_debut %} – {{ programme.annee_fin }}{% endif %} · {{ (programme.periode or '')|capitalize }}</span>
+          <span><i class="fas fa-gears me-1"></i>{{ {'risques': 'Fondé sur les risques', 'auto_risques': 'Fondé sur les risques', 'hybride': 'Hybride', 'manuel': 'Manuel'}.get(programme.methode_generation, (programme.methode_generation or '')|replace('_', ' ')|capitalize) }}</span>
+          {% if programme.pays %}<span><i class="fas fa-earth-africa me-1"></i>{{ programme.pays.nom }}</span>{% endif %}
+          {% if programme.pole %}<span><i class="fas fa-layer-group me-1"></i>{{ programme.pole.nom }}</span>{% endif %}
+          {% if programme.direction %}<span><i class="fas fa-sitemap me-1"></i>{{ programme.direction.nom }}</span>{% endif %}
         </div>
-        <div class="col-xl-3 col-md-6">
-            <div class="card border-0 shadow-sm h-100 animate-in">
-                <div class="card-body p-4">
-                    <div class="d-flex align-items-center justify-content-between">
-                        <div>
-                            <span class="text-uppercase small fw-semibold mb-2 d-block" style="color: #64748b;">PROGRESSION</span>
-                            <h2 class="fw-bold mb-0" style="color: #0f172a;">{{ programme.progression }}%</h2>
-                            <div class="mt-2">
-                                <small style="color: #64748b;"><i class="fas fa-chart-line me-1" style="color: #059669;"></i> {{ programme.nb_missions_realisees }}/{{ programme.nb_missions }} missions</small>
-                            </div>
-                        </div>
-                        <div class="rounded-circle p-3 d-flex align-items-center justify-content-center" style="background: #dcfce7; width: 64px; height: 64px;">
-                            <i class="fas fa-chart-line fa-2x" style="color: #059669;"></i>
-                        </div>
-                    </div>
-                    <div class="progress mt-3" style="height: 6px; background: #e2e8f0;">
-                        <div class="progress-bar" style="width: {{ programme.progression }}%; background: #059669;"></div>
-                    </div>
-                </div>
-            </div>
+      </div>
+      <div class="pd-actions">
+        <a href="{{ url_for('chronogramme_programme', id=programme.id) }}" class="btn btn-sm btn-light"><i class="fas fa-chart-gantt me-1"></i>Chronogramme</a>
+        <a href="{{ url_for('plan_pluie_programme', programme_id=programme.id) }}" class="btn btn-sm btn-light"><i class="fas fa-cloud-rain me-1"></i>Plan de repli</a>
+        <div class="dropdown">
+          <button class="btn btn-sm btn-light dropdown-toggle" data-bs-toggle="dropdown"><i class="fas fa-download me-1"></i>Exporter</button>
+          <ul class="dropdown-menu dropdown-menu-end">
+            <li><a class="dropdown-item" href="{{ url_for('exporter_programme', id=programme.id, format='pdf') }}"><i class="fas fa-file-pdf me-2 text-danger"></i>PDF</a></li>
+            <li><a class="dropdown-item" href="{{ url_for('exporter_programme', id=programme.id, format='excel') }}"><i class="fas fa-file-excel me-2 text-success"></i>Excel</a></li>
+            <li><a class="dropdown-item" href="{{ url_for('exporter_programme', id=programme.id, format='csv') }}"><i class="fas fa-file-csv me-2"></i>CSV</a></li>
+          </ul>
         </div>
-        <!-- ✅ CARTE : Risques critiques NET (utilise la variable de la route) -->
-        <div class="col-xl-3 col-md-6">
-            <div class="card border-0 shadow-sm h-100 animate-in" 
-                 style="border-left: 4px solid {% if nb_risques_net > 0 %}#dc2626{% else %}#10b981{% endif %};">
-                <div class="card-body p-4">
-                    <div class="d-flex align-items-center justify-content-between">
-                        <div>
-                            <span class="text-uppercase small fw-semibold mb-2 d-block" style="color: #64748b;">
-                                RISQUES CRITIQUES NET
-                            </span>
-                            <h2 class="fw-bold mb-0 {% if nb_risques_net > 0 %}text-danger{% else %}text-success{% endif %}">
-                                {{ nb_risques_net }}
-                            </h2>
-                            <div class="mt-2">
-                                <small style="color: #64748b;">
-                                    <i class="fas fa-{% if nb_risques_net > 0 %}fire{% else %}shield-alt{% endif %} me-1" 
-                                       style="color: {% if nb_risques_net > 0 %}#dc2626{% else %}#10b981{% endif %};"></i>
-                                    Risques critiques disponibles
-                                </small>
-                            </div>
-                        </div>
-                        <div class="rounded-circle p-3 d-flex align-items-center justify-content-center" 
-                            style="background: {% if nb_risques_net > 0 %}#fee2e2{% else %}#d1fae5{% endif %}; width: 64px; height: 64px;">
-                            <i class="fas fa-{% if nb_risques_net > 0 %}fire{% else %}shield-alt{% endif %} fa-2x" 
-                               style="color: {% if nb_risques_net > 0 %}#dc2626{% else %}#10b981{% endif %};"></i>
-                        </div>
-                    </div>
-                </div>
-            </div>
+        <div class="dropdown">
+          <button class="btn btn-sm btn-light" data-bs-toggle="dropdown" title="Plus d'actions"><i class="fas fa-ellipsis"></i></button>
+          <ul class="dropdown-menu dropdown-menu-end">
+            <li><a class="dropdown-item" href="#" onclick="openEditModal({{ programme.id }}); return false;"><i class="fas fa-pen me-2"></i>Modifier</a></li>
+            <li><a class="dropdown-item" href="#" onclick="dupliquerProgramme({{ programme.id }}); return false;"><i class="fas fa-copy me-2"></i>Dupliquer</a></li>
+            {% if programme.methode_generation in ['auto_risques', 'hybride', 'risques'] %}<li><a class="dropdown-item" href="#" onclick="regenererMissions({{ programme.id }}); return false;"><i class="fas fa-wand-magic-sparkles me-2"></i>Régénérer depuis les risques</a></li>{% endif %}
+            {% if programme.statut == 'actif' %}<li><a class="dropdown-item" href="#" onclick="openDesapprouverModal({{ programme.id }}); return false;"><i class="fas fa-rotate-left me-2 text-warning"></i>Retirer l'approbation</a></li>{% endif %}
+            <li><hr class="dropdown-divider"></li>
+            <li><a class="dropdown-item text-danger" href="#" onclick="openArchiveModal({{ programme.id }}); return false;"><i class="fas fa-box-archive me-2"></i>Archiver</a></li>
+          </ul>
         </div>
-        <div class="col-xl-3 col-md-6">
-            <div class="card border-0 shadow-sm h-100 animate-in">
-                <div class="card-body p-4">
-                    <div class="d-flex align-items-center justify-content-between">
-                        <div>
-                            <span class="text-uppercase small fw-semibold mb-2 d-block" style="color: #64748b;">RESSOURCES</span>
-                            <h2 class="fw-bold mb-0" style="color: #0f172a;">{{ programme.jours_audit_planifies }}j</h2>
-                            <div class="mt-2">
-                                <small style="color: #64748b;"><i class="fas fa-clock me-1" style="color: #b45309;"></i> {{ programme.jours_audit_realises }} jours réalisés</small>
-                            </div>
-                        </div>
-                        <div class="rounded-circle p-3 d-flex align-items-center justify-content-center" style="background: #fed7aa; width: 64px; height: 64px;">
-                            <i class="fas fa-clock fa-2x" style="color: #b45309;"></i>
-                        </div>
-                    </div>
-                </div>
-            </div>
-        </div>
-        <div class="col-xl-3 col-md-6">
-            <div class="card border-0 shadow-sm h-100 animate-in">
-                <div class="card-body p-4">
-                    <div class="d-flex align-items-center justify-content-between">
-                        <div>
-                            <span class="text-uppercase small fw-semibold mb-2 d-block" style="color: #64748b;">MÉTHODE</span>
-                            <h3 class="fw-bold mb-0" style="color: #0f172a; font-size: 1.5rem;">{{ programme.methode_generation|replace('_', ' ')|title }}</h3>
-                            <div class="mt-2">
-                                <small style="color: #64748b;"><i class="fas fa-cogs me-1" style="color: #7c3aed;"></i> {{ programme.periode|capitalize }}</small>
-                            </div>
-                        </div>
-                        <div class="rounded-circle p-3 d-flex align-items-center justify-content-center" style="background: #ede9fe; width: 64px; height: 64px;">
-                            <i class="fas fa-cogs fa-2x" style="color: #7c3aed;"></i>
-                        </div>
-                    </div>
-                </div>
-            </div>
-        </div>
+        {% if programme.statut == 'en_elaboration' %}
+        <button class="btn btn-sm btn-success" onclick="openApproveModal({{ programme.id }}); return false;"><i class="fas fa-circle-check me-1"></i>Approuver</button>
+        {% endif %}
+        <button class="btn btn-sm btn-primary" data-bs-toggle="modal" data-bs-target="#addMissionModal"><i class="fas fa-plus me-1"></i>Mission</button>
+      </div>
     </div>
+  </div>
 
-    <!-- ========== INFORMATIONS DÉTAILLÉES ========== -->
-    <div class="row g-4 mb-5">
-        <div class="col-xl-8">
-            <div class="card border-0 shadow-sm h-100 animate-in">
-                <div class="card-header bg-transparent d-flex justify-content-between align-items-center p-4" style="border-bottom: 1px solid #e2e8f0;">
-                    <h5 class="fw-semibold mb-0" style="color: #0f172a;"><i class="fas fa-info-circle me-2" style="color: var(--fk-accent);"></i>Informations du programme</h5>
-                    <span class="badge px-3 py-2 fw-normal" style="background: #f8fafc; color: var(--fk-accent); border: 1px solid #e2e8f0;">{{ programme.methode_generation|replace('_', ' ')|title }}</span>
-                </div>
-                <div class="card-body p-4">
-                    <div class="row">
-                        <div class="col-md-6">
-                            <div class="mb-4">
-                                <span class="text-uppercase small fw-semibold mb-2 d-block" style="color: #64748b;">DESCRIPTION</span>
-                                <div class="p-3 rounded-2" style="background: #f8fafc;">
-                                    {% if programme.description %}<p class="mb-0" style="color: #334155;">{{ programme.description|nl2br }}</p>{% else %}<p class="mb-0 text-muted fst-italic"><i class="fas fa-info-circle me-2"></i>Aucune description fournie</p>{% endif %}
-                                </div>
-                            </div>
-                            <span class="text-uppercase small fw-semibold mb-3 d-block" style="color: #64748b;">CONFIGURATION</span>
-                            <div class="table-responsive">
-                                <table class="table table-sm table-borderless">
-                                    <tbody>
-                                        <tr>
-                                            <td class="text-muted">Période :</td>
-                                            <td class="fw-semibold" style="color: #0f172a;">{{ programme.periode|capitalize }}</td>
-                                        </tr>
-                                        <tr>
-                                            <td class="text-muted">Fréquence d'audit :</td>
-                                            <td class="fw-semibold" style="color: #0f172a;">{{ programme.frequence_audit|capitalize if programme.frequence_audit else 'Non spécifiée' }}</td>
-                                        </tr>
-                                        <tr>
-                                            <td class="text-muted">Durée moyenne :</td>
-                                            <td class="fw-semibold" style="color: #0f172a;">{{ programme.duree_moyenne_mission or 'N/A' }} jours</td>
-                                        </tr>
-                                        <tr>
-                                            <td class="text-muted">Ressources :</td>
-                                            <td class="fw-semibold" style="color: #0f172a;">{{ programme.ressources_disponibles or 'N/A' }} jours/homme/an</td>
-                                        </tr>
-                                    </tbody>
-                                </table>
-                            </div>
-                        </div>
-                        <div class="col-md-6">
-                            <span class="text-uppercase small fw-semibold mb-3 d-block" style="color: #64748b;">CRÉATION</span>
-                            <div class="d-flex align-items-center gap-3 mb-4 p-3 rounded-2" style="background: #f8fafc;">
-                                <div class="rounded-circle d-flex align-items-center justify-content-center" style="width: 48px; height: 48px; background: var(--accent-gradient);">
-                                    <i class="fas fa-user text-white"></i>
-                                </div>
-                                <div>
-                                    <p class="mb-1 fw-semibold" style="color: #0f172a;">{{ programme.createur.username }}</p>
-                                    <p class="mb-0 small" style="color: #64748b;"><i class="far fa-calendar me-1" style="color: var(--fk-accent);"></i>Créé le {{ programme.created_at.strftime('%d/%m/%Y à %H:%M') }}</p>
-                                </div>
-                            </div>
-                            {% if programme.criteres_generation %}
-                            <span class="text-uppercase small fw-semibold mb-3 d-block" style="color: #64748b;">CRITÈRES DE GÉNÉRATION</span>
-                            <div class="p-3 rounded-2" style="background: #f8fafc;">
-                                {% set criteres = programme.criteres_generation or {} %}
-                                <div class="row g-2">
-                                    {% if criteres.get('seuil_critique') %}<div class="col-6"><span class="badge px-3 py-2" style="background: #dcfce7; color: #059669;"><i class="fas fa-check-circle me-1"></i>Risques critiques</span></div>{% endif %}
-                                    {% if criteres.get('seuil_eleve') %}<div class="col-6"><span class="badge px-3 py-2" style="background: #fff3e0; color: #b45309;"><i class="fas fa-check-circle me-1"></i>Risques élevés</span></div>{% endif %}
-                                    {% if criteres.get('inclure_risques_moyens') %}<div class="col-6"><span class="badge px-3 py-2" style="background: #dbeafe; color: var(--fk-accent);"><i class="fas fa-check-circle me-1"></i>Risques moyens</span></div>{% endif %}
-                                    {% if criteres.get('prioriser_processus_critiques') %}<div class="col-6"><span class="badge px-3 py-2" style="background: #fee2e2; color: #b91c1c;"><i class="fas fa-check-circle me-1"></i>Processus critiques</span></div>{% endif %}
-                                </div>
-                            </div>
-                            {% endif %}
-                        </div>
-                    </div>
-                </div>
-            </div>
+  {% set pct = ((faites / nb * 100)|round|int) if nb else 0 %}
+  <div class="pd-kpis">
+    <div class="pd-kpi"><span>Missions</span><b>{{ nb }}</b><small>{{ jours }} jours d'audit estimés</small></div>
+    <div class="pd-kpi"><span>Réalisées</span><b style="color:#079455">{{ faites }}</b><div class="pd-barre"><span style="width:{{ pct }}%;background:#17B26A"></span></div></div>
+    <div class="pd-kpi"><span>En cours</span><b style="color:#1D4ED8">{{ en_cours }}</b><small>{{ nb - faites - en_cours }} à lancer</small></div>
+    <div class="pd-kpi"><span>En retard</span><b style="color:{{ '#D92D20' if retard else 'inherit' }}">{{ retard }}</b><small>{{ 'à replanifier' if retard else 'aucune' }}</small></div>
+    <div class="pd-kpi"><span>Risques élevés et critiques</span><b>{{ nb_eleves_net|default(nb_risques_net)|default(0) }}</b><small>{{ nb_risques_net|default(0) }} critique(s) dans la cartographie</small></div>
+  </div>
+
+  <div class="pd-grille">
+    {% call pg.carte('Répartition des missions') %}
+      {% set PR = [('critique', '#F04438'), ('haute', '#F79009'), ('elevee', '#F79009'), ('moyenne', '#2E90FA'), ('basse', '#98A2B3'), ('faible', '#98A2B3')] %}
+      {% if nb %}
+      <div class="pd-repart">{% for p, coul in PR %}{% set n = missions_data|selectattr('priorite', 'equalto', p)|list|length %}{% if n %}<span style="width:{{ n / nb * 100 }}%;background:{{ coul }}" title="{{ PRIO[p][0] }} : {{ n }}"></span>{% endif %}{% endfor %}</div>
+      <div class="pd-leg">{% for p, coul in PR %}{% set n = missions_data|selectattr('priorite', 'equalto', p)|list|length %}{% if n %}<span><i style="background:{{ coul }}"></i>{{ PRIO[p][0] }} : {{ n }}</span>{% endif %}{% endfor %}</div>
+      <div class="pd-trims">
+        {% for a in range(programme.annee_debut, (programme.annee_fin or programme.annee_debut) + 1) %}{% for t in range(1, 5) %}
+          {% set n = missions_data|selectattr('annee_prevue', 'equalto', a)|selectattr('trimestre_prevue', 'equalto', t)|list|length %}
+          <div class="pd-trim" style="{{ 'border-color:#84ADFF;background:#F5F8FF' if n }}"><b>{{ n }}</b>T{{ t }} {{ a }}</div>
+        {% endfor %}{% endfor %}
+      </div>
+      {% else %}<p class="text-secondary small mb-0">Aucune mission pour l'instant.</p>{% endif %}
+    {% endcall %}
+    {% call pg.carte('Le programme') %}
+      <dl class="pd-dl">
+        {% if programme.description %}<dt>Description</dt><dd>{{ programme.description }}</dd>{% endif %}
+        <dt>Ressources</dt><dd>{{ programme.ressources_disponibles or '—' }} auditeur(s)</dd>
+        <dt>Durée moyenne</dt><dd>{{ programme.duree_moyenne_mission or '—' }} jours / mission</dd>
+        {% if programme.capacite_max_trimestre %}<dt>Capacité</dt><dd>{{ programme.capacite_max_trimestre }} missions / trimestre</dd>{% endif %}
+        {% if programme.frequence_audit %}<dt>Fréquence</dt><dd>{{ programme.frequence_audit|capitalize }}</dd>{% endif %}
+        <dt>Créé</dt><dd>{{ programme.created_at.strftime('%d/%m/%Y') if programme.created_at }}{% if programme.createur %} par {{ programme.createur.username }}{% endif %}</dd>
+        {% if programme.date_approbation %}<dt>Approuvé le</dt><dd>{{ programme.date_approbation.strftime('%d/%m/%Y') }}</dd>{% endif %}
+      </dl>
+    {% endcall %}
+  </div>
+
+  <div class="pg-carte">
+    <div class="pg-carte-titre"><h2>Missions ({{ nb }})</h2>
+      <div class="d-flex gap-2">
+        <div class="dropdown">
+          <button class="btn btn-sm btn-outline-secondary dropdown-toggle" data-bs-toggle="dropdown"><i class="fas fa-filter me-1"></i>Priorité</button>
+          <ul class="dropdown-menu dropdown-menu-end">
+            <li><a class="dropdown-item" href="?">Toutes</a></li>
+            {% for p in ('critique', 'elevee', 'moyenne', 'faible') %}<li><a class="dropdown-item" href="?priorite={{ p }}">{{ PRIO[p][0] }}</a></li>{% endfor %}
+          </ul>
         </div>
-        <div class="col-xl-4">
-            <div class="card border-0 shadow-sm h-100 animate-in">
-                <div class="card-header bg-transparent p-4" style="border-bottom: 1px solid #e2e8f0;">
-                    <h5 class="fw-semibold mb-0" style="color: #0f172a;"><i class="fas fa-chart-pie me-2" style="color: var(--fk-accent);"></i>Répartition par priorité</h5>
-                </div>
-                <div class="card-body p-4">
-                    <div class="d-flex justify-content-center mb-4">
-                        <canvas id="prioriteChart" style="max-width: 250px; max-height: 250px;"></canvas>
-                    </div>
-                    <div class="row g-3">
-                        {% set missions_count = {'critique': 0, 'elevee': 0, 'moyenne': 0, 'faible': 0} %}
-                        {% for mission in missions_data %}{% if mission.priorite in missions_count %}{% set _ = missions_count.update({mission.priorite: missions_count[mission.priorite] + 1}) %}{% endif %}{% endfor %}
-                        {% set colors = {'critique': '#b91c1c', 'elevee': '#b45309', 'moyenne': '#2563eb', 'faible': '#64748b'} %}
-                        {% set labels = {'critique': 'Critique', 'elevee': 'Élevée', 'moyenne': 'Moyenne', 'faible': 'Faible'} %}
-                        {% for priorite, count in missions_count.items() %}
-                        {% if count > 0 %}
-                        <div class="col-6">
-                            <div class="p-3 rounded-2" style="background: {{ colors[priorite] }}20;">
-                                <div class="d-flex align-items-center gap-2 mb-2">
-                                    <div class="rounded-circle d-flex align-items-center justify-content-center p-2" style="width: 36px; height: 36px; background: {{ colors[priorite] }}20;">
-                                        <i class="fas fa-{{ 'fire' if priorite == 'critique' else 'exclamation-triangle' if priorite == 'elevee' else 'minus-circle' if priorite == 'moyenne' else 'info-circle' }}" style="color: {{ colors[priorite] }};"></i>
-                                    </div>
-                                    <div>
-                                        <h4 class="mb-0 fw-bold" style="color: {{ colors[priorite] }};">{{ count }}</h4>
-                                        <small style="color: #64748b;">{{ labels[priorite] }}</small>
-                                    </div>
-                                </div>
-                                <div class="progress" style="height: 4px;">
-                                    <div class="progress-bar" style="width: {{ (count / programme.nb_missions * 100)|round if programme.nb_missions > 0 else 0 }}%; background: {{ colors[priorite] }};"></div>
-                                </div>
-                            </div>
-                        </div>
-                        {% endif %}
-                        {% endfor %}
-                    </div>
-                </div>
-            </div>
-        </div>
+        <button class="btn btn-sm btn-primary" data-bs-toggle="modal" data-bs-target="#addMissionModal"><i class="fas fa-plus me-1"></i>Ajouter</button>
+      </div>
     </div>
-    
-    <!-- ========== BARRE DE SÉLECTION ========== -->
-    <div id="selectionBar" class="d-none justify-content-between align-items-center mb-3 p-3 rounded-2" style="background: #dbeafe;">
-        <div>
-            <i class="fas fa-check-circle me-2" style="color: var(--fk-accent);"></i>
-            <span id="selectedCount" class="fw-semibold" style="color: #0f172a;">0</span> mission(s) sélectionnée(s)
-        </div>
-        <div class="d-flex gap-2">
-            <button class="btn btn-sm btn-danger" onclick="preparerSuppressionBloc()"><i class="fas fa-trash me-1"></i>Supprimer la sélection</button>
-            <button class="btn btn-sm btn-secondary" onclick="deselectAll()"><i class="fas fa-times me-1"></i>Désélectionner tout</button>
-        </div>
+    <div id="selectionBar" class="d-none">
+      <i class="fas fa-check-square text-primary"></i><span><b id="selectedCount">0</b> mission(s) sélectionnée(s)</span>
+      <button class="btn btn-sm btn-danger ms-auto" onclick="preparerSuppressionBloc()"><i class="fas fa-trash me-1"></i>Supprimer</button>
+      <button class="btn btn-sm btn-outline-secondary" onclick="deselectAll()">Annuler</button>
     </div>
-    
-    <!-- ========== LISTE DES MISSIONS ========== -->
-    <div class="card border-0 shadow-sm animate-in" style="border-radius: 16px; overflow: hidden;">
-        <div class="card-header bg-transparent d-flex justify-content-between align-items-center p-4" style="border-bottom: 1px solid #e2e8f0;">
-            <div>
-                <h5 class="fw-semibold mb-1" style="color: #0f172a;"><i class="fas fa-tasks me-2" style="color: var(--fk-accent);"></i>Missions d'audit</h5>
-                <small style="color: #64748b;">{{ missions_data|length }} mission(s) programmée(s)</small>
+    {% if missions_data %}
+    <div class="table-responsive">
+    <table class="pd-table">
+      <thead><tr><th style="width:32px"><input type="checkbox" class="form-check-input" id="selectAllMissions" onchange="toggleAllMissions()"></th>
+        <th>Mission</th><th>Prévue</th><th>Priorité</th><th>Responsable</th><th class="text-end">Durée</th><th>Statut</th><th></th></tr></thead>
+      <tbody>
+      {% for mission in missions_data|sort(attribute='reference') %}
+        {% set sm = ST_MIS.get(mission.statut, ((mission.statut or '—')|replace('_', ' ')|capitalize, '#475467', '#F2F4F7')) %}
+        {% set pr = PRIO.get(mission.priorite, ((mission.priorite or '—')|capitalize, '#475467', '#F2F4F7')) %}
+        {% set en_retard = mission.est_en_retard and mission.statut not in ('termine', 'realise', 'realisee', 'annule') %}
+        <tr class="{{ 'pd-retard' if en_retard }}">
+          <td><input type="checkbox" class="form-check-input mission-checkbox" value="{{ mission.id }}" onchange="toggleMissionSelection({{ mission.id }}, this)"></td>
+          <td><div class="pd-mref">{{ mission.reference }}</div>
+            <a href="#" class="pd-titre" data-bs-toggle="modal" data-bs-target="#missionModal{{ mission.id }}">{{ mission.titre }}</a>
+            <div class="pd-sous">{% if mission.risque %}<i class="fas fa-shield-halved me-1"></i>{{ mission.risque.reference }} — {{ mission.risque.intitule|truncate(60) }}{% endif %}
+              {% if mission.audit %}<span class="ms-2"><i class="fas fa-link me-1"></i><a href="{{ url_for('detail_audit', id=mission.audit.id) }}">{{ mission.audit.reference }}</a></span>{% endif %}</div></td>
+          <td class="text-nowrap">{% if mission.trimestre_prevue %}T{{ mission.trimestre_prevue }} {% endif %}{{ mission.annee_prevue }}
+            {% if mission.date_debut_prevue %}<div class="pd-sous">{{ mission.date_debut_prevue[8:10] }}/{{ mission.date_debut_prevue[5:7] }}{% if mission.date_fin_prevue %} → {{ mission.date_fin_prevue[8:10] }}/{{ mission.date_fin_prevue[5:7] }}{% endif %}</div>{% endif %}</td>
+          <td><span class="pd-pastille" style="color:{{ pr[1] }};background:{{ pr[2] }}">{{ pr[0] }}</span></td>
+          <td class="text-nowrap">{{ mission.responsable.username if mission.responsable else '—' }}</td>
+          <td class="text-end text-nowrap">{{ mission.duree_estimee or 0 }} j</td>
+          <td><span class="pd-pastille" style="color:{{ sm[1] }};background:{{ sm[2] }}">{{ sm[0] }}</span>{% if en_retard %} <span class="pd-pastille" style="color:#B42318;background:#FEE4E2">En retard</span>{% endif %}</td>
+          <td class="text-end pd-act text-nowrap">
+            <button class="btn btn-sm" data-bs-toggle="modal" data-bs-target="#missionModal{{ mission.id }}" title="Détail"><i class="fas fa-eye"></i></button>
+            <div class="dropdown d-inline-block">
+              <button class="btn btn-sm" data-bs-toggle="dropdown" title="Actions"><i class="fas fa-ellipsis"></i></button>
+              <ul class="dropdown-menu dropdown-menu-end">
+                {% if not mission.audit_id and mission.statut == 'planifie' %}<li><a class="dropdown-item" href="{{ url_for('convertir_mission_audit', id=mission.id) }}"><i class="fas fa-play me-2 text-success"></i>Lancer l'audit</a></li>
+                {% elif mission.audit_id %}<li><a class="dropdown-item" href="{{ url_for('detail_audit', id=mission.audit_id) }}"><i class="fas fa-arrow-up-right-from-square me-2"></i>Ouvrir l'audit</a></li>{% endif %}
+                <li><a class="dropdown-item" href="#" data-bs-toggle="modal" data-bs-target="#editMissionModal{{ mission.id }}"><i class="fas fa-pen me-2"></i>Modifier</a></li>
+                <li><a class="dropdown-item" href="#" data-bs-toggle="modal" data-bs-target="#reprogrammerMissionModal{{ mission.id }}"><i class="fas fa-calendar-days me-2"></i>Reprogrammer</a></li>
+                <li><hr class="dropdown-divider"></li>
+                <li><a class="dropdown-item text-danger" href="#" onclick="openSupprimerMissionModal({{ mission.id }}); return false;"><i class="fas fa-trash me-2"></i>Supprimer</a></li>
+              </ul>
             </div>
-            <div class="d-flex gap-2">
-                <div class="dropdown">
-                    <button class="btn px-4 py-2 dropdown-toggle d-flex align-items-center gap-2" type="button" data-bs-toggle="dropdown" style="border-radius: 10px; background: white; color: #334155; border: 1px solid #e2e8f0;">
-                        <i class="fas fa-filter" style="color: #64748b;"></i> <span class="d-none d-md-inline">Filtrer</span>
-                    </button>
-                    <ul class="dropdown-menu dropdown-menu-end border-0 shadow-sm" style="border-radius: 12px; padding: 8px;">
-                        <li><a class="dropdown-item py-2" href="?"><i class="fas fa-list-ul me-2"></i>Toutes les missions</a></li>
-                        <li><hr class="dropdown-divider"></li>
-                        <li><h6 class="dropdown-header">Par statut</h6></li>
-                        <li><a class="dropdown-item py-2" href="?statut=planifie"><i class="fas fa-clock me-2"></i>Planifiées</a></li>
-                        <li><a class="dropdown-item py-2" href="?statut=en_cours"><i class="fas fa-play-circle me-2"></i>En cours</a></li>
-                        <li><a class="dropdown-item py-2" href="?statut=termine"><i class="fas fa-check-circle me-2"></i>Terminées</a></li>
-                        <li><hr class="dropdown-divider"></li>
-                        <li><h6 class="dropdown-header">Par priorité</h6></li>
-                        <li><a class="dropdown-item py-2" href="?priorite=critique"><i class="fas fa-fire me-2"></i>Critique</a></li>
-                        <li><a class="dropdown-item py-2" href="?priorite=elevee"><i class="fas fa-exclamation-triangle me-2"></i>Élevée</a></li>
-                        <li><a class="dropdown-item py-2" href="?priorite=moyenne"><i class="fas fa-minus-circle me-2"></i>Moyenne</a></li>
-                        <li><a class="dropdown-item py-2" href="?priorite=faible"><i class="fas fa-info-circle me-2"></i>Faible</a></li>
-                    </ul>
-                </div>
-                {% if missions_data|length == 0 %}
-                <button class="btn px-4 py-2" data-bs-toggle="modal" data-bs-target="#addMissionModal" style="border-radius: 10px; background: var(--accent-gradient); color: white; border: none;">
-                    <i class="fas fa-plus"></i> Ajouter
-                </button>
-                {% endif %}
-            </div>
-        </div>
-        <div class="card-body p-0">
-            {% if missions_data %}
-            <div class="table-responsive">
-                <table class="table table-custom mb-0" style="min-width: 1300px;">
-                    <thead>
-                        <tr>
-                            <th width="40"><input type="checkbox" id="selectAllMissions" onchange="toggleAllMissions()" style="accent-color: var(--fk-accent);"></th>
-                            <th>RÉFÉRENCE</th>
-                            <th>TITRE</th>
-                            <th>PRIORITÉ</th>
-                            <th>PLANIFICATION</th>
-                            <th>STATUT</th>
-                            <th>RESPONSABLE</th>
-                            <th class="text-center">ACTIONS</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        {% for mission in missions_data %}
-                        <tr style="{% if mission.est_en_retard %}background: #fff3e0;{% endif %}">
-                            <td><input type="checkbox" class="mission-checkbox" value="{{ mission.id }}" onchange="toggleMissionSelection({{ mission.id }}, this)" style="accent-color: var(--fk-accent);"></td>
-                            <td>
-                                <span class="badge px-3 py-2" style="background: #f8fafc; color: var(--fk-accent); border: 1px solid #e2e8f0;">{{ mission.reference }}</span>
-                                {% if mission.est_en_retard %}<span class="badge bg-danger ms-1" title="En retard"><i class="fas fa-exclamation"></i></span>{% endif %}
-                                {% if mission.audit_id %}<span class="badge bg-primary ms-1" title="Audit associé"><i class="fas fa-link"></i></span>{% endif %}
-                            </td>
-                            <td>
-                                <a href="#" class="text-decoration-none fw-semibold" style="color: var(--fk-accent);" data-bs-toggle="modal" data-bs-target="#missionModal{{ mission.id }}">{{ mission.titre }}</a>
-                                {% if mission.description %}<p class="mb-0 small text-muted">{{ mission.description|truncate(80) }}</p>{% endif %}
-                            </td>
-                            <td>
-                                <div class="d-flex align-items-center gap-2">
-                                    <div class="rounded-circle" style="width: 10px; height: 10px; background: {% if mission.priorite == 'critique' %}#b91c1c{% elif mission.priorite == 'elevee' %}#b45309{% elif mission.priorite == 'moyenne' %}#2563eb{% else %}#64748b{% endif %};"></div>
-                                    <span class="badge" style="background: {% if mission.priorite == 'critique' %}#b91c1c{% elif mission.priorite == 'elevee' %}#b45309{% elif mission.priorite == 'moyenne' %}#2563eb{% else %}#64748b{% endif %}; color: white;">{{ mission.priorite|capitalize if mission.priorite else 'Non défini' }}</span>
-                                </div>
-                            </td>
-                            <td>
-                                {{ mission.annee_prevue }}{% if mission.trimestre_prevue %} - T{{ mission.trimestre_prevue }}{% endif %}
-                                <br><small><i class="fas fa-clock"></i> {{ mission.duree_estimee or 0 }} jours</small>
-                                {% if mission.jours_restants > 0 %}<br><small class="text-success"><i class="far fa-calendar"></i> {{ mission.jours_restants }}j restants</small>{% endif %}
-                            </td>
-                            <td>
-                                <span class="badge" style="background: {% if mission.statut == 'planifie' %}#64748b{% elif mission.statut == 'en_cours' %}#2563eb{% elif mission.statut == 'termine' %}#059669{% else %}#b45309{% endif %}; color: white;">{{ mission.statut|replace('_', ' ')|title if mission.statut else 'Non défini' }}</span>
-                            </td>
-                            <td>
-                                {% if mission.responsable %}
-                                <div class="d-flex align-items-center gap-2">
-                                    <div class="rounded-circle d-flex align-items-center justify-content-center" style="width: 30px; height: 30px; background: var(--accent-gradient);">
-                                        <i class="fas fa-user text-white small"></i>
-                                    </div>
-                                    <span class="small fw-semibold">{{ mission.responsable.username }}</span>
-                                </div>
-                                {% else %}
-                                <span class="small text-muted">Non assigné</span>
-                                {% endif %}
-                            </td>
-                            <td class="text-center" style="position: static;">
-                                <div class="btn-group dropstart">
-                                    <button class="btn btn-sm" data-bs-toggle="modal" data-bs-target="#missionModal{{ mission.id }}" style="background: #f8fafc; color: var(--fk-accent); border: 1px solid #e2e8f0; border-radius: 8px 0 0 8px;">
-                                        <i class="fas fa-eye"></i>
-                                    </button>
-                                    <button type="button" class="btn btn-sm dropdown-toggle dropdown-toggle-split" data-bs-toggle="dropdown" aria-expanded="false" style="background: #f8fafc; color: #334155; border: 1px solid #e2e8f0; border-left: none; border-radius: 0 8px 8px 0;">
-                                        <span class="visually-hidden">Toggle Dropdown</span>
-                                        <i class="fas fa-chevron-down"></i>
-                                    </button>
-                                    <ul class="dropdown-menu dropdown-menu-end" style="z-index: 9999; min-width: 200px;">
-                                        {% if not mission.audit_id and mission.statut == 'planifie' %}
-                                        <li><a class="dropdown-item" href="{{ url_for('convertir_mission_audit', id=mission.id) }}"><i class="fas fa-play me-2 text-success"></i>Convertir en audit</a></li>
-                                        {% elif mission.audit_id %}
-                                        <li><a class="dropdown-item" href="{{ url_for('detail_audit', id=mission.audit_id) }}"><i class="fas fa-external-link-alt me-2"></i>Voir l'audit</a></li>
-                                        {% endif %}
-                                        <li><a class="dropdown-item" href="#" data-bs-toggle="modal" data-bs-target="#editMissionModal{{ mission.id }}"><i class="fas fa-edit me-2 text-warning"></i>Modifier</a></li>
-                                        <li><a class="dropdown-item" href="#" data-bs-toggle="modal" data-bs-target="#reprogrammerMissionModal{{ mission.id }}"><i class="fas fa-calendar-alt me-2"></i>Reprogrammer</a></li>
-                                        <li><hr class="dropdown-divider"></li>
-                                        <li><a class="dropdown-item text-danger" href="#" onclick="openSupprimerMissionModal({{ mission.id }}); return false;"><i class="fas fa-trash me-2"></i>Supprimer</a></li>
-                                    </ul>
-                                </div>
-                            </td>
-                        </tr>
-                        {% endfor %}
-                    </tbody>
-                </table>
-            </div>
-            {% else %}
-            <div class="text-center py-5">
-                <i class="fas fa-clipboard-list fa-3x text-muted mb-3"></i>
-                <h5>Aucune mission d'audit</h5>
-                <p class="text-muted">Ce programme ne contient pas encore de missions d'audit.</p>
-                <div class="d-flex justify-content-center gap-3">
-                    {% if programme.methode_generation == 'auto_risques' %}
-                    <a href="{{ url_for('generer_missions_auto_programme', id=programme.id) }}" class="btn" style="background: #7c3aed; color: white;">
-                        <i class="fas fa-robot"></i> Générer automatiquement
-                    </a>
-                    {% endif %}
-                    <button class="btn" data-bs-toggle="modal" data-bs-target="#addMissionModal" style="background: var(--accent-gradient); color: white;">
-                        <i class="fas fa-plus"></i> Ajouter manuellement
-                    </button>
-                </div>
-            </div>
-            {% endif %}
-        </div>
+          </td>
+        </tr>
+      {% endfor %}
+      </tbody>
+    </table>
     </div>
+    {% else %}
+    <div class="text-center py-5 text-secondary">
+      <i class="fas fa-calendar-plus fa-2x mb-3 opacity-50 d-block"></i>Aucune mission dans ce programme.
+      <div class="d-flex gap-2 justify-content-center mt-3">
+        {% if programme.methode_generation in ['auto_risques', 'hybride', 'risques'] %}<a href="{{ url_for('generer_missions_auto_programme', id=programme.id) }}" class="btn btn-sm btn-outline-primary"><i class="fas fa-wand-magic-sparkles me-1"></i>Générer depuis les risques</a>{% endif %}
+        <button class="btn btn-sm btn-primary" data-bs-toggle="modal" data-bs-target="#addMissionModal"><i class="fas fa-plus me-1"></i>Ajouter une mission</button>
+      </div>
+    </div>
+    {% endif %}
+  </div>
 </div>
 
 <!-- ========== MODALS ========== -->
@@ -861,11 +599,11 @@
                         </div>
                         <div class="col-md-6">
                             <label class="form-label fw-semibold small">DATE DE DÉBUT</label>
-                            <input type="date" class="form-control bg-light" name="nouvelle_date_debut" value="{{ mission.date_debut_prevue.strftime('%Y-%m-%d') if mission.date_debut_prevue else '' }}">
+                            <input type="date" class="form-control bg-light" name="nouvelle_date_debut" value="{{ mission.date_debut_prevue or '' }}">
                         </div>
                         <div class="col-md-6">
                             <label class="form-label fw-semibold small">DATE DE FIN</label>
-                            <input type="date" class="form-control bg-light" name="nouvelle_date_fin" value="{{ mission.date_fin_prevue.strftime('%Y-%m-%d') if mission.date_fin_prevue else '' }}">
+                            <input type="date" class="form-control bg-light" name="nouvelle_date_fin" value="{{ mission.date_fin_prevue or '' }}">
                         </div>
                         <div class="col-12">
                             <label class="form-label fw-semibold small">RAISON</label>

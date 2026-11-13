@@ -3,401 +3,230 @@
 {% block title %}Chronogramme - {{ programme.nom }} - Programme d'Audit - Egalyx{% endblock %}
 
 {% block content %}
-<div class="container-fluid px-4">
-    <!-- ========== EN-TÊTE ========== -->
-    <div class="d-flex flex-wrap justify-content-between align-items-center mb-5">
-        <div class="mb-3 mb-lg-0">
-            <div class="d-flex align-items-center gap-2 mb-3">
-                <a href="{{ url_for('liste_programmes_audit') }}" class="text-decoration-none" style="color: #64748b;">
-                    <i class="fas fa-arrow-left me-1"></i>
-                    <span class="small">{{ t("Programmes") }}</span>
-                </a>
-                <span class="small" style="color: #94a3b8;">/</span>
-                <a href="{{ url_for('detail_programme_audit', id=programme.id) }}" class="text-decoration-none" style="color: #64748b;">
-                    <span class="small">{{ programme.nom|truncate(30) }}</span>
-                </a>
-                <span class="small" style="color: #94a3b8;">/</span>
-                <span class="small" style="color: #2563eb;">{{ t("Chronogramme") }}</span>
-            </div>
-            
-            <div class="d-flex align-items-center gap-3">
-                <div class="p-3 rounded-2" style="background: #2563eb;">
-                    <i class="fas fa-calendar-alt text-white fa-lg"></i>
-                </div>
-                <div>
-                    <h1 class="fw-bold mt-1 mb-0" style="color: #0f172a; font-size: 2rem;">
-                        {{ t("Chronogramme interactif") }}
-                    </h1>
-                    <div class="d-flex align-items-center gap-3 mt-2">
-                        <span class="badge px-3 py-2 fw-normal" style="background: #f8fafc; color: #2563eb; border: 1px solid #e2e8f0; border-radius: 20px;">
-                            <i class="fas fa-hashtag me-1" style="color: #2563eb;"></i>{{ programme.reference }}
-                        </span>
-                        <span class="small" style="color: #64748b;">
-                            <i class="far fa-calendar me-1" style="color: #2563eb;"></i>{{ programme.annee_debut }} - {{ programme.annee_fin }}
-                        </span>
-                        <span class="badge px-3 py-2 fw-normal" 
-                              style="background: {% if programme.statut == 'actif' %}#059669; color: white; border: 1px solid #bbf7d0;
-                                     {% elif programme.statut == 'en_elaboration' %}#7c3aed; color: white; border: 1px solid #ddd6fe;
-                                     {% else %}#64748b; color: white; border: 1px solid #e2e8f0;{% endif %}; border-radius: 20px;">
-                            <i class="fas fa-{{ 'play-circle' if programme.statut == 'actif' else 'pen' if programme.statut == 'en_elaboration' else 'stop-circle' }} me-1"></i>
-                            {{ programme.statut|replace('_', ' ')|title }}
-                        </span>
-                    </div>
-                </div>
-            </div>
-            <div class="mt-3" style="height: 3px; width: 80px; background: #2563eb; border-radius: 2px;"></div>
-        </div>
-        
-        <div class="d-flex gap-2">
-            <div class="dropdown">
-                <button class="btn px-4 py-2 dropdown-toggle d-flex align-items-center gap-2" 
-                        data-bs-toggle="dropdown"
-                        style="border-radius: 10px; background: white; color: #2563eb; border: 1px solid #e2e8f0;">
-                    <i class="fas fa-tools" style="color: #2563eb;"></i>
-                    <span class="d-none d-md-inline">{{ t("Manipuler") }}</span>
-                </button>
-                <ul class="dropdown-menu dropdown-menu-end border-0 shadow-sm" style="border-radius: 12px; padding: 8px;">
-                    <li>
-                        <a class="dropdown-item py-2" href="#" onclick="repartirAuto(); return false;">
-                            <i class="fas fa-robot me-2" style="color: #2563eb;"></i>{{ t("Répartir automatiquement") }}
-                        </a>
-                    </li>
-                    <li>
-                        <a class="dropdown-item py-2" href="#" onclick="equilibrerCharge(); return false;">
-                            <i class="fas fa-balance-scale me-2" style="color: #b45309;"></i>{{ t("Équilibrer la charge") }}
-                        </a>
-                    </li>
-                    <li>
-                        <a class="dropdown-item py-2" href="#" onclick="exporterCSV(); return false;">
-                            <i class="fas fa-file-csv me-2" style="color: #059669;"></i>{{ t("Exporter CSV") }}
-                        </a>
-                    </li>
-                    <li><hr class="dropdown-divider"></li>
-                    <li>
-                        <a class="dropdown-item py-2" href="#" onclick="resetVue(); return false;">
-                            <i class="fas fa-undo-alt me-2" style="color: #64748b;"></i>{{ t("Réinitialiser") }}
-                        </a>
-                    </li>
-                </ul>
-            </div>
-            
-            <a href="{{ url_for('detail_programme_audit', id=programme.id) }}" 
-               class="btn px-4 py-2 d-flex align-items-center gap-2"
-               style="border-radius: 10px; background: white; color: #334155; border: 1px solid #e2e8f0;">
-                <i class="fas fa-arrow-left" style="color: #64748b;"></i>
-                <span class="d-none d-md-inline">{{ t("Retour") }}</span>
-            </a>
-            <button class="btn px-4 py-2 d-flex align-items-center gap-2" onclick="window.print()"
-                    style="border-radius: 10px; background: white; color: #334155; border: 1px solid #e2e8f0;">
-                <i class="fas fa-print" style="color: #64748b;"></i>
-                <span class="d-none d-md-inline">{{ t("Imprimer") }}</span>
-            </button>
-        </div>
-    </div>
+{% import "_macros/page.html" as pg %}
+{#- ================= Chronogramme modernisé (2026-11) : frise (Gantt), planification par trimestre (glisser-déposer), charge vs capacité.
+    Les fonctions JS d'origine (drag/drop, changerStatut, assignerResponsable…) et la fenêtre « responsable » sont conservées. ================= -#}
+{% set ST_MIS = {'planifie': ('Planifiée', '#475467', '#F2F4F7', '#98A2B3'), 'en_cours': ('En cours', '#175CD3', '#EFF8FF', '#2E90FA'),
+                 'termine': ('Terminée', '#067647', '#ECFDF3', '#17B26A'), 'reporte': ('Reportée', '#B54708', '#FEF0C7', '#F79009'),
+                 'annule': ('Annulée', '#B42318', '#FEE4E2', '#F04438')} %}
+{% set PRIO = {'critique': ('Critique', '#D92D20'), 'elevee': ('Élevée', '#DC6803'), 'moyenne': ('Moyenne', '#1D4ED8'), 'faible': ('Faible', '#98A2B3')} %}
+{% set ST_PROG = {'en_elaboration': ('En élaboration', '#6941C6', '#F4F3FF'), 'actif': ('En exécution', '#067647', '#ECFDF3'), 'approuve': ('Approuvé', '#175CD3', '#EFF8FF'),
+                  'cloture': ('Clôturé', '#475467', '#F2F4F7')} %}
+{% set sp = ST_PROG.get(programme.statut, ((programme.statut or '—')|replace('_', ' ')|capitalize, '#475467', '#F2F4F7')) %}
+{% set nb = missions|length %}
+{% set faites = missions|selectattr('statut', 'equalto', 'termine')|list|length %}
+{% set jours_tot = missions|map(attribute='duree_estimee')|map('default', 0, true)|sum if nb else 0 %}
+{% set jours_faits = missions|selectattr('statut', 'equalto', 'termine')|map(attribute='duree_estimee')|map('default', 0, true)|sum if nb else 0 %}
+{% set capa = (programme.ressources_disponibles or 0) * 60 %}
+{{ pg.styles() }}
+<style>
+  .ch { max-width: 1400px; margin: 0 auto; }
+  .ch-tete { background: var(--bs-body-bg); border: 1px solid var(--bs-border-color); border-radius: 14px; padding: 1.1rem 1.3rem; margin-bottom: 1rem; }
+  .ch-fil { font-size: .82rem; color: var(--bs-secondary-color); margin-bottom: .5rem; } .ch-fil a { color: inherit; text-decoration: none; } .ch-fil a:hover { color: #1D4ED8; }
+  .ch-ligne { display: flex; justify-content: space-between; align-items: flex-end; gap: 1rem; flex-wrap: wrap; }
+  .ch-tete h1 { font-size: 1.35rem; font-weight: 750; margin: 0; }
+  .ch-ref { font-size: .75rem; font-weight: 700; color: #1D4ED8; background: #EFF4FF; border-radius: 6px; padding: .15rem .45rem; margin-right: .5rem; vertical-align: middle; }
+  .ch-meta { display: flex; gap: .4rem 1rem; flex-wrap: wrap; align-items: center; font-size: .82rem; color: var(--bs-secondary-color); margin-top: .45rem; }
+  .ch-pastille { display: inline-block; font-size: .72rem; font-weight: 650; border-radius: 999px; padding: .15rem .6rem; white-space: nowrap; }
+  .ch-actions { display: flex; gap: .4rem; flex-wrap: wrap; }
+  .ch-actions .btn-light { background: var(--bs-body-bg); border: 1px solid var(--bs-border-color); color: var(--bs-body-color); }
+  .ch-actions .btn-light:hover { border-color: #84ADFF; color: #1D4ED8; }
+  .ch-kpis { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: .75rem; margin-bottom: 1rem; }
+  @media (max-width: 992px) { .ch-kpis { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+  .ch-kpi { background: var(--bs-body-bg); border: 1px solid var(--bs-border-color); border-radius: 12px; padding: .9rem 1rem; }
+  .ch-kpi span { font-size: .7rem; font-weight: 650; text-transform: uppercase; letter-spacing: .04em; color: var(--bs-secondary-color); }
+  .ch-kpi b { display: block; font-size: 1.5rem; font-weight: 750; line-height: 1.15; margin-top: .1rem; font-variant-numeric: tabular-nums; }
+  .ch-kpi small { font-size: .75rem; color: var(--bs-secondary-color); }
+  .ch-barre { height: 6px; border-radius: 3px; background: var(--bs-tertiary-bg); overflow: hidden; margin-top: .45rem; } .ch-barre span { display: block; height: 100%; }
+  .ch-prio { display: flex; gap: .35rem; margin-top: .35rem; flex-wrap: wrap; } .ch-prio span { font-size: .72rem; font-weight: 650; text-transform: none; letter-spacing: 0; color: var(--bs-body-color); }
+  .ch-prio i { display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: .25rem; }
+  /* frise */
+  .gt { position: relative; font-size: .8rem; }
+  .gt-entete, .gt-ligne { display: grid; grid-template-columns: 260px 1fr; }
+  .gt-entete { position: sticky; top: 0; z-index: 2; background: var(--bs-body-bg); border-bottom: 1px solid var(--bs-border-color); }
+  .gt-col-nom { padding: .45rem .6rem; font-size: .7rem; font-weight: 650; text-transform: uppercase; letter-spacing: .04em; color: var(--bs-secondary-color); }
+  .gt-echelle { position: relative; display: flex; }
+  .gt-an { flex: 1; border-left: 1px solid var(--bs-border-color); }
+  .gt-an-lib { text-align: center; font-weight: 700; font-size: .78rem; padding: .25rem 0 0; }
+  .gt-trims { display: flex; } .gt-trims div { flex: 1; text-align: center; font-size: .68rem; color: var(--bs-secondary-color); padding: .1rem 0 .35rem; border-left: 1px dashed var(--bs-border-color); }
+  .gt-trims div:first-child { border-left: 0; }
+  .gt-ligne { border-bottom: 1px solid var(--bs-border-color); min-height: 40px; }
+  .gt-ligne:hover { background: var(--bs-tertiary-bg); }
+  .gt-nom { padding: .45rem .6rem; display: flex; align-items: center; gap: .45rem; min-width: 0; }
+  .gt-nom .gt-pt { width: 8px; height: 8px; border-radius: 50%; flex: none; }
+  .gt-nom b { font-size: .72rem; color: var(--bs-secondary-color); flex: none; }
+  .gt-nom span { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .gt-piste { position: relative; background-image: repeating-linear-gradient(90deg, transparent 0, transparent calc(var(--q) - 1px), var(--bs-border-color) calc(var(--q) - 1px), var(--bs-border-color) var(--q)); }
+  .gt-barre { position: absolute; top: 9px; height: 22px; border-radius: 6px; padding: 0 .5rem; color: #fff; font-size: .7rem; font-weight: 650; line-height: 22px;
+              white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 10px; cursor: default; }
+  .gt-barre .gt-av { position: absolute; inset: 0 auto 0 0; background: rgba(255,255,255,.28); }
+  .gt-barre span { position: relative; }
+  .gt-lib { position: absolute; top: 9px; line-height: 22px; font-size: .7rem; color: var(--bs-secondary-color); white-space: nowrap; display: none; }
+  .gt-barre.etroit span { display: none; }
+  .gt-auj { position: absolute; top: 0; bottom: 0; width: 2px; background: #F04438; z-index: 1; pointer-events: none; }
+  .gt-auj::before { content: "Aujourd'hui"; position: absolute; top: -1px; left: 4px; font-size: .62rem; font-weight: 700; color: #F04438; white-space: nowrap; }
+  .gt-leg { display: flex; flex-wrap: wrap; gap: .3rem 1rem; font-size: .76rem; color: var(--bs-secondary-color); margin-top: .75rem; }
+  .gt-leg i { display: inline-block; width: 18px; height: 8px; border-radius: 3px; margin-right: .3rem; vertical-align: middle; }
+  /* tableau par trimestre */
+  .ch-annee { margin-bottom: 1.25rem; }
+  .ch-annee-tete { display: flex; justify-content: space-between; align-items: center; margin-bottom: .6rem; }
+  .ch-annee-tete h3 { font-size: 1rem; font-weight: 750; margin: 0; }
+  .ch-annee-tete small { color: var(--bs-secondary-color); font-size: .8rem; margin-left: .6rem; font-weight: 500; }
+  .ch-cols { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: .75rem; }
+  @media (max-width: 992px) { .ch-cols { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+  .chronogramme-trimestre { background: var(--bs-tertiary-bg); border-radius: 12px; border: 1px solid var(--bs-border-color); display: flex; flex-direction: column; }
+  .ch-q-tete { display: flex; justify-content: space-between; align-items: center; padding: .6rem .75rem .35rem; font-size: .8rem; }
+  .ch-q-tete b { font-size: .85rem; } .ch-q-tete span { color: var(--bs-secondary-color); }
+  .ch-q-charge { height: 4px; margin: 0 .75rem .5rem; border-radius: 2px; background: var(--bs-border-color); overflow: hidden; } .ch-q-charge span { display: block; height: 100%; }
+  .mission-dropzone { min-height: 150px; padding: .25rem .5rem .6rem; flex: 1; transition: background .15s; }
+  .mission-dropzone.ch-survol { background: #EFF4FF; outline: 2px dashed #84ADFF; outline-offset: -4px; border-radius: 10px; }
+  .mission-item { background: var(--bs-body-bg) !important; border: 1px solid var(--bs-border-color) !important; border-left: 3px solid var(--p) !important;
+                  border-radius: 9px !important; padding: .55rem .6rem !important; margin-bottom: .45rem; box-shadow: 0 1px 2px rgba(16,24,40,.04); }
+  .mission-item[draggable="true"] { cursor: grab; } .mission-item[draggable="true"]:active { cursor: grabbing; }
+  .mission-item:hover { border-color: #84ADFF !important; }
+  .mi-ligne { display: flex; justify-content: space-between; align-items: flex-start; gap: .4rem; }
+  .mi-ref { font-size: .7rem; font-weight: 700; color: var(--bs-secondary-color); }
+  .mi-titre { font-size: .83rem; font-weight: 600; line-height: 1.3; margin: .1rem 0 .35rem; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+  .mi-pied { display: flex; align-items: center; gap: .35rem; flex-wrap: wrap; font-size: .7rem; color: var(--bs-secondary-color); }
+  .mi-resp { border: 1px solid var(--bs-border-color); border-radius: 999px; padding: .05rem .45rem; cursor: pointer; background: var(--bs-body-bg); }
+  .mi-resp:hover { border-color: #84ADFF; color: #1D4ED8; }
+  .mi-menu { color: var(--bs-secondary-color); padding: 0 .2rem !important; }
+  .ch-vide-q { text-align: center; padding: 1.2rem .5rem; color: var(--bs-secondary-color); font-size: .78rem; }
+  @media print { .ch-actions, .mi-menu, .ch-vide-q button, #chTableau { display: none !important; } .gt-entete { position: static; } }
+</style>
 
-    <!-- ========== STATISTIQUES ========== -->
-    <div class="row g-4 mb-5">
-        <div class="col-6 col-xl-3">
-            <div class="card border-0 shadow-sm h-100" style="border-radius: 16px; background: white;">
-                <div class="card-body p-4">
-                    <div class="d-flex align-items-center justify-content-between">
-                        <div>
-                            <span class="text-uppercase small fw-semibold mb-2 d-block" style="color: #64748b;">{{ t("MISSIONS") }}</span>
-                            <h2 class="fw-bold mb-0" style="color: #0f172a; font-size: 2rem;">{{ programme.nb_missions }}</h2>
-                            <div class="mt-2">
-                                <small style="color: #64748b;">
-                                    <span style="color: #059669;">{{ programme.nb_missions_realisees }}</span> {{ t("terminées") }}
-                                </small>
-                            </div>
-                        </div>
-                        <div class="rounded-circle p-3 d-flex align-items-center justify-content-center" 
-                             style="background: #e2e8f0; width: 64px; height: 64px;">
-                            <i class="fas fa-clipboard-list fa-2x" style="color: #2563eb;"></i>
-                        </div>
-                    </div>
-                </div>
-            </div>
+<div class="container-fluid ch py-3">
+  <div class="ch-tete">
+    <div class="ch-fil"><a href="{{ url_for('liste_programmes_audit') }}">Programmes d'audit</a> › <a href="{{ url_for('detail_programme_audit', id=programme.id) }}">{{ programme.reference }}</a> › Chronogramme</div>
+    <div class="ch-ligne">
+      <div>
+        <h1><span class="ch-ref">{{ programme.reference }}</span>Chronogramme</h1>
+        <div class="ch-meta"><span class="ch-pastille" style="color:{{ sp[1] }};background:{{ sp[2] }}">{{ sp[0] }}</span>
+          <span>{{ programme.nom }}</span><span><i class="fas fa-calendar me-1"></i>{{ programme.annee_debut }}{% if programme.annee_fin != programme.annee_debut %} – {{ programme.annee_fin }}{% endif %}</span></div>
+      </div>
+      <div class="ch-actions">
+        <a href="{{ url_for('detail_programme_audit', id=programme.id) }}" class="btn btn-sm btn-light"><i class="fas fa-arrow-left me-1"></i>Programme</a>
+        <div class="dropdown">
+          <button class="btn btn-sm btn-light dropdown-toggle" data-bs-toggle="dropdown"><i class="fas fa-sliders me-1"></i>Organiser</button>
+          <ul class="dropdown-menu dropdown-menu-end">
+            <li><a class="dropdown-item" href="#" onclick="repartirAuto(); return false;"><i class="fas fa-wand-magic-sparkles me-2"></i>Répartir automatiquement</a></li>
+            <li><a class="dropdown-item" href="#" onclick="equilibrerCharge(); return false;"><i class="fas fa-scale-balanced me-2"></i>Équilibrer la charge</a></li>
+            <li><a class="dropdown-item" href="#" onclick="resetVue(); return false;"><i class="fas fa-rotate me-2"></i>Actualiser</a></li>
+            <li><hr class="dropdown-divider"></li>
+            <li><a class="dropdown-item" href="#" onclick="exporterCSV(); return false;"><i class="fas fa-file-csv me-2"></i>Exporter en CSV</a></li>
+          </ul>
         </div>
-        
-        <div class="col-6 col-xl-3">
-            <div class="card border-0 shadow-sm h-100" style="border-radius: 16px; background: white;">
-                <div class="card-body p-4">
-                    <div class="d-flex align-items-center justify-content-between">
-                        <div>
-                            <span class="text-uppercase small fw-semibold mb-2 d-block" style="color: #64748b;">{{ t("CHARGE TOTALE") }}</span>
-                            <h2 class="fw-bold mb-0" style="color: #0f172a; font-size: 2rem;">{{ programme.jours_audit_planifies }}j</h2>
-                            <div class="mt-2">
-                                <small style="color: #64748b;">{{ programme.jours_audit_realises }}j {{ t("réalisés") }}</small>
-                            </div>
-                        </div>
-                        <div class="rounded-circle p-3 d-flex align-items-center justify-content-center" 
-                             style="background: #dbeafe; width: 64px; height: 64px;">
-                            <i class="fas fa-clock fa-2x" style="color: #2563eb;"></i>
-                        </div>
-                    </div>
-                </div>
-            </div>
-        </div>
-        
-        <div class="col-6 col-xl-3">
-            <div class="card border-0 shadow-sm h-100" style="border-radius: 16px; background: white;">
-                <div class="card-body p-4">
-                    <div class="d-flex align-items-center justify-content-between">
-                        <div>
-                            <span class="text-uppercase small fw-semibold mb-2 d-block" style="color: #64748b;">{{ t("PROGRESSION") }}</span>
-                            <h2 class="fw-bold mb-0" style="color: #0f172a; font-size: 2rem;">{{ programme.progression }}%</h2>
-                            <div class="progress mt-2" style="height: 6px; background: #e2e8f0; border-radius: 3px; width: 80%;">
-                                <div class="progress-bar" style="width: {{ programme.progression }}%; background: #059669; border-radius: 3px;"></div>
-                            </div>
-                        </div>
-                        <div class="rounded-circle p-3 d-flex align-items-center justify-content-center" 
-                             style="background: #dcfce7; width: 64px; height: 64px;">
-                            <i class="fas fa-chart-line fa-2x" style="color: #059669;"></i>
-                        </div>
-                    </div>
-                </div>
-            </div>
-        </div>
-        
-        <div class="col-6 col-xl-3">
-            <div class="card border-0 shadow-sm h-100" style="border-radius: 16px; background: white;">
-                <div class="card-body p-4">
-                    <div class="d-flex align-items-center justify-content-between">
-                        <div>
-                            <span class="text-uppercase small fw-semibold mb-2 d-block" style="color: #64748b;">{{ t("PRIORITÉS") }}</span>
-                            <div class="d-flex align-items-center gap-2 mt-2">
-                                <span class="badge px-3 py-2" style="background: #b91c1c; color: white; border-radius: 20px;" title="{{ t("Critique") }}">{{ programme.missions_par_priorite.critique }}</span>
-                                <span class="badge px-3 py-2" style="background: #b45309; color: white; border-radius: 20px;" title="{{ t("Élevée") }}">{{ programme.missions_par_priorite.elevee }}</span>
-                                <span class="badge px-3 py-2" style="background: #2563eb; color: white; border-radius: 20px;" title="{{ t("Moyenne") }}">{{ programme.missions_par_priorite.moyenne }}</span>
-                                <span class="badge px-3 py-2" style="background: #64748b; color: white; border-radius: 20px;" title="{{ t("Faible") }}">{{ programme.missions_par_priorite.faible }}</span>
-                            </div>
-                        </div>
-                        <div class="rounded-circle p-3 d-flex align-items-center justify-content-center" 
-                             style="background: #fee2e2; width: 64px; height: 64px;">
-                            <i class="fas fa-flag fa-2x" style="color: #b91c1c;"></i>
-                        </div>
-                    </div>
-                </div>
-            </div>
-        </div>
+        <button class="btn btn-sm btn-light" onclick="window.print()"><i class="fas fa-print me-1"></i>Imprimer</button>
+        <button class="btn btn-sm btn-primary" onclick="ajouterMissionRapide({{ programme.annee_debut }})"><i class="fas fa-plus me-1"></i>Mission</button>
+      </div>
     </div>
+  </div>
 
-    <!-- ========== CHRONOGRAMME INTERACTIF ========== -->
-    <div class="row">
-        <div class="col-12">
-            {% if missions_par_annee %}
-                {% for annee, trimestres in missions_par_annee.items()|sort %}
-                <div class="card border-0 shadow-sm mb-4 chronogramme-annee" data-annee="{{ annee }}" style="border-radius: 16px; overflow: hidden;">
-                    <div class="card-header bg-transparent d-flex flex-wrap justify-content-between align-items-center p-4" style="border-bottom: 1px solid #e2e8f0;">
-                        <h5 class="fw-semibold mb-0" style="color: #0f172a;">
-                            <i class="fas fa-calendar-alt me-2" style="color: #2563eb;"></i>{{ t("Année") }} {{ annee }}
-                        </h5>
-                        <div class="d-flex align-items-center gap-3">
-                            <span class="badge px-3 py-2" style="background: #2563eb; color: white; border-radius: 20px;">
-                                <i class="fas fa-clock me-1"></i>{{ ressources_par_periode[annee].values()|sum }} {{ t("jours") }}
-                            </span>
-                            <span class="badge px-3 py-2" style="background: #0891b2; color: white; border-radius: 20px;">
-                                <i class="fas fa-tasks me-1"></i>{{ trimestres.values()|map('length')|sum }} {{ t("missions") }}
-                            </span>
-                            <button class="btn btn-sm px-3 py-2" onclick="ajouterMissionRapide({{ annee }})"
-                                    style="border-radius: 8px; background: #2563eb; color: white; border: none;">
-                                <i class="fas fa-plus"></i>
-                            </button>
-                        </div>
-                    </div>
-                    
-                    <div class="card-body p-4">
-                        <div class="row g-4">
-                            {% for trimestre in range(1, 5) %}
-                                {% set missions_trimestre = trimestres.get(trimestre, []) %}
-                                {% set charge_trimestre = ressources_par_periode[annee].get(trimestre, 0) %}
-                                
-                                <div class="col-12 col-md-6 col-lg-3">
-                                    <div class="card h-100 border-0 chronogramme-trimestre"
-                                         data-annee="{{ annee }}"
-                                         data-trimestre="{{ trimestre }}"
-                                         style="background: #f8fafc; border-radius: 12px;">
-                                        
-                                        <div class="card-header bg-transparent border-0 pt-3 pb-0">
-                                            <div class="d-flex justify-content-between align-items-center">
-                                                <h6 class="mb-0 fw-bold">
-                                                    <span class="badge px-3 py-2" 
-                                                          style="background: {% if trimestre == 1 %}#2563eb{% elif trimestre == 2 %}#059669{% elif trimestre == 3 %}#b45309{% else %}#0891b2{% endif %}; color: white; border-radius: 20px;">
-                                                        T{{ trimestre }}
-                                                    </span>
-                                                </h6>
-                                                <small style="color: #64748b;">
-                                                    <i class="fas fa-clock me-1" style="color: #2563eb;"></i>{{ charge_trimestre }}j
-                                                </small>
-                                            </div>
-                                        </div>
-                                        
-                                        <div class="card-body pt-2 mission-dropzone" 
-                                             style="min-height: 250px; max-height: 350px; overflow-y: auto; padding: 8px;"
-                                             ondrop="drop(event)"
-                                             ondragover="allowDrop(event)">
-                                             
-                                            {% if missions_trimestre %}
-                                                {% for mission in missions_trimestre %}
-                                                <div class="mission-item mb-2 p-3 rounded-2 border-start border-3" 
-                                                     style="border-left-color: {% if mission.priorite == 'critique' %}#b91c1c{% elif mission.priorite == 'elevee' %}#b45309{% elif mission.priorite == 'moyenne' %}#2563eb{% else %}#64748b{% endif %}; background: white; cursor: {% if mission.statut == 'planifie' %}grab{% else %}default{% endif %};"
-                                                     draggable="{{ 'true' if mission.statut == 'planifie' else 'false' }}"
-                                                     ondragstart="drag(event)"
-                                                     data-mission-id="{{ mission.id }}"
-                                                     data-mission-ref="{{ mission.reference }}"
-                                                     data-mission-priorite="{{ mission.priorite }}"
-                                                     data-mission-statut="{{ mission.statut }}"
-                                                     data-mission-responsable="{{ mission.responsable.id if mission.responsable else '' }}">
-                                                    
-                                                    <div class="d-flex justify-content-between align-items-start">
-                                                        <div class="flex-grow-1">
-                                                            <div class="d-flex align-items-center gap-2 mb-1">
-                                                                {% if mission.statut == 'planifie' %}
-                                                                <i class="fas fa-grip-vertical" style="color: #94a3b8; cursor: grab;"></i>
-                                                                {% endif %}
-                                                                <span class="fw-bold small" style="color: #0f172a;">{{ mission.reference }}</span>
-                                                                <span class="badge px-2 py-1" 
-                                                                      style="background: {% if mission.priorite == 'critique' %}#b91c1c{% elif mission.priorite == 'elevee' %}#b45309{% elif mission.priorite == 'moyenne' %}#2563eb{% else %}#64748b{% endif %}; color: white; font-size: 0.7rem; border-radius: 12px;">
-                                                                    {{ (mission.priorite or 'n/a')[:3]|upper }}
-                                                                </span>
-                                                            </div>
-                                                            
-                                                            <small class="d-block text-truncate" style="color: #64748b; max-width: 180px;">
-                                                                {{ mission.titre|truncate(30) }}
-                                                            </small>
-                                                            
-                                                            <div class="d-flex align-items-center gap-2 mt-2">
-                                                                <span class="badge px-2 py-1" 
-                                                                      style="background: {% if mission.statut == 'planifie' %}#64748b{% elif mission.statut == 'en_cours' %}#2563eb{% elif mission.statut == 'termine' %}#059669{% else %}#b45309{% endif %}; color: white; font-size: 0.65rem; border-radius: 12px;">
-                                                                    <i class="fas {{ 'fa-clock' if mission.statut == 'planifie' else 'fa-play-circle' if mission.statut == 'en_cours' else 'fa-check-circle' if mission.statut == 'termine' else 'fa-calendar-times' }} me-1"></i>
-                                                                    {{ mission.statut[:4]|upper }}
-                                                                </span>
-                                                                
-                                                                <small style="color: #64748b;" title="{{ t("Durée estimée") }}">
-                                                                    <i class="fas fa-hourglass-half" style="color: #64748b;"></i> {{ mission.duree_estimee }}j
-                                                                </small>
-                                                                
-                                                                {% if mission.responsable %}
-                                                                <span class="badge px-2 py-1" 
-                                                                      style="background: #2563eb; color: white; font-size: 0.65rem; border-radius: 12px; cursor: pointer;"
-                                                                      onclick="assignerResponsable({{ mission.id }})"
-                                                                      title="{{ t("Responsable") }}: {{ mission.responsable.username }} - {{ t("Cliquer pour changer") }}">
-                                                                    <i class="fas fa-user-check me-1"></i>
-                                                                    {{ mission.responsable.username|truncate(10) }}
-                                                                </span>
-                                                                {% else %}
-                                                                <span class="badge px-2 py-1" 
-                                                                      style="background: #f8fafc; color: #64748b; border: 1px solid #e2e8f0; font-size: 0.65rem; border-radius: 12px; cursor: pointer;"
-                                                                      onclick="assignerResponsable({{ mission.id }})"
-                                                                      title="{{ t("Aucun responsable - Cliquer pour assigner") }}">
-                                                                    <i class="fas fa-user-plus me-1"></i>
-                                                                    {{ t("Assigner") }}
-                                                                </span>
-                                                                {% endif %}
-                                                            </div>
-                                                        </div>
-                                                        
-                                                        <div class="dropdown ms-2">
-                                                            <button class="btn btn-sm p-0" data-bs-toggle="dropdown" style="color: #94a3b8;">
-                                                                <i class="fas fa-ellipsis-v"></i>
-                                                            </button>
-                                                            <ul class="dropdown-menu dropdown-menu-end border-0 shadow-sm" style="border-radius: 12px; padding: 8px;">
-                                                                <li>
-                                                                    <a class="dropdown-item py-2" href="#" onclick="changerDuree({{ mission.id }}); return false;">
-                                                                        <i class="fas fa-clock me-2" style="color: #b45309;"></i>{{ t("Changer durée") }}
-                                                                    </a>
-                                                                </li>
-                                                                <li>
-                                                                    <a class="dropdown-item py-2" href="#" onclick="assignerResponsable({{ mission.id }}); return false;">
-                                                                        <i class="fas fa-user-tie me-2" style="color: #2563eb;"></i>{{ t("Assigner responsable") }}
-                                                                    </a>
-                                                                </li>
-                                                                <li><hr class="dropdown-divider"></li>
-                                                                <li>
-                                                                    <a class="dropdown-item py-2" href="#" onclick="changerStatut({{ mission.id }}, 'en_cours'); return false;">
-                                                                        <i class="fas fa-play-circle me-2" style="color: #2563eb;"></i>{{ t("Démarrer") }}
-                                                                    </a>
-                                                                </li>
-                                                                <li>
-                                                                    <a class="dropdown-item py-2" href="#" onclick="changerStatut({{ mission.id }}, 'termine'); return false;">
-                                                                        <i class="fas fa-check-circle me-2" style="color: #059669;"></i>{{ t("Terminer") }}
-                                                                    </a>
-                                                                </li>
-                                                                <li>
-                                                                    <a class="dropdown-item py-2" href="#" onclick="changerStatut({{ mission.id }}, 'reporte'); return false;">
-                                                                        <i class="fas fa-calendar-times me-2" style="color: #b45309;"></i>{{ t("Reporter") }}
-                                                                    </a>
-                                                                </li>
-                                                                <li><hr class="dropdown-divider"></li>
-                                                                <li>
-                                                                    <a class="dropdown-item py-2 text-danger" href="#" onclick="supprimerMission({{ mission.id }}); return false;">
-                                                                        <i class="fas fa-trash me-2" style="color: #b91c1c;"></i>{{ t("Supprimer") }}
-                                                                    </a>
-                                                                </li>
-                                                            </ul>
-                                                        </div>
-                                                    </div>
-                                                </div>
-                                                {% endfor %}
-                                            {% else %}
-                                                <div class="text-center py-4">
-                                                    <i class="fas fa-calendar-plus fa-2x mb-2" style="color: #cbd5e1;"></i>
-                                                    <p class="small mb-2" style="color: #94a3b8;">{{ t("Aucune mission") }}</p>
-                                                    <button class="btn btn-sm px-3 py-2" onclick="ajouterMissionRapide({{ annee }}, {{ trimestre }})"
-                                                            style="border-radius: 8px; background: #2563eb; color: white; border: none;">
-                                                        <i class="fas fa-plus me-1"></i>{{ t("Ajouter") }}
-                                                    </button>
-                                                </div>
-                                            {% endif %}
-                                        </div>
-                                    </div>
-                                </div>
-                            {% endfor %}
-                        </div>
-                    </div>
-                </div>
-                {% endfor %}
-            {% else %}
-                <div class="card border-0 shadow-sm p-5 text-center" style="border-radius: 16px;">
-                    <div class="mb-3">
-                        <i class="fas fa-calendar-alt fa-3x" style="color: #cbd5e1;"></i>
-                    </div>
-                    <h5 class="fw-semibold mb-2" style="color: #0f172a;">{{ t("Aucune mission planifiée") }}</h5>
-                    <p class="mb-4" style="color: #64748b;">{{ t("Commencez par ajouter des missions ou générer automatiquement.") }}</p>
-                    <div class="d-flex justify-content-center gap-3">
-                        <a href="{{ url_for('generer_missions_auto_programme', id=programme.id) }}" 
-                           class="btn px-4 py-2"
-                           style="border-radius: 10px; background: #7c3aed; color: white; border: none; box-shadow: 0 4px 12px rgba(124, 58, 237, 0.3);">
-                            <i class="fas fa-robot me-2"></i>{{ t("Générer auto") }}
-                        </a>
-                        <button class="btn px-4 py-2" onclick="ajouterMissionRapide({{ programme.annee_debut }})"
-                                style="border-radius: 10px; background: #2563eb; color: white; border: none; box-shadow: 0 4px 12px rgba(37, 99, 235, 0.3);">
-                            <i class="fas fa-plus me-2"></i>{{ t("Ajouter") }}
-                        </button>
-                    </div>
-                </div>
-            {% endif %}
-        </div>
-    </div>
+  {% set pct = ((faites / nb * 100)|round|int) if nb else 0 %}
+  <div class="ch-kpis">
+    <div class="ch-kpi"><span>Missions</span><b>{{ nb }}</b><small>{{ faites }} terminée(s)</small></div>
+    <div class="ch-kpi"><span>Charge totale</span><b>{{ jours_tot }} j</b><small>{{ jours_faits }} j réalisés{% if capa %} · capacité {{ capa }} j / trimestre{% endif %}</small></div>
+    <div class="ch-kpi"><span>Avancement</span><b>{{ pct }} %</b><div class="ch-barre"><span style="width:{{ pct }}%;background:#17B26A"></span></div></div>
+    <div class="ch-kpi"><span>Priorités</span>
+      <div class="ch-prio">{% for p, v in PRIO.items() %}{% set n = missions|selectattr('priorite', 'equalto', p)|list|length %}<span><i style="background:{{ v[1] }}"></i>{{ v[0] }} {{ n }}</span>{% endfor %}</div></div>
+  </div>
 
-    <!-- ========== GRAPHIQUE ========== -->
-    {% if missions_par_annee %}
-    <div class="row mt-4">
-        <div class="col-12">
-            <div class="card border-0 shadow-sm" style="border-radius: 16px;">
-                <div class="card-header bg-transparent p-4" style="border-bottom: 1px solid #e2e8f0;">
-                    <h5 class="fw-semibold mb-0" style="color: #0f172a;">
-                        <i class="fas fa-chart-bar me-2" style="color: #2563eb;"></i>
-                        {{ t("Charge de travail par période") }}
-                    </h5>
-                </div>
-                <div class="card-body p-4">
-                    <canvas id="chargeChart" style="height: 300px;"></canvas>
-                </div>
-            </div>
+  {% if missions %}
+  {# ---------------------------------------------------------------- frise #}
+  {% call pg.carte('Frise des missions', aide='Barres : dates prévues (ou trimestre). Zone claire : avancement.') %}
+    <div class="gt" id="gt" data-debut="{{ programme.annee_debut }}" data-fin="{{ programme.annee_fin or programme.annee_debut }}">
+      <div class="gt-entete"><div class="gt-col-nom">Mission</div>
+        <div class="gt-echelle">{% for a in range(programme.annee_debut, (programme.annee_fin or programme.annee_debut) + 1) %}
+          <div class="gt-an"><div class="gt-an-lib">{{ a }}</div><div class="gt-trims"><div>T1</div><div>T2</div><div>T3</div><div>T4</div></div></div>{% endfor %}</div>
+      </div>
+      <div id="gt-corps">
+      {% for m in missions|sort(attribute='annee_prevue')|sort(attribute='trimestre_prevue')|sort(attribute='annee_prevue') %}
+        {% set s = ST_MIS.get(m.statut, ST_MIS.planifie) %}{% set pr = PRIO.get(m.priorite, ('—', '#98A2B3')) %}
+        <div class="gt-ligne">
+          <div class="gt-nom" title="{{ m.titre }}"><span class="gt-pt" style="background:{{ pr[1] }}" title="Priorité {{ pr[0] }}"></span><b>{{ m.reference }}</b><span>{{ m.titre }}</span></div>
+          <div class="gt-piste"><div class="gt-barre" style="background:{{ s[3] }}"
+               data-debut="{{ m.date_debut_prevue.isoformat() if m.date_debut_prevue else '' }}" data-fin="{{ m.date_fin_prevue.isoformat() if m.date_fin_prevue else '' }}"
+               data-annee="{{ m.annee_prevue }}" data-trimestre="{{ m.trimestre_prevue or '' }}"
+               title="{{ m.reference }} — {{ m.titre }} · {{ s[0] }}{% if m.responsable %} · {{ m.responsable.username }}{% endif %} · {{ m.duree_estimee or 0 }} j">
+               <div class="gt-av" style="width:{{ (m.progression or (100 if m.statut == 'termine' else 0)) }}%"></div><span>{{ s[0] }}</span></div>
+               <span class="gt-lib">{{ s[0] }}{% if m.responsable %} · {{ m.responsable.username }}{% endif %}</span></div>
         </div>
+      {% endfor %}
+      </div>
     </div>
-    {% endif %}
+    <div class="gt-leg">{% for k in ('planifie', 'en_cours', 'termine', 'reporte') %}<span><i style="background:{{ ST_MIS[k][3] }}"></i>{{ ST_MIS[k][0] }}</span>{% endfor %}
+      <span class="ms-2">· Pastille : priorité ({% for p, v in PRIO.items() %}<span style="color:{{ v[1] }}">●</span> {{ v[0]|lower }}{{ ', ' if not loop.last }}{% endfor %})</span></div>
+  {% endcall %}
+
+  {# ---------------------------------------------------------------- tableau par trimestre #}
+  <div class="pg-carte" id="chTableau">
+    <div class="pg-carte-titre"><h2>Planification par trimestre</h2><span class="pg-aide"><i class="fas fa-hand-pointer me-1"></i>Glissez une mission planifiée vers un autre trimestre</span></div>
+    {% for annee, trimestres in missions_par_annee.items()|sort %}
+    <div class="ch-annee chronogramme-annee" data-annee="{{ annee }}">
+      <div class="ch-annee-tete">
+        <h3>{{ annee }}<small>{{ trimestres.values()|map('length')|sum }} mission(s) · {{ ressources_par_periode[annee].values()|sum }} j</small></h3>
+        <button class="btn btn-sm btn-outline-primary" onclick="ajouterMissionRapide({{ annee }})"><i class="fas fa-plus me-1"></i>Mission en {{ annee }}</button>
+      </div>
+      <div class="ch-cols">
+        {% for trimestre in range(1, 5) %}
+          {% set mt = trimestres.get(trimestre, []) %}{% set charge = ressources_par_periode[annee].get(trimestre, 0) %}
+          {% set ratio = ((charge / capa * 100) if capa else 0) %}
+          <div class="chronogramme-trimestre" data-annee="{{ annee }}" data-trimestre="{{ trimestre }}">
+            <div class="ch-q-tete"><b>T{{ trimestre }}</b><span>{{ mt|length }} mission(s) · <b style="color:{{ '#D92D20' if capa and charge > capa else 'inherit' }}">{{ charge }} j</b>{% if capa %} / {{ capa }}{% endif %}</span></div>
+            {% if capa %}<div class="ch-q-charge" title="Charge / capacité"><span style="width:{{ [ratio, 100]|min }}%;background:{{ '#F04438' if ratio > 100 else ('#F79009' if ratio > 85 else '#17B26A') }}"></span></div>{% endif %}
+            <div class="mission-dropzone" ondrop="drop(event)" ondragover="allowDrop(event)">
+              {% for mission in mt %}{% set s = ST_MIS.get(mission.statut, ST_MIS.planifie) %}{% set pr = PRIO.get(mission.priorite, ('—', '#98A2B3')) %}
+              <div class="mission-item" style="--p: {{ pr[1] }}" draggable="{{ 'true' if mission.statut == 'planifie' else 'false' }}" ondragstart="drag(event)"
+                   data-mission-id="{{ mission.id }}" data-mission-ref="{{ mission.reference }}" data-mission-priorite="{{ mission.priorite }}"
+                   data-mission-statut="{{ mission.statut }}" data-mission-responsable="{{ mission.responsable.id if mission.responsable else '' }}">
+                <div class="mi-ligne">
+                  <span class="mi-ref">{{ mission.reference }} · <span style="color:{{ pr[1] }}">{{ pr[0] }}</span></span>
+                  <div class="dropdown">
+                    <button class="btn btn-sm mi-menu" data-bs-toggle="dropdown" aria-label="Actions"><i class="fas fa-ellipsis"></i></button>
+                    <ul class="dropdown-menu dropdown-menu-end">
+                      <li><a class="dropdown-item" href="#" onclick="changerStatut({{ mission.id }}, 'en_cours'); return false;"><i class="fas fa-play me-2 text-primary"></i>Démarrer</a></li>
+                      <li><a class="dropdown-item" href="#" onclick="changerStatut({{ mission.id }}, 'termine'); return false;"><i class="fas fa-check me-2 text-success"></i>Terminer</a></li>
+                      <li><a class="dropdown-item" href="#" onclick="changerStatut({{ mission.id }}, 'reporte'); return false;"><i class="fas fa-calendar-xmark me-2 text-warning"></i>Reporter</a></li>
+                      <li><hr class="dropdown-divider"></li>
+                      <li><a class="dropdown-item" href="#" onclick="changerDuree({{ mission.id }}); return false;"><i class="fas fa-hourglass-half me-2"></i>Changer la durée</a></li>
+                      <li><a class="dropdown-item" href="#" onclick="assignerResponsable({{ mission.id }}); return false;"><i class="fas fa-user-tie me-2"></i>Responsable</a></li>
+                      <li><hr class="dropdown-divider"></li>
+                      <li><a class="dropdown-item text-danger" href="#" onclick="supprimerMission({{ mission.id }}); return false;"><i class="fas fa-trash me-2"></i>Supprimer</a></li>
+                    </ul>
+                  </div>
+                </div>
+                <div class="mi-titre" title="{{ mission.titre }}">{{ mission.titre }}</div>
+                <div class="mi-pied">
+                  <span class="ch-pastille" style="color:{{ s[1] }};background:{{ s[2] }};font-size:.66rem;padding:.05rem .45rem">{{ s[0] }}</span>
+                  <span><i class="fas fa-hourglass-half me-1"></i>{{ mission.duree_estimee or 0 }} j</span>
+                  <span class="mi-resp" onclick="assignerResponsable({{ mission.id }})" title="Changer le responsable"><i class="fas {{ 'fa-user' if mission.responsable else 'fa-user-plus' }} me-1"></i>{{ mission.responsable.username|truncate(14) if mission.responsable else 'Assigner' }}</span>
+                </div>
+              </div>
+              {% else %}
+              <div class="ch-vide-q">Aucune mission<br><button class="btn btn-sm btn-link p-0 mt-1" onclick="ajouterMissionRapide({{ annee }}, {{ trimestre }})"><i class="fas fa-plus me-1"></i>Ajouter</button></div>
+              {% endfor %}
+            </div>
+          </div>
+        {% endfor %}
+      </div>
+    </div>
+    {% endfor %}
+  </div>
+
+  {% call pg.carte('Charge de travail par trimestre', aide=('Capacité : ' ~ programme.ressources_disponibles ~ ' auditeur(s) × 60 j' if capa else 'Renseignez les ressources du programme pour comparer à la capacité')) %}
+    <div style="height:280px"><canvas id="chargeChart"></canvas></div>
+  {% endcall %}
+  {% else %}
+  <div class="pg-carte text-center py-5">
+    <i class="fas fa-calendar-plus fa-2x mb-3 text-secondary opacity-50 d-block"></i>
+    <h2 class="h6 fw-bold">Aucune mission planifiée</h2>
+    <p class="small text-secondary">Générez les missions à partir des risques ou ajoutez-les une à une.</p>
+    <div class="d-flex gap-2 justify-content-center">
+      <a href="{{ url_for('generer_missions_auto_programme', id=programme.id) }}" class="btn btn-sm btn-outline-primary"><i class="fas fa-wand-magic-sparkles me-1"></i>Générer depuis les risques</a>
+      <button class="btn btn-sm btn-primary" onclick="ajouterMissionRapide({{ programme.annee_debut }})"><i class="fas fa-plus me-1"></i>Ajouter</button>
+    </div>
+  </div>
+  {% endif %}
 </div>
 
 <!-- ========== MODAL SÉLECTION RESPONSABLE ========== -->
@@ -845,67 +674,6 @@ function supprimerMission(missionId) {
 }
 
 // ========== GRAPHIQUE ==========
-function initChart() {
-    const ctx = document.getElementById('chargeChart');
-    if (!ctx) return;
-    
-    const labels = [];
-    const data = [];
-    
-    {% for annee in missions_par_annee.keys()|sort %}
-        {% for trimestre in range(1, 5) %}
-            labels.push('T{{ trimestre }} {{ annee }}');
-            data.push({{ ressources_par_periode.get(annee, {}).get(trimestre, 0) }});
-        {% endfor %}
-    {% endfor %}
-    
-    new Chart(ctx, {
-        type: 'bar',
-        data: {
-            labels: labels,
-            datasets: [{
-                label: '{{ t("Jours de mission") }}',
-                data: data,
-                backgroundColor: '#2563eb',
-                borderColor: '#2563eb',
-                borderWidth: 1,
-                borderRadius: 4
-            }]
-        },
-        options: {
-            responsive: true,
-            maintainAspectRatio: false,
-            scales: {
-                y: { 
-                    beginAtZero: true,
-                    grid: { color: '#e2e8f0' },
-                    title: {
-                        display: true,
-                        text: '{{ t("Jours") }}',
-                        color: '#64748b'
-                    }
-                },
-                x: {
-                    grid: { display: false }
-                }
-            },
-            plugins: {
-                tooltip: {
-                    backgroundColor: '#0f172a',
-                    titleColor: '#f1f5f9',
-                    bodyColor: '#e2e8f0',
-                    callbacks: {
-                        label: function(context) {
-                            return `${context.raw} {{ t("jours") }}`;
-                        }
-                    }
-                }
-            }
-        }
-    });
-}
-
-// ========== NOTIFICATIONS ==========
 function showNotification(message, type = 'info') {
     const notif = document.createElement('div');
     notif.className = `alert alert-${type} alert-dismissible fade show position-fixed top-0 end-0 m-3 shadow`;
@@ -1062,4 +830,65 @@ style.textContent = `
 `;
 document.head.appendChild(style);
 </script>
+<script>
+/* ===== Chronogramme modernisé : frise, survol des zones, graphique charge / capacité ===== */
+(function () {
+  const gt = document.getElementById('gt');
+  if (gt) {
+    const a0 = parseInt(gt.dataset.debut), a1 = parseInt(gt.dataset.fin);
+    const t0 = Date.UTC(a0, 0, 1), t1 = Date.UTC(a1 + 1, 0, 1), span = t1 - t0;
+    const nbQ = (a1 - a0 + 1) * 4;
+    gt.querySelectorAll('.gt-piste').forEach(p => p.style.setProperty('--q', (100 / nbQ) + '%'));
+    const pos = (t) => Math.max(0, Math.min(100, (t - t0) / span * 100));
+    gt.querySelectorAll('.gt-barre').forEach(b => {
+      let d = b.dataset.debut ? Date.parse(b.dataset.debut) : null, f = b.dataset.fin ? Date.parse(b.dataset.fin) : null;
+      const an = parseInt(b.dataset.annee), tr = parseInt(b.dataset.trimestre);
+      if (!d && an) { const m = tr ? (tr - 1) * 3 : 0; d = Date.UTC(an, m, 1); f = Date.UTC(an, tr ? m + 3 : 12, 0); }
+      if (d && !f) f = d + 20 * 86400000;
+      if (!d) { b.style.display = 'none'; return; }
+      const g = pos(d), w = Math.max(pos(f + 86400000) - g, 0.8);
+      b.style.left = g + '%'; b.style.width = w + '%';
+      const lib = b.parentElement.querySelector('.gt-lib');
+      if (b.getBoundingClientRect().width < 90 && lib) { b.classList.add('etroit'); lib.style.display = 'block'; lib.style.left = 'calc(' + (g + w) + '% + 6px)'; }
+    });
+    const now = Date.now();
+    if (now > t0 && now < t1) {
+      const corps = document.getElementById('gt-corps');
+      const ligne = document.createElement('div'); ligne.className = 'gt-auj';
+      const premiere = corps.querySelector('.gt-piste');
+      if (premiere) {
+        const x = premiere.getBoundingClientRect().left - corps.getBoundingClientRect().left;
+        ligne.style.left = 'calc(' + x + 'px + (100% - ' + x + 'px) * ' + (pos(now) / 100) + ')';
+        corps.style.position = 'relative'; corps.appendChild(ligne);
+      }
+    }
+  }
+  document.querySelectorAll('.mission-dropzone').forEach(z => {
+    z.addEventListener('dragenter', () => z.classList.add('ch-survol'));
+    z.addEventListener('dragleave', (e) => { if (!z.contains(e.relatedTarget)) z.classList.remove('ch-survol'); });
+    z.addEventListener('drop', () => z.classList.remove('ch-survol'));
+  });
+})();
+
+function initChart() {
+  const ctx = document.getElementById('chargeChart');
+  if (!ctx || !window.Chart) return;
+  const labels = [], data = [];
+  {% for annee in missions_par_annee.keys()|sort %}{% for trimestre in range(1, 5) %}
+  labels.push('T{{ trimestre }} {{ annee }}'); data.push({{ ressources_par_periode.get(annee, {}).get(trimestre, 0) }});
+  {% endfor %}{% endfor %}
+  const capa = {{ (programme.ressources_disponibles or 0) * 60 }};
+  const sombre = document.documentElement.getAttribute('data-bs-theme') === 'dark';
+  const sets = [{type: 'bar', label: 'Charge planifiée (jours)', data, borderRadius: 6, maxBarThickness: 46,
+                 backgroundColor: data.map(v => capa && v > capa ? '#F04438' : '#2E90FA')}];
+  if (capa) sets.push({type: 'line', label: 'Capacité', data: labels.map(() => capa), borderColor: '#17B26A', borderDash: [6, 5], borderWidth: 2, pointRadius: 0});
+  new Chart(ctx, {data: {labels, datasets: sets},
+    options: {responsive: true, maintainAspectRatio: false,
+      plugins: {legend: {position: 'bottom', labels: {usePointStyle: true, boxWidth: 10, color: sombre ? '#CBD5E1' : '#475467'}},
+                tooltip: {callbacks: {label: (c) => c.dataset.label + ' : ' + c.raw + ' j'}}},
+      scales: {y: {beginAtZero: true, grid: {color: sombre ? 'rgba(255,255,255,.06)' : '#EAECF0'}, ticks: {color: sombre ? '#94A3B8' : '#667085'}},
+               x: {grid: {display: false}, ticks: {color: sombre ? '#94A3B8' : '#667085'}}}}});
+}
+</script>
+
 {% endblock %}

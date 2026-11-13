@@ -1,685 +1,182 @@
 {% extends "base.html" %}
-
-{% block title %}Programmes d'Audit - Egalyx{% endblock %}
+{% import "_macros/page.html" as pg %}
+{#- Liste des programmes d'audit. Contexte et adresses inchangés (liste_programmes_audit). -#}
+{% set STATUTS = {'en_elaboration': ('En élaboration', '#6941C6', '#F4F3FF'), 'approuve': ('Approuvé', '#175CD3', '#EFF8FF'),
+                  'actif': ('En exécution', '#067647', '#ECFDF3'), 'en_cours': ('En exécution', '#067647', '#ECFDF3'),
+                  'cloture': ('Clôturé', '#475467', '#F2F4F7'), 'archive': ('Archivé', '#475467', '#F2F4F7')} %}
+{% block title %}Programmes d'audit{% endblock %}
+{% block styles %}
+{{ super() }}
+{{ pg.styles() }}
+<style>
+  .pl { max-width: 1280px; }
+  .pl-filtres { display: grid; grid-template-columns: 2fr repeat(6, minmax(0, 1fr)) auto; gap: .5rem; align-items: end; }
+  @media (max-width: 1200px) { .pl-filtres { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
+  .pl-filtres label { font-size: .7rem; font-weight: 650; text-transform: uppercase; letter-spacing: .04em; color: var(--bs-secondary-color); margin-bottom: .2rem; }
+  .pl-filtres .form-select, .pl-filtres .form-control { font-size: .85rem; border-radius: 9px; }
+  .pl-kpis { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: .75rem; margin-bottom: 1rem; }
+  @media (max-width: 900px) { .pl-kpis { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+  .pl-kpi { background: var(--bs-body-bg); border: 1px solid var(--bs-border-color); border-radius: 12px; padding: .95rem 1rem; display: flex; gap: .85rem; }
+  .pl-kpi-ic { width: 38px; height: 38px; border-radius: 10px; display: grid; place-items: center; flex: none; }
+  .pl-kpi span { font-size: .72rem; font-weight: 650; text-transform: uppercase; letter-spacing: .04em; color: var(--bs-secondary-color); }
+  .pl-kpi b { display: block; font-size: 1.55rem; font-weight: 750; line-height: 1.15; font-variant-numeric: tabular-nums; }
+  .pl-kpi small { font-size: .75rem; color: var(--bs-secondary-color); }
+  .pl-table { width: 100%; font-size: .88rem; }
+  .pl-table th { font-size: .7rem; text-transform: uppercase; letter-spacing: .04em; color: var(--bs-secondary-color); font-weight: 650; padding: .55rem .75rem;
+                 border-bottom: 1px solid var(--bs-border-color); white-space: nowrap; }
+  .pl-table td { padding: .85rem .75rem; border-bottom: 1px solid var(--bs-border-color); vertical-align: middle; }
+  .pl-table tr:last-child td { border-bottom: 0; }
+  .pl-table tbody tr:hover { background: var(--bs-tertiary-bg); }
+  .pl-ref { font-size: .72rem; font-weight: 700; color: #1D4ED8; background: #EFF4FF; border-radius: 6px; padding: .1rem .4rem; }
+  .pl-nom { font-weight: 650; color: var(--bs-emphasis-color); text-decoration: none; display: block; margin-top: .25rem; }
+  .pl-nom:hover { color: #1D4ED8; }
+  .pl-desc { font-size: .78rem; color: var(--bs-secondary-color); margin-top: .15rem; max-width: 420px; }
+  .pl-tags { display: flex; gap: .75rem; flex-wrap: wrap; font-size: .75rem; color: var(--bs-secondary-color); margin-top: .3rem; }
+  .pl-pastille { display: inline-block; font-size: .72rem; font-weight: 650; border-radius: 999px; padding: .15rem .6rem; white-space: nowrap; }
+  .pl-prog { display: flex; align-items: center; gap: .5rem; min-width: 130px; }
+  .pl-barre { flex: 1; height: 6px; border-radius: 3px; background: var(--bs-tertiary-bg); overflow: hidden; } .pl-barre span { display: block; height: 100%; background: #1D4ED8; }
+  .pl-actions { display: flex; gap: .3rem; justify-content: flex-end; }
+  .pl-actions .btn { border: 1px solid var(--bs-border-color); background: var(--bs-body-bg); color: var(--bs-body-color); }
+  .pl-actions .btn:hover { border-color: #84ADFF; color: #1D4ED8; }
+  .pl-vide { text-align: center; padding: 3rem 1rem; color: var(--bs-secondary-color); }
+  .pl-vide i { font-size: 2rem; opacity: .4; display: block; margin-bottom: .75rem; }
+  .modal-content { border-radius: 14px; }
+</style>
+{% endblock %}
 
 {% block content %}
-<style>
-    /* ========== CORRECTIONS POUR LES DROPDOWNS - SOLUTION FORTE ========== */
-    
-    /* Désactiver complètement l'overflow sur tous les conteneurs */
-    .table-responsive,
-    .card,
-    .card-body,
-    .table,
-    tbody,
-    tr,
-    td {
-        overflow: visible !important;
-    }
-    
-    /* Forcer le positionnement relatif sur la cellule des actions */
-    .actions-cell {
-        position: relative !important;
-        overflow: visible !important;
-    }
-    
-    /* Style spécifique pour le dropdown */
-    .action-dropdown {
-        position: static !important;
-    }
-    
-    /* Le menu dropdown doit être positionné absolument par rapport à la cellule */
-    .actions-cell .dropdown-menu {
-        position: fixed !important;
-        top: auto !important;
-        left: auto !important;
-        right: 20px !important;
-        z-index: 99999 !important;
-        min-width: 220px !important;
-        box-shadow: 0 10px 40px rgba(0,0,0,0.2) !important;
-    }
-    
-    /* Alternative: pour qu'il s'ouvre à gauche */
-    .actions-cell .dropstart .dropdown-menu {
-        position: fixed !important;
-        transform: translateX(-100%) !important;
-        margin-right: 10px !important;
-    }
-    
-    /* S'assurer que le modal backdrop n'interfère pas */
-    .modal-backdrop {
-        z-index: 1040 !important;
-    }
-    
-    .btn, .card {
-        transition: all 0.3s ease;
-    }
-    .btn:hover {
-        transform: translateY(-2px);
-    }
-    .card:hover {
-        transform: translateY(-4px);
-    }
-    
-    .badge-custom {
-        padding: 0.5rem 1rem;
-        border-radius: 30px;
-        font-weight: 500;
-    }
-</style>
+<div class="container-fluid pl py-3">
+  {% call pg.entete('Programmes d\'audit', 'fa-calendar-days', 'Planification pluriannuelle des missions, fondée sur les risques') %}
+    <a href="{{ url_for('programmes_archives') }}" class="btn btn-sm btn-outline-secondary"><i class="fas fa-box-archive me-1"></i>Archives</a>
+    <a href="{{ url_for('nouveau_programme_audit') }}" class="btn btn-sm btn-primary"><i class="fas fa-plus me-1"></i>Nouveau programme</a>
+  {% endcall %}
 
-<div class="container-fluid px-4">
-    <!-- ========== EN-TÊTE ========== -->
-    <div class="d-flex justify-content-between align-items-center mb-5">
-        <div>
-            <div class="d-flex align-items-center gap-3 mb-2">
-                <div class="p-3 rounded-2" style="background: #2563eb;">
-                    <i class="fas fa-calendar-alt text-white fa-lg"></i>
-                </div>
-                <div>
-                    <span class="text-uppercase small fw-semibold" style="color: #64748b; letter-spacing: 0.05em;">Planification</span>
-                    <h1 class="fw-bold mt-1 mb-0" style="color: #0f172a; font-size: 2rem;">
-                        Programmes d'Audit
-                    </h1>
-                </div>
-            </div>
-            <div class="mt-2" style="height: 3px; width: 80px; background: #2563eb; border-radius: 2px;"></div>
-            <p class="text-muted mt-3 mb-0 d-flex align-items-center gap-2">
-                <i class="fas fa-chart-line" style="color: #2563eb;"></i>
-                Planification stratégique des missions d'audit
-            </p>
-        </div>
-        <div class="d-flex gap-2">
-            <a href="{{ url_for('programmes_archives') }}" class="btn px-4 py-2 d-flex align-items-center gap-2" 
-               style="border-radius: 10px; background: white; color: #334155; border: 1px solid #e2e8f0;">
-                <i class="fas fa-archive" style="color: #64748b;"></i>
-                <span class="d-none d-md-inline">Archives</span>
-            </a>
-            <a href="{{ url_for('nouveau_programme_audit') }}" class="btn px-4 py-2 d-flex align-items-center gap-2"
-               style="border-radius: 10px; background: #2563eb; color: white; border: none; box-shadow: 0 4px 12px rgba(37, 99, 235, 0.3);">
-                <i class="fas fa-plus"></i>
-                <span class="d-none d-md-inline">Nouveau Programme</span>
-            </a>
-        </div>
-    </div>
+  <div class="pl-kpis">
+    <div class="pl-kpi"><div class="pl-kpi-ic" style="background:#EFF4FF;color:#1D4ED8"><i class="fas fa-calendar-days"></i></div><div><span>Programmes</span><b>{{ stats.total|default(programmes|length) }}</b><small>{{ stats.actifs|default(0) }} en exécution</small></div></div>
+    <div class="pl-kpi"><div class="pl-kpi-ic" style="background:#F4F3FF;color:#6941C6"><i class="fas fa-pen-ruler"></i></div><div><span>En élaboration</span><b>{{ stats.en_elaboration|default(0) }}</b><small>en attente d'approbation</small></div></div>
+    <div class="pl-kpi"><div class="pl-kpi-ic" style="background:#FFFAEB;color:#DC6803"><i class="fas fa-briefcase"></i></div><div><span>Missions planifiées</span><b>{{ stats.missions_total|default(0) }}</b><small>tous programmes confondus</small></div></div>
+    {% set tx = ((stats.missions_terminees|default(0)) / (stats.missions_total or 1) * 100)|round|int %}
+    <div class="pl-kpi"><div class="pl-kpi-ic" style="background:#ECFDF3;color:#079455"><i class="fas fa-circle-check"></i></div><div class="flex-grow-1"><span>Missions réalisées</span><b>{{ stats.missions_terminees|default(0) }}</b>
+      <div class="pl-barre mt-1"><span style="width:{{ tx }}%;background:#17B26A"></span></div></div></div>
+  </div>
 
-    <!-- ========== FILTRES AVANCÉS ========== -->
-    <div class="card border-0 shadow-sm mb-4" style="border-radius: 16px; overflow: visible !important;">
-        <div class="card-body p-4">
-            <form method="GET" class="row g-3" id="filterForm">
-                <div class="col-md-3">
-                    <label class="form-label fw-semibold small text-uppercase" style="color: #64748b;">
-                        <i class="fas fa-globe text-primary me-1"></i>Pays
-                    </label>
-                    <select name="pays_id" class="form-select" onchange="this.form.submit()">
-                        <option value="0">--- Tous les pays ---</option>
-                        {% for pays in pays_list %}
-                        <option value="{{ pays.id }}" {% if filtre_pays == pays.id %}selected{% endif %}>
-                            {{ pays.drapeau or '🌍' }} {{ pays.nom }}
-                        </option>
-                        {% endfor %}
-                    </select>
-                </div>
-                <div class="col-md-3">
-                    <label class="form-label fw-semibold small text-uppercase" style="color: #64748b;">
-                        <i class="fas fa-layer-group text-success me-1"></i>Pôle
-                    </label>
-                    <select name="pole_id" class="form-select" onchange="this.form.submit()">
-                        <option value="0">--- Tous les pôles ---</option>
-                        {% for pole in poles_list %}
-                        <option value="{{ pole.id }}" {% if filtre_pole == pole.id %}selected{% endif %}>
-                            {{ pole.nom }}
-                        </option>
-                        {% endfor %}
-                    </select>
-                </div>
-                <div class="col-md-3">
-                    <label class="form-label fw-semibold small text-uppercase" style="color: #64748b;">
-                        <i class="fas fa-building text-info me-1"></i>Direction
-                    </label>
-                    <select name="direction_id" class="form-select" onchange="this.form.submit()">
-                        <option value="0">--- Toutes les directions ---</option>
-                        {% for direction in directions_list %}
-                        <option value="{{ direction.id }}" {% if filtre_direction == direction.id %}selected{% endif %}>
-                            {{ direction.nom }}
-                        </option>
-                        {% endfor %}
-                    </select>
-                </div>
-                <div class="col-md-3">
-                    <label class="form-label fw-semibold small text-uppercase" style="color: #64748b;">
-                        <i class="fas fa-tag me-1"></i>Statut
-                    </label>
-                    <select name="statut" class="form-select" onchange="this.form.submit()">
-                        <option value="">--- Tous les statuts ---</option>
-                        <option value="en_elaboration" {% if filtre_statut == 'en_elaboration' %}selected{% endif %}>📝 En élaboration</option>
-                        <option value="actif" {% if filtre_statut == 'actif' %}selected{% endif %}>✅ Actif</option>
-                        <option value="archive" {% if filtre_statut == 'archive' %}selected{% endif %}>📦 Archivé</option>
-                    </select>
-                </div>
-                <div class="col-md-3">
-                    <label class="form-label fw-semibold small text-uppercase" style="color: #64748b;">
-                        <i class="fas fa-calendar me-1"></i>Période
-                    </label>
-                    <select name="periode" class="form-select" onchange="this.form.submit()">
-                        <option value="">--- Toutes les périodes ---</option>
-                        <option value="annuel" {% if filtre_periode == 'annuel' %}selected{% endif %}>Annuel</option>
-                        <option value="triennal" {% if filtre_periode == 'triennal' %}selected{% endif %}>Triennal</option>
-                    </select>
-                </div>
-                <div class="col-md-3">
-                    <label class="form-label fw-semibold small text-uppercase" style="color: #64748b;">
-                        <i class="fas fa-search me-1"></i>Recherche
-                    </label>
-                    <input type="text" name="recherche" class="form-control" placeholder="Nom, référence..." value="{{ filtre_recherche|default('') }}" onchange="this.form.submit()">
-                </div>
-                <div class="col-md-3">
-                    <label class="form-label fw-semibold small text-uppercase" style="color: #64748b;">
-                        <i class="fas fa-chart-line me-1"></i>Année
-                    </label>
-                    <select name="annee" class="form-select" onchange="this.form.submit()">
-                        <option value="0">--- Toutes les années ---</option>
-                        {% for annee in range(now().year - 2, now().year + 6) %}
-                        <option value="{{ annee }}" {% if filtre_annee == annee %}selected{% endif %}>{{ annee }}</option>
-                        {% endfor %}
-                    </select>
-                </div>
-                <div class="col-md-3 d-flex align-items-end">
-                    <div class="d-flex gap-2 w-100">
-                        <button type="submit" class="btn btn-primary w-100 py-2" style="border-radius: 10px;">
-                            <i class="fas fa-search me-2"></i>Filtrer
-                        </button>
-                        <a href="{{ url_for('liste_programmes_audit') }}" class="btn btn-outline-secondary py-2" style="border-radius: 10px;">
-                            <i class="fas fa-undo me-1"></i>
-                        </a>
-                    </div>
-                </div>
-            </form>
-            
-            <!-- Badges des filtres actifs -->
-            {% if filtre_pays or filtre_pole or filtre_direction or filtre_statut or filtre_periode or filtre_annee or filtre_recherche %}
-            <div class="mt-3 pt-2 border-top">
-                <small class="text-muted me-2">Filtres actifs :</small>
-                {% if filtre_pays %}
-                    {% set pays_item = pays_list|selectattr('id', 'equalto', filtre_pays)|first %}
-                    <span class="badge bg-primary me-1 mb-1">
-                        <i class="fas fa-globe me-1"></i>{{ pays_item.nom if pays_item else 'Pays' }}
-                        <a href="?{% for key, value in request.args.items() if key != 'pays_id' %}{{ key }}={{ value }}&{% endfor %}" class="text-white ms-1"><i class="fas fa-times-circle"></i></a>
-                    </span>
-                {% endif %}
-                {% if filtre_pole %}
-                    {% set pole_item = poles_list|selectattr('id', 'equalto', filtre_pole)|first %}
-                    <span class="badge bg-success me-1 mb-1">
-                        <i class="fas fa-layer-group me-1"></i>{{ pole_item.nom if pole_item else 'Pôle' }}
-                        <a href="?{% for key, value in request.args.items() if key != 'pole_id' %}{{ key }}={{ value }}&{% endfor %}" class="text-white ms-1"><i class="fas fa-times-circle"></i></a>
-                    </span>
-                {% endif %}
-                {% if filtre_direction %}
-                    {% set direction_item = directions_list|selectattr('id', 'equalto', filtre_direction)|first %}
-                    <span class="badge bg-info me-1 mb-1">
-                        <i class="fas fa-building me-1"></i>{{ direction_item.nom if direction_item else 'Direction' }}
-                        <a href="?{% for key, value in request.args.items() if key != 'direction_id' %}{{ key }}={{ value }}&{% endfor %}" class="text-white ms-1"><i class="fas fa-times-circle"></i></a>
-                    </span>
-                {% endif %}
-                {% if filtre_statut %}
-                    <span class="badge bg-secondary me-1 mb-1">
-                        Statut: {{ filtre_statut|replace('_', ' ')|title }}
-                        <a href="?{% for key, value in request.args.items() if key != 'statut' %}{{ key }}={{ value }}&{% endfor %}" class="text-white ms-1"><i class="fas fa-times-circle"></i></a>
-                    </span>
-                {% endif %}
-                {% if filtre_periode %}
-                    <span class="badge bg-dark me-1 mb-1">
-                        Période: {{ filtre_periode|capitalize }}
-                        <a href="?{% for key, value in request.args.items() if key != 'periode' %}{{ key }}={{ value }}&{% endfor %}" class="text-white ms-1"><i class="fas fa-times-circle"></i></a>
-                    </span>
-                {% endif %}
-                {% if filtre_annee %}
-                    <span class="badge bg-warning text-dark me-1 mb-1">
-                        Année: {{ filtre_annee }}
-                        <a href="?{% for key, value in request.args.items() if key != 'annee' %}{{ key }}={{ value }}&{% endfor %}" class="text-dark ms-1"><i class="fas fa-times-circle"></i></a>
-                    </span>
-                {% endif %}
-                {% if filtre_recherche %}
-                    <span class="badge bg-info me-1 mb-1">
-                        Recherche: {{ filtre_recherche }}
-                        <a href="?{% for key, value in request.args.items() if key != 'recherche' %}{{ key }}={{ value }}&{% endfor %}" class="text-white ms-1"><i class="fas fa-times-circle"></i></a>
-                    </span>
-                {% endif %}
-            </div>
-            {% endif %}
-        </div>
-    </div>
+  <div class="pg-carte">
+    <form method="get" class="pl-filtres" id="filterForm">
+      <div><label for="f-r">Recherche</label><input type="text" id="f-r" name="recherche" class="form-control" placeholder="Nom ou référence…" value="{{ filtre_recherche|default('') }}"></div>
+      <div><label for="f-s">Statut</label><select id="f-s" name="statut" class="form-select" onchange="this.form.submit()">
+        <option value="">Tous</option>
+        {% for v, l in (('en_elaboration', 'En élaboration'), ('actif', 'En exécution'), ('archive', 'Archivé')) %}<option value="{{ v }}" {{ 'selected' if filtre_statut == v }}>{{ l }}</option>{% endfor %}</select></div>
+      <div><label for="f-p">Période</label><select id="f-p" name="periode" class="form-select" onchange="this.form.submit()">
+        <option value="">Toutes</option><option value="annuel" {{ 'selected' if filtre_periode == 'annuel' }}>Annuel</option><option value="triennal" {{ 'selected' if filtre_periode == 'triennal' }}>Triennal</option></select></div>
+      <div><label for="f-a">Année</label><select id="f-a" name="annee" class="form-select" onchange="this.form.submit()">
+        <option value="0">Toutes</option>{% for a in range(now().year - 2, now().year + 6) %}<option value="{{ a }}" {{ 'selected' if filtre_annee == a }}>{{ a }}</option>{% endfor %}</select></div>
+      <div><label for="f-pa">Pays</label><select id="f-pa" name="pays_id" class="form-select" onchange="this.form.submit()">
+        <option value="0">Tous</option>{% for x in pays_list %}<option value="{{ x.id }}" {{ 'selected' if filtre_pays == x.id }}>{{ x.nom }}</option>{% endfor %}</select></div>
+      <div><label for="f-po">Pôle</label><select id="f-po" name="pole_id" class="form-select" onchange="this.form.submit()">
+        <option value="0">Tous</option>{% for x in poles_list %}<option value="{{ x.id }}" {{ 'selected' if filtre_pole == x.id }}>{{ x.nom }}</option>{% endfor %}</select></div>
+      <div><label for="f-d">Direction</label><select id="f-d" name="direction_id" class="form-select" onchange="this.form.submit()">
+        <option value="0">Toutes</option>{% for x in directions_list %}<option value="{{ x.id }}" {{ 'selected' if filtre_direction == x.id }}>{{ x.nom }}</option>{% endfor %}</select></div>
+      <div class="d-flex gap-1"><button class="btn btn-primary btn-sm" style="height:36px" title="Filtrer"><i class="fas fa-magnifying-glass"></i></button>
+        <a href="{{ url_for('liste_programmes_audit') }}" class="btn btn-outline-secondary btn-sm d-grid align-items-center" style="height:36px" title="Réinitialiser"><i class="fas fa-rotate-left"></i></a></div>
+    </form>
+  </div>
 
-    <!-- ========== STATISTIQUES ========== -->
-    <div class="row g-4 mb-5">
-        <div class="col-xl-3 col-md-6">
-            <div class="card border-0 shadow-sm h-100" style="border-radius: 16px;">
-                <div class="card-body p-4">
-                    <div class="d-flex align-items-center justify-content-between">
-                        <div>
-                            <span class="text-uppercase small fw-semibold mb-2 d-block" style="color: #64748b;">PROGRAMMES</span>
-                            <h2 class="fw-bold mb-0" style="color: #0f172a; font-size: 2rem;">{{ stats.total }}</h2>
-                            <div class="mt-2">
-                                <small style="color: #64748b;">
-                                    <i class="fas fa-calendar-check me-1" style="color: #2563eb;"></i>
-                                    {{ stats.actifs }} actifs
-                                </small>
-                            </div>
-                        </div>
-                        <div class="rounded-circle p-3 d-flex align-items-center justify-content-center" 
-                             style="background: #e2e8f0; width: 64px; height: 64px;">
-                            <i class="fas fa-calendar-alt fa-2x" style="color: #2563eb;"></i>
-                        </div>
-                    </div>
-                </div>
+  <div class="pg-carte p-0">
+    <div class="pg-carte-titre px-3 pt-3"><h2>{{ programmes|length }} programme(s)</h2></div>
+    {% if programmes %}
+    <div class="table-responsive">
+    <table class="pl-table">
+      <thead><tr><th>Programme</th><th>Période</th><th>Missions</th><th>Avancement</th><th>Statut</th><th class="text-end">Actions</th></tr></thead>
+      <tbody>
+      {% for p in programmes %}{% set s = STATUTS.get(p.statut, ((p.statut or '—')|replace('_', ' ')|capitalize, '#475467', '#F2F4F7')) %}
+        <tr>
+          <td>
+            <span class="pl-ref">{{ p.reference }}</span>
+            <a class="pl-nom" href="{{ url_for('detail_programme_audit', id=p.id) }}">{{ p.nom }}</a>
+            {% if p.description %}<div class="pl-desc">{{ p.description|truncate(110) }}</div>{% endif %}
+            <div class="pl-tags">
+              <span><i class="fas fa-gears me-1"></i>{{ {'risques': 'Fondé sur les risques', 'manuel': 'Manuel', 'mixte': 'Mixte'}.get(p.methode_generation, (p.methode_generation or '')|replace('_', ' ')|capitalize) }}</span>
+              {% if p.organisation_complete and p.organisation_complete != 'Non spécifiée' %}<span><i class="fas fa-sitemap me-1"></i>{{ p.organisation_complete }}</span>{% endif %}
+              {% if p.createur %}<span><i class="fas fa-user me-1"></i>{{ p.createur.username }}</span>{% endif %}
             </div>
-        </div>
-        
-        <div class="col-xl-3 col-md-6">
-            <div class="card border-0 shadow-sm h-100" style="border-radius: 16px;">
-                <div class="card-body p-4">
-                    <div class="d-flex align-items-center justify-content-between">
-                        <div>
-                            <span class="text-uppercase small fw-semibold mb-2 d-block" style="color: #64748b;">ACTIFS</span>
-                            <h2 class="fw-bold mb-0" style="color: #0f172a; font-size: 2rem;">{{ stats.actifs }}</h2>
-                            <div class="mt-2">
-                                <small style="color: #64748b;">
-                                    <i class="fas fa-play-circle me-1" style="color: #059669;"></i>
-                                    En cours d'exécution
-                                </small>
-                            </div>
-                        </div>
-                        <div class="rounded-circle p-3 d-flex align-items-center justify-content-center" 
-                             style="background: #dcfce7; width: 64px; height: 64px;">
-                            <i class="fas fa-play-circle fa-2x" style="color: #059669;"></i>
-                        </div>
-                    </div>
-                </div>
+          </td>
+          <td class="text-nowrap"><b>{{ p.annee_debut }}{% if p.annee_fin and p.annee_fin != p.annee_debut %} – {{ p.annee_fin }}{% endif %}</b><div class="small text-secondary">{{ (p.periode or '')|capitalize }}</div></td>
+          <td class="text-nowrap"><b>{{ p.nb_missions }}</b> <span class="small text-secondary">dont {{ p.nb_missions_realisees }} réalisée(s)</span></td>
+          <td><div class="pl-prog"><div class="pl-barre"><span style="width:{{ p.progression or 0 }}%"></span></div><span class="small fw-semibold">{{ (p.progression or 0)|round|int }} %</span></div></td>
+          <td><span class="pl-pastille" style="color:{{ s[1] }};background:{{ s[2] }}">{{ s[0] }}</span></td>
+          <td>
+            <div class="pl-actions">
+              <a class="btn btn-sm" href="{{ url_for('detail_programme_audit', id=p.id) }}" title="Ouvrir"><i class="fas fa-eye"></i></a>
+              <a class="btn btn-sm" href="{{ url_for('chronogramme_programme', id=p.id) }}" title="Chronogramme"><i class="fas fa-chart-gantt"></i></a>
+              <div class="dropdown">
+                <button class="btn btn-sm" data-bs-toggle="dropdown" title="Plus d'actions"><i class="fas fa-ellipsis"></i></button>
+                <ul class="dropdown-menu dropdown-menu-end">
+                  {% if p.statut == 'en_elaboration' %}<li><a class="dropdown-item" href="#" onclick="openApproveModal({{ p.id }}); return false;"><i class="fas fa-circle-check me-2 text-success"></i>Approuver</a></li>{% endif %}
+                  <li><a class="dropdown-item" href="{{ url_for('modifier_programme_audit', id=p.id) }}"><i class="fas fa-pen me-2"></i>Modifier</a></li>
+                  <li><a class="dropdown-item" href="{{ url_for('plan_pluie_programme', programme_id=p.id) }}"><i class="fas fa-cloud-rain me-2"></i>Plan de repli</a></li>
+                  <li><hr class="dropdown-divider"></li>
+                  <li><a class="dropdown-item" href="{{ url_for('exporter_programme', id=p.id, format='pdf') }}"><i class="fas fa-file-pdf me-2 text-danger"></i>Exporter en PDF</a></li>
+                  <li><a class="dropdown-item" href="{{ url_for('exporter_programme', id=p.id, format='excel') }}"><i class="fas fa-file-excel me-2 text-success"></i>Exporter en Excel</a></li>
+                  <li><a class="dropdown-item" href="{{ url_for('exporter_programme', id=p.id, format='csv') }}"><i class="fas fa-file-csv me-2"></i>Exporter en CSV</a></li>
+                  <li><hr class="dropdown-divider"></li>
+                  <li><a class="dropdown-item text-danger" href="#" onclick="openArchiveModal({{ p.id }}); return false;"><i class="fas fa-box-archive me-2"></i>Archiver</a></li>
+                </ul>
+              </div>
             </div>
-        </div>
-        
-        <div class="col-xl-3 col-md-6">
-            <div class="card border-0 shadow-sm h-100" style="border-radius: 16px;">
-                <div class="card-body p-4">
-                    <div class="d-flex align-items-center justify-content-between">
-                        <div>
-                            <span class="text-uppercase small fw-semibold mb-2 d-block" style="color: #64748b;">MISSIONS</span>
-                            <h2 class="fw-bold mb-0" style="color: #0f172a; font-size: 2rem;">{{ stats.missions_total }}</h2>
-                            <div class="mt-2">
-                                <small style="color: #64748b;">
-                                    <i class="fas fa-check-circle me-1" style="color: #059669;"></i>
-                                    {{ stats.missions_terminees }} terminées
-                                </small>
-                            </div>
-                        </div>
-                        <div class="rounded-circle p-3 d-flex align-items-center justify-content-center" 
-                             style="background: #fed7aa; width: 64px; height: 64px;">
-                            <i class="fas fa-clipboard-list fa-2x" style="color: #b45309;"></i>
-                        </div>
-                    </div>
-                </div>
-            </div>
-        </div>
-        
-        <div class="col-xl-3 col-md-6">
-            <div class="card border-0 shadow-sm h-100" style="border-radius: 16px;">
-                <div class="card-body p-4">
-                    <div class="d-flex align-items-center justify-content-between">
-                        <div>
-                            <span class="text-uppercase small fw-semibold mb-2 d-block" style="color: #64748b;">ÉLABORATION</span>
-                            <h2 class="fw-bold mb-0" style="color: #0f172a; font-size: 2rem;">{{ stats.en_elaboration }}</h2>
-                            <div class="mt-2">
-                                <small style="color: #64748b;">
-                                    <i class="fas fa-pen me-1" style="color: #7c3aed;"></i>
-                                    En attente d'approbation
-                                </small>
-                            </div>
-                        </div>
-                        <div class="rounded-circle p-3 d-flex align-items-center justify-content-center" 
-                             style="background: #ede9fe; width: 64px; height: 64px;">
-                            <i class="fas fa-pen fa-2x" style="color: #7c3aed;"></i>
-                        </div>
-                    </div>
-                </div>
-            </div>
-        </div>
+          </td>
+        </tr>
+      {% endfor %}
+      </tbody>
+    </table>
     </div>
-
-    <!-- ========== LISTE DES PROGRAMMES ========== -->
-    <div class="card border-0 shadow-sm" style="border-radius: 16px; overflow: visible !important;">
-        <div class="card-header bg-transparent d-flex justify-content-between align-items-center p-4" style="border-bottom: 1px solid #e2e8f0;">
-            <div>
-                <h5 class="fw-semibold mb-1" style="color: #0f172a;">
-                    <i class="fas fa-list-ul me-2" style="color: #2563eb;"></i>
-                    Programmes d'audit
-                </h5>
-                <small style="color: #64748b;">{{ programmes|length }} programme(s) trouvé(s)</small>
-            </div>
-        </div>
-        
-        <div class="card-body p-0" style="overflow: visible !important;">
-            {% if programmes %}
-            <div style="overflow-x: auto; overflow-y: visible; position: relative;">
-                <table class="table mb-0" id="programmesTable" style="min-width: 1200px; overflow: visible;">
-                    <thead style="background: #f8fafc; border-bottom: 2px solid #e2e8f0;">
-                        <tr>
-                            <th class="px-4 py-3 text-uppercase small fw-semibold" style="color: #64748b;">RÉFÉRENCE</th>
-                            <th class="px-4 py-3 text-uppercase small fw-semibold" style="color: #64748b;">NOM & DESCRIPTION</th>
-                            <th class="px-4 py-3 text-uppercase small fw-semibold" style="color: #64748b;">PÉRIODE</th>
-                            <th class="px-4 py-3 text-uppercase small fw-semibold" style="color: #64748b;">MISSIONS</th>
-                            <th class="px-4 py-3 text-uppercase small fw-semibold" style="color: #64748b;">PROGRESSION</th>
-                            <th class="px-4 py-3 text-uppercase small fw-semibold" style="color: #64748b;">STATUT</th>
-                            <th class="px-4 py-3 text-uppercase small fw-semibold text-center" style="color: #64748b;">ACTIONS</th>
-                        </tr>
-                    </thead>
-                    <tbody style="overflow: visible;">
-                        {% for programme in programmes %}
-                        <tr style="border-bottom: 1px solid #f1f5f9; transition: all 0.2s ease; overflow: visible;" 
-                           onmouseover="this.style.backgroundColor='#f8fafc'" 
-                           onmouseout="this.style.backgroundColor='transparent'">
-                            
-                            <!-- Référence -->
-                            <td class="px-4 py-3">
-                                <span class="badge px-3 py-2 fw-normal" style="background: #f8fafc; color: #2563eb; border: 1px solid #e2e8f0; border-radius: 20px;">
-                                    <i class="fas fa-hashtag me-1" style="color: #2563eb;"></i>{{ programme.reference }}
-                                </span>
-                            </td>
-                            
-                            <!-- Nom et description -->
-                            <td class="px-4 py-3">
-                                <div>
-                                    <a href="{{ url_for('detail_programme_audit', id=programme.id) }}" 
-                                       class="text-decoration-none fw-semibold" style="color: #2563eb;">
-                                        {{ programme.nom }}
-                                    </a>
-                                    {% if programme.description %}
-                                    <p class="mb-0 small" style="color: #64748b; max-width: 300px;">
-                                        {{ programme.description|truncate(80) }}
-                                    </p>
-                                    {% endif %}
-                                    <div class="d-flex flex-wrap align-items-center gap-3 mt-2">
-                                        <small style="color: #64748b;">
-                                            <i class="fas fa-tag me-1" style="color: #2563eb;"></i>
-                                            {{ programme.methode_generation|replace('_', ' ')|title }}
-                                        </small>
-                                        <small style="color: #64748b;">
-                                            <i class="fas fa-user me-1" style="color: #2563eb;"></i>
-                                            {{ programme.createur.username if programme.createur else 'N/A' }}
-                                        </small>
-                                        {% if programme.organisation_complete %}
-                                        <small style="color: #64748b;">
-                                            <i class="fas fa-building me-1" style="color: #10b981;"></i>
-                                            {{ programme.organisation_complete }}
-                                        </small>
-                                        {% endif %}
-                                    </div>
-                                </div>
-                            </td>
-                            
-                            <!-- Période -->
-                            <td class="px-4 py-3">
-                                <div class="d-flex flex-column">
-                                    <span class="fw-medium" style="color: #0f172a;">{{ programme.annee_debut }} - {{ programme.annee_fin }}</span>
-                                    <small style="color: #64748b;">{{ programme.periode|capitalize }}</small>
-                                </div>
-                            </td>
-                            
-                            <!-- Missions -->
-                            <td class="px-4 py-3">
-                                <div class="d-flex flex-column align-items-start">
-                                    <span class="badge rounded-pill px-3 py-2" style="background: #2563eb; color: white;">
-                                        {{ programme.nb_missions }}
-                                    </span>
-                                    <small class="mt-2" style="color: #64748b;">
-                                        {{ programme.nb_missions_realisees }} terminée(s)
-                                    </small>
-                                </div>
-                            </td>
-                            
-                            <!-- Progression -->
-                            <td class="px-4 py-3">
-                                <div class="d-flex flex-column" style="min-width: 120px;">
-                                    <div class="progress" style="height: 8px; background: #e2e8f0; border-radius: 4px;">
-                                        <div class="progress-bar" 
-                                             style="width: {{ programme.progression }}%; border-radius: 4px; 
-                                                    {% if programme.progression >= 75 %}background: #059669;
-                                                    {% elif programme.progression >= 50 %}background: #2563eb;
-                                                    {% elif programme.progression >= 25 %}background: #b45309;
-                                                    {% else %}background: #64748b;{% endif %}">
-                                        </div>
-                                    </div>
-                                    <small class="mt-2" style="color: #64748b;">
-                                        {{ programme.progression }}% réalisé
-                                    </small>
-                                </div>
-                            </td>
-                            
-                            <!-- Statut -->
-                            <td class="px-4 py-3">
-                                <span class="badge px-3 py-2 fw-normal" 
-                                      style="background: {% if programme.statut == 'actif' %}#059669; border: 1px solid #bbf7d0;
-                                             {% elif programme.statut == 'en_elaboration' %}#7c3aed; border: 1px solid #ddd6fe;
-                                             {% else %}#64748b; border: 1px solid #e2e8f0;{% endif %}; 
-                                             color: white; border-radius: 20px;">
-                                    <i class="fas fa-{{ 'play-circle' if programme.statut == 'actif' else 'pen' if programme.statut == 'en_elaboration' else 'stop-circle' }} me-1"></i>
-                                    {{ programme.statut|replace('_', ' ')|title }}
-                                </span>
-                            </td>
-                            
-                            <!-- Actions - Version avec dropdown personnalisé -->
-                            <td class="px-4 py-3 text-center" style="position: relative; overflow: visible;">
-                                <div class="btn-group dropstart" style="position: relative;">
-                                    <a href="{{ url_for('detail_programme_audit', id=programme.id) }}" 
-                                       class="btn btn-sm px-3" 
-                                       style="background: #f8fafc; color: #334155; border: 1px solid #e2e8f0; border-radius: 8px 0 0 8px;"
-                                       title="Voir les détails">
-                                        <i class="fas fa-eye"></i>
-                                    </a>
-                                    
-                                    <a href="{{ url_for('chronogramme_programme', id=programme.id) }}" 
-                                       class="btn btn-sm px-3" 
-                                       style="background: #f8fafc; color: #2563eb; border: 1px solid #e2e8f0; border-left: none;"
-                                       title="Chronogramme">
-                                        <i class="fas fa-calendar-alt"></i>
-                                    </a>
-                                    
-                                    <button type="button" 
-                                            class="btn btn-sm px-3 dropdown-toggle dropdown-toggle-split" 
-                                            data-bs-toggle="dropdown" 
-                                            data-bs-auto-close="true"
-                                            aria-expanded="false"
-                                            style="background: #f8fafc; color: #334155; border: 1px solid #e2e8f0; border-left: none; border-radius: 0 8px 8px 0;">
-                                        <span class="visually-hidden">Toggle Dropdown</span>
-                                        <i class="fas fa-ellipsis-v"></i>
-                                    </button>
-                                    <ul class="dropdown-menu dropdown-menu-end" style="position: absolute; z-index: 99999; min-width: 200px; right: 0; left: auto;">
-                                        <li>
-                                            <a class="dropdown-item" href="{{ url_for('exporter_programme', id=programme.id, format='excel') }}">
-                                                <i class="fas fa-file-excel me-2" style="color: #059669;"></i>
-                                                Exporter Excel
-                                            </a>
-                                        </li>
-                                        <li>
-                                            <a class="dropdown-item" href="{{ url_for('exporter_programme', id=programme.id, format='csv') }}">
-                                                <i class="fas fa-file-csv me-2" style="color: #2563eb;"></i>
-                                                Exporter CSV
-                                            </a>
-                                        </li>
-                                        <li>
-                                            <a class="dropdown-item" href="{{ url_for('exporter_programme', id=programme.id, format='pdf') }}">
-                                                <i class="fas fa-file-pdf me-2" style="color: #b91c1c;"></i>
-                                                Exporter PDF
-                                            </a>
-                                        </li>
-                                        <li><hr class="dropdown-divider"></li>
-                                        <li>
-                                            <a class="dropdown-item" href="{{ url_for('plan_pluie_programme', programme_id=programme.id) }}">
-                                                <i class="fas fa-umbrella me-2" style="color: #b45309;"></i>
-                                                Plan de repli
-                                            </a>
-                                        </li>
-                                        <li><hr class="dropdown-divider"></li>
-                                        {% if programme.statut == 'en_elaboration' %}
-                                        <li>
-                                            <a class="dropdown-item text-success" href="#" onclick="openApproveModal({{ programme.id }}); return false;">
-                                                <i class="fas fa-check-circle me-2"></i>
-                                                Approuver
-                                            </a>
-                                        </li>
-                                        {% endif %}
-                                        <li>
-                                            <a class="dropdown-item text-warning" href="{{ url_for('modifier_programme_audit', id=programme.id) }}">
-                                                <i class="fas fa-edit me-2"></i>
-                                                Modifier
-                                            </a>
-                                        </li>
-                                        <li>
-                                            <a class="dropdown-item text-danger" href="#" onclick="openArchiveModal({{ programme.id }}); return false;">
-                                                <i class="fas fa-archive me-2"></i>
-                                                Archiver
-                                            </a>
-                                        </li>
-                                    </ul>
-                                </div>
-                            </div>
-                        </tr>
-                        {% endfor %}
-                    </tbody>
-                </table>
-            </div>
-            {% else %}
-            <div class="text-center py-5">
-                <div class="mb-3">
-                    <i class="fas fa-calendar-alt fa-3x" style="color: #cbd5e1;"></i>
-                </div>
-                <h5 class="fw-semibold mb-2" style="color: #0f172a;">Aucun programme d'audit</h5>
-                <p class="mb-4" style="color: #64748b;">Commencez par créer votre premier programme d'audit</p>
-                <a href="{{ url_for('nouveau_programme_audit') }}" class="btn px-4 py-2"
-                   style="border-radius: 10px; background: #2563eb; color: white; border: none; box-shadow: 0 4px 12px rgba(37, 99, 235, 0.3);">
-                    <i class="fas fa-plus me-2"></i>Créer un programme
-                </a>
-            </div>
-            {% endif %}
-        </div>
-    </div>
+    {% else %}
+    <div class="pl-vide"><i class="fas fa-calendar-plus"></i>Aucun programme ne correspond à ces filtres.
+      <div class="mt-3"><a href="{{ url_for('nouveau_programme_audit') }}" class="btn btn-primary btn-sm"><i class="fas fa-plus me-1"></i>Créer un programme</a></div></div>
+    {% endif %}
+  </div>
 </div>
 
-<!-- ========== MODAL APPROBATION ========== -->
-<div class="modal fade" id="approuverModal" tabindex="-1" aria-hidden="true">
-    <div class="modal-dialog modal-dialog-centered">
-        <div class="modal-content border-0" style="border-radius: 20px;">
-            <div class="p-4" style="background: #059669; border-radius: 20px 20px 0 0;">
-                <div class="d-flex align-items-center gap-3">
-                    <div class="rounded-circle bg-white p-2" style="width: 48px; height: 48px;">
-                        <i class="fas fa-check-circle fa-lg" style="color: #059669;"></i>
-                    </div>
-                    <div>
-                        <h5 class="fw-bold text-white mb-1">Approuver le programme</h5>
-                    </div>
-                    <button type="button" class="btn-close btn-close-white ms-auto" data-bs-dismiss="modal"></button>
-                </div>
-            </div>
-            <form method="POST" id="approveForm">
-                <div class="modal-body p-4">
-                    <div class="mb-3">
-                        <label class="form-label fw-semibold small text-uppercase" style="color: #64748b;">DATE D'APPROBATION</label>
-                        <input type="date" class="form-control border-0 bg-light px-4 py-3" name="date_approbation" 
-                               value="{{ now().strftime('%Y-%m-%d') }}" style="border-radius: 12px;">
-                    </div>
-                    <div class="mb-3">
-                        <label class="form-label fw-semibold small text-uppercase" style="color: #64748b;">COMMENTAIRES</label>
-                        <textarea class="form-control border-0 bg-light px-4 py-3" name="commentaires" rows="2" style="border-radius: 12px;"></textarea>
-                    </div>
-                </div>
-                <div class="modal-footer border-0 p-4 pt-0">
-                    <button type="button" class="btn w-100 py-2 mb-2" data-bs-dismiss="modal"
-                            style="border-radius: 10px; background: #f8fafc; color: #334155; border: 1px solid #e2e8f0;">Annuler</button>
-                    <button type="submit" class="btn w-100 py-2" style="border-radius: 10px; background: #059669; color: white; border: none;">
-                        <i class="fas fa-check-circle me-2"></i>Approuver
-                    </button>
-                </div>
-            </form>
-        </div>
+{# ---------------------------------------------------------------- approuver #}
+<div class="modal fade" id="approuverModal" tabindex="-1" aria-hidden="true"><div class="modal-dialog modal-dialog-centered"><div class="modal-content">
+  <form method="post" id="approveForm">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <div class="modal-header"><h5 class="modal-title"><i class="fas fa-circle-check me-2 text-success"></i>Approuver le programme</h5><button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Fermer"></button></div>
+    <div class="modal-body">
+      <p class="small text-secondary">Une fois approuvé, le programme devient la référence de planification et les missions peuvent être lancées.</p>
+      <label class="form-label fw-semibold" for="ap-date">Date d'approbation</label>
+      <input type="date" class="form-control mb-3" id="ap-date" name="date_approbation" value="{{ now().strftime('%Y-%m-%d') }}" required>
+      <label class="form-label fw-semibold" for="ap-com">Commentaire (facultatif)</label>
+      <textarea class="form-control" id="ap-com" name="commentaires" rows="2" placeholder="Ex. : approuvé par le comité d'audit du …"></textarea>
     </div>
-</div>
+    <div class="modal-footer"><button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Annuler</button><button class="btn btn-success"><i class="fas fa-check me-1"></i>Approuver</button></div>
+  </form>
+</div></div></div>
 
-<!-- ========== MODAL ARCHIVAGE ========== -->
-<div class="modal fade" id="archiverModal" tabindex="-1" aria-hidden="true">
-    <div class="modal-dialog modal-dialog-centered">
-        <div class="modal-content border-0" style="border-radius: 20px;">
-            <div class="p-4" style="background: #b91c1c; border-radius: 20px 20px 0 0;">
-                <div class="d-flex align-items-center gap-3">
-                    <div class="rounded-circle bg-white p-2" style="width: 48px; height: 48px;">
-                        <i class="fas fa-archive fa-lg" style="color: #b91c1c;"></i>
-                    </div>
-                    <div>
-                        <h5 class="fw-bold text-white mb-1">Archiver le programme</h5>
-                    </div>
-                    <button type="button" class="btn-close btn-close-white ms-auto" data-bs-dismiss="modal"></button>
-                </div>
-            </div>
-            <form method="POST" id="archiveForm">
-                <div class="modal-body p-4">
-                    <div class="mb-3">
-                        <label class="form-label fw-semibold small text-uppercase" style="color: #64748b;">RAISON DE L'ARCHIVAGE *</label>
-                        <select class="form-select border-0 bg-light px-4 py-3" name="raison" required style="border-radius: 12px;">
-                            <option value="">Sélectionnez une raison...</option>
-                            <option value="Programme terminé">✅ Programme terminé</option>
-                            <option value="Période expirée">📅 Période expirée</option>
-                            <option value="Remplacé">🔄 Remplacé</option>
-                            <option value="Programme annulé">❌ Programme annulé</option>
-                            <option value="Autre">📌 Autre</option>
-                        </select>
-                    </div>
-                    <div class="mb-3">
-                        <label class="form-label fw-semibold small text-uppercase" style="color: #64748b;">COMMENTAIRES</label>
-                        <textarea class="form-control border-0 bg-light px-4 py-3" name="commentaire" rows="2" style="border-radius: 12px;"></textarea>
-                    </div>
-                </div>
-                <div class="modal-footer border-0 p-4 pt-0">
-                    <button type="button" class="btn w-100 py-2 mb-2" data-bs-dismiss="modal"
-                            style="border-radius: 10px; background: #f8fafc; color: #334155; border: 1px solid #e2e8f0;">Annuler</button>
-                    <button type="submit" class="btn w-100 py-2" style="border-radius: 10px; background: #b91c1c; color: white; border: none;">
-                        <i class="fas fa-archive me-2"></i>Archiver
-                    </button>
-                </div>
-            </form>
-        </div>
+{# ---------------------------------------------------------------- archiver #}
+<div class="modal fade" id="archiverModal" tabindex="-1" aria-hidden="true"><div class="modal-dialog modal-dialog-centered"><div class="modal-content">
+  <form method="post" id="archiveForm">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <div class="modal-header"><h5 class="modal-title"><i class="fas fa-box-archive me-2 text-danger"></i>Archiver le programme</h5><button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Fermer"></button></div>
+    <div class="modal-body">
+      <label class="form-label fw-semibold" for="ar-r">Raison</label>
+      <select class="form-select mb-3" id="ar-r" name="raison" required>
+        <option value="">Choisissez…</option>
+        {% for r in ('Programme terminé', 'Période expirée', 'Remplacé', 'Programme annulé', 'Autre') %}<option value="{{ r }}">{{ r }}</option>{% endfor %}
+      </select>
+      <label class="form-label fw-semibold" for="ar-c">Commentaire (facultatif)</label>
+      <textarea class="form-control" id="ar-c" name="commentaire" rows="2"></textarea>
+      <p class="small text-secondary mt-2 mb-0">Le programme reste consultable dans les archives.</p>
     </div>
-</div>
+    <div class="modal-footer"><button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Annuler</button><button class="btn btn-danger"><i class="fas fa-box-archive me-1"></i>Archiver</button></div>
+  </form>
+</div></div></div>
+{% endblock %}
 
+{% block scripts %}
+{{ super() }}
 <script>
-let currentProgrammeId = null;
-
-function openApproveModal(programmeId) {
-    currentProgrammeId = programmeId;
-    const form = document.getElementById('approveForm');
-    form.action = `/programme-audit/${programmeId}/approuver`;
-    new bootstrap.Modal(document.getElementById('approuverModal')).show();
-}
-
-function openArchiveModal(programmeId) {
-    currentProgrammeId = programmeId;
-    const form = document.getElementById('archiveForm');
-    form.action = `/programme-audit/${programmeId}/archiver`;
-    new bootstrap.Modal(document.getElementById('archiverModal')).show();
-}
-
-// Initialisation des dropdowns Bootstrap
-document.addEventListener('DOMContentLoaded', function() {
-    // Initialiser tous les dropdowns
-    var dropdownElementList = [].slice.call(document.querySelectorAll('[data-bs-toggle="dropdown"]'));
-    dropdownElementList.map(function (dropdownToggleEl) {
-        return new bootstrap.Dropdown(dropdownToggleEl, {
-            boundary: 'viewport',
-            popperConfig: function(defaultConfig) {
-                return {
-                    ...defaultConfig,
-                    strategy: 'fixed',
-                };
-            }
-        });
-    });
-});
+function openApproveModal(id) { document.getElementById('approveForm').action = '/programme-audit/' + id + '/approuver'; new bootstrap.Modal(document.getElementById('approuverModal')).show(); }
+function openArchiveModal(id) { document.getElementById('archiveForm').action = '/programme-audit/' + id + '/archiver'; new bootstrap.Modal(document.getElementById('archiverModal')).show(); }
+document.querySelectorAll('.pl-actions [data-bs-toggle="dropdown"]').forEach(el => new bootstrap.Dropdown(el, {popperConfig: (c) => ({...c, strategy: 'fixed'})}));
 </script>
 {% endblock %}
