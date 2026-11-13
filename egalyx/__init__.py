@@ -44,12 +44,22 @@ def enregistrer_extensions(app, db, csrf=None, recalculer_cotations=None, constr
     identite.enregistrer(app)
     from egalyx import photo_profil
     photo_profil.enregistrer(app)
-    from egalyx import pages_cassees
-    pages_cassees.enregistrer(app)       # /ci (301 vers l'accueil), /debug/create-user-form (404)
+    try:                                   # paquet facultatif : /ci (301 vers l'accueil), /debug/create-user-form (404)
+        from egalyx import pages_cassees
+        pages_cassees.enregistrer(app)
+    except ImportError:
+        pass
     from egalyx import kri_sources_securite
     kri_sources_securite.enregistrer(app)  # SÉCURITÉ : sources KRI réservées au super-admin, ni SQLite, ni fichier, ni réseau interne
-    from egalyx import ia_cartographie
-    ia_cartographie.enregistrer(app)       # analyse de cartographie : score calculé + rédaction IA vérifiée
+    try:                                   # paquet facultatif : analyse de cartographie : score calculé + rédaction IA vérifiée
+        from egalyx import ia_cartographie
+        ia_cartographie.enregistrer(app)
+    except ImportError:
+        pass
+    from egalyx import kri_connecteurs
+    kri_connecteurs.enregistrer(app)       # KRI : 12 connecteurs (Jira, ServiceNow, Odoo, Google Sheets…) + relevé automatique
+    from egalyx import kri_fiche
+    kri_fiche.enregistrer(app)             # fiche KRI (valeur, jauge, graphique, historique) + suppression des sources en erreur
     from egalyx import bienvenue
     bienvenue.enregistrer(app)          # e-mail de bienvenue (accès, identifiant, guide de double authentification)
     recherche.enregistrer(app)
