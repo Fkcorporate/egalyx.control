@@ -125,6 +125,14 @@ def enregistrer_extensions(app, db, csrf=None, recalculer_cotations=None, constr
         compression.enregistrer(app)       # pages compressées (gzip) : beaucoup plus légères à télécharger
     except ImportError:
         pass
+    try:                                   # paquet facultatif : collaborateurs rattachés à la structure, périmètre, départs
+        from egalyx import structure, organigramme_structure
+        structure.enregistrer(app)
+        organigramme_structure.enregistrer(app)   # organigramme hiérarchique (pays → pôles → directions → services)
+        from egalyx import structure_orga
+        structure_orga.enregistrer(app)           # page « Structure de l'organisation » (/admin/directions)
+    except ImportError:
+        pass
     try:                                   # paquet facultatif : notifications sur téléphone / ordinateur + pastille
         from egalyx import notifications_push
         notifications_push.enregistrer(app)
