@@ -17,14 +17,30 @@ import hashlib
 import logging
 import os
 import sys
+import threading
 from datetime import datetime
 
 from flask import abort, current_app, flash, redirect, render_template, request, send_file, url_for
 from flask_login import current_user, login_required
 
 journal = logging.getLogger('egalyx.carto_rapide')
-VERSION = 'm1'
+VERSION = 'm2'                      # m2 : ignore les images vides que m1 a pu mettre en cache
 TYPES = ('classique', 'criticite', 'priorisation', 'surbrillance')
+# matplotlib (pyplot) n'est pas utilisable par plusieurs fils d'exécution en même temps : le navigateur demande les
+# 4 matrices en parallèle, on les dessine donc une par une (sinon images vides).
+_DESSIN = threading.Lock()
+
+
+def _image_valide(octets):
+    """Refuse une image vide (dessin raté) : elle ne doit jamais être gardée en cache."""
+    try:
+        import io
+        from PIL import Image
+        im = Image.open(io.BytesIO(octets)).convert('RGB')
+        im.thumbnail((200, 200))
+        return len(set(im.getdata())) > 20
+    except Exception:  # noqa: BLE001
+        return len(octets) > 30000
 
 
 def _app():
@@ -309,17 +325,21 @@ def matrice(id, type_):
     if not os.path.exists(chemin):
         import base64
         import utils
-        if type_ == 'surbrillance':
-            b64 = utils.generer_matrice_risque_specifique(valides, surbrillance)
-        else:
-            b64 = utils.generer_matrice_risques(valides, type_)
-        if not b64:
-            abort(404)
-        temporaire = chemin + f'.{os.getpid()}.tmp'
-        with open(temporaire, 'wb') as f:
-            f.write(base64.b64decode(b64))
-        os.replace(temporaire, chemin)
-        _nettoyer(dossier)
+        with _DESSIN:
+            if not os.path.exists(chemin):                  # dessinée entre-temps par une autre demande
+                if type_ == 'surbrillance':
+                    b64 = utils.generer_matrice_risque_specifique(valides, surbrillance)
+                else:
+                    b64 = utils.generer_matrice_risques(valides, type_)
+                octets = base64.b64decode(b64) if b64 else b''
+                if not octets or not _image_valide(octets):
+                    journal.warning("Matrice %s de la cartographie %s : dessin vide, non mise en cache", type_, id)
+                    abort(503)
+                temporaire = chemin + f'.{os.getpid()}.{threading.get_ident()}.tmp'
+                with open(temporaire, 'wb') as f:
+                    f.write(octets)
+                os.replace(temporaire, chemin)
+                _nettoyer(dossier)
     rep = send_file(chemin, mimetype='image/png', max_age=86400, etag=True, conditional=True)
     rep.headers['Cache-Control'] = 'private, max-age=86400'
     return rep

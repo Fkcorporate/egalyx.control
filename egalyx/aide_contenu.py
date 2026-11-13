@@ -1165,6 +1165,14 @@ GLOSSAIRE = [
 ]
 
 
+# Guide illustré pas à pas (captures d'écran annotées) : catégorie et fiches ajoutées en tête du centre d'aide.
+try:
+    from egalyx.guide_illustre import installer as _installer_guide
+    _installer_guide(ARTICLES, CATEGORIES)
+except ImportError:  # pragma: no cover
+    pass
+
+
 def article(id_):
     for a in ARTICLES:
         if a['id'] == id_:

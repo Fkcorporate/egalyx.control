@@ -165,7 +165,7 @@ def visible(a, u=None):
 def acces(a, u=None):
     """(autorisé, message) — message explique quoi faire quand ce n'est pas autorisé."""
     u = current_user if u is None else u
-    if a['pour'] == 'admin' and not _admin(u) and not _a_perm(u, a['perms']):
+    if a['pour'] == 'admin' and not _admin(u) and (not a['perms'] or not _a_perm(u, a['perms'])):
         return False, ('Cette opération est réservée à l’administrateur de votre organisation : '
                        'transmettez-lui votre demande.')
     if not _a_perm(u, a['perms']):
@@ -205,6 +205,8 @@ def chercher(question, u=None, n=5):
     total = sum(idx['idf'].get(t, 1.5) for t in q)
     resultats = []
     texte_q = normaliser(question)
+    veut_guide = bool(set(texte_q.split()) & {'guide', 'guides', 'capture', 'captures', 'image', 'images', 'illustre',
+                                               'tutoriel', 'tuto', 'ecran', 'ecrans', 'montre', 'montrer', 'video'})
     for a, champs in idx['docs']:
         if not visible(a, u):
             continue
@@ -223,6 +225,8 @@ def chercher(question, u=None, n=5):
                 break
         if a.get('glossaire'):
             score *= 0.85
+        elif a.get('illustrations') and not veut_guide:
+            score *= 0.85                    # à question égale, la fiche courte répond plus vite ; le guide reste juste derrière
         resultats.append((round(score, 3), a))
     resultats.sort(key=lambda x: -x[0])
     return resultats[:n]
@@ -284,8 +288,11 @@ def _rendu(texte):
 def accueil():
     q = (request.args.get('q') or '').strip()[:200]
     resultats = [a for _s, a in chercher(q, n=12)] if q else []
-    return render_template('egalyx/aide_index.html', categories=_categories_visibles(current_user), q=q,
-                           resultats=resultats, glossaire=GLOSSAIRE if current_user.is_authenticated else [])
+    guides = [a for a in ARTICLES if a.get('illustrations') and visible(a)]
+    return render_template('egalyx/aide_index.html', categories=[c for c in _categories_visibles(current_user)
+                                                                 if not guides or c['code'] != 'guide'],
+                           q=q, resultats=resultats, guides=guides,
+                           glossaire=GLOSSAIRE if current_user.is_authenticated else [])
 
 
 @bp.route('/fiche/<id_>')
@@ -296,8 +303,15 @@ def fiche(id_):
     ok, message = acces(a)
     voisins = [b for b in ARTICLES if b['cat'] == a['cat'] and b['id'] != a['id'] and visible(b)][:6]
     cat = next((c for c in CATEGORIES if c[0] == a['cat']), None)
+    precedent = suivant = None
+    if a.get('illustrations'):                     # guide illustré : navigation d'un guide au suivant
+        serie = [b for b in ARTICLES if b.get('illustrations') and visible(b)]
+        i = next((k for k, b in enumerate(serie) if b['id'] == a['id']), None)
+        if i is not None:
+            precedent = serie[i - 1] if i > 0 else None
+            suivant = serie[i + 1] if i + 1 < len(serie) else None
     return render_template('egalyx/aide_fiche.html', a=a, ok=ok, message=message, liens=liens(a),
-                           voisins=voisins, categorie=cat)
+                           voisins=voisins, categorie=cat, precedent=precedent, suivant=suivant)
 
 
 @bp.route('/guide-complet')
