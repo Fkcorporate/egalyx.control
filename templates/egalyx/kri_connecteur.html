@@ -1,0 +1,138 @@
+{% extends "base.html" %}
+{% import "_macros/page.html" as pg %}
+{#- Connexion d'un KRI à un outil (egalyx/kri_connecteurs.py) -#}
+{% block title %}Connecter un outil — {{ kri.nom }}{% endblock %}
+{% block styles %}
+{{ super() }}
+{{ pg.styles() }}
+<style>
+  .cx-wrap { max-width: 1080px; }
+  .cx-famille { font-size: .74rem; font-weight: 650; text-transform: uppercase; letter-spacing: .05em; color: var(--bs-secondary-color); margin: 1rem 0 .5rem; }
+  .cx-grille { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: .75rem; }
+  .cx-outil { display: flex; gap: .8rem; align-items: flex-start; border: 1px solid var(--bs-border-color); border-radius: 12px; padding: .9rem 1rem;
+              text-decoration: none; color: var(--bs-body-color); background: var(--bs-body-bg); transition: border-color .15s, box-shadow .15s; }
+  .cx-outil:hover { border-color: var(--bs-primary); box-shadow: 0 2px 10px rgba(16,24,40,.06); color: var(--bs-body-color); }
+  .cx-logo { width: 40px; height: 40px; border-radius: 10px; display: grid; place-items: center; color: #fff; font-size: 1.15rem; flex: none; }
+  .cx-outil strong { display: block; font-size: .95rem; }
+  .cx-outil span { font-size: .8rem; color: var(--bs-secondary-color); line-height: 1.35; display: block; margin-top: .15rem; }
+  .cx-ex { font-size: .82rem; color: var(--bs-secondary-color); }
+  .cx-ex li { margin-bottom: .15rem; }
+  .cx-res { border-radius: 12px; padding: 1rem 1.15rem; display: flex; gap: 1rem; align-items: center; }
+  .cx-res.ok { background: #ECFDF3; border: 1px solid #ABEFC6; color: #054F31; }
+  .cx-res.ko { background: #FEF3F2; border: 1px solid #FECDCA; color: #7A271A; }
+  .cx-res .cx-val { font-size: 2rem; font-weight: 700; font-variant-numeric: tabular-nums; }
+  .form-text a { text-decoration: none; }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="container-fluid cx-wrap py-3">
+  {{ pg.entete('Collecte automatique', 'fa-plug', 'KRI « ' ~ kri.nom ~ ' »' ~ (' · ' ~ kri.unite_mesure if kri.unite_mesure else ''),
+               retour=url_for('detail_kri', kri_id=kri.id), libelle_retour='Fiche du KRI') }}
+
+  {% if existants %}
+  {% call pg.carte('Connexions actives') %}
+    <table class="pg-table">
+      <thead><tr><th>Outil</th><th>Relevé</th><th>Dernier relevé</th><th>État</th><th></th></tr></thead>
+      <tbody>
+      {% for l in existants %}{% set s = l.source %}{% set o = catalogue|selectattr('code', 'equalto', s.config_connexion.connecteur)|first %}
+        <tr>
+          <td><span class="cx-logo d-inline-grid me-2" style="width:28px;height:28px;font-size:.85rem;background:{{ o.couleur }}"><i class="{{ o.icone }}"></i></span><strong>{{ o.nom }}</strong></td>
+          <td>{{ (frequences|selectattr('0', 'equalto', s.frequence_rafraichissement)|map(attribute='1')|first or ('toutes les ' ~ (s.frequence_rafraichissement // 3600) ~ ' h'))|lower }}</td>
+          <td>{{ pg.date(s.derniere_execution, True) }}</td>
+          <td>{% if s.statut == 'erreur' %}<span class="badge text-bg-danger">Erreur</span>{% else %}<span class="badge text-bg-success">Actif</span>{% endif %}</td>
+          <td class="text-end">
+            <form method="post" action="{{ url_for('kri_connecteur_action', kri_id=kri.id, lien_id=l.id) }}" class="d-inline">
+              <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+              <button class="btn btn-sm btn-outline-primary" name="action" value="collecter"><i class="fas fa-rotate me-1"></i>Relever maintenant</button>
+              <button class="btn btn-sm btn-outline-danger" name="action" value="supprimer" onclick="return confirm('Supprimer cette connexion ? Les mesures déjà relevées sont conservées.')"><i class="fas fa-unlink"></i></button>
+            </form>
+          </td>
+        </tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  {% endcall %}
+  {% endif %}
+
+  {% if not c %}
+  {% call pg.carte('Choisissez l\'outil où se trouve la donnée', aide='Le KRI sera mis à jour automatiquement, sans saisie') %}
+    {% for fam in familles %}
+      <div class="cx-famille">{{ fam }}</div>
+      <div class="cx-grille">
+      {% for o in catalogue if o.famille == fam %}
+        <a class="cx-outil" href="{{ url_for('kri_connecteur', kri_id=kri.id, outil=o.code) }}">
+          <div class="cx-logo" style="background: {{ o.couleur }}"><i class="{{ o.icone }}"></i></div>
+          <div><strong>{{ o.nom }}</strong><span>{{ o.mesure }}</span></div>
+        </a>
+      {% endfor %}
+      </div>
+    {% endfor %}
+    <p class="pg-second mt-3 mb-0"><i class="fas fa-circle-info me-1"></i>Votre outil n'est pas dans la liste ? Calculez l'indicateur dans un Google Sheets ou un Airtable relié à votre outil, ou demandez une connexion sur mesure à l'équipe Egalyx.</p>
+  {% endcall %}
+  {% else %}
+  <div class="row g-3">
+    <div class="col-lg-8">
+      <div class="pg-carte">
+        <div class="d-flex align-items-center gap-3 mb-3">
+          <div class="cx-logo" style="background: {{ c.couleur }}"><i class="{{ c.icone }}"></i></div>
+          <div><h2 class="h5 m-0">{{ c.nom }}</h2><div class="pg-second">{{ c.mesure }}</div></div>
+          <a class="ms-auto small text-decoration-none" href="{{ url_for('kri_connecteur', kri_id=kri.id) }}"><i class="fas fa-arrow-left me-1"></i>Autre outil</a>
+        </div>
+        {% if erreur %}<div class="cx-res ko mb-3"><i class="fas fa-triangle-exclamation fa-lg"></i><div>{{ erreur }}</div></div>{% endif %}
+        {% if resultat is not none %}
+        <div class="cx-res ok mb-3"><i class="fas fa-circle-check fa-lg"></i>
+          <div><div class="small">Connexion réussie — valeur lue à l'instant :</div><div class="cx-val">{{ '%g'|format(resultat) }} {{ kri.unite_mesure or '' }}</div>
+          <div class="small">Vérifiez qu'elle correspond à ce que vous voyez dans {{ c.nom }}, puis enregistrez. Les jetons ne sont pas conservés tant que vous n'enregistrez pas : ressaisissez-les.</div></div>
+        </div>
+        {% endif %}
+        <form method="post" autocomplete="off">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+          <input type="hidden" name="outil" value="{{ c.code }}">
+          {% for ch in c.champs %}
+          <div class="mb-3">
+            <label class="form-label fw-semibold" for="ch_{{ ch.nom }}">{{ ch.libelle }}</label>
+            {% if ch.type == 'secret' %}
+              <input class="form-control" type="password" id="ch_{{ ch.nom }}" name="{{ ch.nom }}" autocomplete="new-password" spellcheck="false" placeholder="Collez la valeur ici">
+            {% elif ch.type == 'liste' %}
+              <select class="form-select" id="ch_{{ ch.nom }}" name="{{ ch.nom }}">
+                {% for v, lib in ch.choix %}<option value="{{ v }}" {% if (valeurs.get(ch.nom) or ch.defaut) == v %}selected{% endif %}>{{ lib }}</option>{% endfor %}
+              </select>
+            {% elif ch.type == 'zone' %}
+              <textarea class="form-control font-monospace" style="font-size:.85rem" rows="3" id="ch_{{ ch.nom }}" name="{{ ch.nom }}" placeholder="{{ ch.exemple }}" spellcheck="false">{{ valeurs.get(ch.nom, '') }}</textarea>
+            {% else %}
+              <input class="form-control" type="text" id="ch_{{ ch.nom }}" name="{{ ch.nom }}" value="{{ valeurs.get(ch.nom, '') }}" placeholder="{{ ch.exemple or '' }}" spellcheck="false">
+            {% endif %}
+            {% if ch.aide %}<div class="form-text">{{ ch.aide }}</div>{% elif ch.exemple and ch.type == 'zone' %}<div class="form-text">Exemple : <code>{{ ch.exemple }}</code></div>{% endif %}
+          </div>
+          {% endfor %}
+          <div class="mb-3">
+            <label class="form-label fw-semibold" for="frequence">Relevé automatique</label>
+            <select class="form-select" id="frequence" name="frequence">
+              {% for v, lib in frequences %}<option value="{{ v }}" {% if v == frequence %}selected{% endif %}>{{ lib }}</option>{% endfor %}
+            </select>
+          </div>
+          <div class="d-flex gap-2 flex-wrap">
+            <button class="btn btn-outline-primary" name="action" value="tester"><i class="fas fa-vial me-1"></i>Tester la connexion</button>
+            <button class="btn btn-primary" name="action" value="enregistrer"><i class="fas fa-check me-1"></i>Enregistrer et relever</button>
+          </div>
+        </form>
+      </div>
+    </div>
+    <div class="col-lg-4">
+      {% call pg.carte('Exemples de KRI') %}
+        <ul class="cx-ex ps-3 mb-0">{% for e in c.exemples %}<li>{{ e }}</li>{% endfor %}</ul>
+      {% endcall %}
+      {% call pg.carte('Sécurité') %}
+        <ul class="cx-ex ps-3 mb-0">
+          <li>Utilisez un compte ou un jeton <strong>en lecture seule</strong>, dédié à Egalyx.</li>
+          <li>Le jeton est chiffré et ne sera plus jamais affiché.</li>
+          <li>Egalyx n'appelle que l'adresse officielle de {{ c.nom }}, et ne lit qu'un nombre.</li>
+          <li>Vous pouvez supprimer la connexion à tout moment ; révoquez alors aussi le jeton dans {{ c.nom }}.</li>
+        </ul>
+      {% endcall %}
+    </div>
+  </div>
+  {% endif %}
+</div>
+{% endblock %}
