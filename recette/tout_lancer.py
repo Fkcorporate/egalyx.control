@@ -35,6 +35,10 @@ ETAPES = [
     ('Pages sans identifiant, 6 rôles', 'balayage.py', ['superadmin', 'admin_a', 'gestionnaire', 'validateur', 'operateur', 'lecteur']),
     ('Pages de détail + étanchéité entre organisations', 'balayage_detail.py', []),
     ('Colonnes fantômes', 'colonnes_fantomes.py', []),
+    ('IA honnête et écrans corrigés', 'ia_honnete.py', []),
+    ('Fiche cartographie rapide, matrices, clôture des campagnes', 'carto_rapide.py', []),
+    ('Notifications sur les appareils (push, pastille)', 'notifications_push.py', []),
+    ('Centre d’aide : guide illustré pas à pas', 'guide_illustre.py', []),
 ]
 BRUIT = ('🟢', '🔐', '📋', '✅', '⚠', '❌', '   ', '🔧', '🔒')
 ok_global = True

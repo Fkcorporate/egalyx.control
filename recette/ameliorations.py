@@ -135,7 +135,7 @@ verif('Fiche du KRI (seuils historiques dans l\'historique des mesures) : la pag
 # =========================================================== 3. Audit
 print('--- Audit')
 r, e = get('gestionnaire', f'/audit/{aid}'); t = r.data.decode('utf-8', 'ignore')
-verif('Fiche de l\'audit : encadré « Rapport et équipe »', r.status_code == 200 and 'Rapport et équipe' in t, f'{r.status_code} {e}')
+verif('Fiche de l\'audit : encadré « Rapport et équipe »', r.status_code == 200 and 'id="suivi-rapport"' in t and 'Indépendance' in t, f'{r.status_code} {e}')
 r, e = post('gestionnaire', f'/audit-suivi/{aid}/rapport/provisoire', data=dict(date_limite=''))
 verif('Rapport provisoire refusé tant que l\'équipe n\'a pas signé l\'indépendance', obj(M.Audit, aid).etat_rapport is None)
 post('validateur', f'/audit-suivi/{aid}/independance', data=dict(conflit='1', details='', atteste='1'))

@@ -91,6 +91,13 @@ for u in urls:
     res_img.append((x.status_code, x.mimetype, len(x.data)))
 verif('images PNG valides', all(s == 200 and m == 'image/png' and n > 5000 for s, m, n in res_img), str(res_img))
 dossier = os.path.join(A.app.instance_path, 'cache_matrices')
+def _couleurs(octets):
+    import io
+    from PIL import Image
+    im = Image.open(io.BytesIO(octets)).convert('RGB'); im.thumbnail((200, 200))
+    return len(set(im.getdata()))
+coul = [_couleurs(c.get(u).data) for u in urls]
+verif('images NON vides (vraie matrice dessinée)', all(n > 20 for n in coul), str(coul))
 verif('mises en cache sur disque', os.path.isdir(dossier) and len([f for f in os.listdir(dossier) if f.endswith('.png')]) >= 4)
 x = c.get(urls[0]); etag = x.headers.get('ETag')
 x2 = c.get(urls[0], headers={'If-None-Match': etag})
@@ -108,6 +115,29 @@ r, _, _ = go('lecteur', 'get', urls[0])
 verif('sans « Gérer les risques » : image refusée', r.status_code in (302, 403, 404), str(r.status_code))
 r, _, _ = go('admin_a', 'get', f'/cartographie/{CID}/matrice/inconnu.png')
 verif('type de matrice inconnu : 404', r.status_code == 404)
+import shutil, threading
+shutil.rmtree(dossier, ignore_errors=True)
+paral = {}
+# 4 demandes simultanées (comme le navigateur) sur un vrai serveur multi-fils
+from werkzeug.serving import make_server
+srv = make_server('127.0.0.1', 0, A.app, threaded=True); port = srv.server_port
+th = threading.Thread(target=srv.serve_forever, daemon=True); th.start()
+import requests as _rq
+sess_http = _rq.Session()
+nom_ck = A.app.config.get('SESSION_COOKIE_NAME', 'session')
+ck = c.get_cookie(nom_ck)
+sess_http.cookies.set(nom_ck, ck.value if ck else '', domain='127.0.0.1')
+with Muet():
+    html3 = sess_http.get(f'http://127.0.0.1:{port}/cartographie/{CID}').text
+urls3 = [u.replace('&amp;', '&') for u in re.findall(r'src="(/cartographie/\d+/matrice/[^"]+)"', html3)]
+def _get(u):
+    x = sess_http.get(f'http://127.0.0.1:{port}{u}')
+    paral[u] = (x.status_code, _couleurs(x.content) if x.status_code == 200 else 0)
+with Muet():
+    fils = [threading.Thread(target=_get, args=(u,)) for u in urls3]
+    [f.start() for f in fils]; [f.join() for f in fils]
+srv.shutdown()
+verif('4 matrices demandées en même temps : toutes dessinées', len(urls3) == 4 and all(v and v[0] == 200 and v[1] > 20 for v in paral.values()), str(paral))
 
 print('--- Compression')
 z = c.get(f'/cartographie/{CID}', headers={'Accept-Encoding': 'gzip, deflate, br'})
