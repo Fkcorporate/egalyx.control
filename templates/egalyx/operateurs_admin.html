@@ -1,0 +1,108 @@
+{% extends "base.html" %}
+{% block title %}Opérateurs{% endblock %}
+{% block styles %}{{ super() }}
+<style>
+  .opa { max-width: 1320px; --op-bord: #e2e8f0; --op-doux: #64748b; --op-fond: #f8fafc; --op-carte: #fff; }
+  [data-bs-theme="dark"] .opa, body.dark-mode .opa { --op-bord: #1f2a44; --op-doux: #94a3b8; --op-fond: #0b1220; --op-carte: #111a2e; }
+  .opa h1 { font-size: 1.5rem; font-weight: 750; letter-spacing: -.015em; margin: 0; }
+  .opa-tete { display: flex; align-items: flex-end; gap: 1rem; flex-wrap: wrap; margin-bottom: 1.1rem; }
+  .opa-tete p { color: var(--op-doux); font-size: .9rem; margin: .25rem 0 0; max-width: 760px; }
+  .opa-carte { background: var(--op-carte); border: 1px solid var(--op-bord); border-radius: 14px; margin-bottom: 1.1rem; }
+  .opa-carte > header { display: flex; align-items: center; gap: .6rem; padding: .85rem 1rem; border-bottom: 1px solid var(--op-bord); }
+  .opa-carte > header h2 { font-size: 1rem; font-weight: 700; margin: 0; }
+  .opa-carte > header .compte { background: #eff6ff; color: #1d4ed8; border-radius: 999px; padding: .05rem .55rem; font-size: .78rem; font-weight: 700; }
+  .opa-ajout { display: flex; gap: .6rem; flex-wrap: wrap; align-items: center; padding: 1rem; }
+  .opa-ajout select { flex: 1 1 360px; max-width: 560px; padding: .55rem .75rem; border: 1px solid var(--op-bord); border-radius: 10px; font-size: .92rem; background: var(--op-carte); color: inherit; }
+  .opa-ajout small { flex-basis: 100%; color: var(--op-doux); }
+  .opa-btn { display: inline-flex; align-items: center; gap: .45rem; font-size: .875rem; font-weight: 600; padding: .52rem .9rem; border-radius: 10px;
+             border: 1px solid var(--op-bord); background: var(--op-carte); color: inherit; text-decoration: none; cursor: pointer; }
+  .opa-btn:hover { border-color: #93c5fd; color: #1d4ed8; }
+  .opa-btn.primaire { background: linear-gradient(135deg, #1e3a8a, #2563eb); color: #fff; border-color: transparent; }
+  .opa-btn.primaire:disabled { opacity: .5; cursor: not-allowed; }
+  table.opa-table { width: 100%; border-collapse: collapse; font-size: .9rem; }
+  .opa-table th { font-size: .72rem; text-transform: uppercase; letter-spacing: .05em; color: var(--op-doux); font-weight: 650; padding: .6rem 1rem; border-bottom: 1px solid var(--op-bord); text-align: left; }
+  .opa-table td { padding: .7rem 1rem; border-bottom: 1px solid var(--op-bord); vertical-align: top; }
+  .opa-table tr:last-child td { border-bottom: 0; }
+  .opa-qui { display: flex; gap: .6rem; align-items: center; }
+  .opa-av { width: 36px; height: 36px; border-radius: 50%; display: inline-flex; align-items: center; justify-content: center; background: #dcfce7; color: #166534; font-weight: 700; font-size: .78rem; flex: none; }
+  .opa-qui b { display: block; font-weight: 650; }
+  .opa-qui small { display: block; color: var(--op-doux); font-size: .78rem; }
+  .opa-perimetre { font-size: .84rem; line-height: 1.45; }
+  .opa-perimetre span { display: block; }
+  .opa-perimetre .tout { color: var(--op-doux); }
+  .opa-droits { display: flex; flex-wrap: wrap; gap: .3rem; }
+  .opa-droit { font-size: .74rem; font-weight: 600; padding: .16rem .5rem; border-radius: 999px; white-space: nowrap; }
+  .opa-droit.risques { background: #fef3c7; color: #92400e; }
+  .opa-droit.campagnes { background: #e0e7ff; color: #3730a3; }
+  .opa-droit.plans { background: #dcfce7; color: #166534; }
+  .opa-aucun { font-size: .8rem; color: #b45309; }
+  .opa-act { display: flex; gap: .35rem; justify-content: flex-end; white-space: nowrap; }
+  .opa-act form { margin: 0; }
+  .opa-act .danger:hover { color: #b91c1c; border-color: #fecaca; background: #fef2f2; }
+  .opa-inactif { opacity: .55; }
+  .opa-vide { padding: 2rem 1rem; text-align: center; color: var(--op-doux); }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="container-fluid opa">
+  <div class="opa-tete">
+    <div>
+      <h1><i class="fas fa-user-gear me-2" style="color:#16a34a"></i>Opérateurs</h1>
+      <p>Les opérateurs travaillent dans un espace simplifié : ils évaluent les risques et réalisent les contrôles de leur périmètre,
+        et font avancer leurs plans d'action. Chaque droit coché s'applique sur toutes les pages de leur espace.</p>
+    </div>
+  </div>
+
+  <section class="opa-carte" aria-labelledby="opaAjout">
+    <header><i class="fas fa-user-plus" style="color:#2563eb"></i><h2 id="opaAjout">Ajouter un opérateur</h2></header>
+    <form class="opa-ajout" method="GET" action="{{ url_for('operateur_nouveau') }}">
+      <label class="visually-hidden" for="opaChoix">Collaborateur</label>
+      <select id="opaChoix" name="user_id" required>
+        <option value="">Choisir un collaborateur…</option>
+        {% for c in candidats %}
+          {% set _a = affectation(c) if affectation else none %}
+          <option value="{{ c.id }}">{{ c.nom_affiche }}{% if c.fonction %} — {{ c.fonction }}{% endif %}{% if _a and _a.libelle %} · {{ _a.libelle }}{% endif %}</option>
+        {% endfor %}
+      </select>
+      <button class="opa-btn primaire" type="submit"><i class="fas fa-arrow-right"></i>Choisir ses droits</button>
+      <small>La personne doit déjà avoir un compte.{% if url_creer %} Sinon, <a href="{{ url_creer }}">créez d'abord le collaborateur</a>, puis revenez ici.{% endif %}
+        Les administrateurs ne peuvent pas être opérateurs.</small>
+    </form>
+  </section>
+
+  <section class="opa-carte" aria-labelledby="opaListe">
+    <header><i class="fas fa-users-gear" style="color:#16a34a"></i><h2 id="opaListe">Opérateurs</h2><span class="compte">{{ lignes|length }}</span></header>
+    {% if lignes %}
+    <div class="table-responsive">
+      <table class="opa-table">
+        <thead><tr><th>Opérateur</th><th>Périmètre</th><th>Droits</th><th><span class="visually-hidden">Actions</span></th></tr></thead>
+        <tbody>
+        {% for l in lignes %}
+          <tr class="{{ 'opa-inactif' if not l.u.is_active }}">
+            <td><div class="opa-qui"><span class="opa-av">{{ l.u.initiales_affichees }}</span>
+              <div><b>{{ l.u.nom_affiche }}</b><small>{{ l.u.fonction or l.u.email }}{% if not l.u.is_active %} · compte désactivé{% endif %}</small></div></div></td>
+            <td class="opa-perimetre">{% for m in l.perimetre %}<span class="{{ 'tout' if m == 'Toute l’organisation' }}">{{ m }}</span>{% endfor %}</td>
+            <td>{% if l.droits %}<div class="opa-droits">{% for libelle, famille in l.droits %}<span class="opa-droit {{ famille }}">{{ libelle }}</span>{% endfor %}</div>
+                {% else %}<span class="opa-aucun"><i class="fas fa-triangle-exclamation me-1"></i>Aucun droit : il ne peut que consulter son tableau de bord.</span>{% endif %}</td>
+            <td><div class="opa-act">
+              <a class="opa-btn" href="{{ url_for('admin_operateur_permissions', user_id=l.u.id) }}"><i class="fas fa-sliders"></i>Droits</a>
+              <form method="POST" action="{{ url_for('retrograder_operateur', user_id=l.u.id) }}"
+                    onsubmit="return confirm('Retirer le rôle d’opérateur à {{ l.u.nom_affiche|e }} ? Son compte et son historique sont conservés.');">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() if csrf_token is defined else '' }}">
+                <button class="opa-btn danger" type="submit" title="Retirer le rôle d’opérateur"><i class="fas fa-user-minus"></i><span class="visually-hidden">Retirer le rôle</span></button>
+              </form>
+            </div></td>
+          </tr>
+        {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% else %}
+    <div class="opa-vide"><i class="fas fa-user-gear fa-2x mb-2" style="color:#cbd5e1"></i><p class="mb-0">Aucun opérateur pour l'instant. Ajoutez-en un ci-dessus.</p></div>
+    {% endif %}
+  </section>
+
+  {% include 'egalyx/_valideur_operateurs.html' %}
+</div>
+{% endblock %}
