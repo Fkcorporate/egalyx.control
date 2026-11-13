@@ -1,27 +1,20 @@
 # services/ia_pca_service.py
 import os
 import json
-import random
-from openai import OpenAI
 from flask import current_app
 from datetime import datetime, timedelta
 
-OPENAI_API_KEY = os.environ.get("OPENAI_API_KEY")
-client = None
-if OPENAI_API_KEY and OPENAI_API_KEY != "mode-simulation" and OPENAI_API_KEY.startswith("sk-") and len(OPENAI_API_KEY) >= 30:  # toutes les clés OpenAI actuelles (sk-proj-…, sk-svcacct-…)
-    try:
-        client = OpenAI(api_key=OPENAI_API_KEY)
-        print("✅ OpenAI client initialisé pour PCA")
-    except Exception as e:
-        print(f"⚠️ Erreur initialisation OpenAI PCA: {e}")
-        client = None
+try:
+    from egalyx import ia_moteur as moteur
+except ImportError:                                    # installation sans le module commun
+    moteur = None
 
 class IAPcaService:
     """Service d'IA pour le module PCA"""
 
     @staticmethod
     def _is_ia_available():
-        return client is not None
+        return bool(moteur and moteur.disponible())
 
     @staticmethod
     def calculer_score_efficacite(plan_data):
@@ -468,3 +461,109 @@ class IAPcaService:
         
         # Filtrer les suggestions déjà existantes
         return [s for s in suggestions if s['titre'].lower() not in existing_names][:3]
+
+
+# ============================================================================================
+# Suggestions : vraie IA d'abord ; sinon les règles ci-dessus, signalées comme « automatiques ».
+# ============================================================================================
+CONSIGNES_PCA = """Tu es un expert en continuité d'activité (ISO 22301). On te donne l'état d'un plan de continuité d'activité (PCA).
+Propose des suggestions concrètes et propres À CE PLAN, fondées uniquement sur les données (lacunes, maturité, tests).
+Ne répète pas les éléments déjà existants. Français professionnel."""
+PHASES = ('preparation', 'crise', 'reprise', 'retour', 'test')
+TYPES_EXERCICE = ('table_top', 'technique', 'grandeur_nature')
+
+
+def _donnees(plan_data, existants):
+    d = {k: v for k, v in (plan_data or {}).items()}
+    d['deja_existants'] = existants
+    return d
+
+
+def _ia_actions(plan_data, existants):
+    if moteur is None:
+        return None
+    try:
+        r = moteur.demander_json(CONSIGNES_PCA + """
+Réponds {"actions": [{"titre": "...", "description": "1 à 2 phrases", "phase": "preparation|crise|reprise|retour|test",
+"priorite": "haute|moyenne|basse", "delai_suggere": "ex. 30 jours"}]} avec 3 à 5 actions, la plus urgente d'abord.""",
+                                 _donnees(plan_data, existants), max_tokens=1100)
+    except moteur.IndisponibleIA:
+        return None
+    res, vus = [], {e.lower() for e in existants}
+    for a in (r.get('actions') or [])[:5]:
+        if isinstance(a, dict) and moteur.texte(a.get('titre')) and moteur.texte(a.get('titre')).lower() not in vus:
+            phase = moteur.texte(a.get('phase'), 20).lower()
+            res.append({'titre': moteur.texte(a.get('titre'), 180), 'description': moteur.texte(a.get('description'), 500),
+                        'phase': phase if phase in PHASES else 'preparation', 'priorite': moteur.priorite(a.get('priorite')),
+                        'delai_suggere': moteur.texte(a.get('delai_suggere'), 40) or '30 jours'})
+    return res or None
+
+
+def _ia_exercices(plan_data, existants):
+    if moteur is None:
+        return None
+    try:
+        r = moteur.demander_json(CONSIGNES_PCA + """
+Propose 2 ou 3 exercices de test adaptés au niveau de maturité et aux dates de test.
+Réponds {"exercices": [{"titre": "...", "description": "1 à 2 phrases", "type": "table_top|technique|grandeur_nature",
+"duree_suggeree": "ex. 4 heures", "objectifs": ["...", "..."]}]}""", _donnees(plan_data, existants), max_tokens=1100)
+    except moteur.IndisponibleIA:
+        return None
+    res, vus = [], {e.lower() for e in existants}
+    for e in (r.get('exercices') or [])[:3]:
+        if isinstance(e, dict) and moteur.texte(e.get('titre')) and moteur.texte(e.get('titre')).lower() not in vus:
+            t = moteur.texte(e.get('type'), 20).lower()
+            res.append({'titre': moteur.texte(e.get('titre'), 180), 'description': moteur.texte(e.get('description'), 500),
+                        'type': t if t in TYPES_EXERCICE else 'table_top',
+                        'duree_suggeree': moteur.texte(e.get('duree_suggeree'), 40) or '4 heures',
+                        'objectifs': moteur.liste_textes(e.get('objectifs'), 5, 200)})
+    return res or None
+
+
+def _auto():
+    if moteur is not None:
+        moteur.marquer(moteur.AUTO)
+
+
+_regles_actions = IAPcaService.suggerer_actions
+_regles_exercices = IAPcaService.suggerer_exercices
+_regles_actions_spec = IAPcaService.suggerer_actions_specifiques
+_regles_exercices_spec = IAPcaService.suggerer_exercices_specifiques
+
+
+def suggerer_actions(plan_data):
+    res = _ia_actions(plan_data, [])
+    if res:
+        return [{**a, 'categorie': a['phase']} for a in res]
+    _auto()
+    return _regles_actions(plan_data)
+
+
+def suggerer_exercices(plan_data):
+    res = _ia_exercices(plan_data, [])
+    if res:
+        return res
+    _auto()
+    return _regles_exercices(plan_data)
+
+
+def suggerer_actions_specifiques(plan_data, existing_actions=None):
+    res = _ia_actions(plan_data, [a.intitule for a in (existing_actions or []) if getattr(a, 'intitule', None)])
+    if res:
+        return res
+    _auto()
+    return _regles_actions_spec(plan_data, existing_actions)
+
+
+def suggerer_exercices_specifiques(plan_data, existing_exercices=None):
+    res = _ia_exercices(plan_data, [e.nom for e in (existing_exercices or []) if getattr(e, 'nom', None)])
+    if res:
+        return [{**e, 'objectifs': "\n".join(e['objectifs'])} for e in res]
+    _auto()
+    return _regles_exercices_spec(plan_data, existing_exercices)
+
+
+IAPcaService.suggerer_actions = staticmethod(suggerer_actions)
+IAPcaService.suggerer_exercices = staticmethod(suggerer_exercices)
+IAPcaService.suggerer_actions_specifiques = staticmethod(suggerer_actions_specifiques)
+IAPcaService.suggerer_exercices_specifiques = staticmethod(suggerer_exercices_specifiques)

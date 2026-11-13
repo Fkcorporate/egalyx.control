@@ -1,49 +1,42 @@
 # services/incident_ia_service.py
 import json
-import openai
 from datetime import datetime, timedelta
 from flask import current_app
 
 # IMPORTANT: Ajouter cet import pour accéder au modèle Incident
 from models import Incident
 
+try:
+    from egalyx import ia_moteur as moteur
+except ImportError:                                    # installation sans le module commun
+    moteur = None
+
+CONSIGNES_INCIDENT = """Tu es un expert en gestion des incidents et du risque opérationnel. On te donne UN incident déclaré.
+Analyse-le à partir de ses seules informations : n'invente ni fait, ni chiffre, ni nom. Si une information manque, dis-le.
+Français professionnel, concret.
+Réponds {"classification": {"type": "...", "gravite": "faible|moyenne|elevee|critique"},
+ "causes_probables": ["au plus 3, formulées comme des hypothèses à vérifier"],
+ "recommandations": ["au plus 4 actions concrètes, de la plus urgente à la moins urgente"],
+ "delai_estime": "estimation prudente du délai de résolution, ou 'Non estimable' si les informations manquent",
+ "informations_manquantes": ["au plus 3 éléments qu'il faudrait connaître"]}"""
+
 class IncidentIAService:
     """Service d'analyse IA pour les incidents"""
     
     @staticmethod
     def analyser_incident(incident):
-        """Analyse complète d'un incident avec IA"""
-        
-        # Préparer le prompt
-        prompt = f"""
-        Analyse l'incident suivant et fournis:
-        1. Classification automatique (type, gravité)
-        2. Causes probables
-        3. Recommandations de résolution
-        4. Estimation du délai de résolution
-        
-        Incident:
-        - Titre: {incident.titre}
-        - Description: {incident.description}
-        - Type actuel: {incident.type_incident}
-        - Gravité actuelle: {incident.gravite}
-        """
-        
+        """Analyse d'un incident : vraie IA si disponible, sinon analyse automatique sans IA (signalée comme telle).
+        Aucun « score de confiance » n'est inventé : ia_score_confiance reste à 0."""
         try:
-            # Appel API OpenAI (ou simulation)
-            response = IncidentIAService._appel_api_ia(prompt)
-            
-            # Stocker l'analyse
-            incident.analyse_ia = json.dumps(response)
-            incident.ia_score_confiance = response.get('score_confiance', 75)
-            incident.ia_recommandations = json.dumps(response.get('recommandations', []))
-            
-            return response
-            
+            response = IncidentIAService._appel_api_ia(incident)
         except Exception as e:
-            current_app.logger.error(f"Erreur analyse IA incident {incident.id}: {e}")
-            return IncidentIAService._get_analyse_fallback(incident)
-    
+            current_app.logger.info(f"Analyse IA indisponible pour l'incident {incident.id} : {e}")
+            response = IncidentIAService._get_analyse_fallback(incident)
+        incident.analyse_ia = json.dumps(response, ensure_ascii=False)
+        incident.ia_score_confiance = 0
+        incident.ia_recommandations = json.dumps(response.get('recommandations', []), ensure_ascii=False)
+        return response
+
     @staticmethod
     def predire_recurrence(incident):
         """Prédit la probabilité de récurrence"""
@@ -165,29 +158,53 @@ class IncidentIAService:
         return {'suggestions': suggestions, 'total_analyses': len(incidents)}
     
     @staticmethod
-    def _appel_api_ia(prompt):
-        """Appel à l'API OpenAI (simulé pour l'exemple)"""
-        # Simulation - à remplacer par un vrai appel API
+    def _appel_api_ia(incident):
+        """Vrai appel à l'IA (egalyx.ia_moteur). Lève une exception si l'IA n'est pas disponible."""
+        if moteur is None:
+            raise RuntimeError("module IA absent")
+        donnees = {'titre': incident.titre, 'description': moteur.texte(incident.description, 3000),
+                   'type_declare': incident.type_incident, 'gravite_declaree': incident.gravite,
+                   'statut': incident.statut, 'cause_racine_connue': moteur.texte(incident.cause_racine, 800) or None,
+                   'actions_deja_menees': moteur.texte(incident.actions_correctives, 800) or None,
+                   'service': incident.service_associe, 'direction': incident.direction_associee,
+                   'cout_estime': incident.cout_estime, 'temps_arret_heures': incident.temps_arret,
+                   'date_occurrence': incident.date_occurrence}
+        r = moteur.demander_json(CONSIGNES_INCIDENT, donnees, max_tokens=900)
+        cl = r.get('classification') if isinstance(r.get('classification'), dict) else {}
         return {
-            'classification': {'type': 'technique', 'gravite': 'moyenne'},
-            'causes_probables': ['Défaut de configuration', 'Erreur humaine'],
-            'recommandations': ['Vérifier les logs', 'Mettre à jour la documentation'],
-            'delai_estime': '2-4 heures',
-            'score_confiance': 85
+            'classification': {'type': moteur.texte(cl.get('type'), 60) or incident.type_incident,
+                               'gravite': moteur.texte(cl.get('gravite'), 20) or incident.gravite},
+            'causes_probables': moteur.liste_textes(r.get('causes_probables'), 3, 300),
+            'recommandations': moteur.liste_textes(r.get('recommandations'), 4, 300),
+            'delai_estime': moteur.texte(r.get('delai_estime'), 80) or 'Non estimable',
+            'informations_manquantes': moteur.liste_textes(r.get('informations_manquantes'), 3, 200),
+            'origine': 'ia', 'modele': moteur.modele(),
+            'date': datetime.utcnow().isoformat(timespec='seconds'),
         }
-    
+
     @staticmethod
     def _get_analyse_fallback(incident):
-        """Analyse de secours quand l'IA n'est pas disponible"""
+        """Analyse automatique SANS IA : règles simples, clairement signalée à l'écran."""
+        if moteur is not None:
+            moteur.marquer(moteur.AUTO)
+        recos = []
+        if not incident.cause_racine:
+            recos.append("Identifier et documenter la cause racine de l'incident")
+        if not incident.actions_correctives:
+            recos.append("Définir des actions correctives avec un responsable et une échéance")
+        if incident.gravite in ('critique', 'elevee'):
+            recos.append("Informer la hiérarchie et vérifier si une escalade est nécessaire")
+        if not incident.risque_id:
+            recos.append("Rattacher l'incident au risque de la cartographie concerné")
         return {
             'classification': {'type': incident.type_incident, 'gravite': incident.gravite},
-            'causes_probables': ['À analyser manuellement'],
-            'recommandations': ['Examiner l\'incident en détail'],
+            'causes_probables': [],
+            'recommandations': recos or ["Suivre la résolution et clôturer l'incident une fois les actions vérifiées"],
             'delai_estime': 'Non estimé',
-            'score_confiance': 50,
-            'mode': 'fallback'
+            'origine': 'automatique', 'mode': 'fallback',
+            'date': datetime.utcnow().isoformat(timespec='seconds'),
         }
-    
+
     @staticmethod
     def _generer_recommandation_recurrence(probabilite, facteurs):
         """Génère une recommandation basée sur la probabilité de récurrence"""
@@ -203,7 +220,7 @@ class IncidentIAService:
         """Génère une recommandation basée sur la tendance - CORRIGÉ"""
         if prediction == "hausse significative":
             # CORRECTION: types_frequents est une liste de tuples (type, count)
-            types = ", ".join([t[0] for t in types_frequents[:2]])  # t[0] pour le type, t[1] pour le count
+            types = ", ".join(str(t[0]) for t in types_frequents[:2] if t and t[0]) or "non renseignés"
             return f"Augmentation des incidents. Prioriser l'analyse des types: {types}"
         elif prediction == "baisse significative":
             return "Tendance positive. Maintenir les actions en place."
@@ -240,6 +257,8 @@ class IncidentIAService:
             suggestions['actions_correctives'] = "\n".join(f"- {r}" for r in recommandations)
         
         suggestions['lecons_apprises'] = f"Suite à l'incident de type {incident.get_type_label()}, il est recommandé de renforcer les contrôles sur les causes identifiées."
-        suggestions['commentaire_cloture'] = f"Incident analysé par IA (score {incident.ia_score_confiance}%). À valider par un responsable."
+        suggestions['origine'] = analyse.get('origine') or ('ia' if analyse.get('modele') else 'automatique')
+        suggestions['commentaire_cloture'] = ("Pistes proposées par l'IA, à valider par un responsable." if analyse.get('origine') == 'ia'
+                                              else "Pistes proposées par l'analyse automatique (sans IA), à valider par un responsable.")
         
         return suggestions

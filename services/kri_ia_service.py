@@ -47,7 +47,7 @@ class KRIIAService:
         prompt = self._construire_prompt_kri(risque_data)
         
         response = self.client.chat.completions.create(
-            model="gpt-3.5-turbo",
+            model=(os.environ.get("EGALYX_IA_MODELE") or "gpt-4o-mini"),
             messages=[
                 {
                     "role": "system",

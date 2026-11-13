@@ -119,7 +119,7 @@ class ServiceAnalyseIA:
                 
                 # Appel à l'API
                 response = self.client.chat.completions.create(
-                    model="gpt-3.5-turbo",
+                    model=(os.environ.get("EGALYX_IA_MODELE") or "gpt-4o-mini"),
                     messages=[
                         {
                             "role": "system", 
@@ -479,7 +479,6 @@ class ServiceAnalyseIA:
             'client_initialise': self.client is not None,
             'api_key_presente': self.api_key is not None
         }
-
     def generer_lettre_mission(self, audit_id, feuille_id=None):
         """Générer une lettre de mission pour un audit"""
         
@@ -508,7 +507,7 @@ class ServiceAnalyseIA:
             except Exception as e:
                 print(f"❌ Erreur génération lettre: {e}")
                 return self._simuler_lettre_mission(audit_id, audit)
-    
+
     def _generer_lettre_mission_reelle(self, audit):
         """Générer une lettre de mission réelle avec OpenAI"""
         
@@ -557,7 +556,7 @@ class ServiceAnalyseIA:
         
         try:
             response = self.client.chat.completions.create(
-                model="gpt-3.5-turbo",
+                model=(os.environ.get("EGALYX_IA_MODELE") or "gpt-4o-mini"),
                 messages=[
                     {"role": "system", "content": "Tu es un expert en audit interne. Génère des lettres de mission professionnelles au format JSON."},
                     {"role": "user", "content": prompt}
@@ -583,7 +582,7 @@ class ServiceAnalyseIA:
         except Exception as e:
             print(f"❌ Erreur OpenAI: {e}")
             return self._simuler_lettre_mission(audit.id, audit)
-    
+
     def _simuler_lettre_mission(self, audit_id, audit=None):
         """Simuler une lettre de mission réaliste"""
         
@@ -637,9 +636,9 @@ class ServiceAnalyseIA:
             "societe": client_nom,
             "objet": f"Lettre de mission - Audit {audit_type.upper()} {audit_ref}",
             "introduction": f"""Dans le cadre de notre plan d'audit annuel, nous vous informons de la réalisation d'une mission d'audit au sein de votre service.
-    
+
     Cette mission s'inscrit dans notre démarche d'amélioration continue et vise à évaluer la conformité des processus avec les référentiels applicables.
-    
+
     Nous vous remercions par avance pour votre collaboration et pour la mise à disposition des informations nécessaires à la bonne réalisation de cette mission.""",
             "objectifs": f"""Les principaux objectifs de cette mission sont :
     - Évaluer l'efficacité du contrôle interne
@@ -648,7 +647,7 @@ class ServiceAnalyseIA:
     - Assurer la conformité réglementaire
     - Proposer des axes de progrès""",
             "perimetre": f"""Le périmètre de la mission couvre : {portee}
-    
+
     Période concernée : du {date_debut} au {date_fin}
     Durée estimée : {duree}""",
             "modalites": """Les travaux seront réalisés selon les modalités suivantes :
@@ -657,7 +656,7 @@ class ServiceAnalyseIA:
     - Tests de conformité sur échantillon
     - Observations sur site
     - Réunions de synthèse et de clôture
-    
+
     L'équipe d'audit aura accès aux informations nécessaires à la bonne réalisation de la mission, dans le respect des règles de confidentialité.""",
             "equipe": f"L'équipe d'audit est composée de professionnels qualifiés, sous la supervision de l'auditeur principal.",
             "livrables": """Les livrables attendus à l'issue de la mission sont :
@@ -674,7 +673,7 @@ class ServiceAnalyseIA:
             "emetteur": "L'équipe d'audit - Auditeur principal",
             "confidentialite": True,
             "confidentialite_texte": """Les informations recueillies dans le cadre de cette mission sont strictement confidentielles et ne pourront être divulguées à des tiers sans autorisation préalable.
-    
+
     Conformément aux dispositions légales et réglementaires, les données personnelles sont traitées dans le respect du RGPD. Chaque membre de l'équipe d'audit est tenu au secret professionnel.""",
             "_mode": "simulation"
         }
