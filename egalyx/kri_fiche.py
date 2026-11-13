@@ -176,7 +176,79 @@ def supprimer_source(id):
     return redirect(request.referrer or url_for('liste_sources_donnees'))
 
 
+def graphique_svg(kri, ms, largeur=720, hauteur=230):
+    """Graphique vectoriel (SVG) de l'évolution avec les seuils, pour le PDF : net à toute échelle, sans dépendance."""
+    pts = [(m.date_mesure, m.valeur) for m in ms if m.valeur is not None and m.date_mesure]
+    if len(pts) < 2:
+        return None
+    g, d, h, b = 46, 14, 14, 30
+    t0, t1 = pts[0][0], pts[-1][0]
+    duree = max((t1 - t0).total_seconds(), 1)
+    seuils = [(kri.seuil_alerte, '#F79009', 'alerte'), (kri.seuil_critique, '#F04438', 'critique'), (kri.seuil_cible, '#17B26A', 'cible')]
+    vals = [v for _, v in pts] + [s for s, _, _ in seuils if s is not None]
+    vmin, vmax = min(vals), max(vals)
+    if vmax == vmin:
+        vmin, vmax = vmin - 1, vmax + 1
+    marge = (vmax - vmin) * 0.12
+    vmin, vmax = vmin - marge, vmax + marge
+    X = lambda t: g + (largeur - g - d) * ((t - t0).total_seconds() / duree)
+    Y = lambda v: h + (hauteur - h - b) * (1 - (v - vmin) / (vmax - vmin))
+    o = [f'<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 {largeur} {hauteur}" width="100%" font-family="DejaVu Sans, Arial" font-size="9">']
+    for i in range(5):
+        v = vmin + (vmax - vmin) * i / 4
+        o.append(f'<line x1="{g}" x2="{largeur - d}" y1="{Y(v):.1f}" y2="{Y(v):.1f}" stroke="#EAECF0" stroke-width="1"/>')
+        o.append(f'<text x="{g - 6}" y="{Y(v) + 3:.1f}" text-anchor="end" fill="#667085">{v:.3g}</text>')
+    for s, coul, lib in seuils:
+        if s is not None:
+            o.append(f'<line x1="{g}" x2="{largeur - d}" y1="{Y(s):.1f}" y2="{Y(s):.1f}" stroke="{coul}" stroke-width="1.2" stroke-dasharray="5 4"/>')
+            o.append(f'<text x="{largeur - d}" y="{Y(s) - 3:.1f}" text-anchor="end" fill="{coul}" font-weight="bold">{lib} {s:g}</text>')
+    ligne = ' '.join(f'{X(t):.1f},{Y(v):.1f}' for t, v in pts)
+    o.append(f'<polygon points="{X(pts[0][0]):.1f},{Y(vmin):.1f} {ligne} {X(pts[-1][0]):.1f},{Y(vmin):.1f}" fill="#1D4ED8" fill-opacity="0.07"/>')
+    o.append(f'<polyline points="{ligne}" fill="none" stroke="#1D4ED8" stroke-width="2" stroke-linejoin="round"/>')
+    for t, v in pts[-40:]:
+        e = _etat(kri, v, t)
+        coul = ETATS.get(e, ETATS['inconnu'])[1]
+        o.append(f'<circle cx="{X(t):.1f}" cy="{Y(v):.1f}" r="2.8" fill="{coul}" stroke="#fff" stroke-width="1"/>')
+    idx = sorted({0, len(pts) // 2, len(pts) - 1})
+    for i in idx:
+        t = pts[i][0]
+        ancre = 'start' if i == 0 else ('end' if i == len(pts) - 1 else 'middle')
+        o.append(f'<text x="{X(t):.1f}" y="{hauteur - 10}" text-anchor="{ancre}" fill="#667085">{t:%d/%m/%Y}</text>')
+    o.append('</svg>')
+    return ''.join(o)
+
+
+def rapport_pdf(kri_id):
+    """Rapport PDF d'un KRI : synthèse, jauge, graphique vectoriel, historique COMPLET (commentaires entiers)."""
+    import models as M
+    from flask import make_response, render_template
+    k = M.db.session.get(M.KRI, kri_id)
+    if k is None or (not getattr(current_user, 'is_super_admin', False) and k.client_id != current_user.client_id):
+        abort(404)
+    mesures = M.MesureKRI.query.filter_by(kri_id=k.id).all()
+    f = fiche_kri(k, mesures)
+    ms = sorted([m for m in mesures if m.valeur is not None and m.date_mesure], key=lambda m: (m.date_mesure, m.id or 0))
+    client = M.db.session.get(M.Client, k.client_id) if k.client_id else None
+    html = render_template('kri/rapport_pdf.html', kri=k, f=f, svg=graphique_svg(k, ms), client=client,
+                           genere_le=datetime.utcnow(), auteur=current_user)
+    if request.args.get('html') == '1':
+        return html
+    try:
+        from weasyprint import HTML
+    except ImportError:
+        flash("Le module PDF (WeasyPrint) n'est pas installé sur ce serveur : voici la version imprimable.", 'warning')
+        return html
+    pdf = HTML(string=html, base_url=request.url_root).write_pdf()
+    nom = ''.join(c for c in f"rapport_{k.type_indicateur or 'kri'}_{k.nom}".replace(' ', '_') if c.isalnum() or c in '._-')[:80]
+    rep = make_response(pdf)
+    rep.headers['Content-Type'] = 'application/pdf'
+    rep.headers['Content-Disposition'] = f'attachment; filename={nom}_{datetime.utcnow():%Y%m%d}.pdf'
+    return rep
+
+
 def enregistrer(app):
+    if 'telecharger_rapport_kri_pdf' in app.view_functions:
+        app.view_functions['telecharger_rapport_kri_pdf'] = login_required(rapport_pdf)
     app.jinja_env.globals['fiche_kri'] = fiche_kri
     app.jinja_env.globals['kri_raison_erreur_source'] = raison_erreur
     if 'kri_supprimer_source' not in app.view_functions:
