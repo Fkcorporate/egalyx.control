@@ -17,7 +17,29 @@
     <p class="ad-resume mb-0">{{ a.resume|aide_rendu }}</p>
   {% endcall %}
 
-  {% if a.etapes %}
+  {% if a.illustrations %}
+  <nav class="gi-tete" aria-label="Étapes du guide">
+    <ol class="gi-sommaire">{% for x in a.illustrations %}<li><a href="#etape-{{ loop.index }}">{{ loop.index }}. {{ x.titre }}</a></li>{% endfor %}</ol>
+  </nav>
+  {% for x in a.illustrations %}
+  <section class="pg-carte gi-etape" id="etape-{{ loop.index }}">
+    <h2 class="h5 d-flex align-items-center mb-2"><span class="gi-num">{{ loop.index }}</span>{{ x.titre }}</h2>
+    {% if x.texte %}<p class="gi-texte">{{ x.texte|aide_rendu }}</p>{% endif %}
+    <figure class="gi-figure">
+      <button type="button" class="gi-agrandir" data-src="{{ url_for('static', filename=x.image) }}" aria-label="Agrandir la capture : {{ x.titre }}">
+        <img src="{{ url_for('static', filename=x.image) }}" alt="Capture d'écran : {{ x.titre }}" loading="{{ 'eager' if loop.first else 'lazy' }}" decoding="async" width="1280" height="800">
+      </button>
+    </figure>
+    {% if x.reperes %}
+    <ol class="gi-reperes">{% for r in x.reperes %}<li><span class="gi-pastille" aria-hidden="true">{{ loop.index }}</span><span class="visually-hidden">Repère {{ loop.index }} : </span>{{ r|aide_rendu }}</li>{% endfor %}</ol>
+    {% endif %}
+  </section>
+  {% endfor %}
+  <div class="gi-zoom" id="giZoom" role="dialog" aria-modal="true" aria-label="Capture agrandie">
+    <button type="button" class="gi-zoom-fermer" aria-label="Fermer">&times;</button>
+    <img alt="">
+  </div>
+  {% elif a.etapes %}
   {% call pg.carte('Étapes', aide=a.etapes|length ~ ' étape(s)') %}
     <ol class="ad-etapes">{% for e in a.etapes %}<li>{{ e|aide_rendu }}</li>{% endfor %}</ol>
   {% endcall %}
@@ -35,7 +57,14 @@
   </div>
   {% endif %}
 
-  {% if voisins %}
+  {% if a.illustrations and (precedent or suivant) %}
+  <div class="gi-suite">
+    {% if precedent %}<a class="btn btn-outline-secondary btn-sm" href="{{ url_for('aide.fiche', id_=precedent.id) }}"><i class="fas fa-arrow-left me-1"></i>{{ precedent.titre }}</a>{% else %}<span></span>{% endif %}
+    {% if suivant %}<a class="btn btn-primary btn-sm" href="{{ url_for('aide.fiche', id_=suivant.id) }}">{{ suivant.titre }}<i class="fas fa-arrow-right ms-1"></i></a>{% endif %}
+  </div>
+  {% endif %}
+
+  {% if voisins and not a.illustrations %}
   {% call pg.carte('Dans la même rubrique') %}
     {% for b in voisins %}<a class="ad-ligne" href="{{ url_for('aide.fiche', id_=b.id) }}">{{ b.titre }}</a>{% endfor %}
   {% endcall %}
@@ -43,4 +72,23 @@
 
   <p class="pg-second">Cette fiche n'a pas répondu à votre question ? Posez-la à l'assistant (bouton en bas à droite){% if egalyx_email_support is defined %} ou écrivez à Egalyx (<a href="mailto:{{ egalyx_email_support }}">{{ egalyx_email_support }}</a>){% endif %}.</p>
 </div>
+{% endblock %}
+{% block scripts %}{{ super() }}
+{% if a.illustrations %}
+<script>
+(function () {
+  var z = document.getElementById('giZoom'); if (!z) return;
+  var img = z.querySelector('img'), retour = null;
+  function fermer() { z.classList.remove('ouvert'); img.removeAttribute('src'); if (retour) retour.focus(); }
+  document.querySelectorAll('.gi-agrandir').forEach(function (b) {
+    b.addEventListener('click', function () {
+      retour = b; img.src = b.dataset.src; img.alt = b.getAttribute('aria-label') || '';
+      z.classList.add('ouvert'); z.querySelector('.gi-zoom-fermer').focus();
+    });
+  });
+  z.addEventListener('click', fermer);
+  document.addEventListener('keydown', function (e) { if (e.key === 'Escape' && z.classList.contains('ouvert')) fermer(); });
+})();
+</script>
+{% endif %}
 {% endblock %}
