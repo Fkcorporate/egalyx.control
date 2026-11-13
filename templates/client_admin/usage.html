@@ -247,31 +247,20 @@
 
 <script>
 function requestUpgrade(formuleId) {
-    if (confirm('Êtes-vous sûr de vouloir passer à cette formule ?\n\nVous serez redirigé vers le support.')) {
-        // Envoyer une demande d'upgrade
-        fetch('/api/client/upgrade-request', {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-                'X-CSRFToken': '{{ csrf_token() }}'
-            },
-            body: JSON.stringify({
-                formule_id: formuleId,
-                client_id: {{ current_user.client.id }}
-            })
-        })
-        .then(response => response.json())
-        .then(data => {
-            if (data.success) {
-                alert('Demande d\'upgrade envoyée. Notre équipe vous contactera rapidement.');
-                // Fermer le modal
-                const modal = bootstrap.Modal.getInstance(document.querySelector('#upgradeModal' + formuleId));
-                modal.hide();
-            } else {
-                alert('Erreur: ' + data.error);
-            }
-        });
-    }
+    if (!confirm('Envoyer une demande de changement de formule à l\'équipe Egalyx ?\n\nUn ticket de support sera créé et nous vous recontacterons pour confirmer les conditions.')) return;
+    fetch('/api/client/upgrade-request', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json', 'Accept': 'application/json', 'X-CSRFToken': '{{ csrf_token() }}'},
+        body: JSON.stringify({formule_id: formuleId})
+    })
+    .then(r => r.json().catch(() => ({success: false, error: 'Réponse inattendue du serveur (' + r.status + ').'})))
+    .then(data => {
+        alert(data.success ? data.message : ('La demande n\'a pas été envoyée : ' + (data.error || 'erreur inconnue')));
+        const el = document.querySelector('#upgradeModal' + formuleId);
+        const modal = el && bootstrap.Modal.getInstance(el);
+        if (data.success && modal) modal.hide();
+    })
+    .catch(() => alert('La demande n\'a pas été envoyée (connexion impossible). Réessayez ou contactez-nous via la page Support.'));
 }
 </script>
 {% endblock %}
