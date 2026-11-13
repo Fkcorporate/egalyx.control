@@ -83,6 +83,30 @@ class User(UserMixin, db.Model):
     password_hash = db.Column(db.String(128))
     role = db.Column(db.String(20), default='utilisateur')
     department = db.Column(db.String(100))
+    # Rattachement à la structure (egalyx/structure.py) — entiers simples, sans contrainte de clé étrangère :
+    # la table direction pointe déjà vers user (responsable), on évite le cycle de dépendances.
+    direction_id = db.Column(db.Integer, nullable=True, index=True)
+    service_id = db.Column(db.Integer, nullable=True, index=True)
+    perimetre_acces = db.Column(db.String(20), default='organisation')   # organisation | pole | direction | service
+    # Identité affichée (organigramme, listes) : à défaut, le nom d'utilisateur mis en forme (« awa.kone » -> « Awa Kone »)
+    prenom = db.Column(db.String(80), nullable=True)
+    nom = db.Column(db.String(80), nullable=True)
+    fonction = db.Column(db.String(120), nullable=True)                  # intitulé de poste : « Directrice financière »
+
+    @property
+    def nom_affiche(self):
+        """« Prénom Nom », sinon le nom d'utilisateur mis en forme (« awa.kone » -> « Awa Kone »)."""
+        complet = ' '.join(x.strip() for x in (self.prenom or '', self.nom or '') if x and x.strip())
+        if complet:
+            return complet
+        brut = (self.username or '').split('@')[0]
+        morceaux = [m for m in brut.replace('_', '.').replace('-', '.').split('.') if m]
+        return ' '.join(m[:1].upper() + m[1:] for m in morceaux) or (self.username or '')
+
+    @property
+    def initiales_affichees(self):
+        mots = [m for m in self.nom_affiche.replace('-', ' ').split() if m]
+        return (''.join(m[0] for m in mots[:2]) or '?').upper()
     is_active = db.Column(db.Boolean, default=True)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     last_login = db.Column(db.DateTime)
@@ -880,15 +904,12 @@ class User(UserMixin, db.Model):
     
     def has_permission(self, permission):
         """Vérifie si l'utilisateur a une permission spécifique"""
-        print(f"🟢 MODELS.PY has_permission appelée pour {permission}")
 
-        print(f"🔐 [DEBUG] Vérification permission '{permission}' pour {self.username} (rôle: {self.role})")
         
         # ============================================
         # 1. SUPER ADMIN : TOUJOURS AUTORISÉ
         # ============================================
         if self.role == 'super_admin':
-            print(f"   ✅ Super admin - accès immédiat")
             return True
         
         # ============================================
@@ -907,7 +928,6 @@ class User(UserMixin, db.Model):
         # ============================================
         if self.permissions and permission in self.permissions:
             value = bool(self.permissions[permission])
-            print(f"   📋 Permission explicite dans DB: {permission} = {value}")
             return value
         
         # ============================================
@@ -916,7 +936,6 @@ class User(UserMixin, db.Model):
         is_admin_client = (self.role == 'admin') or (getattr(self, 'is_client_admin', False))
         
         if is_admin_client:
-            print(f"   👑 Utilisateur est un ADMIN CLIENT")
             
             # Permissions OBLIGATOIRES pour admin client (NON NÉGOCIABLES)
             permissions_admin_obligatoires = {
@@ -1032,7 +1051,6 @@ class User(UserMixin, db.Model):
                 if self.permissions and permission in self.permissions:
                     # Si explicitement désactivée, respecter ce choix
                     if not self.permissions[permission]:
-                        print(f"   ⚠️ Permission '{permission}' explicitement désactivée dans DB")
                         return False
                 return permissions_admin_obligatoires[permission]
         
@@ -1040,12 +1058,10 @@ class User(UserMixin, db.Model):
         # 4. GESTIONNAIRE (manager)
         # ============================================
         if self.role == 'manager':
-            print(f"   👤 Utilisateur est un GESTIONNAIRE")
             
             # Vérifier d'abord les permissions explicites
             if self.permissions and permission in self.permissions:
                 value = bool(self.permissions[permission])
-                print(f"   📋 Permission explicite dans DB pour manager: {permission} = {value}")
                 return value
             
             # Permissions par défaut pour un manager (UNIQUEMENT si non définies)
@@ -1191,7 +1207,6 @@ class User(UserMixin, db.Model):
         # ============================================
         # 7. ❌ PAR DÉFAUT : REFUS
         # ============================================
-        print(f"   ❌ Permission '{permission}' REFUSÉE")
         return False
     
     # ============================================

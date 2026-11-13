@@ -1,4 +1,11 @@
 import os
+
+
+def _trace(*args, **kwargs):
+    """Traces de mise au point des droits : seulement si EGALYX_TRACES=1 (sinon les journaux débordent)."""
+    if os.environ.get('EGALYX_TRACES') == '1':
+        print(*args, **kwargs)
+
 import re
 import socket
 import tempfile
@@ -8200,19 +8207,19 @@ def check_module_access(module_code):
                 required_permission = module_permission_map[module_code]
             
             if required_permission:
-                print(f"  🔐 Permission requise: {required_permission}")
-                print(f"  👤 Permissions utilisateur: {current_user.permissions}")
+                _trace(f"  🔐 Permission requise: {required_permission}")
+                _trace(f"  👤 Permissions utilisateur: {current_user.permissions}")
                 
                 user_has_permission = current_user.permissions.get(required_permission, False)
                 
                 if not user_has_permission:
-                    print(f"  ❌ Utilisateur n'a pas la permission '{required_permission}'")
+                    _trace(f"  ❌ Utilisateur n'a pas la permission '{required_permission}'")
                     
                     # Vérifier si c'est un problème de synchronisation
                     if required_permission in formule.permissions_template:
                         formule_has_permission = formule.permissions_template[required_permission]
                         if not formule_has_permission:
-                            print(f"  ⚠️  La formule {formule.nom} n'inclut pas '{required_permission}'")
+                            _trace(f"  ⚠️  La formule {formule.nom} n'inclut pas '{required_permission}'")
                             flash(f'Votre formule {formule.nom} n\'inclut pas cette fonctionnalité.', 'error')
                         else:
                             print(f"  ⚠️  Permission '{required_permission}' incluse dans la formule mais non attribuée")
@@ -8654,15 +8661,15 @@ def check_permissions_middleware_complete():
         required_permission = protected_endpoints[endpoint]
         
         # DEBUG
-        print(f"🔍 [MIDDLEWARE] Vérification endpoint: {endpoint}")
-        print(f"   Permission requise: {required_permission}")
-        print(f"   Utilisateur: {current_user.username} (rôle: {current_user.role})")
+        _trace(f"🔍 [MIDDLEWARE] Vérification endpoint: {endpoint}")
+        _trace(f"   Permission requise: {required_permission}")
+        _trace(f"   Utilisateur: {current_user.username} (rôle: {current_user.role})")
         
         # Vérifier la permission
         has_perm = current_user.has_permission(required_permission)
         
         if not has_perm:
-            print(f"   ❌ Permission refusée par middleware")
+            _trace(f"   ❌ Permission refusée par middleware")
             
             # Message personnalisé selon le type d'utilisateur
             if current_user.role == 'manager' and required_permission.startswith('can_'):
@@ -8672,7 +8679,7 @@ def check_permissions_middleware_complete():
             
             return redirect(url_for('dashboard'))
         else:
-            print(f"   ✅ Permission accordée par middleware")
+            _trace(f"   ✅ Permission accordée par middleware")
 
 def get_all_permissions_with_formule_check(user):
     """Retourne les permissions avec vérification de la formule - VERSION COMPLÈTE"""
@@ -13807,7 +13814,7 @@ def check_module_access(module_code):
                     flash(f'Permission de base requise pour accéder à ce module', 'error')
                     return redirect(url_for('dashboard'))
                 
-                print(f"  ✅ Module '{real_module_db}' accessible avec permissions de base")
+                _trace(f"  ✅ Module '{real_module_db}' accessible avec permissions de base")
                 return f(*args, **kwargs)
             
             # Pour les modules avec permission spécifique
@@ -13821,13 +13828,13 @@ def check_module_access(module_code):
                 required_permission = module_permission_map[module_code]
             
             if required_permission:
-                print(f"  🔐 Permission requise: {required_permission}")
-                print(f"  👤 Permissions utilisateur: {current_user.permissions}")
+                _trace(f"  🔐 Permission requise: {required_permission}")
+                _trace(f"  👤 Permissions utilisateur: {current_user.permissions}")
                 
                 user_has_permission = current_user.permissions.get(required_permission, False)
                 
                 if not user_has_permission:
-                    print(f"  ❌ Utilisateur n'a pas la permission '{required_permission}'")
+                    _trace(f"  ❌ Utilisateur n'a pas la permission '{required_permission}'")
                     
                     # Vérifier si c'est un problème de synchronisation
                     if required_permission in formule.permissions_template:
@@ -15851,16 +15858,16 @@ def check_module_access_middleware():
         required_permission = protected_endpoints[endpoint]
         
         # DEBUG
-        print(f"🔍 [MIDDLEWARE] Vérification endpoint: {endpoint}")
-        print(f"   Permission requise: {required_permission}")
-        print(f"   Utilisateur: {current_user.username} (rôle: {current_user.role})")
+        _trace(f"🔍 [MIDDLEWARE] Vérification endpoint: {endpoint}")
+        _trace(f"   Permission requise: {required_permission}")
+        _trace(f"   Utilisateur: {current_user.username} (rôle: {current_user.role})")
         
         # Vérifier la permission
         has_perm = current_user.has_permission(required_permission)
-        print(f"   Résultat permission: {has_perm}")
+        _trace(f"   Résultat permission: {has_perm}")
         
         if not has_perm:
-            print(f"   ❌ Permission refusée par middleware")
+            _trace(f"   ❌ Permission refusée par middleware")
             
             # Si c'est une route gestionnaire, proposer une solution
             if endpoint.startswith('gestionnaire_'):
@@ -15870,7 +15877,7 @@ def check_module_access_middleware():
             
             return redirect(url_for('dashboard'))
         else:
-            print(f"   ✅ Permission accordée par middleware")
+            _trace(f"   ✅ Permission accordée par middleware")
 
 
 @app.route('/activate-gestionnaire-permissions')
@@ -22511,7 +22518,6 @@ def utility_processor():
     
     return dict(get_file_size=get_file_size)
 
-
 # ========================
 # OPTIMISATIONS PERFORMANCE
 # ========================
@@ -22570,7 +22576,6 @@ try:
     print("✅ Rate limiting activé")
 except ImportError:
     print("⚠️ Flask-Limiter non disponible")
-
 
 # Endpoint de santé pour Render
 @app.route('/health')
@@ -54088,6 +54093,9 @@ def test_logo():
     """
 
 
+@app.route('/roadmap')
+def roadmap():
+    return render_template('roadmap.html')
 
 @app.route('/admin/organigramme/logo/supprimer', methods=['POST'])
 @login_required
@@ -77509,9 +77517,6 @@ def c2n_get_commentaires_plan(plan_id):
 # par les versions ci-dessous. Chaque bloc indique précisément ce qui
 # a changé par rapport à l'original.
 
-@app.route('/roadmap')
-def roadmap():
-    return render_template('roadmap.html')
 
 # ================================================================
 # 1. BUG BLOQUANT : created_by -> createur_id sur PlanActionC2N
