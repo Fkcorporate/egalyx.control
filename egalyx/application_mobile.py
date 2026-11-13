@@ -22,13 +22,40 @@ BLEU_NUIT = '#13294B'
 TAILLES = (192, 512, 180)
 
 SW = r"""
-const VERSION = 'egalyx-v2';
+const VERSION = 'egalyx-v3';
 const HORS_LIGNE = '/hors-ligne';
 self.addEventListener('install', e => {
   e.waitUntil(caches.open(VERSION).then(c => c.addAll([HORS_LIGNE, '/application/icone-192.png'])).then(() => self.skipWaiting()));
 });
 self.addEventListener('activate', e => {
   e.waitUntil(caches.keys().then(ks => Promise.all(ks.filter(k => k !== VERSION).map(k => caches.delete(k)))).then(() => self.clients.claim()));
+});
+// Notifications reçues (egalyx/notifications_push.py) : affichage + pastille sur l'icône de l'application.
+self.addEventListener('push', e => {
+  let d = {};
+  try { d = e.data ? e.data.json() : {}; } catch (x) { d = {corps: e.data ? e.data.text() : ''}; }
+  const travaux = [self.registration.showNotification(d.titre || 'Egalyx', {
+    body: d.corps || '', icon: '/application/icone-192.png', badge: '/application/icone-192.png',
+    tag: d.tag || 'egalyx', renotify: true, data: {url: d.url || '/notifications'}
+  })];
+  const nav = self.navigator;
+  if (nav && 'setAppBadge' in nav) {
+    if (d.pastille && d.non_lues > 0) travaux.push(nav.setAppBadge(d.non_lues).catch(() => {}));
+    else if (d.pastille === false) travaux.push(nav.clearAppBadge().catch(() => {}));
+  }
+  e.waitUntil(Promise.all(travaux));
+});
+self.addEventListener('notificationclick', e => {
+  e.notification.close();
+  const url = new URL((e.notification.data && e.notification.data.url) || '/', self.location.origin).href;
+  e.waitUntil(clients.matchAll({type: 'window', includeUncontrolled: true}).then(fenetres => {
+    for (const f of fenetres) {
+      if (f.url.startsWith(self.location.origin) && 'focus' in f) {
+        return ('navigate' in f ? f.navigate(url).catch(() => f) : Promise.resolve(f)).then(x => (x || f).focus());
+      }
+    }
+    return clients.openWindow(url);
+  }));
 });
 self.addEventListener('fetch', e => {
   // En ligne : le service worker ne touche à RIEN, le navigateur charge les pages normalement

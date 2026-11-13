@@ -125,6 +125,11 @@ def enregistrer_extensions(app, db, csrf=None, recalculer_cotations=None, constr
         compression.enregistrer(app)       # pages compressées (gzip) : beaucoup plus légères à télécharger
     except ImportError:
         pass
+    try:                                   # paquet facultatif : notifications sur téléphone / ordinateur + pastille
+        from egalyx import notifications_push
+        notifications_push.enregistrer(app)
+    except ImportError:
+        pass
     try:                                   # paquet facultatif : la demande de changement d'offre part vraiment
         from egalyx import demande_offre, questionnaire_stats
         demande_offre.enregistrer(app)
