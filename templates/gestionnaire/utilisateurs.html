@@ -775,7 +775,7 @@
                                 <tr>
                                     <th>Utilisateur</th>
                                     <th>Rôle</th>
-                                    <th>Département</th>
+                                    <th>Direction / service</th>
                                     <th>Statut</th>
                                     <th>Date création</th>
                                     <th>Dernière connexion</th>
@@ -809,7 +809,7 @@
                                                 {% endif %}
                                             </div>
                                             <div>
-                                                <strong>{{ u.username }}</strong>
+                                                <strong>{{ u.nom_affiche if u.nom_affiche is defined else u.username }}</strong>{% if u.fonction %}<span class="d-block small" style="color:#334155">{{ u.fonction }}</span>{% endif %}
                                                 <br>
                                                 <small class="text-muted">{{ u.email }}</small>
                                             </div>
@@ -832,7 +832,7 @@
                                             {% endif %}
                                         </span>
                                     </td>
-                                    <td data-label="Département">{{ u.department or 'Non spécifié' }}</td>
+                                    <td data-label="Direction / service">{% set _aff = eg_affectation(u) if eg_affectation is defined else none %}{% if _aff and _aff.direction %}<span class="d-block fw-semibold" style="font-size:.88rem">{{ _aff.direction.nom }}</span>{% if _aff.service %}<small class="text-muted">{{ _aff.service.nom }}</small>{% endif %}{% elif _aff and _aff.dirige %}<span class="d-block fw-semibold" style="font-size:.88rem">{{ _aff.dirige[0][1] }}</span><small class="text-muted">Responsable · {{ _aff.dirige[0][0]|lower }}</small>{% elif u.department %}{{ u.department }}{% else %}<span class="text-muted">Non rattaché</span>{% endif %}</td>
                                     <td data-label="Statut">
                                         <span class="badge-modern {{ 'badge-success' if u.is_active else 'badge-danger' }}" id="status-badge-{{ u.id }}">
                                             <i class="fas fa-circle me-1" style="font-size: 0.4rem;"></i>
@@ -908,7 +908,7 @@
                                                 <button type="button" class="btn btn-outline-danger btn-action delete-user-btn"
                                                         data-user-id="{{ u.id }}"
                                                         data-username="{{ u.username }}"
-                                                        title="Supprimer">
+                                                        title="Retirer (désactiver et transférer ses responsabilités)">
                                                     <i class="fas fa-trash"></i>
                                                 </button>
                                                 {% endif %}
@@ -1084,7 +1084,7 @@
     <div class="modal-dialog">
         <div class="modal-content">
             <div class="modal-header">
-                <h5 class="modal-title"><i class="fas fa-trash me-2" style="color: var(--danger);"></i>Suppression d'utilisateur</h5>
+                <h5 class="modal-title"><i class="fas fa-trash me-2" style="color: var(--danger);"></i>Retirer un utilisateur</h5>
                 <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
             </div>
             <div class="modal-body">
@@ -1100,12 +1100,12 @@
                 </ul>
                 <div class="alert alert-info mt-3">
                     <i class="fas fa-lightbulb me-2"></i>
-                    <small><strong>Conseil :</strong> Si vous souhaitez simplement empêcher l'accès, désactivez le compte plutôt que de le supprimer.</small>
+                    <small><strong>Pourquoi pas d'effacement ?</strong> Dans un outil de contrôle, on doit toujours savoir qui a évalué, validé ou audité quoi : le compte est conservé, mais inactif.</small>
                 </div>
             </div>
             <div class="modal-footer">
                 <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Annuler</button>
-                <button type="button" class="btn btn-modern-danger" id="confirmDeleteUser" style="background: var(--danger); color: white; border: none; border-radius: 30px; padding: 0.6rem 1.6rem;">Supprimer définitivement</button>
+                <button type="button" class="btn btn-modern-danger" id="confirmDeleteUser" style="background: var(--danger); color: white; border: none; border-radius: 30px; padding: 0.6rem 1.6rem;"><i class="fas fa-user-slash me-1"></i>Désactiver et transférer</button>
             </div>
         </div>
     </div>
@@ -1305,7 +1305,7 @@ function attachEventListeners() {
             }
             
             document.getElementById('deleteUserMessage').innerHTML = 
-                `Êtes-vous absolument sûr de vouloir supprimer l'utilisateur <strong class="text-danger">${currentUsername}</strong> ?<br><br><span class="text-muted">Cette action est définitive et ne peut pas être annulée.</span>`;
+                `Le compte de <strong>${currentUsername}</strong> sera <strong>désactivé</strong> : la personne ne pourra plus se connecter, mais tout son historique reste attribué (traçabilité).<br><br><span class="text-muted">Vous pourrez ensuite transférer ses responsabilités en cours (risques, plans, KRI…) à quelqu'un d'autre. Le compte peut être réactivé à tout moment.</span>`;
             
             new bootstrap.Modal(document.getElementById('deleteUserModal')).show();
         }
@@ -1366,7 +1366,7 @@ async function deleteUser() {
     const confirmBtn = document.getElementById('confirmDeleteUser');
     const originalText = confirmBtn.innerHTML;
     
-    confirmBtn.innerHTML = '<i class="fas fa-spinner fa-spin me-2"></i>Suppression...';
+    confirmBtn.innerHTML = '<i class="fas fa-spinner fa-spin me-2"></i>Désactivation...';
     confirmBtn.disabled = true;
     
     try {
@@ -1383,8 +1383,8 @@ async function deleteUser() {
         
         if (data.success) {
             showToast(data.message, 'success');
-            removeUserRow(currentUserId);
-            updateStatsAfterDeletion();
+            if (data.redirect) { setTimeout(() => { window.location.href = data.redirect; }, 1200); }
+            else { setTimeout(() => window.location.reload(), 1200); }
             bootstrap.Modal.getInstance(document.getElementById('deleteUserModal')).hide();
         } else {
             showToast(data.error || 'Erreur lors de la suppression', 'error');
@@ -1456,10 +1456,10 @@ function exportUsersToCSV() {
     
     {% for u in users %}
     rows.push([
-        '{{ u.username }}',
-        '{{ u.email }}',
-        '{{ u.get_role_display_name() }}',
-        '{{ u.department or "" }}',
+        {{ (u.nom_affiche if u.nom_affiche is defined else u.username)|tojson }},
+        {{ u.email|tojson }},
+        {{ u.get_role_display_name()|tojson }},
+        {{ (u.department or '')|tojson }},
         '{{ "Actif" if u.is_active else "Inactif" }}',
         '{{ u.created_at.strftime("%d/%m/%Y") }}',
         '{% if u.last_login %}{{ u.last_login.strftime("%d/%m/%Y %H:%M") }}{% else %}Jamais{% endif %}'
