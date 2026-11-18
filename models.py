@@ -1,3 +1,29 @@
+
+# --- Journal (remplace les anciens print()) : erreurs -> WARNING (journaux du serveur) ; le reste -> DEBUG,
+#     visible seulement avec EGALYX_TRACES=1. Ajouté le 18/11/2026 (ménage).
+import logging as _logging_journal
+import os as _os_journal
+_JOURNAL = _logging_journal.getLogger('egalyx.models')
+_MOTS_ALERTE = ('\u274c', '\u26a0', 'ERREUR', 'Erreur', 'erreur', 'ERROR', 'Error', 'error', 'Exception', 'chec', 'Traceback', 'CRITIQUE')
+if _os_journal.environ.get('EGALYX_TRACES') == '1' and not _JOURNAL.handlers:
+    _JOURNAL.setLevel(_logging_journal.DEBUG)
+    _h = _logging_journal.StreamHandler()
+    _h.setFormatter(_logging_journal.Formatter('%(asctime)s %(name)s %(levelname)s %(message)s'))
+    _JOURNAL.addHandler(_h)
+    _JOURNAL.propagate = False
+
+
+def _journal(*args, sep=' ', **_ignore):
+    """Ancien print() : écrit dans le journal au lieu de la sortie standard."""
+    try:
+        texte = sep.join(str(a) for a in args)
+    except Exception:  # noqa: BLE001
+        return
+    if any(m in texte for m in _MOTS_ALERTE) and not texte.lstrip().startswith(('\u2705', '\u2713')):
+        _JOURNAL.warning(texte)
+    elif _JOURNAL.isEnabledFor(_logging_journal.DEBUG):
+        _JOURNAL.debug(texte)
+# --- fin du journal
 from flask_sqlalchemy import SQLAlchemy
 from flask_login import UserMixin
 from datetime import datetime, date, timezone, timedelta
@@ -32,7 +58,7 @@ def chiffrer_secret(valeur):
         return valeur
     f = _fernet()
     if f is None:
-        print("⚠️ EGALYX_CLE_CHIFFREMENT non définie : secret enregistré EN CLAIR")
+        _journal("⚠️ EGALYX_CLE_CHIFFREMENT non définie : secret enregistré EN CLAIR")
         return valeur
     return PREFIXE_SECRET + f.encrypt(str(valeur).encode()).decode()
 
@@ -42,7 +68,7 @@ def dechiffrer_secret(valeur):
         return valeur
     f = _fernet()
     if f is None:
-        print("⚠️ EGALYX_CLE_CHIFFREMENT non définie : impossible de lire un secret chiffré")
+        _journal("⚠️ EGALYX_CLE_CHIFFREMENT non définie : impossible de lire un secret chiffré")
         return None
     return f.decrypt(str(valeur)[len(PREFIXE_SECRET):].encode()).decode()
 
@@ -1750,11 +1776,11 @@ class Cartographie(db.Model):
         try:
             campagne = CampagneEvaluation.query.get(campagne_id)
             if not campagne:
-                print(f"❌ Campagne {campagne_id} introuvable")
+                _journal(f"❌ Campagne {campagne_id} introuvable")
                 return False
             
             if campagne.cartographie_id != self.id:
-                print(f"❌ Campagne {campagne_id} n'appartient pas à la cartographie {self.id}")
+                _journal(f"❌ Campagne {campagne_id} n'appartient pas à la cartographie {self.id}")
                 return False
             
             # ✅ Définir la campagne active
@@ -1765,19 +1791,19 @@ class Cartographie(db.Model):
                 campagne.statut = 'en_cours'
             
             db.session.commit()
-            print(f"✅ Campagne active définie: {campagne.nom} (ID: {campagne_id})")
+            _journal(f"✅ Campagne active définie: {campagne.nom} (ID: {campagne_id})")
             return True
             
         except Exception as e:
             db.session.rollback()
-            print(f"❌ Erreur set_campagne_active: {e}")
+            _journal(f"❌ Erreur set_campagne_active: {e}")
             return False
     
     def clear_campagne_active(self):
         """Supprime la référence à la campagne active"""
         self.campagne_active_id = None
         db.session.commit()
-        print(f"✅ Campagne active supprimée pour cartographie {self.id}")
+        _journal(f"✅ Campagne active supprimée pour cartographie {self.id}")
     
     def get_campagne_active_display(self):
         """
@@ -4517,7 +4543,7 @@ def veille_before_update(mapper, connection, target):
         
     except Exception as e:
         session.rollback()
-        print(f"⚠️ Erreur audit trail veille {target.id}: {e}")
+        _journal(f"⚠️ Erreur audit trail veille {target.id}: {e}")
     finally:
         session.close()
 
@@ -4557,7 +4583,7 @@ def veille_after_insert(mapper, connection, target):
         session.commit()
     except Exception as e:
         session.rollback()
-        print(f"⚠️ Erreur audit trail create veille {target.id}: {e}")
+        _journal(f"⚠️ Erreur audit trail create veille {target.id}: {e}")
     finally:
         session.close()
 # -------------------- AUDIT --------------------
@@ -9656,7 +9682,7 @@ class FormuleAbonnement(db.Model):
         module_info = self.get_module_status(module_code)
         
         if not module_info['exists']:
-            print(f"⚠️ Module '{module_code}' (réel: '{module_info['real_name']}') non trouvé dans {list(self.modules.keys())}")
+            _journal(f"⚠️ Module '{module_code}' (réel: '{module_info['real_name']}') non trouvé dans {list(self.modules.keys())}")
             return False
         
         return module_info['is_active']
@@ -9789,13 +9815,13 @@ class FormuleAbonnement(db.Model):
         issues = self.check_module_permission_sync()
         
         if issues:
-            print(f"🔧 Correction des incohérences pour formule {self.nom}:")
+            _journal(f"🔧 Correction des incohérences pour formule {self.nom}:")
             
             for issue in issues:
                 module_active = self.modules.get(issue['module'], False)
                 self.permissions_template[issue['permission']] = module_active
                 marquer_json_modifie(self, 'permissions_template')
-                print(f"  🔄 {issue['permission']} = {module_active} (module: {issue['module']})")
+                _journal(f"  🔄 {issue['permission']} = {module_active} (module: {issue['module']})")
             
             return True
         
@@ -9982,7 +10008,7 @@ class FormuleAbonnement(db.Model):
                 del self.modules[old_name]
                 marquer_json_modifie(self, 'modules')
                 fixes_applied += 1
-                print(f"  🔄 Renommage: {old_name} → {new_name}")
+                _journal(f"  🔄 Renommage: {old_name} → {new_name}")
         
         # Synchronisation des permissions
         permission_sync = {
@@ -10001,7 +10027,7 @@ class FormuleAbonnement(db.Model):
                     self.permissions_template[permission] = module_active
                     marquer_json_modifie(self, 'permissions_template')
                     fixes_applied += 1
-                    print(f"  🔄 Permission: {permission} = {module_active}")
+                    _journal(f"  🔄 Permission: {permission} = {module_active}")
         
         if fixes_applied > 0:
             self.updated_at = datetime.utcnow()
@@ -10531,7 +10557,7 @@ class FichierRapport(db.Model):
             try:
                 os.remove(self.chemin)
             except Exception as e:
-                print(f"Erreur suppression fichier physique {self.chemin}: {e}")
+                _journal(f"Erreur suppression fichier physique {self.chemin}: {e}")
         
         # Supprimer l'entrée en base
         db.session.delete(self)
@@ -11364,7 +11390,7 @@ class DispositifMaitrise(db.Model):
             else:
                 return "🔴 FAIBLE", resilience_moyenne
         except Exception as e:
-            print(f"Erreur calcul résilience: {e}")
+            _journal(f"Erreur calcul résilience: {e}")
             return "ERREUR", 0
     
     # ============================================
@@ -14726,7 +14752,7 @@ class AnomalieDetectee(db.Model):
             niveau_criticite=self.criticite,
             impact=(
                 f"Anomalie détectée lors de "
-                f"{'l\'exécution du contrôle ' + (self.get_parent_reference() or '') if self.execution_id else 'la campagne ' + (self.campagne.reference if self.campagne else '')}"
+                f"""{"l'exécution du contrôle " + (self.get_parent_reference() or '') if self.execution_id else 'la campagne ' + (self.campagne.reference if self.campagne else '')}"""
             ),
             cause_racine="À analyser",
             statut='ouvert',
@@ -16253,7 +16279,7 @@ class Incident(db.Model):
             )
             db.session.add(historique)
         except Exception as e:
-            print(f"⚠️ Erreur historique: {e}")
+            _journal(f"⚠️ Erreur historique: {e}")
         
         return {
             'ancienne_efficacite': ancienne_efficacite,
@@ -16847,12 +16873,12 @@ class TicketSupport(db.Model):
                         'taille': os.path.getsize(dest_path)
                     })
                     
-                    print(f"✅ Fichier transféré: {filename} → {new_filename}")
+                    _journal(f"✅ Fichier transféré: {filename} → {new_filename}")
                     
                 except Exception as e:
-                    print(f"❌ Erreur transfert fichier {filename}: {e}")
+                    _journal(f"❌ Erreur transfert fichier {filename}: {e}")
             else:
-                print(f"⚠️ Fichier source non trouvé: {source_path}")
+                _journal(f"⚠️ Fichier source non trouvé: {source_path}")
         
         # Lier le ticket à l'incident (et garder la trace dans l'historique de l'incident)
         self.incident_id = incident.id
@@ -16864,7 +16890,7 @@ class TicketSupport(db.Model):
         
         db.session.commit()
         
-        print(f"📊 Résumé conversion: {len(fichiers_transferes)} fichier(s) transféré(s)")
+        _journal(f"📊 Résumé conversion: {len(fichiers_transferes)} fichier(s) transféré(s)")
         
         return incident
     
@@ -17856,7 +17882,7 @@ class ServiceAlerteApprobation:
             except Exception as e:
                 # Logger proprement, ne pas casser le scheduler
                 import traceback
-                print(f"❌ Erreur dans ServiceAlerteApprobation: {e}")
+                _journal(f"❌ Erreur dans ServiceAlerteApprobation: {e}")
                 traceback.print_exc()
                 # Rollback en cas d'erreur
                 try:
@@ -17890,7 +17916,7 @@ class ServiceAlerteApprobation:
         # ============================================
         audits = Audit.query.filter_by(is_archived=False).all()
         
-        print(f"🔍 Vérification des alertes d'approbation pour {len(audits)} audit(s)")
+        _journal(f"🔍 Vérification des alertes d'approbation pour {len(audits)} audit(s)")
         
         try:
             for audit in audits:
@@ -18016,13 +18042,13 @@ class ServiceAlerteApprobation:
             # 5. ✅ UN SEUL COMMIT POUR TOUT
             # ============================================
             db.session.commit()
-            print(f"✅ Alertes d'approbation traitées : {alertes_traitees}")
+            _journal(f"✅ Alertes d'approbation traitées : {alertes_traitees}")
             return alertes_traitees
         
         except Exception as e:
             db.session.rollback()
             import traceback
-            print(f"❌ Erreur lors de la création des alertes : {e}")
+            _journal(f"❌ Erreur lors de la création des alertes : {e}")
             traceback.print_exc()
             return 0
     
@@ -20869,7 +20895,7 @@ class NonConformiteC2N(db.Model):
                     return self.execution.planification.referentiel.nom
             return "-"
         except Exception as e:
-            print(f"⚠️ Erreur accès controle_nom: {e}")
+            _journal(f"⚠️ Erreur accès controle_nom: {e}")
             return "-"
     
     @property
@@ -20880,7 +20906,7 @@ class NonConformiteC2N(db.Model):
                 return self.execution.planification.reference
             return "-"
         except Exception as e:
-            print(f"⚠️ Erreur accès controle_reference: {e}")
+            _journal(f"⚠️ Erreur accès controle_reference: {e}")
             return "-"
     
     @property

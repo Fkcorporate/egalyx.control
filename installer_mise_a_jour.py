@@ -20,6 +20,11 @@ from datetime import datetime
 ICI = os.path.dirname(os.path.abspath(__file__))
 IGNORER = {'installer_mise_a_jour.py', 'A_LIRE_MISE_A_JOUR.txt', '.DS_Store'}
 OPTIONNELS = {'apparence'}          # modules livrés à part (paquet « nouvelle apparence »)
+# Ancienne révision Alembic inachevée (révision parente jamais renseignée) : laissée en place, elle ferait
+# échouer « flask db upgrade » (deux têtes). Elle est rangée là où outils/menage_projet.py range les anciens
+# scripts (« python3 outils/menage_projet.py --restaurer » la remet en place).
+A_RANGER = {'migrations/versions/add_password_security_fields.py':
+            'archives/menage_2026_11/migrations/versions/add_password_security_fields.py'}
 
 
 def main():
@@ -48,6 +53,12 @@ def main():
                 nouveaux.append(rel)
             os.makedirs(os.path.dirname(cible), exist_ok=True)
             shutil.copyfile(source, cible)      # date du jour : aucun cache .pyc ancien ne peut être repris
+    for rel, archive in A_RANGER.items():
+        origine, dest = os.path.join(projet, rel), os.path.join(projet, archive)
+        if os.path.exists(origine) and not os.path.exists(dest):
+            os.makedirs(os.path.dirname(dest), exist_ok=True)
+            shutil.move(origine, dest)
+            print(f'   rangé : {rel} -> {archive}')
     print(f"{len(copies)} fichier(s) remplacé(s) (anciennes versions dans {os.path.basename(sauvegarde)}/), "
           f"{len(nouveaux)} nouveau(x) :")
     for rel in sorted(nouveaux):

@@ -1,3 +1,29 @@
+
+# --- Journal (remplace les anciens print()) : erreurs -> WARNING (journaux du serveur) ; le reste -> DEBUG,
+#     visible seulement avec EGALYX_TRACES=1. Ajouté le 18/11/2026 (ménage).
+import logging as _logging_journal
+import os as _os_journal
+_JOURNAL = _logging_journal.getLogger('egalyx.config')
+_MOTS_ALERTE = ('\u274c', '\u26a0', 'ERREUR', 'Erreur', 'erreur', 'ERROR', 'Error', 'error', 'Exception', 'chec', 'Traceback', 'CRITIQUE')
+if _os_journal.environ.get('EGALYX_TRACES') == '1' and not _JOURNAL.handlers:
+    _JOURNAL.setLevel(_logging_journal.DEBUG)
+    _h = _logging_journal.StreamHandler()
+    _h.setFormatter(_logging_journal.Formatter('%(asctime)s %(name)s %(levelname)s %(message)s'))
+    _JOURNAL.addHandler(_h)
+    _JOURNAL.propagate = False
+
+
+def _journal(*args, sep=' ', **_ignore):
+    """Ancien print() : écrit dans le journal au lieu de la sortie standard."""
+    try:
+        texte = sep.join(str(a) for a in args)
+    except Exception:  # noqa: BLE001
+        return
+    if any(m in texte for m in _MOTS_ALERTE) and not texte.lstrip().startswith(('\u2705', '\u2713')):
+        _JOURNAL.warning(texte)
+    elif _JOURNAL.isEnabledFor(_logging_journal.DEBUG):
+        _JOURNAL.debug(texte)
+# --- fin du journal
 import os
 from datetime import timedelta
 from urllib.parse import urlparse
@@ -27,11 +53,11 @@ class Config:
         SQLALCHEMY_DATABASE_URI = os.environ.get('DATABASE_URL') or 'sqlite:///controle_interne.db'
     
     SQLALCHEMY_TRACK_MODIFICATIONS = False
-    
+
     SQLALCHEMY_SESSION_OPTIONS = {
         "expire_on_commit": False
     }
-    
+
     SQLALCHEMY_ENGINE_OPTIONS = {
         'pool_recycle': 300,
         'pool_pre_ping': True,
@@ -220,9 +246,9 @@ class Config:
             if not os.path.exists(folder):
                 try:
                     os.makedirs(folder, exist_ok=True)
-                    print(f"✅ Dossier créé: {folder}")
+                    _journal(f"✅ Dossier créé: {folder}")
                 except Exception as e:
-                    print(f"⚠️ Erreur création dossier {folder}: {e}")
+                    _journal(f"⚠️ Erreur création dossier {folder}: {e}")
     
     @staticmethod
     def get_database_info():
@@ -237,22 +263,22 @@ class Config:
     @staticmethod
     def print_config_summary():
         """Affiche un résumé de la configuration (sans les mots de passe)"""
-        print("\n" + "="*60)
-        print("📋 RÉSUMÉ DE LA CONFIGURATION")
-        print("="*60)
-        print(f"ENVIRONNEMENT: {'🎯 PRODUCTION (Render)' if IS_RENDER else '🛠️  DÉVELOPPEMENT'}")
-        print(f"SECRET_KEY: {'✅ Définie' if Config.SECRET_KEY and len(Config.SECRET_KEY) > 20 else '⚠️  Faible ou non définie'}")
-        print(f"DATABASE: {Config.get_database_info()}")
-        print(f"DATABASE_URL: {Config.SQLALCHEMY_DATABASE_URI[:50]}...")
-        print(f"MAIL_SERVER: {Config.MAIL_SERVER}")
-        print(f"MAIL_PORT: {Config.MAIL_PORT}")
-        print(f"MAIL_USERNAME: {Config.MAIL_USERNAME}")
-        print(f"MAIL_PASSWORD: {'✅ Définie' if Config.MAIL_PASSWORD else '❌ Non définie'}")
-        print(f"MAIL_DEFAULT_SENDER: {Config.MAIL_DEFAULT_SENDER}")
-        print(f"UPLOAD_BASE: {Config.BASE_UPLOAD_FOLDER}")
-        print(f"DEBUG_MODE: {'✅ Activé' if Config.DEBUG else '❌ Désactivé'}")
-        print(f"HTTPS_ENFORCED: {'✅ Oui' if Config.SESSION_COOKIE_SECURE else '❌ Non'}")
-        print("="*60)
+        _journal("\n" + "="*60)
+        _journal("📋 RÉSUMÉ DE LA CONFIGURATION")
+        _journal("="*60)
+        _journal(f"ENVIRONNEMENT: {'🎯 PRODUCTION (Render)' if IS_RENDER else '🛠️  DÉVELOPPEMENT'}")
+        _journal(f"SECRET_KEY: {'✅ Définie' if Config.SECRET_KEY and len(Config.SECRET_KEY) > 20 else '⚠️  Faible ou non définie'}")
+        _journal(f"DATABASE: {Config.get_database_info()}")
+        _journal(f"DATABASE_URL: {Config.SQLALCHEMY_DATABASE_URI[:50]}...")
+        _journal(f"MAIL_SERVER: {Config.MAIL_SERVER}")
+        _journal(f"MAIL_PORT: {Config.MAIL_PORT}")
+        _journal(f"MAIL_USERNAME: {Config.MAIL_USERNAME}")
+        _journal(f"MAIL_PASSWORD: {'✅ Définie' if Config.MAIL_PASSWORD else '❌ Non définie'}")
+        _journal(f"MAIL_DEFAULT_SENDER: {Config.MAIL_DEFAULT_SENDER}")
+        _journal(f"UPLOAD_BASE: {Config.BASE_UPLOAD_FOLDER}")
+        _journal(f"DEBUG_MODE: {'✅ Activé' if Config.DEBUG else '❌ Désactivé'}")
+        _journal(f"HTTPS_ENFORCED: {'✅ Oui' if Config.SESSION_COOKIE_SECURE else '❌ Non'}")
+        _journal("="*60)
     
     @staticmethod
     def init_app(app):
@@ -265,7 +291,7 @@ class Config:
         
         # Configuration supplémentaire si nécessaire
         if IS_RENDER:
-            print("🚀 Configuration Render détectée")
+            _journal("🚀 Configuration Render détectée")
             # Forcer HTTPS sur Render
             app.config['PREFERRED_URL_SCHEME'] = 'https'
             

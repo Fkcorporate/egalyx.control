@@ -1,3 +1,29 @@
+
+# --- Journal (remplace les anciens print()) : erreurs -> WARNING (journaux du serveur) ; le reste -> DEBUG,
+#     visible seulement avec EGALYX_TRACES=1. Ajouté le 18/11/2026 (ménage).
+import logging as _logging_journal
+import os as _os_journal
+_JOURNAL = _logging_journal.getLogger('egalyx.utils')
+_MOTS_ALERTE = ('\u274c', '\u26a0', 'ERREUR', 'Erreur', 'erreur', 'ERROR', 'Error', 'error', 'Exception', 'chec', 'Traceback', 'CRITIQUE')
+if _os_journal.environ.get('EGALYX_TRACES') == '1' and not _JOURNAL.handlers:
+    _JOURNAL.setLevel(_logging_journal.DEBUG)
+    _h = _logging_journal.StreamHandler()
+    _h.setFormatter(_logging_journal.Formatter('%(asctime)s %(name)s %(levelname)s %(message)s'))
+    _JOURNAL.addHandler(_h)
+    _JOURNAL.propagate = False
+
+
+def _journal(*args, sep=' ', **_ignore):
+    """Ancien print() : écrit dans le journal au lieu de la sortie standard."""
+    try:
+        texte = sep.join(str(a) for a in args)
+    except Exception:  # noqa: BLE001
+        return
+    if any(m in texte for m in _MOTS_ALERTE) and not texte.lstrip().startswith(('\u2705', '\u2713')):
+        _JOURNAL.warning(texte)
+    elif _JOURNAL.isEnabledFor(_logging_journal.DEBUG):
+        _JOURNAL.debug(texte)
+# --- fin du journal
 import matplotlib
 matplotlib.use('Agg')
 import matplotlib.pyplot as plt
@@ -469,7 +495,7 @@ def generer_matrice_classique_propre(evaluations):
     buffer.close()
     plt.close()
 
-    print(f"✅ Matrice CLASSIQUE générée ({len(evaluations)} risques)")
+    _journal(f"✅ Matrice CLASSIQUE générée ({len(evaluations)} risques)")
     return graphic
 
 
@@ -652,7 +678,7 @@ def generer_matrice_criticite_propre(evaluations):
     buffer.close()
     plt.close()
 
-    print(f"✅ Matrice CRITICITÉ générée ({len(risques_valides)} risques)")
+    _journal(f"✅ Matrice CRITICITÉ générée ({len(risques_valides)} risques)")
     return graphic
 
 def generer_matrice_priorisation_propre(evaluations):
@@ -867,7 +893,7 @@ def generer_matrice_priorisation_propre(evaluations):
     buffer.close()
     plt.close()
 
-    print(f"✅ Matrice PRIORISATION générée ({len(evaluations)} risques)")
+    _journal(f"✅ Matrice PRIORISATION générée ({len(evaluations)} risques)")
     return graphic
 
 def calculer_niveau_risque(impact, probabilite):
@@ -910,7 +936,7 @@ def generer_matrice_risques(evaluations, matrice_type='classique'):
     elif matrice_type == 'priorisation':
         return generer_matrice_priorisation_propre(evaluations)
     else:
-        print(f"⚠️ Type inconnu: {matrice_type}, fallback classique")
+        _journal(f"⚠️ Type inconnu: {matrice_type}, fallback classique")
         return generer_matrice_classique_propre(evaluations)
 
 def _generer_matrice_classique_legacy(evaluations, matrice_type='classique'):
@@ -1072,7 +1098,7 @@ def _generer_matrice_classique_legacy(evaluations, matrice_type='classique'):
     buffer.close()
     plt.close()
     
-    print(f"✅ Matrice {matrice_type} générée ({len(evaluations_valides)} risques)")
+    _journal(f"✅ Matrice {matrice_type} générée ({len(evaluations_valides)} risques)")
     return graphic
 
 def diagnostiquer_evaluations_manquantes(cartographie_id):
@@ -1082,11 +1108,11 @@ def diagnostiquer_evaluations_manquantes(cartographie_id):
     
     cartographie = Cartographie.query.get(cartographie_id)
     
-    print(f"🔍 DIAGNOSTIC pour cartographie: {cartographie.nom}")
-    print(f"📊 Total risques: {len(cartographie.risques)}")
+    _journal(f"🔍 DIAGNOSTIC pour cartographie: {cartographie.nom}")
+    _journal(f"📊 Total risques: {len(cartographie.risques)}")
     
     for risque in cartographie.risques:
-        print(f"\n🎯 Risque: {risque.reference} - {len(risque.evaluations)} évaluations")
+        _journal(f"\n🎯 Risque: {risque.reference} - {len(risque.evaluations)} évaluations")
         
         for eval in risque.evaluations:
             impact_conf = eval.impact_conf
@@ -1099,10 +1125,10 @@ def diagnostiquer_evaluations_manquantes(cartographie_id):
             impact_final = impact_conf or impact_val or impact_pre
             prob_final = prob_conf or prob_val or prob_pre
             
-            print(f"   📋 Évaluation {eval.id}:")
-            print(f"      Impact: Conf={impact_conf}, Val={impact_val}, Pre={impact_pre} → Final={impact_final}")
-            print(f"      Probabilité: Conf={prob_conf}, Val={prob_val}, Pre={prob_pre} → Final={prob_final}")
-            print(f"      Valide: {impact_final and prob_final and impact_final > 0 and prob_final > 0}")
+            _journal(f"   📋 Évaluation {eval.id}:")
+            _journal(f"      Impact: Conf={impact_conf}, Val={impact_val}, Pre={impact_pre} → Final={impact_final}")
+            _journal(f"      Probabilité: Conf={prob_conf}, Val={prob_val}, Pre={prob_pre} → Final={prob_final}")
+            _journal(f"      Valide: {impact_final and prob_final and impact_final > 0 and prob_final > 0}")
 
 
 
@@ -1365,7 +1391,7 @@ def generer_matrice_risque_specifique(evaluations, risque_surbrillance=None):
     graphic = base64.b64encode(image_png).decode('utf-8')
     plt.close()
     
-    print(f"✅ Matrice spécifique générée avec légendes bien positionnées")
+    _journal(f"✅ Matrice spécifique générée avec légendes bien positionnées")
     return graphic
 
 def generer_tableau_bordeaux(risques):
@@ -1414,12 +1440,12 @@ def generer_tableau_bordeaux(risques):
             elif niveau == 'Faible':
                 tableau['actions_limitees'].append(entry)
         except Exception as e:
-            print(f"⚠️ Erreur Bordeaux {getattr(risque, 'reference', 'N/A')}: {e}")
+            _journal(f"⚠️ Erreur Bordeaux {getattr(risque, 'reference', 'N/A')}: {e}")
     
     for cat in tableau:
         tableau[cat].sort(key=lambda x: x['score'], reverse=True)
     
-    print(f"📋 Bordeaux: {sum(len(v) for v in tableau.values())} risques")
+    _journal(f"📋 Bordeaux: {sum(len(v) for v in tableau.values())} risques")
     return tableau
 
 def calculer_tendance_kri(mesures, periode_jours=30):
@@ -1494,14 +1520,14 @@ def generer_tableau_bordeaux(risques):
                 tableau['actions_limitees'].append(entry)
 
         except Exception as e:
-            print(f"⚠️ Erreur traitement risque {getattr(risque, 'reference', 'N/A')}: {e}")
+            _journal(f"⚠️ Erreur traitement risque {getattr(risque, 'reference', 'N/A')}: {e}")
             continue
 
     # Trier chaque catégorie par score décroissant
     for categorie in tableau:
         tableau[categorie] = sorted(tableau[categorie], key=lambda x: x['score'], reverse=True)
 
-    print(f"📋 Tableau Bordeaux généré: {sum(len(v) for v in tableau.values())} risques")
+    _journal(f"📋 Tableau Bordeaux généré: {sum(len(v) for v in tableau.values())} risques")
     return tableau
 
 
@@ -1630,10 +1656,10 @@ def mettre_a_jour_statistiques_cartographie(cartographie_id):
     
     cartographie = Cartographie.query.get(cartographie_id)
     if not cartographie:
-        print(f"❌ Cartographie {cartographie_id} non trouvée pour mise à jour statistiques")
+        _journal(f"❌ Cartographie {cartographie_id} non trouvée pour mise à jour statistiques")
         return False
     
-    print(f"📊 Mise à jour statistiques pour cartographie: {cartographie.nom}")
+    _journal(f"📊 Mise à jour statistiques pour cartographie: {cartographie.nom}")
     
     try:
         # 1. Compter les risques actifs
@@ -1716,17 +1742,17 @@ def mettre_a_jour_statistiques_cartographie(cartographie_id):
         
         db.session.commit()
         
-        print(f"✅ Statistiques mises à jour pour {cartographie.nom}:")
-        print(f"   - {risques_actifs} risques actifs")
-        print(f"   - {risques_evalues} risques évalués") 
-        print(f"   - Score moyen: {statistiques['score_moyen']}")
-        print(f"   - Répartition: {statistiques['repartition_niveaux']}")
+        _journal(f"✅ Statistiques mises à jour pour {cartographie.nom}:")
+        _journal(f"   - {risques_actifs} risques actifs")
+        _journal(f"   - {risques_evalues} risques évalués") 
+        _journal(f"   - Score moyen: {statistiques['score_moyen']}")
+        _journal(f"   - Répartition: {statistiques['repartition_niveaux']}")
         
         return True
         
     except Exception as e:
         db.session.rollback()
-        print(f"❌ Erreur mise à jour statistiques cartographie {cartographie_id}: {str(e)}")
+        _journal(f"❌ Erreur mise à jour statistiques cartographie {cartographie_id}: {str(e)}")
         import traceback
         traceback.print_exc()
         return False
@@ -1943,10 +1969,10 @@ def declencher_mise_a_jour_risque(risque_id, action, user_id, donnees=None):
     
     risque = Risque.query.get(risque_id)
     if not risque:
-        print(f"❌ Risque {risque_id} non trouvé pour mise à jour")
+        _journal(f"❌ Risque {risque_id} non trouvé pour mise à jour")
         return
     
-    print(f"🔔 Mise à jour déclenchée: {action} sur risque {risque.reference} (ID: {risque_id})")
+    _journal(f"🔔 Mise à jour déclenchée: {action} sur risque {risque.reference} (ID: {risque_id})")
     
     try:
         if action == 'creation':
@@ -1973,20 +1999,20 @@ def declencher_mise_a_jour_risque(risque_id, action, user_id, donnees=None):
         # Forcer la regénération des matrices
         if risque.cartographie_id:
             regenerer_matrices_cartographie(risque.cartographie_id)
-            print(f"🎨 Matrices de la cartographie {risque.cartographie_id} à regénérer")
+            _journal(f"🎨 Matrices de la cartographie {risque.cartographie_id} à regénérer")
         
         # SYNCHRONISATION GLOBALE APRÈS CHAQUE ACTION IMPORTANTE
         if action in ['creation', 'evaluation', 'archivage', 'restauration', 'suppression', 'modification']:
             synchroniser_donnees_globales()
-            print(f"🔄 Synchronisation globale déclenchée après {action}")
+            _journal(f"🔄 Synchronisation globale déclenchée après {action}")
         
         # Validation finale
         db.session.commit()
-        print(f"✅ Mise à jour {action} terminée avec succès pour risque {risque.reference}")
+        _journal(f"✅ Mise à jour {action} terminée avec succès pour risque {risque.reference}")
         
     except Exception as e:
         db.session.rollback()
-        print(f"❌ Erreur lors de la mise à jour {action}: {str(e)}")
+        _journal(f"❌ Erreur lors de la mise à jour {action}: {str(e)}")
         raise
 
 def mise_a_jour_apres_creation_risque(risque, user_id):
@@ -2004,7 +2030,7 @@ def mise_a_jour_apres_creation_risque(risque, user_id):
     mettre_a_jour_indicateurs_cartographie(cartographie.id)
     
     db.session.commit()
-    print(f"✅ Risque {risque.reference} créé - Cartographie {cartographie.nom} mise à jour")
+    _journal(f"✅ Risque {risque.reference} créé - Cartographie {cartographie.nom} mise à jour")
 
 def mise_a_jour_apres_evaluation_risque(risque, user_id, donnees_evaluation):
     """Mises à jour après évaluation d'un risque"""
@@ -2026,7 +2052,7 @@ def mise_a_jour_apres_evaluation_risque(risque, user_id, donnees_evaluation):
     generer_alerte_evaluation_risque(risque, user_id, donnees_evaluation)
     
     db.session.commit()
-    print(f"✅ Risque {risque.reference} évalué - Niveau: {donnees_evaluation.get('niveau_risque')}")
+    _journal(f"✅ Risque {risque.reference} évalué - Niveau: {donnees_evaluation.get('niveau_risque')}")
 
 def mise_a_jour_apres_archivage_risque(risque, user_id, motif):
     """Mises à jour après archivage d'un risque"""
@@ -2045,7 +2071,7 @@ def mise_a_jour_apres_archivage_risque(risque, user_id, motif):
     notifier_archivage_risque(risque, user_id)
     
     db.session.commit()
-    print(f"✅ Risque {risque.reference} archivé")
+    _journal(f"✅ Risque {risque.reference} archivé")
 
 def mise_a_jour_apres_restauration_risque(risque, user_id):
     """Mises à jour après restauration d'un risque"""
@@ -2061,7 +2087,7 @@ def mise_a_jour_apres_restauration_risque(risque, user_id):
     mettre_a_jour_statistiques_cartographie(risque.cartographie_id)
     
     db.session.commit()
-    print(f"✅ Risque {risque.reference} restauré")
+    _journal(f"✅ Risque {risque.reference} restauré")
 
 def mise_a_jour_apres_modification_risque(risque, user_id, modifications):
     """Mises à jour après modification d'un risque"""
@@ -2078,7 +2104,7 @@ def mise_a_jour_apres_modification_risque(risque, user_id, modifications):
         regenerer_matrices_cartographie(risque.cartographie_id)
     
     db.session.commit()
-    print(f"✅ Risque {risque.reference} modifié")
+    _journal(f"✅ Risque {risque.reference} modifié")
 
 def mise_a_jour_apres_suppression_risque(risque, user_id):
     """Mises à jour après suppression d'un risque"""
@@ -2095,7 +2121,7 @@ def mise_a_jour_apres_suppression_risque(risque, user_id):
     # 3. Nettoyer les données orphelines
     nettoyer_donnees_orphelines()
     
-    print(f"✅ Risque {risque.reference} supprimé")
+    _journal(f"✅ Risque {risque.reference} supprimé")
 
 def mettre_a_jour_indicateurs_cartographie(cartographie_id):
     """Mettre à jour tous les indicateurs d'une cartographie"""
@@ -2145,14 +2171,14 @@ def mettre_a_jour_indicateurs_cartographie(cartographie_id):
     }
     
     db.session.commit()
-    print(f"📊 Indicateurs recalculés pour {cartographie.nom}: {risques_actifs} risques actifs")
+    _journal(f"📊 Indicateurs recalculés pour {cartographie.nom}: {risques_actifs} risques actifs")
 
 def synchroniser_donnees_globales():
     """Synchronise toutes les données entre les différentes vues"""
     from models import db, Risque, Cartographie, EvaluationRisque
     from sqlalchemy import func, and_
     
-    print("🔄 SYNCHRONISATION GLOBALE DES DONNÉES...")
+    _journal("🔄 SYNCHRONISATION GLOBALE DES DONNÉES...")
     
     try:
         # 1. Synchroniser les compteurs de risques
@@ -2181,13 +2207,13 @@ def synchroniser_donnees_globales():
         for carto in cartographies:
             mettre_a_jour_indicateurs_cartographie(carto.id)
         
-        print(f"✅ Synchronisation terminée: {total_risques_actifs} risques actifs")
-        print(f"📊 Répartition: {dict(niveaux)}")
+        _journal(f"✅ Synchronisation terminée: {total_risques_actifs} risques actifs")
+        _journal(f"📊 Répartition: {dict(niveaux)}")
         
         return True
         
     except Exception as e:
-        print(f"❌ Erreur synchronisation: {str(e)}")
+        _journal(f"❌ Erreur synchronisation: {str(e)}")
         return False
 
 
@@ -2200,7 +2226,7 @@ def mettre_a_jour_tableau_bordeaux(cartographie_id):
     cartographie = Cartographie.query.get(cartographie_id)
     if cartographie:
         # Le tableau de Bordeaux sera regénéré à la prochaine consultation
-        print(f"🔄 Tableau de Bordeaux à regénérer pour {cartographie.nom}")
+        _journal(f"🔄 Tableau de Bordeaux à regénérer pour {cartographie.nom}")
 
 def verifier_alertes_seuil_risque(risque, evaluation):
     """Vérifier et créer des alertes si seuil dépassé"""
@@ -2222,7 +2248,7 @@ def verifier_alertes_seuil_risque(risque, evaluation):
         )
         db.session.add(alerte)
         db.session.commit()  # AJOUTER LE COMMIT
-        print(f"🚨 Alerte créée pour risque {risque.reference} - Niveau: {niveau}")
+        _journal(f"🚨 Alerte créée pour risque {risque.reference} - Niveau: {niveau}")
 
 def mettre_a_jour_kri_risque(risque):
     """Mettre à jour les KRI associés à un risque"""
@@ -2235,7 +2261,7 @@ def mettre_a_jour_kri_risque(risque):
         # Ajuster les seuils du KRI si nécessaire
         if derniere_eval.niveau_risque == 'Critique' and kri.seuil_critique:
             # Vérifier si le KRI est cohérent avec le niveau de risque
-            print(f"📈 KRI {kri.nom} vérifié pour risque {risque.reference}")
+            _journal(f"📈 KRI {kri.nom} vérifié pour risque {risque.reference}")
 
 def desactiver_kri_risque(risque_id):
     """Désactiver les KRI d'un risque archivé"""
@@ -2246,7 +2272,7 @@ def desactiver_kri_risque(risque_id):
         kri.est_actif = False
         kri.updated_at = datetime.utcnow()
         db.session.commit()  # AJOUTER LE COMMIT
-        print(f"🔴 KRI {kri.nom} désactivé")
+        _journal(f"🔴 KRI {kri.nom} désactivé")
 
 def reactiver_kri_risque(risque_id):
     """Réactiver les KRI d'un risque restauré"""
@@ -2257,7 +2283,7 @@ def reactiver_kri_risque(risque_id):
         kri.est_actif = True
         kri.updated_at = datetime.utcnow()
         db.session.commit()  # AJOUTER LE COMMIT
-        print(f"🟢 KRI {kri.nom} réactivé")
+        _journal(f"🟢 KRI {kri.nom} réactivé")
 
 def mettre_a_jour_statistiques_globales():
     """Mettre à jour les statistiques globales de l'application"""
@@ -2272,7 +2298,7 @@ def mettre_a_jour_statistiques_globales():
     }
     
     # Stocker ces statistiques (dans une table dédiée ou en cache)
-    print("🌍 Statistiques globales mises à jour")
+    _journal("🌍 Statistiques globales mises à jour")
 
 def generer_rapport_archivage(risque, user_id, motif):
     """Générer un rapport d'archivage"""
@@ -2286,7 +2312,7 @@ def generer_rapport_archivage(risque, user_id, motif):
         'kri_desactives': 1 if risque.kri else 0
     }
     
-    print(f"📋 Rapport d'archivage généré pour {risque.reference}")
+    _journal(f"📋 Rapport d'archivage généré pour {risque.reference}")
 
 def historiser_modifications_risque(risque, user_id, modifications):
     """Historiser les modifications d'un risque"""
@@ -2301,12 +2327,12 @@ def historiser_modifications_risque(risque, user_id, modifications):
     )
     db.session.add(historique)
     db.session.commit()  # AJOUTER LE COMMIT
-    print(f"📝 Historique modif risque {risque.reference}")
+    _journal(f"📝 Historique modif risque {risque.reference}")
 
 def regenerer_matrices_cartographie(cartographie_id):
     """Forcer la regénération des matrices au prochain accès"""
     # On pourrait implémenter un cache ici
-    print(f"🎨 Matrices à regénérer pour cartographie {cartographie_id}")
+    _journal(f"🎨 Matrices à regénérer pour cartographie {cartographie_id}")
 
 def synchroniser_cartographie_apres_action(cartographie_id, action_type, user_id):
     """Synchronise toutes les vues après une action sur une cartographie"""
@@ -2316,7 +2342,7 @@ def synchroniser_cartographie_apres_action(cartographie_id, action_type, user_id
     if not cartographie:
         return
     
-    print(f"🔄 Synchronisation: {action_type} sur cartographie {cartographie.nom}")
+    _journal(f"🔄 Synchronisation: {action_type} sur cartographie {cartographie.nom}")
     
     # 1. Mettre à jour le timestamp de la cartographie
     cartographie.updated_at = datetime.utcnow()
@@ -2329,7 +2355,7 @@ def synchroniser_cartographie_apres_action(cartographie_id, action_type, user_id
     
     db.session.commit()
     
-    print(f"✅ Cartographie {cartographie.nom} synchronisée")
+    _journal(f"✅ Cartographie {cartographie.nom} synchronisée")
 
 def recalculer_indicateurs_cartographie(cartographie_id):
     """Recalcule tous les indicateurs d'une cartographie"""
@@ -2379,14 +2405,14 @@ def recalculer_indicateurs_cartographie(cartographie_id):
     }
     
     db.session.commit()  # AJOUTER LE COMMIT
-    print(f"📊 Indicateurs recalculés pour {cartographie.nom}")
+    _journal(f"📊 Indicateurs recalculés pour {cartographie.nom}")
 
 def invalider_cache_cartographie(cartographie_id):
     """Invalide le cache pour forcer le recalcul des vues"""
     # Implémentation simple - vous pouvez utiliser Redis ou un cache mémoire
     cache_key = f"cartographie_{cartographie_id}_stats"
     # Supprimer le cache si existant
-    print(f"🗑️ Cache invalidé pour cartographie {cartographie_id}")
+    _journal(f"🗑️ Cache invalidé pour cartographie {cartographie_id}")
 
 def generer_alerte_creation_risque(risque, user_id):
     """Générer une alerte lors de la création d'un risque"""
@@ -2404,9 +2430,9 @@ def generer_alerte_creation_risque(risque, user_id):
         )
         db.session.add(alerte)
         db.session.commit()  # AJOUTER LE COMMIT
-        print(f"📢 Alerte créée pour nouveau risque {risque.reference}")
+        _journal(f"📢 Alerte créée pour nouveau risque {risque.reference}")
     except Exception as e:
-        print(f"❌ Erreur création alerte: {str(e)}")
+        _journal(f"❌ Erreur création alerte: {str(e)}")
 
 def generer_alerte_evaluation_risque(risque, user_id, donnees_evaluation):
     """Générer une alerte lors de l'évaluation d'un risque"""
@@ -2427,9 +2453,9 @@ def generer_alerte_evaluation_risque(risque, user_id, donnees_evaluation):
         )
         db.session.add(alerte)
         db.session.commit()  # AJOUTER LE COMMIT
-        print(f"📢 Alerte évaluation risque {risque.reference}")
+        _journal(f"📢 Alerte évaluation risque {risque.reference}")
     except Exception as e:
-        print(f"❌ Erreur alerte évaluation: {str(e)}")
+        _journal(f"❌ Erreur alerte évaluation: {str(e)}")
 
 def notifier_archivage_risque(risque, user_id):
     """Notifier l'archivage d'un risque"""
@@ -2447,41 +2473,41 @@ def notifier_archivage_risque(risque, user_id):
         )
         db.session.add(alerte)
         db.session.commit()  # AJOUTER LE COMMIT
-        print(f"📢 Notification archivage risque {risque.reference}")
+        _journal(f"📢 Notification archivage risque {risque.reference}")
     except Exception as e:
-        print(f"❌ Erreur notification archivage: {str(e)}")
+        _journal(f"❌ Erreur notification archivage: {str(e)}")
 
 def generer_rapport_archivage(risque, user_id, motif):
     """Générer un rapport d'archivage"""
-    print(f"📋 Rapport d'archivage généré pour {risque.reference}")
-    print(f"   - Motif: {motif}")
-    print(f"   - Archivé par: {user_id}")
-    print(f"   - Date: {datetime.utcnow()}")
+    _journal(f"📋 Rapport d'archivage généré pour {risque.reference}")
+    _journal(f"   - Motif: {motif}")
+    _journal(f"   - Archivé par: {user_id}")
+    _journal(f"   - Date: {datetime.utcnow()}")
 
 def generer_rapport_suppression(risque, user_id):
     """Générer un rapport de suppression"""
-    print(f"🗑️ Rapport suppression généré pour {risque.reference}")
-    print(f"   - Supprimé par: {user_id}")
-    print(f"   - Date: {datetime.utcnow()}")
+    _journal(f"🗑️ Rapport suppression généré pour {risque.reference}")
+    _journal(f"   - Supprimé par: {user_id}")
+    _journal(f"   - Date: {datetime.utcnow()}")
 
 def historiser_modifications_risque(risque, user_id, modifications):
     """Historiser les modifications d'un risque"""
     from models import db
-    print(f"📝 Historique modif risque {risque.reference}")
-    print(f"   - Modifications: {modifications}")
-    print(f"   - Par utilisateur: {user_id}")
+    _journal(f"📝 Historique modif risque {risque.reference}")
+    _journal(f"   - Modifications: {modifications}")
+    _journal(f"   - Par utilisateur: {user_id}")
 
 def mettre_a_jour_references_croisees(risque, modifications):
     """Mettre à jour les références croisées"""
-    print(f"🔗 Mise à jour références croisées pour {risque.reference}")
+    _journal(f"🔗 Mise à jour références croisées pour {risque.reference}")
 
 def nettoyer_donnees_orphelines():
     """Nettoyer les données orphelines"""
-    print("🧹 Nettoyage données orphelines")
+    _journal("🧹 Nettoyage données orphelines")
 
 def invalider_cache_cartographie(cartographie_id):
     """Invalider le cache d'une cartographie"""
-    print(f"🗑️ Cache invalidé pour cartographie {cartographie_id}")
+    _journal(f"🗑️ Cache invalidé pour cartographie {cartographie_id}")
 
 def synchroniser_cartographie_complete(cartographie_id):
     """Synchronise complètement une cartographie après modification"""
@@ -2492,7 +2518,7 @@ def synchroniser_cartographie_complete(cartographie_id):
         return False
     
     try:
-        print(f"🔄 Début synchronisation cartographie {cartographie_id}: {cartographie.nom}")
+        _journal(f"🔄 Début synchronisation cartographie {cartographie_id}: {cartographie.nom}")
         
         # 1. Synchroniser les relations direction/service
         if cartographie.direction_id:
@@ -2532,7 +2558,7 @@ def synchroniser_cartographie_complete(cartographie_id):
                     risques_modifies += 1
                     db.session.add(risque)
         
-        print(f"📝 {risques_modifies} risques mis à jour")
+        _journal(f"📝 {risques_modifies} risques mis à jour")
         
         # 3. Mettre à jour le timestamp
         cartographie.updated_at = datetime.utcnow()
@@ -2544,12 +2570,12 @@ def synchroniser_cartographie_complete(cartographie_id):
         invalider_cache_cartographie(cartographie_id)
         
         db.session.commit()
-        print(f"✅ Cartographie {cartographie.nom} synchronisée")
+        _journal(f"✅ Cartographie {cartographie.nom} synchronisée")
         return True
         
     except Exception as e:
         db.session.rollback()
-        print(f"❌ Erreur synchronisation cartographie {cartographie_id}: {str(e)}")
+        _journal(f"❌ Erreur synchronisation cartographie {cartographie_id}: {str(e)}")
         import traceback
         traceback.print_exc()
         return False
@@ -2560,7 +2586,7 @@ def synchroniser_cartographie_apres_archivage(cartographie_id, user_id):
     from models import db, Cartographie  # IMPORTANT: importer db
     
     try:
-        print(f"🔄 Synchronisation après archivage cartographie {cartographie_id}")
+        _journal(f"🔄 Synchronisation après archivage cartographie {cartographie_id}")
         
         cartographie = Cartographie.query.get(cartographie_id)
         if not cartographie:
@@ -2575,11 +2601,11 @@ def synchroniser_cartographie_apres_archivage(cartographie_id, user_id):
         # 3. Mettre à jour le cache
         invalider_cache_cartographie(cartographie_id)
         
-        print(f"✅ Synchronisation après archivage terminée pour cartographie {cartographie_id}")
+        _journal(f"✅ Synchronisation après archivage terminée pour cartographie {cartographie_id}")
         return True
         
     except Exception as e:
-        print(f"❌ Erreur synchronisation après archivage: {str(e)}")
+        _journal(f"❌ Erreur synchronisation après archivage: {str(e)}")
         import traceback
         traceback.print_exc()
         return False
@@ -2666,13 +2692,13 @@ def notifier_archivage_cartographie(cartographie_id, user_id):
         
         if notifications_count > 0:
             db.session.commit()
-            print(f"📢 {notifications_count} notifications d'archivage envoyées")
+            _journal(f"📢 {notifications_count} notifications d'archivage envoyées")
         else:
-            print(f"ℹ️ Aucune notification nécessaire")
+            _journal(f"ℹ️ Aucune notification nécessaire")
             
     except Exception as e:
         db.session.rollback()
-        print(f"❌ Erreur envoi notifications: {str(e)}")
+        _journal(f"❌ Erreur envoi notifications: {str(e)}")
 
 
 def generer_rapport_archivage_cartographie(cartographie_id, user_id):
@@ -2708,11 +2734,11 @@ def generer_rapport_archivage_cartographie(cartographie_id, user_id):
         db.session.add(journal_entry)
         db.session.commit()
         
-        print(f"📋 Rapport d'archivage généré pour cartographie {cartographie_id}")
+        _journal(f"📋 Rapport d'archivage généré pour cartographie {cartographie_id}")
         
     except Exception as e:
         db.session.rollback()
-        print(f"❌ Erreur génération rapport archivage: {str(e)}")
+        _journal(f"❌ Erreur génération rapport archivage: {str(e)}")
 
 
 def recalculer_indicateurs_cartographie(cartographie_id):
@@ -2763,13 +2789,13 @@ def recalculer_indicateurs_cartographie(cartographie_id):
         if hasattr(cartographie, 'score_moyen_risque'):
             cartographie.score_moyen_risque = score_moyen
         
-        print(f"📊 Indicateurs recalculés pour cartographie {cartographie_id}")
-        print(f"   - Risques actifs: {nb_risques_actifs}")
-        print(f"   - Niveaux: {niveaux_risques}")
-        print(f"   - Score moyen: {score_moyen:.2f}")
+        _journal(f"📊 Indicateurs recalculés pour cartographie {cartographie_id}")
+        _journal(f"   - Risques actifs: {nb_risques_actifs}")
+        _journal(f"   - Niveaux: {niveaux_risques}")
+        _journal(f"   - Score moyen: {score_moyen:.2f}")
         
     except Exception as e:
-        print(f"❌ Erreur recalcul indicateurs: {str(e)}")
+        _journal(f"❌ Erreur recalcul indicateurs: {str(e)}")
 
 
 def invalider_cache_cartographie(cartographie_id):
@@ -2779,10 +2805,10 @@ def invalider_cache_cartographie(cartographie_id):
         # Par exemple, supprimer des fichiers ou vider des clés Redis
         
         # Pour l'instant, juste un log
-        print(f"🗑️ Cache invalidé pour cartographie {cartographie_id}")
+        _journal(f"🗑️ Cache invalidé pour cartographie {cartographie_id}")
         
     except Exception as e:
-        print(f"⚠️ Erreur invalidation cache: {str(e)}")
+        _journal(f"⚠️ Erreur invalidation cache: {str(e)}")
 
 
 def dupliquer_cartographie_complete(cartographie_id, user_id):
@@ -2794,7 +2820,7 @@ def dupliquer_cartographie_complete(cartographie_id, user_id):
         return None
     
     try:
-        print(f"🔄 Début duplication cartographie {cartographie_id}: {cartographie_origine.nom}")
+        _journal(f"🔄 Début duplication cartographie {cartographie_id}: {cartographie_origine.nom}")
         
         # Créer une nouvelle cartographie
         nouvelle_cartographie = Cartographie(
@@ -2810,7 +2836,7 @@ def dupliquer_cartographie_complete(cartographie_id, user_id):
         db.session.add(nouvelle_cartographie)
         db.session.flush()  # Pour obtenir l'ID
         
-        print(f"✅ Nouvelle cartographie créée: {nouvelle_cartographie.id}")
+        _journal(f"✅ Nouvelle cartographie créée: {nouvelle_cartographie.id}")
         
         # Dictionnaire pour mapper les anciens IDs aux nouveaux
         risques_map = {}
@@ -2839,7 +2865,7 @@ def dupliquer_cartographie_complete(cartographie_id, user_id):
                 # Mapper l'ancien ID au nouveau
                 risques_map[risque_origine.id] = nouveau_risque.id
                 
-                print(f"📝 Risque dupliqué: {risque_origine.id} -> {nouveau_risque.id}")
+                _journal(f"📝 Risque dupliqué: {risque_origine.id} -> {nouveau_risque.id}")
         
         db.session.commit()
         
@@ -2919,13 +2945,13 @@ def dupliquer_cartographie_complete(cartographie_id, user_id):
         # Recalculer les indicateurs de la nouvelle cartographie
         recalculer_indicateurs_cartographie(nouvelle_cartographie.id)
         
-        print(f"✅ Duplication terminée. Nouvelle cartographie: {nouvelle_cartographie.id}")
+        _journal(f"✅ Duplication terminée. Nouvelle cartographie: {nouvelle_cartographie.id}")
         
         return nouvelle_cartographie.id
         
     except Exception as e:
         db.session.rollback()
-        print(f"❌ Erreur duplication cartographie: {str(e)}")
+        _journal(f"❌ Erreur duplication cartographie: {str(e)}")
         import traceback
         traceback.print_exc()
         return None
@@ -2996,7 +3022,7 @@ def synchronisation_automatique():
     """Synchronisation automatique lancée périodiquement"""
     from models import Cartographie
     
-    print("🔄 SYNCHRONISATION AUTOMATIQUE EN COURS...")
+    _journal("🔄 SYNCHRONISATION AUTOMATIQUE EN COURS...")
     
     cartographies = Cartographie.query.all()
     results = []
@@ -3022,7 +3048,7 @@ def synchronisation_automatique():
                 'raison': 'Déjà à jour'
             })
     
-    print(f"✅ Synchronisation automatique terminée: {len([r for r in results if r['synchronisee']])}/{len(results)} cartographies")
+    _journal(f"✅ Synchronisation automatique terminée: {len([r for r in results if r['synchronisee']])}/{len(results)} cartographies")
     return results
 
 
@@ -3035,7 +3061,7 @@ def synchroniser_processus_apres_modification(processus_id, action_type, user_id
         processus.updated_at = datetime.utcnow()
         db.session.commit()
         
-        print(f"🔄 Processus {processus.nom} synchronisé après {action_type}")
+        _journal(f"🔄 Processus {processus.nom} synchronisé après {action_type}")
         
         # Synchronisation globale
         synchroniser_donnees_globales()
@@ -3061,7 +3087,7 @@ def synchroniser_organigramme_fluide(processus_id):
             db.session.delete(lien)
     
     db.session.commit()
-    print(f"✅ Organigramme fluide synchronisé pour le processus {processus_id}")
+    _journal(f"✅ Organigramme fluide synchronisé pour le processus {processus_id}")
 
 def synchroniser_evaluation_triphase(risque_id):
     """Synchronise automatiquement après une évaluation triphase"""
@@ -3071,7 +3097,7 @@ def synchroniser_evaluation_triphase(risque_id):
     if not risque:
         return
     
-    print(f"🔄 Synchronisation évaluation triphase pour risque {risque.reference}")
+    _journal(f"🔄 Synchronisation évaluation triphase pour risque {risque.reference}")
     
     try:
         # 1. Mettre à jour les indicateurs de la cartographie
@@ -3090,18 +3116,18 @@ def synchroniser_evaluation_triphase(risque_id):
         
         db.session.commit()
         
-        print(f"✅ Synchronisation terminée pour risque {risque.reference}")
+        _journal(f"✅ Synchronisation terminée pour risque {risque.reference}")
         
     except Exception as e:
         db.session.rollback()
-        print(f"❌ Erreur synchronisation: {str(e)}")
+        _journal(f"❌ Erreur synchronisation: {str(e)}")
 
 def synchroniser_donnees_globales():
     """Synchronise toutes les données entre les différentes vues"""
     from models import db, Risque, Cartographie, EvaluationRisque
     from sqlalchemy import func, and_
     
-    print("🔄 SYNCHRONISATION GLOBALE DES DONNÉES...")
+    _journal("🔄 SYNCHRONISATION GLOBALE DES DONNÉES...")
     
     try:
         # 1. Synchroniser les compteurs de risques
@@ -3130,13 +3156,13 @@ def synchroniser_donnees_globales():
         for carto in cartographies:
             mettre_a_jour_indicateurs_cartographie(carto.id)
         
-        print(f"✅ Synchronisation terminée: {total_risques_actifs} risques actifs")
-        print(f"📊 Répartition: {dict(niveaux)}")
+        _journal(f"✅ Synchronisation terminée: {total_risques_actifs} risques actifs")
+        _journal(f"📊 Répartition: {dict(niveaux)}")
         
         return True
         
     except Exception as e:
-        print(f"❌ Erreur synchronisation: {str(e)}")
+        _journal(f"❌ Erreur synchronisation: {str(e)}")
         return False
 
 def generer_matrice_cotation_classique():
@@ -3250,10 +3276,10 @@ def generer_graphique_kri(kri, mesures=None, format='base64'):
     
     # 🔥 CORRECTION : accepter 1 seule mesure (avec juste un point)
     if not mesures or len(mesures) < 1:
-        print(f"⚠️ Pas de mesures pour {kri.nom}")
+        _journal(f"⚠️ Pas de mesures pour {kri.nom}")
         return None
     
-    print(f"📊 Génération graphique pour {kri.nom} : {len(mesures)} mesures")
+    _journal(f"📊 Génération graphique pour {kri.nom} : {len(mesures)} mesures")
     
     # ============================================
     # PRÉPARATION DES DONNÉES
@@ -3454,7 +3480,7 @@ def synchroniser_kri_automatique():
     from models import KRI, MesureKRI, Risque, db
     from datetime import datetime, timedelta
     
-    print("🔄 SYNCHRONISATION AUTOMATIQUE DES KRI...")
+    _journal("🔄 SYNCHRONISATION AUTOMATIQUE DES KRI...")
     
     try:
         kris = KRI.query.filter_by(est_actif=True).all()
@@ -3477,12 +3503,12 @@ def synchroniser_kri_automatique():
                 verifier_alertes_kri(kri)
         
         db.session.commit()
-        print(f"✅ {kris_synchronises}/{len(kris)} KRI synchronisés")
+        _journal(f"✅ {kris_synchronises}/{len(kris)} KRI synchronisés")
         return True
         
     except Exception as e:
         db.session.rollback()
-        print(f"❌ Erreur synchronisation KRI: {str(e)}")
+        _journal(f"❌ Erreur synchronisation KRI: {str(e)}")
         return False
 
 def verifier_alertes_kri(kri):
@@ -3542,7 +3568,7 @@ def synchroniser_kri_risque(risque_id):
         verifier_alertes_kri(kri)
         
         db.session.commit()
-        print(f"✅ KRI {kri.nom} synchronisé pour risque {risque.reference}")
+        _journal(f"✅ KRI {kri.nom} synchronisé pour risque {risque.reference}")
         return True
     
     return False
@@ -3552,12 +3578,12 @@ def synchroniser_matrices_apres_evaluation_triphase(cartographie_id, risque_id=N
     """Synchronise toutes les matrices après une évaluation triphase"""
     from models import Cartographie
     
-    print(f"🔄 Synchronisation matrices après évaluation triphase - Carto: {cartographie_id}, Risque: {risque_id}")
+    _journal(f"🔄 Synchronisation matrices après évaluation triphase - Carto: {cartographie_id}, Risque: {risque_id}")
     
     try:
         cartographie = Cartographie.query.get(cartographie_id)
         if not cartographie:
-            print(f"❌ Cartographie {cartographie_id} non trouvée")
+            _journal(f"❌ Cartographie {cartographie_id} non trouvée")
             return False
         
         # Forcer la regénération des matrices
@@ -3566,18 +3592,18 @@ def synchroniser_matrices_apres_evaluation_triphase(cartographie_id, risque_id=N
         # Mettre à jour les statistiques
         mettre_a_jour_statistiques_cartographie(cartographie_id)
         
-        print(f"✅ Matrices synchronisées pour cartographie {cartographie.nom}")
+        _journal(f"✅ Matrices synchronisées pour cartographie {cartographie.nom}")
         return True
         
     except Exception as e:
-        print(f"❌ Erreur synchronisation matrices: {str(e)}")
+        _journal(f"❌ Erreur synchronisation matrices: {str(e)}")
         return False
     
 def invalider_cache_matrices(cartographie_id):
     """Invalide le cache des matrices de façon robuste - À PLACER DANS utils.py"""
     from models import Cartographie
     
-    print(f"🗑️ Invalidation du cache pour cartographie {cartographie_id}")
+    _journal(f"🗑️ Invalidation du cache pour cartographie {cartographie_id}")
     
     # Liste des clés de cache à invalider
     cache_keys = [
@@ -3594,7 +3620,7 @@ def invalider_cache_matrices(cartographie_id):
     for key in cache_keys:
         # Si vous utilisez un cache Redis ou mémoire :
         # cache.delete(key)
-        print(f"   🔸 Cache invalidé: {key}")
+        _journal(f"   🔸 Cache invalidé: {key}")
     
     # Forcer le recalcul au prochain affichage en mettant à jour le timestamp
     try:
@@ -3603,9 +3629,9 @@ def invalider_cache_matrices(cartographie_id):
             cartographie.derniere_sync_matrices = datetime.utcnow()
             # Si vous avez un champ pour forcer le recalcul :
             # cartographie.a_besoin_recalcul = True
-            print(f"   🔸 Timestamp de synchronisation mis à jour")
+            _journal(f"   🔸 Timestamp de synchronisation mis à jour")
     except Exception as e:
-        print(f"   ⚠️ Erreur mise à jour timestamp: {e}")
+        _journal(f"   ⚠️ Erreur mise à jour timestamp: {e}")
     
     return True
 
@@ -3615,7 +3641,7 @@ def synchroniser_scores_apres_evaluation_triphase(risque_id):
     
     risque = Risque.query.get(risque_id)
     if not risque:
-        print(f"❌ Risque {risque_id} non trouvé pour synchronisation")
+        _journal(f"❌ Risque {risque_id} non trouvé pour synchronisation")
         return False
     
     try:
@@ -3644,7 +3670,7 @@ def synchroniser_scores_apres_evaluation_triphase(risque_id):
                 
                 db.session.commit()
                 
-                print(f"✅ Scores synchronisés pour {risque.reference}: {impact_final}×{probabilite_final}={score_final} → {niveau_final}")
+                _journal(f"✅ Scores synchronisés pour {risque.reference}: {impact_final}×{probabilite_final}={score_final} → {niveau_final}")
                 
                 # Déclencher les mises à jour globales
                 declencher_mise_a_jour_risque(risque_id, 'evaluation', 1, {
@@ -3660,7 +3686,7 @@ def synchroniser_scores_apres_evaluation_triphase(risque_id):
         
     except Exception as e:
         db.session.rollback()
-        print(f"❌ Erreur synchronisation scores: {str(e)}")
+        _journal(f"❌ Erreur synchronisation scores: {str(e)}")
         return False
 
 def log_system(level, module, message, details=None, ip_address=None):
@@ -3675,9 +3701,9 @@ def log_system(level, module, message, details=None, ip_address=None):
         )
         db.session.add(log)
         db.session.commit()
-        print(f"[{level.upper()}] {module}: {message}")
+        _journal(f"[{level.upper()}] {module}: {message}")
     except Exception as e:
-        print(f"❌ Erreur journalisation système: {e}")
+        _journal(f"❌ Erreur journalisation système: {e}")
 
 
 def create_notification(user_id, type, title, message, entity_type=None, entity_id=None):
@@ -3803,12 +3829,12 @@ class GestionnaireParametrage:
                         db.session.add(champ_perso)
             
             db.session.commit()
-            print(f"✅ Champs personnalisés sauvegardés pour risque {risque_id}")
+            _journal(f"✅ Champs personnalisés sauvegardés pour risque {risque_id}")
             return True
             
         except Exception as e:
             db.session.rollback()
-            print(f"❌ Erreur sauvegarde champs personnalisés: {e}")
+            _journal(f"❌ Erreur sauvegarde champs personnalisés: {e}")
             return False
     
     @staticmethod
@@ -3862,11 +3888,11 @@ class GestionnaireParametrage:
             db.session.add(fichier_risque)
             db.session.commit()
             
-            print(f"✅ Fichier téléversé: {filename} pour risque {risque_id}")
+            _journal(f"✅ Fichier téléversé: {filename} pour risque {risque_id}")
             return fichier_risque
             
         except Exception as e:
-            print(f"❌ Erreur téléversement fichier: {e}")
+            _journal(f"❌ Erreur téléversement fichier: {e}")
             # Supprimer le fichier s'il a été partiellement créé
             if os.path.exists(filepath):
                 os.remove(filepath)
@@ -3889,7 +3915,7 @@ class GestionnaireParametrage:
         from app import db
         from models import Risque, ChampPersonnaliseRisque
         
-        print(f"🔄 Synchronisation champ ajouté: {champ.nom_technique}")
+        _journal(f"🔄 Synchronisation champ ajouté: {champ.nom_technique}")
         
         # Pour les champs obligatoires, créer des entrées vides pour tous les risques existants
         if champ.est_obligatoire and champ.est_actif:
@@ -3916,12 +3942,12 @@ class GestionnaireParametrage:
                     db.session.add(champ_perso)
             
             db.session.commit()
-            print(f"✅ Champ ajouté à {len(risques)} risques existants")
+            _journal(f"✅ Champ ajouté à {len(risques)} risques existants")
     
     @staticmethod
     def synchroniser_modification_champ(champ):
         """Synchroniser la modification d'un champ"""
-        print(f"🔄 Synchronisation modification champ: {champ.nom_technique}")
+        _journal(f"🔄 Synchronisation modification champ: {champ.nom_technique}")
         # Logique de synchronisation à implémenter selon les besoins
 
 # ============================================
@@ -3965,7 +3991,7 @@ def log_activity(user_id, action, description, entite_type=None, entite_id=None)
         db.session.commit()
         return True
     except Exception as e:
-        print(f"❌ Erreur journalisation activité: {e}")
+        _journal(f"❌ Erreur journalisation activité: {e}")
         db.session.rollback()
         return False
 
@@ -4337,7 +4363,7 @@ def mettre_a_jour_progression_plan(plan_id, progression, user_id, commentaire=No
         
     except Exception as e:
         db.session.rollback()
-        print(f"❌ Erreur mise à jour progression plan: {e}")
+        _journal(f"❌ Erreur mise à jour progression plan: {e}")
         return None
 
 
@@ -4387,7 +4413,7 @@ def ajouter_commentaire_plan_action(plan_id, user_id, contenu, fichiers=None):
         
     except Exception as e:
         db.session.rollback()
-        print(f"❌ Erreur ajout commentaire: {e}")
+        _journal(f"❌ Erreur ajout commentaire: {e}")
         return None
 
 # ============================================
@@ -4423,7 +4449,7 @@ def notifier_campagne_terminee(campagne_id):
         db.session.commit()
         
     except Exception as e:
-        print(f"❌ Erreur notification campagne: {e}")
+        _journal(f"❌ Erreur notification campagne: {e}")
         db.session.rollback()
 
 
@@ -4471,7 +4497,7 @@ def notifier_validation_campagne(campagne_id, user_id, action, commentaire):
         db.session.commit()
         
     except Exception as e:
-        print(f"❌ Erreur notification validation: {e}")
+        _journal(f"❌ Erreur notification validation: {e}")
         db.session.rollback()
 
 
@@ -4530,7 +4556,7 @@ def notifier_evaluation_risque(risque_id, user_id, score, niveau):
         db.session.commit()
         
     except Exception as e:
-        print(f"❌ Erreur notification évaluation: {e}")
+        _journal(f"❌ Erreur notification évaluation: {e}")
         db.session.rollback()
 
 # ============================================
@@ -4624,5 +4650,5 @@ def exporter_campagne_excel(campagne_id):
         return output
         
     except Exception as e:
-        print(f"❌ Erreur export Excel: {e}")
+        _journal(f"❌ Erreur export Excel: {e}")
         return None

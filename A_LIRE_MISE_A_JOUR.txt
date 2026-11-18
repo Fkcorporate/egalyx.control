@@ -1,49 +1,54 @@
-EGALYX — ESPACE OPÉRATEUR : DROITS APPLIQUÉS PARTOUT, ÉCRANS D'ADMINISTRATION REVUS
-====================================================================================
-(à installer après « egalyx_structure_organisation » ; l'espace opérateur reste une application à part)
+EGALYX — Ménage, découpage d'app.py, migrations, feuille de style commune (18/11/2026)
+=====================================================================================
 
-1. CHAQUE DROIT FAIT CE QU'IL DIT, SUR CHAQUE PAGE (adresse tapée à la main comprise)
-   Avant : les réglages cachaient des boutons, mais un opérateur qui tapait l'adresse d'une page
-   pouvait évaluer un risque hors de sa direction, ou sans avoir le droit d'évaluer.
-   Maintenant, chaque page de l'espace opérateur vérifie le droit nécessaire et le périmètre
-   (directions, services, catégories de risques). Refus = message clair + retour au tableau de bord.
-   Restent toujours accessibles : ce qui est confié à la personne (campagne dont elle est créatrice,
-   réalisatrice ou valideuse ; risque dont elle est le valideur désigné ; ses plans d'action).
-   Les gestionnaires qui utilisent les mêmes adresses (valider / rejeter une campagne) ne sont pas touchés.
+AVANT TOUT : sauvegarde de la base (flask sauvegarder) et arrêt complet du serveur.
 
-2. SEPT DROITS, CLAIRS, TOUS MODIFIABLES (avant : 3 seulement à l'écran)
-   Risques    : Évaluer les risques · Voir les dispositifs de maîtrise
-   Campagnes  : Voir · Créer et réaliser · Valider ou rejeter
-   Plans      : Voir ses plans · Faire avancer ses plans (sous-actions, pièces, commentaires)
-   Cocher « réaliser » ou « valider » coche d'office « voir ».
+1. INSTALLER
+   python3 installer_mise_a_jour.py /chemin/du/projet
+   - copie 40 fichiers (les anciennes versions sont gardées dans sauvegarde_maj_<date>/) ;
+   - range l'ancienne révision inachevée migrations/versions/add_password_security_fields.py
+     dans archives/menage_2026_11/ (sinon « flask db upgrade » refuserait de démarrer).
 
-3. PERSONNE NE PERD D'ACCÈS LE JOUR DE L'INSTALLATION
-   Au premier démarrage, les opérateurs existants reçoivent les droits qui n'étaient pas appliqués
-   jusqu'ici (valider les campagnes, faire avancer les plans, voir les dispositifs, voir campagnes et
-   plans). Une seule fois : ce que vous décochez ensuite reste décoché.
+2. RANGER LES FICHIERS MORTS (réversible)
+   python3 outils/menage_projet.py              -> affiche la liste, ne touche à rien
+   python3 outils/menage_projet.py --appliquer  -> déplace dans archives/menage_2026_11/ (+ MANIFESTE.txt)
+   python3 outils/menage_projet.py --restaurer  -> remet tout en place
+   Rangés : 251 scripts de la racine (fix_*, debug_*, test_*, migrations isolées…), 2 copies de services,
+   40 pages « copie » ou obsolètes, 3 anciens scripts de migration. Aucun n'est importé par l'application.
+   Restent à la racine : app, models, config, utils, forms*, decorators, tasks, cotation, collecte_engine,
+   et les 4 outils d'administration (reparer_base, create_first_super_admin, reset_super_admin,
+   reinitialiser_mot_de_passe).
 
-4. VALIDATION DES ÉVALUATIONS : INCHANGÉE (comme demandé)
-   Valideur désigné : il voit les pré-évaluations dans son espace et les valide (même hors de son
-   périmètre). Sans valideur : l'opérateur valide lui-même, comme avant.
+3. BASE DE DONNÉES (une seule fois, puis à chaque mise à jour)
+   flask --app app db upgrade
+   - base existante : crée les tables / colonnes manquantes, ne supprime rien, puis enregistre la
+     révision « egalyx_0001_reference ». Une base portant un ancien numéro de révision est reprise.
+   - flask --app app db current   -> doit afficher : egalyx_0001_reference (head)
+   - Prochaines évolutions du modèle : flask --app app db migrate -m "objet" puis db upgrade.
+     L'auto-génération ne propose JAMAIS de supprimer une table ou une colonne présente seulement
+     dans la base (anciennes colonnes ajoutées à la main) : une suppression s'écrit à la main.
+   Détails : migrations/README.
 
-5. ADMINISTRATION (Paramétrage → Opérateurs)
-   - Les opérateurs en premier : nom, fonction, périmètre en clair (avant : « #3 »), droits.
-   - Ajouter un opérateur : un seul sélecteur (avant : la liste de tous les utilisateurs, avec une
-     fenêtre par personne), puis une page de droits pré-remplie avec sa direction / son service.
-   - Page de droits : cases claires par famille, directions et services en cases à cocher par pôle
-     (fini le Ctrl + clic), catégories de risques (jusqu'ici impossibles à choisir), résumé en direct.
-   - Retirer le rôle : compte et historique conservés.
-   - Section « Validation des évaluations faites par les opérateurs » conservée.
+4. REDÉMARRER le serveur.
 
-6. CORRIGÉ : un opérateur sans restriction de direction voyait une liste de plans d'action VIDE
-   (et un tableau de bord sans plans). Il voit maintenant ses plans.
-   Espace opérateur : nom, fonction et direction affichés (avant : l'identifiant et « Aucun service »).
+CE QUI CHANGE
+- app.py : 110 879 -> 83 231 lignes.
+  · 50 fonctions en double supprimées (chacune vérifiée : seule la DERNIÈRE définition était active) ;
+  · l'audit (237 routes) et les risques/cartographie (136 routes) sont dans sections/audit.py et
+    sections/risques.py. Ils sont chargés dans app.py, au même endroit qu'avant, avec les mêmes noms :
+    adresses, droits et comportement identiques (empreinte du code de chaque page comparée avant/après).
+    Pour modifier une page d'audit : sections/audit.py.
+- print() : ~2 230 messages de démarrage et de débogage vont désormais au journal. Les erreurs restent
+  visibles (niveau WARNING) ; le reste n'apparaît qu'avec EGALYX_TRACES=1 dans l'environnement.
+  Les commandes flask (démo, mise à jour de la base…) affichent toujours leurs résultats.
+- static/css/egalyx-theme.css : feuille de style commune, chargée en premier par toutes les mises en
+  page. Elle donne une valeur, en clair et en sombre, aux variables que 37 pages utilisaient sans les
+  définir (fenêtres transparentes, textes sans couleur…). Une page qui définit ses propres couleurs
+  les garde. Pour les nouvelles pages : jetons --eg-* (voir l'en-tête du fichier).
 
-TESTS : recette/operateurs.py (57 vérifications : chaque droit coché / décoché, périmètre par
-  adresse directe, catégories, valideur, mise à niveau, écrans d'administration).
-  Suite complète : 29 recettes, toutes vertes.
+- Compatibilité Render (Python 3.11, render.yaml) : 8 textes de app.py, models.py et sections/audit.py
+  utilisaient une écriture acceptée seulement à partir de Python 3.12 (déjà le cas avant ce paquet).
+  Réécrits à l'identique (même résultat, vérifié) ; la recette compat_python.py le surveille.
 
-INSTALLATION
-  python3 installer_mise_a_jour.py /chemin/vers/votre/projet
-  puis arrêtez complètement le serveur et relancez-le.
-  git add app.py egalyx templates recette && git commit -m "Espace opérateur : droits appliqués partout" && git push
+VÉRIFIER
+   cd recette && python3 tout_lancer.py          (toutes les recettes, dont les 2 nouvelles : migrations_base et feuille_commune)
