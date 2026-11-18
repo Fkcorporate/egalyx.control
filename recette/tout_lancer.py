@@ -42,6 +42,7 @@ ETAPES = [
     ('Structure de l’organisation, collaborateurs, organigramme', 'structure_orga.py', []),
     ('Sécurité : routes de réparation introuvables', 'routes_reparation.py', []),
     ('Espace opérateur : droits et périmètre sur chaque page', 'operateurs.py', []),
+    ('Fenêtres Directions / Pôles, compteur des feuilles de travail', 'correctifs_ui.py', []),
 ]
 BRUIT = ('🟢', '🔐', '📋', '✅', '⚠', '❌', '   ', '🔧', '🔒')
 ok_global = True
