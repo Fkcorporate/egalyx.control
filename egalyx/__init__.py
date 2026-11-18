@@ -133,6 +133,8 @@ def enregistrer_extensions(app, db, csrf=None, recalculer_cotations=None, constr
         structure_orga.enregistrer(app)           # page « Structure de l'organisation » (/admin/directions)
         from egalyx import operateurs
         operateurs.enregistrer(app)               # espace opérateur : droits appliqués sur chaque page, écrans d'administration
+        from egalyx import audit_compteurs
+        audit_compteurs.enregistrer(app)          # fiche audit : nombre de feuilles de travail dès l'ouverture
     except ImportError:
         pass
     try:                                   # paquet facultatif : notifications sur téléphone / ordinateur + pastille
