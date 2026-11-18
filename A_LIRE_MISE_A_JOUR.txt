@@ -1,54 +1,28 @@
-EGALYX — Ménage, découpage d'app.py, migrations, feuille de style commune (18/11/2026)
-=====================================================================================
+EGALYX — Plans d'action : audit, risque et indépendant chacun dans son module (18/11/2026)
+=========================================================================================
 
-AVANT TOUT : sauvegarde de la base (flask sauvegarder) et arrêt complet du serveur.
+À installer APRÈS le paquet egalyx_menage_structure (il modifie sections/audit.py, créé par ce paquet).
 
-1. INSTALLER
-   python3 installer_mise_a_jour.py /chemin/du/projet
-   - copie 40 fichiers (les anciennes versions sont gardées dans sauvegarde_maj_<date>/) ;
-   - range l'ancienne révision inachevée migrations/versions/add_password_security_fields.py
-     dans archives/menage_2026_11/ (sinon « flask db upgrade » refuserait de démarrer).
+   python3 installer_mise_a_jour.py /chemin/du/projet      puis redémarrer le serveur.
+   Aucune modification de la base.
 
-2. RANGER LES FICHIERS MORTS (réversible)
-   python3 outils/menage_projet.py              -> affiche la liste, ne touche à rien
-   python3 outils/menage_projet.py --appliquer  -> déplace dans archives/menage_2026_11/ (+ MANIFESTE.txt)
-   python3 outils/menage_projet.py --restaurer  -> remet tout en place
-   Rangés : 251 scripts de la racine (fix_*, debug_*, test_*, migrations isolées…), 2 copies de services,
-   40 pages « copie » ou obsolètes, 3 anciens scripts de migration. Aucun n'est importé par l'application.
-   Restent à la racine : app, models, config, utils, forms*, decorators, tasks, cotation, collecte_engine,
-   et les 4 outils d'administration (reparer_base, create_first_super_admin, reset_super_admin,
-   reinitialiser_mot_de_passe).
-
-3. BASE DE DONNÉES (une seule fois, puis à chaque mise à jour)
-   flask --app app db upgrade
-   - base existante : crée les tables / colonnes manquantes, ne supprime rien, puis enregistre la
-     révision « egalyx_0001_reference ». Une base portant un ancien numéro de révision est reprise.
-   - flask --app app db current   -> doit afficher : egalyx_0001_reference (head)
-   - Prochaines évolutions du modèle : flask --app app db migrate -m "objet" puis db upgrade.
-     L'auto-génération ne propose JAMAIS de supprimer une table ou une colonne présente seulement
-     dans la base (anciennes colonnes ajoutées à la main) : une suppression s'écrit à la main.
-   Détails : migrations/README.
-
-4. REDÉMARRER le serveur.
+LE PROBLÈME
+Les plans d'audit, de risque et indépendants sont rangés dans la même table ; plusieurs écrans les
+envoyaient tous vers les pages des risques. Exemple : depuis un plan d'audit, l'espace de travail d'une
+sous-action affichait le fil d'Ariane « Cartographies » et son bouton Retour ouvrait « Plan d'action
+risque ». « Tous les plans d'action » ouvrait aussi les plans d'audit dans la page des risques, et la page
+Audit > Plans d'action mélangeait les plans des risques.
 
 CE QUI CHANGE
-- app.py : 110 879 -> 83 231 lignes.
-  · 50 fonctions en double supprimées (chacune vérifiée : seule la DERNIÈRE définition était active) ;
-  · l'audit (237 routes) et les risques/cartographie (136 routes) sont dans sections/audit.py et
-    sections/risques.py. Ils sont chargés dans app.py, au même endroit qu'avant, avec les mêmes noms :
-    adresses, droits et comportement identiques (empreinte du code de chaque page comparée avant/après).
-    Pour modifier une page d'audit : sections/audit.py.
-- print() : ~2 230 messages de démarrage et de débogage vont désormais au journal. Les erreurs restent
-  visibles (niveau WARNING) ; le reste n'apparaît qu'avec EGALYX_TRACES=1 dans l'environnement.
-  Les commandes flask (démo, mise à jour de la base…) affichent toujours leurs résultats.
-- static/css/egalyx-theme.css : feuille de style commune, chargée en premier par toutes les mises en
-  page. Elle donne une valeur, en clair et en sombre, aux variables que 37 pages utilisaient sans les
-  définir (fenêtres transparentes, textes sans couleur…). Une page qui définit ses propres couleurs
-  les garde. Pour les nouvelles pages : jetons --eg-* (voir l'en-tête du fichier).
+- Chaque plan s'ouvre dans SON module, quelle que soit l'adresse ou le lien utilisé (un plan d'audit
+  ouvert par l'adresse des risques est renvoyé vers sa fiche d'audit, et inversement).
+- Espace de travail (commun aux plans) : fil d'Ariane et bouton Retour du bon module
+  (Audits > audit > Plans d'action d'audit, ou Cartographies > risque).
+- Audit > Plans d'action devient « Plans d'action d'audit » : plans d'audit (onglet Indépendants gardé).
+  Plus d'onglet « Risque », de bouton « Voir Risques » ni de création « plan lié à un risque » ici ; un
+  bouton mène à « Tous les plans d'action ». Retour depuis la fiche d'un plan d'audit -> cette liste.
+- Tous les plans d'action : origine Audit / Risques / Indépendant / Contrôle N2, filtre par origine,
+  chaque ligne ouvre la fiche de son module.
+- Les plans des risques restent sur la fiche de chaque risque, comme avant.
 
-- Compatibilité Render (Python 3.11, render.yaml) : 8 textes de app.py, models.py et sections/audit.py
-  utilisaient une écriture acceptée seulement à partir de Python 3.12 (déjà le cas avant ce paquet).
-  Réécrits à l'identique (même résultat, vérifié) ; la recette compat_python.py le surveille.
-
-VÉRIFIER
-   cd recette && python3 tout_lancer.py          (toutes les recettes, dont les 2 nouvelles : migrations_base et feuille_commune)
+VÉRIFIER : cd recette && python3 plans_nature.py   (25 vérifications), puis python3 tout_lancer.py

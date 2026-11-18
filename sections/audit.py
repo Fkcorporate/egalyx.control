@@ -692,7 +692,15 @@ def liste_plans_action():
     # ============================================
     # 4. RÉCUPÉRATION DES PARAMÈTRES DE FILTRAGE
     # ============================================
-    type_filtre = request.args.get('type', 'tous')
+    # Page du module Audit : plans d'audit (et indépendants). Les plans des risques vivent dans leur module
+    # (fiche du risque) et dans « Tous les plans d'action » : une ancienne adresse ?type=risque y mène.
+    type_filtre = request.args.get('type', 'audit')
+    if type_filtre == 'risque':
+        if 'plans_unifies.page' in app.view_functions:
+            return redirect(url_for('plans_unifies.page', source='risques'))
+        type_filtre = 'audit'
+    if type_filtre not in ('audit', 'independant', 'tous'):
+        type_filtre = 'audit'
     filtre_statut = request.args.get('statut', 'tous')
     tri = request.args.get('tri', 'date_desc')
     
@@ -700,7 +708,8 @@ def liste_plans_action():
     # 5. RÉCUPÉRER TOUS LES PLANS POUR LES STATISTIQUES GLOBALES
     # ============================================
     tous_plans_query = get_client_filter(PlanAction)
-    tous_plans = tous_plans_query.all()
+    # sans les plans des risques (voir plus haut)
+    tous_plans = [p for p in tous_plans_query.all() if p.audit_id is not None or p.risque_id is None]
     
     # ============================================
     # 6. CALCULER LES STATISTIQUES GLOBALES
@@ -742,7 +751,8 @@ def liste_plans_action():
         )
         _journal(f"   📋 Filtre: Plans indépendants uniquement")
     else:
-        _journal(f"   📋 Filtre: Tous les plans")
+        query = query.filter(or_(PlanAction.audit_id.isnot(None), PlanAction.risque_id.is_(None)))
+        _journal(f"   📋 Filtre: plans d'audit et indépendants")
     
     # Appliquer le filtre par statut
     if filtre_statut != 'tous':
