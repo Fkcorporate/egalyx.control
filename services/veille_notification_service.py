@@ -4,6 +4,32 @@ Service de notifications pour le module Veille Réglementaire.
 Envoie des notifications aux approbateurs lors des transitions du workflow.
 """
 
+# --- Journal (remplace les anciens print()) : erreurs -> WARNING (journaux du serveur) ; le reste -> DEBUG,
+#     visible seulement avec EGALYX_TRACES=1. Ajouté le 18/11/2026 (ménage).
+import logging as _logging_journal
+import os as _os_journal
+_JOURNAL = _logging_journal.getLogger('egalyx.services.veille_notification_service')
+_MOTS_ALERTE = ('\u274c', '\u26a0', 'ERREUR', 'Erreur', 'erreur', 'ERROR', 'Error', 'error', 'Exception', 'chec', 'Traceback', 'CRITIQUE')
+if _os_journal.environ.get('EGALYX_TRACES') == '1' and not _JOURNAL.handlers:
+    _JOURNAL.setLevel(_logging_journal.DEBUG)
+    _h = _logging_journal.StreamHandler()
+    _h.setFormatter(_logging_journal.Formatter('%(asctime)s %(name)s %(levelname)s %(message)s'))
+    _JOURNAL.addHandler(_h)
+    _JOURNAL.propagate = False
+
+
+def _journal(*args, sep=' ', **_ignore):
+    """Ancien print() : écrit dans le journal au lieu de la sortie standard."""
+    try:
+        texte = sep.join(str(a) for a in args)
+    except Exception:  # noqa: BLE001
+        return
+    if any(m in texte for m in _MOTS_ALERTE) and not texte.lstrip().startswith(('\u2705', '\u2713')):
+        _JOURNAL.warning(texte)
+    elif _JOURNAL.isEnabledFor(_logging_journal.DEBUG):
+        _JOURNAL.debug(texte)
+# --- fin du journal
+
 from datetime import datetime
 from models import db, Notification, User
 
@@ -207,9 +233,9 @@ class VeilleNotificationService:
                 donnees_supplementaires={},
             )
             db.session.add(notif)
-            print(f"📬 Notification créée pour {destinataire.username}")
+            _journal(f"📬 Notification créée pour {destinataire.username}")
         except Exception as e:
-            print(f"⚠️ Erreur création notification : {e}")
+            _journal(f"⚠️ Erreur création notification : {e}")
 
     # Dans veille_notification_service.py
 
@@ -226,9 +252,9 @@ class VeilleNotificationService:
                 body=corps
             )
             mail.send(msg)
-            print(f"📧 Email envoyé à {destinataire.email}")
+            _journal(f"📧 Email envoyé à {destinataire.email}")
         except Exception as e:
-            print(f"⚠️ Erreur email : {e}")
+            _journal(f"⚠️ Erreur email : {e}")
 
     @staticmethod
     def notifier_aux_favoris(veille, type_notif, titre, message):
@@ -251,7 +277,7 @@ class VeilleNotificationService:
             favoris = VeilleFavori.query.filter_by(veille_id=veille.id).all()
             
             if not favoris:
-                print(f"ℹ️ Aucun favori pour la veille #{veille.id}")
+                _journal(f"ℹ️ Aucun favori pour la veille #{veille.id}")
                 return 0
             
             nb_notifs = 0
@@ -290,14 +316,14 @@ class VeilleNotificationService:
                     destinataires_vus.add(user.id)
                     nb_notifs += 1
                 except Exception as e:
-                    print(f"⚠️ Erreur notification pour {user.username} : {e}")
+                    _journal(f"⚠️ Erreur notification pour {user.username} : {e}")
             
-            print(f"📬 {nb_notifs} notification(s) envoyée(s) aux favoris")
+            _journal(f"📬 {nb_notifs} notification(s) envoyée(s) aux favoris")
             return nb_notifs
             
         except ImportError:
-            print("⚠️ Module VeilleFavori non disponible")
+            _journal("⚠️ Module VeilleFavori non disponible")
             return 0
         except Exception as e:
-            print(f"⚠️ Erreur notifier_aux_favoris : {e}")
+            _journal(f"⚠️ Erreur notifier_aux_favoris : {e}")
             return ArithmeticError

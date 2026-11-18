@@ -1,6 +1,32 @@
 """
 Intégration avec les APIs IA externes
 """
+
+# --- Journal (remplace les anciens print()) : erreurs -> WARNING (journaux du serveur) ; le reste -> DEBUG,
+#     visible seulement avec EGALYX_TRACES=1. Ajouté le 18/11/2026 (ménage).
+import logging as _logging_journal
+import os as _os_journal
+_JOURNAL = _logging_journal.getLogger('egalyx.services.api_ia')
+_MOTS_ALERTE = ('\u274c', '\u26a0', 'ERREUR', 'Erreur', 'erreur', 'ERROR', 'Error', 'error', 'Exception', 'chec', 'Traceback', 'CRITIQUE')
+if _os_journal.environ.get('EGALYX_TRACES') == '1' and not _JOURNAL.handlers:
+    _JOURNAL.setLevel(_logging_journal.DEBUG)
+    _h = _logging_journal.StreamHandler()
+    _h.setFormatter(_logging_journal.Formatter('%(asctime)s %(name)s %(levelname)s %(message)s'))
+    _JOURNAL.addHandler(_h)
+    _JOURNAL.propagate = False
+
+
+def _journal(*args, sep=' ', **_ignore):
+    """Ancien print() : écrit dans le journal au lieu de la sortie standard."""
+    try:
+        texte = sep.join(str(a) for a in args)
+    except Exception:  # noqa: BLE001
+        return
+    if any(m in texte for m in _MOTS_ALERTE) and not texte.lstrip().startswith(('\u2705', '\u2713')):
+        _JOURNAL.warning(texte)
+    elif _JOURNAL.isEnabledFor(_logging_journal.DEBUG):
+        _JOURNAL.debug(texte)
+# --- fin du journal
 import os
 import json
 from typing import Optional, Dict, Any
@@ -11,7 +37,7 @@ try:
     OPENAI_AVAILABLE = True
 except ImportError:
     OPENAI_AVAILABLE = False
-    print("⚠️ OpenAI non disponible")
+    _journal("⚠️ OpenAI non disponible")
 
 class APIIntegration:
     """Intégration avec les APIs IA externes"""
@@ -29,7 +55,7 @@ class APIIntegration:
             Dict avec les résultats de l'analyse ou None en cas d'erreur
         """
         if not OPENAI_AVAILABLE:
-            print("❌ OpenAI non disponible")
+            _journal("❌ OpenAI non disponible")
             return None
         
         try:
@@ -37,7 +63,7 @@ class APIIntegration:
             api_key = api_key or os.getenv('OPENAI_API_KEY')
             
             if not api_key:
-                print("❌ Clé API OpenAI manquante")
+                _journal("❌ Clé API OpenAI manquante")
                 return None
             
             client = OpenAI(api_key=api_key)
@@ -91,15 +117,15 @@ class APIIntegration:
                 result = json.loads(result_text)
                 return result
             except json.JSONDecodeError as e:
-                print(f"❌ Erreur décodage JSON: {e}")
-                print(f"Texte reçu: {result_text[:500]}...")
+                _journal(f"❌ Erreur décodage JSON: {e}")
+                _journal(f"Texte reçu: {result_text[:500]}...")
                 return None
             
         except openai.OpenAIError as e:
-            print(f"❌ Erreur OpenAI API: {e}")
+            _journal(f"❌ Erreur OpenAI API: {e}")
             return None
         except Exception as e:
-            print(f"❌ Erreur inattendue: {e}")
+            _journal(f"❌ Erreur inattendue: {e}")
             return None
     
     @staticmethod
@@ -113,7 +139,7 @@ class APIIntegration:
             api_key = api_key or os.getenv('GEMINI_API_KEY')
             
             if not api_key:
-                print("❌ Clé API Gemini manquante")
+                _journal("❌ Clé API Gemini manquante")
                 return None
             
             genai.configure(api_key=api_key)
@@ -148,10 +174,10 @@ class APIIntegration:
                 return {'reponse_textuelle': response.text}
                 
         except ImportError:
-            print("❌ Google Generative AI non installé")
+            _journal("❌ Google Generative AI non installé")
             return None
         except Exception as e:
-            print(f"❌ Erreur Gemini: {e}")
+            _journal(f"❌ Erreur Gemini: {e}")
             return None
     
     @staticmethod
@@ -165,7 +191,7 @@ class APIIntegration:
             api_key = api_key or os.getenv('ANTHROPIC_API_KEY')
             
             if not api_key:
-                print("❌ Clé API Anthropic manquante")
+                _journal("❌ Clé API Anthropic manquante")
                 return None
             
             client = anthropic.Anthropic(api_key=api_key)
@@ -209,8 +235,8 @@ class APIIntegration:
                 return {'reponse_textuelle': result_text}
                 
         except ImportError:
-            print("❌ Anthropic non installé")
+            _journal("❌ Anthropic non installé")
             return None
         except Exception as e:
-            print(f"❌ Erreur Anthropic: {e}")
+            _journal(f"❌ Erreur Anthropic: {e}")
             return None

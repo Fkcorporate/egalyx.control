@@ -5,6 +5,32 @@ Service d'analyse IA pour la veille réglementaire.
 - Sinon → utilise un moteur de suggestion local (heuristiques)
 """
 
+# --- Journal (remplace les anciens print()) : erreurs -> WARNING (journaux du serveur) ; le reste -> DEBUG,
+#     visible seulement avec EGALYX_TRACES=1. Ajouté le 18/11/2026 (ménage).
+import logging as _logging_journal
+import os as _os_journal
+_JOURNAL = _logging_journal.getLogger('egalyx.services.ia_veille_service')
+_MOTS_ALERTE = ('\u274c', '\u26a0', 'ERREUR', 'Erreur', 'erreur', 'ERROR', 'Error', 'error', 'Exception', 'chec', 'Traceback', 'CRITIQUE')
+if _os_journal.environ.get('EGALYX_TRACES') == '1' and not _JOURNAL.handlers:
+    _JOURNAL.setLevel(_logging_journal.DEBUG)
+    _h = _logging_journal.StreamHandler()
+    _h.setFormatter(_logging_journal.Formatter('%(asctime)s %(name)s %(levelname)s %(message)s'))
+    _JOURNAL.addHandler(_h)
+    _JOURNAL.propagate = False
+
+
+def _journal(*args, sep=' ', **_ignore):
+    """Ancien print() : écrit dans le journal au lieu de la sortie standard."""
+    try:
+        texte = sep.join(str(a) for a in args)
+    except Exception:  # noqa: BLE001
+        return
+    if any(m in texte for m in _MOTS_ALERTE) and not texte.lstrip().startswith(('\u2705', '\u2713')):
+        _JOURNAL.warning(texte)
+    elif _JOURNAL.isEnabledFor(_logging_journal.DEBUG):
+        _JOURNAL.debug(texte)
+# --- fin du journal
+
 import os
 import re
 import json
@@ -238,15 +264,15 @@ class IAVeilleService:
             try:
                 from openai import OpenAI
                 self.client = OpenAI(api_key=self.api_key)
-                print("✅ IAVeilleService : mode API OpenAI activé")
+                _journal("✅ IAVeilleService : mode API OpenAI activé")
             except ImportError:
-                print("⚠️ Module openai non installé → mode local activé")
+                _journal("⚠️ Module openai non installé → mode local activé")
                 self.use_api = False
             except Exception as e:
-                print(f"⚠️ Erreur OpenAI : {e} → mode local activé")
+                _journal(f"⚠️ Erreur OpenAI : {e} → mode local activé")
                 self.use_api = False
         else:
-            print("ℹ️ IAVeilleService : mode local (pas de OPENAI_API_KEY)")
+            _journal("ℹ️ IAVeilleService : mode local (pas de OPENAI_API_KEY)")
     
     # ============================================
     # MÉTHODES PUBLIQUES
@@ -260,7 +286,7 @@ class IAVeilleService:
             try:
                 return self._analyser_avec_api(titre, texte, source)
             except Exception as e:
-                print(f"⚠️ Erreur API IA : {e} → fallback local")
+                _journal(f"⚠️ Erreur API IA : {e} → fallback local")
                 # Bascule sur le mode local
                 result = MoteurSuggestionLocal.analyser(titre, texte)
                 result['fallback_raison'] = str(e)
@@ -274,7 +300,7 @@ class IAVeilleService:
             try:
                 return self._resumer_avec_api(texte, max_mots)
             except Exception as e:
-                print(f"⚠️ Erreur résumé IA : {e} → fallback local")
+                _journal(f"⚠️ Erreur résumé IA : {e} → fallback local")
         
         # Fallback local
         result = MoteurSuggestionLocal.analyser("", texte)
@@ -286,7 +312,7 @@ class IAVeilleService:
             try:
                 return self._criticite_avec_api(titre, texte)
             except Exception as e:
-                print(f"⚠️ Erreur criticité IA : {e} → fallback local")
+                _journal(f"⚠️ Erreur criticité IA : {e} → fallback local")
         
         # Fallback local
         result = MoteurSuggestionLocal.analyser(titre, texte)

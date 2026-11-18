@@ -1,4 +1,30 @@
-# services/email_service.py - VERSION CORRIGÉE POUR HOSTINGER
+
+# --- Journal (remplace les anciens print()) : erreurs -> WARNING (journaux du serveur) ; le reste -> DEBUG,
+#     visible seulement avec EGALYX_TRACES=1. Ajouté le 18/11/2026 (ménage).
+import logging as _logging_journal
+import os as _os_journal
+_JOURNAL = _logging_journal.getLogger('egalyx.services.email_service')
+_MOTS_ALERTE = ('\u274c', '\u26a0', 'ERREUR', 'Erreur', 'erreur', 'ERROR', 'Error', 'error', 'Exception', 'chec', 'Traceback', 'CRITIQUE')
+if _os_journal.environ.get('EGALYX_TRACES') == '1' and not _JOURNAL.handlers:
+    _JOURNAL.setLevel(_logging_journal.DEBUG)
+    _h = _logging_journal.StreamHandler()
+    _h.setFormatter(_logging_journal.Formatter('%(asctime)s %(name)s %(levelname)s %(message)s'))
+    _JOURNAL.addHandler(_h)
+    _JOURNAL.propagate = False
+
+
+def _journal(*args, sep=' ', **_ignore):
+    """Ancien print() : écrit dans le journal au lieu de la sortie standard."""
+    try:
+        texte = sep.join(str(a) for a in args)
+    except Exception:  # noqa: BLE001
+        return
+    if any(m in texte for m in _MOTS_ALERTE) and not texte.lstrip().startswith(('\u2705', '\u2713')):
+        _JOURNAL.warning(texte)
+    elif _JOURNAL.isEnabledFor(_logging_journal.DEBUG):
+        _JOURNAL.debug(texte)
+# --- fin du journal
+# services/email_service.py - VERSION POUR DÉVELOPPEMENT LOCAL
 import smtplib
 import ssl
 from email.mime.text import MIMEText
@@ -15,73 +41,170 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 class EmailService:
-    """Service d'email utilisant SMTP Hostinger - Version robuste"""
+    """Service d'email - Version développement local"""
     
     def __init__(self):
-        # Configuration Hostinger
+        # Configuration par défaut (Hostinger)
         self.smtp_server = 'smtp.hostinger.com'
-        
-        # === OPTION 1: TLS sur le port 587 (recommandé) ===
         self.smtp_port_tls = 587
-        self.use_tls = True  # Utiliser STARTTLS
-        
-        # === OPTION 2: SSL direct sur le port 465 (fallback) ===
         self.smtp_port_ssl = 465
-        
-        # Vos identifiants Hostinger
         self.sender_email = 'contact@egalyx.com'
         self.sender_name = 'Egalyx Control'
         self.password = os.environ.get('HOSTINGER_EMAIL_PASSWORD', '')
+        self.timeout = 30
         
-        # Timeout de connexion
-        self.timeout = 30  # secondes
+        # === MODE DÉVELOPPEMENT LOCAL ===
+        # Détection automatique de l'environnement
+        self.is_local = self._detect_local_environment()
         
-        # Mode simulation si pas de mot de passe
-        if not self.password:
+        if self.is_local:
+            logger.info("🖥️ Mode développement local détecté")
+            # Utiliser un serveur SMTP de test ou affichage console
+            self.use_file_output = True  # Sauvegarder dans des fichiers
+            self.use_console_output = True  # Afficher dans la console
+            self.email_output_dir = os.path.join(os.getcwd(), 'emails_saved')
+            
+            # Créer le dossier de sauvegarde
+            if self.use_file_output and not os.path.exists(self.email_output_dir):
+                os.makedirs(self.email_output_dir)
+                logger.info(f"📁 Dossier créé: {self.email_output_dir}")
+        else:
+            logger.info("☁️ Mode production détecté")
+            self.use_file_output = False
+            self.use_console_output = False
+        
+        # Mode simulation (si pas de mot de passe en production)
+        if not self.password and not self.is_local:
             logger.warning("⚠️ HOSTINGER_EMAIL_PASSWORD non défini - emails en mode simulation")
             self.simulation_mode = True
         else:
             self.simulation_mode = False
-            logger.info(f"✅ Service email Hostinger configuré pour {self.sender_email}")
     
-    def test_smtp_connection(self):
-        """Teste la connexion SMTP avant envoi"""
+    def _detect_local_environment(self):
+        """Détecte si on est en environnement local"""
+        import platform
+        
+        hostname = socket.gethostname()
+        
+        # Indices d'environnement local
+        local_indicators = [
+            'localhost',
+            '127.0.0.1',
+            '::1',
+            'desktop',
+            'laptop',
+            'MacBook',
+            'PC',
+            'LAPTOP',
+            'Mac'
+        ]
+        
+        # Vérifier le hostname
+        for indicator in local_indicators:
+            if indicator.lower() in hostname.lower():
+                return True
+        
+        # Vérifier si on est sur Windows/Mac (probablement local)
+        if platform.system() in ['Windows', 'Darwin']:
+            return True
+        
+        return False
+    
+    def _save_email_to_file(self, to_email, subject, body, html_body):
+        """Sauvegarde l'email dans un fichier pour développement"""
         try:
-            # Test avec TLS (port 587)
-            logger.info("🔄 Test connexion SMTP TLS (port 587)...")
-            with smtplib.SMTP(self.smtp_server, self.smtp_port_tls, timeout=self.timeout) as server:
-                server.ehlo()
-                server.starttls(context=ssl.create_default_context())
-                server.ehlo()
-                server.login(self.sender_email, self.password)
-                logger.info("✅ Connexion TLS réussie")
-                return 'tls', server
+            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+            filename = f"email_{timestamp}_{to_email.replace('@', '_').replace('.', '_')}.html"
+            filepath = os.path.join(self.email_output_dir, filename)
             
-        except Exception as e_tls:
-            logger.warning(f"⚠️ Connexion TLS échouée: {e_tls}")
+            # Créer un fichier HTML complet pour visualisation
+            full_html = f"""
+            <!DOCTYPE html>
+            <html>
+            <head>
+                <title>Email sauvegardé</title>
+                <style>
+                    body {{ font-family: Arial, sans-serif; margin: 20px; background: #f5f5f5; }}
+                    .email-container {{ max-width: 800px; margin: 0 auto; background: white; border-radius: 10px; overflow: hidden; box-shadow: 0 5px 15px rgba(0,0,0,0.1); }}
+                    .email-header {{ background: #0A1929; color: white; padding: 20px; }}
+                    .email-meta {{ background: #f0f0f0; padding: 15px; border-bottom: 1px solid #ddd; }}
+                    .email-meta p {{ margin: 5px 0; }}
+                    .email-body {{ padding: 20px; }}
+                    .label {{ font-weight: bold; color: #555; }}
+                </style>
+            </head>
+            <body>
+                <div class="email-container">
+                    <div class="email-header">
+                        <h2>Email sauvegardé - {timestamp}</h2>
+                    </div>
+                    <div class="email-meta">
+                        <p><span class="label">À:</span> {to_email}</p>
+                        <p><span class="label">Sujet:</span> {subject}</p>
+                        <p><span class="label">Date:</span> {datetime.now().strftime('%d/%m/%Y %H:%M:%S')}</p>
+                    </div>
+                    <div class="email-body">
+                        <h3>Version HTML:</h3>
+                        <hr>
+                        {html_body if html_body else '<p>Aucun contenu HTML</p>'}
+                        
+                        <hr>
+                        <h3>Version texte:</h3>
+                        <pre>{body}</pre>
+                    </div>
+                </div>
+            </body>
+            </html>
+            """
             
-            try:
-                # Fallback avec SSL (port 465)
-                logger.info("🔄 Test connexion SMTP SSL (port 465)...")
-                context = ssl.create_default_context()
-                with smtplib.SMTP_SSL(self.smtp_server, self.smtp_port_ssl, timeout=self.timeout, context=context) as server:
-                    server.login(self.sender_email, self.password)
-                    logger.info("✅ Connexion SSL réussie")
-                    return 'ssl', server
-                    
-            except Exception as e_ssl:
-                logger.error(f"❌ Toutes les connexions ont échoué: {e_ssl}")
-                return None, None
+            with open(filepath, 'w', encoding='utf-8') as f:
+                f.write(full_html)
+            
+            logger.info(f"💾 Email sauvegardé: {filepath}")
+            return filepath
+        except Exception as e:
+            logger.error(f"❌ Erreur sauvegarde email: {e}")
+            return None
+    
+    def _print_email_to_console(self, to_email, subject, body, html_body):
+        """Affiche l'email dans la console pour développement"""
+        _journal("\n" + "="*80)
+        _journal(f"📧 EMAIL ENVOYÉ (MODE LOCAL)")
+        _journal("="*80)
+        _journal(f"À: {to_email}")
+        _journal(f"Sujet: {subject}")
+        _journal(f"Date: {datetime.now().strftime('%d/%m/%Y %H:%M:%S')}")
+        _journal("-"*40)
+        _journal("TEXTE:")
+        _journal(body[:500] + "..." if len(body) > 500 else body)
+        _journal("-"*40)
+        if html_body:
+            _journal("HTML: [contenu HTML disponible]")
+        _journal("="*80 + "\n")
     
     def send_email(self, to_email, subject, body, html_body=None, cc=None, bcc=None, max_retries=3):
-        """Envoyer un email via SMTP Hostinger avec mécanisme de retry"""
+        """Envoyer un email - adaptable selon l'environnement"""
         
-        # Mode simulation
+        # === MODE DÉVELOPPEMENT LOCAL ===
+        if self.is_local:
+            # Afficher dans la console
+            if self.use_console_output:
+                self._print_email_to_console(to_email, subject, body, html_body)
+            
+            # Sauvegarder dans un fichier
+            if self.use_file_output:
+                self._save_email_to_file(to_email, subject, body, html_body)
+            
+            logger.info(f"📧 [LOCAL] Email simulé à: {to_email}")
+            return True
+        
+        # === MODE SIMULATION (pas de mot de passe) ===
         if self.simulation_mode:
             logger.info(f"📧 [SIMULATION] Email à: {to_email}")
             logger.info(f"   Sujet: {subject}")
             return True
         
+        # === MODE PRODUCTION RÉEL ===
         # Tentatives multiples
         for attempt in range(1, max_retries + 1):
             try:
@@ -149,192 +272,13 @@ class EmailService:
                 logger.info(f"✅ Email envoyé avec succès à {to_email}")
                 return True
                 
-            except smtplib.SMTPAuthenticationError as e:
-                logger.error(f"❌ Erreur d'authentification SMTP: {e}")
-                logger.error("   Vérifiez votre mot de passe dans les variables d'environnement")
+            except Exception as e:
+                logger.error(f"❌ Erreur tentative {attempt}: {e}")
                 if attempt == max_retries:
                     return False
                 time.sleep(2 ** attempt)  # Exponential backoff
-                
-            except smtplib.SMTPException as e:
-                logger.error(f"❌ Erreur SMTP: {e}")
-                if attempt == max_retries:
-                    return False
-                time.sleep(2 ** attempt)
-                
-            except socket.error as e:
-                logger.error(f"❌ Erreur réseau: {e}")
-                if attempt == max_retries:
-                    return False
-                time.sleep(2 ** attempt)
-                
-            except Exception as e:
-                logger.error(f"❌ Erreur inattendue: {e}")
-                if attempt == max_retries:
-                    return False
-                time.sleep(2 ** attempt)
         
         return False
-    
-    def send_contact_confirmation(self, nom_complet, email, societe, telephone, sujet, message, reference):
-        """Envoyer les emails pour une demande de contact"""
-        
-        # 1. Email à l'administrateur (notification)
-        admin_subject = f"🔔 Nouvelle demande: {sujet[:50]}"
-        admin_body = f"""
-        NOUVELLE DEMANDE DE CONTACT
-        ===========================
-        
-        📋 Informations :
-        - Nom complet : {nom_complet}
-        - Email : {email}
-        - Société : {societe or 'Non spécifié'}
-        - Téléphone : {telephone or 'Non spécifié'}
-        
-        📝 Sujet : {sujet}
-        
-        💬 Message :
-        {message}
-        
-        📎 Référence : {reference}
-        📅 Date : {datetime.now().strftime('%d/%m/%Y %H:%M:%S')}
-        """
-        
-        logger.info(f"📧 Envoi notification admin pour {reference}")
-        admin_sent = self.send_email(
-            to_email='contact@egalyx.com',
-            subject=admin_subject,
-            body=admin_body
-        )
-        
-        # 2. Email de confirmation au client
-        client_subject = "Confirmation de votre demande - Egalyx Control"
-        client_html = f"""
-        <!DOCTYPE html>
-        <html>
-        <head>
-            <meta charset="UTF-8">
-            <style>
-                body {{ font-family: 'Inter', Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; }}
-                .header {{ background: linear-gradient(135deg, #0A1929 0%, #1A3C6B 100%); color: white; padding: 40px 30px; text-align: center; border-radius: 10px 10px 0 0; }}
-                .content {{ padding: 40px 30px; background: #f8fafc; border-radius: 0 0 10px 10px; }}
-                .info-box {{ background: white; padding: 25px; border-radius: 8px; margin: 25px 0; border-left: 4px solid #0066CC; box-shadow: 0 2px 10px rgba(0,0,0,0.05); }}
-                .footer {{ text-align: center; padding: 30px; color: #666; font-size: 14px; border-top: 1px solid #e2e8f0; }}
-            </style>
-        </head>
-        <body>
-            <div class="header">
-                <h1 style="margin: 0; font-size: 28px;">Egalyx Control</h1>
-                <p style="margin: 10px 0 0; opacity: 0.9;">Confirmation de votre demande</p>
-            </div>
-            
-            <div class="content">
-                <h2 style="color: #0A1929;">Bonjour {nom_complet},</h2>
-                
-                <p>Nous avons bien reçu votre demande.</p>
-                
-                <div class="info-box">
-                    <p><strong>Référence :</strong> {reference}</p>
-                    <p><strong>Sujet :</strong> {sujet}</p>
-                    <p><strong>Date :</strong> {datetime.now().strftime('%d/%m/%Y à %H:%M')}</p>
-                </div>
-                
-                <p>Notre équipe vous contactera dans les plus brefs délais.</p>
-                
-                <p>Cordialement,<br><strong>L'équipe Egalyx Control</strong></p>
-            </div>
-            
-            <div class="footer">
-                <p>© 2024 Egalyx Control</p>
-            </div>
-        </body>
-        </html>
-        """
-        
-        client_body = f"""
-        Confirmation de votre demande - Egalyx Control
-        
-        Bonjour {nom_complet},
-        
-        Nous avons bien reçu votre demande.
-        
-        Référence : {reference}
-        Sujet : {sujet}
-        Date : {datetime.now().strftime('%d/%m/%Y à %H:%M')}
-        
-        Notre équipe vous contactera dans les plus brefs délais.
-        
-        Cordialement,
-        L'équipe Egalyx Control
-        """
-        
-        logger.info(f"📧 Envoi confirmation client à {email} pour {reference}")
-        client_sent = self.send_email(
-            to_email=email,
-            subject=client_subject,
-            body=client_body,
-            html_body=client_html
-        )
-        
-        if admin_sent and client_sent:
-            logger.info(f"✅ Tous les emails envoyés avec succès pour {reference}")
-        else:
-            logger.warning(f"⚠️ Certains emails n'ont pas pu être envoyés pour {reference}")
-        
-        return admin_sent and client_sent
-
-# Route de test pour diagnostiquer
-@app.route('/test-smtp')
-def test_smtp():
-    """Route de test pour vérifier la configuration SMTP"""
-    results = []
-    
-    results.append("🔧 TEST CONNEXION SMTP HOSTINGER")
-    results.append("=" * 50)
-    
-    # Vérifier la variable d'environnement
-    password = os.environ.get('HOSTINGER_EMAIL_PASSWORD', '')
-    if password:
-        results.append(f"✅ HOSTINGER_EMAIL_PASSWORD: Défini ({'*' * len(password)})")
-    else:
-        results.append("❌ HOSTINGER_EMAIL_PASSWORD: Non défini")
-    
-    # Tester la connexion
-    try:
-        # Test TLS (port 587)
-        results.append(f"\n🔄 Test TLS sur smtp.hostinger.com:587...")
-        with smtplib.SMTP('smtp.hostinger.com', 587, timeout=10) as server:
-            server.ehlo()
-            server.starttls(context=ssl.create_default_context())
-            server.ehlo()
-            results.append("✅ Connexion TLS établie")
-            
-            # Test login
-            if password:
-                server.login('contact@egalyx.com', password)
-                results.append("✅ Authentification réussie")
-            else:
-                results.append("⚠️ Login non testé (pas de mot de passe)")
-    except Exception as e:
-        results.append(f"❌ Erreur TLS: {str(e)}")
-    
-    try:
-        # Test SSL (port 465)
-        results.append(f"\n🔄 Test SSL sur smtp.hostinger.com:465...")
-        context = ssl.create_default_context()
-        with smtplib.SMTP_SSL('smtp.hostinger.com', 465, timeout=10, context=context) as server:
-            results.append("✅ Connexion SSL établie")
-            
-            # Test login
-            if password:
-                server.login('contact@egalyx.com', password)
-                results.append("✅ Authentification réussie")
-            else:
-                results.append("⚠️ Login non testé (pas de mot de passe)")
-    except Exception as e:
-        results.append(f"❌ Erreur SSL: {str(e)}")
-    
-    return "<pre>" + "\n".join(results) + "</pre>"
 
 # Initialiser le service email
 email_service = EmailService()

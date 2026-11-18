@@ -1,3 +1,29 @@
+
+# --- Journal (remplace les anciens print()) : erreurs -> WARNING (journaux du serveur) ; le reste -> DEBUG,
+#     visible seulement avec EGALYX_TRACES=1. Ajouté le 18/11/2026 (ménage).
+import logging as _logging_journal
+import os as _os_journal
+_JOURNAL = _logging_journal.getLogger('egalyx.services.kri_ia_service')
+_MOTS_ALERTE = ('\u274c', '\u26a0', 'ERREUR', 'Erreur', 'erreur', 'ERROR', 'Error', 'error', 'Exception', 'chec', 'Traceback', 'CRITIQUE')
+if _os_journal.environ.get('EGALYX_TRACES') == '1' and not _JOURNAL.handlers:
+    _JOURNAL.setLevel(_logging_journal.DEBUG)
+    _h = _logging_journal.StreamHandler()
+    _h.setFormatter(_logging_journal.Formatter('%(asctime)s %(name)s %(levelname)s %(message)s'))
+    _JOURNAL.addHandler(_h)
+    _JOURNAL.propagate = False
+
+
+def _journal(*args, sep=' ', **_ignore):
+    """Ancien print() : écrit dans le journal au lieu de la sortie standard."""
+    try:
+        texte = sep.join(str(a) for a in args)
+    except Exception:  # noqa: BLE001
+        return
+    if any(m in texte for m in _MOTS_ALERTE) and not texte.lstrip().startswith(('\u2705', '\u2713')):
+        _JOURNAL.warning(texte)
+    elif _JOURNAL.isEnabledFor(_logging_journal.DEBUG):
+        _JOURNAL.debug(texte)
+# --- fin du journal
 # services/kri_ia_service.py
 import os
 import json
@@ -14,13 +40,13 @@ class KRIIAService:
         
         if not self.api_key or self.api_key.startswith("mode-simulation"):
             self.mode_simulation = True
-            print("🔧 Mode simulation pour KRI IA")
+            _journal("🔧 Mode simulation pour KRI IA")
         else:
             try:
                 self.client = openai.OpenAI(api_key=self.api_key)
-                print("✅ Service KRI IA initialisé")
+                _journal("✅ Service KRI IA initialisé")
             except Exception as e:
-                print(f"⚠️ Erreur initialisation OpenAI: {e}")
+                _journal(f"⚠️ Erreur initialisation OpenAI: {e}")
                 self.mode_simulation = True
     
     def generer_kris_pour_risque(self, risque_data: Dict) -> List[Dict]:
@@ -39,7 +65,7 @@ class KRIIAService:
         try:
             return self._generer_kri_reel(risque_data)
         except Exception as e:
-            print(f"❌ Erreur génération KRI IA: {e}")
+            _journal(f"❌ Erreur génération KRI IA: {e}")
             return self._simuler_generation_kri(risque_data)
     
     def _generer_kri_reel(self, risque_data: Dict) -> List[Dict]:
@@ -87,7 +113,7 @@ class KRIIAService:
                 data = json.loads(json_match.group())
                 return data.get("kris", [])
         except json.JSONDecodeError:
-            print(f"⚠️ Réponse non JSON: {resultat[:100]}...")
+            _journal(f"⚠️ Réponse non JSON: {resultat[:100]}...")
         
         return []
     

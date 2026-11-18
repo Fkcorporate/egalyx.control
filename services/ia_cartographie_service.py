@@ -1,3 +1,29 @@
+
+# --- Journal (remplace les anciens print()) : erreurs -> WARNING (journaux du serveur) ; le reste -> DEBUG,
+#     visible seulement avec EGALYX_TRACES=1. Ajouté le 18/11/2026 (ménage).
+import logging as _logging_journal
+import os as _os_journal
+_JOURNAL = _logging_journal.getLogger('egalyx.services.ia_cartographie_service')
+_MOTS_ALERTE = ('\u274c', '\u26a0', 'ERREUR', 'Erreur', 'erreur', 'ERROR', 'Error', 'error', 'Exception', 'chec', 'Traceback', 'CRITIQUE')
+if _os_journal.environ.get('EGALYX_TRACES') == '1' and not _JOURNAL.handlers:
+    _JOURNAL.setLevel(_logging_journal.DEBUG)
+    _h = _logging_journal.StreamHandler()
+    _h.setFormatter(_logging_journal.Formatter('%(asctime)s %(name)s %(levelname)s %(message)s'))
+    _JOURNAL.addHandler(_h)
+    _JOURNAL.propagate = False
+
+
+def _journal(*args, sep=' ', **_ignore):
+    """Ancien print() : écrit dans le journal au lieu de la sortie standard."""
+    try:
+        texte = sep.join(str(a) for a in args)
+    except Exception:  # noqa: BLE001
+        return
+    if any(m in texte for m in _MOTS_ALERTE) and not texte.lstrip().startswith(('\u2705', '\u2713')):
+        _JOURNAL.warning(texte)
+    elif _JOURNAL.isEnabledFor(_logging_journal.DEBUG):
+        _JOURNAL.debug(texte)
+# --- fin du journal
 # services/ia_cartographie_service.py
 import os
 import json
@@ -12,9 +38,9 @@ client = None
 if OPENAI_API_KEY and OPENAI_API_KEY != "mode-simulation" and OPENAI_API_KEY.startswith("sk-") and len(OPENAI_API_KEY) >= 30:  # toutes les clés OpenAI actuelles (sk-proj-…, sk-svcacct-…)
     try:
         client = OpenAI(api_key=OPENAI_API_KEY)
-        print("✅ OpenAI client initialisé pour Cartographie IA")
+        _journal("✅ OpenAI client initialisé pour Cartographie IA")
     except Exception as e:
-        print(f"⚠️ Erreur initialisation OpenAI: {e}")
+        _journal(f"⚠️ Erreur initialisation OpenAI: {e}")
         client = None
 
 
@@ -75,7 +101,7 @@ class IACartographieService:
             return result
             
         except Exception as e:
-            print(f"❌ Erreur OpenAI: {e}")
+            _journal(f"❌ Erreur OpenAI: {e}")
             # Fallback vers l'analyse locale
             return IACartographieService._analyser_localement(cartographie_data)
 

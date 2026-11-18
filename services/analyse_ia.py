@@ -1,3 +1,29 @@
+
+# --- Journal (remplace les anciens print()) : erreurs -> WARNING (journaux du serveur) ; le reste -> DEBUG,
+#     visible seulement avec EGALYX_TRACES=1. Ajouté le 18/11/2026 (ménage).
+import logging as _logging_journal
+import os as _os_journal
+_JOURNAL = _logging_journal.getLogger('egalyx.services.analyse_ia')
+_MOTS_ALERTE = ('\u274c', '\u26a0', 'ERREUR', 'Erreur', 'erreur', 'ERROR', 'Error', 'error', 'Exception', 'chec', 'Traceback', 'CRITIQUE')
+if _os_journal.environ.get('EGALYX_TRACES') == '1' and not _JOURNAL.handlers:
+    _JOURNAL.setLevel(_logging_journal.DEBUG)
+    _h = _logging_journal.StreamHandler()
+    _h.setFormatter(_logging_journal.Formatter('%(asctime)s %(name)s %(levelname)s %(message)s'))
+    _JOURNAL.addHandler(_h)
+    _JOURNAL.propagate = False
+
+
+def _journal(*args, sep=' ', **_ignore):
+    """Ancien print() : écrit dans le journal au lieu de la sortie standard."""
+    try:
+        texte = sep.join(str(a) for a in args)
+    except Exception:  # noqa: BLE001
+        return
+    if any(m in texte for m in _MOTS_ALERTE) and not texte.lstrip().startswith(('\u2705', '\u2713')):
+        _JOURNAL.warning(texte)
+    elif _JOURNAL.isEnabledFor(_logging_journal.DEBUG):
+        _JOURNAL.debug(texte)
+# --- fin du journal
 # services/analyse_ia.py - Version corrigée
 import os
 import json
@@ -17,36 +43,36 @@ class ServiceAnalyseIA:
         self.client = None
         self.quota_error = False
         
-        print(f"\n🔍 INITIALISATION SERVICE IA")
-        print(f"   Clé API: {'✅ Présente' if self.api_key else '❌ Absente'}")
+        _journal(f"\n🔍 INITIALISATION SERVICE IA")
+        _journal(f"   Clé API: {'✅ Présente' if self.api_key else '❌ Absente'}")
         
         if not self.api_key or self.api_key.startswith("mode-simulation"):
-            print("   🔧 Mode simulation activé (pas de clé API valide)")
+            _journal("   🔧 Mode simulation activé (pas de clé API valide)")
             return
         
         # Vérifier le format de la clé
         if not self.api_key.startswith("sk-"):
-            print(f"   ⚠️ Format clé invalide (doit commencer par 'sk-')")
+            _journal(f"   ⚠️ Format clé invalide (doit commencer par 'sk-')")
             return
         
         # Initialiser OpenAI
         try:
             from openai import OpenAI
             self.client = OpenAI(api_key=self.api_key)
-            print("   ✅ Client OpenAI initialisé")
+            _journal("   ✅ Client OpenAI initialisé")
             
             # Tester la connexion
             if self._tester_connexion():
                 self.mode_simulation = False
-                print("   ✅ Mode réel activé")
+                _journal("   ✅ Mode réel activé")
             else:
-                print("   🔧 Mode simulation activé (test échoué)")
+                _journal("   🔧 Mode simulation activé (test échoué)")
                 
         except ImportError:
-            print("   ⚠️ Package OpenAI non installé")
-            print("      pip install openai")
+            _journal("   ⚠️ Package OpenAI non installé")
+            _journal("      pip install openai")
         except Exception as e:
-            print(f"   ⚠️ Erreur: {e}")
+            _journal(f"   ⚠️ Erreur: {e}")
     
     def _tester_connexion(self):
         """Tester la connexion à l'API - retourne True si succès"""
@@ -56,33 +82,33 @@ class ServiceAnalyseIA:
         try:
             # Test très basique pour vérifier l'authentification
             response = self.client.models.list(timeout=10.0)
-            print(f"   ✅ Connexion API OK - {len(response.data)} modèles disponibles")
+            _journal(f"   ✅ Connexion API OK - {len(response.data)} modèles disponibles")
             return True
             
         except Exception as e:
             error_msg = str(e)
-            print(f"   ❌ Erreur connexion API")
+            _journal(f"   ❌ Erreur connexion API")
             
             # Messages d'erreur spécifiques
             if "insufficient_quota" in error_msg or "429" in error_msg:
-                print("   💸 ERREUR QUOTA: Plus de crédit sur votre compte")
-                print("      https://platform.openai.com/billing")
+                _journal("   💸 ERREUR QUOTA: Plus de crédit sur votre compte")
+                _journal("      https://platform.openai.com/billing")
                 self.quota_error = True
             elif "Invalid API key" in error_msg:
-                print("   🔑 Clé API invalide")
+                _journal("   🔑 Clé API invalide")
             elif "rate limit" in error_msg.lower():
-                print("   ⏳ Limite de taux, réessayez plus tard")
+                _journal("   ⏳ Limite de taux, réessayez plus tard")
             else:
-                print(f"   Détails: {error_msg[:100]}...")
+                _journal(f"   Détails: {error_msg[:100]}...")
             
             return False
     
     def analyser_audit(self, audit_id, type_analyse='complet', user_id=None):
         """Analyser un audit avec l'IA"""
         
-        print(f"\n🎯 ANALYSE IA DÉMARRÉE")
-        print(f"   Audit ID: {audit_id}")
-        print(f"   Mode: {'Simulation' if self.mode_simulation else 'Réel'}")
+        _journal(f"\n🎯 ANALYSE IA DÉMARRÉE")
+        _journal(f"   Audit ID: {audit_id}")
+        _journal(f"   Mode: {'Simulation' if self.mode_simulation else 'Réel'}")
         
         if self.mode_simulation:
             return self._simuler_analyse_detaille(audit_id, type_analyse)
@@ -92,8 +118,8 @@ class ServiceAnalyseIA:
             return self._analyser_reel(audit_id, type_analyse)
             
         except Exception as e:
-            print(f"❌ Erreur analyse réelle: {e}")
-            print("   Fallback vers la simulation")
+            _journal(f"❌ Erreur analyse réelle: {e}")
+            _journal("   Fallback vers la simulation")
             return self._simuler_analyse_detaille(audit_id, type_analyse)
     
     def _analyser_reel(self, audit_id, type_analyse):
@@ -144,8 +170,8 @@ class ServiceAnalyseIA:
                     'timestamp': datetime.now().isoformat()
                 }
                 
-                print(f"   ✅ Analyse réelle terminée")
-                print(f"   Tokens utilisés: {response.usage.total_tokens}")
+                _journal(f"   ✅ Analyse réelle terminée")
+                _journal(f"   Tokens utilisés: {response.usage.total_tokens}")
                 
                 return resultat
                 
@@ -200,7 +226,7 @@ class ServiceAnalyseIA:
                 return self._generer_analyse_realiste(audit, constatations, recommandations, type_analyse)
                 
         except Exception as e:
-            print(f"⚠️ Erreur simulation détaillée: {e}")
+            _journal(f"⚠️ Erreur simulation détaillée: {e}")
             import traceback
             traceback.print_exc()
             # Retourner une simulation par défaut
@@ -482,9 +508,9 @@ class ServiceAnalyseIA:
     def generer_lettre_mission(self, audit_id, feuille_id=None):
         """Générer une lettre de mission pour un audit"""
         
-        print(f"\n📝 GÉNÉRATION LETTRE DE MISSION")
-        print(f"   Audit ID: {audit_id}")
-        print(f"   Mode: {'Simulation' if self.mode_simulation else 'Réel'}")
+        _journal(f"\n📝 GÉNÉRATION LETTRE DE MISSION")
+        _journal(f"   Audit ID: {audit_id}")
+        _journal(f"   Mode: {'Simulation' if self.mode_simulation else 'Réel'}")
         
         # Récupérer le contexte d'application
         app_context = self.get_app_context()
@@ -505,7 +531,7 @@ class ServiceAnalyseIA:
             try:
                 return self._generer_lettre_mission_reelle(audit)
             except Exception as e:
-                print(f"❌ Erreur génération lettre: {e}")
+                _journal(f"❌ Erreur génération lettre: {e}")
                 return self._simuler_lettre_mission(audit_id, audit)
 
     def _generer_lettre_mission_reelle(self, audit):
@@ -580,7 +606,7 @@ class ServiceAnalyseIA:
                 raise ValueError("Pas de JSON trouvé")
                 
         except Exception as e:
-            print(f"❌ Erreur OpenAI: {e}")
+            _journal(f"❌ Erreur OpenAI: {e}")
             return self._simuler_lettre_mission(audit.id, audit)
 
     def _simuler_lettre_mission(self, audit_id, audit=None):
