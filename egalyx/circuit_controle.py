@@ -21,6 +21,32 @@ administration, « À valider » du N2) :
 Droits : permissions des campagnes (« gérer les campagnes ») et du N2 (« gérer le contrôle
 interne N2 ») ; la permission « gérer les audits » n'intervient plus.
 """
+
+# --- Journal (remplace les anciens print()) : erreurs -> WARNING (journaux du serveur) ; le reste -> DEBUG,
+#     visible seulement avec EGALYX_TRACES=1. Ajouté le 18/11/2026 (ménage).
+import logging as _logging_journal
+import os as _os_journal
+_JOURNAL = _logging_journal.getLogger('egalyx.circuit_controle')
+_MOTS_ALERTE = ('\u274c', '\u26a0', 'ERREUR', 'Erreur', 'erreur', 'ERROR', 'Error', 'error', 'Exception', 'chec', 'Traceback', 'CRITIQUE')
+if _os_journal.environ.get('EGALYX_TRACES') == '1' and not _JOURNAL.handlers:
+    _JOURNAL.setLevel(_logging_journal.DEBUG)
+    _h = _logging_journal.StreamHandler()
+    _h.setFormatter(_logging_journal.Formatter('%(asctime)s %(name)s %(levelname)s %(message)s'))
+    _JOURNAL.addHandler(_h)
+    _JOURNAL.propagate = False
+
+
+def _journal(*args, sep=' ', **_ignore):
+    """Ancien print() : écrit dans le journal au lieu de la sortie standard."""
+    try:
+        texte = sep.join(str(a) for a in args)
+    except Exception:  # noqa: BLE001
+        return
+    if any(m in texte for m in _MOTS_ALERTE) and not texte.lstrip().startswith(('\u2705', '\u2713')):
+        _JOURNAL.warning(texte)
+    elif _JOURNAL.isEnabledFor(_logging_journal.DEBUG):
+        _JOURNAL.debug(texte)
+# --- fin du journal
 from datetime import datetime
 
 from flask import url_for
@@ -430,7 +456,7 @@ def _cartographie(pl, u, action, raison=''):
         from egalyx import c2n_cartographie as cc
         return cc.appliquer(pl, u) if action == 'appliquer' else cc.annuler(pl, u, raison)
     except Exception as e:      # la décision reste valable ; l'effet sera visible sur la fiche
-        print(f"⚠️ Contrôle N2 → cartographie : {e}")
+        _journal(f"⚠️ Contrôle N2 → cartographie : {e}")
         return 0
 
 
@@ -469,7 +495,7 @@ def _envelopper(cls, nom, apres, refuser_auteur):
             try:
                 apres(self, user, *a, **k)
             except Exception as e:      # la décision N2 reste valable même si la campagne pose problème
-                print(f"⚠️ Circuit contrôle : propagation à la campagne impossible ({e})")
+                _journal(f"⚠️ Circuit contrôle : propagation à la campagne impossible ({e})")
         return ok, msg
     methode._egalyx_circuit = True
     methode.__doc__ = orig.__doc__

@@ -15,6 +15,32 @@ Quand l'une des conditions manque, l'IA DISPARAÎT :
 Le réglage plateforme est enregistré dans instance/egalyx_reglages.json (pris en compte immédiatement,
 par tous les processus du serveur).
 """
+
+# --- Journal (remplace les anciens print()) : erreurs -> WARNING (journaux du serveur) ; le reste -> DEBUG,
+#     visible seulement avec EGALYX_TRACES=1. Ajouté le 18/11/2026 (ménage).
+import logging as _logging_journal
+import os as _os_journal
+_JOURNAL = _logging_journal.getLogger('egalyx.ia')
+_MOTS_ALERTE = ('\u274c', '\u26a0', 'ERREUR', 'Erreur', 'erreur', 'ERROR', 'Error', 'error', 'Exception', 'chec', 'Traceback', 'CRITIQUE')
+if _os_journal.environ.get('EGALYX_TRACES') == '1' and not _JOURNAL.handlers:
+    _JOURNAL.setLevel(_logging_journal.DEBUG)
+    _h = _logging_journal.StreamHandler()
+    _h.setFormatter(_logging_journal.Formatter('%(asctime)s %(name)s %(levelname)s %(message)s'))
+    _JOURNAL.addHandler(_h)
+    _JOURNAL.propagate = False
+
+
+def _journal(*args, sep=' ', **_ignore):
+    """Ancien print() : écrit dans le journal au lieu de la sortie standard."""
+    try:
+        texte = sep.join(str(a) for a in args)
+    except Exception:  # noqa: BLE001
+        return
+    if any(m in texte for m in _MOTS_ALERTE) and not texte.lstrip().startswith(('\u2705', '\u2713')):
+        _JOURNAL.warning(texte)
+    elif _JOURNAL.isEnabledFor(_logging_journal.DEBUG):
+        _JOURNAL.debug(texte)
+# --- fin du journal
 import functools
 import json
 import logging
@@ -218,4 +244,4 @@ def enregistrer(app):
     app.jinja_env.globals['ia_motifs_adresses'] = MOTIFS_ADRESSES
     faits = neutraliser_services(sys.modules.get(app.import_name))
     if faits:
-        print(f"✅ IA : {len(faits)} fonction(s) d'analyse soumises à l'interrupteur IA")
+        _journal(f"✅ IA : {len(faits)} fonction(s) d'analyse soumises à l'interrupteur IA")

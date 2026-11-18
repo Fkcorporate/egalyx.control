@@ -17,6 +17,32 @@ egalyx/base_donnees.py — mise à jour du schéma et sauvegardes.
    Une sauvegarde sur le même serveur que la base ne protège pas d'une perte du
    serveur : copiez le dossier ailleurs (stockage objet, autre machine).
 """
+
+# --- Journal (remplace les anciens print()) : erreurs -> WARNING (journaux du serveur) ; le reste -> DEBUG,
+#     visible seulement avec EGALYX_TRACES=1. Ajouté le 18/11/2026 (ménage).
+import logging as _logging_journal
+import os as _os_journal
+_JOURNAL = _logging_journal.getLogger('egalyx.base_donnees')
+_MOTS_ALERTE = ('\u274c', '\u26a0', 'ERREUR', 'Erreur', 'erreur', 'ERROR', 'Error', 'error', 'Exception', 'chec', 'Traceback', 'CRITIQUE')
+if _os_journal.environ.get('EGALYX_TRACES') == '1' and not _JOURNAL.handlers:
+    _JOURNAL.setLevel(_logging_journal.DEBUG)
+    _h = _logging_journal.StreamHandler()
+    _h.setFormatter(_logging_journal.Formatter('%(asctime)s %(name)s %(levelname)s %(message)s'))
+    _JOURNAL.addHandler(_h)
+    _JOURNAL.propagate = False
+
+
+def _journal(*args, sep=' ', **_ignore):
+    """Ancien print() : écrit dans le journal au lieu de la sortie standard."""
+    try:
+        texte = sep.join(str(a) for a in args)
+    except Exception:  # noqa: BLE001
+        return
+    if any(m in texte for m in _MOTS_ALERTE) and not texte.lstrip().startswith(('\u2705', '\u2713')):
+        _JOURNAL.warning(texte)
+    elif _JOURNAL.isEnabledFor(_logging_journal.DEBUG):
+        _JOURNAL.debug(texte)
+# --- fin du journal
 import gzip
 import logging
 import os
@@ -46,11 +72,11 @@ def _defaut_litteral(colonne, dialecte):
     return None
 
 
-def colonnes_manquantes(db):
-    """Liste de (table, colonne, instruction SQL) à appliquer."""
+def colonnes_manquantes(db, connexion=None):
+    """Liste de (table, colonne, instruction SQL) à appliquer (connexion : celle d'une migration Alembic)."""
     from sqlalchemy import inspect
-    moteur = db.engine
-    inspecteur = inspect(moteur)
+    moteur = connexion.engine if connexion is not None else db.engine
+    inspecteur = inspect(connexion if connexion is not None else moteur)
     tables_existantes = set(inspecteur.get_table_names())
     prepare = moteur.dialect.identifier_preparer
     dialecte = moteur.dialect.name
@@ -223,7 +249,7 @@ def enregistrer(app, db):
             try:
                 db.create_all()
             except Exception as e:
-                print(f"⚠️ Création des nouvelles tables incomplète : {e}")
+                _journal(f"⚠️ Création des nouvelles tables incomplète : {e}")
         res = completer_schema(db, simulation=simulation)
         if not res:
             print("✅ Schéma à jour : aucune colonne manquante.")
@@ -240,13 +266,13 @@ def enregistrer(app, db):
             try:
                 db.create_all()
             except Exception as e:
-                print(f"⚠️ Création des nouvelles tables incomplète : {e}")
+                _journal(f"⚠️ Création des nouvelles tables incomplète : {e}")
             try:
                 res = completer_schema(db)
                 if res:
-                    print(f"✅ Schéma complété : {len(res)} colonne(s) ajoutée(s).")
+                    _journal(f"✅ Schéma complété : {len(res)} colonne(s) ajoutée(s).")
             except Exception as e:
-                print(f"⚠️ Ajout des colonnes manquantes impossible : {e} — lancez « flask mettre-a-jour-base ».")
+                _journal(f"⚠️ Ajout des colonnes manquantes impossible : {e} — lancez « flask mettre-a-jour-base ».")
 
     # Sauvegarde quotidienne. Avec le rechargeur de Flask, seul le processus enfant planifie.
     if os.environ.get('EGALYX_SAUVEGARDE_AUTO', '1') == '1' and \
@@ -267,7 +293,7 @@ def enregistrer(app, db):
             planif.start()
             app.extensions['egalyx_planificateur'] = planif
         except Exception as e:
-            print(f"⚠️ Sauvegarde automatique non planifiée : {e}")
+            _journal(f"⚠️ Sauvegarde automatique non planifiée : {e}")
 
 
 # =========================================================== page super admin

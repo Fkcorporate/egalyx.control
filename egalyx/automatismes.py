@@ -9,6 +9,32 @@ egalyx/automatismes.py — liens automatiques entre modules et relances.
    - chaque lundi : récapitulatif « Ma semaine » à chaque utilisateur qui a des tâches en retard ou à échéance ;
    - chaque jour : rappel aux référents des signalements dont l'accusé de réception arrive à échéance.
 """
+
+# --- Journal (remplace les anciens print()) : erreurs -> WARNING (journaux du serveur) ; le reste -> DEBUG,
+#     visible seulement avec EGALYX_TRACES=1. Ajouté le 18/11/2026 (ménage).
+import logging as _logging_journal
+import os as _os_journal
+_JOURNAL = _logging_journal.getLogger('egalyx.automatismes')
+_MOTS_ALERTE = ('\u274c', '\u26a0', 'ERREUR', 'Erreur', 'erreur', 'ERROR', 'Error', 'error', 'Exception', 'chec', 'Traceback', 'CRITIQUE')
+if _os_journal.environ.get('EGALYX_TRACES') == '1' and not _JOURNAL.handlers:
+    _JOURNAL.setLevel(_logging_journal.DEBUG)
+    _h = _logging_journal.StreamHandler()
+    _h.setFormatter(_logging_journal.Formatter('%(asctime)s %(name)s %(levelname)s %(message)s'))
+    _JOURNAL.addHandler(_h)
+    _JOURNAL.propagate = False
+
+
+def _journal(*args, sep=' ', **_ignore):
+    """Ancien print() : écrit dans le journal au lieu de la sortie standard."""
+    try:
+        texte = sep.join(str(a) for a in args)
+    except Exception:  # noqa: BLE001
+        return
+    if any(m in texte for m in _MOTS_ALERTE) and not texte.lstrip().startswith(('\u2705', '\u2713')):
+        _JOURNAL.warning(texte)
+    elif _JOURNAL.isEnabledFor(_logging_journal.DEBUG):
+        _JOURNAL.debug(texte)
+# --- fin du journal
 import logging
 import os
 from datetime import datetime, timedelta
@@ -157,7 +183,7 @@ def enregistrer(app):
         event.listen(Incident, 'after_insert', _incident_cree)
         event.listen(MesureKRI, 'after_insert', _mesure_kri_creee)
     except Exception as e:
-        print(f"⚠️ Automatismes incidents / KRI non branchés : {e}")
+        _journal(f"⚠️ Automatismes incidents / KRI non branchés : {e}")
     planif = app.extensions.get('egalyx_planificateur')
     if planif is not None and os.environ.get('EGALYX_RELANCES_AUTO', '1') == '1':
         planif.add_job(lambda: recapitulatif_hebdomadaire(app), 'cron', day_of_week='mon', hour=7, minute=5,

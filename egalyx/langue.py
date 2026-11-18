@@ -21,6 +21,32 @@ Maintenant :
   - en français, les restes d'anglais laissés par l'ancien script sont remis en français.
 Un élément marqué translate="no" (ou classe notranslate) n'est jamais traduit.
 """
+
+# --- Journal (remplace les anciens print()) : erreurs -> WARNING (journaux du serveur) ; le reste -> DEBUG,
+#     visible seulement avec EGALYX_TRACES=1. Ajouté le 18/11/2026 (ménage).
+import logging as _logging_journal
+import os as _os_journal
+_JOURNAL = _logging_journal.getLogger('egalyx.langue')
+_MOTS_ALERTE = ('\u274c', '\u26a0', 'ERREUR', 'Erreur', 'erreur', 'ERROR', 'Error', 'error', 'Exception', 'chec', 'Traceback', 'CRITIQUE')
+if _os_journal.environ.get('EGALYX_TRACES') == '1' and not _JOURNAL.handlers:
+    _JOURNAL.setLevel(_logging_journal.DEBUG)
+    _h = _logging_journal.StreamHandler()
+    _h.setFormatter(_logging_journal.Formatter('%(asctime)s %(name)s %(levelname)s %(message)s'))
+    _JOURNAL.addHandler(_h)
+    _JOURNAL.propagate = False
+
+
+def _journal(*args, sep=' ', **_ignore):
+    """Ancien print() : écrit dans le journal au lieu de la sortie standard."""
+    try:
+        texte = sep.join(str(a) for a in args)
+    except Exception:  # noqa: BLE001
+        return
+    if any(m in texte for m in _MOTS_ALERTE) and not texte.lstrip().startswith(('\u2705', '\u2713')):
+        _JOURNAL.warning(texte)
+    elif _JOURNAL.isEnabledFor(_logging_journal.DEBUG):
+        _JOURNAL.debug(texte)
+# --- fin du journal
 import csv
 import hashlib
 import json
@@ -153,7 +179,7 @@ def charger(dossier=DOSSIER, ancien_csv=None):
                     if len(row) >= 2 and len(cle(row[0])) > 3:
                         _ajouter('en', row[0].strip().strip('"'), row[1].strip().strip('"'))
         except Exception as e:
-            print(f"⚠️ Langue : ancien CSV ignoré ({e})")
+            _journal(f"⚠️ Langue : ancien CSV ignoré ({e})")
     for cible in _MODELES:
         _MODELES[cible].sort(key=lambda m: -len(m[0].pattern))
     _VERSION['valeur'] = empreinte.hexdigest()[:10]
@@ -306,7 +332,7 @@ def _apres_requete(reponse):
                 nouveau = _avant_fin_body(nouveau, _script_navigateur(cible))
             reponse.set_data(nouveau)
         except Exception as e:
-            print(f"⚠️ Langue : page non traduite ({e})")
+            _journal(f"⚠️ Langue : page non traduite ({e})")
     elif reponse.mimetype == 'application/json' and cible != 'fr':
         try:
             donnees = reponse.get_json(silent=True)
@@ -431,7 +457,7 @@ def enregistrer(app):
     app.register_blueprint(bp)
     ancien = os.path.join(app.root_path, 'translations', 'to_translate.csv')
     nb_en, nb_fr = charger(ancien_csv=ancien)
-    print(f"✅ Langue : {nb_en} traductions vers l'anglais, {nb_fr} corrections vers le français")
+    _journal(f"✅ Langue : {nb_en} traductions vers l'anglais, {nb_fr} corrections vers le français")
     # Retire les anciens choix de langue (ils réécrivaient la session à chaque page et l'affichaient dans les journaux)
     avant = app.before_request_funcs.setdefault(None, [])
     avant[:] = [f for f in avant if not (getattr(f, '__name__', '') == 'handle_language'

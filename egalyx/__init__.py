@@ -5,6 +5,32 @@ Branchement (une seule ligne, à la fin de app.py, avant « if __name__ == '__ma
     from egalyx import enregistrer_extensions
     enregistrer_extensions(app, db, csrf=csrf, recalculer_cotations=recalculer_toutes_cotations)
 """
+
+# --- Journal (remplace les anciens print()) : erreurs -> WARNING (journaux du serveur) ; le reste -> DEBUG,
+#     visible seulement avec EGALYX_TRACES=1. Ajouté le 18/11/2026 (ménage).
+import logging as _logging_journal
+import os as _os_journal
+_JOURNAL = _logging_journal.getLogger('egalyx.modules')
+_MOTS_ALERTE = ('\u274c', '\u26a0', 'ERREUR', 'Erreur', 'erreur', 'ERROR', 'Error', 'error', 'Exception', 'chec', 'Traceback', 'CRITIQUE')
+if _os_journal.environ.get('EGALYX_TRACES') == '1' and not _JOURNAL.handlers:
+    _JOURNAL.setLevel(_logging_journal.DEBUG)
+    _h = _logging_journal.StreamHandler()
+    _h.setFormatter(_logging_journal.Formatter('%(asctime)s %(name)s %(levelname)s %(message)s'))
+    _JOURNAL.addHandler(_h)
+    _JOURNAL.propagate = False
+
+
+def _journal(*args, sep=' ', **_ignore):
+    """Ancien print() : écrit dans le journal au lieu de la sortie standard."""
+    try:
+        texte = sep.join(str(a) for a in args)
+    except Exception:  # noqa: BLE001
+        return
+    if any(m in texte for m in _MOTS_ALERTE) and not texte.lstrip().startswith(('\u2705', '\u2713')):
+        _JOURNAL.warning(texte)
+    elif _JOURNAL.isEnabledFor(_logging_journal.DEBUG):
+        _JOURNAL.debug(texte)
+# --- fin du journal
 import logging
 
 journal = logging.getLogger('egalyx')
@@ -163,7 +189,7 @@ def enregistrer_extensions(app, db, csrf=None, recalculer_cotations=None, constr
         egalyx_paiement_actif=lambda: bool(paiement.prestataires()),
         egalyx_courriel_configure=courriel.est_configure,
     )
-    print("✅ Modules v4 : 2FA, SSO, alerte interne, tiers/LCB-FT, signature, paiement, export, "
+    _journal("✅ Modules v4 : 2FA, SSO, alerte interne, tiers/LCB-FT, signature, paiement, export, "
           "API documentée, organigramme éditable, paramètres de risque, sauvegardes, démonstration, "
           "rapport au comité, bibliothèque sectorielle, recherche globale, Ma semaine, relances")
 
