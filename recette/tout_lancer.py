@@ -43,6 +43,9 @@ ETAPES = [
     ('Sécurité : routes de réparation introuvables', 'routes_reparation.py', []),
     ('Espace opérateur : droits et périmètre sur chaque page', 'operateurs.py', []),
     ('Fenêtres Directions / Pôles, compteur des feuilles de travail', 'correctifs_ui.py', []),
+    ('Base de données : migrations (référence, base ancienne, PostgreSQL)', 'migrations_base.py', []),
+    ('Feuille de style commune : chargement, variables orphelines, mode sombre', 'feuille_commune.py', []),
+    ('Compatibilité avec la version de Python de Render', 'compat_python.py', []),
 ]
 BRUIT = ('🟢', '🔐', '📋', '✅', '⚠', '❌', '   ', '🔧', '🔒')
 ok_global = True
