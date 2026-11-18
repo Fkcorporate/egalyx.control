@@ -110,8 +110,12 @@ verif('Le responsable voit le dispositif à vérifier', 'Dispositif à vérifier
 
 print('--- Plans')
 r, t = go('gestionnaire', 'get', f'/plan-action-risque/{psid}')
-verif('La page d\'un plan sans risque s\'affiche (plantait)', r.status_code == 200 and 'Aucun risque rattaché' in t,
-      f'{r.status_code} {socle.cause(A)}')
+# depuis le 18/11/2026 (egalyx/plans_nature.py) : un plan sans risque ouvert par l'adresse des risques est
+# renvoyé vers SA fiche (plan indépendant) au lieu d'être affiché comme un plan de risque
+cible = r.headers.get('Location', '')
+r2 = socle.navigateur(A, ids['gestionnaire']).get(f'/plan-action-risque/{psid}', follow_redirects=True)
+verif('Un plan sans risque ouvert par l\'adresse des risques s\'affiche dans son module (plantait)',
+      r.status_code == 302 and '/plan-action-independant/' in cible and r2.status_code == 200, f'{r.status_code} {cible} {r2.status_code} {socle.cause(A)}')
 r, _ = go('resp_dmr', 'post', f'/plan-action-risque/{pid}/changer-statut-rapide', json={'statut': 'en_cours'})
 verif('Le responsable du plan met à jour son statut', r.status_code in (200, 302), str(r.status_code))
 go('lecteur', 'post', f'/plan-action-risque/{pid}/changer-statut-rapide', json={'statut': 'annule'})

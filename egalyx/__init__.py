@@ -163,6 +163,8 @@ def enregistrer_extensions(app, db, csrf=None, recalculer_cotations=None, constr
         audit_compteurs.enregistrer(app)          # fiche audit : nombre de feuilles de travail dès l'ouverture
         from egalyx import plans_nature
         plans_nature.enregistrer(app)             # plans d'action : audit, risque et indépendant chacun dans son module
+        from egalyx import plans_suivi
+        plans_suivi.enregistrer(app)              # progression, fin de plan, recommandation et constatation : mêmes règles partout
     except ImportError:
         pass
     try:                                   # paquet facultatif : notifications sur téléphone / ordinateur + pastille

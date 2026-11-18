@@ -1,28 +1,33 @@
-EGALYX — Plans d'action : audit, risque et indépendant chacun dans son module (18/11/2026)
-=========================================================================================
+EGALYX — Plans d'action : progression qui tient, suites d'un plan terminé (19/11/2026)
+=====================================================================================
 
-À installer APRÈS le paquet egalyx_menage_structure (il modifie sections/audit.py, créé par ce paquet).
-
+À installer APRÈS egalyx_menage_structure puis egalyx_plans_separes.
    python3 installer_mise_a_jour.py /chemin/du/projet      puis redémarrer le serveur.
    Aucune modification de la base.
 
-LE PROBLÈME
-Les plans d'audit, de risque et indépendants sont rangés dans la même table ; plusieurs écrans les
-envoyaient tous vers les pages des risques. Exemple : depuis un plan d'audit, l'espace de travail d'une
-sous-action affichait le fil d'Ariane « Cartographies » et son bouton Retour ouvrait « Plan d'action
-risque ». « Tous les plans d'action » ouvrait aussi les plans d'audit dans la page des risques, et la page
-Audit > Plans d'action mélangeait les plans des risques.
+CE QUI NE MARCHAIT PAS
+1. Plan d'audit : le curseur de progression, la liste de statut et la suppression d'une sous-action
+   appelaient des adresses qui n'existent pas (/sous-action/<id>/progression, /statut, méthode DELETE).
+   Rien n'était enregistré : après actualisation, l'ancienne valeur revenait.
+2. Une sous-action terminée ne terminait pas toujours le plan (page des risques, plans indépendants,
+   espace opérateur) ; chaque écran recalculait à sa façon.
+3. Plan d'audit terminé : la recommandation liée était CLÔTURÉE D'OFFICE, sans la validation du gestionnaire
+   prévue par le registre des recommandations. Sur les autres écrans, elle n'était pas prévenue du tout.
+4. Plan N2 terminé : la recommandation N2 n'était pas mise à jour.
+5. Changer le statut ou supprimer une sous-action ne demandait que d'être connecté.
 
-CE QUI CHANGE
-- Chaque plan s'ouvre dans SON module, quelle que soit l'adresse ou le lien utilisé (un plan d'audit
-  ouvert par l'adresse des risques est renvoyé vers sa fiche d'audit, et inversement).
-- Espace de travail (commun aux plans) : fil d'Ariane et bouton Retour du bon module
-  (Audits > audit > Plans d'action d'audit, ou Cartographies > risque).
-- Audit > Plans d'action devient « Plans d'action d'audit » : plans d'audit (onglet Indépendants gardé).
-  Plus d'onglet « Risque », de bouton « Voir Risques » ni de création « plan lié à un risque » ici ; un
-  bouton mène à « Tous les plans d'action ». Retour depuis la fiche d'un plan d'audit -> cette liste.
-- Tous les plans d'action : origine Audit / Risques / Indépendant / Contrôle N2, filtre par origine,
-  chaque ligne ouvre la fiche de son module.
-- Les plans des risques restent sur la fiche de chaque risque, comme avant.
+RÈGLES DÉSORMAIS APPLIQUÉES PARTOUT (egalyx/plans_suivi.py, au moment de l'enregistrement)
+- Sous-action : 100 % -> terminée ; 1 à 99 % -> en cours ; 0 % -> à faire ; « terminée » -> 100 %.
+- Plan avec sous-actions : progression = moyenne des sous-actions (le curseur du plan est alors grisé
+  dans la fenêtre « Modifier », avec l'explication).
+- Plan à 100 % ou marqué terminé -> terminé (date de fin), sous-actions restantes terminées.
+  Redescend sous 100 % -> rouvert.
+- Recommandation liée (audit interne ou N2) : avancement = moyenne de ses plans ; tous ses plans terminés ->
+  CLÔTURE DEMANDÉE (historique + notification aux gestionnaires) ; un gestionnaire la valide ou la refuse
+  dans le registre des recommandations. Plan rouvert -> demande retirée.
+- Recommandation clôturée -> sa constatation passe « close » quand toutes ses recommandations le sont ;
+  recommandation rouverte -> constatation « en action ».
+- Changer le statut ou supprimer une sous-action : droit de modifier le plan exigé.
+- Un ancien plan « terminé » n'est jamais rouvert par une simple modification de texte.
 
-VÉRIFIER : cd recette && python3 plans_nature.py   (25 vérifications), puis python3 tout_lancer.py
+VÉRIFIER : cd recette && python3 plans_suivi.py   (31 vérifications), puis python3 tout_lancer.py

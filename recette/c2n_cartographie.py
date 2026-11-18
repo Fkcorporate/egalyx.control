@@ -109,7 +109,7 @@ verif('Campagne validée', statut == 'termine', f'{statut} {e}')
 verif('Taux 70 % → « À corriger » : efficacité 4 → 3 sur chaque dispositif testé', eff1 == 3 and dm(D2)[0] == 3,
       f'{eff1} {dm(D2)[0]}')
 verif('Vérification « Contrôle N2 » enregistrée sur le dispositif', nv1 == 1, str(nv1))
-verif('Prochaine vérification dans 30 jours (après un échec)', prochaine1 == dt.date.today() + dt.timedelta(days=30), str(prochaine1))
+verif('Prochaine vérification dans 30 jours (après un échec)', prochaine1 in {d + dt.timedelta(days=30) for d in (dt.date.today(), dt.datetime.utcnow().date())}, str(prochaine1))  # date du serveur (UTC) ou locale : autour de minuit elles diffèrent
 verif('Dispositif d\'une autre organisation intact', dm(DX)[0] == 4)
 with A.app.app_context():
     h = M.DispositifHistoriqueEfficacite.query.filter_by(dispositif_id=D1).order_by(M.DispositifHistoriqueEfficacite.id.desc()).first()

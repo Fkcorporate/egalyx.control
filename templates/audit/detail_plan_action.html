@@ -1041,8 +1041,15 @@
                     </div>
                     <div class="mb-3">
                         <label class="form-label fw-semibold">Avancement</label>
+                        {% if plan_action.sous_actions %}
+                        {# avec des sous-actions, l'avancement du plan est leur moyenne : il se règle sur chaque sous-action #}
+                        <input type="range" class="form-range" id="planPourcentageRange" min="0" max="100"
+                               value="{{ plan_action.pourcentage_realisation or 0 }}" disabled>
+                        <div class="form-text">Calculé à partir des sous-actions : réglez l'avancement de chacune d'elles.</div>
+                        {% else %}
                         <input type="range" class="form-range" id="planPourcentageRange" name="pourcentage_realisation" 
                                min="0" max="100" value="{{ plan_action.pourcentage_realisation or 0 }}">
+                        {% endif %}
                         <div class="d-flex justify-content-between">
                             <small>0%</small>
                             <small class="fw-bold" id="planPourcentageValue">{{ plan_action.pourcentage_realisation or 0 }}%</small>
@@ -1129,48 +1136,32 @@ document.addEventListener('DOMContentLoaded', function() {
 // ============================================
 // GESTION DES SOUS-ACTIONS
 // ============================================
+function _envoyerSousAction(url, champs, message) {
+    // Adresses réelles de l'application (formulaire classique) ; la page est rechargée pour afficher
+    // la progression du plan recalculée (egalyx/plans_suivi.py).
+    const corps = new URLSearchParams(champs || {});
+    corps.append('csrf_token', csrfToken);
+    return fetch(url, {
+        method: 'POST',
+        headers: { 'X-CSRFToken': csrfToken, 'Content-Type': 'application/x-www-form-urlencoded', 'X-Requested-With': 'fetch' },
+        body: corps
+    })
+    .then(response => {
+        if (response.status === 403) throw new Error("Vous n'avez pas le droit de modifier ce plan.");
+        if (!response.ok) throw new Error('Enregistrement impossible (' + response.status + ')');
+        showToast('success', message);
+        setTimeout(() => location.reload(), 600);
+    })
+    .catch(error => showToast('error', error.message || 'Erreur réseau'));
+}
+
 function changerProgression(sousActionId, progression) {
     progression = Math.round(progression / 25) * 25;
-    
-    fetch(`/sous-action/${sousActionId}/progression`, {
-        method: 'POST',
-        headers: {
-            'X-CSRFToken': csrfToken,
-            'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({ progression: parseInt(progression) })
-    })
-    .then(response => response.json())
-    .then(data => {
-        if (data.success) {
-            showToast('success', 'Progression mise à jour');
-        } else {
-            showToast('error', 'Erreur: ' + data.error);
-        }
-    })
-    .catch(error => {
-        showToast('error', 'Erreur réseau');
-    });
+    _envoyerSousAction(`/sous-action/${sousActionId}/maj-progression`, { progression: parseInt(progression) }, 'Progression enregistrée');
 }
 
 function changerStatut(sousActionId, statut) {
-    fetch(`/sous-action/${sousActionId}/statut`, {
-        method: 'POST',
-        headers: {
-            'X-CSRFToken': csrfToken,
-            'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({ statut: statut })
-    })
-    .then(response => response.json())
-    .then(data => {
-        if (data.success) {
-            showToast('success', 'Statut mis à jour');
-            setTimeout(() => location.reload(), 1000);
-        } else {
-            showToast('error', 'Erreur: ' + data.error);
-        }
-    });
+    _envoyerSousAction(`/sous-action/${sousActionId}/modifier-statut`, { statut: statut }, 'Statut enregistré');
 }
 
 function modifierSousAction(sousActionId) {
@@ -1179,21 +1170,7 @@ function modifierSousAction(sousActionId) {
 
 function supprimerSousAction(sousActionId) {
     if (confirm('Supprimer cette sous-action ?')) {
-        fetch(`/sous-action/${sousActionId}/supprimer`, {
-            method: 'DELETE',
-            headers: {
-                'X-CSRFToken': csrfToken
-            }
-        })
-        .then(response => response.json())
-        .then(data => {
-            if (data.success) {
-                showToast('success', 'Sous-action supprimée');
-                setTimeout(() => location.reload(), 1000);
-            } else {
-                showToast('error', 'Erreur: ' + data.error);
-            }
-        });
+        _envoyerSousAction(`/sous-action/${sousActionId}/supprimer`, {}, 'Sous-action supprimée');
     }
 }
 

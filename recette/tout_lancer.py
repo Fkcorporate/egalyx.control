@@ -46,6 +46,7 @@ ETAPES = [
     ('Base de données : migrations (référence, base ancienne, PostgreSQL)', 'migrations_base.py', []),
     ('Feuille de style commune : chargement, variables orphelines, mode sombre', 'feuille_commune.py', []),
     ('Plans d\'action : audit, risque et indépendant chacun dans son module', 'plans_nature.py', []),
+    ('Plans d\'action : progression qui tient, plan terminé, recommandation et constatation', 'plans_suivi.py', []),
     ('Compatibilité avec la version de Python de Render', 'compat_python.py', []),
 ]
 BRUIT = ('🟢', '🔐', '📋', '✅', '⚠', '❌', '   ', '🔧', '🔒')

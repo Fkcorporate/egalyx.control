@@ -59890,11 +59890,8 @@ def maj_progression_sous_action(sous_action_id):
         if all(s.pourcentage_realisation == 100 for s in plan.sous_actions):
             plan.statut = 'termine'
             plan.date_fin_reelle = datetime.utcnow().date()
-            
-            # Mettre à jour la recommandation associée
-            if plan.recommandation:
-                plan.recommandation.statut = 'termine'
-                plan.recommandation.taux_avancement = 100
+            # La recommandation liée n'est plus clôturée d'office : sa clôture est DEMANDÉE et un gestionnaire
+            # la valide dans le registre des recommandations (egalyx/plans_suivi.py).
         
         db.session.commit()
         
