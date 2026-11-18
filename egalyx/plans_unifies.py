@@ -1,5 +1,6 @@
 """
-egalyx/plans_unifies.py — un seul registre des plans d'action : ceux des risques et ceux du contrôle interne N2.
+egalyx/plans_unifies.py — un seul registre des plans d'action : risques, audit, indépendants et contrôle interne N2
+(chaque ligne ouvre la fiche de SON module).
 
 Les deux modules gardent leurs fiches (un plan N2 naît d'une non-conformité, un plan de risque d'un risque ou d'un
 dispositif), mais on les suit au même endroit : « Tous les plans d'action » (/plans-action/registre), avec les mêmes
@@ -101,22 +102,31 @@ def lignes(client_id, filtre_source=None, filtre_etat=None, moi=False, retard=Fa
             noms[u_id] = u.username if u else ''
         return noms[u_id]
 
-    if filtre_source in (None, '', 'risques'):
+    if filtre_source in (None, '', 'risques', 'audit', 'independant'):
         q = m.PlanAction.query.filter(m.PlanAction.is_archived.isnot(True))
         if client_id:   # plans de l'organisation + ceux dont on est responsable (comme « Ma semaine »)
             q = q.filter(or_(m.PlanAction.client_id == client_id, m.PlanAction.responsable_id == uid))
         for p in q.all():
             if not (voir_risques or p.responsable_id == uid):
                 continue
-            if p.risque_id:
+            # chaque plan garde son module : audit, risque ou indépendant (egalyx/plans_nature.py)
+            from egalyx.plans_nature import nature_plan, lien_plan
+            n = nature_plan(p)
+            cle = {'risque': 'risques', 'audit': 'audit', 'independant': 'independant'}[n]
+            if filtre_source and filtre_source != cle:
+                continue
+            if n == 'risque':
                 r = m.db.session.get(m.Risque, p.risque_id)
                 rat = f'Risque {r.reference}' if r else 'Risque'
-                lien = url_for('detail_plan_action_risque', plan_id=p.id)
+            elif n == 'audit':
+                a = m.db.session.get(m.Audit, p.audit_id)
+                rat = f"Audit {a.reference or a.titre or ''}".strip() if a else 'Audit'
             else:
-                rat = 'Plan indépendant' if not p.audit_id else 'Audit'
-                lien = url_for('detail_plan_action_risque', plan_id=p.id)
+                rat = 'Plan indépendant'
+            lien = lien_plan(p)
             ech = p.date_fin_prevue
-            out.append({'source': 'risques', 'source_libelle': 'Risques', 'reference': p.reference or f'PA-{p.id}',
+            out.append({'source': cle, 'source_libelle': {'risques': 'Risques', 'audit': 'Audit', 'independant': 'Indépendant'}[cle],
+                        'reference': p.reference or f'PA-{p.id}',
                         'titre': p.nom or (p.description or '')[:120], 'rattachement': rat,
                         'responsable_id': p.responsable_id, 'responsable': nom(p.responsable_id), 'echeance': ech,
                         'avancement': p.pourcentage_realisation or 0, 'etat': etat(p.statut), 'lien': lien})
@@ -171,7 +181,9 @@ def page():
     filtres = lignes(cid, source or None, etat_f or None, moi, retard) if (source or etat_f or moi or retard) else tout
     stats = {'total': len(tout), 'ouverts': sum(1 for l in tout if l['etat'] in ('a_faire', 'en_cours')),
              'retard': sum(1 for l in tout if l['en_retard']),
-             'risques': sum(1 for l in tout if l['source'] == 'risques'), 'n2': sum(1 for l in tout if l['source'] == 'n2')}
+             'risques': sum(1 for l in tout if l['source'] == 'risques'), 'n2': sum(1 for l in tout if l['source'] == 'n2'),
+             'audit': sum(1 for l in tout if l['source'] == 'audit'),
+             'independant': sum(1 for l in tout if l['source'] == 'independant')}
     return render_template('egalyx/plans_registre.html', lignes=filtres, stats=stats, source=source, etat=etat_f,
                            moi=moi, retard=retard, libelles=LIBELLES_ETAT)
 
