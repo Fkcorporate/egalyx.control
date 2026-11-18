@@ -120,6 +120,11 @@ def test_contenu_coherent():
 def test_endpoints_des_liens_existent():
     """Chaque lien de fiche vise une route réellement déclarée dans l'application."""
     src = open(os.path.join(RACINE, 'app.py'), encoding='utf-8').read()
+    dossier_sections = os.path.join(RACINE, 'sections')          # parties d'app.py (découpage du 18/11/2026)
+    if os.path.isdir(dossier_sections):
+        for f in sorted(os.listdir(dossier_sections)):
+            if f.endswith('.py'):
+                src += '\n' + open(os.path.join(dossier_sections, f), encoding='utf-8').read()
     fonctions = set(re.findall(r'^def ([a-z_0-9]+)\(', src, re.M))
     blueprints = {}
     for f in os.listdir(os.path.join(RACINE, 'egalyx')):
