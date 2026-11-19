@@ -94,7 +94,7 @@ def test_question_inconnue_puis_envoi_au_support(env):
     demander, tickets = env
     rep = demander('le bouton vert de la page 3 clignote bizarrement depuis hier soir')
     assert rep['intention'] == 'incompris'
-    assert rep['suggestions'][0] == 'Oui, envoyer ma question au support'
+    assert 'Oui, envoyer ma question au support' in rep['suggestions']     # après les fiches proches (« Vouliez-vous dire »)
     rep = demander('Oui, envoyer ma question au support')
     assert rep['intention'] == 'ticket_cree' and 'TKT-2026-0001' in rep['texte']
     assert tickets[0][0].startswith('le bouton vert') and 'awa' in tickets[0][1]

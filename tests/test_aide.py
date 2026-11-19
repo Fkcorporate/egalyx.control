@@ -130,7 +130,7 @@ def test_endpoints_des_liens_existent():
     for f in os.listdir(os.path.join(RACINE, 'egalyx')):
         if f.endswith('.py'):
             t = open(os.path.join(RACINE, 'egalyx', f), encoding='utf-8').read()
-            for nom in re.findall(r"Blueprint\('([a-z_]+)'", t):
+            for nom in re.findall(r"Blueprint\('([a-z_0-9]+)'", t):
                 blueprints.setdefault(nom, set()).update(re.findall(r'^def ([a-z_0-9]+)\(', t, re.M))
                 blueprints[nom].update(re.findall(r'^    def ([a-z_0-9]+)\(', t, re.M))
     externes = {'notifications.liste_notifications'}      # blueprint du projet hôte, déjà utilisé par base.html
