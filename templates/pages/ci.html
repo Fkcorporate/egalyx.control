@@ -317,6 +317,20 @@
                                 <textarea class="form-control" name="message" rows="4" 
                                           placeholder="Dites-nous en plus sur vos besoins..."></textarea>
                             </div>
+                            <div class="col-12" style="position:absolute;left:-5000px" aria-hidden="true">
+                                <label for="ci-site">Ne pas remplir ce champ</label>
+                                <input type="text" id="ci-site" name="site_web" tabindex="-1" autocomplete="off">
+                            </div>
+                            <div class="col-12">
+                                <label class="form-label" for="ci-defi">Vérification anti-spam *</label>
+                                <div class="d-flex align-items-center gap-2 flex-wrap">
+                                    <span class="fw-semibold" id="ciDefiQuestion">Chargement de la question…</span>
+                                    <input type="text" class="form-control" style="max-width:8rem" id="ci-defi" name="defi_reponse" inputmode="numeric" autocomplete="off" required>
+                                    <button type="button" class="btn btn-link btn-sm p-0" onclick="chargerDefiCI()">Autre question</button>
+                                </div>
+                                <input type="hidden" name="defi_jeton" id="ciDefiJeton">
+                                <input type="hidden" name="sujet" value="Contact Côte d'Ivoire">
+                            </div>
                             <div class="col-12">
                                 <button type="submit" class="btn btn-primary-custom w-100">
                                     <i class="fas fa-paper-plane me-2"></i>Envoyer
@@ -381,6 +395,19 @@
 {% block scripts %}
 {{ super() }}
 <script>
+// Petite question anti-spam (même protection que la page de contact principale)
+function chargerDefiCI() {
+    return fetch('/api/contact/defi', { headers: { 'X-Requested-With': 'XMLHttpRequest' }, cache: 'no-store' })
+        .then(r => r.json()).then(d => {
+            const bloc = document.getElementById('ci-defi');
+            if (!d.question) { bloc.closest('.col-12').style.display = 'none'; bloc.required = false; return; }
+            document.getElementById('ciDefiQuestion').textContent = d.question;
+            document.getElementById('ciDefiJeton').value = d.jeton;
+            bloc.value = '';
+        }).catch(() => {});
+}
+document.addEventListener('DOMContentLoaded', chargerDefiCI);
+
 function envoyerContactCI(event) {
     event.preventDefault();
     
@@ -392,17 +419,20 @@ function envoyerContactCI(event) {
     submitBtn.disabled = true;
     submitBtn.innerHTML = '<i class="fas fa-spinner fa-spin me-2"></i>Envoi en cours...';
     
-    fetch('/api/contact-ci', {
+    fetch('/api/contact', {
         method: 'POST',
-        body: formData
+        body: formData,
+        headers: { 'X-Requested-With': 'XMLHttpRequest' }
     })
     .then(response => response.json())
     .then(data => {
         if (data.success) {
             alert('✅ Message envoyé ! Notre équipe à Abidjan vous contactera sous 24h.');
             form.reset();
+            chargerDefiCI();   // chaque question ne sert qu'une fois
         } else {
-            alert('❌ Erreur: ' + (data.message || 'Veuillez réessayer'));
+            alert('❌ Erreur: ' + (data.message || (data.errors || []).join(' ') || 'Veuillez réessayer'));
+            if (data.nouveau_defi) chargerDefiCI();
         }
     })
     .catch(error => {

@@ -1,0 +1,49 @@
+{% extends "base.html" %}
+{% import "_macros/page.html" as pg %}
+{% block title %}Réglages — {{ client.nom }}{% endblock %}
+{% block styles %}{{ pg.styles() }}<style>
+  .lm-modele { display:flex; align-items:center; gap:1rem; padding:.75rem 0; border-bottom:1px solid var(--border); }
+  .lm-modele:last-child { border-bottom:0; }
+  .lm-pastille { width:14px; height:40px; border-radius:4px; flex:0 0 auto; }
+</style>{% endblock %}
+{% block content %}
+<div class="container" style="max-width: 980px;">
+  {% call pg.entete('Réglages de ' ~ client.nom, 'fa-sliders', 'Heure, devise et modèles de lettre de mission de cette organisation',
+                    retour=url_for('super_admin_client_detail', id=client.id), libelle_retour='Fiche organisation') %}
+    <a class="btn btn-sm btn-outline-secondary" href="{{ url_for('lettre_mission.vue_ensemble') }}"><i class="fas fa-list me-1"></i>Toutes les organisations</a>
+  {% endcall %}
+  {% call pg.carte('Heure et devise') %}{% include "egalyx/_heure_devise_form.html" %}{% endcall %}
+  <div id="lettres"></div>
+  {% call pg.carte('Lettres de mission : en-têtes et e-mail', aide='L\'auditeur choisit le modèle de chaque lettre') %}
+    {% for x in modeles %}
+    <div class="lm-modele">
+      <span class="lm-pastille" style="background: {{ x.couleur or '#1A3C6B' }};"></span>
+      <div class="flex-grow-1">
+        <div class="fw-semibold">{{ x.nom }}
+          {% if x.est_defaut %}<span class="badge bg-primary ms-1">Par défaut</span>{% endif %}
+          {% if x.actif is sameas false %}<span class="badge bg-secondary ms-1">Inactif</span>{% endif %}</div>
+        <div class="pg-second small">{{ x.titre_entete or client.nom }}{% if x.mention_haut %} · {{ x.mention_haut }}{% endif %}
+          · logo {{ 'propre' if x.logo_url == 'propre' else ('masqué' if x.logo_position == 'aucun' else 'de l\'organisation') }}
+          · modifié le {{ x.updated_at.strftime('%d/%m/%Y %H:%M') if x.updated_at else '—' }}</div>
+      </div>
+      <div class="d-flex gap-1 flex-wrap">
+        <a class="btn btn-sm btn-outline-primary" href="{{ url_for('lettre_mission.modele_editer', client_id=client.id, modele_id=x.id) }}"><i class="fas fa-pen me-1"></i>Modifier</a>
+        <a class="btn btn-sm btn-outline-secondary" target="_blank" href="{{ url_for('lettre_mission.modele_apercu', client_id=client.id, modele_id=x.id) }}"><i class="fas fa-eye"></i></a>
+        {% for action, icone, titre in [('defaut','fa-star','Par défaut'),('dupliquer','fa-copy','Dupliquer'),('supprimer','fa-trash','Supprimer')] %}
+          {% if not (action == 'defaut' and x.est_defaut) %}
+          <form method="post" action="{{ url_for('lettre_mission.modele_action', client_id=client.id, modele_id=x.id, action=action) }}"
+                {% if action == 'supprimer' %}onsubmit="return confirm('Supprimer le modèle « {{ x.nom|e }} » ?');"{% endif %}>
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            <button class="btn btn-sm btn-outline-{{ 'danger' if action == 'supprimer' else 'secondary' }}" title="{{ titre }}"><i class="fas {{ icone }}"></i></button>
+          </form>
+          {% endif %}
+        {% endfor %}
+      </div>
+    </div>
+    {% else %}
+      {{ pg.vide('Aucun modèle : les lettres utilisent le nom et le logo de l\'organisation, et un e-mail standard.', 'fa-envelope-open-text') }}
+    {% endfor %}
+    <a class="btn btn-sm btn-primary mt-3" href="{{ url_for('lettre_mission.modele_editer', client_id=client.id) }}"><i class="fas fa-plus me-1"></i>Nouveau modèle</a>
+  {% endcall %}
+</div>
+{% endblock %}
