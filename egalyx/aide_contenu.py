@@ -1140,6 +1140,615 @@ ARTICLES = [
 ]
 
 
+# ======================================================================
+# Fonctions ajoutées en novembre 2026 : plans par module, règles d'avancement et de clôture,
+# heure et devise, lettre de mission, listes paginées, archives KRI, réévaluations.
+# ======================================================================
+ARTICLES += [
+    A('plans_ou_trouver', 'plans', 'Plans d’action d’audit, de risque, de contrôle N2 : où les trouver ?',
+      'Chaque plan d’action appartient au module qui l’a fait naître. Les plans d’audit restent dans l’audit, ceux d’un risque '
+      'restent dans la cartographie ; la page « Tous les plans d’action » les rassemble pour une vue d’ensemble.',
+      etapes=['**Plans d’audit** : menu Audit interne → **Plans d’action**. Cette liste ne montre que les plans nés d’une recommandation d’audit.',
+              '**Plans d’un risque** : ouvrez le risque (ou la cartographie) → **Plans d’action**.',
+              '**Plans du contrôle N2** : menu Contrôle N2 → **Plans d’action**.',
+              '**Plans indépendants** (sans audit ni risque) : Plans d’action → **Indépendants**.',
+              '**Tous les plans d’action** : un registre unique, filtrable par origine (audit, risques, indépendant…), par responsable et par échéance.'],
+      notes=['Le fil d’Ariane et le bouton **Retour** d’un plan ramènent toujours à son module d’origine : un plan d’audit ne renvoie jamais vers la cartographie, et inversement.',
+             'Si vous ouvrez un plan par un lien du mauvais module, Egalyx vous redirige vers la bonne fiche.'],
+      mots=['plan', 'plans', 'action', 'actions', 'audit', 'risque', 'risques', 'cartographie', 'c2n', 'independant', 'independants',
+            'tous', 'registre', 'ou', 'trouver', 'liste', 'difference', 'origine', 'module', 'retour', 'melange', 'emmele', 'unifie'],
+      liens=[('Plans d’action d’audit', 'liste_plans_action'), ('Tous les plans d’action', 'plans_unifies.page'),
+             ('Plans indépendants', 'liste_plans_action_independants')],
+      questions=['difference plan d action audit et plan d action risque', 'voir tous les plans d action',
+                 'ou sont les plans d action des risques', 'ou trouver les plans d action', 'tous les plans d action',
+                 'plan d action audit et risque melanges']),
+
+    A('plans_regles', 'plans', 'Avancement et clôture : ce qu’Egalyx fait automatiquement',
+      'L’avancement remonte tout seul des sous-actions vers le plan, puis du plan vers la recommandation. Quand tout est terminé, '
+      'Egalyx demande la clôture de la recommandation ; il ne la clôture jamais sans validation.',
+      etapes=['**Sous-action** : à 0 % elle est « à faire », entre 1 et 99 % « en cours », à 100 % « terminée ». Marquer « terminée » la passe à 100 %.',
+              '**Plan** : son avancement est la moyenne de ses sous-actions. S’il en a, le curseur du plan est bloqué : mettez à jour les sous-actions.',
+              'Un plan marqué « terminé » passe à 100 %. S’il redescend sous 100 %, il est rouvert automatiquement.',
+              '**Recommandation** (audit ou contrôle N2) : son avancement est la moyenne de ses plans.',
+              'Quand **tous ses plans sont terminés**, une **demande de clôture** est créée et les gestionnaires sont prévenus. Ils valident ou refusent depuis le registre des recommandations.',
+              'Si un plan est rouvert entre-temps, la demande de clôture est retirée.',
+              'Une recommandation clôturée passe sa constatation à « close » ; si elle est rouverte, la constatation repasse « en action ».'],
+      notes=['Les changements sont enregistrés immédiatement : après actualisation de la page, vous retrouvez la même progression.',
+             'Modifier le statut d’une sous-action ou la supprimer demande le droit de modifier le plan (responsable du plan ou gestionnaire des plans d’action).'],
+      mots=['avancement', 'progression', 'pourcentage', 'curseur', 'bloque', 'termine', 'terminer', 'cloture', 'cloturer', 'demande',
+            'automatique', 'automatiquement', 'recommandation', 'constatation', 'rouvrir', 'rouvert', 'moyenne', 'sous', 'actualiser',
+            'enregistre', 'sauvegarde', 'regle', 'regles', 'reaction', 'grise', 'desactive'],
+      liens=[('Registre des recommandations', 'recommandations.registre'), ('Tous les plans d’action', 'plans_unifies.page')],
+      questions=['mon plan d action est termine mais la recommandation n est pas cloturee', 'demande de cloture recommandation',
+                 'la progression du plan ne s enregistre pas', 'pourquoi je ne peux pas bouger le curseur d avancement',
+                 'rouvrir un plan termine', 'que se passe t il quand un plan est termine', 'la recommandation ne se cloture pas',
+                 'la progression revient a zero apres actualisation']),
+
+    A('plans_statuts', 'plans', 'Les statuts d’un plan d’action et d’une sous-action',
+      'Plan : en attente, planifié, en cours, suspendu, retardé, terminé, annulé. Sous-action : à faire, en cours, retardée, terminée, annulée.',
+      notes=['Un même statut porte toujours le même nom partout : si un import ou un ancien écran envoie « clôturé » ou « complet », Egalyx l’enregistre comme « terminé ».',
+             'Un plan dont l’échéance est passée est signalé **en retard** dans les listes et dans « Ma semaine ».'],
+      mots=['statut', 'statuts', 'etat', 'etats', 'planifie', 'suspendu', 'retarde', 'termine', 'annule', 'attente', 'faire', 'sous', 'action', 'plan'],
+      liens=[('Tous les plans d’action', 'plans_unifies.page')],
+      questions=['statut d une sous action', 'quels sont les statuts d un plan d action']),
+
+    A('lettre_mission', 'audit', 'Préparer et envoyer la lettre de mission',
+      'Dans la feuille de travail de la mission, l’onglet **Lettre de mission** génère la lettre avec l’en-tête de votre organisation, '
+      'l’affiche en aperçu, l’exporte en PDF et l’envoie par e-mail aux bonnes personnes.',
+      etapes=['Ouvrez la mission → **Feuilles de travail** → ouvrez la feuille → onglet **Lettre de mission**.',
+              'Choisissez le **modèle d’en-tête** (logo, couleurs, mentions, signature préparés pour votre organisation).',
+              '**Générer** pré-remplit la lettre à partir de la mission ; corrigez-la puis **Sauvegarder**.',
+              '**Aperçu** et **PDF** montrent la lettre telle qu’elle partira.',
+              '**Envoyer** ouvre la liste des destinataires : participants et membres externes en « À », responsable et équipe d’audit en copie ; les observateurs sont proposés mais non cochés. Ajustez puis confirmez.'],
+      notes=['L’e-mail reprend l’objet et le message du modèle, joint la lettre en PDF ; les réponses arrivent au chef de mission.',
+             'Chaque envoi est gardé dans l’encadré **Envois** (date, destinataires). Si l’envoi d’e-mails n’est pas configuré sur la plateforme, Egalyx le dit au lieu de faire comme si c’était parti.',
+             'Les modèles d’en-tête sont créés par l’administrateur Egalyx (super administrateur) pour chaque organisation.'],
+      mots=['lettre', 'mission', 'envoyer', 'envoi', 'destinataire', 'destinataires', 'entete', 'modele', 'logo', 'pdf', 'apercu',
+            'email', 'audite', 'participants', 'copie', 'signature', 'generer'],
+      liens=[('Missions', 'liste_audits')],
+      perms=['can_manage_audit'],
+      questions=['envoyer la lettre de mission', 'a qui est envoyee la lettre de mission', 'modifier l en tete de la lettre de mission',
+                 'modele de lettre de mission', 'imprimer la lettre de mission en pdf', 'la lettre de mission n est pas partie']),
+
+    A('heure_devise', 'admin', 'Régler l’heure et la devise de mon organisation',
+      'Menu **Administration → Heure et devise** (aussi dans le menu à votre nom, en haut à droite) : choisissez le fuseau horaire et la monnaie de l’organisation. Toutes les heures '
+      'et tous les montants s’affichent ensuite selon ce réglage, pour tous les utilisateurs.',
+      etapes=['Menu latéral **Administration → Heure et devise**, ou menu à votre nom (en haut à droite) → **Heure et devise**.',
+              'Choisissez le **fuseau horaire** (ex. Abidjan, Dakar, Lomé : UTC+0 ; Cotonou, Douala, Kinshasa : UTC+1 ; Paris).',
+              'Choisissez la **devise** : franc CFA (UEMOA ou CEMAC), euro, dollar, dirham, dinar, naira, cedi…',
+              'Enregistrez : l’aperçu montre l’heure locale et un exemple de montant.'],
+      notes=['Les heures enregistrées sont stockées de façon neutre et converties à l’affichage : changer de fuseau corrige l’affichage sans toucher aux données.',
+             'Les heures saisies à la main avant cette fonction (date d’un incident, ouverture d’un questionnaire) restent affichées telles qu’elles ont été saisies.',
+             'Le super administrateur peut aussi régler l’heure et la devise de chaque organisation.'],
+      mots=['heure', 'heures', 'fuseau', 'horaire', 'devise', 'devises', 'monnaie', 'euro', 'fcfa', 'cfa', 'xof', 'xaf', 'dollar',
+            'montant', 'montants', 'decalage', 'fausse', 'faux', 'mauvaise', 'utc', 'gmt', 'locale'],
+      liens=[('Heure et devise', 'lettre_mission.heure_devise')],
+      pour='admin',
+      questions=['comment changer la devise de mon organisation', 'regler le fuseau horaire', 'l heure affichee est fausse',
+                 'changer de monnaie fcfa', 'afficher les montants en euros', 'il y a une heure de decalage']),
+
+    A('listes_pages', 'demarrer', 'Listes longues : pages et nombre de lignes',
+      'Les grandes listes s’affichent par pages pour rester rapides. En bas de la liste, changez de page ou choisissez 25, 50, 100 ou 200 lignes par page.',
+      notes=['Concerné : plans d’action d’audit, Tous les plans d’action, registre des recommandations, demandes de réévaluation.',
+             'Les totaux et compteurs en haut de page portent sur toute la liste, pas seulement sur la page affichée.',
+             'Les filtres et le tri sont conservés quand vous changez de page.'],
+      mots=['liste', 'listes', 'page', 'pages', 'pagination', 'lignes', 'ligne', 'afficher', 'plus', 'suivante', 'precedente',
+            'nombre', 'lent', 'longue', 'resultats', 'tout'],
+      questions=['afficher plus de lignes dans la liste', 'voir la page suivante', 'la liste n affiche pas tout',
+                 'combien de lignes par page']),
+
+    A('kri_archives', 'maitrise', 'Archiver, restaurer ou supprimer des KRI',
+      'Un KRI archivé disparaît des tableaux mais reste consultable dans **Archives des KRI**, d’où on peut le restaurer.',
+      etapes=['Fiche du KRI → **Archiver**.',
+              'Liste des KRI → bouton **Archives** : restaurez un KRI, ou **Restaurer tout** (administrateur).',
+              '**Exporter** la liste des archives en fichier.',
+              '**Nettoyer** supprime définitivement les KRI archivés depuis plus de 90 jours (administrateur).'],
+      mots=['kri', 'kpi', 'indicateur', 'indicateurs', 'archive', 'archives', 'archiver', 'restaurer', 'restaurer', 'nettoyer', 'supprimer', 'exporter'],
+      liens=[('Archives des KRI', 'kris_archives')],
+      questions=['restaurer des kri archives', 'ou sont les kri archives', 'supprimer definitivement un kri']),
+
+    A('reevaluation', 'risques', 'Demande de réévaluation d’un risque après un audit',
+      'Quand un audit montre qu’un risque est mal coté, l’auditeur propose un nouvel impact et une nouvelle probabilité. '
+      'La demande est validée ou rejetée par une personne habilitée sur les risques, jamais par son auteur.',
+      etapes=['Dans la mission d’audit, sur le risque ou la constatation concerné → **Demander une réévaluation** : impact et probabilité proposés, justification.',
+              'Menu Risques → **Demandes de réévaluation** : la demande y attend une décision.',
+              '**Valider** crée la nouvelle évaluation du risque ; **Rejeter** demande un commentaire.'],
+      mots=['reevaluation', 'reevaluer', 'demande', 'demandes', 'revoir', 'cotation', 'audit', 'auditeur', 'valider', 'rejeter', 'risque'],
+      liens=[('Demandes de réévaluation', 'liste_demandes_reevaluation')],
+      questions=['demande de reevaluation d un risque', 'l audit demande de reevaluer un risque', 'valider une reevaluation']),
+
+    A('incident_supprimer', 'maitrise', 'Supprimer définitivement un incident',
+      'Archivez d’abord l’incident ; seul un administrateur peut ensuite le supprimer définitivement depuis les archives. '
+      'La suppression est notée dans le journal d’activité.',
+      mots=['incident', 'incidents', 'supprimer', 'definitivement', 'archiver', 'archive', 'effacer'],
+      liens=[('Incidents', 'liste_incidents')],
+      perms=['can_manage_incidents'],
+      questions=['supprimer definitivement un incident', 'effacer un incident']),
+
+    A('sa_reglages_organisation', 'superadmin', 'Heure, devise et modèles de lettre de mission d’une organisation',
+      'Super admin → **Heure, devise et lettres de mission** : une ligne par organisation. Ouvrez-la pour régler son fuseau et sa devise, '
+      'et préparer ses modèles de lettre de mission.',
+      etapes=['Choisissez l’organisation (ou bouton **Réglages** sur la fiche du client).',
+              'Réglez le **fuseau horaire** et la **devise**.',
+              '**Nouveau modèle** de lettre : logo (celui de l’organisation ou aucun) et sa position, couleur, titre et lignes d’en-tête, mention en haut, pied de page, signature.',
+              'Réglez l’**objet** et le **message de l’e-mail** d’envoi. L’aperçu se met à jour pendant la saisie.',
+              'Marquez un modèle **par défaut**, **dupliquez**-le pour une variante, désactivez ou supprimez ceux qui ne servent plus.'],
+      notes=['Les auditeurs de l’organisation choisissent ensuite le modèle dans l’onglet Lettre de mission ; ils ne peuvent pas modifier l’en-tête.'],
+      mots=['heure', 'devise', 'fuseau', 'lettre', 'mission', 'modele', 'modeles', 'entete', 'logo', 'organisation', 'client', 'reglages', 'super', 'admin'],
+      liens=[('Heure, devise et lettres de mission', 'lettre_mission.vue_ensemble')], pour='super_admin',
+      questions=['heure et devise super admin', 'modele de lettre de mission par client', 'creer un en tete de lettre de mission']),
+]
+
+for _a in ARTICLES:
+    if _a['id'] == 'plan_suivi':
+        _a['resume'] = ('Mettez à jour chaque sous-action (avancement, commentaire, preuve). L’avancement du plan est la moyenne de ses '
+                        'sous-actions ; à 100 % il passe « terminé » et la recommandation liée suit.')
+        _a['etapes'] = ['Ouvrez le plan depuis son module (audit, risque, contrôle N2) ou depuis **Tous les plans d’action**.',
+                        'Pour chaque sous-action : avancement, commentaire, preuve. Sans sous-action, utilisez le curseur du plan.',
+                        'L’avancement est enregistré aussitôt ; il est conservé après actualisation.']
+        _a['notes'] = ['Le responsable d’un plan ou d’une sous-action peut le mettre à jour même sans permission de gestion générale.',
+                       'Les plans en retard apparaissent en rouge, dans « Ma semaine » et font l’objet de relances.',
+                       'Ce qui se passe ensuite (plan terminé, demande de clôture de la recommandation) : voir « Avancement et clôture : ce qu’Egalyx fait automatiquement ».']
+        _a['liens'] = [('Plans d’action d’audit', 'liste_plans_action'), ('Tous les plans d’action', 'plans_unifies.page')]
+    elif _a['id'] in ('plan_creer', 'plan_retard'):
+        _a['liens'] = [('Plans d’action d’audit', 'liste_plans_action'), ('Tous les plans d’action', 'plans_unifies.page')]
+    elif _a['id'] == 'audit_lancer':
+        _a['etapes'][3] = ('Préparez la **lettre de mission** (feuille de travail → onglet Lettre de mission) et le programme de travail.')
+    elif _a['id'] == 'registre_recommandations':
+        _a['etapes'][3] = ('À 100 %, il **demande la clôture** (une preuve est exigée). Quand tous les plans liés sont terminés, '
+                           'Egalyx crée lui-même la demande et prévient les gestionnaires.')
+    elif _a['id'] == 'api':
+        _a['etapes'].append('Sur chaque clé : **Détails**, **Régénérer** (l’ancienne cesse de marcher) ou **Révoquer**.')
+        _a['mots'] += ['regenerer', 'revoquer', 'details']
+    elif _a['id'] == 'questionnaires':
+        _a['notes'] = list(_a['notes']) + ['**Dupliquer** un questionnaire crée une copie désactivée (avec ses catégories et questions), à adapter puis activer.']
+        _a['mots'] += ['dupliquer', 'copier', 'copie']
+
+
+# ======================================================================
+# Couverture complète (19/11/2026) : chaque page de l'outil a sa fiche.
+# ======================================================================
+ARTICLES += [
+    # ------------------------------------------------------------ ADMINISTRATION
+    A('operateurs', 'admin', 'Gérer les opérateurs et leurs droits',
+      'Les opérateurs sont les collaborateurs des métiers qui évaluent leurs risques, exécutent des campagnes et suivent leurs plans '
+      'dans un espace simplifié. L’administrateur choisit pour chacun ce qu’il peut faire et sur quel périmètre.',
+      etapes=['Tableau de bord Admin Client → **Opérateurs** (ou **Gérer les opérateurs**).',
+              '**Ajouter un opérateur** : choisissez le collaborateur.',
+              '**Choisir ses droits** : évaluer les risques, voir ou modifier les évaluations, exécuter ou valider des campagnes, '
+              'créer ou exécuter des plans d’action, voir ou évaluer les dispositifs.',
+              'Limitez son **périmètre** : directions, services et types de risques autorisés.',
+              '**Retirer le rôle** rend au collaborateur son rôle habituel.'],
+      notes=['Un opérateur sans aucun droit voit un tableau de bord vide avec un message l’invitant à contacter son administrateur.',
+             'Les évaluations des opérateurs peuvent être validées par une personne désignée : voir « Faire valider les évaluations des opérateurs ».'],
+      mots=['operateur', 'operateurs', 'metier', 'metiers', 'droits', 'perimetre', 'direction', 'service', 'evaluer', 'espace', 'simplifie'],
+      liens=[('Opérateurs', 'admin_operateurs')], pour='admin',
+      questions=['ajouter un operateur', 'donner des droits a un operateur', 'limiter un operateur a sa direction',
+                 'qu est ce qu un operateur']),
+
+    A('espace_operateur', 'demarrer', 'Mon espace opérateur',
+      'Si vous êtes opérateur, Egalyx s’ouvre sur votre **tableau de bord opérationnel** : risques à évaluer, campagnes à réaliser, '
+      'plans d’action à suivre et notifications.',
+      etapes=['**Risques à évaluer** : ouvrez un risque et saisissez votre évaluation (impact, probabilité, maîtrise).',
+              '**Campagnes à réaliser** : exécutez les contrôles qui vous sont confiés.',
+              '**Plans d’action à suivre** : mettez à jour l’avancement de vos plans et sous-actions ; les plans en retard sont signalés.',
+              '**Mes recommandations** : les recommandations dont vous êtes responsable.',
+              '**Mon profil** : photo, coordonnées.'],
+      notes=['Vous ne voyez que ce que l’administrateur vous a ouvert, et seulement pour votre périmètre (direction, service).',
+             'Si votre tableau de bord est vide avec un message d’avertissement, aucun droit ne vous a encore été donné : contactez votre administrateur.'],
+      mots=['operateur', 'espace', 'tableau', 'bord', 'operationnel', 'risques', 'evaluer', 'campagnes', 'realiser', 'plans', 'suivre', 'vide'],
+      liens=[('Mon espace', 'operateur_dashboard'), ('Mes recommandations', 'recommandations.miennes')],
+      questions=['mon tableau de bord operateur est vide', 'je suis operateur que dois je faire', 'ou evaluer mes risques']),
+
+    A('gestionnaire_utilisateurs', 'admin', 'Déléguer la gestion des utilisateurs (gestionnaire)',
+      'Un gestionnaire d’utilisateurs crée, modifie, active ou désactive les comptes à la place de l’administrateur, sans pouvoir toucher à l’administrateur.',
+      etapes=['Menu à votre nom → **Créer un gestionnaire**.',
+              'Identifiant, e-mail, mot de passe provisoire, département.',
+              'Cochez ses pouvoirs : voir la liste, modifier les utilisateurs (sauf l’administrateur), créer des comptes, activer / désactiver.',
+              'Le gestionnaire travaille ensuite dans **Gestion des utilisateurs** (filtres, export, statistiques).'],
+      notes=['**Désactiver et transférer** : quand une personne part, ses dossiers (risques, plans, recommandations) sont confiés à un autre utilisateur.'],
+      mots=['gestionnaire', 'utilisateurs', 'deleguer', 'delegation', 'creer', 'comptes', 'desactiver', 'transferer', 'transfert'],
+      liens=[('Créer un gestionnaire', 'client_admin_creer_gestionnaire'), ('Gestion des utilisateurs', 'gestionnaire_utilisateurs')],
+      pour='admin',
+      questions=['creer un gestionnaire d utilisateurs', 'deleguer la creation des comptes', 'transferer les dossiers d un utilisateur qui part']),
+
+    A('modeles_permissions', 'admin', 'Modèles de permissions',
+      'Un modèle regroupe un ensemble de permissions (voir le tableau de bord, gérer les risques, les audits, la veille, exporter…) '
+      'à appliquer d’un coup à plusieurs utilisateurs.',
+      etapes=['Tableau de bord Admin Client → **Modèles de permissions** → **Nouveau modèle** : nom, rôle associé, description.',
+              'Cochez les permissions du modèle.',
+              'Sur la fiche d’un utilisateur, **appliquez** le modèle : ses permissions sont remplacées par celles du modèle.'],
+      notes=['Modifier un modèle ne change pas les utilisateurs auxquels il a déjà été appliqué : réappliquez-le.'],
+      mots=['modele', 'modeles', 'template', 'permissions', 'profil', 'profils', 'appliquer', 'droits', 'role'],
+      liens=[('Modèles de permissions', 'admin_templates_permissions')], pour='admin',
+      questions=['creer un modele de permissions', 'appliquer les memes droits a plusieurs utilisateurs']),
+
+    A('page_connexion', 'admin', 'Personnaliser la page de connexion de mon organisation',
+      'Message d’accueil, contact d’assistance et couleur affichés sur la page de connexion de votre organisation.',
+      etapes=['Menu à votre nom → **Identité de l’organisation** → lien « personnaliser la page de connexion ».',
+              'Saisissez le **message d’accueil** et le **contact d’assistance** (qui appeler en cas de souci de connexion).',
+              'Choisissez la **couleur**, puis **Enregistrer**.'],
+      notes=['Le logo et le nom viennent de « Identité de l’organisation ».'],
+      mots=['page', 'connexion', 'login', 'accueil', 'message', 'personnaliser', 'couleur', 'contact', 'assistance'],
+      liens=[('Page de connexion', 'connexion_client.reglage'), ('Identité de l’organisation', 'identite.page')], pour='admin',
+      questions=['personnaliser la page de connexion', 'ajouter un message sur la page de connexion']),
+
+    A('parametres_evaluation', 'admin', 'Paramétrer les échelles d’évaluation (impact, probabilité, maîtrise, couleurs)',
+      'Paramétrage → **Paramètres d’évaluation** : le libellé et la description de chaque niveau d’impact, de probabilité et de maîtrise, '
+      'le guide d’évaluation affiché aux évaluateurs et les couleurs des niveaux.',
+      etapes=['Onglets **Impact**, **Probabilité**, **Maîtrise** : pour chaque niveau, nom court, description longue, couleur, actif, ordre.',
+              'Onglet **Guide** : le texte d’aide des trois phases (pré-évaluation, validation, confirmation).',
+              'Onglet **Couleurs** : seuils et couleurs Faible, Moyen, Élevé, Revue.',
+              '**Enregistrer** chaque onglet ; **Rafraîchir les paramètres** recharge les valeurs.'],
+      notes=['Les seuils de cotation et l’appétence se règlent dans « Paramètres des risques ».'],
+      mots=['echelle', 'echelles', 'niveaux', 'impact', 'probabilite', 'maitrise', 'libelle', 'description', 'couleur', 'couleurs',
+            'guide', 'evaluation', 'parametrer', 'parametres'],
+      liens=[('Paramètres d’évaluation', 'admin_parametres_evaluation'), ('Paramètres des risques', 'parametres_risque.page')],
+      pour='admin',
+      questions=['changer les libelles des niveaux d impact', 'modifier les couleurs de la matrice', 'modifier le guide d evaluation']),
+
+    A('fiches_risque_parametrage', 'admin', 'Adapter la fiche risque : champs personnalisés, listes déroulantes, fichiers',
+      'Paramétrage → **Fiches risques** : ajoutez vos propres champs à la fiche d’un risque, créez vos listes de valeurs et réglez les pièces jointes autorisées.',
+      etapes=['**Champs personnalisés** : nom affiché, type (texte, nombre, date, liste…), section (général, analyse, évaluation, documentation), '
+              'ordre, obligatoire, texte d’aide, valeurs possibles, contrôle de format.',
+              '**Listes déroulantes** : valeurs au format « valeur|libellé », sélection multiple ou non, valeurs par défaut.',
+              '**Gestion fichiers** : extensions autorisées et taille maximale des pièces jointes.',
+              '**Export / Import** : exportez la configuration en fichier JSON pour la reprendre dans une autre organisation.'],
+      mots=['champ', 'champs', 'personnalise', 'personnalises', 'liste', 'listes', 'deroulante', 'deroulantes', 'fichier', 'fichiers',
+            'extension', 'taille', 'fiche', 'risque', 'parametrage', 'configuration', 'json'],
+      liens=[('Fiches risques', 'parametrage_risque'), ('Champs personnalisés', 'parametrage_champs'),
+             ('Listes déroulantes', 'parametrage_listes'), ('Gestion fichiers', 'parametrage_fichiers')], pour='admin',
+      questions=['ajouter un champ a la fiche risque', 'creer une liste deroulante', 'autoriser un type de fichier',
+                 'taille maximale des pieces jointes']),
+
+    A('cloture_campagnes_droit', 'admin', 'Choisir qui peut clôturer une campagne d’évaluation',
+      'Paramètres des risques → **Clôture des campagnes** : tous les utilisateurs ayant accès à la cartographie, les gestionnaires des risques '
+      'et administrateurs, ou les administrateurs seulement.',
+      notes=['Le réglage s’applique au bouton « Clôturer » comme aux liens directs.',
+             'Une campagne clôturée ne reçoit plus d’évaluations ; elle reste consultable dans l’historique de la cartographie.'],
+      mots=['cloture', 'cloturer', 'campagne', 'campagnes', 'evaluation', 'qui', 'droit', 'autoriser'],
+      liens=[('Clôture des campagnes', 'cloture_campagne.page')], pour='admin',
+      questions=['qui peut cloturer une campagne', 'empecher de cloturer une campagne']),
+
+    A('usage_limites', 'abonnement', 'Utilisation et limites de mon abonnement',
+      'Tableau de bord Admin Client → **Utilisation et limites** : votre formule et ce que vous en consommez (utilisateurs, modules).',
+      mots=['utilisation', 'limites', 'limite', 'quota', 'formule', 'consommation', 'nombre', 'utilisateurs', 'licences'],
+      liens=[('Utilisation et limites', 'client_admin_usage'), ('Abonnement', 'paiement.abonnement')], pour='admin',
+      questions=['combien d utilisateurs puis je creer', 'j ai atteint la limite d utilisateurs']),
+
+    A('sessions_journaux', 'admin', 'Sessions ouvertes et journal système',
+      'Tableau de bord Admin Client → boutons **Journal d’activité**, **Sessions**, **Journal système**. **Sessions** montre qui est connecté et depuis quand ; **Journal système** les événements techniques '
+      'de votre organisation. Le **journal d’activité** reste la référence pour savoir qui a fait quoi.',
+      mots=['sessions', 'session', 'connectes', 'connecte', 'journal', 'systeme', 'logs', 'traces', 'technique'],
+      liens=[('Sessions utilisateurs', 'admin_sessions_utilisateurs'), ('Journal système', 'admin_logs_systeme'),
+             ('Journal d’activité', 'admin_journal_activite')], pour='admin',
+      questions=['qui est connecte en ce moment', 'voir les sessions ouvertes']),
+
+    A('organigramme', 'admin', 'L’organigramme : afficher et personnaliser',
+      'Directions & Services → **Organigramme** dessine votre structure (pays, pôles, directions, services). **Configuration** : nom, logo, couleurs.',
+      etapes=['Ouvrez l’organigramme ; cherchez une entité ou une personne, zoomez, passez en plein écran.',
+              '**Collaborateurs** affiche les personnes sous chaque entité.',
+              '**Configuration** : nom de l’entreprise, logo, couleur des directions et des services.',
+              '**Imprimer / PDF** pour une page A3.'],
+      mots=['organigramme', 'structure', 'directions', 'services', 'poles', 'filiales', 'pays', 'logo', 'couleur', 'imprimer'],
+      liens=[('Organigramme', 'admin_organigramme'), ('Configuration', 'configurer_organigramme')], pour='admin',
+      questions=['afficher l organigramme', 'changer les couleurs de l organigramme', 'imprimer l organigramme']),
+
+    A('archives_organisation', 'admin', 'Directions archivées',
+      'Une direction archivée disparaît des listes mais reste consultable dans **Directions archivées**, d’où on peut la restaurer.',
+      mots=['direction', 'directions', 'archivee', 'archivees', 'restaurer', 'archive'],
+      liens=[('Directions', 'admin_directions')], pour='admin'),
+
+    # ------------------------------------------------------------ RISQUES
+    A('risques_tableau_recherche', 'risques', 'Tableau de bord des risques et recherche avancée',
+      'Tous les risques de toutes vos cartographies, filtrables par niveau net (critiques, élevés, moyens, faibles, non évalués), '
+      'avec export Excel ou JSON. La recherche avancée filtre par texte, catégorie, niveau et cartographie.',
+      etapes=['Depuis le tableau de bord d’accueil → **Tableau de bord des risques**.',
+              'Cliquez un niveau (ex. « Critiques actifs ») pour filtrer la liste ; « Critiques N-1 » compare à l’exercice précédent.',
+              '**Recherche avancée** : combinez texte, catégorie, niveau et cartographie.',
+              '**Exporter Excel** ou **JSON** le résultat.'],
+      mots=['tableau', 'bord', 'risques', 'recherche', 'avancee', 'filtrer', 'critiques', 'eleves', 'tous', 'liste', 'exporter', 'json', 'excel', 'trouver'],
+      liens=[('Tableau de bord des risques', 'dashboard_risques'), ('Recherche avancée', 'recherche_risques')],
+      perms=['can_manage_risks', 'can_view_reports'],
+      questions=['voir tous les risques critiques', 'chercher un risque', 'liste de tous les risques', 'exporter les risques en excel']),
+
+    A('archives_risques', 'risques', 'Cartographies et risques archivés',
+      'Une cartographie ou un risque archivé quitte les listes mais reste dans les archives : on peut le consulter, le restaurer, '
+      'ou nettoyer les archives (suppression définitive).',
+      etapes=['Cartographie → **Archives** (cartographies) ou **Risques archivés**.',
+              '**Restaurer** remet l’élément en service avec son historique.',
+              '**Nettoyage** supprime définitivement les archives choisies : action irréversible.'],
+      mots=['archive', 'archives', 'archiver', 'restaurer', 'cartographie', 'cartographies', 'risque', 'risques', 'nettoyer', 'nettoyage', 'definitivement'],
+      liens=[('Cartographies archivées', 'cartographies_archives'), ('Risques archivés', 'risques_archives')],
+      perms=['can_manage_risks'],
+      questions=['restaurer une cartographie archivee', 'restaurer un risque archive', 'ou sont les risques archives']),
+
+    A('comparaison_matrices', 'pilotage', 'Comparer deux matrices de risques',
+      'Menu **Comparaison des matrices** (sous le tableau de bord stratégique) : mettez côte à côte deux cartographies ou deux périodes pour voir les risques qui montent ou baissent.',
+      mots=['comparer', 'comparaison', 'matrice', 'matrices', 'evolution', 'periode', 'avant', 'apres', 'cartographies'],
+      liens=[('Comparaison des matrices', 'rapport_comparaison_matrices')],
+      questions=['comparer deux cartographies', 'evolution de la matrice entre deux periodes']),
+
+    A('organismes', 'conformite', 'Organismes régulateurs',
+      'La liste des autorités (banque centrale, commission bancaire, autorité de marché…) : code, nom, pays, type, contact et couleur. '
+      'Elle sert dans la veille réglementaire et pour l’origine des recommandations externes.',
+      mots=['organisme', 'organismes', 'regulateur', 'regulateurs', 'autorite', 'autorites', 'bceao', 'cobac', 'commission', 'superviseur'],
+      liens=[('Organismes régulateurs', 'liste_organismes')],
+      questions=['ajouter un organisme regulateur', 'liste des regulateurs']),
+
+    # ------------------------------------------------------------ MAÎTRISE
+    A('dispositifs_benchmark', 'maitrise', 'Comparer l’efficacité des dispositifs de maîtrise',
+      'Depuis le stress test d’un dispositif → **Benchmark** : chaque dispositif avec son type, son efficacité, la réduction du risque obtenue, sa résilience et son stress test. '
+      'Exportez en PDF ou imprimez.',
+      mots=['benchmark', 'comparer', 'efficacite', 'dispositif', 'dispositifs', 'reduction', 'resilience', 'stress', 'rapport'],
+      liens=[('Benchmark des dispositifs', 'benchmark_dispositifs')], perms=['can_manage_risks'],
+      questions=['quels dispositifs sont les plus efficaces', 'rapport sur les dispositifs de maitrise']),
+
+    A('dispositifs_archives', 'maitrise', 'Dispositifs archivés',
+      'Un dispositif archivé n’est plus compté dans la maîtrise du risque ; il reste dans les **archives des dispositifs**, '
+      'd’où on peut le restaurer ou le supprimer définitivement.',
+      mots=['dispositif', 'dispositifs', 'archive', 'archives', 'restaurer', 'supprimer', 'definitivement', 'dmr'],
+      liens=[('Dispositifs archivés', 'dispositifs_archives')], perms=['can_manage_risks']),
+
+    A('kri_sources', 'maitrise', 'Alimenter un KRI automatiquement (sources de données)',
+      'Fiche d’un KRI → **Sources de données** : déclarez d’où viennent les mesures (API, fichier, base de données) pour éviter les saisies manuelles.',
+      etapes=['**Nouvelle source** : nom, type (API, fichier, base de données), paramètres de connexion.',
+              'Rattachez la source au KRI concerné.',
+              'Suivez l’état de chaque source (active ou non) dans la liste.'],
+      mots=['source', 'sources', 'donnees', 'automatique', 'automatiquement', 'alimenter', 'api', 'fichier', 'base', 'kri', 'import'],
+      liens=[('Sources de données', 'liste_sources_donnees')], perms=['can_manage_kri'],
+      questions=['alimenter un kri automatiquement', 'importer les mesures d un kri']),
+
+    A('incidents_tableaux', 'maitrise', 'Tableaux de bord et analyse des incidents',
+      'Boutons en haut de la liste des incidents : le **tableau de bord avancé** (par direction, évolution dans le temps, top 10 des coûts, filtres de dates), '
+      'l’**analyse** des tendances et récurrences, et la liste des **incidents escaladés** en attente.',
+      mots=['incident', 'incidents', 'tableau', 'bord', 'avance', 'analyse', 'tendance', 'tendances', 'recurrence', 'cout', 'couts',
+            'direction', 'escalade', 'escalades', 'statistiques'],
+      liens=[('Tableau de bord avancé', 'dashboard_incidents_avance'), ('Analyse des incidents', 'dashboard_ia_incidents'),
+             ('Incidents escaladés', 'incidents_escalade_attente')],
+      perms=['can_manage_incidents', 'can_view_incidents'],
+      questions=['statistiques des incidents par direction', 'cout des incidents', 'incidents escalades', 'incidents recurrents']),
+
+    A('incidents_export_archives', 'maitrise', 'Exporter ou archiver des incidents',
+      'Depuis la liste des incidents : export **CSV**, **Excel** ou **PDF** de la sélection filtrée. Un incident archivé passe dans '
+      '**Incidents archivés**, d’où il peut être restauré.',
+      mots=['incident', 'incidents', 'exporter', 'export', 'csv', 'excel', 'pdf', 'archiver', 'archives', 'restaurer'],
+      liens=[('Incidents', 'liste_incidents'), ('Incidents archivés', 'incidents_archives')],
+      perms=['can_manage_incidents', 'can_view_incidents'],
+      questions=['exporter les incidents en excel', 'restaurer un incident archive']),
+
+    # ------------------------------------------------------------ CONTRÔLE
+    A('processus_metier', 'controle', 'Processus métier et vue transversale',
+      'Déclarez vos processus (nom, code, type, processus parent, propriétaire, directions) ; la **vue transversale** montre pour chaque processus '
+      'ses risques et son score.',
+      etapes=['Logigrammes → **Processus métier** → **Nouveau processus** : nom, code, type, parent, propriétaire, directions associées.',
+              'Rattachez risques, contrôles et logigrammes au processus.',
+              'Logigrammes → **Vue transversale** : le classement des processus par score de risque.'],
+      mots=['processus', 'metier', 'transversale', 'vue', 'proprietaire', 'parent', 'score', 'cartographie', 'macro'],
+      liens=[('Processus métier', 'liste_processus_metier'), ('Vue transversale', 'vue_transversale')], perms=['can_manage_logigram', 'can_manage_processus'],
+      questions=['creer un processus', 'quels processus sont les plus risques', 'vue transversale des processus']),
+
+    A('logigrammes_archives', 'controle', 'Logigrammes archivés',
+      'Un logigramme archivé reste dans **Logigrammes archivés** : restaurez-le, exportez la liste, ou supprimez-le définitivement.',
+      mots=['logigramme', 'logigrammes', 'archive', 'archives', 'restaurer', 'supprimer', 'definitivement'],
+      liens=[('Logigrammes archivés', 'archives_logigrammes')]),
+
+    A('c2n_reglages', 'controle', 'Réglages du contrôle interne N2 (seuils, échantillons)',
+      'Contrôle interne N2 → **Réglages** : seuils de conclusion (conforme, à améliorer, à corriger, en %) et taille d’échantillon proposée '
+      'selon la fréquence du contrôle.',
+      mots=['reglages', 'seuil', 'seuils', 'conclusion', 'conforme', 'ameliorer', 'corriger', 'echantillon', 'echantillons', 'taille', 'frequence', 'c2n', 'n2'],
+      liens=[('Réglages N2', 'c2n_reglages.page')], perms=['can_manage_controle_interne_n2'],
+      questions=['changer les seuils de conformite c2n', 'taille de l echantillon']),
+
+    A('c2n_referentiel', 'controle', 'Construire le référentiel de contrôles N2',
+      'Contrôle interne N2 → **Référentiel** → créer : code, nom du contrôle, processus, métier, objectif, fréquence, responsable, '
+      'et les risques couverts (chargés depuis une cartographie ou saisis).',
+      mots=['referentiel', 'controle', 'controles', 'type', 'types', 'c2n', 'n2', 'frequence', 'objectif', 'risques', 'couverts'],
+      liens=[('Référentiel N2', 'c2n_liste_referentiel')], perms=['can_manage_controle_interne_n2'],
+      questions=['creer un controle dans le referentiel', 'ajouter un controle type']),
+
+    A('c2n_journal', 'controle', 'Journal d’audit du contrôle N2',
+      'Toutes les actions sur le contrôle N2 (création, exécution, soumission, validation), filtrables par utilisateur, action et type d’élément.',
+      mots=['journal', 'trace', 'traces', 'historique', 'c2n', 'n2', 'qui', 'action'],
+      liens=[('Journal d’audit N2', 'c2n_journal_audit')], perms=['can_manage_controle_interne_n2', 'can_view_controle_interne_n2']),
+
+    A('campagnes_statistiques', 'controle', 'Tableau de bord des campagnes de contrôle',
+      'Répartition par statut, volumes contrôlés, taux de réalisation, de conformité et d’anomalie, efficacité.',
+      mots=['campagne', 'campagnes', 'statistiques', 'tableau', 'bord', 'taux', 'conformite', 'anomalie', 'volumes'],
+      liens=[('Tableau de bord des campagnes', 'statistiques_globales_controle')],
+      questions=['statistiques des campagnes de controle', 'taux de conformite des campagnes']),
+
+    A('questionnaires_import', 'controle', 'Importer un questionnaire',
+      'Questionnaires → **Importer questionnaire** : chargez un fichier JSON, choisissez d’importer catégories, questions et options, '
+      'vérifiez l’aperçu puis importez.',
+      mots=['questionnaire', 'questionnaires', 'importer', 'import', 'json', 'fichier', 'modele'],
+      liens=[('Importer un questionnaire', 'importer_questionnaire')],
+      questions=['importer un questionnaire', 'format du fichier questionnaire']),
+
+    # ------------------------------------------------------------ AUDIT
+    A('feuilles_travail', 'audit', 'Feuilles de travail d’une mission',
+      'Les feuilles de travail documentent les tests de la mission : objectif, procédés, constats, pièces, et l’onglet **Lettre de mission**.',
+      etapes=['Fiche de la mission → **Feuilles de travail** → ouvrir ou créer une feuille (ou menu Audit interne → **Feuilles de travail** pour toutes les missions).',
+              'Complétez les onglets (objectifs, tests réalisés, conclusions) et sauvegardez.'],
+      mots=['feuille', 'feuilles', 'travail', 'papier', 'papiers', 'test', 'tests', 'documentation', 'mission'],
+      liens=[('Feuilles de travail', 'liste_global_feuilles_travail')], perms=['can_manage_audit'],
+      questions=['ou sont les feuilles de travail', 'creer une feuille de travail']),
+
+    A('audit_parametres', 'audit', 'Paramètres d’audit : configurations, modèles de constatations, checklists',
+      'Pour gagner du temps à chaque mission : des **configurations** par type d’audit (durée standard, seuils de gravité), des **modèles de '
+      'constatations** prêts à l’emploi (cause racine, recommandation standard) et des **checklists** par type d’audit.',
+      etapes=['Liste des missions d’audit → **Paramètres d’audit** : **Nouvelle configuration** ou **Initialiser les configurations** (jeu de départ).',
+              '**Nouveau modèle** de constatation : référence, titre, type, gravité par défaut, processus, cause racine typique, recommandation standard.',
+              'Menu Audit interne → **Checklists d’audit** : choisissez un type, appliquez le modèle et personnalisez-le.'],
+      notes=['Les **recommandations globales** (Administration) sont des textes types repris dans les rapports d’audit.'],
+      mots=['configuration', 'configurations', 'parametres', 'audit', 'modele', 'modeles', 'constatation', 'constatations', 'checklist',
+            'checklists', 'liste', 'controle', 'type', 'gravite', 'recommandation', 'globale', 'globales', 'standard'],
+      liens=[('Paramètres d’audit', 'configurations_audit'), ('Checklists', 'checklist_audit'),
+             ('Recommandations globales', 'admin_recommandations_globales')], perms=['can_manage_audit'],
+      questions=['creer un modele de constatation', 'utiliser une checklist d audit', 'recommandations types pour les rapports']),
+
+    A('rapports_audit_fichiers', 'audit', 'Comparer plusieurs missions d’audit',
+      'Menu Audit interne → **Comparaison d’audits** : constatations, recommandations, plans d’action, taux de réalisation et score '
+      'de chaque mission, côte à côte.',
+      mots=['rapport', 'rapports', 'fichier', 'fichiers', 'joint', 'joints', 'televerser', 'comparer', 'comparaison', 'missions', 'audits'],
+      liens=[('Comparaison d’audits', 'rapport_comparaison_audits')],
+      perms=['can_manage_audit', 'can_view_reports'],
+      questions=['joindre un fichier a un audit', 'comparer deux audits']),
+
+    A('developpement_auditeurs', 'audit', 'Développement des auditeurs : compétences et formations',
+      'Menu Audit interne → **Développement des auditeurs** : les compétences de l’équipe d’audit et leurs formations.',
+      etapes=['**Compétences** : code, nom, catégorie, niveau requis ; activez celles servant aux évaluations.',
+              '**Auditeurs** : le niveau de chacun par compétence (évaluation).',
+              '**Formations** : titre, type, durée, dates, coût, formateur, objectifs ; inscrivez les auditeurs.'],
+      mots=['auditeur', 'auditeurs', 'competence', 'competences', 'formation', 'formations', 'developpement', 'equipe', 'niveau', 'evaluation'],
+      liens=[('Développement des auditeurs', 'developpement_auditeurs_index'), ('Compétences', 'gestion_competences'),
+             ('Formations', 'liste_formations')], perms=['can_manage_audit'],
+      questions=['suivre les competences des auditeurs', 'ajouter une formation', 'inscrire un auditeur a une formation']),
+
+    A('programme_archives', 'audit', 'Programmes d’audit archivés',
+      'Un programme archivé (exercice terminé) reste consultable dans **Programmes archivés** et peut être restauré.',
+      mots=['programme', 'programmes', 'archive', 'archives', 'restaurer', 'ancien', 'exercice'],
+      liens=[('Programmes archivés', 'programmes_archives')], perms=['can_manage_audit_program']),
+
+    # ------------------------------------------------------------ CONFORMITÉ
+    A('veille_vues', 'conformite', 'Veille réglementaire : tableau de bord, kanban, calendrier, favoris',
+      'Plusieurs vues sur les textes suivis : **tableau de bord**, **kanban** par statut (projets, en vigueur, abrogées, suspendues), '
+      '**calendrier** des échéances (exportable vers Outlook ou Google Agenda en .ics), **favoris**, **rapport** par impact et par type.',
+      etapes=['Veille → **Kanban** : faites glisser une veille pour changer son statut.',
+              '**Calendrier** : dates d’application et actions des 30 prochains jours ; **Exporter (.ics)** pour votre agenda.',
+              '**Favoris** : l’étoile sur une veille la met dans « Mes veilles favorites ».',
+              '**Rapport** : répartition par impact et par type, actions à faire, en cours, terminées.'],
+      mots=['veille', 'kanban', 'calendrier', 'echeance', 'echeances', 'ics', 'agenda', 'outlook', 'favori', 'favoris', 'rapport',
+            'dashboard', 'tableau', 'vigueur', 'abrogee', 'projet'],
+      liens=[('Tableau de bord veille', 'veille_dashboard'), ('Kanban', 'veille_kanban'), ('Calendrier', 'veille_calendar'),
+             ('Rapport', 'rapport_veille')],
+      perms=['can_manage_regulatory', 'can_view_veille'],
+      questions=['calendrier des echeances reglementaires', 'exporter la veille dans mon agenda', 'vue kanban de la veille',
+                 'mes veilles favorites']),
+
+    A('veille_menaces', 'conformite', 'Détection de menaces réglementaires',
+      'Veille → **Menaces** : Egalyx repère les textes dont l’échéance approche ou l’impact est fort sans action prévue. '
+      '**Relancer** l’analyse ; **Ignorer** une menace (avec une raison).',
+      mots=['menace', 'menaces', 'detection', 'detecter', 'risque', 'reglementaire', 'ignorer', 'relancer'],
+      liens=[('Menaces', 'veille_menaces')], perms=['can_manage_regulatory', 'can_view_veille']),
+
+    A('veille_archives', 'conformite', 'Archives de la veille et des actions de conformité',
+      'Les veilles et actions archivées restent consultables (filtres, recherche) dans les archives de la veille.',
+      mots=['veille', 'archives', 'archive', 'action', 'actions', 'conformite', 'restaurer'],
+      liens=[('Archives veille', 'veille_archives')], perms=['can_manage_regulatory', 'can_view_veille']),
+
+    A('alerte_suivi', 'conformite', 'Suivre mon signalement (lanceur d’alerte)',
+      'Après un signalement, vous recevez un **code de suivi** et choisissez un **mot de passe**. Sur la page **Suivre un signalement**, '
+      'ils donnent accès au dossier : réponses du référent, questions, état — sans révéler votre identité.',
+      mots=['suivre', 'suivi', 'signalement', 'alerte', 'code', 'anonyme', 'lanceur', 'dossier', 'reponse'],
+      liens=[('Suivre un signalement', 'alerte.suivi')], pour='public',
+      questions=['suivre mon signalement', 'j ai perdu mon code de suivi', 'le referent m a t il repondu']),
+
+    # ------------------------------------------------------------ CONTINUITÉ / QUALITÉ
+    A('pca_tableau_stress', 'continuite', 'Tableau de bord PCA et stress test',
+      'Le **tableau de bord PCA** montre les plans par statut et par niveau de maturité. Le **stress test** note chaque plan sur 5 '
+      'face à des scénarios de crise.',
+      mots=['pca', 'continuite', 'tableau', 'bord', 'maturite', 'stress', 'test', 'crise', 'scenario', 'scenarios', 'resilience'],
+      liens=[('Tableau de bord PCA', 'tableau_bord_pca'), ('Stress test', 'pca_stress_test_dedie')],
+      perms=['can_manage_bcp', 'can_view_bcp'],
+      questions=['niveau de maturite des pca', 'faire un stress test pca']),
+
+    A('qualite_outils', 'continuite', 'Qualité : cartographie des plans, revues, grilles d’audit',
+      'Autour des plans qualité : la **cartographie** des plans, les **revues** (en retard, dans les 30 jours), les **grilles d’audit qualité** '
+      '(questions par référentiel) et la **cartographie des risques par fonction d’assurance** (niveaux de contrôle 1, 2, 3 et externe).',
+      etapes=['Plans qualité → **Grilles d’audit** → **Nouvelle grille** : titre, référentiel, version, type, puis les questions ; **Utiliser** la grille pour un audit.',
+              'Plans qualité → **Revues** : les plans dont la revue est en retard ou proche.',
+              '**Cartographie des risques par fonction d’assurance** : pour chaque risque, qui contrôle à quel niveau ; export PDF ou Excel.'],
+      mots=['qualite', 'grille', 'grilles', 'audit', 'revue', 'revues', 'cartographie', 'assurance', 'fonction', 'fonctions',
+            'niveau', 'niveaux', 'lignes', 'defense', 'referentiel', 'iso'],
+      liens=[('Plans qualité', 'liste_plans_qualite'), ('Grilles d’audit qualité', 'liste_grilles_audit_qualite'),
+             ('Revues', 'alertes_revues_qualite'), ('Cartographie par fonction d’assurance', 'liste_cartographie_risques')],
+      perms=['can_manage_quality', 'can_manage_quality_plans', 'can_manage_quality_audits'],
+      questions=['creer une grille d audit qualite', 'revues des plans qualite en retard', 'trois lignes de defense']),
+
+    # ------------------------------------------------------------ PLANS
+    A('plans_independants', 'plans', 'Créer un plan d’action indépendant',
+      'Pour une action qui ne vient ni d’un audit ni d’un risque (projet interne, demande de la direction) : Plans d’action → '
+      '**Indépendants** → **Nouveau** : nom, description, responsable, dates.',
+      mots=['independant', 'independants', 'plan', 'action', 'libre', 'sans', 'audit', 'risque', 'projet'],
+      liens=[('Plans indépendants', 'liste_plans_action_independants')],
+      questions=['creer un plan d action sans audit', 'plan d action independant']),
+
+    # ------------------------------------------------------------ PILOTAGE / IA / AIDE
+    A('rapports_analyses', 'pilotage', 'Rapports et analyses par direction',
+      'Menu **Rapports et analyses** : pour chaque direction, nombre de risques, score moyen et risques critiques ; export PDF.',
+      mots=['rapport', 'rapports', 'analyse', 'analyses', 'direction', 'directions', 'score', 'moyen', 'critiques', 'pdf'],
+      liens=[('Rapports et analyses', 'rapports')]),
+
+    A('ia_suivi', 'ia', 'Suivre l’utilisation de l’IA',
+      'Tableau de bord Admin Client → **Analyses IA** : la liste les analyses faites (par type, audits les plus analysés, analyses récentes).',
+      mots=['ia', 'analyses', 'utilisation', 'suivi', 'intelligence', 'artificielle', 'consommation'],
+      liens=[('Analyses IA', 'admin_analyses_ia')], pour='admin'),
+
+    A('assistant_ameliorer', 'demarrer', 'Questions non comprises par l’assistant',
+      'Tableau de bord Admin Client → **Questions non comprises** (super admin : menu à son nom) : la liste des questions auxquelles l’assistant n’a pas su répondre. '
+      'Elle sert à compléter le centre d’aide. Vous pouvez aussi transmettre une question au support depuis l’assistant.',
+      mots=['assistant', 'chat', 'chatbot', 'questions', 'comprises', 'repondu', 'reponse', 'ameliorer'],
+      liens=[('Questions non comprises', 'assistant_questions_non_comprises')], pour='admin',
+      questions=['l assistant ne comprend pas ma question', 'questions non comprises']),
+
+    A('support_page', 'depannage', 'La page Support',
+      'Page **Support** (lien « Support » en bas du site public) : parcourir l’aide par catégorie, ouvrir un ticket (sujet, priorité, message) et les autres moyens de contact.',
+      mots=['support', 'contact', 'aide', 'ticket', 'telephone', 'email', 'joindre', 'equipe'],
+      liens=[('Support', 'support')]),
+
+    # ------------------------------------------------------------ SUPER ADMINISTRATEUR
+    A('sa_formules', 'superadmin', 'Formules d’abonnement',
+      'Super admin → **Formules d’abonnement** : créez les formules (nom, prix, utilisateurs inclus, modules) proposées aux clients.',
+      mots=['formule', 'formules', 'abonnement', 'offre', 'offres', 'prix', 'tarif', 'creer'],
+      liens=[('Formules', 'super_admin_formules')], pour='super_admin'),
+
+    A('sa_management', 'superadmin', 'Gérer les super administrateurs',
+      'Super admin → **Gestion Super Admins** : liste, création d’un nouveau super administrateur, réinitialisation de mot de passe.',
+      mots=['super', 'admin', 'administrateur', 'administrateurs', 'creer', 'reinitialiser', 'mot', 'passe', 'gestion'],
+      liens=[('Gestion Super Admins', 'super_admin_management')], pour='super_admin'),
+
+    A('sa_vue_client', 'superadmin', 'Voir l’outil comme un client (Vue Client)',
+      'Menu **Vue Client** : choisissez une organisation pour travailler avec ses données ; **Ma vue personnelle** pour revenir. '
+      'Le **panneau de contrôle** rappelle le mode de vue actuel et les actions système.',
+      mots=['vue', 'client', 'clients', 'consulter', 'basculer', 'changer', 'organisation', 'personnelle', 'panneau', 'controle', 'mode'],
+      liens=[('Panneau de contrôle', 'super_admin_control_panel')], pour='super_admin',
+      questions=['voir les donnees d un client', 'revenir a ma vue', 'aucun client selectionne']),
+
+    A('sa_tous_utilisateurs', 'superadmin', 'Tous les utilisateurs de la plateforme',
+      'Super admin → **Tous les utilisateurs** : filtres par client, statistiques globales, détail et export.',
+      mots=['utilisateurs', 'tous', 'plateforme', 'clients', 'export', 'statistiques'],
+      liens=[('Tous les utilisateurs', 'liste_utilisateurs')], pour='super_admin'),
+
+    A('sa_documents', 'superadmin', 'Documents commerciaux et juridiques',
+      'Super admin : **Documents juridiques** (licence, contrat de service, SLA, accord de confidentialité), **Facture pro forma**, '
+      '**Contrat de représentation** et **Générateur de conventions** (apporteur d’affaires). Chaque document se génère, se copie, se télécharge ou s’imprime.',
+      mots=['contrat', 'contrats', 'licence', 'sla', 'nda', 'confidentialite', 'proforma', 'facture', 'devis', 'representation',
+            'convention', 'conventions', 'apporteur', 'juridique', 'juridiques'],
+      liens=[('Documents juridiques', 'licence'), ('Facture pro forma', 'proforma'), ('Contrat de représentation', 'representation'),
+             ('Générateur de conventions', 'super_admin_generateur_conventions')], pour='super_admin',
+      questions=['generer une facture pro forma', 'generer un contrat de licence']),
+
+    A('sa_articles', 'superadmin', 'Articles du blog',
+      'Super admin → **Gestion des articles** : écrire, publier ou garder en brouillon, catégories, auteurs, génération assistée par IA.',
+      mots=['article', 'articles', 'blog', 'publier', 'brouillon', 'categorie', 'auteur'],
+      liens=[('Gestion des articles', 'admin_articles')], pour='super_admin'),
+
+    A('sa_recalcul', 'superadmin', 'Recalculer les cotations des risques',
+      'Menu à votre nom → **Recalcul des cotations** : recalcule les scores bruts et nets de tous les risques avec les paramètres actuels '
+      '(après un changement de seuils, par exemple).',
+      mots=['recalculer', 'recalcul', 'cotation', 'cotations', 'score', 'scores', 'seuils'],
+      liens=[('Recalcul des cotations', 'recalculer_cotations_admin')], pour='super_admin'),
+
+    A('sa_apparence', 'superadmin', 'Choisir l’interface d’une organisation (actuelle ou harmonisée)',
+      'Menu à votre nom → **Apparence** : pour chaque organisation, l’interface **actuelle** ou l’interface **harmonisée**. '
+      'Le changement est immédiat et ne touche pas aux données.',
+      mots=['apparence', 'interface', 'design', 'theme', 'harmonisee', 'actuelle', 'classique', 'nouvelle', 'style', 'look'],
+      liens=[('Apparence', 'apparence.page')], pour='super_admin',
+      questions=['changer l interface d un client', 'activer l interface harmonisee']),
+]
+
+
 GLOSSAIRE = [
     ('Appétence au risque', 'Niveau de risque que la direction accepte de prendre pour atteindre ses objectifs ; au-delà, des mesures sont exigées.'),
     ('BIA', 'Business Impact Analysis : analyse des conséquences d’un arrêt d’activité, qui fixe RTO et RPO.'),
@@ -1149,9 +1758,11 @@ GLOSSAIRE = [
     ('Cartographie des risques', 'Ensemble des risques d’un périmètre, évalués et positionnés selon impact et probabilité.'),
     ('Constatation', 'Écart relevé par l’auditeur entre la situation observée et la règle attendue.'),
     ('Criblage', 'Comparaison du nom d’un tiers aux listes de sanctions et de gel des avoirs.'),
+    ('Demande de clôture', 'Proposition de clore une recommandation, faite par son responsable ou automatiquement quand tous ses plans sont terminés ; un gestionnaire la valide ou la refuse.'),
     ('Criticité', 'Niveau d’un risque (Faible, Moyen, Élevé, Critique) obtenu à partir de son score.'),
     ('Dispositif de maîtrise (DMR)', 'Contrôle ou mesure qui réduit la probabilité ou l’impact d’un risque.'),
     ('Escalade', 'Remontée automatique d’un incident non traité dans les délais vers un niveau hiérarchique supérieur.'),
+    ('Fuseau horaire', 'Heure légale de l’organisation (ex. UTC+0 à Abidjan) ; toutes les heures affichées en dépendent.'),
     ('GAFI', 'Groupe d’action financière : publie les listes de pays à haut risque et sous surveillance en matière de LCB-FT.'),
     ('Impact', 'Gravité des conséquences si le risque survient (1 à 5).'),
     ('KPI', 'Indicateur de performance, comparé à une cible.'),
@@ -1185,3 +1796,70 @@ def article(id_):
         if a['id'] == id_:
             return a
     return None
+
+
+# ----------------------------------------------------------------------
+# Réglage fin de la recherche (banque de questions recette/banque_questions.py)
+# ----------------------------------------------------------------------
+_RETIRER_MOTS = {
+    'assistant_ameliorer': ['assistant', 'chat', 'chatbot', 'reponse', 'ameliorer'],
+    'rapports_audit_fichiers': ['fichier', 'fichiers', 'joint', 'joints', 'televerser', 'rapport', 'rapports'],
+    'kri_sources': ['donnees', 'kri'],
+    'kri_archives': ['kri', 'kpi', 'indicateur', 'indicateurs'],
+    'c2n_referentiel': ['controle', 'controles', 'c2n', 'n2', 'type', 'types'],
+    'c2n_reglages': ['c2n', 'n2', 'conforme'],
+    'c2n_journal': ['c2n', 'n2', 'qui', 'action', 'historique'],
+    'questionnaires_import': ['modele'],
+    'audit_parametres': ['audit', 'liste', 'controle', 'type', 'recommandation'],
+    'ia_absente': [],
+    'ia_suivi': ['ia', 'intelligence', 'artificielle'],
+    'cloture_campagnes_droit': ['evaluation', 'campagnes'],
+    'espace_operateur': ['campagnes', 'tableau', 'bord', 'risques', 'plans', 'operationnel'],
+    'plan_retard': [],
+    'gestionnaire_utilisateurs': ['utilisateurs', 'creer', 'comptes'],
+    'incidents_export_archives': ['exporter', 'export', 'csv', 'excel', 'pdf'],
+    'support_page': ['contact', 'support', 'joindre', 'equipe', 'email', 'telephone'],
+    'risques_tableau_recherche': ['exporter', 'json', 'excel'],
+}
+_AJOUTER = {
+    'presentation': (['egalyx', 'quoi', 'outil', 'logiciel', 'sert'], ['c est quoi egalyx', 'a quoi sert egalyx', 'presentation de l outil']),
+    'navigation': (['deplacer', 'deplace', 'menu', 'menus', 'naviguer'], ['comment on se deplace dans l outil', 'ou sont les menus']),
+    'assistant': ([], ['a quoi sert l assistant', 'comment utiliser l assistant', 'que peut faire l assistant']),
+    'notifications': (['trop', 'recois', 'couper', 'desactiver'], ['je recois trop de notifications', 'couper les notifications']),
+    'roles': (['difference', 'differences', 'roles'], ['difference entre les roles', 'quels sont les roles']),
+    'journal': (['supprime', 'modifie', 'historique', 'qui'], ['qui a supprime ce risque', 'qui a modifie', 'historique des actions des utilisateurs']),
+    'import_export_admin': (['utilisateurs'], ['importer des utilisateurs depuis excel', 'importer des utilisateurs']),
+    'modeles_permissions': (['type'], ['profil de droits type', 'modele de droits']),
+    'fiches_risque_parametrage': (['joindre', 'pieces'], ['quels fichiers on peut joindre', 'types de fichiers autorises']),
+    'heure_devise': (['decalee', 'decale'], ['l heure est decalee', 'l heure n est pas la bonne']),
+    'guide-campagnes': (['lancer'], ['lancer une campagne d evaluation', 'lancer une campagne']),
+    'campagne': (['lancer'], ['lancer une campagne d evaluation', 'lancer une campagne']),
+    'kri_fiabilite': (['fiabilite', 'fiable', 'qualite'], ['fiabilite des donnees kri', 'les donnees du kri sont elles fiables']),
+    'c2n_principe': (['quoi', 'principe'], ['c est quoi le controle n2', 'c est quoi le c2n', 'controle interne de second niveau']),
+    'c2n_planification': (['planifier', 'second', 'niveau'], ['planifier les controles de second niveau', 'planifier les controles n2']),
+    'c2n_nc': ([], ['une non conformite c2n', 'traiter une non conformite']),
+    'questionnaires': (['creer', 'envoyer', 'agences', 'diffuser', 'sondage', 'enquete'], ['creer un questionnaire', 'nouveau questionnaire']),
+    'constatation': (['ajouter', 'cause', 'causes', 'consequence', 'consequences', 'critere'], ['ajouter une constatation', 'saisir une constatation']),
+    'rapport_audit': (['rediger', 'ecrire'], ['rediger le rapport d audit', 'ecrire le rapport d audit']),
+    'audit_tableau': ([], ['tableau de bord audit', 'tableau de bord de l audit']),
+    'ia_fonctions': (['fait', 'peut'], ['que fait l ia', 'a quoi sert l ia']),
+    'enregistrement': (['modifications', 'enregistrees'], ['mes modifications ne sont pas enregistrees', 'ca ne s enregistre pas']),
+    'dashboard': ([], ['tableau de bord', 'mon tableau de bord', 'page d accueil']),
+    'export': ([], ['exporter en excel', 'exporter mes donnees']),
+    'support': ([], ['contacter le support', 'ouvrir un ticket']),
+    'support_page': ([], ['page support', 'ou est la page support']),
+    'alertes_incidents': (['critique', 'critiques', 'grave'], []),
+    'dashboard_strategique': (['direction', 'generale', 'dg', 'synthese'], ['indicateurs pour la direction generale']),
+    'plans_regles': (['100'], []),
+    'dispositif_creer': (['cle', 'reduire', 'mesure', 'attenuer'], []),
+    'email_non_recu': (['arrive', 'recu', 'jamais', 'spam'], []),
+    'utilisateur_creer': (['ajout'], ['ajout utilisateur', 'ajouter un utilisateur']),
+    'guide-kri': (['koi', 'quoi'], ['c est quoi un kri', 'kri c koi', 'kri c est quoi']),
+}
+for _a in ARTICLES:
+    if _a['id'] in _RETIRER_MOTS:
+        _a['mots'] = [m for m in _a['mots'] if m not in _RETIRER_MOTS[_a['id']]]
+    if _a['id'] in _AJOUTER:
+        _m, _q = _AJOUTER[_a['id']]
+        _a['mots'] = list(_a['mots']) + [m for m in _m if m not in _a['mots']]
+        _a['questions'] = list(_a['questions']) + [q for q in _q if q not in _a['questions']]

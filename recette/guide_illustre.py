@@ -18,7 +18,7 @@ from egalyx.guide_illustre import GUIDES, CATEGORIE
 
 print('--- Contenu')
 verif('catégorie « Guide illustré » en tête du centre d’aide', aide_contenu.CATEGORIES[0] == CATEGORIE)
-verif('23 guides', len(GUIDES) == 23, str(len(GUIDES)))
+verif('29 guides', len(GUIDES) == 29, str(len(GUIDES)))
 verif('identifiants uniques dans tout le centre d’aide', len({a['id'] for a in aide_contenu.ARTICLES}) == len(aide_contenu.ARTICLES))
 verif('guides ajoutés une seule fois', sum(1 for a in aide_contenu.ARTICLES if a['cat'] == 'guide') == len(GUIDES))
 statique = os.path.join(A.app.root_path, 'static')
@@ -45,7 +45,7 @@ c = socle.navigateur(A, ids['admin_a'])
 with Muet():
     r = c.get('/aide/')
 h = r.data.decode()
-verif('accueil de l’aide : bandeau du guide illustré', r.status_code == 200 and h.count('class="gi-tuile"') == len(GUIDES), str(h.count('class="gi-tuile"')))
+verif('accueil de l’aide : bandeau du guide illustré', r.status_code == 200 and h.count('class="gi-tuile"') == len([g for g in GUIDES if g['pour'] != 'super_admin']), str(h.count('class="gi-tuile"')))
 verif('accueil : vignettes en chargement différé', 'loading="lazy"' in h)
 verif('accueil : la catégorie n’est pas listée deux fois', 'id="cat-guide"' not in h)
 with Muet():
@@ -70,12 +70,13 @@ verif('fiche ordinaire inchangée (pas de section guide)', r.status_code == 200 
 with Muet():
     r = c.get('/aide/guide-complet')
 h = r.data.decode()
-verif('guide complet imprimable : toutes les captures', r.status_code == 200 and h.count('<figure class="illu">') == len(images), str(h.count('<figure class="illu">')))
+images_admin = [x['image'] for g in GUIDES if g['pour'] != 'super_admin' for x in g['illustrations']]
+verif('guide complet imprimable : toutes les captures (sauf guide super admin)', r.status_code == 200 and h.count('<figure class="illu">') == len(images_admin), str(h.count('<figure class="illu">')))
 tous = 0
 for gg in GUIDES:
     with Muet():
         tous += c.get(f"/aide/fiche/{gg['id']}").status_code == 200
-verif('les 23 guides s’ouvrent', tous == len(GUIDES), str(tous))
+verif('les guides s’ouvrent (le guide super admin reste réservé)', tous == len([g for g in GUIDES if g['pour'] != 'super_admin']), str(tous))
 
 print('--- Droits')
 anonyme = A.app.test_client()

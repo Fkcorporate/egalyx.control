@@ -47,6 +47,13 @@ ETAPES = [
     ('Feuille de style commune : chargement, variables orphelines, mode sombre', 'feuille_commune.py', []),
     ('Plans d\'action : audit, risque et indépendant chacun dans son module', 'plans_nature.py', []),
     ('Plans d\'action : progression qui tient, plan terminé, recommandation et constatation', 'plans_suivi.py', []),
+    ('Heure et devise par organisation ; lettre de mission (en-têtes, PDF, envoi)', 'localisation_lettres.py', []),
+    ('Listes découpées en pages', 'pagination.py', []),
+    ('Statuts : une seule écriture par objet', 'statuts.py', []),
+    ('Centre d\'aide et assistant complets', 'aide_complete.py', []),
+    ('Interface actuelle ou harmonisée', 'interface_harmonisee.py', []),
+    ('PDF sans WeasyPrint et pages réparées', 'pdf_secours.py', []),
+    ('Boutons : plus aucune adresse inexistante', 'boutons_morts.py', []),
     ('Compatibilité avec la version de Python de Render', 'compat_python.py', []),
 ]
 BRUIT = ('🟢', '🔐', '📋', '✅', '⚠', '❌', '   ', '🔧', '🔒')

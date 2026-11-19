@@ -51,6 +51,24 @@ SYNONYMES = {
     'acces': 'permission',
     'ajouter': 'creer', 'nouveau': 'creer', 'nouvelle': 'creer', 'nouvel': 'creer', 'cree': 'creer', 'creation': 'creer',
     'lgbt': 'lcb', 'lbc': 'lcb',
+    # vocabulaire courant ajouté après la banque de questions (19/11/2026)
+    'employe': 'utilisateur', 'employes': 'utilisateur', 'salarie': 'utilisateur', 'salaries': 'utilisateur',
+    'collegue': 'utilisateur', 'collegues': 'utilisateur', 'collaborateur': 'utilisateur', 'collaborateurs': 'utilisateur',
+    'agent': 'utilisateur', 'agents': 'utilisateur', 'personne': 'utilisateur',
+    'supprime': 'archiver', 'supprimee': 'archiver', 'supprimes': 'archiver', 'efface': 'archiver', 'retire': 'archiver',
+    'retirer': 'desactiver', 'enlever': 'desactiver', 'bloquer': 'desactiver',
+    'inactif': 'archiver', 'inactive': 'archiver', 'inactifs': 'archiver',
+    'retrouver': 'restaurer', 'recuperer': 'restaurer',
+    'carto': 'cartographie', 'cartos': 'cartographie', 'cartographies': 'cartographie', 'cartografie': 'cartographie',
+    'grave': 'critique', 'graves': 'critique', 'majeur': 'critique', 'majeurs': 'critique',
+    'tolerance': 'appetence', 'appetit': 'appetence',
+    'perte': 'incident', 'pertes': 'incident', 'sinistre': 'incident', 'sinistres': 'incident', 'fraude': 'incident',
+    'brancher': 'api', 'integrer': 'api', 'integration': 'api', 'interfacer': 'api', 'logiciel': 'api',
+    'parler': 'support', 'joindre': 'support', 'appeler': 'support', 'conseiller': 'support',
+    'bienvenue': 'email', 'invitation': 'email',
+    'constat': 'constatation', 'constats': 'constatation', 'finding': 'constatation',
+    'mdp': 'passe', 'password': 'passe',
+    'indicateur': 'kri', 'indicateurs': 'kri',
 }
 
 
@@ -201,7 +219,11 @@ def chercher(question, u=None, n=5):
         if t not in q:
             q.append(t)
     if not q:
-        return []
+        # Question faite uniquement de mots courants (« c'est quoi egalyx ») : seules les phrases types peuvent répondre
+        texte_q = normaliser(question)
+        trouves = [(2.0, a) for a, _ in idx['docs'] if visible(a, u) and any(
+            p and difflib.SequenceMatcher(None, texte_q, p).ratio() > 0.85 for p in a['questions'])]
+        return trouves[:n]
     total = sum(idx['idf'].get(t, 1.5) for t in q)
     resultats = []
     texte_q = normaliser(question)
@@ -219,10 +241,10 @@ def chercher(question, u=None, n=5):
             continue
         score = s / total + 0.05 * s2 / total
         # bonus : phrase type ou titre presque identique
-        for phrase in a['questions'] + [normaliser(a['titre'])]:
-            if phrase and difflib.SequenceMatcher(None, texte_q, phrase).ratio() > 0.8:
-                score += 1.5
-                break
+        meilleur = max((difflib.SequenceMatcher(None, texte_q, p).ratio()
+                        for p in a['questions'] + [normaliser(a['titre'])] if p), default=0)
+        if meilleur > 0.8:
+            score += 0.5 + meilleur          # 1,5 environ ; la phrase la plus proche l'emporte entre deux fiches
         if a.get('glossaire'):
             score *= 0.85
         elif a.get('illustrations') and not veut_guide:
@@ -232,14 +254,19 @@ def chercher(question, u=None, n=5):
     return resultats[:n]
 
 
-SEUIL_REPONSE = 1.1          # en dessous : pas assez sûr pour répondre seul
+SEUIL_REPONSE = 1.3          # en dessous : pas assez sûr pour répondre seul
+MARGE_REPONSE = 0.2          # écart minimal avec la 2e fiche ; sinon l'assistant propose « Vouliez-vous dire… »
+# Réglés sur recette/banque_questions.py : sur des questions jamais vues, l'assistant répond seul ~8 fois sur 10
+# et se trompe alors ~1 fois sur 15 ; le reste du temps il propose les 3 fiches les plus proches.
 
 
-def repondre(question, u=None, seuil=SEUIL_REPONSE):
-    """Réponse pour l'assistant, ou None."""
+def repondre(question, u=None, seuil=SEUIL_REPONSE, marge=MARGE_REPONSE):
+    """Réponse pour l'assistant, ou None quand ce n'est pas sûr (trop faible, ou deux fiches à égalité)."""
     u = current_user if u is None else u
     res = chercher(question, u, n=4)
     if not res or res[0][0] < seuil:
+        return None
+    if marge and len(res) > 1 and res[0][0] - res[1][0] < marge:
         return None
     score, a = res[0]
     ok, message = acces(a, u)
@@ -259,6 +286,45 @@ def repondre(question, u=None, seuil=SEUIL_REPONSE):
     suggestions = [b['titre'] for s, b in res[1:] if s >= seuil * 0.6 and not b.get('glossaire')][:2]
     return {'texte': '\n'.join(lignes), 'cartes': [], 'actions': actions[:4], 'suggestions': suggestions,
             'intention': 'base_connaissances', 'article': a['id'], 'score': score}
+
+
+MOTS_DONNEES = {'mes', 'combien', 'quels', 'quelles', 'lesquels', 'lister', 'liste', 'montre', 'affiche'}
+
+
+def repondre_si_question_connue(question, u=None, ratio=0.85):
+    """Réponse de la fiche dont une question type est presque identique à la question posée, sinon None.
+
+    Sert à l'assistant pour répondre par la fiche avant ses raccourcis sur les données (« mes recommandations »…),
+    quand la personne pose clairement une question d'usage. Les demandes de données restent aux raccourcis."""
+    texte_q = normaliser(question)
+    if len(texte_q.split()) < 4 or set(texte_q.split()) & MOTS_DONNEES:
+        return None
+    for score, a in chercher(question, u, n=3):
+        if any(p and difflib.SequenceMatcher(None, texte_q, p).ratio() >= ratio for p in a['questions']):
+            return repondre(question, u)
+    return None
+
+
+def contexte_ia(question, u=None, n=5):
+    """Texte des fiches les plus proches, donné à l'IA pour qu'elle réponde d'après le centre d'aide."""
+    u = current_user if u is None else u
+    blocs = []
+    for s, a in chercher(question, u, n=n):
+        if s < 0.35:
+            continue
+        lignes = [f"### {a['titre']}", a['resume']]
+        lignes += [f"{i}. {e}" for i, e in enumerate(a['etapes'], 1)]
+        lignes += ['Remarque : ' + x for x in a['notes'][:3]]
+        try:
+            lignes += [f"Lien : [{l['libelle']}]({l['url']})" for l in liens(a, u)]
+            lignes.append(f"Fiche complète : [{a['titre']}]({url_for('aide.fiche', id_=a['id'])})")
+        except Exception:
+            pass
+        ok, message = acces(a, u)
+        if not ok:
+            lignes.append('Accès : ' + message)
+        blocs.append('\n'.join(lignes))
+    return '\n\n'.join(blocs)
 
 
 def proches(question, u=None, n=3):
@@ -332,4 +398,18 @@ def api_chercher():
 def enregistrer(app):
     app.register_blueprint(bp)
     app.jinja_env.filters.setdefault('aide_rendu', _rendu)
+
+    def image_guide(chemin):
+        """Capture du guide dans l'interface de l'organisation : static/aide/guide/harmonisee/… si elle existe."""
+        import os
+        try:
+            from egalyx.apparence import apparence_harmonisee
+            if apparence_harmonisee() and chemin.startswith('aide/guide/'):
+                variante = 'aide/guide/harmonisee/' + chemin[len('aide/guide/'):]
+                if os.path.exists(os.path.join(app.static_folder, variante)):
+                    chemin = variante
+        except Exception:  # noqa: BLE001 — en cas de doute, la capture d'origine
+            pass
+        return url_for('static', filename=chemin)
+    app.jinja_env.filters['image_guide'] = image_guide
     index()

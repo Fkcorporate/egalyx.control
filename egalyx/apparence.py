@@ -18,7 +18,16 @@ from flask_login import current_user
 
 bp = Blueprint('apparence', __name__, url_prefix='/compte/apparence')
 
-CHOIX = ('classique', 'nouvelle')
+CHOIX = ('classique', 'harmonisee')
+LIBELLES = {'classique': 'Interface actuelle', 'harmonisee': 'Interface harmonisée'}
+ALIAS = {'nouvelle': 'harmonisee', 'actuelle': 'classique'}   # « nouvelle » (première version) = interface harmonisée
+CLE_APERCU = 'egalyx_apercu_apparence'                        # aperçu réservé au super admin, pour sa session
+
+
+def _valeur(v):
+    v = (v or '').strip().lower()
+    v = ALIAS.get(v, v)
+    return v if v in CHOIX else None
 
 
 def journal(message):
@@ -38,8 +47,7 @@ def _m():
 
 
 def defaut_serveur():
-    v = (os.environ.get('EGALYX_APPARENCE') or 'classique').strip().lower()
-    return v if v in CHOIX else 'classique'
+    return _valeur(os.environ.get('EGALYX_APPARENCE')) or 'classique'
 
 
 def reglage_brut(client_id):
@@ -61,7 +69,7 @@ def reglage_brut(client_id):
 
 def defaut_organisation(client_id):
     v, _ = reglage_brut(client_id)
-    return v if v in CHOIX else None
+    return _valeur(v)
 
 
 def apparence_effective(u=None):
@@ -69,6 +77,14 @@ def apparence_effective(u=None):
     u = u or current_user
     if not getattr(u, 'is_authenticated', False):
         return defaut_serveur()
+    if getattr(u, 'is_super_admin', False):
+        try:
+            from flask import session
+            apercu = _valeur(session.get(CLE_APERCU))
+            if apercu:
+                return apercu
+        except Exception:  # noqa: BLE001
+            pass
     cid = getattr(u, 'client_id', None)
     if u is current_user or getattr(u, 'id', None) == getattr(current_user, 'id', None):
         try:                      # super-admin en « Voir comme ce client » : apparence du client consulté
@@ -107,10 +123,14 @@ def apparence_nouvelle():
         if 'egalyx_apparence' not in g:
             g.egalyx_apparence = apparence_effective()
             _journal_page(g.egalyx_apparence)
-        return g.egalyx_apparence == 'nouvelle'
+        return g.egalyx_apparence == 'harmonisee'
     except Exception as e:  # noqa: BLE001
         journal(f'erreur, apparence classique utilisée : {e!r}')
         return False
+
+
+def apparence_harmonisee():
+    return apparence_nouvelle()
 
 
 def _est_super_admin():
@@ -139,7 +159,8 @@ def page():
             conf = m.ClientConfiguration(client_id=cid, couleurs={}, preferences={})
             m.db.session.add(conf)
         prefs = dict(conf.preferences or {})
-        if v in CHOIX:
+        v = _valeur(v)
+        if v:
             prefs['apparence'] = v
         else:
             prefs.pop('apparence', None)
@@ -155,7 +176,28 @@ def page():
         return redirect(url_for('.page'))
     clients = m.Client.query.order_by(m.Client.nom).all()
     reglages = {c.id: defaut_organisation(c.id) for c in clients}
-    return render_template('egalyx/apparence.html', clients=clients, reglages=reglages, serveur=defaut_serveur())
+    from flask import session
+    return render_template('egalyx/apparence.html', clients=clients, reglages=reglages, serveur=defaut_serveur(),
+                           libelles=LIBELLES, apercu=_valeur(session.get(CLE_APERCU)))
+
+
+@bp.route('/apercu/<valeur>', methods=['POST'])
+def apercu(valeur):
+    """Super admin : voir tout l'outil dans l'une ou l'autre interface, pour sa session seulement."""
+    from flask import session
+    if not _est_super_admin():
+        abort(404)
+    v = _valeur(valeur)
+    if v:
+        session[CLE_APERCU] = v
+        flash(f"Aperçu : {LIBELLES[v]} (pour vous seulement ; les clients gardent leur réglage).", 'info')
+    else:
+        session.pop(CLE_APERCU, None)
+        flash("Aperçu arrêté : vous voyez de nouveau l'interface réglée pour le client consulté.", 'info')
+    cible = request.form.get('suivant') or request.referrer or url_for('.page')
+    if cible.startswith('//') or (not cible.startswith('/') and not cible.startswith(request.host_url)):
+        cible = url_for('.page')
+    return redirect(cible)
 
 
 def _diagnostic_demarrage(app):
@@ -182,8 +224,14 @@ def _diagnostic_demarrage(app):
 def enregistrer(app):
     from egalyx.commun import exempter_controle_ancien
     app.register_blueprint(bp)
-    exempter_controle_ancien(app, {'apparence.page'})
+    exempter_controle_ancien(app, {'apparence.page', 'apparence.apercu'})
     app.jinja_env.globals['apparence_nouvelle'] = apparence_nouvelle
+    app.jinja_env.globals['apparence_harmonisee'] = apparence_harmonisee
+
+    def apercu_apparence():
+        from flask import session
+        return _valeur(session.get(CLE_APERCU)) if _est_super_admin() else None
+    app.jinja_env.globals['apercu_apparence'] = apercu_apparence
     _diagnostic_demarrage(app)
     try:                                    # tableau de bord mis en page comme la maquette (apparence « Nouvelle »)
         from egalyx import apparence_tableau
