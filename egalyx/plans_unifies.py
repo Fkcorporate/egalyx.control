@@ -9,6 +9,7 @@ Un plan N2 est rattaché au risque et aux dispositifs testés par son contrôle 
 apparaît donc aussi sur la fiche du dispositif et du risque concernés.
 Chacun ne voit que ce que ses droits permettent (plans des risques, N2) ou ce dont il est responsable.
 """
+from egalyx.localisation import aujourdhui as _aujourdhui  # date du jour dans le fuseau de l'organisation
 from datetime import date
 
 from flask import Blueprint, abort, render_template, request, session, url_for
@@ -90,7 +91,7 @@ def lignes(client_id, filtre_source=None, filtre_etat=None, moi=False, retard=Fa
     voir_risques = _perm('can_view_action_plans', 'can_manage_action_plans', 'can_manage_risks')
     voir_n2 = _perm('can_view_controle_interne_n2', 'can_manage_controle_interne_n2')
     uid = current_user.id
-    aujourd_hui = date.today()
+    aujourd_hui = _aujourdhui()
     out = []
     noms = {}
 
@@ -184,7 +185,9 @@ def page():
              'risques': sum(1 for l in tout if l['source'] == 'risques'), 'n2': sum(1 for l in tout if l['source'] == 'n2'),
              'audit': sum(1 for l in tout if l['source'] == 'audit'),
              'independant': sum(1 for l in tout if l['source'] == 'independant')}
-    return render_template('egalyx/plans_registre.html', lignes=filtres, stats=stats, source=source, etat=etat_f,
+    from egalyx.pagination import paginer
+    page = paginer(filtres)       # affichage par pages (compteurs calculés sur toutes les lignes)
+    return render_template('egalyx/plans_registre.html', lignes=page.items, page=page, stats=stats, source=source, etat=etat_f,
                            moi=moi, retard=retard, libelles=LIBELLES_ETAT)
 
 

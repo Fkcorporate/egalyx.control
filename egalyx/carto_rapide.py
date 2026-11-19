@@ -13,6 +13,7 @@ Correctifs (affichage et données identiques) :
   2. évaluations et dispositifs chargés en 2 requêtes pour toute la cartographie ; anomalies calculées sur place ;
   3. écriture en base seulement si une cotation a réellement changé.
 """
+from egalyx.localisation import aujourdhui as _aujourdhui  # date du jour dans le fuseau de l'organisation
 import hashlib
 import logging
 import os
@@ -180,7 +181,7 @@ def detail_cartographie(id):
     if not campagne_active:
         annee = datetime.now().year
         campagne_active = M.CampagneEvaluation(cartographie_id=id, nom=f"Campagne {annee}", description=f"Évaluation annuelle {annee}",
-                                               date_debut=datetime.now().date(), statut='en_cours', created_by=current_user.id)
+                                               date_debut=_aujourdhui(), statut='en_cours', created_by=current_user.id)
         campagne_active.client_id = cartographie.client_id if current_user.role == 'super_admin' else current_user.client_id
         db.session.add(campagne_active)
         db.session.commit()
@@ -245,7 +246,7 @@ def detail_cartographie(id):
     compte = lambda s: sum(1 for d in demandes_reevaluation if d.statut == s)  # noqa: E731
 
     stats_dispositifs = {'total': total_dispositifs, 'par_type': {}, 'efficaces': 0, 'a_verifier': 0, 'non_evalues': 0, 'par_risque': {}}
-    aujourdhui = datetime.now().date()
+    aujourdhui = _aujourdhui()
     for rid, disp in dispositifs_par_risque.items():
         stats_dispositifs['par_risque'][rid] = len(disp)
         for d in disp:

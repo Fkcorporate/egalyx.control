@@ -1,6 +1,7 @@
 
 # --- Journal (remplace les anciens print()) : erreurs -> WARNING (journaux du serveur) ; le reste -> DEBUG,
 #     visible seulement avec EGALYX_TRACES=1. Ajouté le 18/11/2026 (ménage).
+from egalyx.localisation import aujourdhui as _aujourdhui  # date du jour dans le fuseau de l'organisation
 import logging as _logging_journal
 import os as _os_journal
 _JOURNAL = _logging_journal.getLogger('egalyx.models')
@@ -1344,7 +1345,7 @@ class User(UserMixin, db.Model):
                 elif isinstance(pause_date, datetime):
                     pause_date = pause_date.date()
                 
-                if pause_date and pause_date >= datetime.utcnow().date():
+                if pause_date and pause_date >= _aujourdhui():
                     return False
             except Exception:
                 pass
@@ -3911,7 +3912,7 @@ class VeilleReglementaire(db.Model):
         """Nombre de jours avant application"""
         if not self.date_application:
             return None
-        return (self.date_application - datetime.utcnow().date()).days
+        return (self.date_application - _aujourdhui()).days
     
     @property
     def statut_label(self):
@@ -4151,21 +4152,21 @@ class ActionConformite(db.Model):
             return False
         if not self.date_echeance:
             return False
-        return self.date_echeance < datetime.utcnow().date()
+        return self.date_echeance < _aujourdhui()
     
     @property
     def jours_retard(self):
         """Nombre de jours de retard"""
         if not self.est_en_retard:
             return 0
-        return (datetime.utcnow().date() - self.date_echeance).days
+        return (_aujourdhui() - self.date_echeance).days
     
     @property
     def jours_restants(self):
         """Nombre de jours restants avant échéance"""
         if self.statut == 'termine' or not self.date_echeance:
             return None
-        delta = (self.date_echeance - datetime.utcnow().date()).days
+        delta = (self.date_echeance - _aujourdhui()).days
         return delta if delta >= 0 else 0
     
     # ============================================
@@ -4874,7 +4875,7 @@ class Audit(db.Model):
         if self.date_fin_reelle:
             return 100
         
-        aujourdhui = datetime.utcnow().date()
+        aujourdhui = _aujourdhui()
         
         if aujourdhui < self.date_debut_reelle:
             return 0
@@ -5908,7 +5909,7 @@ class PlanAction(db.Model):
             return False
         if not self.date_fin_prevue:
             return False
-        return datetime.utcnow().date() > self.date_fin_prevue
+        return _aujourdhui() > self.date_fin_prevue
 
     @property
     def couleur_priorite(self):
@@ -6380,7 +6381,7 @@ class SousAction(db.Model):
         """Vérifie si la sous-action est en retard"""
         if not self.date_fin_prevue or self.statut == 'termine':
             return False
-        return datetime.utcnow().date() > self.date_fin_prevue
+        return _aujourdhui() > self.date_fin_prevue
     
     @property
     def couleur_statut(self):
@@ -6402,7 +6403,7 @@ class SousAction(db.Model):
         """Termine la sous-action"""
         self.statut = 'termine'
         self.pourcentage_realisation = 100
-        self.date_fin_reelle = datetime.utcnow().date()
+        self.date_fin_reelle = _aujourdhui()
         self.updated_at = datetime.utcnow()
 
 
@@ -7398,7 +7399,7 @@ class ErreurTest(db.Model):
         """Marquer l'erreur comme corrigée"""
         self.etat = 'corrigee'
         self.correction_effectuee = True
-        self.date_correction = datetime.utcnow().date()
+        self.date_correction = _aujourdhui()
         if responsable_id:
             self.responsable_correction_id = responsable_id
         self.updated_at = datetime.utcnow()
@@ -9201,6 +9202,7 @@ class Client(db.Model):
     theme_couleur = db.Column(db.String(50), default='#1A3C6B')
     langue = db.Column(db.String(10), default='fr')
     fuseau_horaire = db.Column(db.String(50), default='Europe/Paris')
+    devise = db.Column(db.String(3), nullable=True)   # code ISO (EUR, XOF…) ; vide : devise de l'abonnement (egalyx/localisation.py)
     
     # Plan et limitations
     plan = db.Column(db.String(50), default='standard')  # standard, premium, enterprise
@@ -9476,6 +9478,34 @@ class ClientDataFilter:
 # ====================
 # MODÈLES FORMULES
 # ====================
+
+class ModeleLettreMission(db.Model):
+    """En-tête et e-mail d'accompagnement d'une lettre de mission, propres à une organisation.
+
+    Gérés par le super admin (egalyx/lettre_mission.py) ; l'auditeur choisit le modèle de chaque lettre.
+    """
+    __tablename__ = 'modeles_lettre_mission'
+    id = db.Column(db.Integer, primary_key=True)
+    client_id = db.Column(db.Integer, db.ForeignKey('clients.id'), nullable=False, index=True)
+    nom = db.Column(db.String(120), nullable=False)
+    est_defaut = db.Column(db.Boolean, default=False)
+    actif = db.Column(db.Boolean, default=True)
+    # en-tête
+    logo_url = db.Column(db.String(500))                 # vide : logo de l'organisation
+    logo_position = db.Column(db.String(10), default='gauche')   # gauche, centre, droite, aucun
+    couleur = db.Column(db.String(20), default='#1A3C6B')
+    titre_entete = db.Column(db.String(200))             # ex. « Direction de l'Audit Interne »
+    lignes_entete = db.Column(db.Text)                   # une ligne par information (adresse, téléphone…)
+    mention_haut = db.Column(db.String(200))             # ex. « CONFIDENTIEL »
+    pied_page = db.Column(db.Text)
+    signature = db.Column(db.Text)                       # bloc de signature (nom, fonction)
+    # e-mail d'accompagnement ; variables : {reference} {objet} {audit} {organisation} {date_debut} {date_fin} {emetteur} {destinataire}
+    objet_email = db.Column(db.String(250))
+    message_email = db.Column(db.Text)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    modifie_par_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=True)
+
 
 class FormuleAbonnement(db.Model):
     """Formule d'abonnement standard/prémium"""
@@ -10075,7 +10105,7 @@ class AbonnementClient(db.Model):
     
     def is_active(self):
         """Vérifie si l'abonnement est actif"""
-        today = datetime.utcnow().date()
+        today = _aujourdhui()
         return (self.statut == 'actif' and 
                 self.date_debut <= today and 
                 (self.date_fin is None or self.date_fin >= today))
@@ -10084,7 +10114,7 @@ class AbonnementClient(db.Model):
         """Retourne le nombre de jours restants"""
         if not self.date_fin:
             return float('inf')
-        today = datetime.utcnow().date()
+        today = _aujourdhui()
         return (self.date_fin - today).days
 
 # models.py - Classe FichierRapport complète
@@ -11019,7 +11049,7 @@ class DispositifMaitrise(db.Model):
         
         facteurs_aggravants = []
         if self.date_derniere_verification:
-            jours_depuis = (datetime.now().date() - self.date_derniere_verification).days
+            jours_depuis = (_aujourdhui() - self.date_derniere_verification).days
             if jours_depuis > 365:
                 facteurs_aggravants.append("Non vérifié depuis plus d'un an")
         if self.statut != 'actif':
@@ -11049,7 +11079,7 @@ class DispositifMaitrise(db.Model):
                 return "🟠 AMÉLIORATION NÉCESSAIRE - Plan d'action à programmer"
         
         if self.prochaine_verification:
-            jours_restants = (self.prochaine_verification - datetime.now().date()).days
+            jours_restants = (self.prochaine_verification - _aujourdhui()).days
             if jours_restants < 0:
                 return f"🔴 VÉRIFICATION EN RETARD de {abs(jours_restants)} jours"
             elif jours_restants < 30:
@@ -12075,8 +12105,8 @@ class ProgrammeAudit(db.Model):
     def approuver(self, date_approbation=None, commentaire=None):
         """Approuve le programme"""
         self.statut = 'actif'
-        self.date_approbation = date_approbation or datetime.now().date()
-        self.date_mise_en_oeuvre = datetime.now().date()
+        self.date_approbation = date_approbation or _aujourdhui()
+        self.date_mise_en_oeuvre = _aujourdhui()
         self.updated_at = datetime.now()
     
     def desapprouver(self, raison=None):
@@ -12377,13 +12407,13 @@ class MissionAudit(db.Model):
     @property
     def est_en_retard(self):
         if self.date_fin_prevue and self.statut not in ['termine', 'annule', 'reporte']:
-            return datetime.now().date() > self.date_fin_prevue
+            return _aujourdhui() > self.date_fin_prevue
         return False
     
     @property
     def jours_restants(self):
         if self.date_fin_prevue and self.statut not in ['termine', 'annule', 'reporte']:
-            return max(0, (self.date_fin_prevue - datetime.now().date()).days)
+            return max(0, (self.date_fin_prevue - _aujourdhui()).days)
         return 0
     
     @property
@@ -12511,7 +12541,7 @@ class PlanPluieAudit(db.Model):
             return 0
         if self.mission_principale.statut in ['termine', 'annule']:
             return 0
-        retard = (datetime.now().date() - self.mission_principale.date_fin_prevue).days
+        retard = (_aujourdhui() - self.mission_principale.date_fin_prevue).days
         return max(0, retard)
     
     @property
@@ -13437,7 +13467,7 @@ class PlanQualiteFonction(db.Model):
         # 4. Revue (15%)
         if self.date_derniere_revue:
             score += 7.5
-        if self.date_prochaine_revue and self.date_prochaine_revue > datetime.now().date():
+        if self.date_prochaine_revue and self.date_prochaine_revue > _aujourdhui():
             score += 7.5
         total += 15
         
@@ -13505,7 +13535,7 @@ class PlanQualiteFonction(db.Model):
         if not self.date_prochaine_revue:
             return 'non_planifie'
         
-        today = datetime.now().date()
+        today = _aujourdhui()
         if self.date_prochaine_revue < today:
             return 'retard'
         elif self.date_prochaine_revue <= today + timedelta(days=30):
@@ -13518,7 +13548,7 @@ class PlanQualiteFonction(db.Model):
         if not self.date_prochaine_revue:
             return None
         
-        today = datetime.now().date()
+        today = _aujourdhui()
         if self.date_prochaine_revue < today:
             return - (today - self.date_prochaine_revue).days
         else:
@@ -13783,7 +13813,7 @@ class PlanQualiteFonction(db.Model):
         # Revue (15%)
         if self.date_derniere_revue:
             score += 7.5
-        if self.date_prochaine_revue and self.date_prochaine_revue > datetime.now().date():
+        if self.date_prochaine_revue and self.date_prochaine_revue > _aujourdhui():
             score += 7.5
         total += 15
         
@@ -14453,7 +14483,7 @@ class ActionAmeliorationQualite(db.Model):
     def est_en_retard(self):
         if self.statut == 'terminee':
             return False
-        if self.date_echeance and datetime.utcnow().date() > self.date_echeance:
+        if self.date_echeance and _aujourdhui() > self.date_echeance:
             return True
         return False
 
@@ -15384,7 +15414,7 @@ class CampagneControle(db.Model):
     def get_jours_restants(self):
         """Retourne le nombre de jours restants avant la date de fin"""
         if self.date_fin:
-            delta = self.date_fin - datetime.now().date()
+            delta = self.date_fin - _aujourdhui()
             return max(0, delta.days)
         return None
     
@@ -17908,7 +17938,7 @@ class ServiceAlerteApprobation:
         Returns:
             int: Nombre d'alertes créées ou réactivées
         """
-        aujourdhui = datetime.utcnow().date()
+        aujourdhui = _aujourdhui()
         alertes_traitees = 0
         
         # ============================================
@@ -19394,14 +19424,14 @@ class PlanificationControle(db.Model):
     def est_en_retard(self):
         """Vérifie si la planification est en retard"""
         if self.date_prevue and self.statut not in ['valide', 'rejete', 'archive']:
-            return datetime.now().date() > self.date_prevue
+            return _aujourdhui() > self.date_prevue
         return False
     
     @property
     def jours_restants(self):
         """Retourne le nombre de jours restants avant la date prévue"""
         if self.date_prevue and self.statut not in ['valide', 'rejete', 'archive']:
-            delta = self.date_prevue - datetime.now().date()
+            delta = self.date_prevue - _aujourdhui()
             return max(0, delta.days)
         return 0
     
@@ -20019,7 +20049,7 @@ class RecommandationC2N(db.Model):
             recommandation_id=self.id,
             action_corrective=self.titre,
             description=self.description,
-            date_echeance=date_echeance or (datetime.utcnow().date() + timedelta(days=30)),
+            date_echeance=date_echeance or (_aujourdhui() + timedelta(days=30)),
             statut='a_faire',
             taux_avancement=self.progression,
             priorite=self.priorite,
@@ -20045,7 +20075,7 @@ class RecommandationC2N(db.Model):
         # Si progression à 100%, marquer comme réalisée
         if self.progression == 100 and self.statut not in ['realisee', 'rejetee']:
             self.statut = 'realisee'
-            self.date_fin_reelle = datetime.utcnow().date()
+            self.date_fin_reelle = _aujourdhui()
         
         return True
     
@@ -20065,14 +20095,14 @@ class RecommandationC2N(db.Model):
     def est_en_retard(self):
         """Vérifie si la recommandation est en retard"""
         if self.date_echeance and self.statut not in ['realisee', 'rejetee']:
-            return datetime.utcnow().date() > self.date_echeance
+            return _aujourdhui() > self.date_echeance
         return False
     
     @property
     def jours_restants(self):
         """Retourne le nombre de jours restants avant échéance"""
         if self.date_echeance and self.statut not in ['realisee', 'rejetee']:
-            delta = self.date_echeance - datetime.utcnow().date()
+            delta = self.date_echeance - _aujourdhui()
             return max(0, delta.days)
         return None
     
@@ -20314,13 +20344,13 @@ class PlanActionC2N(db.Model):
     @property
     def est_en_retard(self):
         if self.date_echeance and self.statut != 'terminee' and not self.is_archived:
-            return datetime.utcnow().date() > self.date_echeance
+            return _aujourdhui() > self.date_echeance
         return False
     
     @property
     def jours_restants(self):
         if self.date_echeance and self.statut != 'terminee' and not self.is_archived:
-            delta = self.date_echeance - datetime.utcnow().date()
+            delta = self.date_echeance - _aujourdhui()
             return max(0, delta.days)
         return 0
     
@@ -20359,7 +20389,7 @@ class PlanActionC2N(db.Model):
         
         if self.taux_avancement == 100 and self.statut != 'terminee':
             self.statut = 'terminee'
-            self.date_fin_reelle = datetime.utcnow().date()
+            self.date_fin_reelle = _aujourdhui()
         elif self.taux_avancement > 0 and self.statut == 'a_faire':
             self.statut = 'en_cours'
         elif self.taux_avancement == 0 and self.statut == 'en_cours':
@@ -20374,7 +20404,7 @@ class PlanActionC2N(db.Model):
         
         self.statut = 'terminee'
         self.taux_avancement = 100
-        self.date_fin_reelle = datetime.utcnow().date()
+        self.date_fin_reelle = _aujourdhui()
         if commentaire:
             self.commentaire_realisation = commentaire
         self.updated_at = datetime.utcnow()
@@ -20445,7 +20475,7 @@ class PlanActionC2N(db.Model):
         
         if self.taux_avancement == 100 and self.statut != 'terminee':
             self.statut = 'terminee'
-            self.date_fin_reelle = datetime.utcnow().date()
+            self.date_fin_reelle = _aujourdhui()
         elif self.taux_avancement > 0 and self.statut == 'a_faire':
             self.statut = 'en_cours'
         elif self.taux_avancement == 0 and self.statut == 'en_cours':
@@ -20531,7 +20561,7 @@ class PlanActionC2N(db.Model):
  
         if self.taux_avancement == 100 and self.statut != 'terminee':
             self.statut = 'terminee'
-            self.date_fin_reelle = datetime.utcnow().date()
+            self.date_fin_reelle = _aujourdhui()
         elif self.taux_avancement > 0 and self.statut == 'a_faire':
             self.statut = 'en_cours'
         elif self.taux_avancement == 0 and self.statut == 'en_cours':
@@ -20691,7 +20721,7 @@ class SousActionPlanC2N(db.Model):
  
         if self.taux_avancement == 100 and self.statut != 'terminee':
             self.statut = 'terminee'
-            self.date_fin_reelle = datetime.utcnow().date()
+            self.date_fin_reelle = _aujourdhui()
         elif self.taux_avancement > 0 and self.statut == 'a_faire':
             self.statut = 'en_cours'
         elif self.taux_avancement == 0 and self.statut == 'en_cours':
@@ -21467,7 +21497,7 @@ class Tiers(db.Model):
 
     @property
     def revue_en_retard(self):
-        return bool(self.date_prochaine_revue and self.date_prochaine_revue < date.today())
+        return bool(self.date_prochaine_revue and self.date_prochaine_revue < _aujourdhui())
 
 
 class EntreeSanction(db.Model):

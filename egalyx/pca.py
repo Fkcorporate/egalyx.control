@@ -18,6 +18,7 @@ egalyx/pca.py — refonte du module « Plans de continuité d'activité » (PCA)
 6. Liens avec la cartographie (risques) et les processus métier ; documents joints.
 7. Alertes : plan expiré ou bientôt expiré, test en retard, plan à valider, actions confiées (« Ma semaine »).
 """
+from egalyx.localisation import aujourdhui as _aujourdhui  # date du jour dans le fuseau de l'organisation
 import os
 import re
 import uuid
@@ -197,7 +198,7 @@ def _version_suivante(v):
 # ---------------------------------------------------------------- informations pour la fiche
 def alertes(p, aujourd_hui=None):
     a = []
-    j = aujourd_hui or date.today()
+    j = aujourd_hui or _aujourdhui()
     if p.statut == 'valide' and p.date_validite:
         if p.date_validite < j:
             a.append(('danger', f"Plan expiré depuis le {p.date_validite.strftime('%d/%m/%Y')} : à revoir et revalider."))
@@ -289,8 +290,8 @@ def valider(plan_id):
     p.statut, p.valide_le, p.valide_par_id, p.motif_renvoi = 'valide', datetime.utcnow(), current_user.id, None
     if deja_valide:
         p.version = _version_suivante(p.version)
-    if not p.date_validite or p.date_validite < date.today():
-        p.date_validite = _plus_mois(date.today(), 12)
+    if not p.date_validite or p.date_validite < _aujourdhui():
+        p.date_validite = _plus_mois(_aujourdhui(), 12)
     _notifier([p.soumis_par_id, p.responsable_id, p.redacteur_id], f'PCA validé : {p.reference}',
               f'{current_user.username} a validé le plan « {p.titre} » (version {p.version}).', p, 'pca_valide')
     journaliser('pca_valide', {'plan_id': p.id, 'version': p.version,
@@ -371,7 +372,7 @@ def resultat(exercice_id):
         e.resultat_saisi_le, e.resultat_saisi_par_id = datetime.utcnow(), current_user.id
         creees = 0
         if st == 'realise':
-            jour = (e.date_exercice.date() if isinstance(e.date_exercice, datetime) else e.date_exercice) or date.today()
+            jour = (e.date_exercice.date() if isinstance(e.date_exercice, datetime) else e.date_exercice) or _aujourdhui()
             if not p.date_dernier_test or jour >= p.date_dernier_test:
                 p.date_dernier_test = jour
                 p.dernier_test = datetime.combine(jour, datetime.min.time())
@@ -389,7 +390,7 @@ def resultat(exercice_id):
                         reference=f'{p.reference}-A{n0 + i + 1:02d}', plan_id=p.id, intitule=axe[:200],
                         description=f"Axe d'amélioration de l'exercice {e.reference} ({e.nom}).", phase='preparation',
                         priorite='haute' if (e.note or 100) < 50 else 'moyenne', statut='a_faire',
-                        date_fin_prevue=_plus_mois(date.today(), 3), created_by=current_user.id, client_id=p.client_id))
+                        date_fin_prevue=_plus_mois(_aujourdhui(), 3), created_by=current_user.id, client_id=p.client_id))
                     creees += 1
                 e.actions_correctives = sorted(deja | set(axes))
         journaliser('pca_exercice_resultat', {'exercice_id': e.id, 'statut': st, 'actions_creees': creees})

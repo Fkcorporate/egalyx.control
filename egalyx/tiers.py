@@ -10,6 +10,7 @@ egalyx/tiers.py — connaissance des tiers (KYC), LCB-FT et évaluation des four
 - Fournisseurs : criticité (impact d'un arrêt, dépendance, substituabilité, note) et
   historique des évaluations.
 """
+from egalyx.localisation import aujourdhui as _aujourdhui  # date du jour dans le fuseau de l'organisation
 import csv
 import io
 from datetime import date, datetime
@@ -55,7 +56,7 @@ def evaluer(t):
             t.impact_arret, t.dependance_pct, t.substituable, t.note_evaluation)
     else:
         t.criticite_score = t.criticite = None
-    base = t.date_derniere_revue or date.today()
+    base = t.date_derniere_revue or _aujourdhui()
     t.date_prochaine_revue = calculs.ajouter_mois(base, r['delai_revue_mois'])
     return r
 
@@ -244,7 +245,7 @@ def action(tid):
                 flash('Note de 0 à 5 attendue.', 'danger')
                 return redirect(url_for('.detail', tid=t.id))
             t.note_evaluation = note
-        t.date_derniere_revue = date.today()
+        t.date_derniere_revue = _aujourdhui()
         evaluer(t)
         marquer_json_modifie(t, 'facteurs_lcb')
         db.session.add(RevueTiers(client_id=t.client_id, tiers_id=t.id, type_revue=type_revue, note=note,

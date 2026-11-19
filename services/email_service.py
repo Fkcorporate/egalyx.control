@@ -182,7 +182,10 @@ class EmailService:
             _journal("HTML: [contenu HTML disponible]")
         _journal("="*80 + "\n")
     
-    def send_email(self, to_email, subject, body, html_body=None, cc=None, bcc=None, max_retries=3):
+    def send_email(self, to_email, subject, body, html_body=None, cc=None, bcc=None, max_retries=3,
+                   attachments=None, reply_to=None, inline_images=None):
+        """attachments : [(nom, octets, type MIME)] ; inline_images : [(cid, octets, sous-type)] pour <img src="cid:…"> ;
+        reply_to : adresse de réponse (ex. le chef de mission)."""
         """Envoyer un email - adaptable selon l'environnement"""
         
         # === MODE DÉVELOPPEMENT LOCAL ===
@@ -194,12 +197,16 @@ class EmailService:
             # Sauvegarder dans un fichier
             if self.use_file_output:
                 self._save_email_to_file(to_email, subject, body, html_body)
+            self.dernier_envoi = {'to': to_email, 'cc': cc, 'subject': subject, 'html': html_body, 'reply_to': reply_to,
+                                  'attachments': [(a[0], len(a[1])) for a in (attachments or [])]}
             
             logger.info(f"📧 [LOCAL] Email simulé à: {to_email}")
             return True
         
         # === MODE SIMULATION (pas de mot de passe) ===
         if self.simulation_mode:
+            self.dernier_envoi = {'to': to_email, 'cc': cc, 'subject': subject, 'html': html_body, 'reply_to': reply_to,
+                                  'attachments': [(a[0], len(a[1])) for a in (attachments or [])], 'simulation': True}
             logger.info(f"📧 [SIMULATION] Email à: {to_email}")
             logger.info(f"   Sujet: {subject}")
             return True
@@ -210,9 +217,15 @@ class EmailService:
             try:
                 logger.info(f"📨 Tentative {attempt}/{max_retries} d'envoi à {to_email}")
                 
-                # Créer le message
-                msg = MIMEMultipart('alternative')
+                # Créer le message (pièces jointes / images intégrées : enveloppe « mixed » / « related »)
+                alternative = MIMEMultipart('alternative')
+                if attachments or inline_images:
+                    msg = MIMEMultipart('mixed')
+                else:
+                    msg = alternative
                 msg['Subject'] = subject
+                if reply_to:
+                    msg['Reply-To'] = reply_to
                 msg['From'] = formataddr((self.sender_name, self.sender_email))
                 msg['Message-ID'] = f"<{datetime.now().timestamp()}@{self.smtp_server}>"
                 
@@ -242,12 +255,30 @@ class EmailService:
                 
                 # Partie texte
                 text_part = MIMEText(body, 'plain', 'utf-8')
-                msg.attach(text_part)
+                alternative.attach(text_part)
                 
                 # Partie HTML si fournie
                 if html_body:
                     html_part = MIMEText(html_body, 'html', 'utf-8')
-                    msg.attach(html_part)
+                    if inline_images:
+                        from email.mime.image import MIMEImage
+                        related = MIMEMultipart('related')
+                        related.attach(html_part)
+                        for cid_img, octets, sous_type in inline_images:
+                            img = MIMEImage(octets, _subtype=sous_type or 'png')
+                            img.add_header('Content-ID', f'<{cid_img}>')
+                            img.add_header('Content-Disposition', 'inline', filename=f'{cid_img}.{sous_type or "png"}')
+                            related.attach(img)
+                        alternative.attach(related)
+                    else:
+                        alternative.attach(html_part)
+                if msg is not alternative:
+                    msg.attach(alternative)
+                    from email.mime.application import MIMEApplication
+                    for nom, octets, type_mime in (attachments or []):
+                        partie = MIMEApplication(octets, _subtype=(type_mime or 'application/octet-stream').split('/')[-1])
+                        partie.add_header('Content-Disposition', 'attachment', filename=nom)
+                        msg.attach(partie)
                 
                 # Essayer TLS d'abord
                 try:

@@ -707,167 +707,84 @@ def liste_plans_action():
     # ============================================
     # 5. RÉCUPÉRER TOUS LES PLANS POUR LES STATISTIQUES GLOBALES
     # ============================================
-    tous_plans_query = get_client_filter(PlanAction)
-    # sans les plans des risques (voir plus haut)
-    tous_plans = [p for p in tous_plans_query.all() if p.audit_id is not None or p.risque_id is None]
-    
-    # ============================================
-    # 6. CALCULER LES STATISTIQUES GLOBALES
-    # ============================================
+    # Liste découpée en pages (egalyx/pagination.py) : les compteurs sont calculés par la base,
+    # seule la page affichée est chargée (avant : tous les plans, puis tri en mémoire).
+    from sqlalchemy import case, func
+    from egalyx.pagination import paginer
+    aujourdhui = _aujourdhui()
+    base = get_client_filter(PlanAction).filter(or_(PlanAction.audit_id.isnot(None), PlanAction.risque_id.is_(None)))
+    compte = lambda q: q.order_by(None).count()  # noqa: E731
+    par_statut = dict(base.order_by(None).with_entities(PlanAction.statut, func.count(PlanAction.id)).group_by(PlanAction.statut).all())
     stats_globales = {
-        'total': len(tous_plans),
-        'audit': len([p for p in tous_plans if p.audit_id is not None]),
-        'risque': len([p for p in tous_plans if p.risque_id is not None]),
-        'independant': len([p for p in tous_plans if p.audit_id is None and p.risque_id is None]),
-        'en_attente': len([p for p in tous_plans if p.statut == 'en_attente']),
-        'en_cours': len([p for p in tous_plans if p.statut == 'en_cours']),
-        'termines': len([p for p in tous_plans if p.statut == 'termine']),
-        'suspendus': len([p for p in tous_plans if p.statut == 'suspendu']),
-        'annules': len([p for p in tous_plans if p.statut == 'annule']),
-        'urgences': 0,
-        'en_retard': 0,
-        'moyenne_realisation': 0
+        'total': compte(base),
+        'audit': compte(base.filter(PlanAction.audit_id.isnot(None))),
+        'risque': 0,
+        'independant': compte(base.filter(PlanAction.audit_id.is_(None), PlanAction.risque_id.is_(None))),
+        'en_attente': par_statut.get('en_attente', 0), 'en_cours': par_statut.get('en_cours', 0),
+        'termines': par_statut.get('termine', 0), 'suspendus': par_statut.get('suspendu', 0), 'annules': par_statut.get('annule', 0),
+        'urgences': 0, 'en_retard': 0, 'moyenne_realisation': 0,
     }
-    
-    # ============================================
-    # 7. APPLIQUER LES FILTRES POUR LA LISTE AFFICHÉE
-    # ============================================
-    query = get_client_filter(PlanAction)
-    
-    # IMPORTANT: Charger les sous-actions pour éviter les problèmes N+1
-    query = query.options(joinedload(PlanAction.sous_actions))
-    
-    # Appliquer le filtre par type
+
+    # Filtres de la liste affichée
+    query = base
     if type_filtre == 'audit':
         query = query.filter(PlanAction.audit_id.isnot(None))
-        _journal(f"   📋 Filtre: Plans d'audit uniquement")
-    elif type_filtre == 'risque':
-        query = query.filter(PlanAction.risque_id.isnot(None))
-        _journal(f"   📋 Filtre: Plans de risque uniquement")
     elif type_filtre == 'independant':
-        query = query.filter(
-            PlanAction.audit_id.is_(None),
-            PlanAction.risque_id.is_(None)
-        )
-        _journal(f"   📋 Filtre: Plans indépendants uniquement")
-    else:
-        query = query.filter(or_(PlanAction.audit_id.isnot(None), PlanAction.risque_id.is_(None)))
-        _journal(f"   📋 Filtre: plans d'audit et indépendants")
-    
-    # Appliquer le filtre par statut
+        query = query.filter(PlanAction.audit_id.is_(None), PlanAction.risque_id.is_(None))
     if filtre_statut != 'tous':
         query = query.filter(PlanAction.statut == filtre_statut)
-        _journal(f"   📋 Statut: {filtre_statut}")
-    
-    # Récupérer les plans filtrés
-    plans_action = query.all()
-    
-    # ============================================
-    # 8. VÉRIFIER L'ACCÈS POUR CHAQUE PLAN ET PRÉPARER LES DONNÉES
-    # ============================================
+
+    # Indicateurs de la sélection (en base)
+    stats_globales['en_retard'] = compte(query.filter(PlanAction.date_fin_prevue < aujourdhui))
+    stats_globales['urgences'] = compte(query.filter(PlanAction.date_fin_prevue >= aujourdhui,
+                                                     PlanAction.date_fin_prevue <= aujourdhui + timedelta(days=7)))
+    moyenne = query.order_by(None).with_entities(func.avg(PlanAction.pourcentage_realisation)).scalar()
+    stats_globales['moyenne_realisation'] = round(moyenne or 0)
+
+    # Tri (en base)
+    en_retard = PlanAction.date_fin_prevue < aujourdhui
+    urgent = PlanAction.date_fin_prevue <= aujourdhui + timedelta(days=7)
+    a_suivre = PlanAction.date_fin_prevue <= aujourdhui + timedelta(days=30)
+    ordres = {
+        'urgence': [case((PlanAction.date_fin_prevue.is_(None), 4), (en_retard, 0), (urgent, 1), (a_suivre, 2), else_=3),
+                    PlanAction.date_fin_prevue.asc()],
+        'realisation_asc': [PlanAction.pourcentage_realisation.asc()],
+        'realisation_desc': [PlanAction.pourcentage_realisation.desc()],
+        'date_asc': [PlanAction.date_fin_prevue.asc()],
+        'date_desc': [PlanAction.date_fin_prevue.desc()],
+        'titre_asc': [PlanAction.nom.asc()],
+        'titre_desc': [PlanAction.nom.desc()],
+    }
+    query = query.order_by(*(ordres.get(tri) or ordres['date_desc']), PlanAction.id.desc())
+    page = paginer(query.options(joinedload(PlanAction.sous_actions)))
+
+    # Données affichées : seulement les plans de la page
     accessible_plans = []
-    aujourdhui = datetime.now().date()
-    total_realisation = 0
-    
-    for plan in plans_action:
-        if check_client_access(plan):
-            # Créer un dictionnaire avec les données du plan
-            plan_data = {
-                'obj': plan,
-                'type_plan': 'audit' if plan.audit_id else 'risque' if plan.risque_id else 'independant',
-                'jours_restants': None,
-                'etat_delai': 'non_defini',
-                'jours_retard': 0,
-                'pourcentage_global': 0,
-                'source': None
-            }
-            
-            # Récupérer la source (audit ou risque)
-            if plan.audit_id:
-                plan_data['source'] = get_client_filter(Audit).filter_by(id=plan.audit_id).first()
-            elif plan.risque_id:
-                plan_data['source'] = get_client_filter(Risque).filter_by(id=plan.risque_id).first()
-            
-            # Calculer les jours restants par rapport à la date de fin prévue
-            if plan.date_fin_prevue:
-                jours_restants = (plan.date_fin_prevue - aujourdhui).days
-                plan_data['jours_restants'] = jours_restants
-                
-                if jours_restants < 0:
-                    plan_data['etat_delai'] = 'retarde'
-                    plan_data['jours_retard'] = abs(jours_restants)
-                    stats_globales['en_retard'] += 1
-                elif jours_restants <= 7:
-                    plan_data['etat_delai'] = 'urgence'
-                    stats_globales['urgences'] += 1
-                elif jours_restants <= 30:
-                    plan_data['etat_delai'] = 'a_suivre'
-                else:
-                    plan_data['etat_delai'] = 'ok'
+    audits = {a.id: a for a in get_client_filter(Audit).filter(Audit.id.in_({p.audit_id for p in page.items if p.audit_id})).all()} \
+        if any(p.audit_id for p in page.items) else {}
+    for plan in page.items:
+        plan_data = {'obj': plan, 'type_plan': 'audit' if plan.audit_id else 'risque' if plan.risque_id else 'independant',
+                     'jours_restants': None, 'etat_delai': 'pas_de_date', 'jours_retard': 0,
+                     'pourcentage_global': plan.pourcentage_realisation or 0, 'source': audits.get(plan.audit_id)}
+        if plan.date_fin_prevue:
+            jours = (plan.date_fin_prevue - aujourdhui).days
+            plan_data['jours_restants'] = jours
+            if jours < 0:
+                plan_data['etat_delai'], plan_data['jours_retard'] = 'retarde', -jours
+            elif jours <= 7:
+                plan_data['etat_delai'] = 'urgence'
+            elif jours <= 30:
+                plan_data['etat_delai'] = 'a_suivre'
             else:
-                plan_data['etat_delai'] = 'pas_de_date'
-            
-            # Calculer la progression à partir des sous-actions
-            if hasattr(plan, 'sous_actions') and plan.sous_actions:
-                total_sous_actions = len(plan.sous_actions)
-                if total_sous_actions > 0:
-                    sous_actions_terminees = len([sa for sa in plan.sous_actions 
-                                                 if sa.statut == 'termine'])
-                    plan_data['pourcentage_global'] = round((sous_actions_terminees / total_sous_actions) * 100)
-                    plan_data['sous_actions_terminees'] = sous_actions_terminees
-                    plan_data['total_sous_actions'] = total_sous_actions
-                else:
-                    plan_data['pourcentage_global'] = 0
-                    plan_data['sous_actions_terminees'] = 0
-                    plan_data['total_sous_actions'] = 0
-            else:
-                # Fallback sur le pourcentage stocké
-                plan_data['pourcentage_global'] = getattr(plan, 'pourcentage_realisation', 0) or 0
-                plan_data['sous_actions_terminees'] = 0
-                plan_data['total_sous_actions'] = 0
-            
-            total_realisation += plan_data['pourcentage_global']
-            accessible_plans.append(plan_data)
-    
-    # Calculer la moyenne de réalisation pour les plans affichés
-    if accessible_plans:
-        stats_globales['moyenne_realisation'] = round(total_realisation / len(accessible_plans))
-    
-    # ============================================
-    # 9. APPLIQUER LE TRI
-    # ============================================
-    if tri == 'urgence':
-        accessible_plans.sort(key=lambda p: (
-            0 if p['etat_delai'] == 'retarde' else 
-            1 if p['etat_delai'] == 'urgence' else 
-            2 if p['etat_delai'] == 'a_suivre' else 3,
-            p['obj'].date_fin_prevue or datetime.max.date()
-        ))
-    elif tri == 'realisation_asc':
-        accessible_plans.sort(key=lambda p: p['pourcentage_global'])
-    elif tri == 'realisation_desc':
-        accessible_plans.sort(key=lambda p: p['pourcentage_global'], reverse=True)
-    elif tri == 'date_asc':
-        accessible_plans.sort(key=lambda p: p['obj'].date_fin_prevue or datetime.min.date())
-    elif tri == 'date_desc':
-        accessible_plans.sort(key=lambda p: p['obj'].date_fin_prevue or datetime.min.date(), reverse=True)
-    elif tri == 'titre_asc':
-        accessible_plans.sort(key=lambda p: p['obj'].titre or '')
-    elif tri == 'titre_desc':
-        accessible_plans.sort(key=lambda p: p['obj'].titre or '', reverse=True)
-    
-    # ============================================
-    # 10. DEBUG : Afficher ce qu'on a trouvé
-    # ============================================
-    _journal(f"\n📊 RÉSULTATS:")
-    _journal(f"   Total plans en base: {len(plans_action)}")
-    _journal(f"   Plans accessibles: {len(accessible_plans)}")
-    _journal(f"   Plans audit: {len([p for p in accessible_plans if p['type_plan'] == 'audit'])}")
-    _journal(f"   Plans risque: {len([p for p in accessible_plans if p['type_plan'] == 'risque'])}")
-    _journal(f"   Plans indépendants: {len([p for p in accessible_plans if p['type_plan'] == 'independant'])}")
-    
+                plan_data['etat_delai'] = 'ok'
+        sas = list(plan.sous_actions or [])
+        plan_data['total_sous_actions'] = len(sas)
+        plan_data['sous_actions_terminees'] = sum(1 for sa in sas if sa.statut == 'termine')
+        accessible_plans.append(plan_data)
+
     return render_template('audit/plans_action.html', 
                          plans_action=accessible_plans,
+                         page=page,
                          stats=stats_globales,
                          type_filtre=type_filtre,
                          filtre_statut=filtre_statut,
@@ -1007,7 +924,7 @@ def api_statistiques_audit_globales():
         'total_plans_action': sum(len(a.plans_action) for a in audits),
         'plans_action_en_retard': len([
             p for a in audits for p in a.plans_action 
-            if p.date_fin_prevue and p.date_fin_prevue < datetime.now().date() and p.statut != 'termine'
+            if p.date_fin_prevue and p.date_fin_prevue < _aujourdhui() and p.statut != 'termine'
         ])
     }
     
@@ -3073,13 +2990,13 @@ def api_modifier_erreur_test(erreur_id):
         # Si l'état passe à 'corrigee' ou 'fermee', on peut automatiquement marquer la correction comme effectuée
         if data['etat'] in ['corrigee', 'fermee'] and not erreur.correction_effectuee:
             erreur.correction_effectuee = True
-            erreur.date_correction = datetime.utcnow().date()
+            erreur.date_correction = _aujourdhui()
     if 'correction_proposee' in data:
         erreur.correction_proposee = data['correction_proposee']
     if 'correction_effectuee' in data:
         erreur.correction_effectuee = data['correction_effectuee']
         if data['correction_effectuee'] and not erreur.date_correction:
-            erreur.date_correction = datetime.utcnow().date()
+            erreur.date_correction = _aujourdhui()
     if 'date_correction' in data:
         erreur.date_correction = datetime.strptime(data['date_correction'], '%Y-%m-%d').date() if data['date_correction'] else None
     if 'responsable_correction_id' in data:
@@ -5120,7 +5037,7 @@ def dashboard_audit_global():
     # ============================================
     # 4. RÉCUPÉRATION DES TÂCHES À VENIR
     # ============================================
-    aujourdhui = datetime.utcnow().date()
+    aujourdhui = _aujourdhui()
     sept_jours = aujourdhui + timedelta(days=7)
     
     echeances_proches = []
@@ -5354,7 +5271,7 @@ def dashboard_audit_global_complet():
                 'priorite': rec.score_priorite or 0,
                 'est_en_retard': (
                     rec.date_echeance 
-                    and rec.date_echeance < datetime.utcnow().date() 
+                    and rec.date_echeance < _aujourdhui() 
                     and rec.statut != 'termine'
                 )
             })
@@ -5401,7 +5318,7 @@ def dashboard_audit_global_complet():
     # ============================================
     # ✅ ÉCHÉANCES ET RETARDS
     # ============================================
-    aujourdhui = datetime.utcnow().date()
+    aujourdhui = _aujourdhui()
     sept_jours = aujourdhui + timedelta(days=7)
     
     echeances_proches = []
@@ -7456,7 +7373,7 @@ def simuler_retard(programme_id):
         if jours_retard <= 0 or jours_retard > 365:
             return jsonify({'success': False, 'message': 'Le nombre de jours doit être entre 1 et 365'}), 400
         
-        date_limite = datetime.now().date() - timedelta(days=jours_retard)
+        date_limite = _aujourdhui() - timedelta(days=jours_retard)
         
         alertes_generes = 0
         missions_retard = []
@@ -7715,7 +7632,7 @@ def chrono_statut(mid):
         mission.statut = statut
         
         # Gestion automatique des dates
-        aujourdhui = datetime.now().date()
+        aujourdhui = _aujourdhui()
         
         if statut == 'termine':
             mission.progression = 100
@@ -8220,7 +8137,7 @@ def convertir_mission_audit(id):
             titre=mission.titre,
             description=mission.description,
             type_audit='interne',
-            date_debut_prevue=mission.date_debut_prevue or datetime.now().date(),
+            date_debut_prevue=mission.date_debut_prevue or _aujourdhui(),
             date_fin_prevue=mission.date_fin_prevue,
             statut='planifie',
             sous_statut='planification',
@@ -8237,7 +8154,7 @@ def convertir_mission_audit(id):
         # Lier l'audit à la mission
         mission.audit_id = audit.id
         mission.statut = 'en_cours'
-        mission.date_debut_reelle = datetime.now().date()
+        mission.date_debut_reelle = _aujourdhui()
         
         # Lier l'audit au risque
         if mission.risque_id:
@@ -8760,7 +8677,7 @@ def approuver_programme_audit(id):
             request.form.get('date_approbation', datetime.now().strftime('%Y-%m-%d')), 
             '%Y-%m-%d'
         ).date()
-        programme.date_mise_en_oeuvre = datetime.now().date()
+        programme.date_mise_en_oeuvre = _aujourdhui()
         programme.updated_at = datetime.now()
         
         db.session.commit()
@@ -10333,7 +10250,7 @@ def demander_nouveau_risque_audit(audit_id):
             cartographie_id=cartographie_id,
             nom=f"Campagne {annee_courante}",
             description=f"Évaluation annuelle {annee_courante}",
-            date_debut=datetime.now().date(),
+            date_debut=_aujourdhui(),
             statut='en_cours',
             created_by=current_user.id,
             client_id=current_user.client_id
@@ -10769,9 +10686,10 @@ def liste_audits():
         'en_redaction': len([a for a in accessible_audits if a.sous_statut == 'redaction']),
         'en_validation': len([a for a in accessible_audits if a.sous_statut == 'validation']),
         'clos': len([a for a in accessible_audits if a.statut == 'clos']),
-        'constatations_total': sum(len(a.constatations) for a in accessible_audits),
-        'recommandations_total': sum(len(a.recommandations) for a in accessible_audits),
-        'plans_action_total': sum(len(a.plans_action) for a in accessible_audits),
+        # comptés par la base (avant : chargement de toutes les constatations, recommandations et plans)
+        'constatations_total': Constatation.query.filter(Constatation.audit_id.in_([a.id for a in accessible_audits])).count() if accessible_audits else 0,
+        'recommandations_total': Recommandation.query.filter(Recommandation.audit_id.in_([a.id for a in accessible_audits])).count() if accessible_audits else 0,
+        'plans_action_total': PlanAction.query.filter(PlanAction.audit_id.in_([a.id for a in accessible_audits])).count() if accessible_audits else 0,
         'archives': get_client_filter(Audit).filter_by(is_archived=True).count()
     }
     
@@ -12485,7 +12403,7 @@ def dashboard_audit(audit_id):
     # 6. ÉCHÉANCES À VENIR
     # ============================================
     echeances_a_venir = []
-    aujourdhui = datetime.utcnow().date()
+    aujourdhui = _aujourdhui()
     sept_jours = aujourdhui + timedelta(days=7)
     
     for reco in recommandations_client:
@@ -14406,7 +14324,7 @@ def export_audit_excel(audit_id):
                 for r in recommandations:
                     est_en_retard = False
                     if r.date_echeance and r.statut != 'termine':
-                        est_en_retard = datetime.utcnow().date() > r.date_echeance
+                        est_en_retard = _aujourdhui() > r.date_echeance
                     
                     recommandations_data.append({
                         'Référence': r.reference,
@@ -14704,7 +14622,7 @@ def ajouter_recommandation(audit_id):
             except ValueError:
                 flash('Format de date invalide', 'warning')
                 # Date par défaut: 30 jours à partir d'aujourd'hui
-                date_echeance = datetime.utcnow().date() + timedelta(days=30)
+                date_echeance = _aujourdhui() + timedelta(days=30)
         
         # 5. Créer la recommandation avec TOUS les champs requis
         recommandation = Recommandation(

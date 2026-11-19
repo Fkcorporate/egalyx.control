@@ -6,6 +6,7 @@ la LCB-FT et le dispositif d'alerte, et rédige une synthèse en langage clair.
 La synthèse est produite par des règles explicites à partir des chiffres (pas d'IA) :
 elle est donc reproductible et vérifiable. Impression / PDF par le navigateur.
 """
+from egalyx.localisation import aujourdhui as _aujourdhui  # date du jour dans le fuseau de l'organisation
 from datetime import date, datetime, timedelta
 
 from flask import Blueprint, current_app, flash, redirect, render_template, request, url_for
@@ -113,7 +114,7 @@ def collecter(cid, construire_dashboard):
     from models import Audit, Constatation, Recommandation, Tiers, Signalement, Client
     d = construire_dashboard(cid)
     k = d['kpi']
-    aujourd_hui = date.today()
+    aujourd_hui = _aujourdhui()
     il_y_a_un_an = datetime.utcnow() - timedelta(days=365)
     c = {'date': aujourd_hui.strftime('%d/%m/%Y'), 'fenetre': d['fenetre_jours'],
          'total_risques': k['couverture']['total'], 'evalues': k['couverture']['evalues'],

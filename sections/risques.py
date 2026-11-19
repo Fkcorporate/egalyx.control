@@ -1312,7 +1312,7 @@ def telecharger_rapport_cartographie_pdf(cartographie_id):
             # Vérifier les retards
             if hasattr(plan, 'date_fin_prevue') and plan.date_fin_prevue:
                 try:
-                    if plan.date_fin_prevue < datetime.now().date() and plan.statut != 'termine':
+                    if plan.date_fin_prevue < _aujourdhui() and plan.statut != 'termine':
                         stats_plans['en_retard'] += 1
                 except Exception as e:
                     _journal(f"⚠️ Erreur vérification retard plan {plan.id}: {e}")
@@ -1665,7 +1665,7 @@ def telecharger_rapport_cartographie_pdf_campagne(cartographie_id, campagne_id):
     # ============================================
     total_plans = 0
     stats_plans = {'total': 0, 'en_cours': 0, 'termines': 0, 'en_retard': 0}
-    aujourdhui = datetime.now().date()
+    aujourdhui = _aujourdhui()
 
     for item in risques_avec_evaluation:
         plans = get_client_filter(PlanAction)\
@@ -1956,7 +1956,7 @@ def cloturer_campagne_specifique(cartographie_id, campagne_id):
         return redirect(url_for('liste_campagnes_cartographie', cartographie_id=cartographie_id))
     
     campagne.statut = 'terminee'
-    campagne.date_fin = datetime.utcnow().date()
+    campagne.date_fin = _aujourdhui()
     campagne.updated_at = datetime.utcnow()
     
     db.session.commit()
@@ -2308,7 +2308,7 @@ def nouveau_plan_action_pour_risque(risque_id):
         form.risque_id.data = risque_id
         
         # Définir les dates par défaut
-        aujourdhui = datetime.now().date()
+        aujourdhui = _aujourdhui()
         form.date_debut.data = aujourdhui
         form.date_echeance.data = aujourdhui + timedelta(days=30)  # 30 jours par défaut
     
@@ -2563,7 +2563,7 @@ def nouveau_sous_action_risque(plan_id):
     
     if request.method == 'GET':
         # Définir les dates par défaut
-        form.date_debut.data = datetime.now().date()
+        form.date_debut.data = _aujourdhui()
         form.date_fin_prevue.data = (datetime.now() + timedelta(days=14)).date()
     
     if form.validate_on_submit():
@@ -3043,7 +3043,7 @@ def changer_statut_plan_risque(plan_id):
         # ============================================================
         if nouveau_statut == 'termine':
             # Si le plan est marqué comme terminé
-            plan_action.date_fin_reelle = datetime.utcnow().date()
+            plan_action.date_fin_reelle = _aujourdhui()
             plan_action.pourcentage_realisation = 100
             
             # Marquer TOUTES les sous-actions comme terminées à 100%
@@ -3051,7 +3051,7 @@ def changer_statut_plan_risque(plan_id):
                 sous_action.statut = 'termine'
                 sous_action.pourcentage_realisation = 100
                 if not sous_action.date_fin_reelle:
-                    sous_action.date_fin_reelle = datetime.utcnow().date()
+                    sous_action.date_fin_reelle = _aujourdhui()
                 sous_action.updated_at = datetime.utcnow()
                 
         elif nouveau_statut == 'en_cours':
@@ -3148,7 +3148,7 @@ def changer_progression_plan(plan_id):
         # Ajuster automatiquement le statut basé sur la progression
         if progression == 100:
             plan.statut = 'termine'
-            plan.date_fin_reelle = datetime.utcnow().date()
+            plan.date_fin_reelle = _aujourdhui()
         elif progression >= 50 and plan.statut == 'en_attente':
             plan.statut = 'en_cours'
         elif progression == 0 and plan.statut != 'en_attente':
@@ -3282,7 +3282,7 @@ def terminer_plan_complet_risque(plan_id):
     try:
         # Marquer le plan comme terminé
         plan_action.statut = 'termine'
-        plan_action.date_fin_reelle = datetime.utcnow().date()
+        plan_action.date_fin_reelle = _aujourdhui()
         plan_action.pourcentage_realisation = 100
         
         # Marquer toutes les sous-actions comme terminées
@@ -3291,7 +3291,7 @@ def terminer_plan_complet_risque(plan_id):
             sous_action.statut = 'termine'
             sous_action.pourcentage_realisation = 100
             if not sous_action.date_fin_reelle:
-                sous_action.date_fin_reelle = datetime.utcnow().date()
+                sous_action.date_fin_reelle = _aujourdhui()
         
         plan_action.updated_at = datetime.utcnow()
         db.session.commit()
@@ -3449,7 +3449,7 @@ def changer_statut_sous_action(sous_action_id):
         # Ajuster automatiquement la progression basée sur le statut
         if nouveau_statut == 'termine' and sous_action.pourcentage_realisation < 100:
             sous_action.pourcentage_realisation = 100
-            sous_action.date_fin_reelle = datetime.utcnow().date()
+            sous_action.date_fin_reelle = _aujourdhui()
         elif nouveau_statut == 'en_cours' and sous_action.pourcentage_realisation < 50:
             sous_action.pourcentage_realisation = 50
         elif nouveau_statut == 'a_faire' and sous_action.pourcentage_realisation > 0:
@@ -3501,7 +3501,7 @@ def changer_progression_sous_action(sous_action_id):
         # Ajuster automatiquement le statut basé sur la progression
         if progression == 100:
             sous_action.statut = 'termine'
-            sous_action.date_fin_reelle = datetime.utcnow().date()
+            sous_action.date_fin_reelle = _aujourdhui()
         elif progression >= 50 and sous_action.statut == 'a_faire':
             sous_action.statut = 'en_cours'
         elif progression < 50 and sous_action.statut == 'termine':
@@ -3752,7 +3752,7 @@ def detail_cartographie(id):
             cartographie_id=id,
             nom=f"Campagne {annee_courante}",
             description=f"Évaluation annuelle {annee_courante}",
-            date_debut=datetime.now().date(),
+            date_debut=_aujourdhui(),
             statut='en_cours',
             created_by=current_user.id
         )
@@ -4026,7 +4026,7 @@ def detail_cartographie(id):
         'par_risque': {}
     }
 
-    aujourdhui = datetime.now().date()
+    aujourdhui = _aujourdhui()
     for risque_id, dispositifs in dispositifs_par_risque.items():
         stats_dispositifs['par_risque'][risque_id] = len(dispositifs)
         for d in dispositifs:
@@ -5118,7 +5118,7 @@ def evaluer_risque_triphase(id):
             cartographie_id=risque.cartographie_id,
             nom=f"Campagne {annee_courante}",
             description=f"Évaluation annuelle {annee_courante}",
-            date_debut=datetime.now().date(),
+            date_debut=_aujourdhui(),
             statut='en_cours',
             created_by=current_user.id,
             client_id=risque.client_id or current_user.client_id
@@ -5872,7 +5872,7 @@ def nouvelle_campagne_cartographie(id):
         
         for ancienne in anciennes:
             ancienne.statut = 'terminee'
-            ancienne.date_fin = datetime.now().date()
+            ancienne.date_fin = _aujourdhui()
             _journal(f"✅ Campagne '{ancienne.nom}' (ID={ancienne.id}) clôturée")
         
         # 2. Créer la nouvelle
@@ -5880,7 +5880,7 @@ def nouvelle_campagne_cartographie(id):
             cartographie_id=id,
             nom=nom,
             description=request.form.get('description', ''),
-            date_debut=datetime.now().date(),
+            date_debut=_aujourdhui(),
             statut='en_cours',
             created_by=current_user.id,
             client_id=cartographie.client_id
@@ -5953,7 +5953,7 @@ def cloturer_campagne_cartographie(cartographie_id):
         return redirect(url_for('detail_cartographie', id=cartographie_id))
     
     campagne_active.statut = 'terminee'
-    campagne_active.date_fin = datetime.now().date()
+    campagne_active.date_fin = _aujourdhui()
     db.session.commit()
     
     flash(f'✅ Campagne "{campagne_active.nom}" clôturée', 'success')
@@ -7142,7 +7142,7 @@ def plans_action_cartographie(cartographie_id):
         'total': len(plans_action),
         'en_cours': len([p for p in plans_action if p.statut == 'en_cours']),
         'termines': len([p for p in plans_action if p.statut == 'termine']),
-        'en_retard': len([p for p in plans_action if p.statut == 'en_cours' and p.date_fin_prevue and p.date_fin_prevue < datetime.now().date()])
+        'en_retard': len([p for p in plans_action if p.statut == 'en_cours' and p.date_fin_prevue and p.date_fin_prevue < _aujourdhui()])
     }
     
     return render_template('cartographie/plans_action.html',
@@ -9144,8 +9144,8 @@ def valider_demande_reevaluation(demande_id):
                 risque_id=demande.risque_id,
                 priorite='haute',
                 statut='en_cours',
-                date_debut=datetime.utcnow().date(),
-                date_fin_prevue=datetime.utcnow().date() + timedelta(days=30),
+                date_debut=_aujourdhui(),
+                date_fin_prevue=_aujourdhui() + timedelta(days=30),
                 created_by=current_user.id,
                 client_id=current_user.client_id,
                 demande_reevaluation_id=demande.id,
@@ -9362,7 +9362,10 @@ def liste_demandes_reevaluation():
             )
         )
     
-    demandes = query.order_by(DemandeReevaluation.date_demande.desc()).all()
+    # liste découpée en pages (egalyx/pagination.py) ; compteurs calculés par la base
+    from egalyx.pagination import paginer
+    page = paginer(query.order_by(DemandeReevaluation.date_demande.desc()))
+    demandes = page.items
     
     # Statistiques
     stats = {
@@ -9375,13 +9378,15 @@ def liste_demandes_reevaluation():
     
     # Calculer le temps moyen de traitement
     temps_moyen = 0
-    demandes_traitees = [d for d in demandes if d.statut in ['validee', 'rejetee'] and d.date_validation]
+    demandes_traitees = query.filter(DemandeReevaluation.statut.in_(['validee', 'rejetee']),
+                                     DemandeReevaluation.date_validation.isnot(None)).all()
     if demandes_traitees:
         temps_total = sum((d.date_validation - d.date_demande).total_seconds() / 3600 for d in demandes_traitees)
         temps_moyen = round(temps_total / len(demandes_traitees), 1)
     
     return render_template('reevaluation/liste.html',
                          demandes=demandes,
+                         page=page,
                          stats=stats,
                          statut=statut,
                          recherche=recherche,

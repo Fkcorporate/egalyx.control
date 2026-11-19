@@ -2,6 +2,7 @@
 egalyx/ma_semaine.py — « Ma semaine » : tout ce que l'utilisateur doit faire, trié par urgence,
 et démarrage guidé d'une organisation (liste de mise en route).
 """
+from egalyx.localisation import aujourdhui as _aujourdhui  # date du jour dans le fuseau de l'organisation
 from datetime import date, datetime, timedelta
 
 from flask import Blueprint, current_app, render_template, url_for
@@ -29,7 +30,7 @@ def _lien(endpoint, **k):
 
 def taches(u, aujourd_hui=None):
     """Liste de tâches {type, titre, sous_titre, echeance, retard_jours, lien, priorite} de l'utilisateur u."""
-    aujourd_hui = aujourd_hui or date.today()
+    aujourd_hui = aujourd_hui or _aujourdhui()
     horizon = aujourd_hui + timedelta(days=14)
     t = []
 
@@ -194,7 +195,7 @@ def page():
     resume = {'retard': sum(1 for x in lst if x['retard_jours']),
               'semaine': sum(1 for x in lst if not x['retard_jours'] and x['priorite'] == 1),
               'total': len(lst)}
-    return render_template('egalyx/ma_semaine.html', taches=lst, resume=resume, aujourd_hui=date.today())
+    return render_template('egalyx/ma_semaine.html', taches=lst, resume=resume, aujourd_hui=_aujourdhui())
 
 
 # ====================================================================== démarrage guidé

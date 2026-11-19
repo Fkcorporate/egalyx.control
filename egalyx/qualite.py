@@ -17,6 +17,7 @@ egalyx/qualite.py — refonte du module Qualité (plans qualité, audits qualit�
    suivante selon la périodicité du plan.
 5. « Ma semaine » : plans à valider, revues à tenir, non-conformités et actions confiées, audits qualité à mener.
 """
+from egalyx.localisation import aujourdhui as _aujourdhui  # date du jour dans le fuseau de l'organisation
 import os
 from datetime import date, datetime, timedelta
 
@@ -186,7 +187,7 @@ def suivi(p):
     cid = p.client_id
     ncs = m.NonConformite.query.filter_by(plan_qualite_id=p.id).all()
     actions = m.ActionAmeliorationQualite.query.filter_by(plan_qualite_id=p.id, is_archived=False).all()
-    j = date.today()
+    j = _aujourdhui()
     alertes = []
     if p.date_prochaine_revue and p.date_prochaine_revue < j:
         alertes.append(('danger', f"Revue de direction en retard (prévue le {p.date_prochaine_revue.strftime('%d/%m/%Y')})."))
@@ -277,7 +278,7 @@ def valider(plan_id):
     if (p.statut or 'brouillon') == 'brouillon':
         p.statut = 'actif'
     if not p.date_prochaine_revue:
-        p.date_prochaine_revue = _plus_mois(date.today(), MOIS_REVUE.get(p.periode_revue or 'annuelle', 12))
+        p.date_prochaine_revue = _plus_mois(_aujourdhui(), MOIS_REVUE.get(p.periode_revue or 'annuelle', 12))
     _notifier([p.soumis_par_id, p.responsable_conformite_id], f'Plan qualité validé : {p.reference}',
               f'{current_user.username} a validé « {p.titre} ».', 'plan_qualite', p.id, p.client_id, 'qualite_valide')
     journaliser('qualite_plan_valide', {'plan_id': p.id, 'auto_validation': p.soumis_par_id == current_user.id})
@@ -321,7 +322,7 @@ def nc_vers_action(nc_id):
     try:
         echeance = datetime.strptime(request.form.get('echeance') or '', '%Y-%m-%d').date()
     except ValueError:
-        echeance = nc.echeance_traitement or _plus_mois(date.today(), 1)
+        echeance = nc.echeance_traitement or _plus_mois(_aujourdhui(), 1)
     n = m.ActionAmeliorationQualite.query.filter_by(plan_qualite_id=p.id).count()
     a = m.ActionAmeliorationQualite(
         reference=f'{p.reference}-AC{n + 1:02d}', intitule=intitule or f'Traiter {nc.reference}',
@@ -425,7 +426,7 @@ def _regles_reunion(r, session):
     p = session.get(m.PlanQualiteFonction, r.plan_qualite_id)
     if p is None:
         return
-    jour = r.date_reunion.date() if isinstance(r.date_reunion, datetime) else (r.date_reunion or date.today())
+    jour = r.date_reunion.date() if isinstance(r.date_reunion, datetime) else (r.date_reunion or _aujourdhui())
     if not p.date_derniere_revue or jour >= p.date_derniere_revue:
         p.date_derniere_revue = jour
         p.date_prochaine_revue = _plus_mois(jour, MOIS_REVUE.get(p.periode_revue or 'annuelle', 12))

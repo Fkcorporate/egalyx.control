@@ -12,6 +12,7 @@ Chaque partie est créée dans sa propre transaction imbriquée : si l'une écho
 différent dans votre version), les autres sont conservées et l'erreur est signalée.
 Toutes les données sont fictives.
 """
+from egalyx.localisation import aujourdhui as _aujourdhui  # date du jour dans le fuseau de l'organisation
 import random
 import secrets
 from datetime import date, datetime, timedelta
@@ -44,7 +45,7 @@ def creer_demo(db, avec_alerte=True, graine=7):
     from egalyx.bibliotheque_donnees import risques_du_secteur
     hasard = random.Random(graine)
     maintenant = datetime.utcnow()
-    aujourd_hui = date.today()
+    aujourd_hui = _aujourdhui()
     rapport = []
 
     n = 1

@@ -21,6 +21,7 @@ Règles, appliquées au moment de l'enregistrement (avant chaque écriture en ba
                 un plan rouvert retire une demande de clôture encore en attente.
   Constatation  toutes ses recommandations clôturées -> « close » ; une recommandation rouverte -> « en action ».
 """
+from egalyx.localisation import aujourdhui as _aujourdhui  # date du jour dans le fuseau de l'organisation
 import logging
 from datetime import date, datetime
 
@@ -75,7 +76,7 @@ def _regler_sous_action(sa):
         if sa.statut != 'termine':
             sa.statut = 'termine'
         if not sa.date_fin_reelle:
-            sa.date_fin_reelle = date.today()
+            sa.date_fin_reelle = _aujourdhui()
     elif _change(sa, 'pourcentage_realisation'):
         if sa.statut == 'termine' or (p > 0 and sa.statut in (None, '', 'a_faire')) or (p == 0 and sa.statut == 'en_cours'):
             sa.statut = 'en_cours' if p > 0 else 'a_faire'
@@ -92,7 +93,7 @@ def _regler_plan(session, plan, sous_actions_touchees):
         for s in vivantes:
             if s.statut not in ('annule', 'annulee') and (s.pourcentage_realisation or 0) < 100:
                 s.pourcentage_realisation, s.statut = 100, 'termine'
-                s.date_fin_reelle = s.date_fin_reelle or date.today()
+                s.date_fin_reelle = s.date_fin_reelle or _aujourdhui()
         plan.pourcentage_realisation = 100
     elif vivantes:
         moy = round(sum(s.pourcentage_realisation or 0 for s in vivantes) / len(vivantes))
@@ -110,7 +111,7 @@ def _regler_plan(session, plan, sous_actions_touchees):
         elif 0 < p < 100 and plan.statut in (None, '', 'en_attente', 'a_faire'):
             plan.statut = 'en_cours'
     if plan.statut == 'termine' and not plan.date_fin_reelle:
-        plan.date_fin_reelle = date.today()
+        plan.date_fin_reelle = _aujourdhui()
     maintenant = plan.statut
     return (maintenant == 'termine' and etait != 'termine'), (etait == 'termine' and maintenant != 'termine')
 
@@ -130,7 +131,7 @@ def _regler_plan_n2(plan):
             plan.date_fin_reelle = None
     fini = plan.statut in ('terminee', 'termine')
     if fini and not plan.date_fin_reelle:
-        plan.date_fin_reelle = date.today()
+        plan.date_fin_reelle = _aujourdhui()
     return (fini and not fini_avant), (fini_avant and not fini)
 
 

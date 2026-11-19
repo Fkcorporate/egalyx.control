@@ -16,6 +16,7 @@ Indicateurs de comité : taux de mise en œuvre, échues, ancienneté moyenne, r
 
 # --- Journal (remplace les anciens print()) : erreurs -> WARNING (journaux du serveur) ; le reste -> DEBUG,
 #     visible seulement avec EGALYX_TRACES=1. Ajouté le 18/11/2026 (ménage).
+from egalyx.localisation import aujourdhui as _aujourdhui  # date du jour dans le fuseau de l'organisation
 import logging as _logging_journal
 import os as _os_journal
 _JOURNAL = _logging_journal.getLogger('egalyx.recommandations')
@@ -215,7 +216,7 @@ def _recos_audit(cid, responsable_id):
 
 
 def _finaliser(lignes):
-    auj = date.today()
+    auj = _aujourdhui()
     for l in lignes:
         ech = l['echeance'].date() if isinstance(l['echeance'], datetime) else l['echeance']
         l['echeance'] = ech
@@ -385,7 +386,9 @@ def registre_page():
             if (not f_source or l['source'] == f_source)
             and (not f_statut or l['statut'] == f_statut)
             and (not f_echues or l['echue'])]
-    return render_template('egalyx/recommandations_registre.html', lignes=vues, ind=ind, sources=SOURCES,
+    from egalyx.pagination import paginer
+    page = paginer(vues)          # affichage par pages (indicateurs calculés sur toutes les lignes)
+    return render_template('egalyx/recommandations_registre.html', lignes=page.items, page=page, ind=ind, sources=SOURCES,
                            statuts=STATUTS, priorites=PRIORITES, f_source=f_source, f_statut=f_statut,
                            f_echues=f_echues, peut_gerer=est_gestionnaire(type_='externe'), base_layout='base.html')
 
@@ -440,7 +443,7 @@ def _formulaire_externe(r):
         if nouveau:
             n = m.RecommandationExterne.query.filter_by(client_id=cid).count() + 1
             r = m.RecommandationExterne(client_id=cid, created_by=current_user.id,
-                                        reference=(f.get('reference') or '').strip() or f'EXT-{date.today().year}-{n:03d}')
+                                        reference=(f.get('reference') or '').strip() or f'EXT-{_aujourdhui().year}-{n:03d}')
             m.db.session.add(r)
         elif (f.get('reference') or '').strip():
             r.reference = f.get('reference').strip()[:60]

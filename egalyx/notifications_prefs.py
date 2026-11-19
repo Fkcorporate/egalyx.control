@@ -17,6 +17,7 @@ EGALYX_EMAIL_NOTIFICATIONS=0 coupe tous ces e-mails sur le serveur.
 
 # --- Journal (remplace les anciens print()) : erreurs -> WARNING (journaux du serveur) ; le reste -> DEBUG,
 #     visible seulement avec EGALYX_TRACES=1. Ajouté le 18/11/2026 (ménage).
+from egalyx.localisation import aujourdhui as _aujourdhui  # date du jour dans le fuseau de l'organisation
 import logging as _logging_journal
 import os as _os_journal
 _JOURNAL = _logging_journal.getLogger('egalyx.notifications_prefs')
@@ -210,7 +211,7 @@ def contenu_resume(u, depuis):
     taches = []
     try:
         from egalyx.ma_semaine import taches as calcul
-        aujourd_hui = date.today()
+        aujourd_hui = _aujourdhui()
         taches = [t for t in calcul(u) if t.get('retard_jours') or (t.get('echeance') and t['echeance'] <= aujourd_hui + timedelta(days=7))]
     except Exception:  # noqa: BLE001
         taches = []
@@ -243,7 +244,7 @@ def contenu_resume(u, depuis):
         nom = nom_affiche(u.client_id) if u.client_id else None
     except Exception:  # noqa: BLE001
         pass
-    sujet = f"[{nom or 'Egalyx'}] Votre résumé du {date.today().strftime('%d/%m')}" + \
+    sujet = f"[{nom or 'Egalyx'}] Votre résumé du {_aujourdhui().strftime('%d/%m')}" + \
         (f" : {len(taches)} point(s) à traiter" if taches else '')
     return sujet, '\n'.join(lignes)
 

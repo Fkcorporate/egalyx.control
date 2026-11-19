@@ -10,6 +10,7 @@ Les liens qui pointent vers ces lignes depuis des lignes conservées (journaux d
 On ne travaille qu'avec les tables et colonnes qui existent vraiment dans la base. Tout se fait dans une seule
 transaction : en cas d'erreur, rien n'est supprimé.
 """
+from egalyx.localisation import aujourdhui as _aujourdhui  # date du jour dans le fuseau de l'organisation
 import os
 import io
 import json
@@ -290,7 +291,7 @@ def exporter_client(client_id):
     _tracer(f'Données du client exportées : {client.nom}', {'client_id': client_id})
     nom = ''.join(ch if ch.isalnum() else '_' for ch in (client.nom or 'client'))
     return send_file(tampon, mimetype='application/zip', as_attachment=True,
-                     download_name=f'export_{nom}_{date.today().isoformat()}.zip')
+                     download_name=f'export_{nom}_{_aujourdhui().isoformat()}.zip')
 
 
 def _synchroniser(u):

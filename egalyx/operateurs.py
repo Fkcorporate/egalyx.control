@@ -75,6 +75,7 @@ PAGES = {
     'operateur_supprimer_anomalie': ('peut_executer_campagnes', CAMP),
     'operateur_modifier_anomalie': ('peut_executer_campagnes', 'anomalie'),
     'operateur_ecarter_anomalie': ('peut_executer_campagnes', 'anomalie'),
+    'operateur_reintegrer_anomalie': ('peut_executer_campagnes', 'anomalie'),   # egalyx/boutons_repares.py
     'operateur_upload_fichier_campagne': ('peut_executer_campagnes', CAMP),
     'operateur_supprimer_fichier_campagne': ('peut_executer_campagnes', 'fichier_campagne'),
     'operateur_rouvrir_campagne': ('peut_executer_campagnes', CAMP),

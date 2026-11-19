@@ -12,6 +12,7 @@ Règle : un paiement n'est jamais considéré réussi sur la seule foi du naviga
 est toujours revérifié auprès du prestataire (API de vérification CinetPay, session Stripe
 ou webhook signé). La validation est idempotente.
 """
+from egalyx.localisation import aujourdhui as _aujourdhui  # date du jour dans le fuseau de l'organisation
 import json
 import os
 import secrets
@@ -87,7 +88,7 @@ def valider(p, reponse=None, reference_prestataire=None):
         p.reponse = reponse
         marquer_json_modifie(p, 'reponse')
     client = db.session.get(Client, p.client_id)
-    aujourd_hui = date.today()
+    aujourd_hui = _aujourdhui()
     echeance = client.date_expiration.date() if client.date_expiration else None
     # Abonnement en cours : la nouvelle période commence le lendemain de l'échéance ; sinon aujourd'hui.
     debut = echeance + timedelta(days=1) if echeance and echeance >= aujourd_hui else aujourd_hui
@@ -168,7 +169,7 @@ def abonnement():
     abonnements = AbonnementClient.query.filter_by(client_id=cid).order_by(AbonnementClient.date_debut.desc()).limit(10).all()
     return render_template('egalyx/abonnement.html', client=client, formules=formules, paiements=paiements,
                            abonnements=abonnements, prestataires=prestataires(), xof=calculs.montant_xof,
-                           aujourd_hui=date.today())
+                           aujourd_hui=_aujourdhui())
 
 
 @bp.route('/abonnement/payer', methods=['POST'])

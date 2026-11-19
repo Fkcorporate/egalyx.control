@@ -10,6 +10,7 @@ egalyx/kri_suivi.py — fiabilité des KRI.
 4. KRI critique => les gestionnaires des risques sont prévenus et invités à réévaluer le risque lié ;
    le tableau de bord stratégique signale un risque coté Faible/Moyen dont le KRI est critique.
 """
+from egalyx.localisation import aujourdhui as _aujourdhui  # date du jour dans le fuseau de l'organisation
 from datetime import datetime, timedelta
 
 from flask_login import current_user
@@ -33,7 +34,7 @@ def _jour(d):
 
 def fraicheur(kri, aujourd_hui=None):
     """{'etat': 'a_jour' | 'en_retard' | 'jamais', 'derniere', 'attendue_le', 'retard_jours'}"""
-    aujourd_hui = aujourd_hui or datetime.utcnow().date()
+    aujourd_hui = aujourd_hui or _aujourdhui()
     m = kri.get_derniere_mesure() if hasattr(kri, 'get_derniere_mesure') else None
     if m is None or not m.date_mesure:
         return {'etat': 'jamais', 'derniere': None, 'attendue_le': None, 'retard_jours': None}

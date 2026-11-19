@@ -33,7 +33,7 @@ from sqlalchemy import inspect, text  # noqa: E402
 import flask_migrate  # noqa: E402
 
 DOSSIER = os.path.join(app.root_path, 'migrations')
-TETE = 'egalyx_0001_reference'
+TETE = 'egalyx_0003_statuts'      # dernière révision (0001 : référence ; 0002 : heure, devise, lettres ; 0003 : statuts)
 
 
 def tables():
@@ -107,13 +107,22 @@ with app.app_context():
     cols = {x['name'] for x in inspect(db.engine).get_columns('user')}
     verif('révision inconnue oubliée, référence appliquée, colonne rétablie', version() == [TETE] and 'fonction' in cols, str(version()))
 
+    print('--- C3. Révision 0002 sur une base restée en 0001')
+    with db.engine.begin() as c:
+        c.execute(text('DROP TABLE modeles_lettre_mission'))
+        c.execute(text('ALTER TABLE clients DROP COLUMN devise'))
+        c.execute(text("UPDATE alembic_version SET version_num = 'egalyx_0001_reference'"))
+    upgrade()
+    verif('0002 : colonne clients.devise et table des modèles de lettre ajoutées',
+          'devise' in {x['name'] for x in inspect(db.engine).get_columns('clients')} and 'modeles_lettre_mission' in tables() and version() == [TETE], str(version()))
+
     print('--- D. Chaîne de révisions')
     from alembic.script import ScriptDirectory
     from alembic.config import Config
     cfg = Config(os.path.join(DOSSIER, 'alembic.ini')); cfg.set_main_option('script_location', DOSSIER)
     sd = ScriptDirectory.from_config(cfg)
     verif('une seule tête de révision', sd.get_heads() == [TETE], str(sd.get_heads()))
-    verif('aucune ancienne révision inachevée restante', len(list(sd.walk_revisions())) == 1)
+    verif('chaîne propre : 0001 -> 0002 -> 0003', [r.revision for r in sd.walk_revisions()] == [TETE, 'egalyx_0002_localisation_lettres', 'egalyx_0001_reference'])
     try:
         with Muet():
             flask_migrate.downgrade(directory=DOSSIER, revision='base')

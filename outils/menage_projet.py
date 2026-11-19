@@ -292,6 +292,11 @@ AUTRES = [
 ]
 
 PAGES = [
+    # 19/11/2026 : pages jamais affichées (aucune route ne les utilise) dont les boutons appelaient des adresses inexistantes
+    "admin/api_keys_management.html", "audit/constatation/gestion_preuves.html", "audit/notifications.html",
+    "c2n/dashboard_recommandations.html", "campagnes_controle/detail.html", "cartographie/_dashboard_dynamique.html",
+    "constatation/gestion_preuves.html", "dashboard_strategique/index.html", "logigramme/archive_logigrammes.html",
+    "plans_action/espace_travail.html", "blog.html", "features.html", "rapports_audit.html", "home.html.backup",
     "audit/detail_audit copie 2.html",
     "audit/detail_audit copie 3.html",
     "audit/detail_audit copie 4.html",

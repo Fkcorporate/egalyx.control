@@ -14,6 +14,7 @@ egalyx/audit_plus.py — compléments d'audit conformes aux pratiques de l'IIA.
    EGALYX_PROGRAMME_DOUBLE_REGARD=1 impose un second gestionnaire (sauf s'il n'y en a qu'un).
    Désapprobation motivée et tracée.
 """
+from egalyx.localisation import aujourdhui as _aujourdhui  # date du jour dans le fuseau de l'organisation
 import os
 import re
 from datetime import date, datetime, timedelta
@@ -177,7 +178,7 @@ def rapport_provisoire(audit_id):
         pass
     a.etat_rapport = 'provisoire'
     a.rapport_provisoire_le, a.rapport_provisoire_par_id = datetime.utcnow(), current_user.id
-    a.date_limite_reponses = limite if limite and limite >= date.today() else date.today() + timedelta(days=DELAI_REPONSE_JOURS)
+    a.date_limite_reponses = limite if limite and limite >= _aujourdhui() else _aujourdhui() + timedelta(days=DELAI_REPONSE_JOURS)
     _notifier(audites(a), f'Rapport provisoire : {a.reference}',
               f"Merci de répondre aux constats de l'audit « {a.titre} » avant le {a.date_limite_reponses.strftime('%d/%m/%Y')}.", a)
     m.db.session.commit()
@@ -198,7 +199,7 @@ def rapport_definitif(audit_id):
         flash("Émettez d'abord le rapport provisoire : les audités doivent pouvoir répondre.", 'warning')
         return retour
     sans_reponse = [c for c in constats(a) if not c.reponse_audite]
-    if sans_reponse and a.date_limite_reponses and date.today() <= a.date_limite_reponses:
+    if sans_reponse and a.date_limite_reponses and _aujourdhui() <= a.date_limite_reponses:
         flash(f"{len(sans_reponse)} constat(s) sans réponse et la date limite ({a.date_limite_reponses.strftime('%d/%m/%Y')}) "
               "n'est pas passée : attendez les réponses ou la date limite.", 'warning')
         return retour
@@ -264,8 +265,8 @@ def reponses(audit_id):
     utilisateurs = {u.id: u for u in m.User.query.filter_by(client_id=a.client_id).all()}
     return render_template('egalyx/audit_reponses.html', a=a, constats=constats(a), positions=POSITIONS,
                            etats=ETATS_RAPPORT, gest=gest, peut_repondre=peut_repondre(a), suivi=suivi_audit(a),
-                           utilisateurs=utilisateurs, aujourd_hui=date.today(),
-                           defaut_limite=date.today() + timedelta(days=DELAI_REPONSE_JOURS))
+                           utilisateurs=utilisateurs, aujourd_hui=_aujourdhui(),
+                           defaut_limite=_aujourdhui() + timedelta(days=DELAI_REPONSE_JOURS))
 
 
 # ---------------------------------------------------------------- indépendance
@@ -329,7 +330,7 @@ def temps(audit_id):
         except ValueError:
             jour = None
         activite = request.form.get('activite') if request.form.get('activite') in ACTIVITES else 'terrain'
-        if not jour or heures is None or not (0 < heures <= 24) or jour > date.today():
+        if not jour or heures is None or not (0 < heures <= 24) or jour > _aujourdhui():
             flash('Indiquez une date passée ou du jour et un nombre d\'heures entre 0 et 24.', 'warning')
             return redirect(url_for('audit_plus.temps', audit_id=a.id))
         if not membre and not gest:
@@ -341,7 +342,7 @@ def temps(audit_id):
         flash('Temps enregistré.', 'success')
         return redirect(url_for('audit_plus.temps', audit_id=a.id))
     return render_template('egalyx/audit_temps.html', a=a, tps=temps_resume(a), activites=ACTIVITES, membre=membre,
-                           gest=gest, aujourd_hui=date.today(), heures_jour=HEURES_PAR_JOUR)
+                           gest=gest, aujourd_hui=_aujourdhui(), heures_jour=HEURES_PAR_JOUR)
 
 
 # ---------------------------------------------------------------- programme d'audit

@@ -19,6 +19,7 @@ egalyx/maitrise.py — dispositifs de maîtrise (DMR) et plans d'action des risq
    de 6 mois pour tous) ; 30 jours après une vérification défavorable.
 3. « Ma semaine » : dispositifs à vérifier (responsable, ou gestionnaires des risques pour ceux sans responsable).
 """
+from egalyx.localisation import aujourdhui as _aujourdhui  # date du jour dans le fuseau de l'organisation
 import sys
 from datetime import date, datetime, timedelta
 
@@ -295,7 +296,7 @@ def benchmark(client_id=None):
         'couverture_moyenne': moyenne([d.couverture for d in couverts]),
         'reduction_moyenne': moyenne(reductions),
         'par_type': par_type,
-        'a_verifier': sum(1 for d in tous if d.prochaine_verification and d.prochaine_verification <= date.today()),
+        'a_verifier': sum(1 for d in tous if d.prochaine_verification and d.prochaine_verification <= _aujourdhui()),
     }
 
 

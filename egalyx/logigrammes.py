@@ -13,6 +13,7 @@ egalyx/logigrammes.py — gouvernance des logigrammes (procédures).
    contrôle non rattaché au référentiel, étape hors couloir…).
 4. Conversion d'un ancien « Processus » (étapes + liens) en logigramme, une seule fois, en gardant le lien.
 """
+from egalyx.localisation import aujourdhui as _aujourdhui  # date du jour dans le fuseau de l'organisation
 import os
 from datetime import date, datetime, timedelta
 
@@ -220,7 +221,7 @@ def suivi(activite_id):
     noms = {u.id: u.username for u in utilisateurs}
     return render_template('egalyx/logigramme_suivi.html', a=a, statut=statut(a), statuts=STATUTS, versions=versions,
                            verif=verifier(a), utilisateurs=utilisateurs, noms=noms, gest=est_gestionnaire(),
-                           aujourd_hui=date.today(), peut_valider=peut_valider(a))
+                           aujourd_hui=_aujourdhui(), peut_valider=peut_valider(a))
 
 
 def peut_valider(a, u=None):
@@ -322,7 +323,7 @@ def valider(activite_id):
     a.version_courante = (a.version_courante or 0) + 1
     a.statut_validation = 'valide'
     a.valide_le, a.valide_par_id = datetime.utcnow(), current_user.id
-    a.date_revue_prevue = date.today() + timedelta(days=365 * REVUE_MOIS // 12)
+    a.date_revue_prevue = _aujourdhui() + timedelta(days=365 * REVUE_MOIS // 12)
     m.db.session.add(m.VersionLogigramme(client_id=a.client_id, activite_id=a.id, version=a.version_courante,
                                          nature='auto_validation' if auto else 'validation', contenu=contenu(a),
                                          commentaire=(request.form.get('commentaire') or '').strip() or None,
@@ -364,7 +365,7 @@ def revue(activite_id):
     if statut(a) != 'valide':
         flash("La revue sans modification concerne une procédure validée et non modifiée depuis.", 'warning')
         return redirect(url_for('logigrammes.suivi', activite_id=a.id))
-    a.date_revue_prevue = date.today() + timedelta(days=365)
+    a.date_revue_prevue = _aujourdhui() + timedelta(days=365)
     m.db.session.add(m.VersionLogigramme(client_id=a.client_id, activite_id=a.id, version=a.version_courante or 0,
                                          nature='revue', commentaire=(request.form.get('commentaire') or '').strip()
                                          or 'Revue annuelle : procédure toujours à jour', user_id=current_user.id))
@@ -491,7 +492,7 @@ def _avant_flush(session, _ctx, _inst):
 def resume(a):
     """Petit résumé pour les listes et l'éditeur."""
     st = statut(a)
-    retard = bool(a.date_revue_prevue and a.date_revue_prevue < date.today())
+    retard = bool(a.date_revue_prevue and a.date_revue_prevue < _aujourdhui())
     return {'statut': st, 'libelle': STATUTS[st], 'version': a.version_courante or 0, 'revue': a.date_revue_prevue,
             'revue_en_retard': retard, 'acteurs': list(a.acteurs or [])}
 
