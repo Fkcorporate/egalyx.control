@@ -39,6 +39,8 @@ journal = logging.getLogger('egalyx')
 def enregistrer_extensions(app, db, csrf=None, recalculer_cotations=None, construire_dashboard=None):
     from egalyx import (base_donnees, double_auth, sso, parametres_risque, alerte, tiers, signature,
                         paiement, export_donnees, api_doc, organigramme)
+    from egalyx import stockage_persistant
+    stockage_persistant.enregistrer(app)    # Render : fichiers déposés sur le disque persistant (EGALYX_DONNEES ou /var/data)
     from egalyx import garde_mot_de_passe
     garde_mot_de_passe.enregistrer(app)     # SÉCURITÉ : un mauvais mot de passe ne doit jamais ouvrir de session
     base_donnees.enregistrer(app, db)

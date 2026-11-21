@@ -1956,7 +1956,7 @@ def cloturer_campagne_specifique(cartographie_id, campagne_id):
         return redirect(url_for('detail_cartographie', id=cartographie_id))
     campagne = CampagneEvaluation.query.get_or_404(campagne_id)
     
-    if not check_client_access(campagne.cartographie):
+    if campagne.cartographie_id != cartographie_id or not check_client_access(campagne.cartographie):
         flash('Accès non autorisé', 'error')
         return redirect(url_for('liste_cartographies'))
     
@@ -5951,6 +5951,9 @@ def cloturer_campagne_cartographie(cartographie_id):
         flash("Lien expiré ou invalide : relancez l'action depuis la page.", 'warning')
         return redirect(url_for('detail_cartographie', id=cartographie_id))
     cartographie = Cartographie.query.get_or_404(cartographie_id)
+    if not check_client_access(cartographie):
+        flash('Accès non autorisé', 'error')
+        return redirect(url_for('liste_cartographies'))
     
     campagne_active = CampagneEvaluation.query.filter_by(
         cartographie_id=cartographie_id,

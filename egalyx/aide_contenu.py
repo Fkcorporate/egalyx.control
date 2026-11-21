@@ -1442,8 +1442,8 @@ ARTICLES += [
                  'taille maximale des pieces jointes']),
 
     A('cloture_campagnes_droit', 'admin', 'Choisir qui peut clôturer une campagne d’évaluation',
-      'Paramètres des risques → **Clôture des campagnes** : tous les utilisateurs ayant accès à la cartographie, les gestionnaires des risques '
-      'et administrateurs, ou les administrateurs seulement.',
+      'Paramètres des risques → **Clôture des campagnes** : les gestionnaires des risques et administrateurs (par défaut), '
+      'tous les utilisateurs ayant accès à la cartographie (valideurs compris), ou les administrateurs seulement.',
       notes=['Le réglage s’applique au bouton « Clôturer » comme aux liens directs.',
              'Une campagne clôturée ne reçoit plus d’évaluations ; elle reste consultable dans l’historique de la cartographie.'],
       mots=['cloture', 'cloturer', 'campagne', 'campagnes', 'evaluation', 'qui', 'droit', 'autoriser'],

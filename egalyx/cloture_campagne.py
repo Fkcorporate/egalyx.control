@@ -1,11 +1,11 @@
 """
 egalyx/cloture_campagne.py — qui peut clôturer une campagne d'évaluation des risques (réglage par organisation).
 
-Par défaut, rien ne change : tout utilisateur qui a accès à la cartographie peut clôturer la campagne
-(bouton « Clôturer » ou lien direct), y compris un valideur.
-L'administrateur peut restreindre dans Paramètres des risques → « Clôture des campagnes d'évaluation » :
-  - « tous »            : comportement actuel ;
-  - « gestionnaires »   : seulement la permission « Gérer les risques » et les administrateurs ;
+Par défaut : les gestionnaires des risques (permission « Gérer les risques ») et les administrateurs.
+Auparavant, tout utilisateur ayant accès à la cartographie pouvait clôturer, y compris un valideur ou par lien direct.
+L'administrateur choisit dans Paramètres des risques → « Clôture des campagnes d'évaluation » :
+  - « tous »            : ancien comportement (y compris les valideurs) ;
+  - « gestionnaires »   : seulement la permission « Gérer les risques » et les administrateurs (défaut) ;
   - « administrateurs » : seulement les administrateurs de l'organisation.
 Le réglage s'applique au bouton (masqué) ET aux liens directs (refusés avec un message).
 """
@@ -18,13 +18,13 @@ bp = Blueprint('cloture_campagne', __name__, url_prefix='/parametres/risques/cam
 CLE = 'cloture_campagne_evaluation'
 CHOIX = {
     'tous': ("Tous les utilisateurs ayant accès à la cartographie",
-             "Comportement actuel : y compris les valideurs et les gestionnaires sans droit de paramétrage."),
+             "Y compris les valideurs et les gestionnaires sans droit de paramétrage."),
     'gestionnaires': ("Les gestionnaires des risques et les administrateurs",
-                      "Permission « Gérer les risques » requise. Les valideurs sans cette permission ne peuvent plus clôturer."),
+                      "Réglage par défaut. Permission « Gérer les risques » requise : les valideurs sans cette permission ne clôturent pas."),
     'administrateurs': ("Les administrateurs de l'organisation uniquement",
                         "Le plus strict : seule l'administration de l'organisation clôture les campagnes."),
 }
-DEFAUT = 'tous'
+DEFAUT = 'gestionnaires'
 ENDPOINTS = ('cloturer_campagne_specifique', 'cloturer_campagne_cartographie')
 
 

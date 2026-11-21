@@ -5,9 +5,10 @@ services:
     region: frankfurt  # ou london, us-east, etc.
     buildCommand: |
       pip install -r requirements.txt
-      pip install gunicorn
-      python -m pip install --upgrade pip
-    startCommand: gunicorn app:app --workers=4 --threads=2 --timeout=120 --worker-class=gthread
+    # Un seul processus (plusieurs fils) : les tâches planifiées (alertes de 8 h, résumé hebdomadaire,
+    # sauvegarde de nuit, relevé des KRI) démarrent dans chaque processus ; avec 4 processus elles
+    # s'exécuteraient 4 fois (e-mails en quadruple).
+    startCommand: gunicorn app:app --workers=1 --threads=8 --worker-class=gthread --timeout=120
     envVars:
       - key: PYTHON_VERSION
         value: 3.11.0
@@ -19,6 +20,8 @@ services:
           property: connectionString
       - key: RENDER
         value: true
+      - key: EGALYX_DONNEES      # fichiers déposés (logos, preuves, pièces jointes) sur le disque persistant
+        value: /var/data
       - key: MAIL_SERVER
         value: smtp.gmail.com
       - key: MAIL_PORT

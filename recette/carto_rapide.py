@@ -190,8 +190,21 @@ def regler(choix, role='admin_a'):
 
 
 with A.app.app_context():
-    verif('par défaut : « tous » (comportement actuel inchangé)', cc.reglage(1) == 'tous')
-verif('par défaut : le valideur peut toujours clôturer (inchangé)', cloturer('validateur'))
+    verif('par défaut : « gestionnaires et administrateurs »', cc.reglage(1) == 'gestionnaires')
+verif('par défaut : le valideur ne peut pas clôturer, même par lien direct', not cloturer('validateur'))
+verif('par défaut : le gestionnaire des risques peut clôturer', cloturer('gestionnaire'))
+nouvelle_campagne()
+with A.app.app_context():
+    import models as _M
+    _c = _M.CampagneEvaluation.query.filter_by(cartographie_id=O['a']['carto'], statut='en_cours').first()
+    _carto_a_client = _M.Cartographie.query.get(O['a']['carto']).client_id
+cl_b, j_b = jeton_csrf('admin_b')
+with Muet():
+    cl_b.get(f"/cartographie/{O['a']['carto']}/cloturer-campagne?csrf_token={j_b}")
+    cl_b.get(f"/cartographie/{O['a']['carto']}/cloturer-campagne/{_c.id}?csrf_token={j_b}")
+with A.app.app_context():
+    verif('autre organisation : ne peut pas clôturer la campagne active (lien direct)',
+          _M.CampagneEvaluation.query.get(_c.id).statut == 'en_cours')
 r, t, e = go('admin_a', 'get', '/parametres/risques/campagnes/')
 verif('page de réglage : 3 choix, « Par défaut » signalé', r.status_code == 200 and t.count('name="cloture"') == 3 and 'Par défaut' in t, f'{r.status_code} {e}')
 r, t, _ = go('admin_a', 'get', '/parametres/risques/')
@@ -200,15 +213,17 @@ r, _, _ = go('lecteur', 'get', '/parametres/risques/campagnes/')
 verif('sans droit de paramétrage : page refusée', r.status_code == 302, str(r.status_code))
 r = regler('gestionnaires', 'lecteur')
 with A.app.app_context():
-    verif('sans droit de paramétrage : enregistrement refusé', cc.reglage(1) == 'tous')
+    verif('sans droit de paramétrage : enregistrement refusé', cc.reglage(1) == 'gestionnaires')
 regler('n_importe_quoi')
 with A.app.app_context():
-    verif('choix invalide : refusé', cc.reglage(1) == 'tous')
+    verif('choix invalide : refusé', cc.reglage(1) == 'gestionnaires')
 
-regler('gestionnaires')
+regler('tous')
 with A.app.app_context():
-    verif('réglage « gestionnaires » enregistré', cc.reglage(1) == 'gestionnaires')
-    verif('autre organisation non touchée', cc.reglage(2) == 'tous')
+    verif('réglage « tous » enregistré', cc.reglage(1) == 'tous')
+    verif('autre organisation non touchée', cc.reglage(2) == 'gestionnaires')
+verif('« tous » : le valideur peut clôturer', cloturer('validateur'))
+regler('gestionnaires')
 verif('« gestionnaires » : le valideur ne peut plus clôturer (lien direct)', not cloturer('validateur'))
 verif('« gestionnaires » : le gestionnaire des risques peut', cloturer('gestionnaire'))
 verif('« gestionnaires » : l\'administrateur peut', cloturer('admin_a'))
@@ -221,7 +236,7 @@ verif('bouton « Clôturer la campagne » masqué pour le valideur, visible pour
 regler('administrateurs')
 verif('« administrateurs » : le gestionnaire ne peut plus', not cloturer('gestionnaire'))
 verif('« administrateurs » : l\'administrateur peut', cloturer('admin_a'))
-regler('tous')
-verif('retour à « tous » : le valideur peut de nouveau', cloturer('validateur'))
+regler('gestionnaires')
+verif('retour au réglage par défaut : le valideur ne peut plus', not cloturer('validateur'))
 
 print(f'\n{sum(res)}/{len(res)} vérifications réussies')

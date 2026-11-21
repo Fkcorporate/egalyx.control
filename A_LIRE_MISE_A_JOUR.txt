@@ -1,31 +1,33 @@
-EGALYX — CONTENU DES RAPPORTS PAR ORGANISATION (NIVEAU 2)
-=========================================================
-À installer après « egalyx_rapports_couleurs_client » (présentation des rapports).
+EGALYX — DROITS DE CLÔTURE ET FICHIERS CONSERVÉS SUR RENDER
+==========================================================
+À installer après « egalyx_rapports_contenu_client ».
 
-1. Nouvelle page « Contenu des rapports » (/organisation/rapports/)
-   Accès : administrateur de l'organisation, ou super-admin pour un client ; lien depuis
-   Identité de l'organisation. Un onglet par rapport :
-   - Rapport d'audit (PDF) et Rapport au comité d'audit ;
-   - titre du document (vide : titre habituel) ;
-   - sections affichées, avec numérotation recalculée (et sommaire pour l'audit) ;
-     le résumé exécutif et la synthèse sont toujours affichés ;
-   - introduction et conclusion types, avec des champs remplis à chaque rapport :
-     {organisation}, {date}, et pour l'audit {reference}, {mission} ;
-   - jusqu'à 4 signataires (fonction, nom facultatif ; sans nom, une ligne pour signer) ;
-   - bouton « Rétablir le contenu d'origine ». Chaque changement est journalisé.
-   Sans réglage, les deux rapports restent comme avant.
+1. Clôture des campagnes d'évaluation (sécurité)
+   - Par défaut, seuls les gestionnaires des risques (permission « Gérer les risques ») et les
+     administrateurs peuvent clôturer, bouton comme lien direct. Avant : tout utilisateur ayant accès
+     à la cartographie, valideurs compris.
+     Pour revenir à l'ancien fonctionnement : Paramètres des risques → Clôture des campagnes → « Tous ».
+   - Corrigé : le lien de clôture de la campagne active ne vérifiait pas l'organisation ; un utilisateur
+     d'une autre organisation pouvait clôturer la campagne en connaissant l'adresse.
 
-2. Rapport d'audit : le sommaire indique désormais les vraies pages des sections
-   (les numéros 3 à 8 étaient fixés à la main). En version imprimable depuis le navigateur
-   (serveur sans WeasyPrint), le sommaire s'affiche sans numéros de page.
+2. Fichiers déposés conservés d'un déploiement à l'autre
+   Logos, photos de profil, preuves, pièces jointes, lettres de mission, documents PCA… étaient effacés
+   à chaque déploiement Render. Au démarrage, si un disque est monté sur /var/data (ou si la variable
+   EGALYX_DONNEES est définie), les dossiers instance/, uploads/ et static/uploads/ sont placés sur ce
+   disque. Les fichiers déjà présents y sont recopiés, sans jamais écraser un fichier du disque.
+   Sans disque, rien ne change.
 
-3. Corrigé : sans WeasyPrint sur le serveur, l'export PDF des incidents et le rapport des
-   dispositifs renvoyaient vers une page d'erreur ; ils affichent maintenant la version imprimable.
-
-4. Centre d'aide : nouvelle fiche « Choisir le contenu du rapport d'audit et du rapport au comité ».
+3. Serveur de production : gunicorn ajouté à requirements.txt ; render.yaml corrigé
+   (1 processus et 8 fils : avec 4 processus, les alertes de 8 h, le résumé hebdomadaire et la
+   sauvegarde de nuit partaient 4 fois).
 
 INSTALLATION
   python3 installer_mise_a_jour.py /chemin/vers/votre/projet
-  git add egalyx templates recette
-  git commit -m "Contenu des rapports par organisation" && git push
-  (le fichier egalyx/rapport_contenu.py est nouveau : sans « git add », Render s'arrête au démarrage)
+  git add egalyx sections recette requirements.txt render.yaml
+  git commit -m "Droits de clôture, fichiers conservés sur Render, gunicorn" && git push
+
+DANS RENDER (une seule fois, voir le message d'accompagnement)
+  a) Disks → Add Disk : Mount Path = /var/data, taille 1 à 10 Go.
+  b) Settings → Start Command :
+       gunicorn app:app --workers=1 --threads=8 --worker-class=gthread --timeout=120
+  c) Après le déploiement, dans Logs : lignes « Stockage persistant : … → /var/data/… ».
