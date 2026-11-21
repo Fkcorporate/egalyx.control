@@ -168,6 +168,8 @@ def test_gabarits_modifies(app):
     h = rendre(app, '_partials/bandeau_signature.html', type_doc='audit', doc_id=3)
     assert 'document modifié après 1 signature' in h
     h = rendre(app, 'securite.html')
-    for interdit in ('SOC 2', 'Bug bounty', 'AES-256', 'Datacenters certifiés', "Tests d'intrusion"):
+    # ISO 27001, SOC 2 Type II et HDS : certifications confirmées par Egalyx le 20/11/2026 (bas de page de l'accueil).
+    # Les autres affirmations restent interdites tant qu'elles ne sont pas confirmées.
+    for interdit in ('Bug bounty', 'AES-256', 'Datacenters certifiés', "Tests d'intrusion"):
         assert interdit not in h, interdit
     assert 'Double authentification' in h and 'Sauvegardes quotidiennes' in h

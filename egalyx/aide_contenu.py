@@ -345,8 +345,8 @@ ARTICLES = [
       questions=['mettre mon logo', 'changer le nom affiche', 'personnaliser l outil']),
 
     A('presentation_rapports', 'admin', 'Mettre les rapports aux couleurs de mon organisation',
-      'Les rapports PDF et imprimables reprennent votre logo, votre couleur, votre mention de confidentialité et votre '
-      'pied de page : rapport d’audit (PDF et complet), rapport au comité d’audit, cartographie des risques, KRI, '
+      'Les rapports PDF, imprimables et Word reprennent votre logo, votre couleur, votre mention de confidentialité et votre '
+      'pied de page : rapport d’audit (PDF, complet et Word), rapport au comité d’audit, cartographie des risques, KRI, '
       'incidents, plans d’action N2, logigrammes, dispositifs de contrôle, organigramme, feuilles de travail et audits qualité.',
       etapes=['Menu du compte → **Identité de l’organisation**, section **Présentation des rapports**.',
               'Cochez la case de la couleur et choisissez une teinte assez foncée (les couleurs trop claires sont refusées).',
@@ -364,7 +364,7 @@ ARTICLES = [
                  'personnaliser le pied de page des rapports', 'rapport aux couleurs de la banque']),
 
     A('contenu_rapports', 'admin', 'Choisir le contenu du rapport d’audit et du rapport au comité',
-      'Pour le rapport d’audit (PDF) et le rapport au comité d’audit, votre organisation choisit le titre, les sections '
+      'Pour le rapport d’audit (PDF et Word) et le rapport au comité d’audit, votre organisation choisit le titre, les sections '
       'affichées, un texte d’introduction et de conclusion types, et les signataires.',
       etapes=['Menu du compte → **Identité de l’organisation** → lien « Choisir aussi le contenu » '
               '(ou directement **Contenu des rapports**), puis l’onglet du rapport.',
@@ -416,6 +416,55 @@ ARTICLES = [
       liens=[('Satisfaction des audités', 'satisfaction_audit.synthese')],
       questions=['questionnaire de satisfaction apres un audit', 'avis des audites sur la mission',
                  'mesurer la satisfaction des audites', 'donner mon avis sur un audit']),
+
+    A('univers_audit', 'audit', 'Univers d’audit : ce qui doit être audité, et quand',
+      'L’univers d’audit liste ce que l’audit interne peut auditer (processus, directions, filiales, systèmes, projets), '
+      'avec un niveau de risque, un cycle d’audit, la date du dernier audit et l’échéance du prochain.',
+      etapes=['Menu Audit interne → **Univers d’audit**.',
+              '« Ajouter ceux qui manquent » crée une entité par processus (logigramme) et, si coché, par direction ; '
+              'ou ajoutez une entité à la main (filiale, système…).',
+              'Réglez le risque de chaque entité : le cycle suit (élevé 1 an, moyen 2 ans, faible 3 ans), ou fixez-le vous-même.',
+              'Pour un audit fait avant l’outil, saisissez la date du dernier audit. Les audits de l’outil comptent '
+              'automatiquement s’ils portent sur le processus de l’entité, ou s’ils lui sont rattachés (« Modifier » → Rattacher).',
+              'Les entités « Jamais audité » ou « À auditer » remontent en tête : c’est la base du programme d’audit.'],
+      notes=['Un audit compte à la date de son rapport définitif.', 'Une entité retirée reste consultable et peut être remise.'],
+      mots=['univers', 'entite', 'entites', 'auditable', 'auditables', 'cycle', 'couverture', 'dernier', 'audite',
+            'programme', 'planifier', 'prochain', 'risque'],
+      liens=[('Univers d’audit', 'fonction_audit.page_univers')],
+      questions=['univers d audit', 'quand auditer ce processus', 'liste des entites auditables',
+                 'qu est ce qui n a pas ete audite depuis longtemps', 'couverture du plan d audit']),
+
+    A('qualite_fonction_audit', 'audit', 'Qualité de la fonction d’audit (Normes IIA 2024)',
+      'Évaluez la conformité de votre fonction d’audit interne aux 15 principes des Normes internationales d’audit interne : '
+      'évaluation interne périodique (au moins une fois par an) et évaluation externe au moins tous les 5 ans.',
+      etapes=['Menu Audit interne → **Qualité de la fonction** : alertes, indicateurs de l’année et observations par principe.',
+              '**Évaluation interne** : pour chaque principe, Conforme / Partiellement / Non conforme / Sans objet, '
+              'un constat et, si besoin, une action d’amélioration.',
+              'Indiquez la date, la conclusion générale et la synthèse pour le Conseil, puis **Valider** '
+              '(une évaluation validée ne se modifie plus).',
+              '**Saisir une évaluation externe** : même grille, avec le cabinet ou la personne qui l’a conduite.'],
+      notes=['Indicateurs calculés par l’outil : programme réalisé, délai du rapport définitif, recommandations mises en œuvre, '
+             'satisfaction des audités, indépendance documentée, couverture de l’univers, charte.',
+             'Les observations aident l’évaluation ; elles ne remplacent pas le jugement de l’évaluateur.'],
+      mots=['qualite', 'qaip', 'normes', 'iia', 'principes', 'evaluation', 'externe', 'interne', 'conformite',
+            'auto', 'autoevaluation', 'fonction', 'indicateurs', 'kpi'],
+      liens=[('Qualité de la fonction', 'fonction_audit.page_qualite')],
+      questions=['evaluation externe de l audit interne', 'auto evaluation de la fonction audit', 'conformite aux normes iia',
+                 'programme d assurance et d amelioration qualite', 'indicateurs de la fonction audit']),
+
+    A('charte_audit', 'audit', 'Charte d’audit interne',
+      'La charte fixe la mission, le positionnement, les droits d’accès et les responsabilités de l’audit interne. '
+      'Elle est approuvée par le Conseil et revue au moins une fois par an.',
+      etapes=['Menu Audit interne → **Charte d’audit** → « Rédiger la charte à partir du modèle » '
+              '(le modèle reprend les points attendus par les Normes ; adaptez-le).',
+              'Enregistrez le brouillon autant de fois que nécessaire.',
+              'Après approbation, indiquez la date et l’instance (Conseil d’administration, comité d’audit…) puis '
+              '**Mettre en vigueur**. La revue suivante est prévue un an après.',
+              'Pour la modifier : « Préparer une nouvelle version » ; l’ancienne est conservée dans l’historique.'],
+      mots=['charte', 'mandat', 'mission', 'audit', 'interne', 'conseil', 'approbation', 'revue', 'version'],
+      liens=[('Charte d’audit', 'fonction_audit.page_charte')],
+      questions=['charte d audit interne', 'rediger la charte d audit', 'mettre a jour la charte d audit',
+                 'faire approuver la charte par le conseil']),
 
     A('application_telephone', 'admin', 'Installer Egalyx sur mon téléphone',
       'Egalyx s’installe comme une application, sans passer par un magasin : icône sur l’écran d’accueil, plein écran, '

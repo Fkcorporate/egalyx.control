@@ -1633,6 +1633,9 @@ def export_rapport_audit_word(audit_id):
     
     # Créer un nouveau document Word
     doc = Document()
+    from egalyx.identite import presentation_rapport
+    from egalyx.rapport_word import preparer_document
+    preparer_document(doc, presentation_rapport(audit.client_id))   # logo, nom, mention, couleur, pied de page du client
     
     # Définir les styles
     styles = doc.styles
@@ -8887,6 +8890,9 @@ def export_synthese_word(audit_id):
     
     # Créer le document Word
     doc = Document()
+    from egalyx.identite import presentation_rapport
+    from egalyx.rapport_word import preparer_document
+    preparer_document(doc, presentation_rapport(audit.client_id))   # logo, nom, mention, couleur, pied de page du client
     
     # Titre
     title = doc.add_heading(f'Rapport d\'Audit - {audit.reference}', 0)
@@ -9894,9 +9900,16 @@ def rapport_audit_word_pro(audit_id):
     
     # Créer le document Word
     doc = Document()
+    # Présentation et contenu choisis par l'organisation (Identité de l'organisation, Contenu des rapports)
+    from egalyx.identite import presentation_rapport
+    from egalyx.rapport_contenu import contenu_rapport
+    from egalyx.rapport_word import preparer_document, texte_libre, entete_tableau
+    rp = presentation_rapport(audit.client_id)
+    ct = contenu_rapport('audit', cid=audit.client_id, valeurs={'reference': audit.reference, 'mission': audit.titre})
+    preparer_document(doc, rp)
     
     # Titre
-    title = doc.add_heading(f"RAPPORT D'AUDIT", level=1)
+    title = doc.add_heading(ct.titre.upper(), level=1)
     title.alignment = WD_ALIGN_PARAGRAPH.CENTER
     
     subtitle = doc.add_paragraph(f"{audit.reference} - {audit.titre}")
@@ -9925,173 +9938,197 @@ def rapport_audit_word_pro(audit_id):
     
     doc.add_page_break()
     
-    # Résumé exécutif
-    doc.add_heading("RÉSUMÉ EXÉCUTIF", level=2)
+    if ct.introduction:
+        doc.add_heading("INTRODUCTION", level=2)
+        texte_libre(doc, ct.introduction)
+        doc.add_page_break()
+
+    if ct.montre('resume'):
+        # Résumé exécutif
+        doc.add_heading("RÉSUMÉ EXÉCUTIF", level=2)
     
-    resume = doc.add_paragraph()
-    resume.add_run(f"L'audit {audit.reference} a permis d'identifier ").font.size = Pt(11)
-    resume.add_run(f"{len(constatations)} constatation(s)").bold = True
-    resume.add_run(f", dont {len([c for c in constatations if c.gravite == 'critique'])} critique(s). ").font.size = Pt(11)
+        resume = doc.add_paragraph()
+        resume.add_run(f"L'audit {audit.reference} a permis d'identifier ").font.size = Pt(11)
+        resume.add_run(f"{len(constatations)} constatation(s)").bold = True
+        resume.add_run(f", dont {len([c for c in constatations if c.gravite == 'critique'])} critique(s). ").font.size = Pt(11)
     
-    resume.add_run(f"{len(recommandations)} recommandation(s) ont été formulées, ").font.size = Pt(11)
-    resume.add_run(f"dont {len([r for r in recommandations if r.statut == 'termine'])} déjà terminées.").font.size = Pt(11)
+        resume.add_run(f"{len(recommandations)} recommandation(s) ont été formulées, ").font.size = Pt(11)
+        resume.add_run(f"dont {len([r for r in recommandations if r.statut == 'termine'])} déjà terminées.").font.size = Pt(11)
     
-    doc.add_paragraph()
-    tests_summary = doc.add_paragraph()
-    tests_summary.add_run(f"📊 Tests de contrôle: ").bold = True
-    tests_summary.add_run(f"{tests_stats['total_tests']} tests réalisés, ")
-    tests_summary.add_run(f"{tests_stats['tests_conformes']} conformes, ").font.color.rgb = RGBColor(16, 185, 129)
-    tests_summary.add_run(f"{tests_stats['tests_non_conformes']} non conformes. ").font.color.rgb = RGBColor(239, 68, 68)
+        doc.add_paragraph()
+        tests_summary = doc.add_paragraph()
+        tests_summary.add_run(f"📊 Tests de contrôle: ").bold = True
+        tests_summary.add_run(f"{tests_stats['total_tests']} tests réalisés, ")
+        tests_summary.add_run(f"{tests_stats['tests_conformes']} conformes, ").font.color.rgb = RGBColor(16, 185, 129)
+        tests_summary.add_run(f"{tests_stats['tests_non_conformes']} non conformes. ").font.color.rgb = RGBColor(239, 68, 68)
     
-    ecarts_summary = doc.add_paragraph()
-    ecarts_summary.add_run(f"📌 Écarts constatés: ").bold = True
-    ecarts_summary.add_run(f"{tests_stats['total_ecarts']} écarts identifiés, ")
-    taux_correction = round((tests_stats['ecarts_corriges'] / max(tests_stats['total_ecarts'], 1)) * 100, 1)
-    ecarts_summary.add_run(f"{tests_stats['ecarts_corriges']} corrigés ({taux_correction}%).").font.color.rgb = RGBColor(16, 185, 129)
+        ecarts_summary = doc.add_paragraph()
+        ecarts_summary.add_run(f"📌 Écarts constatés: ").bold = True
+        ecarts_summary.add_run(f"{tests_stats['total_ecarts']} écarts identifiés, ")
+        taux_correction = round((tests_stats['ecarts_corriges'] / max(tests_stats['total_ecarts'], 1)) * 100, 1)
+        ecarts_summary.add_run(f"{tests_stats['ecarts_corriges']} corrigés ({taux_correction}%).").font.color.rgb = RGBColor(16, 185, 129)
     
-    doc.add_page_break()
+        doc.add_page_break()
     
-    # Tests de contrôle
-    doc.add_heading("TESTS DE CONTRÔLE", level=2)
+    if ct.montre('tests'):
+        # Tests de contrôle
+        doc.add_heading("TESTS DE CONTRÔLE", level=2)
     
-    if tests_data:
-        table = doc.add_table(rows=1, cols=6)
-        table.style = 'Table Grid'
+        if tests_data:
+            table = doc.add_table(rows=1, cols=6)
+            table.style = 'Table Grid'
         
-        headers = ['Test', 'Feuille', 'Résultat', 'Criticité', 'Écarts', 'Action']
-        for i, header in enumerate(headers):
-            cell = table.rows[0].cells[i]
+            headers = ['Test', 'Feuille', 'Résultat', 'Criticité', 'Écarts', 'Action']
+            for i, header in enumerate(headers):
+                cell = table.rows[0].cells[i]
+                cell.text = header
+                cell.paragraphs[0].runs[0].bold = True
+            entete_tableau(table, rp)
+        
+            for test in tests_data:
+                row = table.add_row()
+                row.cells[0].text = test['objet_test'][:50] if test['objet_test'] else ''
+                row.cells[1].text = test['feuille_reference']
+            
+                resultat_text = "Conforme" if test['resultat'] == 'conforme' else "Non conforme" if test['resultat'] == 'non_conforme' else "Non testé"
+                row.cells[2].text = resultat_text
+            
+                criticite_text = "Critique" if test['niveau_criticite'] == 'critique' else "Élevée" if test['niveau_criticite'] == 'eleve' else "Moyenne"
+                row.cells[3].text = criticite_text
+            
+                row.cells[4].text = str(test['nb_erreurs'])
+                row.cells[5].text = "✅ Oui" if test['correction_effectuee'] else "❌ Non"
+        
+            doc.add_paragraph()
+        
+            # Détail des écarts
+            doc.add_heading("Détail des écarts constatés", level=3)
+        
+            for test in tests_data:
+                if test['nb_erreurs'] > 0:
+                    doc.add_heading(f"{test['objet_test']} ({test['nb_erreurs']} écarts)", level=4)
+                
+                    for erreur in test['erreurs']:
+                        p = doc.add_paragraph(style='List Bullet')
+                        p.add_run(f"• {erreur['description']} ")
+                        gravite_display = erreur['gravite'].capitalize() if erreur['gravite'] else 'Non défini'
+                        p.add_run(f"[{gravite_display}] ").bold = True
+                        etat_display = erreur['etat'].capitalize() if erreur['etat'] else 'Non défini'
+                        p.add_run(f"| État: {etat_display}")
+                        if erreur['impact_financier']:
+                            p.add_run(f" | 💰 {erreur['impact_financier']} €")
+    
+        doc.add_page_break()
+    
+    if ct.montre('constatations'):
+        # Constatations
+        doc.add_heading("CONSTATATIONS DÉTAILLÉES", level=2)
+    
+        for constat in constatations:
+            type_display = get_type_display(constat)
+            doc.add_heading(f"{constat.reference} - {type_display}", level=3)
+            doc.add_paragraph(constat.description)
+        
+            if constat.cause_racine:
+                doc.add_paragraph(f"Cause racine : {constat.cause_racine}", style='List Bullet')
+        
+            gravite_display = get_gravite_display(constat)
+            statut_display = get_statut_display(constat)
+            doc.add_paragraph(f"Gravité : {gravite_display} | Statut : {statut_display}", style='List Bullet')
+        
+            doc.add_paragraph()
+    
+        doc.add_page_break()
+    
+    if ct.montre('recommandations'):
+        # Recommandations
+        doc.add_heading("RECOMMANDATIONS", level=2)
+    
+        reco_table = doc.add_table(rows=1, cols=5)
+        reco_table.style = 'Table Grid'
+    
+        reco_headers = ['Réf.', 'Description', 'Type', 'Statut', 'Priorité']
+        for i, header in enumerate(reco_headers):
+            cell = reco_table.rows[0].cells[i]
             cell.text = header
             cell.paragraphs[0].runs[0].bold = True
+        entete_tableau(reco_table, rp)
+    
+        for reco in recommandations:
+            row = reco_table.add_row()
+            row.cells[0].text = reco.reference
+            row.cells[1].text = reco.description[:100] + '...' if len(reco.description) > 100 else reco.description
+            row.cells[2].text = get_reco_type_display(reco)
+            row.cells[3].text = get_reco_statut_display(reco)
+            row.cells[4].text = str(reco.score_priorite) if reco.score_priorite else 'N/A'
+    
+        doc.add_page_break()
+    
+    if ct.montre('plans'):
+        # Plans d'action
+        doc.add_heading("PLANS D'ACTION", level=2)
+    
+        for plan in plans_action:
+            doc.add_heading(plan.nom, level=3)
+            if plan.description:
+                doc.add_paragraph(plan.description)
         
-        for test in tests_data:
-            row = table.add_row()
-            row.cells[0].text = test['objet_test'][:50] if test['objet_test'] else ''
-            row.cells[1].text = test['feuille_reference']
-            
-            resultat_text = "Conforme" if test['resultat'] == 'conforme' else "Non conforme" if test['resultat'] == 'non_conforme' else "Non testé"
-            row.cells[2].text = resultat_text
-            
-            criticite_text = "Critique" if test['niveau_criticite'] == 'critique' else "Élevée" if test['niveau_criticite'] == 'eleve' else "Moyenne"
-            row.cells[3].text = criticite_text
-            
-            row.cells[4].text = str(test['nb_erreurs'])
-            row.cells[5].text = "✅ Oui" if test['correction_effectuee'] else "❌ Non"
+            progress = doc.add_paragraph()
+            progress.add_run("Avancement: ").bold = True
+            progress.add_run(f"{plan.pourcentage_realisation or 0}%")
+            doc.add_paragraph(f"Statut: {get_plan_statut_display(plan)}")
         
-        doc.add_paragraph()
-        
-        # Détail des écarts
-        doc.add_heading("Détail des écarts constatés", level=3)
-        
-        for test in tests_data:
-            if test['nb_erreurs'] > 0:
-                doc.add_heading(f"{test['objet_test']} ({test['nb_erreurs']} écarts)", level=4)
-                
-                for erreur in test['erreurs']:
-                    p = doc.add_paragraph(style='List Bullet')
-                    p.add_run(f"• {erreur['description']} ")
-                    gravite_display = erreur['gravite'].capitalize() if erreur['gravite'] else 'Non défini'
-                    p.add_run(f"[{gravite_display}] ").bold = True
-                    etat_display = erreur['etat'].capitalize() if erreur['etat'] else 'Non défini'
-                    p.add_run(f"| État: {etat_display}")
-                    if erreur['impact_financier']:
-                        p.add_run(f" | 💰 {erreur['impact_financier']} €")
+            doc.add_paragraph()
     
-    doc.add_page_break()
+        doc.add_page_break()
     
-    # Constatations
-    doc.add_heading("CONSTATATIONS DÉTAILLÉES", level=2)
+    if ct.conclusion:
+        doc.add_heading("CONCLUSION", level=2)
+        texte_libre(doc, ct.conclusion)
+        doc.add_page_break()
+
+    if ct.montre('validation'):
+        # Signatures
+        doc.add_heading("VALIDATION", level=2)
     
-    for constat in constatations:
-        type_display = get_type_display(constat)
-        doc.add_heading(f"{constat.reference} - {type_display}", level=3)
-        doc.add_paragraph(constat.description)
-        
-        if constat.cause_racine:
-            doc.add_paragraph(f"Cause racine : {constat.cause_racine}", style='List Bullet')
-        
-        gravite_display = get_gravite_display(constat)
-        statut_display = get_statut_display(constat)
-        doc.add_paragraph(f"Gravité : {gravite_display} | Statut : {statut_display}", style='List Bullet')
-        
-        doc.add_paragraph()
+        workflow = WorkflowApprobation.query.filter_by(audit_id=audit.id).first()
+        signataire_auditeur = None
+        signataire_qualite = None
     
-    doc.add_page_break()
+        if workflow:
+            if workflow.approbateur_niveau1_id:
+                signataire_auditeur = User.query.get(workflow.approbateur_niveau1_id)
+            if workflow.approbateur_niveau2_id:
+                signataire_qualite = User.query.get(workflow.approbateur_niveau2_id)
     
-    # Recommandations
-    doc.add_heading("RECOMMANDATIONS", level=2)
+        if not signataire_auditeur and audit.responsable:
+            signataire_auditeur = audit.responsable
     
-    reco_table = doc.add_table(rows=1, cols=5)
-    reco_table.style = 'Table Grid'
+        # Signataires choisis par l'organisation (Contenu des rapports), sinon les signataires habituels
+        lignes_sig = ([(sg['fonction'], sg['nom'] or '') for sg in ct.signataires] if ct.signataires_regles else
+                      [("Auditeur principal", signataire_auditeur.username if signataire_auditeur else ''),
+                       ("Responsable Qualité", signataire_qualite.username if signataire_qualite else '')])
+        if lignes_sig:
+            sig_table = doc.add_table(rows=len(lignes_sig) + 1, cols=3 if ct.signataires_regles else 2)
+            sig_table.style = 'Table Grid'
+            sig_table.cell(0, 0).text = "Rôle"
+            sig_table.cell(0, 1).text = "Nom" if ct.signataires_regles else "Signature"
+            if ct.signataires_regles:
+                sig_table.cell(0, 2).text = "Signature"
+            for c in sig_table.rows[0].cells:
+                c.paragraphs[0].runs[0].bold = True
+            entete_tableau(sig_table, rp)
+            for i, (role, nom) in enumerate(lignes_sig, start=1):
+                sig_table.cell(i, 0).text = role
+                sig_table.cell(i, 1).text = nom or ("" if ct.signataires_regles else "_________________________")
+                if ct.signataires_regles:
+                    sig_table.rows[i].height = Cm(1.6)
     
-    reco_headers = ['Réf.', 'Description', 'Type', 'Statut', 'Priorité']
-    for i, header in enumerate(reco_headers):
-        cell = reco_table.rows[0].cells[i]
-        cell.text = header
-        cell.paragraphs[0].runs[0].bold = True
-    
-    for reco in recommandations:
-        row = reco_table.add_row()
-        row.cells[0].text = reco.reference
-        row.cells[1].text = reco.description[:100] + '...' if len(reco.description) > 100 else reco.description
-        row.cells[2].text = get_reco_type_display(reco)
-        row.cells[3].text = get_reco_statut_display(reco)
-        row.cells[4].text = str(reco.score_priorite) if reco.score_priorite else 'N/A'
-    
-    doc.add_page_break()
-    
-    # Plans d'action
-    doc.add_heading("PLANS D'ACTION", level=2)
-    
-    for plan in plans_action:
-        doc.add_heading(plan.nom, level=3)
-        if plan.description:
-            doc.add_paragraph(plan.description)
-        
-        progress = doc.add_paragraph()
-        progress.add_run("Avancement: ").bold = True
-        progress.add_run(f"{plan.pourcentage_realisation or 0}%")
-        doc.add_paragraph(f"Statut: {get_plan_statut_display(plan)}")
-        
-        doc.add_paragraph()
-    
-    doc.add_page_break()
-    
-    # Signatures
-    doc.add_heading("VALIDATION", level=2)
-    
-    workflow = WorkflowApprobation.query.filter_by(audit_id=audit.id).first()
-    signataire_auditeur = None
-    signataire_qualite = None
-    
-    if workflow:
-        if workflow.approbateur_niveau1_id:
-            signataire_auditeur = User.query.get(workflow.approbateur_niveau1_id)
-        if workflow.approbateur_niveau2_id:
-            signataire_qualite = User.query.get(workflow.approbateur_niveau2_id)
-    
-    if not signataire_auditeur and audit.responsable:
-        signataire_auditeur = audit.responsable
-    
-    sig_table = doc.add_table(rows=3, cols=2)
-    sig_table.style = 'Table Grid'
-    
-    sig_table.cell(0, 0).text = "Rôle"
-    sig_table.cell(0, 1).text = "Signature"
-    sig_table.cell(0, 0).paragraphs[0].runs[0].bold = True
-    sig_table.cell(0, 1).paragraphs[0].runs[0].bold = True
-    
-    sig_table.cell(1, 0).text = "Auditeur principal"
-    sig_table.cell(1, 1).text = signataire_auditeur.username if signataire_auditeur else "_________________________"
-    
-    sig_table.cell(2, 0).text = "Responsable Qualité"
-    sig_table.cell(2, 1).text = signataire_qualite.username if signataire_qualite else "_________________________"
-    
-    # Pied de page
-    footer = doc.sections[0].footer
-    footer_para = footer.paragraphs[0]
-    footer_para.text = f"Egalyx Control - Rapport généré le {datetime.now().strftime('%d/%m/%Y à %H:%M')}"
-    footer_para.alignment = WD_ALIGN_PARAGRAPH.CENTER
+    # Pied de page : texte de l'organisation et numéro de page (preparer_document)
+    if not (rp.get('pied') or rp.get('logo') or rp.get('mention')):
+        footer_para = doc.sections[0].footer.add_paragraph()
+        footer_para.text = f"Egalyx Control - Rapport généré le {datetime.now().strftime('%d/%m/%Y à %H:%M')}"
+        footer_para.alignment = WD_ALIGN_PARAGRAPH.CENTER
     
     # Sauvegarder et retourner
     buffer = io.BytesIO()

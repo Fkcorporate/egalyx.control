@@ -31908,6 +31908,8 @@ def lire_notification(notification_id):
                     return redirect(url_for('detail_demande_reevaluation', demande_id=notification.entite_id))
             
             # === AUDIT ===
+            elif notification.entite_type == 'audit_satisfaction':
+                return redirect(url_for('satisfaction_audit.questionnaire', audit_id=notification.entite_id))
             elif notification.entite_type == 'audit':
                 audit = Audit.query.get(notification.entite_id)
                 if audit:

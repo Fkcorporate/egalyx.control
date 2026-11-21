@@ -30,7 +30,7 @@ CHAMP_MAX = 80
 # Sections de chaque rapport, dans l'ordre. numerotee=False : pas de numéro (sommaire, encadré…).
 RAPPORTS = {
     'audit': {
-        'libelle': 'Rapport d’audit (PDF)',
+        'libelle': 'Rapport d’audit (PDF et Word)',
         'titre': "Rapport d'Audit",
         'champs': ('organisation', 'date', 'reference', 'mission'),
         'sections': [
