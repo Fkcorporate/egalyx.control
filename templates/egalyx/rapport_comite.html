@@ -1,10 +1,11 @@
 {% import "egalyx/_rapport_marque.html" as marque %}{% set rp = presentation_rapport() -%}
+{% set ct = contenu_rapport('comite', valeurs={'date': c.date}) -%}
 <!DOCTYPE html>
 <html lang="fr">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Rapport au comité d’audit — {{ client.nom if client else '' }} — {{ c.date }}</title>
+<title>{{ ct.titre }} — {{ client.nom if client else '' }} — {{ c.date }}</title>
 <style>
   :root { --encre: #111827; --doux: #6b7280; --trait: #e5e7eb; --marine: {{ rp.couleur('#1A3C6B') }}; --fond: #f8fafc; }
   * { box-sizing: border-box; }
@@ -48,6 +49,11 @@
   .vide { color: var(--doux); font-style: italic; }
   .pied-client { position: absolute; bottom: 12.5mm; left: 18mm; right: 18mm; font-size: 7pt; color: var(--doux); white-space: pre-line; }
   .pied { position: absolute; bottom: 8mm; left: 18mm; right: 18mm; font-size: 7.5pt; color: var(--doux); display: flex; justify-content: space-between; }
+  .ct-texte { white-space: pre-line; margin: 0; text-align: justify; }
+  .ct-signatures { display: grid; grid-template-columns: 1fr 1fr; gap: 2.2rem 3rem; margin-top: 2.5rem; }
+  .ct-signature { display: flex; flex-direction: column; font-size: 9.5pt; }
+  .ct-signature .ct-ligne { border-bottom: 1px solid var(--encre); height: 2.6rem; margin-bottom: .4rem; }
+  .ct-signature span { color: var(--doux); }
   .note { font-size: 8pt; color: var(--doux); margin-top: .3rem; }
   @page { size: A4; margin: 0; }
   @media print {
@@ -66,7 +72,7 @@
 {% set k = d.kpi %}
 
 <div class="barre-outils">
-  <span class="titre">Rapport au comité d’audit — aperçu avant impression</span>
+  <span class="titre">{{ ct.titre }} — aperçu avant impression</span>
   <button type="button" onclick="window.print()">Imprimer / enregistrer en PDF</button>
   <a href="{{ url_for('tableau_de_bord_strategique') }}">Tableau de bord</a>
 </div>
@@ -76,7 +82,7 @@
   <div class="marque">EGALYX CONTROL</div>
   <div>
     <span class="confidentiel">{{ rp.mention or 'Confidentiel — usage du comité' }}</span>
-    <h1 style="margin-top: 1rem;">Rapport au comité d’audit</h1>
+    <h1 style="margin-top: 1rem;">{{ ct.titre }}</h1>
     {% set _logo = rp.logo %}
     {% if _logo %}<div style="margin-bottom: 10px;"><span style="display: inline-block; background: #fff; border-radius: 6px; padding: 6px 10px;"><img src="{{ _logo }}" alt="" style="max-height: 52px; max-width: 220px; display: block;"></span></div>{% endif %}
     <div class="org">{{ client.nom if client else '' }}</div>
@@ -92,18 +98,25 @@
 
 {# ============================ SYNTHÈSE ============================ #}
 <div class="page">
+  {% if ct.introduction %}
+  <section class="ct-intro">
+    <h2><span class="num">{{ ct.numero('introduction') }}.</span>Introduction</h2>
+    <p class="ct-texte">{{ ct.introduction }}</p>
+  </section>
+  {% endif %}
   <section class="synthese">
-    <h2><span class="num">1.</span>Synthèse</h2>
+    <h2><span class="num">{{ ct.numero('synthese') }}.</span>Synthèse</h2>
     {% for p in synthese %}<p>{{ p }}</p>{% endfor %}
   </section>
-  {% if decisions %}
+  {% if decisions and ct.montre('decisions') %}
   <section class="decisions">
     <strong>Décisions attendues du comité</strong>
     <ol>{% for x in decisions %}<li>{{ x }}</li>{% endfor %}</ol>
   </section>
   {% endif %}
+{% if ct.montre('chiffres') %}
   <section>
-    <h2><span class="num">2.</span>Chiffres clés</h2>
+    <h2><span class="num">{{ ct.numero('chiffres') }}.</span>Chiffres clés</h2>
     <div class="kpis">
       <div class="kpi"><div class="lib">Risques critiques (net)</div><div class="val" style="color: #991b1b;">{{ k.critiques.valeur }}</div><div class="sous">{{ k.critiques.brut }} avant maîtrise {{ tendance(k.critiques.tendance) }}</div></div>
       <div class="kpi"><div class="lib">Score net moyen</div><div class="val">{{ k.score_moyen.valeur if k.score_moyen.valeur is not none else '—' }}</div><div class="sous">sur 25 {{ tendance(k.score_moyen.tendance) }}</div></div>
@@ -115,14 +128,17 @@
       <div class="kpi"><div class="lib">Recommandations échues</div><div class="val">{{ c.recommandations_retard }}</div><div class="sous">{{ c.audits }} audit(s) sur 12 mois</div></div>
     </div>
   </section>
+  {% endif %}
   {{ marque.pied(rp, classe='pied-client') }}
-  <div class="pied"><span>{{ client.nom if client else '' }} — Rapport au comité d’audit — {{ c.date }}</span><span>{{ rp.mention or 'Confidentiel' }} · Réalisé avec Egalyx</span></div>
+  <div class="pied"><span>{{ client.nom if client else '' }} — {{ ct.titre }} — {{ c.date }}</span><span>{{ rp.mention or 'Confidentiel' }} · Réalisé avec Egalyx</span></div>
 </div>
 
 {# ============================ PROFIL DE RISQUE ============================ #}
+{% if ct.montre('profil') or ct.montre('top_risques') %}
 <div class="page">
+{% if ct.montre('profil') %}
   <section>
-    <h2><span class="num">3.</span>Profil de risque</h2>
+    <h2><span class="num">{{ ct.numero('profil') }}.</span>Profil de risque</h2>
     <div class="deux">
       <div>
         <h3 style="margin-top: 0;">Effet des dispositifs de maîtrise</h3>
@@ -168,7 +184,9 @@
     </svg>
     <div class="legende"><span style="color: #991b1b;">■</span> Critiques &nbsp; <span style="color: #ea580c;">■</span> Élevés — même règle de cotation appliquée à chaque fin de mois.</div>
   </section>
+  {% endif %}
 
+{% if ct.montre('top_risques') %}
   <section>
     <h3>Risques les plus élevés</h3>
     {% if d.top_risques %}
@@ -178,14 +196,19 @@
     </tbody></table>
     {% else %}<p class="vide">Aucun risque évalué.</p>{% endif %}
   </section>
+  {% endif %}
   {{ marque.pied(rp, classe='pied-client') }}
-  <div class="pied"><span>{{ client.nom if client else '' }} — Rapport au comité d’audit — {{ c.date }}</span><span>{{ rp.mention or 'Confidentiel' }} · Réalisé avec Egalyx</span></div>
+  <div class="pied"><span>{{ client.nom if client else '' }} — {{ ct.titre }} — {{ c.date }}</span><span>{{ rp.mention or 'Confidentiel' }} · Réalisé avec Egalyx</span></div>
 </div>
 
+{% endif %}
+
 {# ============================ APPÉTENCE, PLANS, INCIDENTS ============================ #}
+{% if ct.montre('appetence') or ct.montre('plans') or ct.montre('incidents') or ct.montre('kri') %}
 <div class="page">
+{% if ct.montre('appetence') %}
   <section>
-    <h2><span class="num">4.</span>Risques au-delà de l’appétence</h2>
+    <h2><span class="num">{{ ct.numero('appetence') }}.</span>Risques au-delà de l’appétence</h2>
     {% if d.appetence and d.appetence.risques %}
     <table><thead><tr><th>Réf.</th><th>Risque</th><th>Catégorie</th><th class="num">Net</th><th class="num">Seuil</th><th class="num">Écart</th></tr></thead><tbody>
       {% for t in d.appetence.risques %}<tr><td>{{ t.risque.reference }}</td><td>{{ t.risque.intitule }}</td><td>{{ t.risque.categorie or '—' }}</td>
@@ -194,9 +217,11 @@
     {% elif d.appetence is none %}<p class="vide">L’appétence au risque n’est pas encore fixée.</p>
     {% else %}<p>Tous les risques évalués se situent dans l’appétence fixée.</p>{% endif %}
   </section>
+  {% endif %}
 
+{% if ct.montre('plans') %}
   <section>
-    <h2><span class="num">5.</span>Plans d’action en retard</h2>
+    <h2><span class="num">{{ ct.numero('plans') }}.</span>Plans d’action en retard</h2>
     {% if d.plans_retard %}
     <table><thead><tr><th>Réf.</th><th>Action</th><th>Responsable</th><th>Échéance</th><th class="num">Retard</th><th class="num">Avancement</th></tr></thead><tbody>
       {% for x in d.plans_retard %}<tr><td>{{ x.plan.reference }}</td><td>{{ x.plan.nom }}</td><td>{{ x.plan.responsable.username if x.plan.responsable else '—' }}</td>
@@ -205,29 +230,40 @@
     {% if d.nb_plans_retard > d.plans_retard|length %}<div class="note">… et {{ d.nb_plans_retard - d.plans_retard|length }} autre(s).</div>{% endif %}
     {% else %}<p>Aucun plan d’action en retard.</p>{% endif %}
   </section>
+  {% endif %}
 
+  {% if ct.montre('incidents') or ct.montre('kri') %}
   <section class="deux">
+{% if ct.montre('incidents') %}
     <div>
-      <h2><span class="num">6.</span>Incidents graves</h2>
+      <h2><span class="num">{{ ct.numero('incidents') }}.</span>Incidents graves</h2>
       {% if d.incidents_graves %}
       <table><tbody>{% for i in d.incidents_graves %}<tr><td>{{ i.date_occurrence.strftime('%d/%m') }}</td><td>{{ i.titre }}</td><td>{{ (i.gravite or '')|capitalize }}</td></tr>{% endfor %}</tbody></table>
       {% else %}<p class="vide">Aucun incident grave sur {{ c.fenetre }} jours.</p>{% endif %}
     </div>
+  {% endif %}
+{% if ct.montre('kri') %}
     <div>
-      <h2><span class="num">7.</span>Indicateurs en alerte</h2>
+      <h2><span class="num">{{ ct.numero('kri') }}.</span>Indicateurs en alerte</h2>
       {% if d.kri_alerte %}
       <table><tbody>{% for x in d.kri_alerte %}<tr><td>{{ x.kri.nom }}</td><td class="num">{{ x.valeur }} {{ x.kri.unite_mesure or '' }}</td><td style="color: {{ '#991b1b' if x.grave else '#b54708' }};">{{ x.etat|replace('_', ' ') }}</td></tr>{% endfor %}</tbody></table>
       {% else %}<p class="vide">Aucun indicateur en alerte.</p>{% endif %}
     </div>
+  {% endif %}
   </section>
+  {% endif %}
   {{ marque.pied(rp, classe='pied-client') }}
-  <div class="pied"><span>{{ client.nom if client else '' }} — Rapport au comité d’audit — {{ c.date }}</span><span>{{ rp.mention or 'Confidentiel' }} · Réalisé avec Egalyx</span></div>
+  <div class="pied"><span>{{ client.nom if client else '' }} — {{ ct.titre }} — {{ c.date }}</span><span>{{ rp.mention or 'Confidentiel' }} · Réalisé avec Egalyx</span></div>
 </div>
 
+{% endif %}
+
 {# ============================ AUDIT ET CONFORMITÉ ============================ #}
+{% if ct.montre('audit') or ct.montre('conformite') or ct.montre('methode') %}
 <div class="page">
+{% if ct.montre('audit') %}
   <section>
-    <h2><span class="num">8.</span>Audit interne (12 mois)</h2>
+    <h2><span class="num">{{ ct.numero('audit') }}.</span>Audit interne (12 mois)</h2>
     {% if audits %}
     <table><thead><tr><th>Réf.</th><th>Mission</th><th>Statut</th><th class="num">Constatations</th><th class="num">dont majeures</th><th class="num">Recommandations</th><th class="num">échues</th></tr></thead><tbody>
       {% for a in audits %}<tr><td>{{ a.audit.reference }}</td><td>{{ a.audit.titre }}</td><td>{{ (a.audit.statut or '')|replace('_', ' ')|capitalize }}</td>
@@ -241,9 +277,11 @@
     </tbody></table>
     {% endif %}
   </section>
+  {% endif %}
 
+{% if ct.montre('conformite') %}
   <section>
-    <h2><span class="num">9.</span>Conformité</h2>
+    <h2><span class="num">{{ ct.numero('conformite') }}.</span>Conformité</h2>
     <div class="kpis">
       <div class="kpi"><div class="lib">Tiers suivis (LCB-FT)</div><div class="val">{{ c.tiers }}</div><div class="sous">{{ c.tiers_renforces }} en vigilance renforcée</div></div>
       <div class="kpi"><div class="lib">Criblages à lever</div><div class="val" style="color: {{ '#b42318' if c.criblages_a_verifier else 'inherit' }};">{{ c.criblages_a_verifier }}</div><div class="sous">listes de sanctions</div></div>
@@ -252,15 +290,40 @@
     </div>
     <div class="note">Par confidentialité, aucun élément permettant d’identifier un lanceur d’alerte ou les faits signalés ne figure dans ce rapport.</div>
   </section>
+  {% endif %}
 
+{% if ct.montre('methode') %}
   <section>
-    <h2><span class="num">10.</span>Méthode</h2>
+    <h2><span class="num">{{ ct.numero('methode') }}.</span>Méthode</h2>
     <p class="note" style="font-size: 9pt;">Cotation : score brut = impact × probabilité (1 à 25) ; score net = impact × probabilité résiduelle après prise en compte du niveau de
       maîtrise. Niveaux selon les seuils de l’organisation. La synthèse est rédigée automatiquement à partir des chiffres de ce rapport, selon des règles fixes :
       elle ne contient aucune appréciation qui ne découle des données. Données extraites d’Egalyx Control le {{ genere_le.strftime('%d/%m/%Y à %H:%M') }}.</p>
   </section>
+  {% endif %}
   {{ marque.pied(rp, classe='pied-client') }}
-  <div class="pied"><span>{{ client.nom if client else '' }} — Rapport au comité d’audit — {{ c.date }}</span><span>{{ rp.mention or 'Confidentiel' }} · Réalisé avec Egalyx</span></div>
+  <div class="pied"><span>{{ client.nom if client else '' }} — {{ ct.titre }} — {{ c.date }}</span><span>{{ rp.mention or 'Confidentiel' }} · Réalisé avec Egalyx</span></div>
 </div>
+{% endif %}
+
+{# ============================ CONCLUSION ET SIGNATURES ============================ #}
+{% if ct.conclusion or (ct.signataires_regles and ct.signataires) %}
+<div class="page">
+  {% if ct.conclusion %}
+  <section>
+    <h2><span class="num">{{ ct.numero('conclusion') }}.</span>Conclusion</h2>
+    <p class="ct-texte">{{ ct.conclusion }}</p>
+  </section>
+  {% endif %}
+  {% if ct.signataires_regles and ct.signataires %}
+  <section class="ct-signatures">
+    {% for sg in ct.signataires %}
+    <div class="ct-signature"><div class="ct-ligne"></div><strong>{% if sg.nom %}{{ sg.nom }}{% else %}&nbsp;{% endif %}</strong><span>{{ sg.fonction }}</span></div>
+    {% endfor %}
+  </section>
+  {% endif %}
+  {{ marque.pied(rp, classe='pied-client') }}
+  <div class="pied"><span>{{ client.nom if client else '' }} — {{ ct.titre }} — {{ c.date }}</span><span>{{ rp.mention or 'Confidentiel' }} · Réalisé avec Egalyx</span></div>
+</div>
+{% endif %}
 </body>
 </html>

@@ -1,0 +1,103 @@
+{% extends "base.html" %}
+{% import "_macros/page.html" as pg %}
+{% block title %}Contenu des rapports{% endblock %}
+{% block styles %}{{ pg.styles() }}<style>
+  .rc-onglets { display: flex; gap: .25rem; border-bottom: 1px solid #DDE3EA; margin-bottom: 1rem; }
+  .rc-onglets a { padding: .5rem .9rem; border: 1px solid transparent; border-bottom: 0; border-radius: 6px 6px 0 0; color: #475467; text-decoration: none; font-weight: 500; }
+  .rc-onglets a[aria-current="page"] { border-color: #DDE3EA; background: #fff; color: #101828; margin-bottom: -1px; }
+  .rc-sections { display: grid; grid-template-columns: repeat(auto-fill, minmax(230px, 1fr)); gap: .35rem .9rem; }
+  .rc-champs button { font-size: .75rem; padding: .1rem .45rem; }
+  .rc-sig td { padding: .25rem .35rem; vertical-align: middle; }
+  .rc-sig[aria-disabled="true"] { opacity: .5; }
+</style>{% endblock %}
+{% block content %}
+<div class="container" style="max-width: 860px;">
+  {{ pg.entete('Contenu des rapports', 'fa-file-signature', 'Titre, sections, textes types et signataires de vos rapports. La présentation (couleur, logo, mention, pied de page) se règle dans Identité de l\'organisation.') }}
+  <nav class="rc-onglets" aria-label="Rapports">
+    {% for k, x in rapports.items() %}
+      <a href="{{ url_for('.page', rapport=k, **cible) }}" {% if k == rapport %}aria-current="page"{% endif %}>{{ x.libelle }}</a>
+    {% endfor %}
+    <a href="{{ url_for('identite.page', **cible) }}" class="ms-auto"><i class="fas fa-palette me-1"></i>Présentation</a>
+  </nav>
+
+  <form method="post" id="rc-form">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    {% call pg.carte('Titre du document') %}
+      <input class="form-control" name="titre" maxlength="{{ titre_max }}" value="{{ r.titre }}" placeholder="{{ d.titre }}" aria-label="Titre du document">
+      <div class="pg-second mt-1">Laissez vide pour garder « {{ d.titre }} ».</div>
+    {% endcall %}
+
+    {% call pg.carte('Sections affichées') %}
+      <div class="rc-sections">
+        {% for k, lib, num in d.sections %}
+          <div class="form-check">
+            <input class="form-check-input" type="checkbox" name="sections" value="{{ k }}" id="s_{{ k }}"
+                   {{ 'checked' if k not in r.masquees }} {{ 'disabled' if k in obligatoires }}>
+            {% if k in obligatoires %}<input type="hidden" name="sections" value="{{ k }}">{% endif %}
+            <label class="form-check-label" for="s_{{ k }}">{{ lib }}{% if k in obligatoires %} <span class="text-muted small">(toujours affichée)</span>{% endif %}</label>
+          </div>
+        {% endfor %}
+      </div>
+      <div class="pg-second mt-2">La numérotation{% if rapport == 'audit' %} et le sommaire suivent{% else %} suit{% endif %} les sections affichées.</div>
+    {% endcall %}
+
+    {% call pg.carte('Textes types') %}
+      <div class="rc-champs mb-2 small">Champs remplis automatiquement :
+        {% for c, lib in champs %}<button type="button" class="btn btn-outline-secondary me-1" data-champ="{{ '{' ~ c ~ '}' }}" title="{{ lib }}">{{ '{' ~ c ~ '}' }}</button>{% endfor %}
+        <span class="text-muted">(cliquez pour l'insérer dans le texte en cours)</span>
+      </div>
+      <label class="form-label small fw-semibold" for="introduction">Introduction</label>
+      <textarea class="form-control mb-1" id="introduction" name="introduction" rows="4" maxlength="{{ texte_max }}"
+        placeholder="Ex. : Le présent rapport rend compte de la mission {reference} — {mission}, conduite par la Direction de l'audit interne de {organisation}.">{{ r.introduction }}</textarea>
+      <div class="pg-second mb-3">Ajoutée en tête du rapport, comme première section. Vide : pas d'introduction.</div>
+      <label class="form-label small fw-semibold" for="conclusion">Conclusion</label>
+      <textarea class="form-control mb-1" id="conclusion" name="conclusion" rows="4" maxlength="{{ texte_max }}"
+        placeholder="Ex. : Nous remercions les équipes pour leur disponibilité. Le suivi des recommandations sera présenté au prochain comité d'audit.">{{ r.conclusion }}</textarea>
+      <div class="pg-second">{% if rapport == 'audit' %}Placée juste avant la validation.{% else %}Placée en fin de rapport, avec les signataires.{% endif %} {{ texte_max }} caractères au maximum par texte.</div>
+    {% endcall %}
+
+    {% call pg.carte('Signataires') %}
+      <div class="form-check mb-2">
+        <input class="form-check-input" type="checkbox" id="sig_regles" name="sig_regles" value="1" {{ 'checked' if r.signataires_regles }}>
+        <label class="form-check-label" for="sig_regles">Choisir les signataires de ce rapport</label>
+      </div>
+      <div class="pg-second mb-2">
+        {% if rapport == 'audit' %}Sinon : l'auditeur principal et le responsable qualité de la mission, avec leur nom.{% else %}Sinon : pas de bloc de signature.{% endif %}
+        Le nom est facultatif : sans nom, une ligne est laissée pour signer à la main.
+      </div>
+      <table class="table table-sm rc-sig mb-0" id="rc-sig" aria-disabled="{{ 'false' if r.signataires_regles else 'true' }}">
+        <thead><tr><th style="width: 52%;">Fonction</th><th>Nom (facultatif)</th></tr></thead>
+        <tbody>
+        {% for i in range(sig_max) %}{% set s = r.signataires[i] if i < r.signataires|length else none %}
+          <tr>
+            <td><input class="form-control form-control-sm" name="sig_fonction" maxlength="80" value="{{ s.fonction if s else '' }}" aria-label="Fonction du signataire {{ i + 1 }}" placeholder="{{ 'Directeur de l\'audit interne' if i == 0 else '' }}"></td>
+            <td><input class="form-control form-control-sm" name="sig_nom" maxlength="80" value="{{ s.nom if s else '' }}" aria-label="Nom du signataire {{ i + 1 }}"></td>
+          </tr>
+        {% endfor %}
+        </tbody>
+      </table>
+    {% endcall %}
+
+    <div class="d-flex gap-2">
+      <button class="btn btn-primary btn-sm" name="action" value="enregistrer"><i class="fas fa-save me-1"></i>Enregistrer</button>
+      <button class="btn btn-outline-secondary btn-sm" name="action" value="reinitialiser" formnovalidate><i class="fas fa-undo me-1"></i>Rétablir le contenu d'origine</button>
+    </div>
+  </form>
+</div>
+<script>
+(function () {
+  var dernier = document.getElementById('introduction');
+  ['introduction', 'conclusion'].forEach(function (id) { document.getElementById(id).addEventListener('focus', function () { dernier = this; }); });
+  document.querySelectorAll('[data-champ]').forEach(function (b) {
+    b.addEventListener('click', function () {
+      var t = dernier, v = b.getAttribute('data-champ'), a = t.selectionStart || t.value.length, z = t.selectionEnd || a;
+      t.value = t.value.slice(0, a) + v + t.value.slice(z); t.focus(); t.selectionStart = t.selectionEnd = a + v.length;
+    });
+  });
+  var c = document.getElementById('sig_regles'), tab = document.getElementById('rc-sig');
+  function maj() { tab.setAttribute('aria-disabled', c.checked ? 'false' : 'true');
+    tab.querySelectorAll('input').forEach(function (i) { i.readOnly = !c.checked; }); }
+  c.addEventListener('change', maj); maj();
+})();
+</script>
+{% endblock %}

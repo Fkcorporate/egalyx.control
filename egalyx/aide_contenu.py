@@ -363,6 +363,27 @@ ARTICLES = [
       questions=['mettre mon logo sur les rapports', 'changer la couleur des rapports', 'ajouter confidentiel sur les rapports',
                  'personnaliser le pied de page des rapports', 'rapport aux couleurs de la banque']),
 
+    A('contenu_rapports', 'admin', 'Choisir le contenu du rapport d’audit et du rapport au comité',
+      'Pour le rapport d’audit (PDF) et le rapport au comité d’audit, votre organisation choisit le titre, les sections '
+      'affichées, un texte d’introduction et de conclusion types, et les signataires.',
+      etapes=['Menu du compte → **Identité de l’organisation** → lien « Choisir aussi le contenu » '
+              '(ou directement **Contenu des rapports**), puis l’onglet du rapport.',
+              'Saisissez un titre (vide : titre habituel) et décochez les sections à ne pas afficher ; '
+              'la numérotation et le sommaire suivent.',
+              'Rédigez l’introduction et la conclusion types. Les champs {organisation}, {date}, et pour l’audit '
+              '{reference} et {mission}, sont remplis automatiquement à chaque rapport.',
+              'Cochez « Choisir les signataires » et indiquez jusqu’à 4 fonctions (le nom est facultatif : sans nom, '
+              'une ligne reste pour signer à la main), puis **Enregistrer**.'],
+      notes=['« Rétablir le contenu d’origine » annule tous ces choix pour le rapport affiché.',
+             'La synthèse du rapport au comité et le résumé exécutif du rapport d’audit sont toujours affichés.',
+             'Chaque changement est journalisé et ne concerne que votre organisation.'],
+      mots=['contenu', 'section', 'sections', 'masquer', 'signataire', 'signataires', 'signature', 'introduction',
+            'conclusion', 'titre', 'sommaire', 'rapport', 'comite', 'modele', 'texte'],
+      liens=[('Contenu des rapports', 'rapport_contenu.page')], pour='admin',
+      questions=['changer les signataires du rapport d audit', 'masquer une section du rapport au comite',
+                 'ajouter une introduction au rapport', 'changer le titre du rapport d audit',
+                 'personnaliser le contenu des rapports']),
+
     A('application_telephone', 'admin', 'Installer Egalyx sur mon téléphone',
       'Egalyx s’installe comme une application, sans passer par un magasin : icône sur l’écran d’accueil, plein écran, '
       'ouverture sur « Ma semaine », raccourci « Signaler un incident ».',

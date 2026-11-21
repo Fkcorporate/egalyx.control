@@ -122,6 +122,75 @@ for nom, url in RAPPORTS.items():
     st, h = page(admin, url)
     verif(f'{nom} : de nouveau sans bandeau ni couleur', 'rp-marque' not in h and '#0E6B4F' not in h)
 
+print('--- Contenu des rapports (niveau 2)')
+from werkzeug.datastructures import MultiDict
+st, h = page(admin, '/organisation/rapports/audit')
+verif('page « Contenu des rapports » : administrateur', st == 200 and 'Sections affichées' in h and 'Signataires' in h, st)
+st, _ = page(lecteur, '/organisation/rapports/comite')
+verif('page « Contenu des rapports » : refusée au simple utilisateur', st == 403, st)
+st, _ = page(admin, '/organisation/rapports/inconnu')
+verif('rapport inconnu : 404', st == 404, st)
+st, h = page(admin, '/organisation/identite/')
+verif('lien depuis Identité de l\'organisation', '/organisation/rapports/' in h)
+
+def regler_contenu(c, rapport, champs):
+    donnees = MultiDict([('csrf_token', jeton(c))] + champs)
+    return socle.appel(c, 'post', f'/organisation/rapports/{rapport}', data=donnees)
+
+r = regler_contenu(admin, 'comite', [('titre', 'Rapport trimestriel au comité des risques'),
+    ('sections', 'chiffres'), ('sections', 'audit'),
+    ('introduction', 'Situation de {organisation} au {date}. {inconnu} reste tel quel.'),
+    ('conclusion', 'Le comité est invité à prendre acte.'),
+    ('sig_regles', '1'), ('sig_fonction', 'Président du comité'), ('sig_nom', ''), ('sig_fonction', 'Directeur de l\'audit interne'), ('sig_nom', 'Awa Koné')])
+verif('contenu du rapport au comité enregistré', r.status_code in (302, 303), r.status_code)
+st, h = page(admin, RAPPORTS['rapport au comité'])
+verif('comité : titre choisi', 'Rapport trimestriel au comité des risques' in h and '<h1 style="margin-top: 1rem;">Rapport au comité' not in h)
+verif('comité : synthèse toujours affichée (obligatoire)', 'Synthèse</h2>' in h)
+verif('comité : sections masquées absentes', 'Profil de risque' not in h and 'Méthode</h2>' not in h and 'Conformité</h2>' not in h)
+verif('comité : numérotation recalculée', '<span class="num">1.</span>Introduction' in h and '<span class="num">2.</span>Synthèse' in h
+      and '<span class="num">3.</span>Chiffres clés' in h and '<span class="num">4.</span>Audit interne' in h and '<span class="num">5.</span>Conclusion' in h)
+verif('introduction : champs remplis, champ inconnu laissé tel quel', 'Situation de Banque' in h and '{organisation}' not in h and '{inconnu} reste tel quel' in h)
+verif('comité : signataires', 'Président du comité' in h and 'Awa Koné' in h and 'class="ct-signature"' in h)
+st, h2 = page(admin_b, RAPPORTS['rapport au comité'])
+verif('autre organisation : contenu d\'origine', 'Rapport trimestriel' not in h2 and 'Profil de risque' in h2 and 'class="ct-signature"' not in h2)
+
+r = regler_contenu(admin, 'comite', [('sig_regles', '1'), ('sig_fonction', ''), ('sig_nom', 'Sans fonction')])
+with app.app_context():
+    from egalyx import rapport_contenu
+    verif('signataire sans fonction refusé', rapport_contenu.reglages(cid_a, 'comite')['titre'] == 'Rapport trimestriel au comité des risques')
+r = regler_contenu(admin, 'comite', [('introduction', 'x' * 1600)])
+with app.app_context():
+    verif('texte trop long refusé', len(rapport_contenu.reglages(cid_a, 'comite')['introduction']) < 1600)
+regler_contenu(admin, 'comite', [('introduction', '<script>alert(2)</script>'), ('sections', 'chiffres')])
+st, h = page(admin, RAPPORTS['rapport au comité'])
+verif('texte type : HTML échappé', '<script>alert(2)' not in h and '&lt;script&gt;alert(2)' in h)
+with app.app_context():
+    n = M.JournalActiviteClient.query.filter_by(action='contenu_rapport').count()
+verif('réglages du contenu journalisés', n >= 2, n)
+
+with app.app_context():
+    ct = rapport_contenu.Contenu('audit', {'titre': '', 'masquees': ['tests', 'sommaire'], 'introduction': 'Intro {reference}',
+                                           'conclusion': 'Fin', 'signataires': [], 'signataires_regles': False},
+                                 {'reference': 'AUD-1', 'organisation': 'X', 'date': '01/01/2026', 'mission': 'M'})
+    verif('rapport d\'audit : numérotation (intro, résumé, constatations…, conclusion avant validation)',
+          [ct.numero(k) for k in ('introduction', 'resume', 'tests', 'constatations', 'conclusion', 'validation')] == [1, 2, '', 3, 6, 7]
+          and ct.introduction == 'Intro AUD-1' and not ct.montre('sommaire'), ct.sommaire())
+    verif("rapport d'audit : titre d'origine sans réglage", ct.titre == "Rapport d'Audit")
+r = regler_contenu(admin, 'comite', [('action', 'reinitialiser')])
+st, h = page(admin, RAPPORTS['rapport au comité'])
+verif('« Rétablir le contenu d\'origine »', 'Rapport trimestriel' not in h and 'Profil de risque' in h and 'class="ct-signature"' not in h)
+GABARITS_CONTENU = ['audit/rapport_pdf.html', 'egalyx/rapport_comite.html']
+verif('rapport d\'audit et rapport au comité suivent le contenu choisi',
+      all("contenu_rapport('" in open(os.path.join(app.template_folder, g), encoding='utf-8').read() for g in GABARITS_CONTENU))
+
+print('--- Exports PDF sans WeasyPrint')
+for u in ('/incidents/export/pdf', '/dispositifs/rapport'):
+    r = socle.appel(admin, 'get', u)
+    with admin.session_transaction() as ss:
+        fl = ss.get('_flashes') or []
+    verif(f'{u} : version imprimable (et plus de message d\'erreur)', r.status_code == 200 and b'eg-pdf-secours' in r.data
+          and not any('WeasyPrint' in m for _, m in fl), r.status_code)
+
 print('--- Rapports branchés')
 GABARITS = ['audit/rapport_pdf.html', 'audit/rapport_complet.html', 'egalyx/rapport_comite.html', 'rapports/cartographie_pdf.html',
             'kri/rapport_pdf.html', 'incidents/export_pdf.html', 'c2n/plan_action_export_pdf.html', 'rapport_dispositifs.html',

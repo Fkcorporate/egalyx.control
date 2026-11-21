@@ -6,12 +6,14 @@ WeasyPrint, absent de requirements.txt (il demande des bibliothèques système).
 tombaient en erreur 500. Ici, si WeasyPrint manque, on installe un remplaçant minimal : le document HTML préparé
 pour le PDF est affiché tel quel, avec un bandeau « Imprimer / Enregistrer en PDF » (le navigateur fait le PDF).
 Si WeasyPrint est installé, ce module ne fait rien.
+Certaines pages attrapent toutes les erreurs (« except Exception ») et renvoient vers une autre page avec un message
+d'échec : le document préparé est alors gardé pour la requête (g) et affiché quand même, sans ce message.
 """
 import importlib.util
 import sys
 import types
 
-from flask import Response
+from flask import Response, g, has_request_context, session
 
 BANDEAU = """<div id="eg-pdf-secours" style="position:sticky;top:0;z-index:9999;display:flex;gap:12px;align-items:center;
 padding:10px 16px;background:#FFF7E6;border-bottom:1px solid #F5D9A8;font:14px/1.4 Inter,system-ui,sans-serif;color:#14202E">
@@ -42,11 +44,16 @@ class _HTML:
             except OSError:
                 self.html = ''
 
-    def write_pdf(self, *a, **k):
+    def _lever(self):
+        if has_request_context():
+            g._egalyx_pdf_secours = (self.html, len(session.get('_flashes') or []))
         raise PdfIndisponible(self.html)
 
+    def write_pdf(self, *a, **k):
+        self._lever()
+
     def render(self, *a, **k):
-        raise PdfIndisponible(self.html)
+        self._lever()
 
 
 class _Neutre:
@@ -86,3 +93,15 @@ def enregistrer(app):
     for nom, module in _module_remplacant().items():
         sys.modules.setdefault(nom, module)
     app.register_error_handler(PdfIndisponible, page_imprimable)
+
+    @app.after_request
+    def _pdf_secours_rattrape(reponse):
+        """La page a avalé l'erreur (redirection ou erreur) : on montre quand même le document à imprimer."""
+        en_attente = g.pop('_egalyx_pdf_secours', None)
+        if en_attente is None or not (300 <= reponse.status_code < 400 or reponse.status_code >= 500):
+            return reponse
+        html, nb_messages = en_attente
+        messages = session.get('_flashes') or []
+        if len(messages) > nb_messages:
+            session['_flashes'] = messages[:nb_messages]
+        return page_imprimable(PdfIndisponible(html))

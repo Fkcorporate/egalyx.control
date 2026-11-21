@@ -177,5 +177,11 @@ def page():
 
 def enregistrer(app, construire_dashboard=None):
     app.register_blueprint(bp)
+    # Le gabarit lit la présentation et le contenu choisis par l'organisation : fonctions toujours disponibles,
+    # même si identite / rapport_contenu ne sont pas enregistrés (sinon titre et couleurs vides en silence).
+    from egalyx.identite import presentation_rapport
+    from egalyx.rapport_contenu import contenu_rapport
+    app.jinja_env.globals.setdefault('presentation_rapport', presentation_rapport)
+    app.jinja_env.globals.setdefault('contenu_rapport', contenu_rapport)
     if construire_dashboard:
         app.extensions['egalyx_dashboard_strategique'] = construire_dashboard
