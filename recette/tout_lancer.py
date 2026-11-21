@@ -52,6 +52,7 @@ ETAPES = [
     ('Statuts : une seule écriture par objet', 'statuts.py', []),
     ('Centre d\'aide et assistant complets', 'aide_complete.py', []),
     ('Interface actuelle ou harmonisée', 'interface_harmonisee.py', []),
+    ('Rapports aux couleurs de chaque organisation', 'rapports_presentation.py', []),
     ('PDF sans WeasyPrint et pages réparées', 'pdf_secours.py', []),
     ('Boutons : plus aucune adresse inexistante', 'boutons_morts.py', []),
     ('Compatibilité avec la version de Python de Render', 'compat_python.py', []),

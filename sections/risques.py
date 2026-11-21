@@ -1426,6 +1426,15 @@ def telecharger_rapport_cartographie_pdf(cartographie_id):
         'nb_risques_evalues': nb_risques_evalues,
         'progression_campagne': round(progression, 1),
         'has_matrices': matrice_classique is not None,
+        # Compteurs par niveau NET (page de garde et synthèse) : absents ici, le rapport complet plantait
+        'compteurs_net': {cle: len((tableau_bordeaux or {}).get(source) or [])
+                          for cle, source in (('critique', 'actions_prioritaires'), ('eleve', 'surveillance_renforcee'),
+                                              ('moyen', 'surveillance_courante'), ('faible', 'actions_limitees'))},
+        'stats_dispositifs': {
+            'total': total_dispositifs,
+            'efficaces': sum(1 for ds in dispositifs_par_risque.values() for d in ds if d.efficacite_reelle and d.efficacite_reelle >= 4),
+            'a_evaluer': sum(1 for ds in dispositifs_par_risque.values() for d in ds if not d.efficacite_reelle),
+        },
         # Solution de secours: ajouter campagne = None pour éviter l'erreur
         'campagne': None
     }

@@ -9,11 +9,15 @@ egalyx/identite.py — le nom et le logo de chaque organisation dans l'outil.
   - Réglable par l'administrateur de l'organisation (« Identité de l'organisation ») et par le super admin, dès la
     création du client.
   - « Egalyx » reste visible : marque en haut à gauche et mention « Réalisé avec Egalyx » sur les rapports.
+  - Présentation des rapports (PDF et pages imprimables) : couleur principale, mention de confidentialité,
+    pied de page, logo oui/non. Lue par presentation_rapport() ; chaque rapport l'applique via
+    templates/egalyx/_rapport_marque.html. Sans réglage, les rapports gardent leur présentation d'origine.
 Stockage : Client.logo (nom du fichier) et ClientConfiguration.preferences['identite'] — aucune nouvelle table.
 """
 import base64
 import io
 import os
+import re
 
 from flask import Blueprint, abort, current_app, flash, g, redirect, render_template, request, send_file, url_for
 from flask_login import current_user
@@ -26,6 +30,11 @@ CLE = 'identite'
 NOM_MAX = 30
 TAILLE_MAX = 1024 * 1024
 DIMENSIONS = (400, 160)
+MENTION_MAX = 60
+PIED_MAX = 200
+COULEUR = re.compile(r'^#[0-9A-Fa-f]{6}$')
+MENTIONS_PROPOSEES = ('Confidentiel', 'Confidentiel — usage interne', 'Diffusion restreinte',
+                      'Strictement confidentiel', 'Document interne')
 SIGNATURES = {b'\x89PNG\r\n\x1a\n': 'png', b'\xff\xd8\xff': 'jpg', b'RIFF': 'webp'}
 
 
@@ -143,6 +152,87 @@ def preparer_logo(contenu):
     return sortie.getvalue()
 
 
+# ---------------------------------------------------------------- présentation des rapports
+def _luminance(hexa):
+    def canal(c):
+        c = c / 255
+        return c / 12.92 if c <= 0.03928 else ((c + 0.055) / 1.055) ** 2.4
+    r, v, b = (int(hexa[i:i + 2], 16) for i in (1, 3, 5))
+    return 0.2126 * canal(r) + 0.7152 * canal(v) + 0.0722 * canal(b)
+
+
+def contraste_sur_blanc(hexa):
+    return 1.05 / (_luminance(hexa) + 0.05)
+
+
+def _teinte(hexa, part):
+    """Mélange la couleur avec du blanc (part = proportion de la couleur)."""
+    r, v, b = (int(hexa[i:i + 2], 16) for i in (1, 3, 5))
+    return '#%02x%02x%02x' % tuple(round(255 - (255 - c) * part) for c in (r, v, b))
+
+
+def reglages_rapports(cid):
+    r = dict((_preferences(cid).get('rapports') or {}))
+    couleur = r.get('couleur') if COULEUR.match(r.get('couleur') or '') else None
+    return {'couleur': couleur.upper() if couleur else None, 'mention': (r.get('mention') or '')[:MENTION_MAX],
+            'pied': (r.get('pied') or '')[:PIED_MAX], 'logo': r.get('logo', True) is not False}
+
+
+def presentation_rapport(cid=None):
+    """Ce que chaque rapport applique. couleur(défaut) rend la couleur du client ou celle d'origine du rapport."""
+    cid = cid if cid is not None else client_id_courant()
+    vide = {'actif': False, 'couleur_client': None, 'mention': '', 'pied': '', 'logo': None, 'nom': '', 'nom_court': '',
+            'clair': None, 'tres_clair': None}
+    if not cid:
+        res = dict(vide)
+    else:
+        cache = g.setdefault('_egalyx_rapport', {}) if _contexte_requete() else {}
+        if cid in cache:
+            return cache[cid]
+        m = _m()
+        client = m.db.session.get(m.Client, cid)
+        if client is None:
+            res = dict(vide)
+        else:
+            r = reglages_rapports(cid)
+            prefs = _preferences(cid)
+            res = {'actif': True, 'couleur_client': r['couleur'], 'mention': r['mention'], 'pied': r['pied'],
+                   'logo': logo_data_uri(cid) if r['logo'] and client.logo else None,
+                   'nom': client.nom, 'nom_court': prefs.get('nom_court') or nom_par_defaut(client.nom),
+                   'clair': _teinte(r['couleur'], .14) if r['couleur'] else None,
+                   'tres_clair': _teinte(r['couleur'], .06) if r['couleur'] else None}
+        cache[cid] = res
+
+    def couleur(defaut):
+        return res['couleur_client'] or defaut
+    res['couleur'] = couleur
+    return res
+
+
+def appliquer_rapports(cid, couleur='', mention='', pied='', logo=True):
+    """Enregistre la présentation des rapports (sans commit). Lève ValueError avec un message clair."""
+    couleur = (couleur or '').strip()
+    if couleur and not COULEUR.match(couleur):
+        raise ValueError('Couleur invalide : format #RRGGBB attendu.')
+    if couleur and contraste_sur_blanc(couleur) < 3:
+        raise ValueError('Couleur trop claire : les titres ne seraient pas lisibles sur fond blanc. Choisissez une teinte plus foncée.')
+    m = _m()
+    conf = m.ClientConfiguration.query.filter_by(client_id=cid).first()
+    if conf is None:
+        conf = m.ClientConfiguration(client_id=cid, couleurs={}, preferences={})
+        m.db.session.add(conf)
+    prefs = dict(conf.preferences or {})
+    ident = dict(prefs.get(CLE) or {})
+    ident['rapports'] = {'couleur': couleur.upper() or None,
+                         'mention': ' '.join((mention or '').split())[:MENTION_MAX],
+                         'pied': '\n'.join(' '.join(l.split()) for l in (pied or '').splitlines() if l.strip())[:PIED_MAX],
+                         'logo': bool(logo)}
+    prefs[CLE] = ident
+    conf.preferences = prefs
+    if _contexte_requete():
+        g.pop('_egalyx_rapport', None)
+
+
 def appliquer(cid, nom_court=None, logo=None, retirer_logo=False):
     """Enregistre le nom affiché et/ou le logo (sans commit). logo : octets bruts du fichier envoyé."""
     m = _m()
@@ -191,16 +281,24 @@ def page():
             appliquer(cid, nom_court=request.form.get('nom_court', ''),
                       logo=f.read(TAILLE_MAX + 1) if f and f.filename else None,
                       retirer_logo=request.form.get('retirer_logo') == '1')
+            if request.form.get('rapports') == '1':
+                appliquer_rapports(cid, couleur=request.form.get('rp_couleur', '') if request.form.get('rp_couleur_active') == '1' else '',
+                                   mention=request.form.get('rp_mention', ''), pied=request.form.get('rp_pied', ''),
+                                   logo=request.form.get('rp_logo') == '1')
         except ValueError as e:
+            _m().db.session.rollback()
             flash(str(e), 'warning')
             return redirect(url_for('.page', client_id=cid if est_super_admin() else None))
         journaliser('identite_organisation', {'nom_court': request.form.get('nom_court', '')[:NOM_MAX],
                                               'logo': bool(f and f.filename),
-                                              'retrait_logo': request.form.get('retirer_logo') == '1'}, client_id=cid)
+                                              'retrait_logo': request.form.get('retirer_logo') == '1',
+                                              'rapports': reglages_rapports(cid) if request.form.get('rapports') == '1' else None},
+                    client_id=cid)
         _m().db.session.commit()
         flash('Identité de l\'organisation enregistrée.', 'success')
         return redirect(url_for('.page', client_id=cid if est_super_admin() else None))
-    return render_template('egalyx/identite.html', ident=identite(cid), nom_max=NOM_MAX)
+    return render_template('egalyx/identite.html', ident=identite(cid), nom_max=NOM_MAX, rp=reglages_rapports(cid),
+                           mention_max=MENTION_MAX, pied_max=PIED_MAX, mentions=MENTIONS_PROPOSEES)
 
 
 @bp.route('/logo/<int:cid>')
@@ -258,3 +356,4 @@ def enregistrer(app):
     app.jinja_env.globals['identite_client'] = identite
     app.jinja_env.globals['identite_reglable'] = peut_regler
     app.jinja_env.globals['logo_client_data'] = logo_data_uri
+    app.jinja_env.globals['presentation_rapport'] = presentation_rapport

@@ -344,6 +344,25 @@ ARTICLES = [
       liens=[('Identité de l’organisation', 'identite.page')], pour='admin',
       questions=['mettre mon logo', 'changer le nom affiche', 'personnaliser l outil']),
 
+    A('presentation_rapports', 'admin', 'Mettre les rapports aux couleurs de mon organisation',
+      'Les rapports PDF et imprimables reprennent votre logo, votre couleur, votre mention de confidentialité et votre '
+      'pied de page : rapport d’audit (PDF et complet), rapport au comité d’audit, cartographie des risques, KRI, '
+      'incidents, plans d’action N2, logigrammes, dispositifs de contrôle, organigramme, feuilles de travail et audits qualité.',
+      etapes=['Menu du compte → **Identité de l’organisation**, section **Présentation des rapports**.',
+              'Cochez la case de la couleur et choisissez une teinte assez foncée (les couleurs trop claires sont refusées).',
+              'Choisissez une mention de confidentialité (« Confidentiel — usage interne », « Diffusion restreinte »…) '
+              'et, si vous le souhaitez, un pied de page (raison sociale, direction, adresse).',
+              'Gardez ou décochez « Afficher le logo sur les rapports », puis **Enregistrer** : l’aperçu montre le résultat, '
+              'et tous les rapports suivants l’appliquent.'],
+      notes=['Sans réglage, les rapports gardent leur présentation habituelle.',
+             'Les réglages ne concernent que votre organisation ; ils sont journalisés.',
+             'La lettre de mission garde ses propres en-têtes (réglés par le super-administrateur).'],
+      mots=['rapport', 'rapports', 'couleur', 'logo', 'confidentiel', 'confidentialite', 'mention', 'pied', 'page',
+            'charte', 'presentation', 'personnaliser', 'pdf', 'entete'],
+      liens=[('Identité de l’organisation', 'identite.page')], pour='admin',
+      questions=['mettre mon logo sur les rapports', 'changer la couleur des rapports', 'ajouter confidentiel sur les rapports',
+                 'personnaliser le pied de page des rapports', 'rapport aux couleurs de la banque']),
+
     A('application_telephone', 'admin', 'Installer Egalyx sur mon téléphone',
       'Egalyx s’installe comme une application, sans passer par un magasin : icône sur l’écran d’accueil, plein écran, '
       'ouverture sur « Ma semaine », raccourci « Signaler un incident ».',
