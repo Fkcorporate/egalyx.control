@@ -46,15 +46,18 @@
       var fond = rgb(cs.backgroundColor);
       var texteClair = clair(rgb(cs.color));
       var b = el.getBoundingClientRect();
-      var dejaPlat = el.parentElement && el.parentElement.closest('.eg-plat');
+      var dejaPlat = el.parentElement && el.parentElement.closest('.eg-plat, .eg-bandeau, .pg-entete');
+      var dansBande = el.parentElement && el.parentElement.closest('.eg-bandeau, .pg-entete');
       if ((cs.webkitBackgroundClip || cs.backgroundClip) === 'text') { el.classList.add('eg-texte-plat'); continue; }
       if (degrade && el.matches('thead, thead tr, thead th, tr, th')) { el.classList.add('eg-thead'); continue; }
       var bandeauPossible = !dejaPlat && b.width >= 0.55 * largeur && b.height >= 56 && (b.top + window.scrollY - haut) < 360 &&
         !el.matches('.card-header, .fk-card-header, .modal-header, .modal-content, thead, tr, th, td, .table, .btn');
       if (degrade || (bandeauPossible && texteClair && foncePlein(fond))) {
         el.style.setProperty('background-image', 'none', 'important');
-        if (bandeauPossible) {
-          el.classList.add('eg-plat', 'eg-bandeau');
+        if (dansBande && !el.matches('.btn, [class*="btn-"], .badge')) {
+          el.classList.add('eg-dans-bande');            // tuile ou pastille posée dans la bande de titre
+        } else if (bandeauPossible) {
+          el.classList.add('eg-bandeau');
         } else if (!dejaPlat && (texteClair || el.querySelector('.text-white')) && b.width >= 110 && b.height >= 44 && !el.matches('.btn, .badge')) {
           el.classList.add('eg-plat');
           // la couleur d'origine de la tuile reste en repère discret à gauche (rouge = critique, orange = retard…)
@@ -125,7 +128,15 @@
       if (el.dataset.egC || el.closest(IGNORER + ', .badge, .navbar, .dropdown-menu')) { continue; }
       el.dataset.egC = '1';
       var cs = getComputedStyle(el);
-      if (!clair(rgb(cs.color))) { continue; }
+      var couleur = rgb(cs.color);
+      if (couleur && !clair(couleur) && (0.299 * couleur.r + 0.587 * couleur.g + 0.114 * couleur.b) / 255 < 0.4) {
+        var f0 = fondEffectif(el);
+        if (f0 && (0.299 * f0.r + 0.587 * f0.g + 0.114 * f0.b) / 255 < 0.3 && el.closest('.eg-bandeau, .pg-entete')) {
+          el.style.setProperty('color', '#FFFFFF', 'important');      // texte foncé posé sur la bande marine
+        }
+        continue;
+      }
+      if (!clair(couleur)) { continue; }
       var aDuTexte = el.tagName === 'I' || el.tagName === 'svg' || Array.prototype.some.call(el.childNodes, function (n) {
         return n.nodeType === 3 && n.textContent.trim();
       });
@@ -139,16 +150,125 @@
     }
   }
 
+  // Page sans bande de titre : l'en-tête qui porte le premier grand titre devient la bande
+  function bandeTitre(main) {
+    if (!main || main.querySelector('.eg-bandeau, .pg-entete')) { return; }
+    var haut = main.getBoundingClientRect().top, h = null;
+    var titres = main.querySelectorAll('h1, h2, h3, h4, .h1, .h2, .h3, .h4, .page-title');
+    for (var i = 0; i < titres.length && !h; i++) {
+      var t = titres[i];
+      if (t.getBoundingClientRect().top - haut > 320) { break; }
+      if (t.closest('.modal, table, form, .dropdown-menu, .alert') || !t.getBoundingClientRect().height) { continue; }
+      var carte = t.closest('.card, .fk-card, .eg-plat');
+      if (carte) {
+        // carte d'en-tête (titre de la page, quelques boutons) : elle devient la bande
+        var rc = carte.getBoundingClientRect();
+        if (rc.top - haut < 200 && rc.height <= 300 && !carte.querySelector('table, canvas, input:not([type=hidden]), select, textarea')
+            && carte.getBoundingClientRect().width >= 0.55 * main.getBoundingClientRect().width && !t.closest('.card-header, .fk-card-header')) {
+          carte.classList.add('eg-bandeau');
+          return;
+        }
+        continue;
+      }
+      h = t;
+    }
+    if (!h) {
+      // titre dans l'en-tête de la première carte : cet en-tête devient la bande
+      var tete = main.querySelector('.card-header, .fk-card-header');
+      if (tete && !tete.closest('.modal, .dropdown-menu') && tete.getBoundingClientRect().height
+          && tete.getBoundingClientRect().top - haut < 200 && tete.querySelector('h1, h2, h3, h4, h5, .h3, .h4, .h5, .card-title')
+          && tete.getBoundingClientRect().width >= 0.55 * main.getBoundingClientRect().width && !tete.querySelector('.nav-tabs, .nav-pills')) {
+        tete.classList.add('eg-bandeau', 'eg-bandeau-tete');
+      }
+      return;
+    }
+    // largeur de référence : la colonne de la page (pages étroites et centrées), sinon toute la zone principale
+    var largeurMain = main.getBoundingClientRect().width, choisi = h;
+    for (var a = h.parentElement; a && a !== main; a = a.parentElement) {
+      var la = a.getBoundingClientRect().width;
+      if (la >= 0.4 * main.getBoundingClientRect().width && (getComputedStyle(a).maxWidth !== 'none' || a.matches('[class*="container"], [class*="col-lg-"], [class*="col-md-"], [class*="col-xl-"]'))) {
+        largeurMain = la; break;
+      }
+    }
+    for (var x = h.parentElement; x && x !== main && !x.matches('main, .container-fluid > .row, body'); x = x.parentElement) {
+      var r = x.getBoundingClientRect();
+      if (r.height > 240 || x.querySelector('table, canvas, .card, .fk-card, form .form-control, .row .col-md-3')) { break; }
+      choisi = x;
+      if (r.width >= 0.55 * largeurMain && x.querySelector('.btn, .breadcrumb, p, small') ) { break; }
+    }
+    if (choisi.getBoundingClientRect().width < 0.55 * largeurMain) { return; }
+    if (choisi === h && h.parentElement && h.parentElement.querySelector('.card, .fk-card, form, table')) {
+      // titre posé seul dans la colonne : on le regroupe avec son lien de retour et son sous-titre
+      var petit = function (e) {
+        return e && e.nodeType === 1 && !e.matches('.card, .fk-card, form, table, .row, .alert, script, style, .modal')
+          && !e.querySelector('.card, form, table, input, select, textarea, canvas') && e.getBoundingClientRect().height < 90;
+      };
+      var groupe = [h], e2;
+      for (e2 = h.previousElementSibling; petit(e2) && groupe.length < 4; e2 = e2.previousElementSibling) { groupe.unshift(e2); }
+      for (e2 = h.nextElementSibling; petit(e2) && groupe.length < 5; e2 = e2.nextElementSibling) { groupe.push(e2); }
+      var bande = document.createElement('div');
+      bande.className = 'eg-bandeau eg-bandeau-cree';
+      h.parentElement.insertBefore(bande, groupe[0]);
+      groupe.forEach(function (x) { bande.appendChild(x); });
+      return;
+    }
+    choisi.classList.add('eg-bandeau');
+  }
+
+  // Graphiques (Chart.js) : même police, mêmes couleurs de texte et de grille que le reste
+  function graphiques() {
+    var C = window.Chart;
+    if (!C || !C.version || parseInt(C.version, 10) < 3) { return; }      // Chart.js 2 : on n'y touche pas
+    try {
+      if (C.defaults && C.defaults.font) {
+        C.defaults.font.family = 'Inter, system-ui, sans-serif'; C.defaults.color = '#5D6B7C'; C.defaults.borderColor = '#EDF1F5';
+      }
+      var liste = C.instances ? (Array.isArray(C.instances) ? C.instances : Object.values(C.instances)) : [];
+      var objet = function (o, k) { if (!o[k] || typeof o[k] !== 'object') { o[k] = {}; } return o[k]; };
+      var police = { family: 'Inter, system-ui, sans-serif', size: 12 };
+      liste.forEach(function (g) {
+        if (!g.config || !g.config.options) { return; }
+        var o = g.config.options;                 // options écrites par la page (pas les options calculées)
+        var type = g.config.type || '';
+        try {
+          var legende = objet(objet(o, 'plugins'), 'legend'), etiquettes = objet(legende, 'labels');
+          etiquettes.usePointStyle = true; etiquettes.boxWidth = 8; etiquettes.boxHeight = 8; etiquettes.color = '#5D6B7C'; etiquettes.font = police;
+          var bulle = objet(o.plugins, 'tooltip');
+          bulle.backgroundColor = '#0B1F3A'; bulle.titleColor = '#FFFFFF'; bulle.bodyColor = '#E2E8F0'; bulle.cornerRadius = 6; bulle.padding = 10;
+          Object.keys(o.scales || {}).forEach(function (k) {
+            var sc = o.scales[k];
+            if (!sc || typeof sc !== 'object' || Array.isArray(sc)) { return; }
+            objet(sc, 'grid').color = '#EDF1F5';
+            objet(sc, 'border').color = '#DDE3EA';
+            var tk = objet(sc, 'ticks'); tk.color = '#5D6B7C'; tk.font = { family: police.family, size: 11 };
+          });
+          ((g.config.data && g.config.data.datasets) || []).forEach(function (d) {
+            if (/doughnut|pie|polar/.test(type)) { d.borderColor = '#FFFFFF'; d.borderWidth = 2; d.hoverOffset = 4; }
+            if (/bar/.test(type)) { d.borderRadius = 4; d.borderSkipped = false; }
+            if (/line/.test(type)) { d.borderWidth = 2; if (d.pointRadius !== 0) { d.pointRadius = 3; } }
+          });
+          if (/doughnut|pie/.test(type) && !o.cutout) { o.cutout = '62%'; }
+          g.update('none');
+        } catch (e) { /* un graphique particulier reste comme il était */ }
+      });
+    } catch (e) { /* Chart.js absent ou ancien */ }
+  }
+
   function lancer() {
     if (!document.documentElement.classList.contains('ui-h')) { return; }
     aplatir(document.querySelector('main') || document.body);
+    bandeTitre(document.querySelector('main'));
+    document.querySelectorAll('main .eg-bandeau, main .pg-entete').forEach(function (b) {
+      b.querySelectorAll('[data-eg-c]').forEach(function (x) { delete x.dataset.egC; });
+      contraste(b);                                      // la bande a changé les couleurs : on revérifie dedans
+    });
     document.querySelectorAll('.modal').forEach(function (m) { aplatir(m); });
   }
   var attente = null;
   function plusTard() { clearTimeout(attente); attente = setTimeout(lancer, 120); }
 
   if (document.readyState === 'loading') { document.addEventListener('DOMContentLoaded', lancer); } else { lancer(); }
-  window.addEventListener('load', plusTard);
+  window.addEventListener('load', function () { plusTard(); setTimeout(graphiques, 300); setTimeout(graphiques, 1500); });
   document.addEventListener('shown.bs.modal', plusTard);
   document.addEventListener('shown.bs.tab', plusTard);
   // listes chargées après coup (filtres, pagination, tableaux dynamiques)

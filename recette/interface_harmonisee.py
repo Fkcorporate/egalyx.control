@@ -101,6 +101,22 @@ regler(cid_a, 'classique')
 with Muet():
     h = ca.get('/aide/fiche/guide-plans-action').get_data(as_text=True)
 verif('organisation en interface actuelle : captures actuelles', 'aide/guide/plans_audit.webp' in h and 'harmonisee/plans_audit' not in h)
+print('--- Tableau de bord et bandes de titre')
+regler(cid_a, 'harmonisee')
+with Muet():
+    h = ca.get('/dashboard', follow_redirects=True).get_data(as_text=True)
+verif('accueil harmonisé : bloc « Vos modules »', 'Vos modules' in h and h.count('tn-mod') >= 5, h.count('tn-mod'))
+verif('… avec les modules du tableau classique', all(m in h for m in ('Risques', 'Incidents', 'Audits', 'Plans d’action' if 'Plans d’action' in h else 'Plans d')), '')
+verif('accueil harmonisé : bande de titre', 'tn-bande eg-bandeau' in h)
+regler(cid_a, 'classique')
+with Muet():
+    h2 = ca.get('/dashboard', follow_redirects=True).get_data(as_text=True)
+verif('interface actuelle : tableau de bord d’origine', 'Vos modules' not in h2)
+regler(cid_a, 'harmonisee')
+js = open(os.path.join(app.static_folder, 'js/egalyx-harmonise.js'), encoding='utf-8').read()
+css = open(os.path.join(app.static_folder, 'css/egalyx-harmonise.css'), encoding='utf-8').read()
+verif('bande de titre posée sur chaque page (script)', 'function bandeTitre' in js and 'eg-bandeau-tete' in js and 'eg-bandeau-cree' in js)
+verif('bande de titre : style marine', '.eg-bandeau.eg-bandeau.eg-bandeau' in css and 'eg-bandeau-tete' in css)
 for f in ('css/egalyx-harmonise.css', 'js/egalyx-harmonise.js'):
     verif(f'fichier {f} présent', os.path.exists(os.path.join(app.static_folder, f)))
 
