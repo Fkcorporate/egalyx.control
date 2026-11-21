@@ -199,6 +199,108 @@ def _activite(cid):
     return out
 
 
+# ------------------------------------------------------------------ tous les modules (mêmes chiffres que l'interface actuelle)
+_ORIGINE_DASHBOARD = None
+
+# clé : (libellé, icône, ton)  — ton = couleur discrète de l'icône
+LIBELLES_MODULES = {
+    'risques': ('Risques', 'fa-triangle-exclamation', 'bleu'),
+    'kri': ('Indicateurs de risque (KRI)', 'fa-chart-line', 'vert'),
+    'logigrammes': ('Logigrammes', 'fa-diagram-project', 'cyan'),
+    'veille': ('Veille réglementaire', 'fa-scale-balanced', 'orange'),
+    'incidents': ('Incidents', 'fa-bolt', 'rouge'),
+    'tickets': ('Tickets support', 'fa-headset', 'ardoise'),
+    'campagnes': ('Campagnes de contrôle', 'fa-clipboard-check', 'violet'),
+    'audit': ('Audits', 'fa-magnifying-glass-chart', 'indigo'),
+    'plans_action': ("Plans d'action", 'fa-list-check', 'cyan'),
+    'controle_n2': ('Contrôle interne N2', 'fa-user-check', 'indigo'),
+    'pca': ('Continuité (PCA)', 'fa-life-ring', 'orange'),
+}
+
+
+def _tuile(key, d):
+    """Chiffre principal, détail et part en alerte de chaque module, comme les cartes de l'interface actuelle."""
+    g = lambda *ch, defaut=0: _cle(d, ch, defaut)
+    if key == 'risques':
+        v, n = g('total_risques'), g('risques_critiques_count')
+        return v, f"{n} critique{'s' if n > 1 else ''} (net)", n > 0, g('pourcentage_critiques')
+    if key == 'kri':
+        v, n = g('total_kri'), g('kri_alertes')
+        return v, f'{n} en alerte', n > 0, round(n * 100 / v) if v else 0
+    if key == 'logigrammes':
+        v, n = g('total_logigrammes'), g('logigrammes_actifs')
+        return v, f'{n} actif{"s" if n > 1 else ""}', False, round(n * 100 / v) if v else 0
+    if key == 'veille':
+        v, n = g('veilles_actives'), g('actions_retardees')
+        return v, f'{n} action{"s" if n > 1 else ""} en retard', n > 0, round(n * 100 / v) if v else 0
+    if key == 'incidents':
+        v, n = g('stats_incidents', 'total'), g('stats_incidents', 'critiques')
+        return v, f'{n} critique{"s" if n > 1 else ""}', n > 0, round(n * 100 / v) if v else 0
+    if key == 'tickets':
+        v = g('tickets_nouveaux')
+        return v, 'en attente de traitement', v > 0, 100 if v else 0
+    if key == 'campagnes':
+        v, n = g('stats_campagnes', 'total'), g('stats_campagnes', 'en_cours')
+        return v, f'{n} en cours', False, g('stats_campagnes', 'taux_moyen')
+    if key == 'audit':
+        v, n, t = g('total_audits'), g('audits_en_cours'), g('audits_termines')
+        return v, f'{n} en cours · {t} terminé{"s" if t > 1 else ""}', False, round(t * 100 / v) if v else 0
+    if key == 'plans_action':
+        v, n = g('stats_plans', 'ouverts'), g('stats_plans', 'retard')
+        return v, f'ouverts · {n} en retard', n > 0, round(n * 100 / v) if v else 0
+    if key == 'controle_n2':
+        v, n, ok = g('stats_c2n', 'total'), g('stats_c2n', 'a_valider'), g('stats_c2n', 'valides')
+        return v, f'planifiés · {n} à valider · {ok} validé{"s" if ok > 1 else ""}', n > 0, round(ok * 100 / v) if v else 0
+    if key == 'pca':
+        v, n = g('stats_pca', 'total'), g('stats_pca', 'actifs')
+        return v, f'{n} actif{"s" if n > 1 else ""}', False, round(n * 100 / v) if v else 0
+    return 0, '', False, 0
+
+
+def _cle(d, chemin, defaut=0):
+    x = d
+    for c in chemin:
+        x = x.get(c) if isinstance(x, dict) else getattr(x, c, None)
+        if x is None:
+            return defaut
+    try:
+        return int(x) if float(x).is_integer() else round(float(x), 1)
+    except (TypeError, ValueError):
+        return defaut
+
+
+def _tous_les_modules():
+    """Calcule les modules et chiffres du tableau de bord d'origine (mêmes droits, mêmes modules de la formule)."""
+    from flask import current_app, template_rendered
+    if _ORIGINE_DASHBOARD is None:
+        return []
+    capte = {}
+
+    def recevoir(sender, template, context, **_):
+        if template.name == 'dashboard.html' and 'modules_visibles' in context:
+            capte['modules'] = context.get('modules_visibles') or []
+            capte['data'] = context.get('data') or {}
+    app = current_app._get_current_object()
+    template_rendered.connect(recevoir, app)
+    try:
+        _ORIGINE_DASHBOARD()
+    finally:
+        template_rendered.disconnect(recevoir, app)
+    sortie = []
+    for mod in capte.get('modules', []):
+        key = mod.get('key')
+        libelle, icone, ton = LIBELLES_MODULES.get(key, ((mod.get('titre') or key).capitalize(), mod.get('icone', 'fa-circle'), 'ardoise'))
+        valeur, detail, alerte, pct = _tuile(key, capte.get('data', {}))
+        lien = mod.get('lien')
+        try:
+            url = url_for(lien) if lien and lien in app.view_functions else None
+        except Exception:  # noqa: BLE001
+            url = None
+        sortie.append({'key': key, 'libelle': libelle, 'icone': icone, 'ton': ton, 'valeur': valeur, 'detail': detail,
+                       'alerte': alerte, 'pct': max(0, min(100, pct or 0)), 'url': url})
+    return sortie
+
+
 def _date_du_jour():
     d = _aujourdhui()
     return f'{JOURS[d.weekday()].capitalize()} {d.day} {MOIS[d.month - 1]}'
@@ -223,6 +325,7 @@ def page_nouvelle():
         'n2': _bloc('contrôles N2', lambda: _controles_n2(cid), None) if voir_n2 else None,
         'dispositifs': _bloc('dispositifs', lambda: _dispositifs(cid), None) if voir_risques else None,
         'activite': _bloc('activité', lambda: _activite(cid), []),
+        'modules': _bloc('modules', _tous_les_modules, []),
     }
     try:
         from egalyx.ma_semaine import a_traiter
@@ -242,7 +345,9 @@ def _apres_connexion():
 def enregistrer(app):
     from egalyx.apparence import apparence_nouvelle
 
+    global _ORIGINE_DASHBOARD
     origine_dashboard = app.view_functions.get('dashboard')
+    _ORIGINE_DASHBOARD = origine_dashboard
     if origine_dashboard is not None:
         def dashboard_selon_apparence(*a, **k):
             if (getattr(current_user, 'is_authenticated', False) and not getattr(current_user, 'is_operateur', False)
