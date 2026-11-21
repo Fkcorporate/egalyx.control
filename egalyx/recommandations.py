@@ -463,7 +463,7 @@ def _formulaire_externe(r):
             if r.responsable_id:
                 _notifier([r.responsable_id], f'Recommandation à mettre en œuvre : {r.reference}', r.titre, r.id, cid)
         m.db.session.commit()
-        journaliser('recommandation_externe_' + ('creee' if nouveau else 'modifiee'), {'id': r.id})
+        journaliser('recommandation_externe_' + ('creee' if nouveau else 'modifiee'), {'id': r.id}, valider=True)
         flash('Recommandation enregistrée.', 'success')
         return redirect(url_for('recommandations.externe', reco_id=r.id))
     return render_template('egalyx/recommandation_externe_form.html', r=r, f=None, sources=SOURCES,

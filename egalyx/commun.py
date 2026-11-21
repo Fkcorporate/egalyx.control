@@ -83,8 +83,10 @@ def adresse_ip():
     return (fwd.split(',')[0].strip() if fwd else request.remote_addr) or ''
 
 
-def journaliser(action, details=None, client_id=None):
-    """Trace dans journal_activite_client ; ne fait jamais échouer l'action principale."""
+def journaliser(action, details=None, client_id=None, valider=False):
+    """Trace dans journal_activite_client ; ne fait jamais échouer l'action principale.
+    La ligne est ajoutée à la session : elle est enregistrée au prochain commit de l'appelant.
+    valider=True l'enregistre tout de suite (à utiliser quand l'appelant a déjà fait son commit)."""
     try:
         from models import db, JournalActiviteClient
         cid = client_id or client_id_courant()
@@ -95,6 +97,8 @@ def journaliser(action, details=None, client_id=None):
             utilisateur_id=getattr(current_user, 'id', None) if getattr(current_user, 'is_authenticated', False) else None,
             action=action[:100], details=details or {},
             ip_address=adresse_ip()[:45], user_agent=(request.user_agent.string or '')[:500]))
+        if valider:
+            db.session.commit()
     except Exception as e:  # pragma: no cover
         current_app.logger.warning(f"Journalisation impossible ({action}) : {e}")
 

@@ -302,7 +302,7 @@ def soumettre(activite_id):
     _notifier(_gestionnaires(a.client_id), f'Procédure à valider : {a.nom}',
               f'{current_user.username} soumet la procédure « {a.nom} » à validation.', a)
     m.db.session.commit()
-    journaliser('logigramme_soumis', {'id': a.id})
+    journaliser('logigramme_soumis', {'id': a.id}, valider=True)
     flash('Procédure soumise à validation.', 'success')
     return redirect(url_for('logigrammes.suivi', activite_id=a.id))
 
@@ -331,7 +331,7 @@ def valider(activite_id):
     _notifier([a.soumis_par_id, a.proprietaire_id], f'Procédure validée : {a.nom} (v{a.version_courante})',
               f'Version {a.version_courante} validée par {current_user.username}.', a)
     m.db.session.commit()
-    journaliser('logigramme_valide', {'id': a.id, 'version': a.version_courante, 'auto': auto})
+    journaliser('logigramme_valide', {'id': a.id, 'version': a.version_courante, 'auto': auto}, valider=True)
     flash(f'Version {a.version_courante} validée. Prochaine revue : {a.date_revue_prevue.strftime("%d/%m/%Y")}.', 'success')
     return redirect(url_for('logigrammes.suivi', activite_id=a.id))
 
@@ -465,7 +465,7 @@ def convertir(processus_id):
             m.db.session.add(m.LienLogigramme(activite_id=a.id, element_source_id=correspondance[etapes[-1].id],
                                               element_cible_id=fin.id, client_id=p.client_id))
     m.db.session.commit()
-    journaliser('processus_converti_logigramme', {'processus_id': p.id, 'logigramme_id': a.id})
+    journaliser('processus_converti_logigramme', {'processus_id': p.id, 'logigramme_id': a.id}, valider=True)
     flash(f"Processus converti : {len(etapes)} étape(s), {len(acteurs)} couloir(s). Vérifiez le dessin puis soumettez-le à validation.", 'success')
     return redirect(url_for('editer_logigramme', id=a.id))
 

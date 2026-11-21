@@ -368,7 +368,7 @@ def page_droits(user_id):
         u.operateur_permissions_id = p.id
         M.db.session.commit()
         journaliser('operateur_droits', {'user_id': u.id, 'par': current_user.username,
-                                         'droits': [d for d in TOUS_DROITS if getattr(p, d)]})
+                                         'droits': [d for d in TOUS_DROITS if getattr(p, d)]}, valider=True)
         flash(f'Droits de {u.nom_affiche} enregistrés.', 'success')
         return redirect(url_for('admin_operateurs'))
     return _formulaire(u, p, nouveau=False)
@@ -425,7 +425,7 @@ def promouvoir():
     u.is_operateur = True
     u.operateur_permissions_id = p.id
     M.db.session.commit()
-    journaliser('promotion_operateur', {'user_id': u.id, 'par': current_user.username})
+    journaliser('promotion_operateur', {'user_id': u.id, 'par': current_user.username}, valider=True)
     flash(f'{u.nom_affiche} est maintenant opérateur. Il retrouve son espace opérationnel à sa prochaine page.', 'success')
     return redirect(url_for('admin_operateurs'))
 
@@ -443,7 +443,7 @@ def retrograder(user_id):
     u.is_operateur = False
     u.operateur_permissions_id = None
     M.db.session.commit()
-    journaliser('retrait_operateur', {'user_id': u.id, 'par': current_user.username})
+    journaliser('retrait_operateur', {'user_id': u.id, 'par': current_user.username}, valider=True)
     flash(f'{u.nom_affiche} n’est plus opérateur : il retrouve l’interface standard (selon ses permissions).', 'success')
     return redirect(url_for('admin_operateurs'))
 

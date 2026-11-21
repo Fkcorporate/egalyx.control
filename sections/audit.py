@@ -12195,11 +12195,17 @@ def changer_statut_audit(audit_id):
     if not check_client_access(audit):
         return jsonify({'success': False, 'message': 'Accès non autorisé'}), 403
     
-    if not current_user.can_edit_audit(audit):
+    # can_edit_audit n'existe pas sur User : la route plantait (500) pour tout non-administrateur.
+    from egalyx.audit_plus import est_gestionnaire_audit, equipe
+    if not (est_gestionnaire_audit() or current_user.id == audit.created_by or current_user.id in equipe(audit)):
         return jsonify({'success': False, 'message': 'Permission refusée'}), 403
     
-    nouveau_statut = request.form.get('statut')
-    sous_statut = request.form.get('sous_statut')
+    nouveau_statut = (request.form.get('statut') or '').strip() or None
+    sous_statut = (request.form.get('sous_statut') or '').strip() or None
+    if nouveau_statut and nouveau_statut not in ('planifie', 'en_cours', 'en_validation', 'relecture', 'valide', 'realise', 'termine', 'clos', 'annule', 'suspendu', 'archive'):
+        return jsonify({'success': False, 'message': 'Statut inconnu'}), 400
+    if sous_statut and len(sous_statut) > 50:
+        return jsonify({'success': False, 'message': 'Sous-statut trop long'}), 400
     
     ancien_statut = audit.statut
     ancien_sous_statut = audit.sous_statut

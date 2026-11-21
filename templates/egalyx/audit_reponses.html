@@ -31,10 +31,72 @@
         <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
         <button class="btn btn-sm btn-success"><i class="fas fa-stamp me-1"></i>Émettre le rapport définitif</button>
       </form>
-      <div class="small text-secondary">Possible quand chaque constat a une réponse, ou après la date limite. Ensuite, tout est figé.</div>
+      <div class="small text-secondary">Possible quand chaque constat a une réponse, ou après la date limite. Ensuite, tout le dossier est figé : feuilles de travail, tests, preuves et constats.</div>
       {% endif %}
     </div>
   {% endcall %}
+  {% endif %}
+
+  {% if a.etat_rapport == 'definitif' %}
+  {% call pg.carte('Dossier de mission') %}
+    {% if a.dossier_rouvert_le %}
+      <div class="alert alert-warning mb-3"><i class="fas fa-lock-open me-1"></i>
+        <strong>Dossier rouvert</strong> le {{ a.dossier_rouvert_le.strftime('%d/%m/%Y à %H:%M') }} — motif : {{ a.dossier_rouvert_motif }}.
+        Les feuilles de travail, tests, preuves et constats sont de nouveau modifiables ; chaque modification est tracée.</div>
+      {% if gest %}
+      <form method="post" action="{{ url_for('dossier_fige.figer', audit_id=a.id) }}">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <button class="btn btn-sm btn-success"><i class="fas fa-lock me-1"></i>Figer de nouveau le dossier</button>
+      </form>
+      {% endif %}
+    {% else %}
+      <p class="mb-2"><i class="fas fa-lock me-1 text-success"></i><strong>Dossier figé</strong> depuis le rapport définitif
+        {% if a.rapport_definitif_le %}du {{ a.rapport_definitif_le.strftime('%d/%m/%Y') }}{% endif %} :
+        feuilles de travail, tests, preuves, constats et équipe ne sont plus modifiables.
+        Le suivi des recommandations et des plans d'action continue normalement.</p>
+      {% if gest %}
+      <details>
+        <summary class="small">Rouvrir le dossier pour une correction</summary>
+        <form method="post" action="{{ url_for('dossier_fige.rouvrir', audit_id=a.id) }}" class="mt-2" style="max-width: 640px;">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+          <label class="form-label small" for="motif">Motif (conservé au dossier et communiqué à l'équipe)</label>
+          <textarea class="form-control form-control-sm mb-2" id="motif" name="motif" rows="2" minlength="15" maxlength="500" required
+            placeholder="Ex. : erreur de saisie dans le test T-04, constatée par le responsable qualité"></textarea>
+          <button class="btn btn-sm btn-outline-warning"><i class="fas fa-lock-open me-1"></i>Rouvrir le dossier</button>
+        </form>
+      </details>
+      {% endif %}
+    {% endif %}
+  {% endcall %}
+  {% endif %}
+
+  {% if a.etat_rapport == 'definitif' and satisfaction_audit is defined %}
+  {% if satisfaction_peut_repondre(a) %}
+  <div class="alert alert-info d-flex align-items-center justify-content-between gap-3 flex-wrap">
+    <span><i class="fas fa-star-half-stroke me-1"></i>La mission est terminée : votre avis aide l'audit interne à s'améliorer (2 minutes, sans votre nom).</span>
+    <a class="btn btn-sm btn-primary" href="{{ url_for('satisfaction_audit.questionnaire', audit_id=a.id) }}">Donner mon avis</a>
+  </div>
+  {% endif %}
+  {% if gest %}{% set sat = satisfaction_audit(a) %}
+  <div id="satisfaction">
+  {% call pg.carte('Satisfaction des audités') %}
+    <p class="small mb-2">{{ sat.nb }} réponse(s) sur {{ sat.invites }} audité(s) invité(s).
+      <a href="{{ url_for('satisfaction_audit.synthese') }}">Synthèse de l'année</a></p>
+    {% if sat.visible %}
+      <table class="table table-sm mb-2"><tbody>
+      {% for code, texte in sat_questions %}{% set q = sat.questions[code] %}
+        <tr><td class="small">{{ texte }}</td><td class="text-end fw-semibold" style="width: 80px;">{{ q.moyenne or '—' }}{% if q.moyenne %} / 5{% endif %}</td></tr>
+      {% endfor %}
+        <tr><td class="small fw-semibold">Moyenne générale</td><td class="text-end fw-bold">{{ sat.moyenne or '—' }}{% if sat.moyenne %} / 5{% endif %}</td></tr>
+      </tbody></table>
+      {% if sat.commentaires %}<div class="small fw-semibold mb-1">Commentaires</div>
+        <ul class="small mb-0">{% for c in sat.commentaires %}<li style="white-space: pre-line;">{{ c }}</li>{% endfor %}</ul>{% endif %}
+    {% else %}
+      <p class="text-secondary small mb-0">Les résultats s'affichent à partir de 2 réponses, pour que personne ne soit reconnaissable.</p>
+    {% endif %}
+  {% endcall %}
+  </div>
+  {% endif %}
   {% endif %}
 
   {% for c in constats %}

@@ -54,6 +54,8 @@ ETAPES = [
     ('Interface actuelle ou harmonisée', 'interface_harmonisee.py', []),
     ('Rapports aux couleurs de chaque organisation', 'rapports_presentation.py', []),
     ('Fichiers déposés conservés sur le disque persistant', 'stockage_persistant.py', []),
+    ('Audit : dossier figé après le rapport définitif, réouverture motivée', 'dossier_fige.py', []),
+    ('Audit : questionnaire de satisfaction des audités', 'satisfaction_audit.py', []),
     ('PDF sans WeasyPrint et pages réparées', 'pdf_secours.py', []),
     ('Boutons : plus aucune adresse inexistante', 'boutons_morts.py', []),
     ('Compatibilité avec la version de Python de Render', 'compat_python.py', []),

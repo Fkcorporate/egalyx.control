@@ -182,7 +182,7 @@ def rapport_provisoire(audit_id):
     _notifier(audites(a), f'Rapport provisoire : {a.reference}',
               f"Merci de répondre aux constats de l'audit « {a.titre} » avant le {a.date_limite_reponses.strftime('%d/%m/%Y')}.", a)
     m.db.session.commit()
-    journaliser('audit_rapport_provisoire', {'audit_id': a.id})
+    journaliser('audit_rapport_provisoire', {'audit_id': a.id}, valider=True)
     flash(f"Rapport provisoire émis : les audités ont jusqu'au {a.date_limite_reponses.strftime('%d/%m/%Y')} pour répondre.", 'success')
     return retour
 
@@ -205,12 +205,18 @@ def rapport_definitif(audit_id):
         return retour
     a.etat_rapport = 'definitif'
     a.rapport_definitif_le, a.rapport_definitif_par_id = datetime.utcnow(), current_user.id
+    try:
+        from egalyx.satisfaction_audit import notifier_invites
+        notifier_invites(a)            # questionnaire de satisfaction des audités
+    except Exception as e:  # le rapport définitif ne doit pas échouer pour une notification
+        from flask import current_app
+        current_app.logger.warning('Questionnaire de satisfaction non envoyé (audit %s) : %s', a.id, e)
     _notifier(audites(a) | equipe(a), f'Rapport définitif : {a.reference}',
               f"Le rapport de l'audit « {a.titre} » est définitif." +
               (f" {len(sans_reponse)} constat(s) sans réponse à la date limite." if sans_reponse else ''), a)
     m.db.session.commit()
-    journaliser('audit_rapport_definitif', {'audit_id': a.id, 'sans_reponse': len(sans_reponse)})
-    flash('Rapport définitif émis. Les réponses et les constats sont désormais figés.', 'success')
+    journaliser('audit_rapport_definitif', {'audit_id': a.id, 'sans_reponse': len(sans_reponse)}, valider=True)
+    flash('Rapport définitif émis. Le dossier de mission est figé : feuilles de travail, tests, preuves, constats et réponses.', 'success')
     return retour
 
 
@@ -299,7 +305,7 @@ def independance(audit_id):
             _notifier({u for u in [a.responsable_id] if u}, f"Conflit d'intérêts déclaré : {a.reference}",
                       f"{current_user.username} déclare un conflit d'intérêts : {details[:300]}", a)
         m.db.session.commit()
-        journaliser('audit_independance', {'audit_id': a.id, 'conflit': conflit})
+        journaliser('audit_independance', {'audit_id': a.id, 'conflit': conflit}, valider=True)
         flash('Déclaration signée.' + (" Le responsable de l'audit est prévenu du conflit déclaré." if conflit else ''), 'success')
         return redirect(url_for('audit_plus.reponses', audit_id=a.id))
     return render_template('egalyx/audit_independance.html', a=a, d=d, membre=membre, ind=etat_independance(a))

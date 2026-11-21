@@ -1,0 +1,58 @@
+{% extends "base.html" %}
+{% import "_macros/page.html" as pg %}
+{% block title %}Satisfaction des audités {{ annee }}{% endblock %}
+{% block styles %}{{ pg.styles() }}<style>
+  .ss-barre { height: 8px; border-radius: 4px; background: var(--bs-secondary-bg); overflow: hidden; min-width: 120px; }
+  .ss-barre span { display: block; height: 100%; background: var(--bs-primary); }
+  .ss-note { font-variant-numeric: tabular-nums; font-weight: 600; }
+</style>{% endblock %}
+{% block content %}
+<div class="container-fluid" style="max-width: 1100px;">
+  {{ pg.entete('Satisfaction des audités', 'fa-star-half-stroke', 'Avis recueillis en fin de mission, présentés sans nom.') }}
+  <form class="d-flex align-items-center gap-2 mb-3" method="get">
+    <label class="small" for="annee">Année</label>
+    <select class="form-select form-select-sm" id="annee" name="annee" style="width: auto;" onchange="this.form.submit()">
+      {% for y in annees %}<option value="{{ y }}" {{ 'selected' if y == annee }}>{{ y }}</option>{% endfor %}
+    </select>
+  </form>
+  <div class="pg-kpis">
+    {{ pg.kpi('Note moyenne', (total.moyenne ~ ' / 5') if total.moyenne else '—') }}
+    {{ pg.kpi('Réponses', total.nb) }}
+    {{ pg.kpi('Missions évaluées', missions|length) }}
+  </div>
+
+  {% call pg.carte('Par question') %}
+    {% if total.moyenne %}
+    <table class="table table-sm align-middle mb-0">
+      <tbody>
+      {% for code, texte in questions %}{% set q = total.questions[code] %}
+        <tr><td>{{ texte }}</td>
+          <td style="width: 160px;"><div class="ss-barre" role="img" aria-label="{{ q.moyenne or 'sans note' }} sur 5"><span style="width: {{ ((q.moyenne or 0) / 5 * 100)|round }}%;"></span></div></td>
+          <td class="ss-note text-end" style="width: 70px;">{{ q.moyenne or '—' }}</td>
+          <td class="text-secondary small text-end" style="width: 90px;">{{ q.nb }} note(s)</td></tr>
+      {% endfor %}
+      </tbody>
+    </table>
+    {% else %}
+    <p class="text-secondary mb-0">Pas encore assez de réponses cette année (il en faut au moins {{ seuil }} pour préserver l'anonymat).</p>
+    {% endif %}
+  {% endcall %}
+
+  {% call pg.carte('Par mission') %}
+    {% if missions %}
+    <table class="table table-sm align-middle mb-0">
+      <thead><tr><th>Mission</th><th class="text-end">Réponses</th><th class="text-end">Note moyenne</th></tr></thead>
+      <tbody>
+      {% for x in missions %}
+        <tr><td><a href="{{ url_for('audit_plus.reponses', audit_id=x.audit.id) }}#satisfaction">{{ x.audit.reference }} — {{ x.audit.titre }}</a></td>
+          <td class="text-end">{{ x.nb }} / {{ x.invites }}</td>
+          <td class="text-end ss-note">{% if x.moyenne %}{{ x.moyenne }} / 5{% else %}<span class="text-secondary fw-normal small">moins de {{ seuil }} réponses</span>{% endif %}</td></tr>
+      {% endfor %}
+      </tbody>
+    </table>
+    {% else %}
+    <p class="text-secondary mb-0">Aucun avis reçu en {{ annee }}. Le questionnaire part automatiquement vers les audités à l'émission du rapport définitif.</p>
+    {% endif %}
+  {% endcall %}
+</div>
+{% endblock %}

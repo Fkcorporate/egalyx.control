@@ -1,0 +1,49 @@
+{% extends "base.html" %}
+{% import "_macros/page.html" as pg %}
+{% block title %}Votre avis — {{ a.reference }}{% endblock %}
+{% block styles %}{{ pg.styles() }}<style>
+  .sa-q { padding: .85rem 0; border-bottom: 1px solid var(--bs-border-color); }
+  .sa-q:last-of-type { border-bottom: 0; }
+  .sa-q legend { font-size: .95rem; font-weight: 500; margin-bottom: .5rem; float: none; }
+  .sa-echelle { display: flex; flex-wrap: wrap; gap: .4rem; }
+  .sa-echelle label { border: 1px solid var(--bs-border-color); border-radius: 6px; padding: .3rem .65rem; font-size: .82rem; cursor: pointer; }
+  .sa-echelle input { position: absolute; opacity: 0; width: 1px; height: 1px; }
+  .sa-echelle input:checked + span { font-weight: 600; }
+  .sa-echelle label:has(input:checked) { border-color: var(--bs-primary); background: var(--bs-primary-bg-subtle); }
+  .sa-echelle label:has(input:focus-visible) { outline: 2px solid var(--bs-primary); outline-offset: 2px; }
+  .sa-echelle .sa-sans { color: var(--bs-secondary-color); }
+</style>{% endblock %}
+{% block content %}
+<div class="container" style="max-width: 820px;">
+  {{ pg.entete('Votre avis sur la mission d’audit', 'fa-star-half-stroke', a.reference ~ ' · ' ~ a.titre) }}
+  {% call pg.carte('') %}
+    <p class="mb-1">L'audit interne cherche à s'améliorer : dites-nous comment s'est passée cette mission pour vous.</p>
+    <p class="pg-second mb-0"><i class="fas fa-user-secret me-1"></i>Vos réponses sont présentées sans votre nom, et seulement
+      quand au moins deux personnes ont répondu. Toutes les questions sont facultatives.
+      {% if r %}Vous avez répondu le {{ r.repondu_le.strftime('%d/%m/%Y') }}{% if modifiable %} : vous pouvez modifier votre réponse pendant 30 jours{% endif %}.{% endif %}</p>
+  {% endcall %}
+  <form method="post">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    {% call pg.carte('Êtes-vous d’accord avec ces affirmations ?') %}
+      {% for code, texte in questions %}{% set actuelle = (r.notes or {}).get(code) if r else none %}
+      <fieldset class="sa-q" {{ 'disabled' if not modifiable }}>
+        <legend>{{ loop.index }}. {{ texte }}</legend>
+        <div class="sa-echelle">
+          {% for v, lib in echelle %}
+          <label><input type="radio" name="{{ code }}" value="{{ v }}" {{ 'checked' if actuelle == v }}><span>{{ v }} — {{ lib }}</span></label>
+          {% endfor %}
+          <label class="sa-sans"><input type="radio" name="{{ code }}" value="" {{ 'checked' if r and actuelle is none }}><span>Sans avis</span></label>
+        </div>
+      </fieldset>
+      {% endfor %}
+    {% endcall %}
+    {% call pg.carte('Commentaire') %}
+      <label class="form-label small" for="commentaire">Ce qui vous a été utile, ce qui pourrait être amélioré (facultatif)</label>
+      <textarea class="form-control" id="commentaire" name="commentaire" rows="4" maxlength="{{ commentaire_max }}" {{ 'disabled' if not modifiable }}>{{ r.commentaire if r and r.commentaire else '' }}</textarea>
+    {% endcall %}
+    {% if modifiable %}
+    <button class="btn btn-primary"><i class="fas fa-paper-plane me-1"></i>{{ 'Mettre à jour mon avis' if r else 'Envoyer mon avis' }}</button>
+    {% endif %}
+  </form>
+</div>
+{% endblock %}

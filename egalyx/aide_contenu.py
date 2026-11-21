@@ -384,6 +384,39 @@ ARTICLES = [
                  'ajouter une introduction au rapport', 'changer le titre du rapport d audit',
                  'personnaliser le contenu des rapports']),
 
+    A('dossier_fige', 'audit', 'Dossier de mission figé après le rapport définitif',
+      'Dès que le rapport définitif est émis, le dossier de mission ne se modifie plus : feuilles de travail, tests, '
+      'erreurs, preuves, constats, équipe et fiche de l’audit. C’est la règle des normes d’audit interne : le dossier '
+      'doit refléter exactement ce qui a fondé le rapport.',
+      etapes=['Le suivi continue normalement : recommandations, plans d’action, temps passé, dépôt du rapport signé, '
+              'clôture ou archivage de l’audit.',
+              'Pour une correction, un gestionnaire de l’audit ouvre la fiche de l’audit → **Constats et réponses** → '
+              '« Rouvrir le dossier pour une correction » et indique le motif (15 caractères au moins).',
+              'L’équipe est prévenue, la réouverture est journalisée avec son motif.',
+              'Une fois la correction faite : **Figer de nouveau le dossier**.'],
+      notes=['Une modification refusée affiche « le dossier de mission est figé ».',
+             'La fiche de l’audit indique « Dossier figé » ou « Dossier rouvert pour correction ».'],
+      mots=['fige', 'figer', 'verrouille', 'verrouiller', 'bloque', 'rouvrir', 'reouvrir', 'dossier', 'definitif',
+            'modifier', 'feuille', 'constat', 'correction'],
+      liens=[('Missions d’audit', 'liste_audits')],
+      questions=['je ne peux plus modifier ma feuille de travail', 'rouvrir un audit apres le rapport definitif',
+                 'le dossier de mission est fige', 'corriger un constat apres le rapport definitif']),
+
+    A('satisfaction_audites', 'audit', 'Questionnaire de satisfaction des audités',
+      'À l’émission du rapport définitif, les audités (participants et responsables des recommandations) reçoivent '
+      'une notification pour donner leur avis sur la mission : 6 affirmations notées de 1 à 5 et un commentaire.',
+      etapes=['L’audité clique sur la notification, ou sur **Donner mon avis** depuis la fiche de l’audit.',
+              'Il répond aux questions qu’il souhaite (« sans avis » possible) ; il peut modifier sa réponse pendant 30 jours.',
+              'Le gestionnaire voit les résultats de la mission dans **Constats et réponses**, et la synthèse de l’année '
+              'dans le menu Audit interne → **Satisfaction des audités**.'],
+      notes=['Les résultats sont présentés sans nom, et seulement à partir de 2 réponses.',
+             'L’équipe d’audit n’est pas invitée : elle ne s’évalue pas elle-même.'],
+      mots=['satisfaction', 'avis', 'questionnaire', 'audites', 'audite', 'enquete', 'evaluation', 'retour', 'mission',
+            'qualite', 'note'],
+      liens=[('Satisfaction des audités', 'satisfaction_audit.synthese')],
+      questions=['questionnaire de satisfaction apres un audit', 'avis des audites sur la mission',
+                 'mesurer la satisfaction des audites', 'donner mon avis sur un audit']),
+
     A('application_telephone', 'admin', 'Installer Egalyx sur mon téléphone',
       'Egalyx s’installe comme une application, sans passer par un magasin : icône sur l’écran d’accueil, plein écran, '
       'ouverture sur « Ma semaine », raccourci « Signaler un incident ».',

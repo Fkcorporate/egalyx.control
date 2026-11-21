@@ -72,6 +72,10 @@ def enregistrer_extensions(app, db, csrf=None, recalculer_cotations=None, constr
     identite.enregistrer(app)
     from egalyx import rapport_contenu
     rapport_contenu.enregistrer(app)                # contenu des rapports (sections, signataires, textes) par organisation
+    from egalyx import dossier_fige
+    dossier_fige.enregistrer(app)                   # dossier de mission figé après le rapport définitif
+    from egalyx import satisfaction_audit
+    satisfaction_audit.enregistrer(app)             # avis des audités en fin de mission
     from egalyx import photo_profil
     photo_profil.enregistrer(app)
     try:                                   # paquet facultatif : /ci (301 vers l'accueil), /debug/create-user-form (404)

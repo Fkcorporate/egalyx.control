@@ -4651,6 +4651,9 @@ class Audit(db.Model):
     date_limite_reponses = db.Column(db.Date, nullable=True)
     rapport_definitif_le = db.Column(db.DateTime, nullable=True)
     rapport_definitif_par_id = db.Column(db.Integer, nullable=True)
+    dossier_rouvert_le = db.Column(db.DateTime, nullable=True)       # dossier rouvert après le rapport définitif (egalyx/dossier_fige.py)
+    dossier_rouvert_par_id = db.Column(db.Integer, nullable=True)
+    dossier_rouvert_motif = db.Column(db.String(500), nullable=True)
     commentaires = db.Column(db.Text, nullable=True)   # écrit par l'application mais absent de la base (recette nov. 2026)
     reference = db.Column(db.String(50), nullable=False)
     titre = db.Column(db.String(200), nullable=False)
@@ -9092,6 +9095,7 @@ class Notification(db.Model):
             
             # === AUDIT ===
             'audit': f'/audit/{self.entite_id}',
+            'audit_satisfaction': f'/audit-suivi/{self.entite_id}/satisfaction',
             'constatation': f'/audit/constatation/{self.entite_id}',
             'recommandation': f'/audit/recommandation/{self.entite_id}',
             
@@ -21694,6 +21698,20 @@ class DeclarationIndependance(db.Model):
     signe_le = db.Column(db.DateTime, default=datetime.utcnow)
     user = db.relationship('User', foreign_keys=[user_id])
     __table_args__ = (db.UniqueConstraint('audit_id', 'user_id', name='uq_independance_audit_user'),)
+
+
+class SatisfactionAudit(db.Model):
+    """Réponse d'un audité au questionnaire de satisfaction de fin de mission (egalyx/satisfaction_audit.py).
+    user_id sert seulement à éviter les doublons : les résultats sont présentés sans nom."""
+    __tablename__ = 'satisfaction_audit'
+    id = db.Column(db.Integer, primary_key=True)
+    client_id = db.Column(db.Integer, db.ForeignKey('clients.id'), nullable=False, index=True)
+    audit_id = db.Column(db.Integer, db.ForeignKey('audits.id', ondelete='CASCADE'), nullable=False, index=True)
+    user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
+    notes = db.Column(db.JSON)              # {code de la question: 1..5}, question absente = « sans avis »
+    commentaire = db.Column(db.Text)
+    repondu_le = db.Column(db.DateTime, default=datetime.utcnow)
+    __table_args__ = (db.UniqueConstraint('audit_id', 'user_id', name='uq_satisfaction_audit_user'),)
 
 
 class VersionLogigramme(db.Model):

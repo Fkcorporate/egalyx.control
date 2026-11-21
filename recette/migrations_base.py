@@ -33,7 +33,8 @@ from sqlalchemy import inspect, text  # noqa: E402
 import flask_migrate  # noqa: E402
 
 DOSSIER = os.path.join(app.root_path, 'migrations')
-TETE = 'egalyx_0003_statuts'      # dernière révision (0001 : référence ; 0002 : heure, devise, lettres ; 0003 : statuts)
+TETE = 'egalyx_0005_satisfaction_audit'   # dernière révision (0001 : référence ; 0002 : heure, devise, lettres ; 0003 : statuts ;
+                                           # 0004 : dossier de mission figé ; 0005 : satisfaction des audités)
 
 
 def tables():
@@ -122,7 +123,8 @@ with app.app_context():
     cfg = Config(os.path.join(DOSSIER, 'alembic.ini')); cfg.set_main_option('script_location', DOSSIER)
     sd = ScriptDirectory.from_config(cfg)
     verif('une seule tête de révision', sd.get_heads() == [TETE], str(sd.get_heads()))
-    verif('chaîne propre : 0001 -> 0002 -> 0003', [r.revision for r in sd.walk_revisions()] == [TETE, 'egalyx_0002_localisation_lettres', 'egalyx_0001_reference'])
+    verif('chaîne propre : 0001 -> 0002 -> 0003 -> 0004 -> 0005', [r.revision for r in sd.walk_revisions()] == [
+        TETE, 'egalyx_0004_dossier_fige', 'egalyx_0003_statuts', 'egalyx_0002_localisation_lettres', 'egalyx_0001_reference'])
     try:
         with Muet():
             flask_migrate.downgrade(directory=DOSSIER, revision='base')
