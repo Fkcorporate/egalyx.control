@@ -1,1138 +1,413 @@
-{# templates/client_admin/dashboard.html #}
+{# templates/client_admin/dashboard.html
+   Tableau de bord de l'administrateur client.
+   Organisation : 1. en-tête (client + actions principales)
+                  2. « À traiter » : ce qui demande une action (tuiles cliquables)
+                  3. colonne gauche : risques critiques, activités récentes, derniers utilisateurs
+                     colonne droite : abonnement & quotas, opérateurs & permissions, outils d'administration
+   Les données viennent de la route client_admin_dashboard (app.py) : rien n'a changé côté serveur. #}
 
 {% extends "base.html" %}
 {% import "_macros/cotation.html" as cot %}
 
-{% block title %}Dashboard Admin Client - Egalyx Control{% endblock %}
+{% block title %}Administration — {{ client.nom }} - Egalyx Control{% endblock %}
+
+{# lien vers une page seulement si la route existe dans cette installation #}
+{% macro lien(endpoint) -%}
+{%- if url_exists is defined and url_exists(endpoint) -%}{{ url_for(endpoint) }}{%- endif -%}
+{%- endmacro %}
+
+{# tuile « À traiter » : chiffre, libellé, précision ; alerte = couleur d'état quand le chiffre demande une action #}
+{% macro tuile(valeur, libelle, icone, sous='', href='', alerte=False, ton='danger') -%}
+<{{ 'a' if href else 'div' }} class="ca-tuile{% if alerte %} ca-alerte ca-{{ ton }}{% endif %}"{% if href %} href="{{ href }}"{% endif %}>
+    <span class="ca-tuile-icone"><i class="fas fa-{{ icone }}"></i></span>
+    <span class="ca-tuile-texte">
+        <span class="ca-tuile-valeur">{{ valeur }}</span>
+        <span class="ca-tuile-libelle">{{ libelle }}</span>
+        {% if sous %}<span class="ca-tuile-sous">{{ sous }}</span>{% endif %}
+    </span>
+    {% if href %}<i class="fas fa-chevron-right ca-tuile-fleche"></i>{% endif %}
+</{{ 'a' if href else 'div' }}>
+{%- endmacro %}
+
+{# ligne de quota de l'abonnement #}
+{% macro quota(libelle, icone, valeur, limite) -%}
+{% set lim = limite or 0 %}
+{% set pct = ((valeur / lim * 100)|round|int) if lim > 0 else 0 %}
+<div class="ca-quota">
+    <div class="d-flex justify-content-between align-items-baseline mb-1">
+        <span class="ca-quota-libelle"><i class="fas fa-{{ icone }} me-2"></i>{{ libelle }}</span>
+        <span class="ca-quota-valeur">
+            <strong>{{ valeur }}</strong>
+            <span class="text-muted">/ {{ lim if lim > 0 else '∞' }}</span>
+        </span>
+    </div>
+    <div class="progress ca-barre" role="progressbar" aria-label="{{ libelle }}" aria-valuenow="{{ pct }}" aria-valuemin="0" aria-valuemax="100">
+        <div class="progress-bar {{ 'bg-danger' if pct >= 100 else 'bg-warning' if pct >= 80 else 'bg-primary' }}" style="width: {{ [pct, 100]|min }}%"></div>
+    </div>
+    {% if pct >= 100 %}<div class="ca-quota-note text-danger">Limite atteinte</div>
+    {% elif pct >= 80 %}<div class="ca-quota-note text-warning">{{ pct }} % utilisé</div>{% endif %}
+</div>
+{%- endmacro %}
+
+{# ligne de permission des opérateurs #}
+{% macro permission(libelle, icone, nb, total) -%}
+{% set pct = ((nb / total * 100)|round|int) if total > 0 else 0 %}
+<div class="ca-permission">
+    <div class="d-flex justify-content-between align-items-baseline mb-1">
+        <span><i class="fas fa-{{ icone }} me-2 text-muted"></i>{{ libelle }}</span>
+        <span class="ca-quota-valeur"><strong>{{ nb }}</strong><span class="text-muted"> / {{ total }}</span></span>
+    </div>
+    <div class="progress ca-barre"><div class="progress-bar bg-success" style="width: {{ pct }}%"></div></div>
+</div>
+{%- endmacro %}
 
 {% block styles %}
 {{ super() }}
 <style>
-    /* ============================================ */
-    /* ===== VARIABLES ===== */
-    /* ============================================ */
-    :root {
-        --primary-blue: #1a2a5e;
-        --primary-blue-light: #2a4a8a;
-        --gold: #c9a84c;
-        --gold-light: #f0d080;
-        --success: #10b981;
-        --danger: #ef4444;
-        --warning: #f59e0b;
-        --info: #3b82f6;
-        --gray: #6b7280;
-        --gray-light: #f3f4f6;
-        --shadow: 0 2px 12px rgba(10, 22, 40, 0.08);
-        --shadow-hover: 0 8px 24px rgba(10, 22, 40, 0.12);
-        --radius: 16px;
-        --radius-sm: 10px;
-        --transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-    }
+    .ca { --ca-trait: var(--bs-border-color, #e5e7eb); --ca-doux: var(--bs-secondary-color, #6b7280); --ca-surface: #fff;
+          --ca-fond-doux: var(--bs-tertiary-bg, #f7f8fa); --ca-marine: #1a2a5e; }
+    [data-bs-theme="dark"] .ca { --ca-marine: #93b4f5; --ca-surface: var(--bs-body-bg, #212529); }
 
-    /* ============================================ */
-    /* ===== CARTES MODERNES ===== */
-    /* ============================================ */
-    .card-modern {
-        border: none;
-        border-radius: var(--radius);
-        box-shadow: var(--shadow);
-        transition: var(--transition);
-        overflow: hidden;
-    }
-    .card-modern:hover {
-        box-shadow: var(--shadow-hover);
-        transform: translateY(-2px);
-    }
-    .card-modern .card-header {
-        background: transparent;
-        border-bottom: 2px solid var(--gray-light);
-        padding: 1.25rem 1.5rem;
-        font-weight: 600;
-        color: var(--primary-blue);
-    }
-    .card-modern .card-body {
-        padding: 1.5rem;
-    }
+    /* ---------- En-tête ---------- */
+    .ca-entete { display: flex; flex-wrap: wrap; align-items: center; gap: 1rem 1.5rem; margin-bottom: 1.5rem; }
+    .ca-entete h1 { font-size: 1.5rem; font-weight: 650; margin: 0 0 .25rem; color: var(--ca-marine); }
+    .ca-meta { display: flex; flex-wrap: wrap; gap: .35rem 1rem; color: var(--ca-doux); font-size: .88rem; }
+    .ca-meta i { opacity: .75; }
+    .ca-plan { display: inline-block; padding: .1rem .55rem; border-radius: 999px; font-size: .75rem; font-weight: 600;
+               background: rgba(59,130,246,.12); color: #1d4ed8; }
+    [data-bs-theme="dark"] .ca-plan { color: #93c5fd; }
+    .ca-actions { margin-left: auto; display: flex; flex-wrap: wrap; gap: .5rem; }
 
-    /* ============================================ */
-    /* ===== STATISTIQUES ===== */
-    /* ============================================ */
-    .card-stat {
-        border: none;
-        border-radius: var(--radius);
-        box-shadow: var(--shadow);
-        transition: var(--transition);
-        cursor: pointer;
-        background: white;
-        overflow: hidden;
-    }
-    .card-stat:hover {
-        transform: translateY(-4px);
-        box-shadow: var(--shadow-hover);
-    }
-    .card-stat .stat-icon {
-        width: 52px;
-        height: 52px;
-        border-radius: 14px;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        font-size: 1.5rem;
-        transition: var(--transition);
-        flex-shrink: 0;
-    }
-    .card-stat:hover .stat-icon {
-        transform: scale(1.1) rotate(3deg);
-    }
-    .card-stat .stat-icon.primary { background: rgba(26, 42, 94, 0.1); color: var(--primary-blue); }
-    .card-stat .stat-icon.success { background: rgba(16, 185, 129, 0.1); color: var(--success); }
-    .card-stat .stat-icon.warning { background: rgba(245, 158, 11, 0.1); color: var(--warning); }
-    .card-stat .stat-icon.info { background: rgba(59, 130, 246, 0.1); color: var(--info); }
-    .card-stat .stat-icon.danger { background: rgba(239, 68, 68, 0.1); color: var(--danger); }
-    .card-stat .stat-icon.purple { background: rgba(139, 92, 246, 0.1); color: #8b5cf6; }
-    .card-stat .stat-icon.gold { background: rgba(201, 168, 76, 0.1); color: var(--gold); }
-    .card-stat .stat-value {
-        font-family: 'Georgia', serif;
-        font-weight: 700;
-        color: var(--primary-blue);
-        font-size: 1.8rem;
-        line-height: 1.2;
-    }
-    .card-stat .stat-label {
-        font-size: 0.8rem;
-        font-weight: 500;
-        color: var(--gray);
-        text-transform: uppercase;
-        letter-spacing: 0.5px;
-        margin-bottom: 0;
-    }
-    .card-stat .stat-sub {
-        font-size: 0.7rem;
-        color: var(--gray);
-        margin-top: 0.25rem;
-    }
+    /* ---------- Titres de section ---------- */
+    .ca .ca-section { font-size: .8rem !important; font-weight: 600 !important; color: var(--ca-doux) !important; text-transform: uppercase; letter-spacing: .04em; margin: 0 0 .6rem; }
+    /* tuiles et outils sont des liens : ils gardent la couleur du texte (y compris en interface harmonisée) */
+    .ca a.ca-tuile, .ca a.ca-tuile:hover, .ca a.ca-outil, .ca a.ca-outil:hover { color: inherit !important; text-decoration: none; }
 
-    /* ============================================ */
-    /* ===== BADGES MODERNES ===== */
-    /* ============================================ */
-    .badge-modern {
-        padding: 0.4rem 0.8rem;
-        font-size: 0.75rem;
-        font-weight: 600;
-        border-radius: 20px;
-        display: inline-flex;
-        align-items: center;
-        gap: 0.3rem;
-        transition: var(--transition);
-    }
-    .badge-modern:hover {
-        transform: scale(1.05);
-    }
-    .badge-danger {
-        background: rgba(239, 68, 68, 0.12);
-        color: var(--danger);
-        border: 1px solid rgba(239, 68, 68, 0.15);
-    }
-    .badge-warning {
-        background: rgba(245, 158, 11, 0.12);
-        color: var(--warning);
-        border: 1px solid rgba(245, 158, 11, 0.15);
-    }
-    .badge-info {
-        background: rgba(59, 130, 246, 0.12);
-        color: var(--info);
-        border: 1px solid rgba(59, 130, 246, 0.15);
-    }
-    .badge-success {
-        background: rgba(16, 185, 129, 0.12);
-        color: var(--success);
-        border: 1px solid rgba(16, 185, 129, 0.15);
-    }
-    .badge-secondary {
-        background: rgba(107, 114, 128, 0.12);
-        color: var(--gray);
-        border: 1px solid rgba(107, 114, 128, 0.15);
-    }
-    .badge-primary {
-        background: rgba(26, 42, 94, 0.12);
-        color: var(--primary-blue);
-        border: 1px solid rgba(26, 42, 94, 0.15);
-    }
-    .badge-gold {
-        background: rgba(201, 168, 76, 0.12);
-        color: var(--gold);
-        border: 1px solid rgba(201, 168, 76, 0.15);
-    }
+    /* ---------- Tuiles « À traiter » ---------- */
+    .ca-tuiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap: .75rem; margin-bottom: 1.75rem; }
+    .ca-tuile { display: flex; align-items: center; gap: .8rem; padding: .9rem 1rem; background: var(--ca-surface);
+                border: 1px solid var(--ca-trait); border-left: 3px solid var(--ca-trait); border-radius: 10px;
+                color: inherit; text-decoration: none; transition: border-color .15s, background-color .15s; }
+    a.ca-tuile:hover { background: var(--ca-fond-doux); color: inherit; }
+    .ca-tuile-icone { flex: none; width: 40px; height: 40px; border-radius: 9px; display: inline-flex; align-items: center; justify-content: center;
+                      background: var(--ca-fond-doux); color: var(--ca-doux); font-size: 1rem; }
+    .ca-tuile-texte { display: flex; flex-direction: column; min-width: 0; }
+    .ca-tuile-valeur { font-size: 1.45rem; font-weight: 650; line-height: 1.1; }
+    .ca-tuile-libelle { font-size: .85rem; font-weight: 500; }
+    .ca-tuile-sous { font-size: .74rem; color: var(--ca-doux); margin-top: .1rem; }
+    .ca-tuile-fleche { margin-left: auto; color: var(--ca-doux); font-size: .75rem; opacity: .6; }
+    .ca-alerte.ca-danger { border-left-color: #dc2626; }
+    .ca-alerte.ca-danger .ca-tuile-icone { background: rgba(220,38,38,.1); color: #dc2626; }
+    .ca-alerte.ca-danger .ca-tuile-valeur { color: #b91c1c; }
+    .ca-alerte.ca-warning { border-left-color: #d97706; }
+    .ca-alerte.ca-warning .ca-tuile-icone { background: rgba(217,119,6,.1); color: #d97706; }
+    .ca-alerte.ca-info { border-left-color: #2563eb; }
+    .ca-alerte.ca-info .ca-tuile-icone { background: rgba(37,99,235,.1); color: #2563eb; }
+    [data-bs-theme="dark"] .ca-alerte.ca-danger .ca-tuile-valeur { color: #f87171; }
 
-    /* ============================================ */
-    /* ===== BOUTONS MODERNES ===== */
-    /* ============================================ */
-    .btn-modern-primary {
-        background: linear-gradient(135deg, var(--primary-blue), var(--primary-blue-light));
-        color: white;
-        border: none;
-        border-radius: 30px;
-        padding: 0.6rem 1.6rem;
-        font-weight: 500;
-        transition: var(--transition);
-        box-shadow: 0 4px 12px rgba(26, 42, 94, 0.2);
-    }
-    .btn-modern-primary:hover {
-        transform: translateY(-2px);
-        box-shadow: 0 6px 20px rgba(26, 42, 94, 0.3);
-        color: white;
-    }
-    .btn-modern-primary:disabled {
-        opacity: 0.5;
-        cursor: not-allowed;
-        transform: none;
-    }
+    /* ---------- Cartes ---------- */
+    .ca-carte { background: var(--ca-surface); border: 1px solid var(--ca-trait); border-radius: 10px; margin-bottom: 1.25rem; overflow: hidden; }
+    .ca-carte > .card-header { background: transparent; border-bottom: 1px solid var(--ca-trait); padding: .8rem 1.1rem;
+                               display: flex; align-items: center; justify-content: space-between; gap: .75rem; }
+    .ca-carte > .card-header h2 { font-size: .98rem; font-weight: 600; margin: 0; }
+    .ca-carte > .card-header h2 i { color: var(--ca-doux); margin-right: .45rem; }
+    .ca-carte > .card-body { padding: 1rem 1.1rem; }
+    .ca-lien-entete { font-size: .82rem; text-decoration: none; white-space: nowrap; }
 
-    .btn-modern-gold {
-        background: linear-gradient(135deg, var(--gold), var(--gold-light));
-        color: var(--primary-blue);
-        border: none;
-        border-radius: 30px;
-        padding: 0.6rem 1.6rem;
-        font-weight: 500;
-        transition: var(--transition);
-        box-shadow: 0 4px 12px rgba(201, 168, 76, 0.2);
-    }
-    .btn-modern-gold:hover {
-        transform: translateY(-2px);
-        box-shadow: 0 6px 20px rgba(201, 168, 76, 0.3);
-        color: var(--primary-blue);
-    }
+    /* listes */
+    .ca-liste { list-style: none; margin: 0; padding: 0; }
+    .ca-liste > li { display: flex; align-items: center; gap: .8rem; padding: .7rem 1.1rem; border-bottom: 1px solid var(--ca-trait); }
+    .ca-liste > li:last-child { border-bottom: 0; }
+    .ca-pastille { flex: none; width: 34px; height: 34px; border-radius: 50%; display: inline-flex; align-items: center; justify-content: center;
+                   font-size: .8rem; background: var(--ca-fond-doux); color: var(--ca-doux); }
+    .ca-pastille.critique { background: rgba(220,38,38,.1); color: #dc2626; }
+    .ca-pastille.n1 { background: rgba(217,119,6,.12); color: #d97706; }
+    .ca-pastille.creation { background: rgba(5,150,105,.1); color: #059669; }
+    .ca-pastille.modification { background: rgba(217,119,6,.1); color: #d97706; }
+    .ca-pastille.admin { background: rgba(201,168,76,.15); color: #a8873a; }
+    .ca-pastille.operateur { background: rgba(5,150,105,.1); color: #059669; }
+    .ca-principal { flex: 1; min-width: 0; }
+    .ca-principal .ca-ligne1 { display: flex; flex-wrap: wrap; align-items: center; gap: .35rem .5rem; }
+    .ca-principal .ca-ligne2 { font-size: .8rem; color: var(--ca-doux); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .ca-etiquette { display: inline-block; padding: .05rem .45rem; border-radius: 4px; font-size: .7rem; font-weight: 600; white-space: nowrap; }
+    .ca-etiquette.actif { background: rgba(5,150,105,.1); color: #047857; }
+    .ca-etiquette.n1 { background: rgba(217,119,6,.12); color: #b45309; }
+    .ca-etiquette.role { background: var(--ca-fond-doux); color: var(--ca-doux); }
+    .ca-etiquette.role-admin { background: rgba(201,168,76,.15); color: #8a6d24; }
+    .ca-etiquette.role-operateur { background: rgba(5,150,105,.1); color: #047857; }
+    [data-bs-theme="dark"] .ca-etiquette.actif, [data-bs-theme="dark"] .ca-etiquette.role-operateur { color: #34d399; }
+    [data-bs-theme="dark"] .ca-etiquette.n1 { color: #fbbf24; }
+    [data-bs-theme="dark"] .ca-etiquette.role-admin { color: #e5c76b; }
+    .ca-date { flex: none; font-size: .78rem; color: var(--ca-doux); white-space: nowrap; }
+    .ca-vide { display: flex; flex-direction: column; align-items: center; text-align: center; padding: 2rem 1rem; color: var(--ca-doux); }
+    .ca-vide i { font-size: 1.6rem; opacity: .5; margin-bottom: .5rem; }
 
-    .btn-outline-primary {
-        border-radius: 30px;
-        padding: 0.4rem 1rem;
-        font-weight: 500;
-        transition: var(--transition);
-        border-color: var(--primary-blue);
-        color: var(--primary-blue);
-    }
-    .btn-outline-primary:hover {
-        background: var(--primary-blue);
-        color: white;
-        transform: translateY(-2px);
-        box-shadow: 0 4px 12px rgba(26, 42, 94, 0.2);
-    }
+    /* quotas et permissions */
+    .ca-quota + .ca-quota, .ca-permission + .ca-permission { margin-top: .9rem; }
+    .ca-quota-libelle { font-size: .88rem; }
+    .ca-quota-libelle i { color: var(--ca-doux); width: 1rem; text-align: center; }
+    .ca-quota-valeur { font-size: .85rem; white-space: nowrap; }
+    .ca-quota-note { font-size: .74rem; margin-top: .2rem; }
+    .ca-barre { height: 6px; border-radius: 3px; background: var(--ca-fond-doux); }
+    .ca-permission { font-size: .88rem; }
+    .ca-chiffres-equipe { display: grid; grid-template-columns: 1fr 1fr; gap: .6rem; margin-bottom: 1rem; }
+    .ca-chiffres-equipe > div { background: var(--ca-fond-doux); border-radius: 8px; padding: .6rem .75rem; }
+    .ca-chiffres-equipe strong { display: block; font-size: 1.25rem; font-weight: 650; line-height: 1.1; }
+    .ca-chiffres-equipe span { font-size: .78rem; color: var(--ca-doux); }
 
-    /* ============================================ */
-    /* ===== PROGRESS BAR ===== */
-    /* ============================================ */
-    .progress {
-        height: 6px;
-        border-radius: 10px;
-        background: var(--gray-light);
-        overflow: hidden;
-    }
-    .progress-bar {
-        border-radius: 10px;
-        transition: width 0.8s ease;
-    }
-    .progress-bar.bg-success { background: linear-gradient(90deg, #10b981, #34d399); }
-    .progress-bar.bg-warning { background: linear-gradient(90deg, #f59e0b, #fbbf24); }
-    .progress-bar.bg-danger { background: linear-gradient(90deg, #ef4444, #f87171); }
-    .progress-bar.bg-primary { background: linear-gradient(90deg, var(--primary-blue), var(--primary-blue-light)); }
+    /* outils d'administration */
+    .ca-outils { display: grid; grid-template-columns: 1fr 1fr; gap: .5rem; }
+    .ca-outil { display: flex; align-items: center; gap: .5rem; padding: .55rem .65rem; border: 1px solid var(--ca-trait); border-radius: 8px;
+                font-size: .82rem; color: inherit; text-decoration: none; line-height: 1.2; }
+    .ca-outil i { color: var(--ca-doux); width: 1rem; text-align: center; flex: none; }
+    .ca-outil:hover { background: var(--ca-fond-doux); color: inherit; }
 
-    /* ============================================ */
-    /* ===== AVATARS ===== */
-    /* ============================================ */
-    .avatar-circle {
-        width: 40px;
-        height: 40px;
-        border-radius: 50%;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        font-size: 0.9rem;
-        font-weight: 600;
-        flex-shrink: 0;
-        transition: var(--transition);
-        background: var(--gray-light);
-        color: var(--gray);
+    @media (max-width: 767.98px) {
+        .ca-actions { margin-left: 0; width: 100%; }
+        .ca-actions .btn { flex: 1 1 auto; }
+        .ca-tuiles { grid-template-columns: repeat(2, 1fr); }
+        .ca-date { display: none; }
+        .ca-risque { flex-wrap: wrap; }
+        .ca-risque .ca-principal { flex-basis: calc(100% - 50px); }
+        .ca-risque .text-end { margin-left: 46px; text-align: left !important; }
+        .ca-risque .btn { margin-left: auto; }
     }
-    .avatar-circle:hover {
-        transform: scale(1.1);
-    }
-    .avatar-circle .fas {
-        font-size: 0.85rem;
-    }
-    .avatar-circle.bg-primary { background: var(--primary-blue); color: white; }
-    .avatar-circle.bg-success { background: var(--success); color: white; }
-    .avatar-circle.bg-warning { background: var(--warning); color: white; }
-    .avatar-circle.bg-danger { background: var(--danger); color: white; }
-    .avatar-circle.bg-info { background: var(--info); color: white; }
-    .avatar-circle.bg-gold { background: var(--gold); color: white; }
-    .avatar-circle.bg-purple { background: #8b5cf6; color: white; }
-
-    /* ============================================ */
-    /* ===== LIST GROUP ===== */
-    /* ============================================ */
-    .list-group-modern .list-group-item {
-        border: none;
-        border-bottom: 1px solid var(--gray-light);
-        padding: 0.8rem 1rem;
-        transition: var(--transition);
-        background: transparent;
-    }
-    .list-group-modern .list-group-item:last-child {
-        border-bottom: none;
-    }
-    .list-group-modern .list-group-item:hover {
-        background: var(--gray-light);
-        border-radius: var(--radius-sm);
-    }
-
-    /* ============================================ */
-    /* ===== PERMISSIONS CARD ===== */
-    /* ============================================ */
-    .permission-item {
-        background: var(--gray-light);
-        border-radius: var(--radius-sm);
-        padding: 0.8rem 1rem;
-        transition: var(--transition);
-        border: 1px solid transparent;
-    }
-    .permission-item:hover {
-        border-color: var(--gold-light);
-        background: #faf8f0;
-    }
-    .permission-item .permission-icon {
-        width: 32px;
-        height: 32px;
-        border-radius: 8px;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        font-size: 0.9rem;
-        flex-shrink: 0;
-    }
-
-    /* ============================================ */
-    /* ===== BLOC RISQUE CRITIQUE ===== */
-    /* ============================================ */
-    .critical-risk-item {
-        transition: var(--transition);
-        border-left: 3px solid transparent;
-    }
-    .critical-risk-item:hover {
-        border-left-color: var(--danger);
-        background: rgba(239, 68, 68, 0.03);
-    }
-    .critical-risk-item.revaluation {
-        border-left-color: var(--warning);
-        opacity: 0.9;
-    }
-    .critical-risk-item.revaluation:hover {
-        border-left-color: var(--warning);
-        background: rgba(245, 158, 11, 0.05);
-    }
-
-    /* ============================================ */
-    /* ===== ANIMATIONS ===== */
-    /* ============================================ */
-    .fade-in {
-        animation: fadeInUp 0.6s ease-out;
-    }
-    @keyframes fadeInUp {
-        from { opacity: 0; transform: translateY(20px); }
-        to { opacity: 1; transform: translateY(0); }
-    }
-    .slide-in {
-        animation: slideIn 0.5s ease-out;
-    }
-    @keyframes slideIn {
-        from { opacity: 0; transform: translateX(-20px); }
-        to { opacity: 1; transform: translateX(0); }
-    }
-
-    .stat-delay-1 { animation-delay: 0.05s; }
-    .stat-delay-2 { animation-delay: 0.10s; }
-    .stat-delay-3 { animation-delay: 0.15s; }
-    .stat-delay-4 { animation-delay: 0.20s; }
-    .stat-delay-5 { animation-delay: 0.25s; }
-    .stat-delay-6 { animation-delay: 0.30s; }
-    .stat-delay-7 { animation-delay: 0.35s; }
-    .stat-delay-8 { animation-delay: 0.40s; }
-
-    /* ============================================ */
-    /* ===== BREADCRUMB ===== */
-    /* ============================================ */
-    .breadcrumb {
-        background: transparent;
-        padding: 0;
-        margin-bottom: 1rem;
-        font-size: 0.9rem;
-    }
-    .breadcrumb-item a {
-        color: var(--primary-blue);
-        text-decoration: none;
-        transition: var(--transition);
-    }
-    .breadcrumb-item a:hover {
-        color: var(--gold);
-    }
-    .breadcrumb-item.active {
-        color: var(--gray);
-    }
-
-    /* ============================================ */
-    /* ===== RESPONSIVE ===== */
-    /* ============================================ */
-    @media (max-width: 768px) {
-        .card-stat .stat-value {
-            font-size: 1.4rem;
-        }
-        .card-stat .stat-icon {
-            width: 40px;
-            height: 40px;
-            font-size: 1.1rem;
-        }
-        .row.g-4 > [class*="col-"] {
-            margin-bottom: 0.75rem;
-        }
-        .d-flex.justify-content-md-end {
-            justify-content: flex-start !important;
-            margin-top: 0.75rem;
-        }
-        .btn-modern-primary, .btn-modern-gold {
-            width: 100%;
-            margin-bottom: 0.5rem;
-        }
-        .permission-item .d-flex {
-            flex-direction: column;
-            align-items: flex-start !important;
-        }
-        .permission-item .d-flex > div:last-child {
-            margin-top: 0.3rem;
-            width: 100%;
-        }
-    }
-
-    @media (max-width: 576px) {
-        .card-modern .card-body {
-            padding: 1rem;
-        }
-        .stats-grid {
-            grid-template-columns: repeat(2, 1fr);
-            gap: 0.5rem;
-        }
-        h1.h3 {
-            font-size: 1.25rem;
-        }
-        .list-group-modern .list-group-item {
-            padding: 0.6rem 0.8rem;
-        }
-    }
-
-    /* ============================================ */
-    /* ===== MODE SOMBRE ===== */
-    /* ============================================ */
-    [data-bs-theme="dark"] {
-        --gray-light: #1e293b;
-        --shadow: 0 2px 12px rgba(0, 0, 0, 0.3);
-        --shadow-hover: 0 8px 24px rgba(0, 0, 0, 0.4);
-    }
-    [data-bs-theme="dark"] .card-modern {
-        background: #1e293b;
-        border-color: #334155;
-    }
-    [data-bs-theme="dark"] .card-modern .card-header {
-        border-bottom-color: #334155;
-        color: #f8fafc;
-    }
-    [data-bs-theme="dark"] .card-stat {
-        background: #1e293b;
-    }
-    [data-bs-theme="dark"] .card-stat .stat-value {
-        color: #f8fafc;
-    }
-    [data-bs-theme="dark"] .card-stat .stat-label,
-    [data-bs-theme="dark"] .card-stat .stat-sub {
-        color: #94a3b8;
-    }
-    [data-bs-theme="dark"] .card-stat .stat-icon.primary { background: rgba(96, 165, 250, 0.15); color: #60a5fa; }
-    [data-bs-theme="dark"] .card-stat .stat-icon.success { background: rgba(52, 211, 153, 0.15); color: #34d399; }
-    [data-bs-theme="dark"] .card-stat .stat-icon.warning { background: rgba(251, 191, 36, 0.15); color: #fbbf24; }
-    [data-bs-theme="dark"] .card-stat .stat-icon.info { background: rgba(96, 165, 250, 0.15); color: #60a5fa; }
-    [data-bs-theme="dark"] .card-stat .stat-icon.danger { background: rgba(248, 113, 113, 0.15); color: #f87171; }
-    [data-bs-theme="dark"] .card-stat .stat-icon.purple { background: rgba(167, 139, 250, 0.15); color: #a78bfa; }
-    [data-bs-theme="dark"] .card-stat .stat-icon.gold { background: rgba(251, 191, 36, 0.15); color: #fbbf24; }
-    [data-bs-theme="dark"] .list-group-modern .list-group-item {
-        border-bottom-color: #334155;
-        color: #f8fafc;
-    }
-    [data-bs-theme="dark"] .list-group-modern .list-group-item:hover {
-        background: #0f172a;
-    }
-    [data-bs-theme="dark"] .permission-item {
-        background: #0f172a;
-        border-color: #1e293b;
-    }
-    [data-bs-theme="dark"] .permission-item:hover {
-        border-color: var(--gold-light);
-        background: #1a2332;
-    }
-    [data-bs-theme="dark"] .breadcrumb-item a {
-        color: #60a5fa;
-    }
-    [data-bs-theme="dark"] .breadcrumb-item a:hover {
-        color: var(--gold-light);
-    }
-    [data-bs-theme="dark"] .breadcrumb-item.active {
-        color: #94a3b8;
-    }
-    [data-bs-theme="dark"] .progress {
-        background: #334155;
-    }
-    [data-bs-theme="dark"] .btn-outline-primary {
-        border-color: #60a5fa;
-        color: #60a5fa;
-    }
-    [data-bs-theme="dark"] .btn-outline-primary:hover {
-        background: #60a5fa;
-        color: #0f172a;
-    }
-    [data-bs-theme="dark"] .btn-modern-primary {
-        background: linear-gradient(135deg, #2563eb, #60a5fa);
-    }
-    [data-bs-theme="dark"] .btn-modern-gold {
-        background: linear-gradient(135deg, #d4af37, #f0d080);
-        color: #0f172a;
-    }
-    [data-bs-theme="dark"] .badge-modern.badge-danger {
-        background: rgba(248, 113, 113, 0.15);
-        color: #f87171;
-        border-color: rgba(248, 113, 113, 0.2);
-    }
-    [data-bs-theme="dark"] .badge-modern.badge-warning {
-        background: rgba(251, 191, 36, 0.15);
-        color: #fbbf24;
-        border-color: rgba(251, 191, 36, 0.2);
-    }
-    [data-bs-theme="dark"] .badge-modern.badge-info {
-        background: rgba(96, 165, 250, 0.15);
-        color: #60a5fa;
-        border-color: rgba(96, 165, 250, 0.2);
-    }
-    [data-bs-theme="dark"] .badge-modern.badge-success {
-        background: rgba(52, 211, 153, 0.15);
-        color: #34d399;
-        border-color: rgba(52, 211, 153, 0.2);
-    }
-    [data-bs-theme="dark"] .badge-modern.badge-secondary {
-        background: rgba(148, 163, 184, 0.15);
-        color: #94a3b8;
-        border-color: rgba(148, 163, 184, 0.2);
-    }
-    [data-bs-theme="dark"] .badge-modern.badge-primary {
-        background: rgba(96, 165, 250, 0.15);
-        color: #60a5fa;
-        border-color: rgba(96, 165, 250, 0.2);
-    }
-    [data-bs-theme="dark"] .badge-modern.badge-gold {
-        background: rgba(251, 191, 36, 0.15);
-        color: #fbbf24;
-        border-color: rgba(251, 191, 36, 0.2);
-    }
-    [data-bs-theme="dark"] .avatar-circle {
-        background: #334155;
-        color: #94a3b8;
-    }
-    [data-bs-theme="dark"] .avatar-circle.bg-primary { background: #2563eb; color: white; }
-    [data-bs-theme="dark"] .avatar-circle.bg-success { background: #065f46; color: white; }
-    [data-bs-theme="dark"] .avatar-circle.bg-warning { background: #d97706; color: white; }
-    [data-bs-theme="dark"] .avatar-circle.bg-danger { background: #991b1b; color: white; }
-    [data-bs-theme="dark"] .avatar-circle.bg-info { background: #1e3a8a; color: white; }
-    [data-bs-theme="dark"] .avatar-circle.bg-gold { background: #a8873a; color: white; }
-    [data-bs-theme="dark"] .avatar-circle.bg-purple { background: #5b21b6; color: white; }
-    [data-bs-theme="dark"] .critical-risk-item:hover {
-        background: rgba(248, 113, 113, 0.05);
-    }
-    [data-bs-theme="dark"] .critical-risk-item.revaluation:hover {
-        background: rgba(251, 191, 36, 0.05);
-    }
-}
+    @media (max-width: 420px) { .ca-tuiles, .ca-outils { grid-template-columns: 1fr; } }
 </style>
 {% endblock %}
 
 {% block content %}
-<div class="container-fluid py-4 fade-in">
-    <div class="row">
-        <div class="col-12">
-            <!-- ============================================ -->
-            <!-- BREADCRUMB -->
-            <!-- ============================================ -->
-            <nav aria-label="breadcrumb">
-                <ol class="breadcrumb">
-                    <li class="breadcrumb-item">
-                        <a href="{{ url_for('dashboard') }}">
-                            <i class="fas fa-home me-1"></i>Dashboard
-                        </a>
-                    </li>
-                    <li class="breadcrumb-item active">
-                        <i class="fas fa-building me-1"></i>Admin Client
-                    </li>
-                </ol>
-            </nav>
-            
-            <!-- ============================================ -->
-            <!-- EN-TÊTE CLIENT -->
-            <!-- ============================================ -->
-            <div class="card card-modern mb-4">
-                <div class="card-body">
-                    <div class="row align-items-center">
-                        <div class="col-md-8">
-                            <h1 class="h3 mb-1" style="font-family: 'Georgia', serif; color: var(--primary-blue);">
-                                <i class="fas fa-building me-2" style="color: var(--gold);"></i>
-                                {{ client.nom }}
-                            </h1>
-                            <p class="text-muted mb-0">
-                                <i class="fas fa-id-card me-1"></i>{{ client.reference }} • 
-                                <i class="fas fa-envelope me-1"></i>{{ client.contact_email }} • 
-                                Plan: <span class="badge-modern badge-info">{{ client.plan|title }}</span>
-                            </p>
-                        </div>
-                        <div class="col-md-4 text-md-end">
-                            <div class="d-flex justify-content-md-end gap-2 flex-wrap">
-                                <a href="{{ url_for('client_admin_utilisateurs') }}" class="btn btn-modern-primary">
-                                    <i class="fas fa-users me-2"></i>Gérer les utilisateurs
-                                </a>
-                                <a href="{{ url_for('admin_operateurs') }}" class="btn btn-outline-primary">
-                                    <i class="fas fa-user-cog me-2"></i>Opérateurs
-                                </a>
-                                {% if url_exists is not defined or url_exists('parametres_risque.valideur_page') %}
-                                <a href="{{ url_for('parametres_risque.valideur_page') }}" class="btn btn-outline-primary">
-                                    <i class="fas fa-user-check me-2"></i>Valideur des opérateurs
-                                </a>
-                                {% endif %}
-                            </div>
-                            <div class="d-flex justify-content-md-end gap-2 flex-wrap mt-2 small">
-                                <a href="{{ url_for('admin_journal_activite') }}" class="btn btn-sm btn-outline-secondary"><i class="fas fa-clock-rotate-left me-1"></i>Journal d'activité</a>
-                                <a href="{{ url_for('admin_sessions_utilisateurs') }}" class="btn btn-sm btn-outline-secondary"><i class="fas fa-plug me-1"></i>Sessions</a>
-                                <a href="{{ url_for('admin_logs_systeme') }}" class="btn btn-sm btn-outline-secondary"><i class="fas fa-terminal me-1"></i>Journal système</a>
-                                <a href="{{ url_for('admin_templates_permissions') }}" class="btn btn-sm btn-outline-secondary"><i class="fas fa-id-card me-1"></i>Modèles de permissions</a>
-                                <a href="{{ url_for('admin_analyses_ia') }}" class="btn btn-sm btn-outline-secondary"><i class="fas fa-robot me-1"></i>Analyses IA</a>
-                                <a href="{{ url_for('assistant_questions_non_comprises') }}" class="btn btn-sm btn-outline-secondary"><i class="fas fa-circle-question me-1"></i>Questions non comprises</a>
-                            </div>
-                        </div>
-                    </div>
-                </div>
+{% set nb_crit = stats.risques_critiques|default(0) %}
+{% set nb_crit_actifs = stats.risques_critiques_actifs|default(0) %}
+{% set nb_crit_n1 = stats.risques_critiques_n_moins_1|default(0) %}
+{% set nb_reeval = stats.reevaluations_attente|default(0) %}
+{% set sm = stats.score_risque_moyen|default(0) %}
+{% set top_risques = stats_risques.risques_critiques_formatted if stats_risques is defined and stats_risques else [] %}
+
+<div class="container-fluid py-4 ca">
+
+    <!-- ============ EN-TÊTE ============ -->
+    <nav aria-label="Fil d'Ariane">
+        <ol class="breadcrumb mb-2 small">
+            <li class="breadcrumb-item"><a href="{{ url_for('dashboard') }}">Tableau de bord</a></li>
+            <li class="breadcrumb-item active" aria-current="page">Administration</li>
+        </ol>
+    </nav>
+
+    <header class="ca-entete">
+        <div>
+            <h1><i class="fas fa-building me-2"></i>{{ client.nom }}</h1>
+            <div class="ca-meta">
+                {% if client.reference %}<span><i class="fas fa-id-card me-1"></i>{{ client.reference }}</span>{% endif %}
+                {% if client.contact_email %}<span><i class="fas fa-envelope me-1"></i>{{ client.contact_email }}</span>{% endif %}
+                {% if client.plan %}<span>Formule <span class="ca-plan">{{ client.plan|title }}</span></span>{% endif %}
             </div>
+        </div>
+        <div class="ca-actions">
+            <a href="{{ url_for('client_admin_utilisateurs') }}" class="btn btn-primary">
+                <i class="fas fa-users me-2"></i>Gérer les utilisateurs
+            </a>
+            <a href="{{ url_for('admin_operateurs') }}" class="btn btn-outline-secondary">
+                <i class="fas fa-user-cog me-2"></i>Opérateurs
+            </a>
+            {% if url_exists is not defined or url_exists('parametres_risque.valideur_page') %}
+            <a href="{{ url_for('parametres_risque.valideur_page') }}" class="btn btn-outline-secondary">
+                <i class="fas fa-user-check me-2"></i>Valideur des opérateurs
+            </a>
+            {% endif %}
+        </div>
+    </header>
+
+    <!-- ============ À TRAITER ============ -->
+    <h2 class="ca-section">À traiter</h2>
+    <div class="ca-tuiles">
+        {% set sous_crit %}{% if nb_crit %}{{ nb_crit_actifs }} actif{{ 's' if nb_crit_actifs > 1 }}{% if nb_crit_n1 %} · {{ nb_crit_n1 }} N-1 à réévaluer{% endif %}{% else %}Aucun risque critique{% endif %}{% endset %}
+        {{ tuile(nb_crit, 'Risques critiques', 'fire', sous_crit, '#top-risques' if top_risques else '', nb_crit > 0, 'danger') }}
+
+        {{ tuile(stats.plans_retard|default(0), "Plans d'action en retard", 'clock',
+                 'Échéance dépassée' if stats.plans_retard else 'Tous dans les délais',
+                 lien('liste_plans_action'), stats.plans_retard|default(0) > 0, 'danger') }}
+
+        {{ tuile(nb_reeval, 'Réévaluations en attente', 'rotate',
+                 'Risques à réévaluer' if nb_reeval else 'Rien en attente',
+                 '#top-risques' if (nb_reeval and top_risques) else '', nb_reeval > 0, 'warning') }}
+
+        {{ tuile(stats.campagnes_actives|default(0), 'Campagnes en cours', 'bullhorn', 'Campagnes de contrôle',
+                 lien('liste_campagnes_controle'), stats.campagnes_actives|default(0) > 0, 'info') }}
+
+        {{ tuile(stats.audits_en_cours|default(0), 'Audits en cours', 'clipboard-list',
+                 'sur ' ~ (stats.audits|default(0)) ~ ' audit' ~ ('s' if stats.audits|default(0) > 1 else ''),
+                 lien('liste_audits'), stats.audits_en_cours|default(0) > 0, 'info') }}
+
+        <div class="ca-tuile">
+            <span class="ca-tuile-icone"><i class="fas fa-chart-line"></i></span>
+            <span class="ca-tuile-texte">
+                <span class="ca-tuile-valeur cot-texte-{{ cot.cle(cotation_niveau(sm)) if sm else 'na' }}">{{ cot.fmt(sm) if sm else '—' }}</span>
+                <span class="ca-tuile-libelle">Score NET moyen</span>
+                <span class="ca-tuile-sous">{% if sm %}{{ cot.badge_score(sm, afficher_score=False, petit=True) }}{% else %}Aucune évaluation{% endif %}</span>
+            </span>
         </div>
     </div>
 
-    <!-- ============================================ -->
-    <!-- STATISTIQUES PRINCIPALES -->
-    <!-- ============================================ -->
-    <div class="row g-4 mb-4">
-        <!-- Utilisateurs -->
-        <div class="col-md-3">
-            <div class="card card-stat fade-in stat-delay-1">
-                <div class="card-body">
-                    <div class="d-flex align-items-center">
-                        <div class="stat-icon primary me-3">
-                            <i class="fas fa-users"></i>
-                        </div>
-                        <div>
-                            <div class="stat-value">{{ stats.utilisateurs }}</div>
-                            <p class="stat-label">Utilisateurs</p>
-                            <div class="stat-sub">{{ stats.utilisateurs }} / {{ stats.limite_utilisateurs }}</div>
-                            <div class="progress mt-1" style="height: 4px;">
-                                <div class="progress-bar bg-primary" 
-                                     style="width: {{ (stats.utilisateurs / stats.limite_utilisateurs * 100)|round if stats.limite_utilisateurs > 0 else 0 }}%">
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-            </div>
-        </div>
-        
-        <!-- Opérateurs -->
-        <div class="col-md-3">
-            <div class="card card-stat fade-in stat-delay-2">
-                <div class="card-body">
-                    <div class="d-flex align-items-center">
-                        <div class="stat-icon success me-3">
-                            <i class="fas fa-user-check"></i>
-                        </div>
-                        <div>
-                            <div class="stat-value">{{ stats.operateurs }}</div>
-                            <p class="stat-label">Opérateurs</p>
-                            <div class="stat-sub">
-                                {{ ((stats.operateurs / stats.utilisateurs * 100)|round if stats.utilisateurs > 0 else 0) }}% des utilisateurs
-                            </div>
-                            <div class="progress mt-1" style="height: 4px;">
-                                <div class="progress-bar bg-success" 
-                                     style="width: {{ (stats.operateurs / stats.utilisateurs * 100)|round if stats.utilisateurs > 0 else 0 }}%">
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-            </div>
-        </div>
-        
-        <!-- Risques -->
-        <div class="col-md-3">
-            <div class="card card-stat fade-in stat-delay-3">
-                <div class="card-body">
-                    <div class="d-flex align-items-center">
-                        <div class="stat-icon warning me-3">
-                            <i class="fas fa-exclamation-triangle"></i>
-                        </div>
-                        <div>
-                            <div class="stat-value">{{ stats.risques }}</div>
-                            <p class="stat-label">Risques</p>
-                            <div class="stat-sub">{{ stats.risques }} / {{ stats.limite_risques }}</div>
-                            <div class="progress mt-1" style="height: 4px;">
-                                <div class="progress-bar bg-warning" 
-                                     style="width: {{ (stats.risques / stats.limite_risques * 100)|round if stats.limite_risques > 0 else 0 }}%">
-                                </div>
-                            </div>
-                            {% if stats.risques_critiques > 0 %}
-                            <div class="stat-sub text-danger mt-1">
-                                <i class="fas fa-circle me-1" style="font-size: 0.4rem;"></i>
-                                <strong>{{ stats.risques_critiques }}</strong> critiques
-                                {% if stats.risques_critiques_n_moins_1 is defined and stats.risques_critiques_n_moins_1 > 0 %}
-                                <span class="badge-modern badge-warning ms-1" 
-                                      style="font-size: 0.6rem; padding: 0.15rem 0.4rem;"
-                                      title="Critiques N-1 à réévaluer">
-                                    {{ stats.risques_critiques_n_moins_1 }} à réévaluer
-                                </span>
-                                {% endif %}
-                            </div>
-                            {% endif %}
-                        </div>
-                    </div>
-                </div>
-            </div>
-        </div>
-        
-        <!-- Audits -->
-        <div class="col-md-3">
-            <div class="card card-stat fade-in stat-delay-4">
-                <div class="card-body">
-                    <div class="d-flex align-items-center">
-                        <div class="stat-icon info me-3">
-                            <i class="fas fa-clipboard-list"></i>
-                        </div>
-                        <div>
-                            <div class="stat-value">{{ stats.audits }}</div>
-                            <p class="stat-label">Audits</p>
-                            <div class="stat-sub">{{ stats.audits }} / {{ stats.limite_audits }}</div>
-                            <div class="progress mt-1" style="height: 4px;">
-                                <div class="progress-bar bg-info" 
-                                     style="width: {{ (stats.audits / stats.limite_audits * 100)|round if stats.limite_audits > 0 else 0 }}%">
-                                </div>
-                            </div>
-                            {% if stats.audits_en_cours > 0 %}
-                            <div class="stat-sub text-warning mt-1">
-                                <i class="fas fa-circle me-1" style="font-size: 0.4rem;"></i>
-                                {{ stats.audits_en_cours }} en cours
-                            </div>
-                            {% endif %}
-                        </div>
-                    </div>
-                </div>
-            </div>
-        </div>
-    </div>
-
-    <!-- ============================================ -->
-    <!-- STATISTIQUES AVANCÉES -->
-    <!-- ============================================ -->
-    <div class="row g-4 mb-4">
-        <!-- Campagnes actives -->
-        <div class="col-md-3">
-            <div class="card card-stat fade-in stat-delay-5" style="border-left: 4px solid var(--warning);">
-                <div class="card-body">
-                    <div class="d-flex align-items-center">
-                        <div class="stat-icon warning me-3">
-                            <i class="fas fa-bullhorn"></i>
-                        </div>
-                        <div>
-                            <div class="stat-value">{{ stats.campagnes_actives }}</div>
-                            <p class="stat-label">Campagnes actives</p>
-                        </div>
-                    </div>
-                </div>
-            </div>
-        </div>
-        
-        <!-- Plans en retard -->
-        <div class="col-md-3">
-            <div class="card card-stat fade-in stat-delay-6" style="border-left: 4px solid var(--danger);">
-                <div class="card-body">
-                    <div class="d-flex align-items-center">
-                        <div class="stat-icon danger me-3">
-                            <i class="fas fa-clock"></i>
-                        </div>
-                        <div>
-                            <div class="stat-value">{{ stats.plans_retard }}</div>
-                            <p class="stat-label">Plans en retard</p>
-                        </div>
-                    </div>
-                </div>
-            </div>
-        </div>
-        
-        <!-- Opérateurs actifs -->
-        <div class="col-md-3">
-            <div class="card card-stat fade-in stat-delay-7" style="border-left: 4px solid #8b5cf6;">
-                <div class="card-body">
-                    <div class="d-flex align-items-center">
-                        <div class="stat-icon purple me-3">
-                            <i class="fas fa-user-tie"></i>
-                        </div>
-                        <div>
-                            <div class="stat-value">{{ stats.operateurs_actifs }}</div>
-                            <p class="stat-label">Opérateurs actifs</p>
-                            <div class="stat-sub">
-                                {{ ((stats.operateurs_actifs / stats.operateurs * 100)|round if stats.operateurs > 0 else 0) }}% des opérateurs
-                            </div>
-                        </div>
-                    </div>
-                </div>
-            </div>
-        </div>
-        
-        <!-- Score NET moyen -->
-        <div class="col-md-3">
-            <div class="card card-stat fade-in stat-delay-8" style="border-left: 4px solid var(--gold);">
-                <div class="card-body">
-                    <div class="d-flex align-items-center">
-                        <div class="stat-icon gold me-3">
-                            <i class="fas fa-chart-line"></i>
-                        </div>
-                        <div>
-                            {% set sm = stats.score_risque_moyen|default(0) %}
-                            <div class="stat-value cot-texte-{{ cot.cle(cotation_niveau(sm)) if sm else 'na' }}">
-                                {{ cot.fmt(sm) if sm else 0 }}
-                            </div>
-                            <p class="stat-label">Score NET moyen</p>
-                            <div class="stat-sub">{% if sm %}{{ cot.badge_score(sm, afficher_score=False, petit=True) }}{% else %}{{ cot.badge(none, petit=True) }}{% endif %}</div>
-                            {% if stats.reevaluations_attente is defined and stats.reevaluations_attente > 0 %}
-                            <div class="stat-sub text-info mt-1">
-                                <i class="fas fa-sync me-1"></i>
-                                {{ stats.reevaluations_attente }} réévaluation(s)
-                            </div>
-                            {% endif %}
-                        </div>
-                    </div>
-                </div>
-            </div>
-        </div>
-    </div>
-
-    <!-- ============================================ -->
-    <!-- TOP 10 DES RISQUES CRITIQUES -->
-    <!-- ============================================ -->
-    {% if stats_risques is defined and stats_risques.risques_critiques_formatted %}
-    <div class="row g-4 mb-4">
-        <div class="col-12">
-            <div class="card card-modern">
-                <div class="card-header d-flex justify-content-between align-items-center">
-                    <h6 class="mb-0">
-                        <i class="fas fa-fire me-2" style="color: #dc2626;"></i>
-                        Top {{ stats_risques.risques_critiques_formatted|length }} des risques critiques
-                    </h6>
-                    <span class="badge-modern badge-danger">
-                        {{ stats.risques_critiques_actifs|default(0) }} actifs
-                        {% if stats.risques_critiques_n_moins_1 is defined and stats.risques_critiques_n_moins_1 > 0 %}
-                        + {{ stats.risques_critiques_n_moins_1 }} N-1
-                        {% endif %}
-                    </span>
-                </div>
-                <div class="card-body p-0">
-                    <div class="list-group list-group-modern">
-                        {% for item in stats_risques.risques_critiques_formatted %}
-                        <div class="list-group-item critical-risk-item {% if item.est_revaluation %}revaluation{% endif %}">
-                            <div class="d-flex align-items-center gap-3">
-                                <!-- Icône criticité -->
-                                <div class="avatar-circle" 
-                                     style="background: {% if item.est_revaluation %}#f59e0b{% else %}#dc2626{% endif %}; 
-                                            color: white; width: 44px; height: 44px; font-size: 1rem;">
-                                    <i class="fas fa-{% if item.est_revaluation %}clock{% else %}fire{% endif %}"></i>
-                                </div>
-                                
-                                <!-- Infos -->
-                                <div class="flex-grow-1">
-                                    <div class="d-flex align-items-center gap-2 mb-1 flex-wrap">
-                                        <strong>{{ item.risque.reference }}</strong>
-                                        <span class="text-muted small">
-                                            {{ item.risque.intitule|truncate(60) }}
-                                        </span>
-                                        {% if item.est_revaluation %}
-                                        <span class="badge-modern badge-warning" style="font-size: 0.65rem;">
-                                            <i class="fas fa-clock me-1"></i>N-1
-                                        </span>
-                                        {% else %}
-                                        <span class="badge-modern badge-success" style="font-size: 0.65rem;">
-                                            <i class="fas fa-check-circle me-1"></i>Actif
-                                        </span>
-                                        {% endif %}
-                                    </div>
-                                    <div class="small text-muted">
-                                        <i class="fas fa-clipboard-list me-1"></i>
-                                        Campagne : {{ item.campagne_nom|truncate(40) }}
-                                    </div>
-                                </div>
-                                
-                                <!-- Score -->
-                                <div class="text-end flex-shrink-0">
-                                    {{ cot.brut_net(item.score_brut, item.score_net, item.taux_reduction) }}
-                                </div>
-                                
-                                <!-- Action -->
-                                <a href="{{ url_for('detail_risque', id=item.risque.id) }}" 
-                                   class="btn btn-sm btn-outline-primary ms-2"
-                                   title="Voir le détail">
-                                    <i class="fas fa-arrow-right"></i>
-                                </a>
-                            </div>
-                        </div>
-                        {% endfor %}
-                    </div>
-                </div>
-            </div>
-        </div>
-    </div>
-    {% endif %}
-
-    <!-- ============================================ -->
-    <!-- PERMISSIONS DES OPÉRATEURS -->
-    <!-- ============================================ -->
-    <div class="row g-4 mb-4">
-        <div class="col-12">
-            <div class="card card-modern">
-                <div class="card-header">
-                    <h6 class="mb-0">
-                        <i class="fas fa-key me-2" style="color: var(--gold);"></i>
-                        Permissions des opérateurs
-                    </h6>
-                </div>
-                <div class="card-body">
-                    <div class="row g-3">
-                        <div class="col-md-4">
-                            <div class="permission-item d-flex align-items-center justify-content-between">
-                                <div class="d-flex align-items-center">
-                                    <div class="permission-icon" 
-                                         style="background: rgba(59, 130, 246, 0.1); color: var(--info);">
-                                        <i class="fas fa-search"></i>
-                                    </div>
-                                    <div class="ms-2">
-                                        <strong style="font-size: 0.85rem;">Évaluer les risques</strong>
-                                    </div>
-                                </div>
-                                <span class="badge-modern badge-info">
-                                    {{ permissions_operateurs.peut_evaluer_risques }}/{{ permissions_operateurs.total }}
-                                </span>
-                            </div>
-                        </div>
-                        <div class="col-md-4">
-                            <div class="permission-item d-flex align-items-center justify-content-between">
-                                <div class="d-flex align-items-center">
-                                    <div class="permission-icon" 
-                                         style="background: rgba(245, 158, 11, 0.1); color: var(--warning);">
-                                        <i class="fas fa-clipboard-list"></i>
-                                    </div>
-                                    <div class="ms-2">
-                                        <strong style="font-size: 0.85rem;">Exécuter campagnes</strong>
-                                    </div>
-                                </div>
-                                <span class="badge-modern badge-warning">
-                                    {{ permissions_operateurs.peut_executer_campagnes }}/{{ permissions_operateurs.total }}
-                                </span>
-                            </div>
-                        </div>
-                        <div class="col-md-4">
-                            <div class="permission-item d-flex align-items-center justify-content-between">
-                                <div class="d-flex align-items-center">
-                                    <div class="permission-icon" 
-                                         style="background: rgba(16, 185, 129, 0.1); color: var(--success);">
-                                        <i class="fas fa-tasks"></i>
-                                    </div>
-                                    <div class="ms-2">
-                                        <strong style="font-size: 0.85rem;">Gérer plans d'action</strong>
-                                    </div>
-                                </div>
-                                <span class="badge-modern badge-success">
-                                    {{ permissions_operateurs.peut_creer_plans_action }}/{{ permissions_operateurs.total }}
-                                </span>
-                            </div>
-                        </div>
-                    </div>
-                    <div class="mt-3 text-center">
-                        <small class="text-muted">
-                            <i class="fas fa-info-circle me-1"></i>
-                            Sur {{ permissions_operateurs.total }} opérateurs,
-                            {{ permissions_operateurs.peut_evaluer_risques }} peuvent évaluer les risques,
-                            {{ permissions_operateurs.peut_executer_campagnes }} peuvent exécuter des campagnes,
-                            {{ permissions_operateurs.peut_creer_plans_action }} peuvent gérer les plans d'action.
-                        </small>
-                    </div>
-                </div>
-            </div>
-        </div>
-    </div>
-
-    <!-- ============================================ -->
-    <!-- ACTIVITÉS RÉCENTES + UTILISATEURS -->
-    <!-- ============================================ -->
     <div class="row g-4">
-        <!-- Activités récentes -->
-        <div class="col-md-7">
-            <div class="card card-modern">
+        <!-- ============ COLONNE PRINCIPALE ============ -->
+        <div class="col-xl-8">
+
+            <!-- Risques critiques -->
+            <section class="card ca-carte" id="top-risques">
                 <div class="card-header">
-                    <h5 class="mb-0">
-                        <i class="fas fa-history me-2" style="color: var(--gold);"></i>
-                        Activités récentes
-                    </h5>
+                    <h2><i class="fas fa-fire"></i>Risques critiques{% if top_risques %} — top {{ top_risques|length }}{% endif %}</h2>
+                    {% if nb_crit %}
+                    <span class="small text-muted">{{ nb_crit_actifs }} actif{{ 's' if nb_crit_actifs > 1 }}{% if nb_crit_n1 %} + {{ nb_crit_n1 }} N-1{% endif %}</span>
+                    {% endif %}
                 </div>
-                <div class="card-body p-0">
-                    <div class="list-group list-group-modern">
-                        {% if activites %}
-                            {% for activite in activites %}
-                            <div class="list-group-item d-flex justify-content-between align-items-center">
-                                <div>
-                                    <div class="d-flex align-items-center">
-                                        <div class="avatar-circle 
-                                            {% if 'creation' in activite.action %}bg-success
-                                            {% elif 'modification' in activite.action %}bg-warning
-                                            {% else %}bg-info{% endif %} me-2" 
-                                             style="width: 32px; height: 32px; font-size: 0.7rem;">
-                                            <i class="fas fa-{{ 'user-plus' if 'creation' in activite.action else 'user-edit' if 'modification' in activite.action else 'bell' }}"></i>
-                                        </div>
-                                        <div>
-                                            <strong>
-                                                {{ activite.utilisateur.username if activite.utilisateur else 'Système' }}
-                                            </strong>
-                                            <span class="text-muted ms-1">
-                                                {{ activite.details|truncate(50) if activite.details else activite.action }}
-                                            </span>
-                                        </div>
-                                    </div>
-                                </div>
-                                <small class="text-muted flex-shrink-0 ms-2">
-                                    {{ activite.date_creation.strftime('%d/%m/%Y %H:%M') if activite.date_creation else 'N/A' }}
-                                </small>
+                {% if top_risques %}
+                <ul class="ca-liste">
+                    {% for item in top_risques %}
+                    <li class="ca-risque">
+                        <span class="ca-pastille {{ 'n1' if item.est_revaluation else 'critique' }}" title="{{ 'Critique N-1 à réévaluer' if item.est_revaluation else 'Critique actif' }}">
+                            <i class="fas fa-{{ 'clock' if item.est_revaluation else 'fire' }}"></i>
+                        </span>
+                        <div class="ca-principal">
+                            <div class="ca-ligne1">
+                                <strong>{{ item.risque.reference }}</strong>
+                                <span>{{ item.risque.intitule|truncate(70) }}</span>
+                                {% if item.est_revaluation %}<span class="ca-etiquette n1">N-1 à réévaluer</span>
+                                {% else %}<span class="ca-etiquette actif">Actif</span>{% endif %}
                             </div>
-                            {% endfor %}
-                        {% else %}
-                            <div class="text-center py-5">
-                                <div class="avatar-circle mx-auto mb-3" 
-                                     style="width: 56px; height: 56px; font-size: 1.5rem; background: var(--gray-light);">
-                                    <i class="fas fa-history text-muted"></i>
-                                </div>
-                                <p class="text-muted mb-0">Aucune activité récente</p>
-                            </div>
-                        {% endif %}
-                    </div>
+                            <div class="ca-ligne2"><i class="fas fa-clipboard-list me-1"></i>{{ item.campagne_nom|truncate(50) }}</div>
+                        </div>
+                        <div class="flex-shrink-0 text-end">{{ cot.brut_net(item.score_brut, item.score_net, item.taux_reduction) }}</div>
+                        <a href="{{ url_for('detail_risque', id=item.risque.id) }}" class="btn btn-sm btn-outline-secondary flex-shrink-0"
+                           title="Voir le risque {{ item.risque.reference }}" aria-label="Voir le risque {{ item.risque.reference }}">
+                            <i class="fas fa-arrow-right"></i>
+                        </a>
+                    </li>
+                    {% endfor %}
+                </ul>
+                {% else %}
+                <div class="ca-vide"><i class="fas fa-shield-halved"></i>Aucun risque critique dans la campagne en cours.</div>
+                {% endif %}
+            </section>
+
+            <!-- Activités récentes -->
+            <section class="card ca-carte">
+                <div class="card-header">
+                    <h2><i class="fas fa-clock-rotate-left"></i>Activités récentes</h2>
+                    <a class="ca-lien-entete" href="{{ url_for('admin_journal_activite') }}">Tout le journal <i class="fas fa-arrow-right ms-1"></i></a>
                 </div>
-            </div>
+                {% if activites %}
+                <ul class="ca-liste">
+                    {% for activite in activites %}
+                    {% set action = activite.action or '' %}
+                    {% set genre = 'creation' if 'creation' in action else 'modification' if 'modification' in action else '' %}
+                    <li>
+                        <span class="ca-pastille {{ genre }}">
+                            <i class="fas fa-{{ 'plus' if genre == 'creation' else 'pen' if genre == 'modification' else 'bell' }}"></i>
+                        </span>
+                        <div class="ca-principal">
+                            <div class="ca-ligne1"><strong>{{ activite.utilisateur.username if activite.utilisateur else 'Système' }}</strong></div>
+                            <div class="ca-ligne2">{{ activite.details|truncate(90) if activite.details else action }}</div>
+                        </div>
+                        <span class="ca-date">{{ activite.date_creation.strftime('%d/%m/%Y %H:%M') if activite.date_creation else '' }}</span>
+                    </li>
+                    {% endfor %}
+                </ul>
+                {% else %}
+                <div class="ca-vide"><i class="fas fa-clock-rotate-left"></i>Aucune activité récente.</div>
+                {% endif %}
+            </section>
+
+            <!-- Derniers utilisateurs -->
+            <section class="card ca-carte">
+                <div class="card-header">
+                    <h2><i class="fas fa-user-plus"></i>Derniers utilisateurs</h2>
+                    <a class="ca-lien-entete" href="{{ url_for('client_admin_utilisateurs') }}">Tous <i class="fas fa-arrow-right ms-1"></i></a>
+                </div>
+                {% if utilisateurs_recents %}
+                <ul class="ca-liste">
+                    {% for user in utilisateurs_recents %}
+                    {% set genre = 'operateur' if user.is_operateur else 'admin' if user.is_client_admin else '' %}
+                    <li>
+                        <span class="ca-pastille {{ genre }}">
+                            <i class="fas fa-{{ 'user-check' if genre == 'operateur' else 'crown' if genre == 'admin' else 'user' }}"></i>
+                        </span>
+                        <div class="ca-principal">
+                            <div class="ca-ligne1"><strong>{{ user.username }}</strong></div>
+                            <div class="ca-ligne2">{{ user.email }}</div>
+                        </div>
+                        <span class="ca-etiquette role{% if genre %} role-{{ genre }}{% endif %}">
+                            {{ 'Opérateur' if genre == 'operateur' else 'Admin client' if genre == 'admin' else (user.role or 'Utilisateur')|replace('_', ' ')|capitalize }}
+                        </span>
+                    </li>
+                    {% endfor %}
+                </ul>
+                {% else %}
+                <div class="ca-vide"><i class="fas fa-users"></i>Aucun utilisateur récent.</div>
+                {% endif %}
+            </section>
         </div>
 
-        <!-- Utilisateurs récents -->
-        <div class="col-md-5">
-            <div class="card card-modern">
+        <!-- ============ COLONNE LATÉRALE ============ -->
+        <div class="col-xl-4">
+
+            <!-- Abonnement et quotas -->
+            <section class="card ca-carte">
                 <div class="card-header">
-                    <h5 class="mb-0">
-                        <i class="fas fa-user-plus me-2" style="color: var(--gold);"></i>
-                        Derniers utilisateurs
-                    </h5>
+                    <h2><i class="fas fa-gauge"></i>Abonnement</h2>
+                    {% if client.plan %}<span class="ca-plan">{{ client.plan|title }}</span>{% endif %}
                 </div>
-                <div class="card-body p-0">
-                    <div class="list-group list-group-modern">
-                        {% if utilisateurs_recents %}
-                            {% for user in utilisateurs_recents %}
-                            <div class="list-group-item d-flex align-items-center">
-                                <div class="avatar-circle 
-                                    {% if user.is_operateur %}bg-success
-                                    {% elif user.is_client_admin %}bg-gold
-                                    {% else %}bg-secondary{% endif %} me-3">
-                                    <i class="fas fa-{% if user.is_operateur %}user-check{% elif user.is_client_admin %}crown{% else %}user{% endif %}"></i>
-                                </div>
-                                <div class="flex-grow-1">
-                                    <div class="d-flex align-items-center justify-content-between">
-                                        <div>
-                                            <h6 class="mb-0" style="font-size: 0.9rem;">
-                                                {{ user.username }}
-                                            </h6>
-                                            <small class="text-muted">{{ user.email }}</small>
-                                        </div>
-                                        <span class="badge-modern 
-                                            {% if user.is_operateur %}badge-success
-                                            {% elif user.is_client_admin %}badge-gold
-                                            {% else %}badge-secondary{% endif %}"
-                                            style="font-size: 0.6rem;">
-                                            {% if user.is_operateur %}Opérateur
-                                            {% elif user.is_client_admin %}Admin Client
-                                            {% else %}{{ user.role }}{% endif %}
-                                        </span>
-                                    </div>
-                                </div>
-                            </div>
-                            {% endfor %}
-                        {% else %}
-                            <div class="text-center py-5">
-                                <div class="avatar-circle mx-auto mb-3" 
-                                     style="width: 56px; height: 56px; font-size: 1.5rem; background: var(--gray-light);">
-                                    <i class="fas fa-users text-muted"></i>
-                                </div>
-                                <p class="text-muted mb-0">Aucun utilisateur récent</p>
-                            </div>
-                        {% endif %}
+                <div class="card-body">
+                    {{ quota('Utilisateurs', 'users', stats.utilisateurs|default(0), stats.limite_utilisateurs) }}
+                    {{ quota('Risques', 'triangle-exclamation', stats.risques|default(0), stats.limite_risques) }}
+                    {{ quota('Audits', 'clipboard-list', stats.audits|default(0), stats.limite_audits) }}
+                </div>
+            </section>
+
+            <!-- Équipe et permissions -->
+            {% set nb_op = permissions_operateurs.total|default(0) %}
+            <section class="card ca-carte">
+                <div class="card-header">
+                    <h2><i class="fas fa-user-gear"></i>Opérateurs</h2>
+                    <a class="ca-lien-entete" href="{{ url_for('admin_operateurs') }}">Gérer <i class="fas fa-arrow-right ms-1"></i></a>
+                </div>
+                <div class="card-body">
+                    <div class="ca-chiffres-equipe">
+                        <div>
+                            <strong>{{ stats.operateurs|default(0) }}</strong>
+                            <span>opérateur{{ 's' if stats.operateurs|default(0) > 1 }} · {{ ((stats.operateurs / stats.utilisateurs * 100)|round|int) if stats.utilisateurs else 0 }} % des utilisateurs</span>
+                        </div>
+                        <div>
+                            <strong>{{ stats.operateurs_actifs|default(0) }}</strong>
+                            <span>actif{{ 's' if stats.operateurs_actifs|default(0) > 1 }}{% if stats.operateurs %} · {{ ((stats.operateurs_actifs / stats.operateurs * 100)|round|int) }} %{% endif %}</span>
+                        </div>
                     </div>
-                    <div class="card-footer bg-transparent text-center border-0 pt-0 pb-3">
-                        <a href="{{ url_for('client_admin_utilisateurs') }}" 
-                           class="btn btn-modern-primary btn-sm">
-                            <i class="fas fa-users me-1"></i>
-                            Voir tous les utilisateurs
-                        </a>
-                        <a href="{{ url_for('admin_operateurs') }}" 
-                           class="btn btn-outline-primary btn-sm ms-2">
-                            <i class="fas fa-user-cog me-1"></i>
-                            Gérer les opérateurs
-                        </a>
+                    {% if nb_op %}
+                    <div class="small text-muted mb-2">Ce que les opérateurs peuvent faire</div>
+                    {{ permission('Évaluer les risques', 'magnifying-glass', permissions_operateurs.peut_evaluer_risques, nb_op) }}
+                    {{ permission('Exécuter les campagnes', 'clipboard-check', permissions_operateurs.peut_executer_campagnes, nb_op) }}
+                    {{ permission("Gérer les plans d'action", 'list-check', permissions_operateurs.peut_creer_plans_action, nb_op) }}
+                    {% else %}
+                    <p class="small text-muted mb-0">Aucun opérateur pour l'instant. Désignez-en depuis la page Opérateurs pour leur confier évaluations, campagnes et plans d'action.</p>
+                    {% endif %}
+                </div>
+            </section>
+
+            <!-- Outils d'administration -->
+            <section class="card ca-carte">
+                <div class="card-header"><h2><i class="fas fa-screwdriver-wrench"></i>Outils d'administration</h2></div>
+                <div class="card-body">
+                    <div class="ca-outils">
+                        <a class="ca-outil" href="{{ url_for('admin_journal_activite') }}"><i class="fas fa-clock-rotate-left"></i>Journal d'activité</a>
+                        <a class="ca-outil" href="{{ url_for('admin_sessions_utilisateurs') }}"><i class="fas fa-plug"></i>Sessions</a>
+                        <a class="ca-outil" href="{{ url_for('admin_logs_systeme') }}"><i class="fas fa-terminal"></i>Journal système</a>
+                        <a class="ca-outil" href="{{ url_for('admin_templates_permissions') }}"><i class="fas fa-id-card"></i>Modèles de permissions</a>
+                        <a class="ca-outil" href="{{ url_for('admin_analyses_ia') }}"><i class="fas fa-robot"></i>Analyses IA</a>
+                        <a class="ca-outil" href="{{ url_for('assistant_questions_non_comprises') }}"><i class="fas fa-circle-question"></i>Questions non comprises</a>
                     </div>
                 </div>
-            </div>
+            </section>
         </div>
     </div>
 </div>
-{% endblock %}
-
-{% block scripts %}
-<script>
-document.addEventListener('DOMContentLoaded', function() {
-    // Activer les tooltips
-    const tooltipTriggerList = [].slice.call(document.querySelectorAll('[data-bs-toggle="tooltip"]'));
-    tooltipTriggerList.map(tooltipTriggerEl => new bootstrap.Tooltip(tooltipTriggerEl));
-    
-    // Activer tous les éléments avec title (pour les badges info)
-    const titleTriggers = [].slice.call(document.querySelectorAll('[title]'));
-    titleTriggers.map(el => new bootstrap.Tooltip(el));
-    
-    // Animation des stat cards au scroll
-    const observer = new IntersectionObserver((entries) => {
-        entries.forEach(entry => {
-            if (entry.isIntersecting) {
-                entry.target.style.opacity = '1';
-                entry.target.style.transform = 'translateY(0)';
-            }
-        });
-    }, { threshold: 0.1 });
-    
-    document.querySelectorAll('.card-stat').forEach(card => {
-        card.style.opacity = '0';
-        card.style.transform = 'translateY(20px)';
-        observer.observe(card);
-    });
-});
-</script>
 {% endblock %}
