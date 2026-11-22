@@ -30,7 +30,7 @@
   .oc-vue { position: relative; height: calc(100vh - 290px); min-height: 520px; background: var(--oc-fond);
             background-image: radial-gradient(circle, rgba(100,116,139,.18) 1px, transparent 1px); background-size: 22px 22px;
             border: 1px solid var(--oc-bord); border-radius: 0 0 12px 12px; overflow: hidden; cursor: grab; touch-action: none; }
-  .oc-vue.glisse { cursor: grabbing; }
+  .oc-vue.glisse, .oc-vue.glisse .oc-carte { cursor: grabbing; user-select: none; }
   .oc-vue:fullscreen { height: 100vh; border-radius: 0; }
   .oc-vue:fullscreen .oc-sortir { display: inline-flex; }
   .oc-sortir { display: none; position: absolute; top: 12px; right: 12px; z-index: 5; align-items: center; gap: .4rem; background: var(--oc-carte); border: 1px solid var(--oc-bord);
@@ -65,8 +65,8 @@
   /* ---- carte ---- */
   .oc-carte { position: relative; width: 236px; background: var(--oc-carte); border: 1px solid var(--oc-bord); border-radius: 14px;
               box-shadow: 0 1px 2px rgba(15,23,42,.06), 0 6px 18px rgba(15,23,42,.06); text-align: left; cursor: pointer;
-              transition: box-shadow .15s, transform .15s, border-color .15s; overflow: visible; }
-  .oc-carte:hover { box-shadow: 0 2px 4px rgba(15,23,42,.08), 0 12px 28px rgba(30,58,138,.14); transform: translateY(-1px); }
+              transition: box-shadow .15s, border-color .15s; overflow: visible; }
+  .oc-carte:hover { box-shadow: 0 2px 4px rgba(15,23,42,.08), 0 12px 28px rgba(30,58,138,.14); }
   .oc-carte:focus-visible { outline: 3px solid #93c5fd; outline-offset: 2px; }
   .oc-carte::before { content: ''; position: absolute; left: 0; right: 0; top: 0; height: 5px; border-radius: 14px 14px 0 0; background: var(--c, #1e3a8a); }
   .oc-carte .oc-c-corps { padding: .8rem .85rem .65rem; }
@@ -320,16 +320,23 @@
   var etat = { z: 1, x: 0, y: 0 };
   var NIVEAU = { organisation: 'Organisation', pays: 'Pays', pole: 'Pôle / filiale', direction: 'Direction', service: 'Service' };
 
+  // garde toujours un morceau de l'organigramme dans la vue (on ne peut plus le « perdre »)
+  function borner() {
+    var r = vue.getBoundingClientRect(), w = scene.scrollWidth * etat.z, h = scene.scrollHeight * etat.z, m = Math.min(200, r.width / 3, r.height / 3);
+    etat.x = Math.min(r.width - m, Math.max(m - w, etat.x));
+    etat.y = Math.min(r.height - m, Math.max(m - h, etat.y));
+  }
   function appliquer(anim) {
+    borner();
     scene.style.transition = anim ? 'transform .25s ease' : 'none';
     scene.style.transform = 'translate(' + etat.x + 'px,' + etat.y + 'px) scale(' + etat.z + ')';
     document.getElementById('ocZoomVal').textContent = Math.round(etat.z * 100) + ' %';
   }
-  function zoomer(f, cx, cy) {
+  function zoomer(f, cx, cy, sansAnim) {
     var r = vue.getBoundingClientRect();
     cx = cx == null ? r.width / 2 : cx; cy = cy == null ? r.height / 2 : cy;
     var z = Math.min(2, Math.max(0.2, etat.z * f));
-    etat.x = cx - (cx - etat.x) * (z / etat.z); etat.y = cy - (cy - etat.y) * (z / etat.z); etat.z = z; appliquer(true);
+    etat.x = cx - (cx - etat.x) * (z / etat.z); etat.y = cy - (cy - etat.y) * (z / etat.z); etat.z = z; appliquer(!sansAnim);
   }
   function ajuster() {
     var r = vue.getBoundingClientRect(), w = scene.scrollWidth, h = scene.scrollHeight;
@@ -341,17 +348,27 @@
     etat.x += (r.left + r.width / 2) - (b.left + b.width / 2); etat.y += (r.top + r.height / 3) - (b.top + b.height / 2); appliquer(true);
   }
   // ---- déplacement
-  var glisse = null;
+  var glisse = null, aGlisse = false, image = 0;
   vue.addEventListener('pointerdown', function (e) {
-    if (e.target.closest('.oc-carte, button, a, input')) return;
-    glisse = { x: e.clientX - etat.x, y: e.clientY - etat.y, id: e.pointerId }; vue.setPointerCapture(e.pointerId); vue.classList.add('glisse');
+    if (e.button !== 0 || e.target.closest('button, a, input, .oc-sortir')) return;
+    glisse = { x0: e.clientX, y0: e.clientY, x: e.clientX - etat.x, y: e.clientY - etat.y, id: e.pointerId, parti: false }; aGlisse = false;
   });
-  vue.addEventListener('pointermove', function (e) { if (!glisse) return; etat.x = e.clientX - glisse.x; etat.y = e.clientY - glisse.y; appliquer(false); });
+  vue.addEventListener('pointermove', function (e) {
+    if (!glisse || e.pointerId !== glisse.id) return;
+    if (!glisse.parti) {
+      if (Math.abs(e.clientX - glisse.x0) + Math.abs(e.clientY - glisse.y0) < 5) return;   // petit tremblement de la main : c'est encore un clic
+      glisse.parti = true; aGlisse = true; vue.setPointerCapture(e.pointerId); vue.classList.add('glisse');
+    }
+    etat.x = e.clientX - glisse.x; etat.y = e.clientY - glisse.y;
+    if (!image) image = requestAnimationFrame(function () { image = 0; appliquer(false); });   // une mise à jour par image
+  });
   function lacher() { glisse = null; vue.classList.remove('glisse'); }
+  // après un glisser, le relâchement sur une carte n'ouvre pas sa fiche
+  vue.addEventListener('click', function (e) { if (aGlisse) { e.stopPropagation(); e.preventDefault(); aGlisse = false; } }, true);
   vue.addEventListener('pointerup', lacher); vue.addEventListener('pointercancel', lacher);
   vue.addEventListener('wheel', function (e) {
     e.preventDefault();
-    if (e.ctrlKey || e.metaKey) { var r = vue.getBoundingClientRect(); zoomer(e.deltaY < 0 ? 1.12 : 1 / 1.12, e.clientX - r.left, e.clientY - r.top); }
+    if (e.ctrlKey || e.metaKey) { var r = vue.getBoundingClientRect(); zoomer(Math.exp(-Math.max(-60, Math.min(60, e.deltaY)) * 0.004), e.clientX - r.left, e.clientY - r.top, true); }
     else { etat.x -= e.deltaX; etat.y -= e.deltaY; appliquer(false); }
   }, { passive: false });
   document.getElementById('ocPlus').onclick = function () { zoomer(1.2); };
