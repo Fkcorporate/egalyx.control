@@ -85,7 +85,7 @@
         if (nature === 'clair' && !texteClair) {
           var pale = couleurs(cs.backgroundImage).filter(function (c) { return c.a >= 0.35; })[0];
           el.style.setProperty('background-image', 'none', 'important');
-          if (pale) { el.style.setProperty('background-color', 'rgb(' + pale.r + ',' + pale.g + ',' + pale.b + ')', 'important'); }
+          if (pale && !enSombre()) { el.style.setProperty('background-color', 'rgb(' + pale.r + ',' + pale.g + ',' + pale.b + ')', 'important'); }
           continue;
         }
       }
@@ -182,7 +182,9 @@
   function aDuTexteDirect(el) {
     return Array.prototype.some.call(el.childNodes, function (n) { return n.nodeType === 3 && n.textContent.trim(); });
   }
+  function enSombre() { return document.documentElement.getAttribute('data-bs-theme') === 'dark'; }
   function contraste(racine) {
+    if (enSombre()) { return; }                 // en mode sombre, c'est egalyx-sombre.js qui règle la lisibilité
     var tous = racine.querySelectorAll('*');
     for (var i = 0; i < tous.length; i++) {
       var el = tous[i];
@@ -346,5 +348,8 @@
     new MutationObserver(function (changes) {
       for (var i = 0; i < changes.length; i++) { if (changes[i].addedNodes.length) { plusTard(); return; } }
     }).observe(document.body, { childList: true, subtree: true });
+    // retour du mode sombre au mode clair : les textes que le mode sombre laissait de côté sont revérifiés
+    new MutationObserver(function () { if (!enSombre()) { plusTard(); } })
+      .observe(document.documentElement, { attributes: true, attributeFilter: ['data-bs-theme'] });
   } catch (e) { /* navigateur ancien : la page reste lisible */ }
 })();
