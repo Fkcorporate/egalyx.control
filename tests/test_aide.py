@@ -208,3 +208,27 @@ def test_echappement(app):
     with app.test_request_context():
         from markupsafe import Markup
         assert aide._rendu('**gras** <script>') == Markup('<strong>gras</strong> &lt;script&gt;')
+
+
+def test_video_et_captures_selon_apparence(app, monkeypatch):
+    """Vidéo de prise en main et vignettes du guide : version classique ou harmonisée selon l'apparence."""
+    from egalyx import apparence
+    app.static_folder = os.path.join(RACINE, 'static')                 # les vraies captures et vidéos du projet
+    c = app.test_client(); c.get('/_connexion/3')
+
+    monkeypatch.setattr(apparence, 'apparence_harmonisee', lambda: False)
+    r = c.get('/aide/')
+    assert r.status_code == 200 and 'id="video-prise-en-main"' in r.text
+    assert '/static/aide/video/prise_en_main.mp4' in r.text and 'aide/video/harmonisee/' not in r.text
+    assert '/static/aide/guide/tdb.webp' not in r.text or 'aide/guide/harmonisee/' not in r.text
+
+    monkeypatch.setattr(apparence, 'apparence_harmonisee', lambda: True)
+    r = c.get('/aide/')
+    assert '/static/aide/video/harmonisee/prise_en_main.mp4' in r.text
+    assert '/static/aide/video/harmonisee/prise_en_main.jpg' in r.text
+    assert 'aide/guide/harmonisee/' in r.text                         # vignettes du guide illustré
+    f = c.get('/aide/fiche/guide-premiers-pas')
+    assert f.status_code == 200 and '/static/aide/video/harmonisee/prise_en_main.mp4' in f.text
+
+    # recherche en cours : la vidéo s'efface pour laisser les résultats en tête
+    assert 'id="video-prise-en-main"' not in c.get('/aide/?q=incident').text

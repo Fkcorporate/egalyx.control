@@ -399,17 +399,34 @@ def enregistrer(app):
     app.register_blueprint(bp)
     app.jinja_env.filters.setdefault('aide_rendu', _rendu)
 
-    def image_guide(chemin):
-        """Capture du guide dans l'interface de l'organisation : static/aide/guide/harmonisee/… si elle existe."""
+    from jinja2 import pass_context
+
+    def _media(chemin):
+        """Capture ou vidéo de l'aide dans l'interface de l'organisation.
+
+        aide/guide/x.webp  → aide/guide/harmonisee/x.webp   (captures du guide illustré)
+        aide/video/x.mp4   → aide/video/harmonisee/x.mp4    (vidéos de formation, et leur image d'attente .jpg)
+        La variante « harmonisée » n'est prise que si l'organisation est en interface harmonisée ET que le fichier existe ;
+        sinon on garde le fichier classique."""
         import os
         try:
             from egalyx.apparence import apparence_harmonisee
-            if apparence_harmonisee() and chemin.startswith('aide/guide/'):
-                variante = 'aide/guide/harmonisee/' + chemin[len('aide/guide/'):]
-                if os.path.exists(os.path.join(app.static_folder, variante)):
-                    chemin = variante
-        except Exception:  # noqa: BLE001 — en cas de doute, la capture d'origine
+            if apparence_harmonisee():
+                for dossier in ('aide/guide/', 'aide/video/'):
+                    if chemin.startswith(dossier):
+                        variante = dossier + 'harmonisee/' + chemin[len(dossier):]
+                        if os.path.exists(os.path.join(app.static_folder, variante)):
+                            chemin = variante
+                        break
+        except Exception:  # noqa: BLE001 — en cas de doute, le fichier d'origine
             pass
         return url_for('static', filename=chemin)
+
+    # @pass_context : Jinja ne doit PAS calculer ces filtres à la compilation. Sans lui, un chemin écrit en dur
+    # ('aide/video/x.mp4'|media_aide) serait figé avec l'apparence de la première organisation qui ouvre la page.
+    @pass_context
+    def image_guide(_contexte, chemin):
+        return _media(chemin)
     app.jinja_env.filters['image_guide'] = image_guide
+    app.jinja_env.filters['media_aide'] = image_guide      # même règle, nom plus parlant pour les vidéos
     index()
