@@ -6,7 +6,9 @@
 (function () {
   'use strict';
   var IGNORER = '.progress, canvas, svg, .matrice, .matrix, .heatmap, .risk-matrix, .risk-cell, .cellule, .cell-matrice, ' +
-    '.legende, .legend, .gauge, .jauge, [data-garder-style], .eg-chat, .navbar, .sidebar-container, .select2-container';
+    '.legende, .legend, .gauge, .jauge, [data-garder-style], .eg-chat, .navbar, .sidebar-container, .select2-container, ' +
+    // zones de dessin (logigrammes, organigrammes) : leurs formes gardent leurs couleurs, la feuille de style les met à plat
+    '#editeur-logigramme, .minimap, .oc-vue, .ed-cadre, .orga-cadre, [class*="logigramme-canvas"], [class*="organigramme-canvas"]';
   var ETATS = [
     ['retard', /^(en retard|retard|retardée?s?|échue?s?|en dépassement|dépassée?)$/i],
     ['valider', /^(à valider|en validation|en attente de validation|soumise?|demande de clôture|clôture demandée|à approuver|en revue)$/i],
@@ -25,6 +27,31 @@
     return { r: parseInt(x.slice(0, 2), 16), g: parseInt(x.slice(2, 4), 16), b: parseInt(x.slice(4, 6), 16), a: 1 };
   }
   function clair(c) { return c && (0.299 * c.r + 0.587 * c.g + 0.114 * c.b) / 255 > 0.8; }
+  function lum(c) { return (0.299 * c.r + 0.587 * c.g + 0.114 * c.b) / 255; }
+  function couleurs(chaine) {
+    var re = /rgba?\(([\d.]+),\s*([\d.]+),\s*([\d.]+)(?:,\s*([\d.]+))?\)/g, m, liste = [];
+    while ((m = re.exec(chaine || ''))) { liste.push({ r: +m[1], g: +m[2], b: +m[3], a: m[4] === undefined ? 1 : +m[4] }); }
+    return liste;
+  }
+  // Nature d'un dégradé : « texture » (quadrillage, points : couleurs presque transparentes),
+  // « clair » (fond très pâle, ex. #f8fafc → #f1f5f9) ou « fonce » (vrai bandeau coloré)
+  function natureDegrade(chaine) {
+    var toutes = couleurs(chaine), opaques = toutes.filter(function (c) { return c.a >= 0.35; });
+    if (!toutes.length) { return 'fonce'; }
+    if (!opaques.length) { return 'texture'; }
+    return opaques.every(function (c) { return lum(c) > 0.8; }) ? 'clair' : 'fonce';
+  }
+  // Couleur qui porte le sens d'un dégradé : la plus foncée de ses couleurs opaques
+  function couleurPrincipale(chaine) {
+    var opaques = couleurs(chaine).filter(function (c) { return c.a >= 0.35; });
+    if (!opaques.length) { return null; }
+    return opaques.reduce(function (a, b) { return lum(b) < lum(a) ? b : a; });
+  }
+  // Couleur assez foncée pour servir de texte sur fond pâle
+  function lisible(c) {
+    var k = lum(c) > 0.55 ? 0.55 / lum(c) : 1;
+    return 'rgb(' + Math.round(c.r * k) + ',' + Math.round(c.g * k) + ',' + Math.round(c.b * k) + ')';
+  }
   function foncePlein(c) { return c && c.a > 0.6 && (0.299 * c.r + 0.587 * c.g + 0.114 * c.b) / 255 < 0.55; }
 
   function aplatir(racine) {
@@ -50,6 +77,18 @@
       var dansBande = el.parentElement && el.parentElement.closest('.eg-bandeau, .pg-entete');
       if ((cs.webkitBackgroundClip || cs.backgroundClip) === 'text') { el.classList.add('eg-texte-plat'); continue; }
       if (degrade && el.matches('thead, thead tr, thead th, tr, th')) { el.classList.add('eg-thead'); continue; }
+      if (degrade) {
+        var nature = natureDegrade(cs.backgroundImage);
+        // quadrillage ou trame de points (zone de dessin) : on n'y touche pas
+        if (nature === 'texture') { continue; }
+        // fond pâle en dégradé avec texte foncé : simple fond clair uni, jamais une bande marine
+        if (nature === 'clair' && !texteClair) {
+          var pale = couleurs(cs.backgroundImage).filter(function (c) { return c.a >= 0.35; })[0];
+          el.style.setProperty('background-image', 'none', 'important');
+          if (pale) { el.style.setProperty('background-color', 'rgb(' + pale.r + ',' + pale.g + ',' + pale.b + ')', 'important'); }
+          continue;
+        }
+      }
       var bandeauPossible = !dejaPlat && b.width >= 0.55 * largeur && b.height >= 56 && (b.top + window.scrollY - haut) < 360 &&
         !el.matches('.card-header, .fk-card-header, .modal-header, .modal-content, thead, tr, th, td, .table, .btn');
       if (degrade || (bandeauPossible && texteClair && foncePlein(fond))) {
@@ -61,21 +100,26 @@
         } else if (!dejaPlat && (texteClair || el.querySelector('.text-white')) && b.width >= 110 && b.height >= 44 && !el.matches('.btn, .badge')) {
           el.classList.add('eg-plat');
           // la couleur d'origine de la tuile reste en repère discret à gauche (rouge = critique, orange = retard…)
-          var r = rgb(cs.backgroundImage) || rgb(styleEcrit);
-          if (r && (0.299 * r.r + 0.587 * r.g + 0.114 * r.b) / 255 > 0.25) {
+          var r = couleurPrincipale(cs.backgroundImage) || rgb(styleEcrit);
+          if (r && lum(r) > 0.25 && lum(r) < 0.85) {
             el.style.setProperty('box-shadow', 'inset 3px 0 0 rgb(' + r.r + ',' + r.g + ',' + r.b + ')', 'important');
           }
         } else if (degrade) {
           // petit élément (pastille, icône, avatar) : teinte claire de la couleur d'origine, icône dans cette couleur
-          var c = rgb(cs.backgroundImage) || rgb(styleEcrit);
+          var c = couleurPrincipale(cs.backgroundImage) || rgb(styleEcrit);
           el.classList.add('eg-teinte');
           el.style.setProperty('background-image', 'none', 'important');
-          if (c && el.matches('.btn, [class*="btn-"], button') && (0.299 * c.r + 0.587 * c.g + 0.114 * c.b) / 255 < 0.75) {
+          if (c && lum(c) > 0.8) {
+            // dégradé très pâle : fond uni de cette couleur, le texte garde sa couleur (sinon blanc sur blanc)
+            el.style.setProperty('background-color', 'rgb(' + c.r + ',' + c.g + ',' + c.b + ')', 'important');
+          } else if (el.matches('.action-btn, [class*="btn-action"], [class*="btn-icon"]')) {
+            // petit bouton d'action de ligne : la feuille de style le met en blanc, texte gris (rien à poser ici)
+          } else if (c && el.matches('.btn, [class*="btn-"], button') && lum(c) < 0.75) {
             // bouton en dégradé : couleur unie (la première du dégradé), texte blanc conservé
             el.style.setProperty('background-color', 'rgb(' + c.r + ',' + c.g + ',' + c.b + ')', 'important');
             el.style.setProperty('border-color', 'rgb(' + c.r + ',' + c.g + ',' + c.b + ')', 'important');
           } else if (c) {
-            var plein = 'rgb(' + c.r + ',' + c.g + ',' + c.b + ')';
+            var plein = lisible(c);                       // texte toujours assez foncé sur la teinte pâle
             el.style.setProperty('background-color', 'rgba(' + c.r + ',' + c.g + ',' + c.b + ',.12)', 'important');
             el.style.setProperty('color', plein, 'important');
             el.querySelectorAll('i, svg, span').forEach(function (x) { x.style.setProperty('color', plein, 'important'); });
@@ -121,22 +165,48 @@
     }
     return { r: 243, g: 245, b: 248, a: 1 };
   }
+  // écart de contraste (WCAG) entre deux couleurs : 1 = identiques, 21 = noir sur blanc
+  function ecart(a, b) {
+    var l = function (c) {
+      var f = function (v) { v /= 255; return v <= 0.03928 ? v / 12.92 : Math.pow((v + 0.055) / 1.055, 2.4); };
+      return 0.2126 * f(c.r) + 0.7152 * f(c.g) + 0.0722 * f(c.b);
+    };
+    var x = l(a), y = l(b);
+    return (Math.max(x, y) + 0.05) / (Math.min(x, y) + 0.05);
+  }
+  // même teinte, assez foncée pour être lue sur fond clair
+  function fonce(c) {
+    var k = Math.min(1, 0.36 / Math.max(lum(c), 0.01));
+    return 'rgb(' + Math.round(c.r * k) + ',' + Math.round(c.g * k) + ',' + Math.round(c.b * k) + ')';
+  }
+  function aDuTexteDirect(el) {
+    return Array.prototype.some.call(el.childNodes, function (n) { return n.nodeType === 3 && n.textContent.trim(); });
+  }
   function contraste(racine) {
     var tous = racine.querySelectorAll('*');
     for (var i = 0; i < tous.length; i++) {
       var el = tous[i];
-      if (el.dataset.egC || el.closest(IGNORER + ', .badge, .navbar, .dropdown-menu')) { continue; }
+      if (el.dataset.egC || el.closest(IGNORER + ', .navbar, .dropdown-menu')) { continue; }
       el.dataset.egC = '1';
       var cs = getComputedStyle(el);
       var couleur = rgb(cs.color);
-      if (couleur && !clair(couleur) && (0.299 * couleur.r + 0.587 * couleur.g + 0.114 * couleur.b) / 255 < 0.4) {
+      if (couleur && lum(couleur) < 0.45) {
         var f0 = fondEffectif(el);
-        if (f0 && (0.299 * f0.r + 0.587 * f0.g + 0.114 * f0.b) / 255 < 0.3 && el.closest('.eg-bandeau, .pg-entete')) {
-          el.style.setProperty('color', '#FFFFFF', 'important');      // texte foncé posé sur la bande marine
+        // texte foncé posé sur un fond foncé (bande marine, bouton recoloré…) : il passe en blanc si c'est plus lisible
+        if (f0 && (el.closest('.eg-bandeau, .pg-entete') || aDuTexteDirect(el)) && ecart(couleur, f0) < 3 && ecart({ r: 255, g: 255, b: 255 }, f0) > ecart(couleur, f0)) {
+          el.style.setProperty('color', '#FFFFFF', 'important');
         }
         continue;
       }
-      if (!clair(couleur)) { continue; }
+      if (!clair(couleur)) {
+        // couleur intermédiaire (jaune, doré, cyan…) posée sur un fond clair : on la fonce en gardant sa teinte
+        var f1 = couleur && aDuTexteDirect(el) ? fondEffectif(el) : null;
+        if (f1 && clair(f1) && ecart(couleur, f1) < 2.2) {
+          el.classList.add('eg-contraste');
+          el.style.setProperty('color', Math.max(couleur.r, couleur.g, couleur.b) - Math.min(couleur.r, couleur.g, couleur.b) > 40 ? fonce(couleur) : '#14202E', 'important');
+        }
+        continue;
+      }
       var aDuTexte = el.tagName === 'I' || el.tagName === 'svg' || Array.prototype.some.call(el.childNodes, function (n) {
         return n.nodeType === 3 && n.textContent.trim();
       });
