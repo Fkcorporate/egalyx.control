@@ -1,0 +1,113 @@
+{% extends "base.html" %}
+{% import "_macros/page.html" as pg %}
+{% block title %}{{ 'Modifier' if m else 'Nouveau' }} modèle de lettre — {{ client.nom }}{% endblock %}
+{% block styles %}{{ pg.styles() }}<style>
+  .lm-grille { display:grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.15fr); gap:1.25rem; align-items:start; }
+  @media (max-width: 1100px) { .lm-grille { grid-template-columns: 1fr; } }
+  .lm-apercu { position: sticky; top: 80px; }
+  .lm-apercu iframe { width:100%; height:78vh; border:1px solid var(--border); border-radius:10px; background:#eef2f7; }
+  .lm-var code { cursor:pointer; }
+</style>{% endblock %}
+{% block content %}
+<div class="container-fluid" style="max-width: 1400px;">
+  {{ pg.entete(('Modèle « ' ~ m.nom ~ ' »') if m else 'Nouveau modèle de lettre de mission', 'fa-envelope-open-text', client.nom,
+               retour=url_for('lettre_mission.reglages_client', client_id=client.id) ~ '#lettres', libelle_retour='Réglages de l\'organisation') }}
+  <div class="lm-grille">
+    <form method="post" enctype="multipart/form-data" id="formModele">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      {% call pg.carte('Modèle') %}
+        <div class="row g-2">
+          <div class="col-md-8"><label class="form-label small fw-semibold" for="nom">Nom du modèle</label>
+            <input class="form-control" id="nom" name="nom" required maxlength="120" value="{{ m.nom if m else 'Standard' }}" placeholder="ex. Direction de l'audit, Filiale Sénégal…"></div>
+          <div class="col-md-4 d-flex align-items-end gap-3">
+            <div class="form-check"><input class="form-check-input" type="checkbox" id="est_defaut" name="est_defaut" value="1" {% if not m or m.est_defaut %}checked{% endif %}>
+              <label class="form-check-label small" for="est_defaut">Par défaut</label></div>
+            <input type="hidden" name="actif" value="0">
+            <div class="form-check"><input class="form-check-input" type="checkbox" id="actif" name="actif" value="1" {% if not m or m.actif is not sameas false %}checked{% endif %}>
+              <label class="form-check-label small" for="actif">Actif</label></div>
+          </div>
+        </div>
+      {% endcall %}
+      {% call pg.carte('En-tête') %}
+        <div class="row g-2">
+          <div class="col-md-5"><label class="form-label small fw-semibold" for="logo_position">Logo</label>
+            <select class="form-select" id="logo_position" name="logo_position">
+              {% for p, lib in [('gauche','À gauche'),('centre','Centré'),('droite','À droite'),('aucun','Pas de logo')] %}
+              <option value="{{ p }}" {% if (m.logo_position if m else 'gauche') == p %}selected{% endif %}>{{ lib }}</option>{% endfor %}
+            </select></div>
+          <div class="col-md-4"><label class="form-label small fw-semibold" for="logo_source">Image</label>
+            <select class="form-select" id="logo_source" name="logo_source">
+              <option value="organisation" {% if not m or m.logo_url != 'propre' %}selected{% endif %}>Logo de l'organisation</option>
+              {% if m and m.logo_url == 'propre' %}<option value="propre" selected>Logo propre à ce modèle</option>{% endif %}
+            </select></div>
+          <div class="col-md-3"><label class="form-label small fw-semibold" for="couleur">Couleur</label>
+            <input type="color" class="form-control form-control-color w-100" id="couleur" name="couleur" value="{{ m.couleur if m and m.couleur else '#1A3C6B' }}"></div>
+          <div class="col-12"><label class="form-label small fw-semibold" for="logo">Logo propre à ce modèle (facultatif)</label>
+            <input class="form-control" type="file" id="logo" name="logo" accept="image/png,image/jpeg,image/webp">
+            <div class="pg-second small mt-1">PNG, JPEG ou WebP, 1 Mo au maximum. Sinon, le logo de l'organisation est utilisé.</div></div>
+          <div class="col-12"><label class="form-label small fw-semibold" for="titre_entete">Titre de l'en-tête</label>
+            <input class="form-control" id="titre_entete" name="titre_entete" maxlength="200" value="{{ m.titre_entete or '' if m else '' }}" placeholder="{{ client.nom }} — Direction de l'Audit Interne"></div>
+          <div class="col-12"><label class="form-label small fw-semibold" for="lignes_entete">Coordonnées (une information par ligne)</label>
+            <textarea class="form-control" id="lignes_entete" name="lignes_entete" rows="3" placeholder="Immeuble Alpha, Plateau — Abidjan&#10;Tél. +225 27 20 00 00 00&#10;audit@exemple.ci">{{ m.lignes_entete or '' if m else '' }}</textarea></div>
+          <div class="col-12"><label class="form-label small fw-semibold" for="mention_haut">Mention en haut de page</label>
+            <input class="form-control" id="mention_haut" name="mention_haut" maxlength="200" value="{{ m.mention_haut or '' if m else '' }}" placeholder="Confidentiel"></div>
+        </div>
+      {% endcall %}
+      {% call pg.carte('Signature et pied de page') %}
+        <label class="form-label small fw-semibold" for="signature">Signature</label>
+        <textarea class="form-control mb-2" id="signature" name="signature" rows="2" placeholder="Le Directeur de l'Audit Interne&#10;Nom Prénom">{{ m.signature or '' if m else '' }}</textarea>
+        <label class="form-label small fw-semibold" for="pied_page">Pied de page (sur chaque page du PDF)</label>
+        <textarea class="form-control" id="pied_page" name="pied_page" rows="2" placeholder="Société anonyme au capital de … — RCCM …">{{ m.pied_page or '' if m else '' }}</textarea>
+        <label class="form-label small fw-semibold mt-2" for="pied_position">Position du pied de page</label>
+        <div class="btn-group w-100" role="group" aria-label="Position du pied de page">
+          {% set _pos = (m.pied_position if m and m.pied_position else 'centre') %}
+          {% for p, lib in PIED_POSITIONS %}
+          <input type="radio" class="btn-check" name="pied_position" id="pied_{{ p }}" value="{{ p }}" {% if _pos == p %}checked{% endif %}>
+          <label class="btn btn-outline-secondary btn-sm" for="pied_{{ p }}"><i class="fas fa-align-{{ {'gauche': 'left', 'centre': 'center', 'droite': 'right'}[p] }} me-1"></i>{{ lib }}</label>
+          {% endfor %}
+        </div>
+        <div class="pg-second small mt-1">Le numéro de page se place du côté opposé (à droite si le pied est centré).
+          {% if papier %}<br><i class="fas fa-file-pdf me-1"></i>Cette organisation a un papier à en-tête : le pied du papier reste tel quel ; ce pied-ci s'écrit juste au-dessus, et l'aperçu montre le PDF réel.{% endif %}</div>
+      {% endcall %}
+      {% call pg.carte('E-mail d\'accompagnement') %}
+        <label class="form-label small fw-semibold" for="objet_email">Objet</label>
+        <input class="form-control mb-2" id="objet_email" name="objet_email" maxlength="250" value="{{ m.objet_email or '' if m else '' }}" placeholder="{{ OBJET_DEFAUT }}">
+        <label class="form-label small fw-semibold" for="message_email">Message</label>
+        <textarea class="form-control" id="message_email" name="message_email" rows="7" placeholder="{{ MESSAGE_DEFAUT }}">{{ m.message_email or '' if m else '' }}</textarea>
+        <div class="pg-second small mt-2 lm-var">Variables remplacées à l'envoi :
+          {% for v in VARIABLES %}<code>{{ '{' ~ v ~ '}' }}</code> {% endfor %}
+          — l'auditeur peut retoucher l'objet et le message avant chaque envoi.</div>
+      {% endcall %}
+      <button class="btn btn-primary"><i class="fas fa-save me-1"></i>Enregistrer le modèle</button>
+    </form>
+    <div class="lm-apercu">
+      {% call pg.carte('Aperçu', aide='Mis à jour pendant la saisie') %}
+        <iframe id="apercu" title="Aperçu de la lettre"></iframe>
+      {% endcall %}
+    </div>
+  </div>
+</div>
+<script>
+(function () {
+  const form = document.getElementById('formModele');
+  const cadre = document.getElementById('apercu');
+  const url = "{{ url_for('lettre_mission.modele_apercu', client_id=client.id, modele_id=(m.id if m else 0)) }}";
+  let minuterie = null;
+  function rafraichir() {
+    const donnees = new FormData(form);
+    donnees.delete('logo');
+    fetch(url, { method: 'POST', body: donnees, headers: { 'X-CSRFToken': '{{ csrf_token() }}' } })
+      .then(r => r.ok ? r.text() : Promise.reject(r.status))
+      .then(html => { cadre.srcdoc = html; })
+      .catch(() => { cadre.srcdoc = '<p style="font-family:sans-serif;padding:1rem;color:#b91c1c">Aperçu indisponible.</p>'; });
+  }
+  form.addEventListener('input', () => { clearTimeout(minuterie); minuterie = setTimeout(rafraichir, 400); });
+  form.addEventListener('change', () => { clearTimeout(minuterie); minuterie = setTimeout(rafraichir, 100); });
+  document.querySelectorAll('.lm-var code').forEach(c => c.addEventListener('click', () => {
+    const cible = document.activeElement && ['message_email', 'objet_email'].includes(document.activeElement.id) ? document.activeElement : document.getElementById('message_email');
+    cible.setRangeText(c.textContent, cible.selectionStart, cible.selectionEnd, 'end'); cible.focus();
+  }));
+  rafraichir();
+})();
+</script>
+{% endblock %}

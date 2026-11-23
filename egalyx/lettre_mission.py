@@ -38,6 +38,7 @@ MESSAGE_DEFAUT = ("Bonjour,\n\nVeuillez trouver ci-dessous et en pièce jointe l
                   "« {objet} », prévue du {date_debut} au {date_fin}.\n\nNous restons à votre disposition pour "
                   "convenir d'une réunion de lancement.\n\nCordialement,\n{emetteur}")
 POSITIONS = ('gauche', 'centre', 'droite', 'aucun')
+PIED_POSITIONS = (('gauche', 'À gauche'), ('centre', 'Au centre'), ('droite', 'À droite'))
 
 
 def _m():
@@ -233,18 +234,36 @@ def pdf_lettre(lettre, m, cid, audit):
 
     pied = remplir((m.pied_page if m else '') or '', ctx)
 
+    cote = getattr(m, 'pied_position', None) or 'centre'
+    cote = cote if cote in dict(PIED_POSITIONS) else 'centre'
+
+    def ecrire(canvas, x_g, x_d, y, texte, ou):
+        if ou == 'gauche':
+            canvas.drawString(x_g, y, texte)
+        elif ou == 'droite':
+            canvas.drawRightString(x_d, y, texte)
+        else:
+            canvas.drawCentredString((x_g + x_d) / 2, y, texte)
+
     def pied_de_page(canvas, doc):
-        if papier:                                  # le pied est sur le papier ; seul le numéro de page est ajouté
-            canvas.saveState(); canvas.setFont('Helvetica', 7.5); canvas.setFillColor(colors.HexColor('#64748b'))
-            canvas.drawRightString(A4[0] - papier['droite'] * mm, (papier['bas'] - 5) * mm, f'Page {doc.page}')
+        # le numéro de page va du côté opposé au pied (à droite si le pied est centré ou à gauche)
+        cote_num = 'gauche' if cote == 'droite' else 'droite'
+        texte = pied.replace('\n', ' — ')[:180] if pied else ''
+        canvas.saveState(); canvas.setFont('Helvetica', 7.5); canvas.setFillColor(colors.HexColor('#64748b'))
+        if papier:
+            # le pied du client est imprimé sur le papier : on écrit juste au-dessus, dans la marge laissée libre
+            x_g, x_d, y = papier['gauche'] * mm, A4[0] - papier['droite'] * mm, (papier['bas'] - 4) * mm
+            if texte:
+                ecrire(canvas, x_g, x_d, y, texte, cote)
+            ecrire(canvas, x_g, x_d, y if not texte or cote != cote_num else y - 9, f'Page {doc.page}', cote_num if texte else cote)
             canvas.restoreState(); return
-        canvas.saveState()
+        x_g, x_d = 18 * mm, A4[0] - 18 * mm
         canvas.setStrokeColor(couleur); canvas.setLineWidth(0.6)
-        canvas.line(18 * mm, 15 * mm, A4[0] - 18 * mm, 15 * mm)
-        canvas.setFont('Helvetica', 7.5); canvas.setFillColor(colors.HexColor('#64748b'))
-        if pied:
-            canvas.drawCentredString(A4[0] / 2, 10.5 * mm, pied.replace('\n', ' — ')[:180])
-        canvas.drawRightString(A4[0] - 18 * mm, 6.5 * mm, f'Page {doc.page}')
+        canvas.line(x_g, 15 * mm, x_d, 15 * mm)
+        canvas.setFillColor(colors.HexColor('#64748b'))
+        if texte:
+            ecrire(canvas, x_g, x_d, 10.5 * mm, texte, cote)
+        ecrire(canvas, x_g, x_d, 6.5 * mm, f'Page {doc.page}', cote_num if texte else cote)
         canvas.restoreState()
 
     tampon = io.BytesIO()
@@ -257,6 +276,29 @@ def pdf_lettre(lettre, m, cid, audit):
         from egalyx.papier_entete import poser
         return poser(tampon.getvalue(), cid, 'lettre_mission', natif=True)
     return tampon.getvalue()
+
+
+def _papier_lettre(cid):
+    try:
+        from egalyx.papier_entete import reglage
+        return reglage(cid, 'lettre_mission')
+    except Exception:  # noqa: BLE001
+        return None
+
+
+def apercu_pdf_html(pdf):
+    """Page HTML qui affiche un PDF (aperçus en iframe « srcdoc ») : la lettre telle qu'elle sera imprimée."""
+    import base64
+    donnees = base64.b64encode(pdf).decode()
+    return ('<!doctype html><html lang="fr"><head><meta charset="utf-8"><style>html,body{margin:0;height:100%;background:#525659}'
+            'iframe{border:0;width:100%;height:100%;display:block}p{font:14px sans-serif;color:#fff;padding:1rem}a{color:#9cc3ff}</style></head>'
+            '<body><iframe id="pdf" title="Lettre de mission (PDF)"></iframe>'
+            '<p id="secours" hidden>Votre navigateur n\'affiche pas le PDF ici : <a id="lien" download="apercu_lettre_mission.pdf">téléchargez l\'aperçu</a>.</p>'
+            '<script>(function(){var b=atob("' + donnees + '"),t=new Uint8Array(b.length);for(var i=0;i<b.length;i++)t[i]=b.charCodeAt(i);'
+            'var u=URL.createObjectURL(new Blob([t],{type:"application/pdf"}));document.getElementById("lien").href=u;'
+            'try{document.getElementById("pdf").src=u+"#view=FitH";}catch(e){document.getElementById("secours").hidden=false;}'
+            'if(!navigator.pdfViewerEnabled&&navigator.pdfViewerEnabled!==undefined){document.getElementById("secours").hidden=false;}})();</script>'
+            '</body></html>')
 
 
 # ------------------------------------------------------------------ destinataires
@@ -371,6 +413,8 @@ def enregistrer_lettre(feuille_id):
 def apercu(feuille_id):
     f, audit, cid = _feuille(feuille_id)
     m = modele_pour(cid, request.args.get('modele_id') or _lettre(f).get('modele_id'))
+    if _papier_lettre(cid):
+        return apercu_pdf_html(pdf_lettre(_lettre(f), m, cid, audit))
     import base64
     logo = logo_octets(m, cid)
     src = 'data:image/png;base64,' + base64.b64encode(logo).decode() if logo else None
@@ -484,6 +528,8 @@ def _formulaire_modele(m, form):
     m.nom = (form.get('nom') or '').strip()[:120] or 'Modèle'
     pos = form.get('logo_position') or 'gauche'
     m.logo_position = pos if pos in POSITIONS else 'gauche'
+    pied = form.get('pied_position') or 'centre'
+    m.pied_position = pied if pied in dict(PIED_POSITIONS) else 'centre'
     couleur = (form.get('couleur') or '').strip()
     m.couleur = couleur if re.match(r'^#[0-9A-Fa-f]{6}$', couleur) else '#1A3C6B'
     for champ, n in (('titre_entete', 200), ('mention_haut', 200), ('objet_email', 250)):
@@ -609,6 +655,7 @@ def modele_editer(client_id, modele_id=None):
                'objectifs': 'Évaluer la maîtrise des risques du processus achats.', 'date_debut': '2026-12-01', 'date_fin': '2026-12-19',
                'emetteur': 'Le Directeur de l\'Audit Interne'}
     return render_template('egalyx/modele_lettre_form.html', client=c, m=m, exemple=exemple, POSITIONS=POSITIONS,
+                           PIED_POSITIONS=PIED_POSITIONS, papier=_papier_lettre(c.id),
                            VARIABLES=VARIABLES, OBJET_DEFAUT=OBJET_DEFAUT, MESSAGE_DEFAUT=MESSAGE_DEFAUT)
 
 
@@ -641,6 +688,8 @@ def modele_apercu(client_id, modele_id):
               'perimetre': 'Achats de biens et services de l\'exercice en cours.', 'date_debut': '2026-12-01', 'date_fin': '2026-12-19',
               'emetteur': 'Le Directeur de l\'Audit Interne', 'confidentialite': True,
               'confidentialite_texte': 'Les informations recueillies resteront strictement confidentielles.'}
+    if _papier_lettre(c.id):
+        return apercu_pdf_html(pdf_lettre(lettre, m, c.id, None))
     return html_lettre(lettre, m, c.id, None, logo_src='data:image/png;base64,' + base64.b64encode(logo).decode() if logo else None)
 
 

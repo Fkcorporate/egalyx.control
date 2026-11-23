@@ -9502,6 +9502,7 @@ class ModeleLettreMission(db.Model):
     lignes_entete = db.Column(db.Text)                   # une ligne par information (adresse, téléphone…)
     mention_haut = db.Column(db.String(200))             # ex. « CONFIDENTIEL »
     pied_page = db.Column(db.Text)
+    pied_position = db.Column(db.String(10), default='centre')   # gauche, centre, droite : pied de page et numéro de page
     signature = db.Column(db.Text)                       # bloc de signature (nom, fonction)
     # e-mail d'accompagnement ; variables : {reference} {objet} {audit} {organisation} {date_debut} {date_fin} {emetteur} {destinataire}
     objet_email = db.Column(db.String(250))

@@ -40,6 +40,15 @@ TAILLE_MAX = 5 * 1024 * 1024
 ECART = 6          # mm laissés entre le papier imprimé et le contenu
 
 
+def pypdf_present():
+    """La bibliothèque pypdf (requirements.txt) est-elle installée sur le serveur ? Sans elle, le papier n'est pas appliqué."""
+    try:
+        import pypdf  # noqa: F401
+        return True
+    except ImportError:
+        return False
+
+
 # ------------------------------------------------------------------ rangement des fichiers
 def _racine():
     base = os.environ.get('EGALYX_DONNEES')
@@ -325,6 +334,10 @@ def deposer(client_id, type_):
             flash('Le papier à en-tête dépasse 5 Mo.', 'danger'); return retour
         if not octets.startswith(b'%PDF'):
             flash('Le papier à en-tête doit être un fichier PDF.', 'danger'); return retour
+        if not pypdf_present():
+            flash("Le serveur n'a pas la bibliothèque pypdf : redéployez avec le requirements.txt fourni (ligne « pypdf »), "
+                  "puis déposez à nouveau le papier.", 'danger')
+            return retour
         try:
             infos = analyser(octets)
         except Exception as e:  # noqa: BLE001
@@ -429,3 +442,4 @@ def enregistrer(app):
     app.after_request(_apres_requete)
     app.jinja_env.globals['papiers_entete'] = tous
     app.jinja_env.globals['PAPIER_TYPES'] = TYPES
+    app.jinja_env.globals['papier_pypdf_present'] = pypdf_present
