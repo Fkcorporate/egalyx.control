@@ -3285,3 +3285,34 @@ class PlanPluieForm(FlaskForm):
     condition_description = TextAreaField('Description de la condition')
     
     submit = SubmitField('Créer le plan de repli')
+
+
+class ProcessusMetierForm(FlaskForm):
+    """Processus métier (création / modification : /processus-metier/nouveau et /processus-metier/<id>/modifier).
+
+    Il manquait : app.py l'importait avec tous les autres formulaires, et son absence faisait échouer TOUT
+    l'import (« cannot import name 'ProcessusMetierForm' » au démarrage). Les listes (parent, propriétaire,
+    directions) sont remplies par les routes ; client_id et processus_id sont acceptés pour ces mêmes routes."""
+    code = StringField('Code', validators=[Optional(), Length(max=50)])
+    nom = StringField('Nom du processus', validators=[DataRequired(message='Le nom est obligatoire.'), Length(max=200)])
+    description = TextAreaField('Description', validators=[Optional()])
+    type_processus = SelectField('Type de processus', choices=[
+        ('strategique', 'Stratégique (pilotage)'),
+        ('metier', 'Métier (opérationnel)'),
+        ('support', 'Support'),
+        ('reglementaire', 'Réglementaire'),
+    ], default='metier', validators=[DataRequired()])
+    parent_id = SelectField('Processus parent', coerce=int, choices=[(0, '-- Aucun parent --')], default=0, validators=[Optional()])
+    proprietaire_id = SelectField('Propriétaire', coerce=int, choices=[(0, '-- Non assigné --')], default=0, validators=[Optional()])
+    directions = SelectMultipleField('Directions concernées', coerce=int, choices=[], validators=[Optional()])
+    est_actif = BooleanField('Processus actif', default=True)
+    submit = SubmitField('Enregistrer')
+
+    def __init__(self, *args, client_id=None, processus_id=None, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.client_id = client_id
+        self.processus_id = processus_id
+
+    def validate_parent_id(self, champ):
+        if self.processus_id and champ.data and champ.data == self.processus_id:
+            raise ValidationError('Un processus ne peut pas être son propre parent.')

@@ -3095,6 +3095,19 @@ def configurer_types_fichiers():
     
     return redirect(url_for('parametrage_fichiers'))
 
+def _table_existe(nom):
+    """La table existe-t-elle ? (SQLite comme PostgreSQL — remplace « sqlite_master », inconnu de PostgreSQL)"""
+    from sqlalchemy import inspect as _inspecter
+    return _inspecter(db.engine).has_table(nom)
+
+
+def _colonnes_table(nom):
+    """Noms des colonnes d'une table (SQLite comme PostgreSQL — remplace « PRAGMA table_info »)"""
+    from sqlalchemy import inspect as _inspecter
+    insp = _inspecter(db.engine)
+    return [c['name'] for c in insp.get_columns(nom)] if insp.has_table(nom) else []
+
+
 @app.route('/admin/fix-database-columns')
 @login_required
 @admin_required
@@ -3138,9 +3151,7 @@ def fix_database_columns():
             for column_name, column_type in table_info['columns']:
                 try:
                     # Vérifier si la colonne existe déjà
-                    check_sql = f"PRAGMA table_info({table_name})"
-                    columns = db.session.execute(text(check_sql)).fetchall()
-                    column_names = [col[1] for col in columns]
+                    column_names = _colonnes_table(table_name)
                     
                     if column_name not in column_names:
                         # Ajouter la colonne
@@ -11056,10 +11067,10 @@ def fix_zone_risque_processus_table():
             from sqlalchemy import text
             
             # Vérifier si la colonne existe déjà
-            check_sql = "PRAGMA table_info(zone_risque_processus)"
-            columns = db.session.execute(text(check_sql)).fetchall()
-            column_names = [col[1] for col in columns]
-            
+            if not _table_existe('zone_risque_processus'):
+                return
+            column_names = _colonnes_table('zone_risque_processus')
+
             if 'client_id' not in column_names:
                 _journal("⚠️ Colonne client_id manquante dans zone_risque_processus, ajout...")
                 
@@ -13177,16 +13188,13 @@ def fix_zone_risque_table():
         _journal("🔧 Début correction table zone_risque_processus...")
         
         # 1. Vérifier si la table existe
-        tables = db.session.execute(text(
-            "SELECT name FROM sqlite_master WHERE type='table' AND name='zone_risque_processus'"
-        )).fetchone()
+        tables = _table_existe('zone_risque_processus')
         
         if not tables:
             return "❌ Table zone_risque_processus n'existe pas", 404
         
         # 2. Vérifier les colonnes existantes
-        columns = db.session.execute(text("PRAGMA table_info(zone_risque_processus)")).fetchall()
-        column_names = [col[1] for col in columns]
+        column_names = _colonnes_table('zone_risque_processus')
         _journal(f"📋 Colonnes actuelles: {column_names}")
         
         # 3. Ajouter la colonne client_id si manquante
@@ -13286,17 +13294,14 @@ def fix_all_missing_client_id_columns():
             for table_name in tables_to_check:
                 try:
                     # Vérifier si la table existe
-                    table_exists = db.session.execute(text(
-                        f"SELECT name FROM sqlite_master WHERE type='table' AND name='{table_name}'"
-                    )).fetchone()
+                    table_exists = _table_existe(table_name)
                     
                     if not table_exists:
                         _journal(f"⚠️ Table '{table_name}' n'existe pas")
                         continue
                     
                     # Vérifier les colonnes
-                    columns = db.session.execute(text(f"PRAGMA table_info({table_name})")).fetchall()
-                    column_names = [col[1] for col in columns]
+                    column_names = _colonnes_table(table_name)
                     
                     if 'client_id' not in column_names:
                         _journal(f"⚠️ Colonne client_id manquante dans '{table_name}', ajout...")
@@ -13388,17 +13393,14 @@ def fix_all_client_id_columns():
         for table_name in all_tables:
             try:
                 # Vérifier si la table existe
-                table_exists = db.session.execute(text(
-                    f"SELECT name FROM sqlite_master WHERE type='table' AND name='{table_name}'"
-                )).fetchone()
+                table_exists = _table_existe(table_name)
                 
                 if not table_exists:
                     results.append({'table': table_name, 'status': 'not_exists'})
                     continue
                 
                 # Vérifier les colonnes
-                columns = db.session.execute(text(f"PRAGMA table_info({table_name})")).fetchall()
-                column_names = [col[1] for col in columns]
+                column_names = _colonnes_table(table_name)
                 
                 if 'client_id' not in column_names:
                     # Ajouter la colonne
