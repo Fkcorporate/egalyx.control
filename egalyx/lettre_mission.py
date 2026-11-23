@@ -167,8 +167,15 @@ def pdf_lettre(lettre, m, cid, audit):
     def p(texte, style=normal):
         return Paragraph(escape(texte or '').replace('\n', '<br/>'), style)
 
+    # papier à en-tête PDF du client (egalyx/papier_entete.py) : logo et coordonnées sont déjà imprimés dessus
+    try:
+        from egalyx.papier_entete import reglage as _papier
+        papier = _papier(cid, 'lettre_mission')
+    except Exception:  # noqa: BLE001
+        papier = None
+
     elements = []
-    logo = logo_octets(m, cid)
+    logo = None if papier else logo_octets(m, cid)
     position = (m.logo_position if m else 'gauche') or 'gauche'
     bloc = [p(m.titre_entete if m and m.titre_entete else ctx['organisation'], entete_titre)]
     for ligne in ((m.lignes_entete if m else '') or '').splitlines():
@@ -183,6 +190,8 @@ def pdf_lettre(lettre, m, cid, audit):
             img = Image(io.BytesIO(logo), width=largeur, height=largeur * h / w)
         except Exception as e:  # noqa: BLE001
             journal.info('Logo illisible pour le PDF : %s', e)
+    if papier:
+        bloc = []                                   # pas de titre ni d'adresse : le papier les porte déjà
     if img is not None and position == 'centre':
         img.hAlign = 'CENTER'
         elements += [img, Spacer(1, 3 * mm)]
@@ -196,7 +205,8 @@ def pdf_lettre(lettre, m, cid, audit):
         elements.append(t)
     else:
         elements += bloc
-    elements += [Spacer(1, 2 * mm), HRFlowable(width='100%', thickness=1.2, color=couleur), Spacer(1, 4 * mm)]
+    if not papier:
+        elements += [Spacer(1, 2 * mm), HRFlowable(width='100%', thickness=1.2, color=couleur), Spacer(1, 4 * mm)]
     if m and m.mention_haut:
         elements.append(p(m.mention_haut.upper(), ParagraphStyle('m', parent=petit, fontName='Helvetica-Bold', textColor=colors.HexColor('#b91c1c'), alignment=TA_RIGHT)))
     date_l = _date_fr(lettre.get('date')) if lettre.get('date') else datetime.utcnow().strftime('%d/%m/%Y')
@@ -224,6 +234,10 @@ def pdf_lettre(lettre, m, cid, audit):
     pied = remplir((m.pied_page if m else '') or '', ctx)
 
     def pied_de_page(canvas, doc):
+        if papier:                                  # le pied est sur le papier ; seul le numéro de page est ajouté
+            canvas.saveState(); canvas.setFont('Helvetica', 7.5); canvas.setFillColor(colors.HexColor('#64748b'))
+            canvas.drawRightString(A4[0] - papier['droite'] * mm, (papier['bas'] - 5) * mm, f'Page {doc.page}')
+            canvas.restoreState(); return
         canvas.saveState()
         canvas.setStrokeColor(couleur); canvas.setLineWidth(0.6)
         canvas.line(18 * mm, 15 * mm, A4[0] - 18 * mm, 15 * mm)
@@ -234,9 +248,14 @@ def pdf_lettre(lettre, m, cid, audit):
         canvas.restoreState()
 
     tampon = io.BytesIO()
-    doc = SimpleDocTemplate(tampon, pagesize=A4, leftMargin=20 * mm, rightMargin=20 * mm, topMargin=16 * mm, bottomMargin=22 * mm,
-                            title=f"Lettre de mission {ctx['reference']}", author=ctx['organisation'])
+    marges = (dict(leftMargin=papier['gauche'] * mm, rightMargin=papier['droite'] * mm, topMargin=papier['haut'] * mm,
+                   bottomMargin=papier['bas'] * mm) if papier else
+              dict(leftMargin=20 * mm, rightMargin=20 * mm, topMargin=16 * mm, bottomMargin=22 * mm))
+    doc = SimpleDocTemplate(tampon, pagesize=A4, title=f"Lettre de mission {ctx['reference']}", author=ctx['organisation'], **marges)
     doc.build(elements, onFirstPage=pied_de_page, onLaterPages=pied_de_page)
+    if papier:
+        from egalyx.papier_entete import poser
+        return poser(tampon.getvalue(), cid, 'lettre_mission', natif=True)
     return tampon.getvalue()
 
 

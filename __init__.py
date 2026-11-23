@@ -39,6 +39,8 @@ journal = logging.getLogger('egalyx')
 def enregistrer_extensions(app, db, csrf=None, recalculer_cotations=None, construire_dashboard=None):
     from egalyx import (base_donnees, double_auth, sso, parametres_risque, alerte, tiers, signature,
                         paiement, export_donnees, api_doc, organigramme)
+    from egalyx import stockage_persistant
+    stockage_persistant.enregistrer(app)    # Render : fichiers déposés sur le disque persistant (EGALYX_DONNEES ou /var/data)
     from egalyx import garde_mot_de_passe
     garde_mot_de_passe.enregistrer(app)     # SÉCURITÉ : un mauvais mot de passe ne doit jamais ouvrir de session
     base_donnees.enregistrer(app, db)
@@ -68,6 +70,12 @@ def enregistrer_extensions(app, db, csrf=None, recalculer_cotations=None, constr
     alertes_incidents.enregistrer(app)
     from egalyx import identite
     identite.enregistrer(app)
+    from egalyx import rapport_contenu
+    rapport_contenu.enregistrer(app)                # contenu des rapports (sections, signataires, textes) par organisation
+    from egalyx import dossier_fige
+    dossier_fige.enregistrer(app)                   # dossier de mission figé après le rapport définitif
+    from egalyx import satisfaction_audit
+    satisfaction_audit.enregistrer(app)             # avis des audités en fin de mission
     from egalyx import photo_profil
     photo_profil.enregistrer(app)
     try:                                   # paquet facultatif : /ci (301 vers l'accueil), /debug/create-user-form (404)
@@ -165,6 +173,17 @@ def enregistrer_extensions(app, db, csrf=None, recalculer_cotations=None, constr
         plans_nature.enregistrer(app)             # plans d'action : audit, risque et indépendant chacun dans son module
         from egalyx import plans_suivi
         plans_suivi.enregistrer(app)              # progression, fin de plan, recommandation et constatation : mêmes règles partout
+        from egalyx import localisation, lettre_mission
+        localisation.enregistrer(app)             # heure et devise de chaque organisation
+        lettre_mission.enregistrer(app)           # lettre de mission : en-têtes par organisation, PDF, envoi aux bonnes personnes
+        from egalyx import papier_entete
+        papier_entete.enregistrer(app)            # papier à en-tête PDF du client (rapport d'audit, lettre de mission)
+        from egalyx import boutons_repares
+        boutons_repares.enregistrer(app)          # boutons qui appelaient une adresse inexistante
+        from egalyx import statuts
+        statuts.enregistrer(app)                  # une seule écriture des statuts par objet (+ conversion des données)
+        from egalyx import pdf_secours
+        pdf_secours.enregistrer(app)              # sans WeasyPrint : version imprimable au lieu d'une erreur 500
     except ImportError:
         pass
     try:                                   # paquet facultatif : notifications sur téléphone / ordinateur + pastille

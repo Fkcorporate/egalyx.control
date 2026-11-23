@@ -1,0 +1,125 @@
+{% extends "base.html" %}
+{% import "_macros/page.html" as pg %}
+{% block title %}Réglages — {{ client.nom }}{% endblock %}
+{% block styles %}{{ pg.styles() }}<style>
+  .lm-modele { display:flex; align-items:center; gap:1rem; padding:.75rem 0; border-bottom:1px solid var(--border); }
+  .lm-modele:last-child { border-bottom:0; }
+  .lm-pastille { width:14px; height:40px; border-radius:4px; flex:0 0 auto; }
+  .pe-bloc { padding: 1rem 0; border-bottom: 1px solid var(--border); }
+  .pe-bloc:last-child { border-bottom: 0; padding-bottom: 0; }
+  .pe-bloc:first-child { padding-top: 0; }
+  .pe-titre { display:flex; align-items:center; gap:.6rem; flex-wrap:wrap; margin-bottom:.5rem; }
+  .pe-titre h3 { font-size:1rem; font-weight:650; margin:0; }
+  .pe-marges { display:grid; grid-template-columns: repeat(4, minmax(90px, 1fr)); gap:.5rem; max-width: 520px; }
+  .pe-marges label { font-size:.78rem; color: var(--bs-secondary-color, #6b7280); margin-bottom:.15rem; }
+  @media (max-width: 575.98px) { .pe-marges { grid-template-columns: repeat(2, 1fr); } }
+</style>{% endblock %}
+{% block content %}
+<div class="container" style="max-width: 980px;">
+  {% call pg.entete('Réglages de ' ~ client.nom, 'fa-sliders', 'Heure, devise, modèles de lettre de mission et papiers à en-tête de cette organisation',
+                    retour=url_for('super_admin_client_detail', id=client.id), libelle_retour='Fiche organisation') %}
+    <a class="btn btn-sm btn-outline-secondary" href="{{ url_for('lettre_mission.vue_ensemble') }}"><i class="fas fa-list me-1"></i>Toutes les organisations</a>
+  {% endcall %}
+  {% call pg.carte('Heure et devise') %}{% include "egalyx/_heure_devise_form.html" %}{% endcall %}
+  <div id="lettres"></div>
+  {% call pg.carte('Lettres de mission : en-têtes et e-mail', aide='L\'auditeur choisit le modèle de chaque lettre') %}
+    {% for x in modeles %}
+    <div class="lm-modele">
+      <span class="lm-pastille" style="background: {{ x.couleur or '#1A3C6B' }};"></span>
+      <div class="flex-grow-1">
+        <div class="fw-semibold">{{ x.nom }}
+          {% if x.est_defaut %}<span class="badge bg-primary ms-1">Par défaut</span>{% endif %}
+          {% if x.actif is sameas false %}<span class="badge bg-secondary ms-1">Inactif</span>{% endif %}</div>
+        <div class="pg-second small">{{ x.titre_entete or client.nom }}{% if x.mention_haut %} · {{ x.mention_haut }}{% endif %}
+          · logo {{ 'propre' if x.logo_url == 'propre' else ('masqué' if x.logo_position == 'aucun' else 'de l\'organisation') }}
+          · modifié le {{ x.updated_at.strftime('%d/%m/%Y %H:%M') if x.updated_at else '—' }}</div>
+      </div>
+      <div class="d-flex gap-1 flex-wrap">
+        <a class="btn btn-sm btn-outline-primary" href="{{ url_for('lettre_mission.modele_editer', client_id=client.id, modele_id=x.id) }}"><i class="fas fa-pen me-1"></i>Modifier</a>
+        <a class="btn btn-sm btn-outline-secondary" target="_blank" href="{{ url_for('lettre_mission.modele_apercu', client_id=client.id, modele_id=x.id) }}"><i class="fas fa-eye"></i></a>
+        {% for action, icone, titre in [('defaut','fa-star','Par défaut'),('dupliquer','fa-copy','Dupliquer'),('supprimer','fa-trash','Supprimer')] %}
+          {% if not (action == 'defaut' and x.est_defaut) %}
+          <form method="post" action="{{ url_for('lettre_mission.modele_action', client_id=client.id, modele_id=x.id, action=action) }}"
+                {% if action == 'supprimer' %}onsubmit="return confirm('Supprimer le modèle « {{ x.nom|e }} » ?');"{% endif %}>
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            <button class="btn btn-sm btn-outline-{{ 'danger' if action == 'supprimer' else 'secondary' }}" title="{{ titre }}"><i class="fas {{ icone }}"></i></button>
+          </form>
+          {% endif %}
+        {% endfor %}
+      </div>
+    </div>
+    {% else %}
+      {{ pg.vide('Aucun modèle : les lettres utilisent le nom et le logo de l\'organisation, et un e-mail standard.', 'fa-envelope-open-text') }}
+    {% endfor %}
+    <a class="btn btn-sm btn-primary mt-3" href="{{ url_for('lettre_mission.modele_editer', client_id=client.id) }}"><i class="fas fa-plus me-1"></i>Nouveau modèle</a>
+  {% endcall %}
+
+  {# Papier à en-tête PDF du client (egalyx/papier_entete.py) #}
+  <div id="papiers-entete"></div>
+  {% if papiers_entete is defined %}
+  {% set deposes = papiers_entete(client.id) %}
+  {% call pg.carte('Papiers à en-tête du client (PDF)', aide="Le modèle officiel du client : ses rapports d'audit et ses lettres de mission sont imprimés dessus") %}
+    <p class="pg-second small mb-3">Déposez le papier à en-tête du client (un PDF d'une page A4 : logo, cartouche qualité, pied de page…).
+      Le contenu des documents est placé dans la zone libre, sans jamais recouvrir ce qui est imprimé.
+      Si le papier contient « 1 de 1 », chaque page est numérotée « 2 de 5 »… Sans papier, les documents gardent leur mise en page habituelle.</p>
+    {% for type_, libelle in PAPIER_TYPES.items() %}
+    {% set r = deposes.get(type_) %}
+    <div class="pe-bloc">
+      <div class="pe-titre">
+        <h3><i class="fas fa-{{ 'file-contract' if type_ == 'lettre_mission' else 'file-lines' }} me-2 text-muted"></i>{{ libelle }}</h3>
+        {% if r is not none %}
+          {% if r.get('actif', True) %}<span class="badge bg-success">Utilisé</span>{% else %}<span class="badge bg-secondary">En pause</span>{% endif %}
+        {% else %}<span class="badge bg-light text-dark border">Mise en page habituelle</span>{% endif %}
+      </div>
+      {% if r is not none %}
+        <div class="pg-second small mb-2">
+          <i class="fas fa-file-pdf me-1"></i>{{ r.get('nom', 'papier.pdf') }}
+          {% if r.get('depose_le') %} · déposé le {{ r.depose_le }}{% if r.get('depose_par') %} par {{ r.depose_par }}{% endif %}{% endif %}
+          · <a href="{{ url_for('papier_entete.original', client_id=client.id, type_=type_) }}" target="_blank" rel="noopener">voir le papier</a>
+        </div>
+        <form method="post" action="{{ url_for('papier_entete.deposer', client_id=client.id, type_=type_) }}" class="mb-2">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+          <div class="small fw-semibold mb-1">Zone libre pour le contenu (mm depuis le bord de la page)</div>
+          <div class="pe-marges mb-2">
+            {% for cle, lib in [('haut','En haut'),('bas','En bas'),('gauche','À gauche'),('droite','À droite')] %}
+            <div><label for="pe-{{ type_ }}-{{ cle }}">{{ lib }}</label>
+              <input class="form-control form-control-sm" type="number" min="5" max="140" step="1" id="pe-{{ type_ }}-{{ cle }}" name="{{ cle }}" value="{{ r.get(cle, '') }}"></div>
+            {% endfor %}
+          </div>
+          {% if r.get('numero') %}
+          <div class="form-check small"><input class="form-check-input" type="checkbox" name="numeroter" value="1" id="pe-{{ type_ }}-num" {% if r.get('numeroter', True) %}checked{% endif %}>
+            <label class="form-check-label" for="pe-{{ type_ }}-num">Numéroter les pages dans le cartouche (« 1 de 1 » devient « 2 de 5 »…)</label></div>
+          {% endif %}
+          <div class="form-check small mb-2"><input class="form-check-input" type="checkbox" name="actif" value="1" id="pe-{{ type_ }}-actif" {% if r.get('actif', True) %}checked{% endif %}>
+            <label class="form-check-label" for="pe-{{ type_ }}-actif">Utiliser ce papier pour les {{ 'lettres de mission' if type_ == 'lettre_mission' else "rapports d'audit" }}</label></div>
+          <div class="d-flex gap-2 flex-wrap">
+            <button class="btn btn-sm btn-primary"><i class="fas fa-check me-1"></i>Enregistrer</button>
+            <a class="btn btn-sm btn-outline-secondary" target="_blank" rel="noopener" href="{{ url_for('papier_entete.apercu', client_id=client.id, type_=type_) }}"><i class="fas fa-eye me-1"></i>Aperçu d'un document</a>
+          </div>
+        </form>
+        <div class="d-flex gap-2 flex-wrap align-items-center">
+          <form method="post" enctype="multipart/form-data" action="{{ url_for('papier_entete.deposer', client_id=client.id, type_=type_) }}" class="d-flex gap-2 align-items-center">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            <input class="form-control form-control-sm" type="file" name="fichier" accept="application/pdf,.pdf" required style="max-width: 260px;" aria-label="Nouveau papier {{ libelle }}">
+            <button class="btn btn-sm btn-outline-primary text-nowrap"><i class="fas fa-arrow-rotate-right me-1"></i>Remplacer</button>
+          </form>
+          <form method="post" action="{{ url_for('papier_entete.supprimer', client_id=client.id, type_=type_) }}"
+                onsubmit="return confirm('Retirer le papier à en-tête « {{ libelle }} » ? Les documents reprendront leur mise en page habituelle.');">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            <button class="btn btn-sm btn-outline-danger"><i class="fas fa-trash me-1"></i>Retirer</button>
+          </form>
+        </div>
+      {% else %}
+        <form method="post" enctype="multipart/form-data" action="{{ url_for('papier_entete.deposer', client_id=client.id, type_=type_) }}" class="d-flex gap-2 align-items-center flex-wrap">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+          <input class="form-control form-control-sm" type="file" name="fichier" accept="application/pdf,.pdf" required style="max-width: 320px;" aria-label="Papier {{ libelle }}">
+          <button class="btn btn-sm btn-primary text-nowrap"><i class="fas fa-upload me-1"></i>Déposer le papier</button>
+          <span class="pg-second small">PDF, une page A4, 5 Mo au plus</span>
+        </form>
+      {% endif %}
+    </div>
+    {% endfor %}
+  {% endcall %}
+  {% endif %}
+</div>
+{% endblock %}

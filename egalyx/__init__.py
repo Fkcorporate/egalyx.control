@@ -176,6 +176,8 @@ def enregistrer_extensions(app, db, csrf=None, recalculer_cotations=None, constr
         from egalyx import localisation, lettre_mission
         localisation.enregistrer(app)             # heure et devise de chaque organisation
         lettre_mission.enregistrer(app)           # lettre de mission : en-têtes par organisation, PDF, envoi aux bonnes personnes
+        from egalyx import papier_entete
+        papier_entete.enregistrer(app)            # papier à en-tête PDF du client (rapport d'audit, lettre de mission)
         from egalyx import boutons_repares
         boutons_repares.enregistrer(app)          # boutons qui appelaient une adresse inexistante
         from egalyx import statuts
