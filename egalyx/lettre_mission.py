@@ -236,42 +236,72 @@ def pdf_lettre(lettre, m, cid, audit):
 
     cote = getattr(m, 'pied_position', None) or 'centre'
     cote = cote if cote in dict(PIED_POSITIONS) else 'centre'
+    from reportlab.lib.enums import TA_LEFT
+    from reportlab.pdfgen.canvas import Canvas
+    gris = colors.HexColor('#64748b')
+    aligne = {'gauche': TA_LEFT, 'centre': TA_CENTER, 'droite': TA_RIGHT}[cote]
+    # Pied de page sobre : petits caractères gris, sur une ou plusieurs lignes (retours à la ligne du modèle
+    # conservés, lignes trop longues renvoyées à la ligne), aligné comme choisi ; dessous « Page 2 / 5 », même alignement.
+    style_pied = ParagraphStyle('pied', fontName='Helvetica', fontSize=7, leading=8.6, textColor=gris, alignment=aligne)
+    lignes_pied = [escape(x.strip()) for x in pied.splitlines() if x.strip()]
+    if papier:
+        x_g, x_d = papier['gauche'] * mm, A4[0] - papier['droite'] * mm
+        y_num = (papier['bas'] + 1.5) * mm                 # au-dessus du pied imprimé sur le papier du client
+    else:
+        x_g, x_d = 20 * mm, A4[0] - 20 * mm
+        y_num = 8 * mm
+    largeur_pied = x_d - x_g
+    h_pied = Paragraph('<br/>'.join(lignes_pied), style_pied).wrap(largeur_pied, 60 * mm)[1] if lignes_pied else 0
+    y_texte = y_num + 10                                   # bas du texte du pied
+    y_filet = y_texte + h_pied + 4
+    marge_bas = y_filet + 8                                # le contenu s'arrête au-dessus du filet
 
-    def ecrire(canvas, x_g, x_d, y, texte, ou):
-        if ou == 'gauche':
+    def ecrire(canvas, y, texte, police='Helvetica', taille=7):
+        canvas.setFont(police, taille)
+        if cote == 'gauche':
             canvas.drawString(x_g, y, texte)
-        elif ou == 'droite':
+        elif cote == 'droite':
             canvas.drawRightString(x_d, y, texte)
         else:
             canvas.drawCentredString((x_g + x_d) / 2, y, texte)
 
     def pied_de_page(canvas, doc):
-        # le numéro de page va du côté opposé au pied (à droite si le pied est centré ou à gauche)
-        cote_num = 'gauche' if cote == 'droite' else 'droite'
-        texte = pied.replace('\n', ' — ')[:180] if pied else ''
-        canvas.saveState(); canvas.setFont('Helvetica', 7.5); canvas.setFillColor(colors.HexColor('#64748b'))
-        if papier:
-            # le pied du client est imprimé sur le papier : on écrit juste au-dessus, dans la marge laissée libre
-            x_g, x_d, y = papier['gauche'] * mm, A4[0] - papier['droite'] * mm, (papier['bas'] - 4) * mm
-            if texte:
-                ecrire(canvas, x_g, x_d, y, texte, cote)
-            ecrire(canvas, x_g, x_d, y if not texte or cote != cote_num else y - 9, f'Page {doc.page}', cote_num if texte else cote)
-            canvas.restoreState(); return
-        x_g, x_d = 18 * mm, A4[0] - 18 * mm
-        canvas.setStrokeColor(couleur); canvas.setLineWidth(0.6)
-        canvas.line(x_g, 15 * mm, x_d, 15 * mm)
-        canvas.setFillColor(colors.HexColor('#64748b'))
-        if texte:
-            ecrire(canvas, x_g, x_d, 10.5 * mm, texte, cote)
-        ecrire(canvas, x_g, x_d, 6.5 * mm, f'Page {doc.page}', cote_num if texte else cote)
+        canvas.saveState()
+        if not papier:
+            canvas.setStrokeColor(colors.HexColor('#CBD5E1')); canvas.setLineWidth(0.5)
+            canvas.line(x_g, y_filet, x_d, y_filet)
+        if lignes_pied:
+            par = Paragraph('<br/>'.join(lignes_pied), style_pied)
+            par.wrap(largeur_pied, 60 * mm)
+            par.drawOn(canvas, x_g, y_texte)
         canvas.restoreState()
+
+    class _AvecTotal(Canvas):
+        """« Page n / N » : le nombre total de pages n'est connu qu'à la fin, on écrit les numéros à l'enregistrement."""
+        def __init__(self, *a, **k):
+            super().__init__(*a, **k)
+            self._pages = []
+
+        def showPage(self):
+            self._pages.append(dict(self.__dict__))
+            self._startPage()
+
+        def save(self):
+            total = len(self._pages)
+            for etat in self._pages:
+                self.__dict__.update(etat)
+                self.saveState(); self.setFillColor(gris)
+                ecrire(self, y_num, f'Page {self._pageNumber} / {total}')
+                self.restoreState()
+                Canvas.showPage(self)
+            Canvas.save(self)
 
     tampon = io.BytesIO()
     marges = (dict(leftMargin=papier['gauche'] * mm, rightMargin=papier['droite'] * mm, topMargin=papier['haut'] * mm,
-                   bottomMargin=papier['bas'] * mm) if papier else
-              dict(leftMargin=20 * mm, rightMargin=20 * mm, topMargin=16 * mm, bottomMargin=22 * mm))
+                   bottomMargin=marge_bas) if papier else
+              dict(leftMargin=20 * mm, rightMargin=20 * mm, topMargin=16 * mm, bottomMargin=max(22 * mm, marge_bas)))
     doc = SimpleDocTemplate(tampon, pagesize=A4, title=f"Lettre de mission {ctx['reference']}", author=ctx['organisation'], **marges)
-    doc.build(elements, onFirstPage=pied_de_page, onLaterPages=pied_de_page)
+    doc.build(elements, onFirstPage=pied_de_page, onLaterPages=pied_de_page, canvasmaker=_AvecTotal)
     if papier:
         from egalyx.papier_entete import poser
         return poser(tampon.getvalue(), cid, 'lettre_mission', natif=True)
@@ -706,8 +736,8 @@ def modele_action(client_id, modele_id, action):
         flash(f'« {m.nom} » est désormais le modèle par défaut.', 'success')
     elif action == 'dupliquer':
         copie = M.ModeleLettreMission(client_id=c.id, created_at=datetime.utcnow(), est_defaut=False)
-        for col in ('logo_position', 'couleur', 'titre_entete', 'lignes_entete', 'mention_haut', 'pied_page', 'signature',
-                    'objet_email', 'message_email', 'actif'):
+        for col in ('logo_position', 'couleur', 'titre_entete', 'lignes_entete', 'mention_haut', 'pied_page', 'pied_position',
+                    'signature', 'objet_email', 'message_email', 'actif'):
             setattr(copie, col, getattr(m, col))
         copie.nom = (m.nom + ' (copie)')[:120]
         copie.logo_url = None

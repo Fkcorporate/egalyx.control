@@ -190,6 +190,8 @@ def enregistrer_extensions(app, db, csrf=None, recalculer_cotations=None, constr
         appreciation_reco.enregistrer(app)        # appréciation de l'auditeur sur chaque recommandation
         from egalyx import categories_risque
         categories_risque.enregistrer(app)        # catégories de risque par défaut (+ libellés lisibles)
+        from egalyx import cartouche_qualite
+        cartouche_qualite.enregistrer(app)        # cartouche qualité (code, date, version, page) du rapport d'audit
         from egalyx import boutons_repares
         boutons_repares.enregistrer(app)          # boutons qui appelaient une adresse inexistante
         from egalyx import statuts

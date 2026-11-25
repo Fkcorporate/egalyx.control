@@ -66,6 +66,15 @@ def reglage(cid, type_):
     """Réglage du papier {marges en mm, nom, date…} ou None s'il n'y a pas de papier pour ce type."""
     if not cid or type_ not in TYPES:
         return None
+    if type_ == 'rapport_audit':
+        # cartouche qualité réglé par l'organisation (egalyx/cartouche_qualite.py) : prioritaire sur un papier déposé
+        try:
+            from egalyx.cartouche_qualite import reglage_papier
+            rc = reglage_papier(cid)
+            if rc:
+                return rc
+        except Exception as e:  # noqa: BLE001
+            journal.warning('Cartouche qualité non lu : %s', e)
     _, pdf, js = _chemins(cid, type_)
     if not os.path.exists(pdf):
         return None
@@ -228,10 +237,13 @@ def _numeros(W, H, numero, total):
     c = rl.Canvas(tampon, pagesize=(W, H))
     for n in range(1, total + 1):
         x, y, xf = numero['x'], numero['y'], numero['x_fin']
-        c.setFillColorRGB(1, 1, 1); c.rect(x - 2, y - 2.5, max(xf - x, 30) + 4, 10.5, stroke=0, fill=1)
-        c.setFillColorRGB(0, 0, 0)
         morceaux = ((str(n), 'Helvetica-Bold'), (' de ', 'Helvetica'), (str(total), 'Helvetica-Bold'))   # « 2 de 5 »
-        cx = x
+        if numero.get('centre'):                     # cartouche généré : case vide, numéro centré dans la case
+            cx = numero['centre'] - sum(c.stringWidth(t_, p_, 8) for t_, p_ in morceaux) / 2
+        else:
+            c.setFillColorRGB(1, 1, 1); c.rect(x - 2, y - 2.5, max(xf - x, 30) + 4, 10.5, stroke=0, fill=1)
+            cx = x
+        c.setFillColorRGB(0, 0, 0)
         for texte, police in morceaux:
             c.setFont(police, 8); c.drawString(cx, y, texte); cx += c.stringWidth(texte, police, 8)
         c.showPage()
@@ -239,15 +251,21 @@ def _numeros(W, H, numero, total):
     return PdfReader(io.BytesIO(tampon.getvalue()))
 
 
-def poser(octets_pdf, cid, type_, natif=False):
+def _page_papier(r):
+    """Page du papier : fichier déposé, ou PDF généré (cartouche qualité). Une copie neuve à chaque appel."""
+    from pypdf import PdfReader
+    return PdfReader(io.BytesIO(r['octets']) if r.get('octets') else r['chemin']).pages[0]
+
+
+def poser(octets_pdf, cid, type_, natif=False, reglage_force=None):
     """Pose chaque page du PDF sur le papier à en-tête du client. Sans papier (ou en cas d'erreur) : PDF inchangé.
     natif=True : le PDF a déjà été mis en page dans la zone libre (lettre de mission) → pas de réduction."""
-    r = reglage(cid, type_)
+    r = reglage_force or reglage(cid, type_)
     if not r:
         return octets_pdf
     try:
         from pypdf import PdfReader, PdfWriter, Transformation
-        papier = PdfReader(r['chemin']).pages[0]
+        papier = _page_papier(r)
         l, b, rr, hh = (float(v) for v in papier.mediabox)
         W, H = rr - l, hh - b
         src = PdfReader(io.BytesIO(octets_pdf))
@@ -268,7 +286,7 @@ def poser(octets_pdf, cid, type_, natif=False):
         num = _numeros(W, H, r['numero'], total) if r.get('numero') and r.get('numeroter', True) else None
         sortie = PdfWriter()
         for i, page in enumerate(src.pages):
-            fond = PdfReader(r['chemin']).pages[0]               # une copie neuve du papier pour chaque page
+            fond = _page_papier(r)                                # une copie neuve du papier pour chaque page
             if boite:
                 page = _decouper(page, *boite)
             fond.merge_transformed_page(page, t)

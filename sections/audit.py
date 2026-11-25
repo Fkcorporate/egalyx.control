@@ -1638,6 +1638,8 @@ def export_rapport_audit_word(audit_id):
     from egalyx.identite import presentation_rapport
     from egalyx.rapport_word import preparer_document
     preparer_document(doc, presentation_rapport(audit.client_id))   # logo, nom, mention, couleur, pied de page du client
+    from egalyx.cartouche_qualite import cartouche_word
+    cartouche_word(doc, audit.client_id)            # cartouche qualité en haut de chaque page, s'il est activé
     
     # Définir les styles
     styles = doc.styles
@@ -8897,6 +8899,8 @@ def export_synthese_word(audit_id):
     from egalyx.identite import presentation_rapport
     from egalyx.rapport_word import preparer_document
     preparer_document(doc, presentation_rapport(audit.client_id))   # logo, nom, mention, couleur, pied de page du client
+    from egalyx.cartouche_qualite import cartouche_word
+    cartouche_word(doc, audit.client_id)            # cartouche qualité en haut de chaque page, s'il est activé
     
     # Titre
     title = doc.add_heading(f'Rapport d\'Audit - {audit.reference}', 0)
@@ -9911,6 +9915,8 @@ def rapport_audit_word_pro(audit_id):
     rp = presentation_rapport(audit.client_id)
     ct = contenu_rapport('audit', cid=audit.client_id, valeurs={'reference': audit.reference, 'mission': audit.titre})
     preparer_document(doc, rp)
+    from egalyx.cartouche_qualite import cartouche_word
+    cartouche_word(doc, audit.client_id)            # cartouche qualité en haut de chaque page, s'il est activé
     
     # Titre
     title = doc.add_heading(ct.titre.upper(), level=1)
