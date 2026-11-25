@@ -4,8 +4,9 @@ egalyx/securite.py — protections communes ajoutées par-dessus l'application.
 1. Outils de débogage et pages de test (/debug…, /api/debug/…, /test-…) : fermés en production (404),
    sauf pour un super administrateur connecté. Certains étaient ouverts sans connexion, et l'un d'eux
    écrivait dans les journaux tous les en-têtes reçus, cookie de session compris.
-2. Connexion : 20 tentatives au plus par adresse IP et par 10 minutes (en plus du blocage du compte
+2. Connexion : au plus 20 ÉCHECS de connexion par adresse IP et par 10 minutes (en plus du blocage du compte
    après 10 mots de passe erronés, déjà en place dans models.py). Contre les essais en masse sur plusieurs comptes.
+   Seuls les échecs comptent : tout un bureau derrière la même adresse peut se connecter le matin sans être gêné.
 3. En-têtes de sécurité complémentaires, choisis pour ne casser aucune page existante :
    Content-Security-Policy (pas d'intégration du site dans un autre, pas de plug-in, formulaires vers le site
    seulement…), Permissions-Policy, Cross-Origin-Opener-Policy.
@@ -37,7 +38,7 @@ _OUTILS = re.compile(
     r'|api/audit/\d+/debug-fichiers'
     r')$')
 
-_LOGIN = {'/login', '/login-fullscreen', '/login_fullscreen'}
+_LOGIN = {'/login', '/auth/login_fullscreen', '/login-fullscreen', '/login_fullscreen'}   # /auth/login_fullscreen : la vraie page de connexion
 _FENETRE, _MAXI = 600, 20
 _essais = defaultdict(deque)
 _verrou = threading.Lock()
@@ -80,7 +81,7 @@ def enregistrer(app):
                 file = _essais[cle]
                 while file and maintenant - file[0] > _FENETRE:
                     file.popleft()
-                if len(file) >= _MAXI:
+                if len(file) >= _MAXI:                       # trop d'ÉCHECS récents depuis cette adresse
                     attente = int(_FENETRE - (maintenant - file[0])) // 60 + 1
                     return (f"<!doctype html><meta charset='utf-8'><title>Trop de tentatives</title>"
                             f"<div style='font-family:sans-serif;max-width:520px;margin:15vh auto;text-align:center'>"
@@ -88,10 +89,18 @@ def enregistrer(app):
                             f"<p>Par sécurité, réessayez dans {attente} minute{'s' if attente > 1 else ''}.</p>"
                             f"<p><a href='/login'>Retour à la connexion</a></p></div>", 429,
                             {'Retry-After': str(attente * 60)})
-                file.append(maintenant)
+
+    @app.after_request
+    def _compter_echecs(reponse):
+        # connexion réussie = redirection (302) ; échec = la page de connexion réaffichée (200)
+        if (request.method == 'POST' and (request.path.rstrip('/') or '/') in _LOGIN and reponse.status_code == 200
+                and os.environ.get('EGALYX_LIMITE_CONNEXION', '1') != '0'):
+            with _verrou:
+                _essais[_ip()].append(time.time())
                 if len(_essais) > 50000:                     # mémoire bornée
                     for k in list(_essais)[:10000]:
                         _essais.pop(k, None)
+        return reponse
 
     @app.after_request
     def _entetes_securite(reponse):
