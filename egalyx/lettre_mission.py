@@ -178,7 +178,8 @@ def pdf_lettre(lettre, m, cid, audit):
     elements = []
     logo = None if papier else logo_octets(m, cid)
     position = (m.logo_position if m else 'gauche') or 'gauche'
-    bloc = [p(m.titre_entete if m and m.titre_entete else ctx['organisation'], entete_titre)]
+    afficher_titre = getattr(m, 'afficher_titre', True) is not False
+    bloc = [p(m.titre_entete if m and m.titre_entete else ctx['organisation'], entete_titre)] if afficher_titre else []
     for ligne in ((m.lignes_entete if m else '') or '').splitlines():
         if ligne.strip():
             bloc.append(p(ligne.strip(), petit))
@@ -558,6 +559,7 @@ def _formulaire_modele(m, form):
     m.nom = (form.get('nom') or '').strip()[:120] or 'Modèle'
     pos = form.get('logo_position') or 'gauche'
     m.logo_position = pos if pos in POSITIONS else 'gauche'
+    m.afficher_titre = form.get('afficher_titre') == '1'
     pied = form.get('pied_position') or 'centre'
     m.pied_position = pied if pied in dict(PIED_POSITIONS) else 'centre'
     couleur = (form.get('couleur') or '').strip()
@@ -737,7 +739,7 @@ def modele_action(client_id, modele_id, action):
     elif action == 'dupliquer':
         copie = M.ModeleLettreMission(client_id=c.id, created_at=datetime.utcnow(), est_defaut=False)
         for col in ('logo_position', 'couleur', 'titre_entete', 'lignes_entete', 'mention_haut', 'pied_page', 'pied_position',
-                    'signature', 'objet_email', 'message_email', 'actif'):
+                    'afficher_titre', 'signature', 'objet_email', 'message_email', 'actif'):
             setattr(copie, col, getattr(m, col))
         copie.nom = (m.nom + ' (copie)')[:120]
         copie.logo_url = None
