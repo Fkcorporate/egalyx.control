@@ -51,7 +51,8 @@ def preparer(contenu):
             raise ValueError('Ce serveur n\'accepte que les photos PNG (bibliothèque Pillow absente).')
         return contenu
     try:
-        img = Image.open(io.BytesIO(contenu))
+        # formats limités : jamais d'EPS/PostScript, que Pillow confierait à Ghostscript (alerte Upload2Shell, nov. 2026)
+        img = Image.open(io.BytesIO(contenu), formats=('PNG', 'JPEG', 'WEBP'))
         img.load()
     except Exception:  # noqa: BLE001
         raise ValueError('Image illisible.')
