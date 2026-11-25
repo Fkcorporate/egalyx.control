@@ -1488,7 +1488,10 @@ def export_rapport_audit_pdf(audit_id):
     
     # Créer le PDF en mémoire
     buffer = BytesIO()
-    doc = SimpleDocTemplate(buffer, pagesize=letter)
+    # A4 ; cartouche qualité de l'organisation en haut de chaque page s'il est activé (egalyx/cartouche_qualite.py)
+    from egalyx.cartouche_qualite import document_pdf
+    from egalyx.pdf_tableaux import tableau_pdf
+    doc = document_pdf(buffer, audit.client_id, audit, title=f"Rapport d'audit {audit.reference}")
     story = []
     styles = getSampleStyleSheet()
     
@@ -1517,7 +1520,7 @@ def export_rapport_audit_pdf(audit_id):
         ['Score global', f"{audit.score_global if hasattr(audit, 'score_global') else 0}/100"],
     ]
     
-    info_table = Table(info_data, colWidths=[2*inch, 4*inch])
+    info_table = tableau_pdf(info_data, colWidths=[2*inch, 4*inch])
     info_table.setStyle(TableStyle([
         ('GRID', (0,0), (-1,-1), 1, colors.black),
         ('BACKGROUND', (0,0), (0,-1), colors.lightgrey),
@@ -1539,7 +1542,7 @@ def export_rapport_audit_pdf(audit_id):
                 fichier.created_at.strftime('%d/%m/%Y') if fichier.created_at else 'N/A'
             ])
         
-        fichiers_table = Table(fichiers_data, colWidths=[2*inch, 0.8*inch, 0.8*inch, 1.5*inch, 1*inch])
+        fichiers_table = tableau_pdf(fichiers_data, colWidths=[2*inch, 0.8*inch, 0.8*inch, 1.5*inch, 1*inch])
         fichiers_table.setStyle(TableStyle([
             ('GRID', (0,0), (-1,-1), 1, colors.black),
             ('BACKGROUND', (0,0), (-1,0), colors.lightgrey),
@@ -1560,7 +1563,7 @@ def export_rapport_audit_pdf(audit_id):
                 constat.statut
             ])
         
-        constat_table = Table(constat_data, colWidths=[0.5*inch, 2.5*inch, inch, inch, inch])
+        constat_table = tableau_pdf(constat_data, colWidths=[0.5*inch, 2.5*inch, inch, inch, inch])
         constat_table.setStyle(TableStyle([
             ('GRID', (0,0), (-1,-1), 1, colors.black),
             ('BACKGROUND', (0,0), (-1,0), colors.lightgrey),
@@ -1586,7 +1589,7 @@ def export_rapport_audit_pdf(audit_id):
                 _lib_appreciation(getattr(reco, 'appreciation', None)) or '—'
             ])
         
-        reco_table = Table(reco_data, colWidths=[0.5*inch, 2.5*inch, 0.6*inch, 0.8*inch, 0.8*inch, 1.2*inch])
+        reco_table = tableau_pdf(reco_data, colWidths=[0.5*inch, 2.5*inch, 0.6*inch, 0.8*inch, 0.8*inch, 1.2*inch])
         reco_table.setStyle(TableStyle([
             ('GRID', (0,0), (-1,-1), 1, colors.black),
             ('BACKGROUND', (0,0), (-1,0), colors.lightgrey),
@@ -1639,7 +1642,7 @@ def export_rapport_audit_word(audit_id):
     from egalyx.rapport_word import preparer_document
     preparer_document(doc, presentation_rapport(audit.client_id))   # logo, nom, mention, couleur, pied de page du client
     from egalyx.cartouche_qualite import cartouche_word
-    cartouche_word(doc, audit.client_id)            # cartouche qualité en haut de chaque page, s'il est activé
+    cartouche_word(doc, audit.client_id, audit)     # cartouche qualité en haut de chaque page, s'il est activé
     
     # Définir les styles
     styles = doc.styles
@@ -8780,11 +8783,15 @@ def export_rapport_audit_complet(audit_id):
     from reportlab.lib import colors
     from io import BytesIO
     
-    audit = Audit.query.get_or_404(audit_id)
+    # audit de l'organisation de l'utilisateur uniquement (avant : tout audit, quelle que soit l'organisation)
+    audit = get_client_object_or_404(Audit, audit_id)
     
     # Créer le PDF en mémoire
     buffer = BytesIO()
-    doc = SimpleDocTemplate(buffer, pagesize=letter)
+    # A4 ; cartouche qualité de l'organisation en haut de chaque page s'il est activé (egalyx/cartouche_qualite.py)
+    from egalyx.cartouche_qualite import document_pdf
+    from egalyx.pdf_tableaux import tableau_pdf
+    doc = document_pdf(buffer, audit.client_id, audit, title=f"Rapport d'audit {audit.reference}")
     story = []
     styles = getSampleStyleSheet()
     
@@ -8813,7 +8820,7 @@ def export_rapport_audit_complet(audit_id):
         ['Score global', f"{audit.score_global}/100"],
     ]
     
-    info_table = Table(info_data, colWidths=[2*inch, 4*inch])
+    info_table = tableau_pdf(info_data, colWidths=[2*inch, 4*inch])
     info_table.setStyle(TableStyle([
         ('GRID', (0,0), (-1,-1), 1, colors.black),
         ('BACKGROUND', (0,0), (0,-1), colors.lightgrey),
@@ -8834,7 +8841,7 @@ def export_rapport_audit_complet(audit_id):
                 constat.statut
             ])
         
-        constat_table = Table(constat_data, colWidths=[0.5*inch, 2.5*inch, inch, inch, inch])
+        constat_table = tableau_pdf(constat_data, colWidths=[0.5*inch, 2.5*inch, inch, inch, inch])
         constat_table.setStyle(TableStyle([
             ('GRID', (0,0), (-1,-1), 1, colors.black),
             ('BACKGROUND', (0,0), (-1,0), colors.lightgrey),
@@ -8860,7 +8867,7 @@ def export_rapport_audit_complet(audit_id):
                 _lib_appreciation(getattr(reco, 'appreciation', None)) or '—'
             ])
         
-        reco_table = Table(reco_data, colWidths=[0.5*inch, 2.5*inch, 0.6*inch, 0.8*inch, 0.8*inch, 1.2*inch])
+        reco_table = tableau_pdf(reco_data, colWidths=[0.5*inch, 2.5*inch, 0.6*inch, 0.8*inch, 0.8*inch, 1.2*inch])
         reco_table.setStyle(TableStyle([
             ('GRID', (0,0), (-1,-1), 1, colors.black),
             ('BACKGROUND', (0,0), (-1,0), colors.lightgrey),
@@ -8900,7 +8907,7 @@ def export_synthese_word(audit_id):
     from egalyx.rapport_word import preparer_document
     preparer_document(doc, presentation_rapport(audit.client_id))   # logo, nom, mention, couleur, pied de page du client
     from egalyx.cartouche_qualite import cartouche_word
-    cartouche_word(doc, audit.client_id)            # cartouche qualité en haut de chaque page, s'il est activé
+    cartouche_word(doc, audit.client_id, audit)     # cartouche qualité en haut de chaque page, s'il est activé
     
     # Titre
     title = doc.add_heading(f'Rapport d\'Audit - {audit.reference}', 0)
@@ -9634,17 +9641,9 @@ def rapport_audit_pdf_elegant(audit_id):
     font_config = FontConfiguration()
     
     # CSS pour le PDF
+    # Les règles de page (format, marges, numérotation, cartouche qualité) sont dans le gabarit audit/rapport_pdf.html :
+    # une règle @page ici passerait après celles du gabarit (pages numérotées deux fois, cartouche recouvert).
     css = CSS(string='''
-        @page {
-            size: A4;
-            margin: 2cm 1.8cm;
-            @bottom-center {
-                content: "Page " counter(page) " sur " counter(pages);
-                font-size: 9pt;
-                color: #666;
-            }
-        }
-        
         body {
             font-family: 'DejaVu Sans', 'Arial', sans-serif;
             font-size: 10pt;
@@ -9920,7 +9919,7 @@ def rapport_audit_word_pro(audit_id):
     ct = contenu_rapport('audit', cid=audit.client_id, valeurs={'reference': audit.reference, 'mission': audit.titre})
     preparer_document(doc, rp)
     from egalyx.cartouche_qualite import cartouche_word
-    cartouche_word(doc, audit.client_id)            # cartouche qualité en haut de chaque page, s'il est activé
+    cartouche_word(doc, audit.client_id, audit)     # cartouche qualité en haut de chaque page, s'il est activé
     
     # Titre
     title = doc.add_heading(ct.titre.upper(), level=1)

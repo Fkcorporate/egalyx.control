@@ -10,6 +10,8 @@ Le super admin le dépose dans « Heure, devise et lettres de mission » → ré
 
 Zone libre : détectée automatiquement à l'envoi (on mesure où le papier est imprimé), modifiable à la main en mm.
 Numérotation : si le papier contient « 1 de 1 » (cartouche qualité), ce texte devient « 2 de 5 »… sur chaque page.
+Si l'organisation a activé son cartouche qualité (egalyx/cartouche_qualite.py), il est dessiné directement dans
+les rapports d'audit et le papier « rapport_audit » n'est pas appliqué.
 
 Les fichiers sont rangés dans le disque persistant (/var/data sur Render, ou EGALYX_DONNEES), sinon dans instance/.
 Sans papier déposé, rien ne change : les PDF sortent exactement comme avant.
@@ -66,15 +68,10 @@ def reglage(cid, type_):
     """Réglage du papier {marges en mm, nom, date…} ou None s'il n'y a pas de papier pour ce type."""
     if not cid or type_ not in TYPES:
         return None
-    if type_ == 'rapport_audit':
-        # cartouche qualité réglé par l'organisation (egalyx/cartouche_qualite.py) : prioritaire sur un papier déposé
-        try:
-            from egalyx.cartouche_qualite import reglage_papier
-            rc = reglage_papier(cid)
-            if rc:
-                return rc
-        except Exception as e:  # noqa: BLE001
-            journal.warning('Cartouche qualité non lu : %s', e)
+    if type_ == 'rapport_audit' and _cartouche_actif(cid):
+        # cartouche qualité de l'organisation (egalyx/cartouche_qualite.py) : dessiné directement dans chaque
+        # rapport ; il remplace le papier déposé (pas de superposition, pas de réduction du contenu)
+        return None
     _, pdf, js = _chemins(cid, type_)
     if not os.path.exists(pdf):
         return None
@@ -87,6 +84,15 @@ def reglage(cid, type_):
     r.setdefault('actif', True)
     r['chemin'] = pdf
     return r if r.get('actif', True) else None
+
+
+def _cartouche_actif(cid):
+    try:
+        from egalyx.cartouche_qualite import actif
+        return actif(cid)
+    except Exception as e:  # noqa: BLE001
+        journal.warning('Cartouche qualité non lu : %s', e)
+        return False
 
 
 def tous(cid):

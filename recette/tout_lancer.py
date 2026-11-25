@@ -58,6 +58,7 @@ ETAPES = [
     ('Audit : questionnaire de satisfaction des audités', 'satisfaction_audit.py', []),
     ('Audit : univers d\'audit, qualité de la fonction (IIA 2024), charte', 'fonction_audit.py', []),
     ('Audit : rapports Word aux couleurs et au contenu de l\'organisation', 'rapport_word.py', []),
+    ('Rapport d\'audit : cartouche qualité en haut de chaque page (PDF, Word)', 'cartouche_qualite.py', []),
     ('PDF sans WeasyPrint et pages réparées', 'pdf_secours.py', []),
     ('Boutons : plus aucune adresse inexistante', 'boutons_morts.py', []),
     ('Compatibilité avec la version de Python de Render', 'compat_python.py', []),
