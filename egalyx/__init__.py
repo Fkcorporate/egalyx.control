@@ -178,6 +178,8 @@ def enregistrer_extensions(app, db, csrf=None, recalculer_cotations=None, constr
         lettre_mission.enregistrer(app)           # lettre de mission : en-têtes par organisation, PDF, envoi aux bonnes personnes
         from egalyx import papier_entete
         papier_entete.enregistrer(app)            # papier à en-tête PDF du client (rapport d'audit, lettre de mission)
+        from egalyx import securite
+        securite.enregistrer(app)                 # outils de débogage fermés en production, limite de connexion, en-têtes
         from egalyx import boutons_repares
         boutons_repares.enregistrer(app)          # boutons qui appelaient une adresse inexistante
         from egalyx import statuts

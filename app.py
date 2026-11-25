@@ -46584,8 +46584,8 @@ def update_profil():
             flash('Les mots de passe ne correspondent pas', 'error')
             return redirect(url_for('profil_utilisateur'))
         
-        if len(new_password) < 6:
-            flash('Le mot de passe doit contenir au moins 6 caractères', 'error')
+        if len(new_password) < 8:
+            flash('Le mot de passe doit contenir au moins 8 caractères', 'error')
             return redirect(url_for('profil_utilisateur'))
         
         user.set_password(new_password)
