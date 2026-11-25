@@ -19511,26 +19511,30 @@ def export_dashboard():
         
         # --- RÉCUPÉRATION DES DONNÉES COMPLÈTES ---
         
+        # Cloisonnement : uniquement les données de l'organisation de l'utilisateur (super admin : toutes)
+        _cid = None if current_user.role == 'super_admin' else (current_user.client_id or -1)
+        _rc = [Risque.client_id == _cid] if _cid else []
+
         # 1. Statistiques principales
-        total_risques = Risque.query.filter_by(is_archived=False).count()
+        total_risques = get_client_filter(Risque, is_archived=False).count()
         
         # KRI actifs
         total_kri = db.session.query(KRI).join(
             Risque, KRI.risque_id == Risque.id
         ).filter(
-            Risque.is_archived == False,
+            Risque.is_archived == False, *_rc,
             KRI.est_actif == True
         ).count()
         
         # Processus et logigrammes
-        total_processus = Processus.query.count()
-        total_logigrammes = ProcessusActivite.query.count()
-        logigrammes_actifs = ProcessusActivite.query.filter_by(
+        total_processus = get_client_filter(Processus).count()
+        total_logigrammes = get_client_filter(ProcessusActivite).count()
+        logigrammes_actifs = get_client_filter(ProcessusActivite).filter_by(
             is_archived=False
         ).count()
         
         # Veilles actives
-        veilles_actives = VeilleReglementaire.query.filter_by(
+        veilles_actives = get_client_filter(VeilleReglementaire).filter_by(
             is_active=True, 
             is_archived=False
         ).count()
@@ -19552,7 +19556,7 @@ def export_dashboard():
             )
         ).join(Risque, EvaluationRisque.risque_id == Risque.id
         ).filter(
-            Risque.is_archived == False, 
+            Risque.is_archived == False, *_rc, 
             EvaluationRisque.niveau_risque.isnot(None)
         ).group_by(EvaluationRisque.niveau_risque).all()
         
@@ -19578,7 +19582,7 @@ def export_dashboard():
             func.count().label('count')
         ).join(Risque, EvaluationRisque.risque_id == Risque.id
         ).filter(
-            Risque.is_archived == False,
+            Risque.is_archived == False, *_rc,
             EvaluationRisque.created_at >= six_mois
         ).group_by(
             func.strftime('%Y-%m', EvaluationRisque.created_at),
@@ -19598,7 +19602,7 @@ def export_dashboard():
                 EvaluationRisque.created_at == derniere_eval_subq.c.max_date
             )
         ).filter(
-            Risque.is_archived == False
+            Risque.is_archived == False, *_rc
         ).group_by(Cartographie.id
         ).order_by(func.avg(EvaluationRisque.score_risque).desc()
         ).limit(5).all()
@@ -19616,7 +19620,7 @@ def export_dashboard():
             MesureKRI.date_mesure == derniere_mesure_subq.c.max_date
         )).join(Risque, KRI.risque_id == Risque.id
         ).filter(
-            Risque.is_archived == False,
+            Risque.is_archived == False, *_rc,
             KRI.est_actif == True,
             KRI.seuil_alerte.isnot(None),
             MesureKRI.valeur >= KRI.seuil_alerte
@@ -19629,7 +19633,8 @@ def export_dashboard():
             ActionConformite.is_archived == False
         ).join(VeilleReglementaire).filter(
             VeilleReglementaire.is_active == True,
-            VeilleReglementaire.is_archived == False
+            VeilleReglementaire.is_archived == False,
+            *([VeilleReglementaire.client_id == _cid] if _cid else [])
         ).count()
         
         # 7. Score de risque moyen
@@ -19642,14 +19647,14 @@ def export_dashboard():
                 EvaluationRisque.created_at == derniere_eval_subq.c.max_date
             )
         ).join(Risque
-        ).filter(Risque.is_archived == False
+        ).filter(Risque.is_archived == False, *_rc
         ).scalar()
         
         score_risque_moyen = round(score_risque_moyen, 2) if score_risque_moyen else 0
         
         # 8. Taux de couverture des risques (risques avec KRI)
         risques_avec_kri = db.session.query(Risque).join(KRI).filter(
-            Risque.is_archived == False,
+            Risque.is_archived == False, *_rc,
             KRI.est_actif == True
         ).distinct().count()
         
@@ -19675,20 +19680,20 @@ def export_dashboard():
                     EvaluationRisque.created_at == derniere_eval_subq.c.max_date
                 )
             ).join(Risque).filter(
-                Risque.is_archived == False,
+                Risque.is_archived == False, *_rc,
                 EvaluationRisque.niveau_risque == niveau
             ).scalar()
             scores_par_niveau[niveau] = round(score, 2) if score else 0
         
         # 11. Nouvelles données pour l'évolution
-        nouveaux_risques_6_mois = Risque.query.filter(
-            Risque.is_archived == False,
+        nouveaux_risques_6_mois = get_client_filter(Risque).filter(
+            Risque.is_archived == False, *_rc,
             Risque.created_at >= six_mois
         ).count()
         
         # Risques avec faible score (considérés comme "clôturés")
         risques_clotures_6_mois = db.session.query(Risque).join(EvaluationRisque).filter(
-            Risque.is_archived == False,
+            Risque.is_archived == False, *_rc,
             EvaluationRisque.created_at >= six_mois,
             EvaluationRisque.score_risque <= 5
         ).distinct().count()
@@ -23622,13 +23627,15 @@ def importer_configuration():
         
         if mode_import == 'remplacer':
             # Supprimer les configurations existantes
-            ConfigurationChampRisque.query.delete()
-            ConfigurationListeDeroulante.query.delete()
+            # cloisonnement : uniquement la configuration de l'organisation de l'utilisateur
+            for _ancien in get_client_filter(ConfigurationChampRisque).all() + get_client_filter(ConfigurationListeDeroulante).all():
+                db.session.delete(_ancien)
+            db.session.flush()
         
         # Importer les champs
         if 'champs' in data.get('configuration', {}):
             for champ_data in data['configuration']['champs']:
-                existing = ConfigurationChampRisque.query.filter_by(
+                existing = get_client_filter(ConfigurationChampRisque).filter_by(
                     nom_technique=champ_data['nom_technique']
                 ).first()
                 
@@ -23645,13 +23652,15 @@ def importer_configuration():
                     existing.regex_validation = champ_data['regex_validation']
                 else:
                     # Créer un nouveau champ
+                    champ_data = {k: v for k, v in champ_data.items() if k not in ('id', 'client_id')}
                     champ = ConfigurationChampRisque(**champ_data)
+                    champ.client_id = current_user.client_id
                     db.session.add(champ)
         
         # Importer les listes
         if 'listes' in data.get('configuration', {}):
             for liste_data in data['configuration']['listes']:
-                existing = ConfigurationListeDeroulante.query.filter_by(
+                existing = get_client_filter(ConfigurationListeDeroulante).filter_by(
                     nom_technique=liste_data['nom_technique']
                 ).first()
                 
@@ -23664,7 +23673,9 @@ def importer_configuration():
                     existing.est_actif = liste_data['est_actif']
                 else:
                     # Créer une nouvelle liste
+                    liste_data = {k: v for k, v in liste_data.items() if k not in ('id', 'client_id')}
                     liste = ConfigurationListeDeroulante(**liste_data)
+                    liste.client_id = current_user.client_id
                     db.session.add(liste)
         
         db.session.commit()
@@ -31364,10 +31375,9 @@ def nettoyer_archives():
     
     try:
         # Compter avant suppression pour l'affichage
-        nb_risques = Risque.query.filter_by(is_archived=True).count()
-        
-        # Récupérer tous les risques archivés
-        risques_archives = Risque.query.filter_by(is_archived=True).all()
+        # cloisonnement : seulement les risques archivés de l'organisation de l'administrateur
+        risques_archives = get_client_filter(Risque, is_archived=True).all()
+        nb_risques = len(risques_archives)
         
         for risque in risques_archives:
             # Supprimer les évaluations
@@ -46813,8 +46823,8 @@ def nouveau_logigramme():
     from models import Direction, Service
     
     # Récupérer les directions et services
-    directions = Direction.query.order_by(Direction.nom).all()
-    services = Service.query.order_by(Service.nom).all()
+    directions = get_client_filter(Direction).order_by(Direction.nom).all()   # cloisonnement
+    services = get_client_filter(Service).order_by(Service.nom).all()
     
     if request.method == 'POST':
         nom = request.form.get('nom')

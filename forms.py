@@ -24,6 +24,9 @@ def coerce_int_or_none(value):
         return None
 
 # Widget personnalisé pour les sélections multiples
+from egalyx.categories_risque import CATEGORIES_RISQUE
+
+
 class MultiCheckboxField(SelectMultipleField):
     widget = ListWidget(prefix_label=False)
     option_widget = CheckboxInput()
@@ -533,18 +536,10 @@ class RisqueForm(FlaskForm):
     intitule = StringField('Intitulé du risque', validators=[DataRequired()])
     description = TextAreaField('Description', validators=[DataRequired()])
     processus_concerne = StringField('Processus concerné')
-    categorie = SelectField('Catégorie', choices=[
-        ('', 'Sélectionnez une catégorie'),
-        ('operationnel', 'Opérationnel'),
-        ('financier', 'Financier'),
-        ('juridique', 'Juridique'),
-        ('compliance', 'Compliance'),
-        ('reputation', 'Réputation'),
-        ('strategique', 'Stratégique'),
-        ('technologique', 'Technologique'),
-        ('humain', 'Ressources Humaines'),
-        ('environnemental', 'Environnemental')
-    ], validators=[DataRequired()])
+    # liste par défaut : egalyx/categories_risque.py ; validate_choice=False : une organisation peut avoir sa
+    # propre liste (Paramétrage > Listes déroulantes), et les anciennes valeurs restent acceptées
+    categorie = SelectField('Catégorie', choices=[('', 'Sélectionnez une catégorie')] + CATEGORIES_RISQUE,
+                            validators=[DataRequired()], validate_choice=False)
     type_risque = SelectField('Type de risque', choices=[
         ('', 'Sélectionnez un type'),
         ('inne', 'Inhérent'),

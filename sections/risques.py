@@ -7370,16 +7370,16 @@ def modifier_risque(id):
     form = RisqueForm(obj=risque)
     
     # Récupérer les configurations de listes déroulantes
-    categories_liste = ConfigurationListeDeroulante.query.filter_by(
+    categories_liste = get_client_filter(ConfigurationListeDeroulante).filter_by(
         nom_technique='categorie'
     ).first()
     
-    types_risque_liste = ConfigurationListeDeroulante.query.filter_by(
+    types_risque_liste = get_client_filter(ConfigurationListeDeroulante).filter_by(
         nom_technique='type_risque'
     ).first()
     
-    # Récupérer les champs configurés
-    champs_configures = ConfigurationChampRisque.query.filter_by(
+    # Récupérer les champs configurés (cloisonnement par organisation)
+    champs_configures = get_client_filter(ConfigurationChampRisque).filter_by(
         est_actif=True
     ).order_by('section', 'ordre_affichage').all()
     

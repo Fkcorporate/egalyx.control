@@ -913,7 +913,7 @@ def rapports_audit():
 @login_required
 def api_statistiques_audit_globales():
     """API pour les statistiques globales des audits"""
-    audits = Audit.query.all()
+    audits = get_client_filter(Audit).all()   # cloisonnement par organisation
     
     stats = {
         'total_audits': len(audits),
@@ -1574,17 +1574,19 @@ def export_rapport_audit_pdf(audit_id):
     # Recommandations
     story.append(Paragraph("Recommandations", styles['Heading2']))
     if audit.recommandations:
-        reco_data = [['Réf.', 'Description', 'Priorité', 'Statut', 'Avancement']]
+        from egalyx.appreciation_reco import libelle as _lib_appreciation
+        reco_data = [['Réf.', 'Description', 'Priorité', 'Statut', 'Avancement', 'Appréciation']]
         for reco in audit.recommandations:
             reco_data.append([
                 reco.reference,
-                reco.description[:80] + '...' if len(reco.description) > 80 else reco.description,
+                reco.description[:70] + '...' if len(reco.description) > 70 else reco.description,
                 reco.score_priorite,
                 reco.statut,
-                f"{reco.taux_avancement}%"
+                f"{reco.taux_avancement}%",
+                _lib_appreciation(getattr(reco, 'appreciation', None)) or '—'
             ])
         
-        reco_table = Table(reco_data, colWidths=[0.5*inch, 3*inch, 0.7*inch, inch, inch])
+        reco_table = Table(reco_data, colWidths=[0.5*inch, 2.5*inch, 0.6*inch, 0.8*inch, 0.8*inch, 1.2*inch])
         reco_table.setStyle(TableStyle([
             ('GRID', (0,0), (-1,-1), 1, colors.black),
             ('BACKGROUND', (0,0), (-1,0), colors.lightgrey),
@@ -8844,17 +8846,19 @@ def export_rapport_audit_complet(audit_id):
     # Recommandations
     story.append(Paragraph("Recommandations", styles['Heading2']))
     if audit.recommandations:
-        reco_data = [['Réf.', 'Description', 'Priorité', 'Statut', 'Avancement']]
+        from egalyx.appreciation_reco import libelle as _lib_appreciation
+        reco_data = [['Réf.', 'Description', 'Priorité', 'Statut', 'Avancement', 'Appréciation']]
         for reco in audit.recommandations:
             reco_data.append([
                 reco.reference,
-                reco.description[:80] + '...' if len(reco.description) > 80 else reco.description,
+                reco.description[:70] + '...' if len(reco.description) > 70 else reco.description,
                 reco.score_priorite,
                 reco.statut,
-                f"{reco.taux_avancement}%"
+                f"{reco.taux_avancement}%",
+                _lib_appreciation(getattr(reco, 'appreciation', None)) or '—'
             ])
         
-        reco_table = Table(reco_data, colWidths=[0.5*inch, 3*inch, 0.7*inch, inch, inch])
+        reco_table = Table(reco_data, colWidths=[0.5*inch, 2.5*inch, 0.6*inch, 0.8*inch, 0.8*inch, 1.2*inch])
         reco_table.setStyle(TableStyle([
             ('GRID', (0,0), (-1,-1), 1, colors.black),
             ('BACKGROUND', (0,0), (-1,0), colors.lightgrey),
@@ -14757,6 +14761,10 @@ def modifier_recommandation(recommandation_id):
         risque_id = request.form.get('risque_id')
         recommandation.risque_id = int(risque_id) if risque_id and risque_id.isdigit() else None
         
+        # Appréciation de l'auditeur (niveau + commentaire)
+        from egalyx.appreciation_reco import enregistrer_formulaire as _appreciation
+        _appreciation(recommandation, request.form, current_user.id)
+
         # Recalculer le score de priorité
         recommandation.score_priorite = recommandation.calculer_score_priorite()
         
@@ -15544,7 +15552,8 @@ def supprimer_constatation(constatation_id):
 @login_required
 def rapport_comparaison_audits():
     """Rapport de comparaison entre audits"""
-    audits = Audit.query.filter_by(is_archived=False).all()
+    # cloisonnement : uniquement les audits de l'organisation de l'utilisateur (super admin : toutes)
+    audits = get_client_filter(Audit, is_archived=False).all()
     
     # Calculer les statistiques pour la comparaison
     comparaison_data = []

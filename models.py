@@ -5660,6 +5660,11 @@ class Recommandation(db.Model):
     updated_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc),  # CORRIGÉ
                           onupdate=lambda: datetime.now(timezone.utc))  # CORRIGÉ
     client_id = db.Column(db.Integer, db.ForeignKey('clients.id'), nullable=True)
+    # Appréciation de l'auditeur (25/11/2026) : niveau + commentaire, voir egalyx/appreciation_reco.py
+    appreciation = db.Column(db.String(30), nullable=True)
+    appreciation_commentaire = db.Column(db.Text, nullable=True)
+    appreciation_le = db.Column(db.DateTime, nullable=True)
+    appreciation_par_id = db.Column(db.Integer, nullable=True)
     
     # Relations
     audit = db.relationship('Audit', back_populates='recommandations')

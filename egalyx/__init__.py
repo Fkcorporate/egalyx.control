@@ -46,6 +46,8 @@ def enregistrer_extensions(app, db, csrf=None, recalculer_cotations=None, constr
     base_donnees.enregistrer(app, db)
     from egalyx import cloisonnement
     cloisonnement.enregistrer(app)          # isolation des organisations sur toutes les routes
+    from egalyx import cloisonnement_listes
+    cloisonnement_listes.enregistrer(app)   # filet : les listes ne montrent que l'organisation de l'utilisateur
     from egalyx import questionnaires_publics
     questionnaires_publics.enregistrer(app)  # réponses publiques : questionnaire public, actif, dans ses dates
     double_auth.enregistrer(app)
@@ -184,6 +186,10 @@ def enregistrer_extensions(app, db, csrf=None, recalculer_cotations=None, constr
         installation.enregistrer(app)             # on-premise : flask creer-super-admin, flask verifier-installation
         from egalyx import licence
         licence.enregistrer(app)                  # on-premise : clé de licence (inactive sauf EGALYX_LICENCE_REQUISE=1)
+        from egalyx import appreciation_reco
+        appreciation_reco.enregistrer(app)        # appréciation de l'auditeur sur chaque recommandation
+        from egalyx import categories_risque
+        categories_risque.enregistrer(app)        # catégories de risque par défaut (+ libellés lisibles)
         from egalyx import boutons_repares
         boutons_repares.enregistrer(app)          # boutons qui appelaient une adresse inexistante
         from egalyx import statuts
