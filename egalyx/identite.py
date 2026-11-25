@@ -50,7 +50,43 @@ def _dossier():
 
 
 def _chemin_logo(cid):
-    return os.path.join(_dossier(), f'client_{int(cid)}.png')
+    """Chemin du logo. Si le fichier a disparu (Render sans disque persistant : dossier effacé à chaque
+    déploiement ou redémarrage), il est recréé depuis la copie gardée dans la base de données."""
+    p = os.path.join(_dossier(), f'client_{int(cid)}.png')
+    if not os.path.exists(p):
+        _restaurer_logo(cid, p)
+    return p
+
+
+CLE_LOGO = 'identite_logo'          # copie du logo (PNG en base64) dans ClientConfiguration.preferences
+
+
+def _restaurer_logo(cid, p):
+    try:
+        conf = _m().ClientConfiguration.query.filter_by(client_id=cid).first()
+        b64 = ((conf.preferences or {}).get(CLE_LOGO) if conf else None)
+        if b64:
+            with open(p, 'wb') as f:
+                f.write(base64.b64decode(b64))
+    except Exception:  # noqa: BLE001
+        pass
+
+
+def _garder_copie_logo(cid, donnees):
+    """Range (ou retire si donnees=None) la copie du logo dans la base, qui survit aux redéploiements."""
+    m = _m()
+    conf = m.ClientConfiguration.query.filter_by(client_id=cid).first()
+    if conf is None:
+        if donnees is None:
+            return
+        conf = m.ClientConfiguration(client_id=cid, couleurs={}, preferences={})
+        m.db.session.add(conf)
+    prefs = dict(conf.preferences or {})
+    if donnees is None:
+        prefs.pop(CLE_LOGO, None)
+    else:
+        prefs[CLE_LOGO] = base64.b64encode(donnees).decode()
+    conf.preferences = prefs
 
 
 def nom_par_defaut(nom):
@@ -252,15 +288,18 @@ def appliquer(cid, nom_court=None, logo=None, retirer_logo=False):
         conf.preferences = prefs
     if logo:
         donnees = preparer_logo(logo)
-        with open(_chemin_logo(cid), 'wb') as f:
+        chemin = os.path.join(_dossier(), f'client_{int(cid)}.png')
+        with open(chemin, 'wb') as f:
             f.write(donnees)
-        client.logo = os.path.basename(_chemin_logo(cid))
+        client.logo = os.path.basename(chemin)
+        _garder_copie_logo(cid, donnees)
     elif retirer_logo:
         try:
-            os.remove(_chemin_logo(cid))
+            os.remove(os.path.join(_dossier(), f'client_{int(cid)}.png'))
         except OSError:
             pass
         client.logo = None
+        _garder_copie_logo(cid, None)
     if _contexte_requete():
         g.pop('_egalyx_identite', None)
 

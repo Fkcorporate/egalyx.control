@@ -78,6 +78,10 @@ def preparer(app, donnees=None):
         return []
     os.makedirs(donnees, exist_ok=True)
     faits = []
+    if 'RENDER' in os.environ and not os.path.ismount(donnees):
+        faits.append(f"⚠️ {donnees} n'est PAS un disque persistant Render : les fichiers déposés (logos, photos, "
+                     "preuves, papiers à en-tête…) seront effacés au prochain déploiement. Ajoutez un disque "
+                     f"(Render > service > Disks, chemin de montage {donnees}).")
     verrou = open(os.path.join(donnees, '.egalyx_verrou'), 'w')
     try:
         try:
