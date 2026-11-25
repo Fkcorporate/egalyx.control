@@ -1,64 +1,57 @@
-version: '3.8'
+# Egalyx Control — installation chez un client (on-premise) : application + PostgreSQL + Nginx (HTTPS).
+# Avant le premier lancement :  cp deploiement/on-premise/env.exemple .env   puis remplissez .env
+# Lancement :                   docker compose up -d --build
+# Guide complet :               deploiement/on-premise/GUIDE_INSTALLATION.md
+name: egalyx
 
 services:
+  db:
+    image: postgres:15-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-egalyx}
+      POSTGRES_USER: ${POSTGRES_USER:-egalyx}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD manquant dans .env}
+    volumes:
+      - db_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-egalyx} -d ${POSTGRES_DB:-egalyx}"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    # la base n'est jamais exposée hors du serveur
+
   web:
     build: .
-    ports:
-      - "5000:5000"
+    image: egalyx-control:latest
+    restart: unless-stopped
+    env_file: .env
     environment:
-      - FLASK_ENV=production
-      - DATABASE_URL=postgresql://postgres:password@db:5432/audit_db
-      - REDIS_URL=redis://redis:6379/0
+      EGALYX_PRODUCTION: "1"
+      EGALYX_DONNEES: /donnees
+      EGALYX_DOSSIER_SAUVEGARDES: /sauvegardes
+      DATABASE_URL: postgresql://${POSTGRES_USER:-egalyx}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB:-egalyx}
+    volumes:
+      - donnees:/donnees
+      - ./sauvegardes:/sauvegardes
     depends_on:
-      - db
-      - redis
-    volumes:
-      - ./uploads:/app/uploads
-      - ./backups:/app/backups
-    restart: unless-stopped
-
-  db:
-    image: postgres:15
-    environment:
-      - POSTGRES_DB=audit_db
-      - POSTGRES_USER=postgres
-      - POSTGRES_PASSWORD=password
-    volumes:
-      - postgres_data:/var/lib/postgresql/data
-    restart: unless-stopped
-
-  redis:
-    image: redis:7-alpine
-    volumes:
-      - redis_data:/data
-    restart: unless-stopped
+      db:
+        condition: service_healthy
+    expose:
+      - "8000"
 
   nginx:
-    image: nginx:alpine
+    image: nginx:1.27-alpine
+    restart: unless-stopped
     ports:
-      - "80:80"
-      - "443:443"
+      - "${PORT_HTTP:-80}:80"
+      - "${PORT_HTTPS:-443}:443"
     volumes:
-      - ./nginx/nginx.conf:/etc/nginx/nginx.conf
-      - ./nginx/ssl:/etc/nginx/ssl
-      - ./uploads:/app/uploads
+      - ./deploiement/on-premise/nginx/egalyx.conf:/etc/nginx/conf.d/default.conf:ro
+      - ./deploiement/on-premise/certificats:/etc/nginx/certs:ro
     depends_on:
       - web
-    restart: unless-stopped
 
 volumes:
-  postgres_data:
-  redis_data:
-
-  version: '3.8'
-
-services:
-  web:
-    build: .
-    ports:
-      - "5000:5000"
-    environment:
-      - OPENAI_API_KEY=${OPENAI_API_KEY}  # Sera injectée depuis le host
-      - FLASK_ENV=development
-    volumes:
-      - .:/app
+  db_data:
+  donnees:

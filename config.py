@@ -34,6 +34,11 @@ load_dotenv()
 
 # Déterminer si on est sur Render
 IS_RENDER = 'RENDER' in os.environ
+# Production : sur Render, ou chez un client (installation on-premise) avec EGALYX_PRODUCTION=1.
+# Hors production, l'outil démarre en mode développement (débogage, cookies non sécurisés) : jamais chez un client.
+EN_PRODUCTION = IS_RENDER or os.environ.get('EGALYX_PRODUCTION') == '1'
+# Cookies réservés à HTTPS en production (EGALYX_HTTPS=0 seulement pour un essai sans certificat)
+HTTPS = EN_PRODUCTION and os.environ.get('EGALYX_HTTPS', '1') != '0'
 
 class Config:
     # ============================================================================
@@ -42,8 +47,8 @@ class Config:
     SECRET_KEY = os.environ.get('SECRET_KEY') or 'votre_cle_secrete_super_securisee_changer_en_production'
     
     # Configuration base de données
-    if IS_RENDER and os.environ.get('DATABASE_URL'):
-        # Render utilise PostgreSQL - conversion nécessaire
+    if EN_PRODUCTION and os.environ.get('DATABASE_URL'):
+        # Render (et l'on-premise) utilisent PostgreSQL - conversion nécessaire
         DATABASE_URL = os.environ['DATABASE_URL']
         if DATABASE_URL.startswith('postgres://'):
             DATABASE_URL = DATABASE_URL.replace('postgres://', 'postgresql://', 1)
@@ -104,15 +109,17 @@ class Config:
     MAIL_USE_SSL = os.environ.get('MAIL_USE_SSL', 'False').lower() in ['true', '1', 't']
     MAIL_USERNAME = os.environ.get('MAIL_USERNAME', 'contact.fkcorporate@gmail.com')
     MAIL_PASSWORD = os.environ.get('MAIL_PASSWORD', '')
-    MAIL_DEFAULT_SENDER = ('FK Corporate Intelligence', 'contact.fkcorporate@gmail.com')
+    # Expéditeur des e-mails : réglable (chez un client, ses propres nom et adresse) ; sinon la valeur historique
+    MAIL_DEFAULT_SENDER = ((os.environ.get('MAIL_NOM_EXPEDITEUR') or 'Egalyx Control', os.environ['MAIL_DEFAULT_SENDER'])
+                           if os.environ.get('MAIL_DEFAULT_SENDER') else ('FK Corporate Intelligence', 'contact.fkcorporate@gmail.com'))
     
     # ============================================================================
     # CONFIGURATION SECURITÉ
     # ============================================================================
-    SESSION_COOKIE_SECURE = IS_RENDER  # HTTPS uniquement sur Render
+    SESSION_COOKIE_SECURE = HTTPS  # HTTPS uniquement en production (Render ou on-premise)
     SESSION_COOKIE_HTTPONLY = True
     SESSION_COOKIE_SAMESITE = 'Lax'
-    REMEMBER_COOKIE_SECURE = IS_RENDER
+    REMEMBER_COOKIE_SECURE = HTTPS
     REMEMBER_COOKIE_HTTPONLY = True
     
     # ============================================================================
@@ -198,8 +205,8 @@ class Config:
     # ============================================================================
     # CONFIGURATION POUR RENDER (PERFORMANCE)
     # ============================================================================
-    if IS_RENDER:
-        # Désactiver le debug
+    if EN_PRODUCTION:
+        # Désactiver le debug (Render ou on-premise)
         DEBUG = False
         TEMPLATES_AUTO_RELOAD = False
         
@@ -266,7 +273,7 @@ class Config:
         _journal("\n" + "="*60)
         _journal("📋 RÉSUMÉ DE LA CONFIGURATION")
         _journal("="*60)
-        _journal(f"ENVIRONNEMENT: {'🎯 PRODUCTION (Render)' if IS_RENDER else '🛠️  DÉVELOPPEMENT'}")
+        _journal(f"ENVIRONNEMENT: {('🎯 PRODUCTION (Render)' if IS_RENDER else '🎯 PRODUCTION (on-premise)') if EN_PRODUCTION else '🛠️  DÉVELOPPEMENT'}")
         _journal(f"SECRET_KEY: {'✅ Définie' if Config.SECRET_KEY and len(Config.SECRET_KEY) > 20 else '⚠️  Faible ou non définie'}")
         _journal(f"DATABASE: {Config.get_database_info()}")
         _journal(f"DATABASE_URL: {Config.SQLALCHEMY_DATABASE_URI[:50]}...")
@@ -290,8 +297,8 @@ class Config:
         Config.print_config_summary()
         
         # Configuration supplémentaire si nécessaire
-        if IS_RENDER:
-            _journal("🚀 Configuration Render détectée")
+        if EN_PRODUCTION:
+            _journal("🚀 Configuration de production détectée" + (" (Render)" if IS_RENDER else " (on-premise)"))
             # Forcer HTTPS sur Render
             app.config['PREFERRED_URL_SCHEME'] = 'https'
             

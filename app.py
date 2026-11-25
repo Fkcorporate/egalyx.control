@@ -3475,9 +3475,13 @@ with app.app_context():
             db.create_all()
             _journal("✅ Tables créées ou déjà existantes")
             
-            # Créer l'admin si nécessaire
+            # Créer l'admin si nécessaire — en développement seulement. En production (Render, on-premise),
+            # jamais de compte au mot de passe connu : le premier compte se crée avec « flask creer-super-admin ».
+            _prod = bool(os.environ.get('RENDER')) or os.environ.get('EGALYX_PRODUCTION') == '1'
             try:
-                if User.query.count() == 0:
+                if User.query.count() == 0 and _prod:
+                    _journal("ℹ️ Base vide : créez le premier compte avec « flask creer-super-admin ».")
+                elif User.query.count() == 0:
                     admin = User(
                         username='admin',
                         email='admin@entreprise.com',

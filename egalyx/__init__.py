@@ -180,6 +180,10 @@ def enregistrer_extensions(app, db, csrf=None, recalculer_cotations=None, constr
         papier_entete.enregistrer(app)            # papier à en-tête PDF du client (rapport d'audit, lettre de mission)
         from egalyx import securite
         securite.enregistrer(app)                 # outils de débogage fermés en production, limite de connexion, en-têtes
+        from egalyx import installation
+        installation.enregistrer(app)             # on-premise : flask creer-super-admin, flask verifier-installation
+        from egalyx import licence
+        licence.enregistrer(app)                  # on-premise : clé de licence (inactive sauf EGALYX_LICENCE_REQUISE=1)
         from egalyx import boutons_repares
         boutons_repares.enregistrer(app)          # boutons qui appelaient une adresse inexistante
         from egalyx import statuts
