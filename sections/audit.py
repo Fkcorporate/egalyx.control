@@ -9315,8 +9315,12 @@ def associer_risques_plan_action(audit_id, plan_id):
 @login_required
 def rapport_audit_pdf_elegant(audit_id):
     """Génère un PDF élégant et professionnel avec intégration des feuilles de travail"""
-    from weasyprint import HTML, CSS
-    from weasyprint.text.fonts import FontConfiguration
+    try:
+        from weasyprint import HTML, CSS
+        from weasyprint.text.fonts import FontConfiguration
+    except Exception as e:  # noqa: BLE001 — WeasyPrint absent ou bibliothèques système manquantes (Render)
+        app.logger.warning('PDF élégant indisponible (%s) : export PDF complet à la place', e)
+        return redirect(url_for('export_rapport_audit_complet', audit_id=audit_id))
     from datetime import datetime
     from models import User, Constatation, Recommandation, PlanAction, Risque, FichierRapport
     from models import WorkflowApprobation, FeuilleTravail, TestControleFeuille, ErreurTest

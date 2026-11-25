@@ -11,9 +11,8 @@ titre, code, date et version du document, logo oui / non. La page « n de N » e
 Où il apparaît :
   - rapports d'audit PDF (export PDF, rapport complet PDF, rapport élégant) : posé en haut de chaque page
     par egalyx/papier_entete.py, qui réduit légèrement le contenu pour le placer dessous et numérote les pages ;
-  - rapports d'audit Word : en-tête de chaque page, numéros PAGE / NUMPAGES mis à jour par Word ;
-  - rapport complet à l'écran / imprimé depuis le navigateur : en haut du document (sans la colonne PAGE,
-    que le navigateur ne sait pas remplir).
+  - rapports d'audit Word : en-tête de chaque page, numéros PAGE / NUMPAGES mis à jour par Word.
+La page « Rapport complet » à l'écran n'en a pas : le cartouche ne concerne que les documents téléchargés.
 Il remplace le papier à en-tête PDF déposé pour le rapport d'audit, s'il y en a un, tant qu'il est activé.
 
 Stockage : ClientConfiguration.preferences['cartouche_qualite'] (base de données : survit aux redéploiements).
