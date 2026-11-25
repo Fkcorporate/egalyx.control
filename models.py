@@ -19972,6 +19972,11 @@ class RecommandationC2N(db.Model):
     cloture_validee_le = db.Column(db.DateTime, nullable=True)
     cloture_validee_par_id = db.Column(db.Integer, nullable=True)
     motif_refus_cloture = db.Column(db.Text, nullable=True)
+    # Appréciation (niveau + commentaire), comme les recommandations d'audit : egalyx/appreciation_reco.py
+    appreciation = db.Column(db.String(30), nullable=True)
+    appreciation_commentaire = db.Column(db.Text, nullable=True)
+    appreciation_le = db.Column(db.DateTime, nullable=True)
+    appreciation_par_id = db.Column(db.Integer, nullable=True)
     planification_id = db.Column(db.Integer, db.ForeignKey('planification_controles.id'), nullable=False)
     
     # Contenu
@@ -20047,7 +20052,9 @@ class RecommandationC2N(db.Model):
             'created_at': self.created_at.isoformat() if self.created_at else None,
             'created_by': self.createur.username if self.createur else None,
             'planification_reference': self.planification.reference if self.planification else None,
-            'controle_nom': self.planification.referentiel.nom if self.planification and self.planification.referentiel else None
+            'controle_nom': self.planification.referentiel.nom if self.planification and self.planification.referentiel else None,
+            'appreciation': self.appreciation,
+            'appreciation_commentaire': self.appreciation_commentaire
         }
     
     def transformer_en_plan_action(self, user_id, date_echeance=None):
@@ -21643,6 +21650,14 @@ class RecommandationExterne(db.Model):
     created_by = db.Column(db.Integer, db.ForeignKey('user.id'))
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    # Entité saisie à la main quand elle n'est pas dans la structure (agence, filiale, comité…) — 25/11/2026
+    entite_type = db.Column(db.String(30), nullable=True)
+    entite_nom = db.Column(db.String(200), nullable=True)
+    # Appréciation (niveau + commentaire), comme les recommandations d'audit : egalyx/appreciation_reco.py
+    appreciation = db.Column(db.String(30), nullable=True)
+    appreciation_commentaire = db.Column(db.Text, nullable=True)
+    appreciation_le = db.Column(db.DateTime, nullable=True)
+    appreciation_par_id = db.Column(db.Integer, nullable=True)
     responsable = db.relationship('User', foreign_keys=[responsable_id])
     direction = db.relationship('Direction', foreign_keys=[direction_id])
 

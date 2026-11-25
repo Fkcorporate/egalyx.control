@@ -27,10 +27,53 @@
       <input type="date" class="form-control" id="date_echeance" name="date_echeance" value="{{ v.date_echeance or (r.date_echeance.isoformat() if r and r.date_echeance else '') }}"></div>
     <div class="col-md-3"><label class="form-label" for="responsable_id">Responsable</label>
       <select class="form-select" id="responsable_id" name="responsable_id"><option value="">— À désigner —</option>{% for u in utilisateurs %}<option value="{{ u.id }}" {% if r and r.responsable_id == u.id %}selected{% endif %}>{{ u.username }}</option>{% endfor %}</select></div>
-    <div class="col-md-4"><label class="form-label" for="direction_id">Direction concernée</label>
-      <select class="form-select" id="direction_id" name="direction_id"><option value="">—</option>{% for d in directions %}<option value="{{ d.id }}" {% if r and r.direction_id == d.id %}selected{% endif %}>{{ d.nom }}</option>{% endfor %}</select></div>
+    {% set est_autre = (v.direction_id == 'autre') or (not f and r and r.entite_nom) %}
+    <div class="col-md-4"><label class="form-label" for="direction_id">Entité concernée</label>
+      <select class="form-select" id="direction_id" name="direction_id">
+        <option value="">—</option>
+        {% for d in directions %}<option value="{{ d.id }}" {% if not est_autre and r and r.direction_id == d.id %}selected{% endif %}>{{ d.nom }}</option>{% endfor %}
+        <option value="autre" {% if est_autre %}selected{% endif %}>➕ Autre (saisir à la main)…</option>
+      </select></div>
+    <div class="col-md-8" id="bloc-entite" {% if not est_autre %}hidden{% endif %}>
+      <div class="row g-2">
+        <div class="col-md-4"><label class="form-label" for="entite_type">Type</label>
+          <select class="form-select" id="entite_type" name="entite_type">{% for k, l in entites.items() %}<option value="{{ k }}" {% if (v.entite_type or (r.entite_type if r else '') or 'direction') == k %}selected{% endif %}>{{ l }}</option>{% endfor %}</select></div>
+        <div class="col-md-8"><label class="form-label" for="entite_nom">Nom</label>
+          <input class="form-control" id="entite_nom" name="entite_nom" maxlength="200" value="{{ v.entite_nom or (r.entite_nom if r else '') or '' }}" placeholder="ex. Agence de Bouaké, Direction Générale, Comité de crédit"></div>
+        <div class="col-12 form-check ms-1" id="bloc-creer">
+          <input class="form-check-input" type="checkbox" id="creer_direction" name="creer_direction" value="1" {% if v.creer_direction %}checked{% endif %}>
+          <label class="form-check-label small" for="creer_direction">Ajouter aussi cette direction à la structure de l'organisation (elle sera proposée partout ailleurs)</label>
+        </div>
+      </div>
+    </div>
+    <div class="col-12 p-3 rounded" style="border:1px solid #D0D5DD">
+      <label class="form-label fw-semibold mb-2">Appréciation</label>
+      <div class="d-flex flex-wrap gap-3 mb-2">
+        {% set appr = v.appreciation if f else (r.appreciation if r else '') %}
+        {% for code, n in APPRECIATIONS.items() %}
+        <div class="form-check"><input class="form-check-input" type="radio" name="appreciation" value="{{ code }}" id="appr_{{ code }}" {% if appr == code %}checked{% endif %}>
+          <label class="form-check-label" for="appr_{{ code }}">{{ n.libelle }}</label></div>
+        {% endfor %}
+        <div class="form-check"><input class="form-check-input" type="radio" name="appreciation" value="" id="appr_aucune" {% if not appr %}checked{% endif %}>
+          <label class="form-check-label text-muted" for="appr_aucune">Aucune</label></div>
+      </div>
+      <textarea class="form-control" name="appreciation_commentaire" rows="2" maxlength="2000" placeholder="Commentaire : qualité de la mise en œuvre, éléments probants vus, réserves…">{{ v.appreciation_commentaire if f else ((r.appreciation_commentaire if r else '') or '') }}</textarea>
+    </div>
     <div class="col-12"><button class="btn btn-primary"><i class="fas fa-floppy-disk me-1"></i>Enregistrer</button></div>
   </form>
   {% endcall %}
 </div>
+<script>
+(function () {
+  var choix = document.getElementById('direction_id'), bloc = document.getElementById('bloc-entite'),
+      type = document.getElementById('entite_type'), creer = document.getElementById('bloc-creer');
+  function maj() {
+    bloc.hidden = choix.value !== 'autre';
+    creer.hidden = type.value !== 'direction';
+    if (!bloc.hidden) document.getElementById('entite_nom').required = true;
+    else document.getElementById('entite_nom').required = false;
+  }
+  choix.addEventListener('change', maj); type.addEventListener('change', maj); maj();
+})();
+</script>
 {% endblock %}

@@ -142,7 +142,8 @@ def _ligne(source, r):
                 priorite=r.priorite or 'moyenne', responsable_id=r.responsable_id, responsable=r.responsable,
                 echeance=r.date_echeance, progression=r.progression or 0, statut=_statut_externe(r),
                 cree_le=r.created_at, origine=r.emetteur or '', lien=_url('recommandations.externe', reco_id=r.id),
-                client_id=r.client_id, objet=r, demandeur_id=r.demande_cloture_par_id, motif_refus=r.motif_refus_cloture)
+                client_id=r.client_id, objet=r, demandeur_id=r.demande_cloture_par_id, motif_refus=r.motif_refus_cloture,
+                entite=entite_libelle(r))
 
 
 def module_actif(type_, client=None):
@@ -438,7 +439,7 @@ def _formulaire_externe(r):
             flash('Indiquez un intitulé (5 caractères au moins).', 'warning')
             return render_template('egalyx/recommandation_externe_form.html', r=r, f=f, sources=SOURCES,
                                    externes=SOURCES_EXTERNES, priorites=PRIORITES, utilisateurs=utilisateurs,
-                                   directions=directions)
+                                   directions=directions, entites=ENTITES)
         nouveau = r is None
         if nouveau:
             n = m.RecommandationExterne.query.filter_by(client_id=cid).count() + 1
@@ -455,8 +456,9 @@ def _formulaire_externe(r):
         r.date_echeance = _date(f.get('date_echeance'))
         uid = entier(f.get('responsable_id'))
         r.responsable_id = uid if uid and any(u.id == uid for u in utilisateurs) else None
-        did = entier(f.get('direction_id'))
-        r.direction_id = did if did and any(d.id == did for d in directions) else None
+        _entite_concernee(m, r, f, cid, directions)
+        from egalyx.appreciation_reco import enregistrer_formulaire as _appreciation
+        _appreciation(r, f, current_user.id)
         m.db.session.flush()
         if nouveau:
             _suivi('externe', r, 'creation', commentaire=f'Source : {SOURCES[source]}')
@@ -467,7 +469,44 @@ def _formulaire_externe(r):
         flash('Recommandation enregistrée.', 'success')
         return redirect(url_for('recommandations.externe', reco_id=r.id))
     return render_template('egalyx/recommandation_externe_form.html', r=r, f=None, sources=SOURCES,
-                           externes=SOURCES_EXTERNES, priorites=PRIORITES, utilisateurs=utilisateurs, directions=directions)
+                           externes=SOURCES_EXTERNES, priorites=PRIORITES, utilisateurs=utilisateurs, directions=directions,
+                           entites=ENTITES)
+
+
+ENTITES = {'direction': 'Direction', 'service': 'Service', 'agence': 'Agence / site', 'filiale': 'Filiale',
+           'comite': 'Comité / instance', 'autre': 'Autre'}
+
+
+def _entite_concernee(m, r, f, cid, directions):
+    """Direction de la structure, ou entité saisie à la main (avec option : l'ajouter aux directions)."""
+    choix = f.get('direction_id') or ''
+    nom = ' '.join((f.get('entite_nom') or '').split())[:200]
+    if choix != 'autre' or not nom:
+        did = entier(choix)
+        r.direction_id = did if did and any(d.id == did for d in directions) else None
+        r.entite_type = r.entite_nom = None
+        return
+    type_ = f.get('entite_type') if f.get('entite_type') in ENTITES else 'autre'
+    if type_ == 'direction' and f.get('creer_direction'):
+        existante = next((d for d in directions if (d.nom or '').strip().lower() == nom.lower()), None)
+        if existante is None:
+            existante = m.Direction(nom=nom[:100], client_id=cid, is_active=True,
+                                    description='Créée depuis une recommandation externe')
+            m.db.session.add(existante)
+            m.db.session.flush()
+            journaliser('direction_creee', {'id': existante.id, 'nom': existante.nom, 'origine': 'recommandation_externe'})
+        r.direction_id, r.entite_type, r.entite_nom = existante.id, None, None
+        return
+    r.direction_id, r.entite_type, r.entite_nom = None, type_, nom
+
+
+def entite_libelle(r):
+    """Texte de l'entité concernée d'une recommandation externe (direction ou saisie libre)."""
+    if getattr(r, 'direction', None) is not None:
+        return r.direction.nom
+    if getattr(r, 'entite_nom', None):
+        return f"{r.entite_nom} ({ENTITES.get(r.entite_type, 'Autre').lower()})"
+    return ''
 
 
 def _date(v):

@@ -71093,6 +71093,10 @@ def c2n_modifier_recommandation(reco_id):
         if progression:
             recommandation.progression = int(progression)
         
+        # Appréciation (niveau + commentaire)
+        from egalyx.appreciation_reco import enregistrer_formulaire as _appreciation
+        _appreciation(recommandation, request.form, current_user.id)
+        
         recommandation.updated_at = datetime.utcnow()
         db.session.commit()
         
