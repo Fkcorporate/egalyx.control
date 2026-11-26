@@ -1,0 +1,294 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="d-flex justify-content-between flex-wrap flex-md-nowrap align-items-center pt-3 pb-2 mb-3 border-bottom">
+    <h1 class="h2">
+        <i class="fas fa-{{ 'edit' if action == 'modifier' else 'plus' }}"></i> 
+        {{ 'Modifier' if action == 'modifier' else 'Nouvelle' }} Direction
+    </h1>
+</div>
+
+<div class="row">
+    <div class="col-md-8">
+        <div class="card shadow">
+            <div class="card-header {{ 'bg-info' if action == 'modifier' else 'bg-primary' }} text-white">
+                <h5 class="mb-0">{{ 'Modification' if action == 'modifier' else 'Création' }} de la Direction</h5>
+            </div>
+            <div class="card-body">
+                <form method="POST" id="directionForm">
+                    {{ form.hidden_tag() }}
+                    
+                    {% if action == 'modifier' and direction %}
+                    <input type="hidden" name="direction_id" value="{{ direction.id }}">
+                    <div class="alert alert-info mb-3">
+                        <i class="fas fa-info-circle"></i> Modification de la direction : 
+                        <strong>{{ direction.nom }}</strong>
+                    </div>
+                    {% endif %}
+                    
+                    <div class="mb-3">
+                        {{ form.nom.label(class="form-label") }}
+                        {{ form.nom(class="form-control", placeholder="Nom de la direction") }}
+                        {% for error in form.nom.errors %}
+                        <div class="text-danger">{{ error }}</div>
+                        {% endfor %}
+                    </div>
+                    
+                    <div class="mb-3">
+                        {{ form.description.label(class="form-label") }}
+                        {{ form.description(class="form-control", rows="4", placeholder="Description de la direction...") }}
+                        {% for error in form.description.errors %}
+                        <div class="text-danger">{{ error }}</div>
+                        {% endfor %}
+                    </div>
+                    
+                    <!-- Sélection du Pôle (optionnel) -->
+                    <div class="mb-3">
+                        <label class="form-label fw-bold">
+                            <i class="fas fa-layer-group text-primary me-2"></i>
+                            Pôle / Filiale (optionnel)
+                        </label>
+                        <select class="form-select" name="pole_id" id="pole_id">
+                            <option value="0">--- Aucun pôle ---</option>
+                            {% if poles is defined and poles %}
+                                {% for pole in poles %}
+                                <option value="{{ pole.id }}" 
+                                        {% if form.pole_id.data == pole.id %}selected{% endif %}
+                                        {% if pole.couleur %}style="border-left: 3px solid {{ pole.couleur }};"{% endif %}>
+                                    {{ pole.nom }}
+                                    {% if pole.responsable_nom %} (Resp: {{ pole.responsable_nom }}){% endif %}
+                                </option>
+                                {% endfor %}
+                            {% endif %}
+                        </select>
+                        <small class="form-text text-muted">
+                            <i class="fas fa-info-circle me-1"></i>
+                            Rattachez cette direction à un pôle existant
+                        </small>
+                        {% for error in form.pole_id.errors %}
+                        <div class="text-danger">{{ error }}</div>
+                        {% endfor %}
+                    </div>
+                    
+                    <!-- Type de responsable -->
+                    <div class="mb-3">
+                        <label class="form-label fw-bold">Responsable de la direction</label>
+                        <div class="card bg-light">
+                            <div class="card-body">
+                                <div class="mb-3">
+                                    {{ form.type_responsable.label(class="form-label") }}
+                                    {% for subfield in form.type_responsable %}
+                                    <div class="form-check">
+                                        {{ subfield(class="form-check-input", onclick="toggleResponsableType()") }}
+                                        {{ subfield.label(class="form-check-label") }}
+                                    </div>
+                                    {% endfor %}
+                                </div>
+                                
+                                <!-- Zone de sélection utilisateur -->
+                                <div id="zone_utilisateur" class="mb-3">
+                                    {{ form.responsable_id.label(class="form-label") }}
+                                    <select class="form-select" name="responsable_id" id="responsable_id">
+                                        <option value="0">--- Aucun responsable ---</option>
+                                        {% if users is defined and users %}
+                                            {% for user in users %}
+                                            <option value="{{ user.id }}" {% if form.responsable_id.data == user.id %}selected{% endif %}>
+                                                {{ user.username }}
+                                            </option>
+                                            {% endfor %}
+                                        {% endif %}
+                                    </select>
+                                    <small class="form-text text-muted">Laissez « Aucun responsable » si le poste est à pourvoir : la direction apparaîtra « À pourvoir » dans la structure.</small>
+                                    {% for error in form.responsable_id.errors %}
+                                    <div class="text-danger">{{ error }}</div>
+                                    {% endfor %}
+                                    <small class="form-text text-muted">Sélectionnez un utilisateur existant</small>
+                                </div>
+                                
+                                <!-- Zone de saisie manuelle -->
+                                <div id="zone_manuel" style="display: none;" class="mb-3">
+                                    {{ form.responsable_nom_manuel.label(class="form-label") }}
+                                    {{ form.responsable_nom_manuel(class="form-control", placeholder="Ex: Jean Dupont") }}
+                                    {% for error in form.responsable_nom_manuel.errors %}
+                                    <div class="text-danger">{{ error }}</div>
+                                    {% endfor %}
+                                    <small class="form-text text-muted">Saisissez le nom du responsable (ne sera pas lié à un compte utilisateur)</small>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="d-grid gap-2 d-md-flex justify-content-md-end">
+                        <a href="{{ url_for('admin_directions') }}" class="btn btn-secondary me-md-2">
+                            <i class="fas fa-arrow-left"></i> Annuler
+                        </a>
+                        <button type="submit" class="btn {{ 'btn-info' if action == 'modifier' else 'btn-primary' }}">
+                            <i class="fas fa-save"></i> {{ 'Enregistrer' if action == 'modifier' else 'Créer la Direction' }}
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+    
+    <div class="col-md-4">
+        <div class="card shadow">
+            <div class="card-header bg-info text-white">
+                <h6 class="mb-0"><i class="fas fa-lightbulb"></i> Informations</h6>
+            </div>
+            <div class="card-body">
+                <p>Les directions représentent les principales unités organisationnelles.</p>
+                
+                <div class="alert alert-primary mt-3">
+                    <h6 class="alert-heading fw-bold">
+                        <i class="fas fa-layer-group me-2"></i>Pôles / Filiales
+                    </h6>
+                    <p class="small mb-0">
+                        Les pôles permettent de regrouper plusieurs directions sous une même entité. Exemple : 'Pôle Finance' regroupe 'Direction Financière' et 'Direction Comptable'.
+                    </p>
+                </div>
+                
+                <p><strong>Responsable :</strong></p>
+                <ul>
+                    <li>Sélectionner un utilisateur : lie la direction à un compte existant</li>
+                    <li>Saisie manuelle : simple texte (utile pour des personnes externes)</li>
+                </ul>
+                
+                <!-- Aperçu de la hiérarchie -->
+                <div class="border-top pt-3 mt-3">
+                    <h6 class="fw-bold">Hiérarchie</h6>
+                    <div class="d-flex align-items-center mb-2 flex-wrap">
+                        <span class="badge bg-primary me-2" id="previewPole">Pôle</span>
+                        <i class="fas fa-arrow-right text-muted mx-1"></i>
+                        <span class="badge bg-success" id="previewDirection">Direction</span>
+                    </div>
+                    <p class="small text-muted" id="previewDescription">
+                        Sélectionnez un pôle pour voir l'aperçu
+                    </p>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+function toggleResponsableType() {
+    const typeUtilisateur = document.getElementById('type_responsable-0')?.checked;
+    const zoneUtilisateur = document.getElementById('zone_utilisateur');
+    const zoneManuel = document.getElementById('zone_manuel');
+    
+    if (typeUtilisateur) {
+        if (zoneUtilisateur) zoneUtilisateur.style.display = 'block';
+        if (zoneManuel) zoneManuel.style.display = 'none';
+        const manuelInput = document.getElementById('responsable_nom_manuel');
+        if (manuelInput) manuelInput.value = '';
+    } else {
+        if (zoneUtilisateur) zoneUtilisateur.style.display = 'none';
+        if (zoneManuel) zoneManuel.style.display = 'block';
+        const responsableSelect = document.getElementById('responsable_id');
+        if (responsableSelect) responsableSelect.value = '0';
+    }
+}
+
+function updatePolePreview() {
+    const poleSelect = document.getElementById('pole_id');
+    const previewPole = document.getElementById('previewPole');
+    const previewDirection = document.getElementById('previewDirection');
+    const previewDescription = document.getElementById('previewDescription');
+    const directionNom = document.querySelector('input[name="nom"]')?.value || 'Direction';
+    
+    if (poleSelect && poleSelect.value && poleSelect.value != '0') {
+        const selectedOption = poleSelect.options[poleSelect.selectedIndex];
+        const poleNom = selectedOption.text.split(' (')[0];
+        if (previewPole) {
+            previewPole.textContent = poleNom;
+            previewPole.className = 'badge bg-primary me-2';
+        }
+        if (previewDirection) previewDirection.textContent = directionNom;
+        if (previewDescription) {
+            previewDescription.innerHTML = `<i class="fas fa-check-circle text-success me-1"></i>La direction sera rattachée au pôle <strong>${poleNom}</strong>`;
+        }
+    } else {
+        if (previewPole) {
+            previewPole.textContent = 'Aucun pôle';
+            previewPole.className = 'badge bg-secondary me-2';
+        }
+        if (previewDirection) previewDirection.textContent = directionNom;
+        if (previewDescription) {
+            previewDescription.innerHTML = '<i class="fas fa-info-circle text-info me-1"></i>Direction sans pôle (niveau entreprise)';
+        }
+    }
+}
+
+document.addEventListener('DOMContentLoaded', function() {
+    toggleResponsableType();
+    
+    const poleSelect = document.getElementById('pole_id');
+    const nomInput = document.querySelector('input[name="nom"]');
+    
+    if (poleSelect) {
+        poleSelect.addEventListener('change', updatePolePreview);
+    }
+    
+    if (nomInput) {
+        nomInput.addEventListener('input', updatePolePreview);
+    }
+    
+    setTimeout(updatePolePreview, 100);
+    
+    const form = document.getElementById('directionForm');
+    if (form) {
+        form.addEventListener('submit', function(e) {
+            const nom = document.querySelector('input[name="nom"]')?.value;
+            if (!nom || nom.trim() === '') {
+                e.preventDefault();
+                alert('Le nom de la direction est requis');
+                return false;
+            }
+            
+            // Responsable facultatif : laissé vide, la direction apparaît « À pourvoir » dans la structure.
+        });
+    }
+});
+</script>
+
+<style>
+#previewPole, #previewDirection {
+    font-size: 0.9rem;
+    padding: 0.5rem 1rem;
+    transition: all 0.3s ease;
+}
+
+.badge.bg-primary {
+    background-color: #3b82f6 !important;
+}
+
+.badge.bg-success {
+    background-color: #10b981 !important;
+}
+
+.badge.bg-secondary {
+    background-color: #6c757d !important;
+}
+
+@keyframes fadeIn {
+    from { opacity: 0; transform: translateY(-5px); }
+    to { opacity: 1; transform: translateY(0); }
+}
+
+#previewDescription {
+    animation: fadeIn 0.3s ease;
+}
+
+.card.bg-light {
+    background-color: #f8f9fa !important;
+    border: 1px solid #e9ecef;
+}
+
+.alert-primary {
+    background-color: #e8f0fe;
+    border-left: 4px solid #3b82f6;
+    color: #1e3a8a;
+}
+</style>
+{% endblock %}
