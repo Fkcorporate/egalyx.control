@@ -18,9 +18,10 @@ with Muet():
     try: objets.peupler_objets(A, ids)
     except TypeError: objets.peupler_objets(A)
 c = A.app.test_client()
-for u in ('/ci', '/cote-divoire'):
-    r = c.get(u, base_url='https://www.egalyx.com')
-    verif(f'{u} → accueil (301)', r.status_code == 301 and r.headers['Location'].endswith('/#contact'), str(r.status_code))
+r = c.get('/ci', base_url='https://www.egalyx.com')
+verif('/ci → /cote-divoire (301)', r.status_code == 301 and r.headers['Location'].endswith('/cote-divoire'), str(r.status_code))
+r = c.get('/cote-divoire', base_url='https://www.egalyx.com')
+verif('/cote-divoire : vraie page Côte d’Ivoire (200)', r.status_code == 200 and 'Côte d' in r.get_data(as_text=True), str(r.status_code))
 with A.app.app_context():
     uid = ids['gestionnaire']; cid = db.session.get(M.User, uid).client_id
     plans = [p.id for p in M.PlanAction.query.filter_by(client_id=cid).limit(2)]

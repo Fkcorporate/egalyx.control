@@ -148,6 +148,8 @@ def enregistrer_extensions(app, db, csrf=None, recalculer_cotations=None, constr
     anti_spam_contact.enregistrer(app, csrf=csrf)   # formulaire de contact du site : question, champ piège, limite par IP
     from egalyx import blog
     blog.enregistrer(app)                   # blog public : vrais articles, catégories, sitemap, SEO
+    from egalyx import seo
+    seo.enregistrer(app)                    # SEO : accueil à « / », adresse unique, robots.txt, pages de mots-clés
     from egalyx import connexion_client
     connexion_client.enregistrer(app)       # page de connexion aux couleurs du client (https://<client>.egalyx.com)
     try:                                    # paquet optionnel « nouvelle apparence » (classique / nouvelle au choix)

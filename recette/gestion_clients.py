@@ -182,7 +182,10 @@ verif('Majuscules et port tolérés', r.status_code == 200, str(r.status_code))
 r = anonyme.get('/auth/login_fullscreen', headers={'Host': 'inconnu.egalyx.com'})
 verif('Sous-domaine inconnu : page « client introuvable »', r.status_code == 404, str(r.status_code))
 r = anonyme.get('/auth/login_fullscreen', headers={'Host': 'egalyx.com'})
-verif('Domaine principal : inchangé', r.status_code == 200, str(r.status_code))
+verif('Domaine nu egalyx.com → www (301, adresse unique pour Google)',
+      r.status_code == 301 and r.headers.get('Location') == 'https://www.egalyx.com/auth/login_fullscreen', str(r.status_code))
+r = anonyme.get('/auth/login_fullscreen', headers={'Host': 'www.egalyx.com'})
+verif('Domaine principal www : inchangé', r.status_code == 200, str(r.status_code))
 with A.app.app_context():
     from egalyx.gestion_clients import client_par_hote, url_client
     env_seul = M.Client(nom='Ancien client', reference='REC-ANC', is_active=True)

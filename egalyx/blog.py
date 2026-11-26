@@ -29,15 +29,93 @@ PAS_ARTICLES = {'index', 'article', 'article-template', 'auteur', 'categorie', '
 # notes. Elles répondent « page introuvable » et ne sont ni listées ni dans le sitemap. Pour en remettre une en ligne
 # (avec de vrais avis, clients d'accord), retirez son nom de cette liste.
 SUSPENDUES = {'egalyx-avis-clients-certifies', 'avis-certifies-clients-egalyx-2026', 'logiciel-audit-interne-avis-clients',
-              'avis-retours-clients-egalyx-alternatives'}
+              'avis-retours-clients-egalyx-alternatives',
+              'audit-seo-tools-2025'}   # hors sujet (outils de référencement) : dilue la thématique audit / risques du site
+# Articles trop courts : en dessous de ce nombre de mots, la page reste en ligne mais n'est pas proposée à Google
+# (« noindex, follow ») ni dans le plan du site. Dès qu'un article est enrichi au-delà du seuil, il redevient indexable.
+SEUIL_MOTS = 250
 # Doublons fusionnés : l'ancienne adresse renvoie (301) vers la version complète, Google garde un seul article.
+# Une cible qui commence par « / » est une page du site (page de mots-clés) plutôt qu'un article.
 FUSIONS = {'conformite-rgpd-logiciel-gestion-risques': 'conformite-rgpd-logiciel-risques',
            # anciens liens de la page d'accueil (articles qui n'ont jamais existé)
-           'comment-ia-transforme-audit-interne': 'ia-audit-interne-2026',
+           'comment-ia-transforme-audit-interne': 'audit-interne-ia-automatisation',
            'cartographie-risques-methodologie': 'cartographie-risques-entreprise-methode-2026',
-           'nouveautes-ohada-2024': 'mise-en-conformite-ohada-entreprises-ivoiriennes'}
+           'nouveautes-ohada-2024': 'mise-en-conformite-ohada-entreprises-ivoiriennes',
+           # --- 26/11/2026 : quasi-doublons regroupés sur l'article le plus complet du sujet ---
+           # RGPD
+           'conformite-rgpd-2026': 'conformite-rgpd-logiciel-risques',
+           'conformite-rgpd-entreprise-guide-2026': 'conformite-rgpd-logiciel-risques',
+           # OHADA
+           'logiciel-gestion-risques-ohada-afrique-2026': 'logiciel-gestion-risques-ohada-afrique',
+           'conformite-ohada-logiciel-afrique': 'logiciel-gestion-risques-ohada-afrique',
+           'conformite-ohada-logiciel-risques': 'logiciel-gestion-risques-ohada-afrique',
+           'logiciel_audit_ohada_afrique': 'logiciel-gestion-risques-ohada-afrique',
+           'conformite_ohada_cote_ivoire': 'mise-en-conformite-ohada-entreprises-ivoiriennes',
+           # planification, 3 lignes, méthode
+           'audit-interne-frequence-planification-2026': 'audit-interne-frequence-planification',
+           'audit-interne-3e-ligne-defense-entreprise': 'audit-interne-3-lignes-defense',
+           'audit-interne-normes-internationales': 'methodologie-audit-interne-normes-iso-2026',
+           'guide-implementation-audit-interne': 'methodologie-audit-interne-normes-iso-2026',
+           # KRI
+           'indicateurs-risques-kri-mise-en-place': 'indicateurs-risques-kri-guide',
+           'indicateurs-risques-kri-performance-2026': 'indicateurs-risques-kri-guide',
+           # cartographie
+           'cartographie-risques-entreprise-guide': 'cartographie-risques-entreprise-methode-2026',
+           'mise-en-place-cartographie-risques': 'cartographie-risques-entreprise-methode-2026',
+           # IA et automatisation de l'audit
+           'ia-audit-interne-2026': 'audit-interne-ia-automatisation',
+           'audit-interne-ia-avantages': 'audit-interne-ia-automatisation',
+           'automatisation-audit-interne-productivite-2026': 'audit-interne-ia-automatisation',
+           'transformation-digitale-audit': 'audit-interne-ia-automatisation',
+           # plans d'action
+           'plan-action-correctif-audit-efficace-2026': 'plan-action-correctif-audit',
+           # gestion des risques
+           'logiciel-gestion-risques-iso-31000': 'mise-en-place-systeme-gestion-risques-iso-31000-2026',
+           'management-des-risques-entreprise': 'guide-complet-gestion-risques-entreprise-2026',
+           'gestion-risques-entreprise-afrique-2026': 'guide-complet-gestion-risques-entreprise-2026',
+           'gestion-risques-financiers': 'guide-complet-gestion-risques-entreprise-2026',
+           # cybersécurité
+           'gestion-risques-cybersecurite-entreprise-2026': 'logiciel-gestion-risques-cyber-securite',
+           'cybersecurite-gestion-risques': 'logiciel-gestion-risques-cyber-securite',
+           'offre-securite-informatique-pme': 'cybersecurite-pme-tpe',
+           # conformité générale
+           'conformite-entreprise-2026': 'audit-interne-conformite-reglementaire',
+           'conformite-reglementaire-ia-logiciel-2026': 'audit-interne-conformite-reglementaire',
+           'audit-conformite-entreprise-guide': 'audit-interne-conformite-reglementaire',
+           # contrôle interne
+           'solution-controle-interne-express': 'guide-mise-en-place-controle-interne',
+           'meilleures-pratiques-controle-interne-entreprise': 'guide-mise-en-place-controle-interne',
+           'guide-achat-logiciel-controle-interne': 'guide-choix-logiciel-controle-interne',
+           # choisir un logiciel, prix, ROI
+           'comparatif-logiciel-audit-interne-2026': 'comment-choisir-logiciel-audit-2026',
+           'comparatif-egalyx-vs-concurrents-2026': 'comment-choisir-logiciel-audit-2026',
+           'meilleur-logiciel-gestion-risques-2026': 'comment-choisir-logiciel-audit-2026',
+           'outils_digitalisation_audit_interne': 'comment-choisir-logiciel-audit-2026',
+           'pourquoi_choisir_egalyx_logiciel_audit': 'comment-choisir-logiciel-audit-2026',
+           'prix-abonnement-logiciel-audit-interne-2026': 'prix-logiciel-audit-interne-comparatif-2026',
+           'couts-logiciel-controle-interne': 'prix-logiciel-audit-interne-comparatif-2026',
+           'prix-logiciel-gestion-risques-comparatif': 'prix-logiciel-audit-interne-comparatif-2026',
+           'logiciel-gestion-risques-prix-devis': 'prix-logiciel-audit-interne-comparatif-2026',
+           'devis-gratuit-logiciel-gestion-risques': 'prix-logiciel-audit-interne-comparatif-2026',
+           'logiciel-cartographie-risques-prix-afrique': 'prix-logiciel-audit-interne-comparatif-2026',
+           'rentabiliser-logiciel-audit-interne': 'roi-logiciel-audit-interne',
+           # PME
+           'logiciel-audit-interne-pme-2026': 'audit-interne-logiciel-pme-avantages-2026',
+           # pages commerciales : la page de mots-clés du site répond mieux à la recherche
+           'logiciel-gestion-risques-ia-2026': '/gestion-risques-entreprise-ia',
+           'logiciel-controle-interne-avantages': '/controle-interne-logiciel-pme',
+           'logiciel-gouvernance-entreprise': '/gouvernance-entreprise-logiciel',
+           # Côte d'Ivoire / Abidjan : une seule page locale
+           'logiciel-audit-interne-cote-ivoire': '/cote-divoire',
+           'logiciel_gestion_risques_abidjan': '/cote-divoire',
+           'audit-interne-abidjan-entreprise': '/cote-divoire',
+           'audit_interne_abidjan_prix': '/cote-divoire',
+           'logiciel-cartographie-risques-abidjan': '/cote-divoire',
+           'achat-outils-controle-interne-abidjan': '/cote-divoire',
+           'achat-guides-audit-conformite-abidjan': '/cote-divoire',
+           'manuel-audit-performance-achat-abidjan': '/cote-divoire'}
 # « Dernières publications » de la page d'accueil : ces articles d'abord (avec leur image), sinon les plus récents
-A_LA_UNE = [('ia-audit-interne-2026', '/static/images/blog-ia-audit.jpg'),
+A_LA_UNE = [('audit-interne-ia-automatisation', '/static/images/blog-ia-audit.jpg'),
             ('cartographie-risques-entreprise-methode-2026', '/static/images/blog-cartographie.jpg'),
             ('mise-en-conformite-ohada-entreprises-ivoiriennes', '/static/images/blog-conformite.jpg')]
 
@@ -111,7 +189,7 @@ def _lire(chemin, slug):
         'mots_cles': mots, 'categorie': cat, 'categorie_libelle': CAT[cat][1],
         'image': entete.get('image') or IMAGES_CAT[cat], 'image_og': entete.get('image') or OG_CAT[cat],
         'date': entete.get('date', DATE_DEFAUT), 'date_modif': max(modif, entete.get('date', DATE_DEFAUT)),
-        'lecture': max(2, round(nb_mots / 220)), 'mots': nb_mots,
+        'lecture': max(2, round(nb_mots / 220)), 'mots': nb_mots, 'indexable': nb_mots >= SEUIL_MOTS,
         'jsonld_propre': bool(re.search(r'"@type"\s*:\s*"(BlogPosting|Article|NewsArticle)"', src)),
         'fil_propre': 'breadcrumb' in corps, 'autonome': '{% extends' not in src,
         'ancien_slug': canon.group(1).strip('/') if canon and canon.group(1).strip('/') != slug else None,
@@ -208,7 +286,8 @@ def enregistrer(app):
         if (slug or '').endswith('.html'):
             return redirect(url_for('blog_article', slug=slug[:-5]), 301)
         if slug in FUSIONS:
-            return redirect(url_for('blog_article', slug=FUSIONS[slug]), 301)
+            cible = FUSIONS[slug]
+            return redirect(cible if cible.startswith('/') else url_for('blog_article', slug=cible), 301)
         if not re.fullmatch(r'[A-Za-z0-9_\-]{1,120}', slug or '') or slug in SUSPENDUES or slug in PAS_ARTICLES:
             abort(404)
         art = _par_slug(app, slug)
@@ -240,9 +319,10 @@ def enregistrer(app):
                 rep = make_response(rep)
                 xml = rep.get_data(as_text=True)
                 lignes = []
-                for c in CATEGORIES:
+                avec = {a['categorie'] for a in catalogue(app) if a['indexable']}
+                for c in [c for c in CATEGORIES if c[0] in avec]:
                     lignes.append(f'    <url>\n        <loc>{SITE}/blog/categorie/{c[0]}</loc>\n        <changefreq>weekly</changefreq>\n        <priority>0.6</priority>\n    </url>\n')
-                for art in catalogue(app):
+                for art in [a for a in catalogue(app) if a['indexable']]:
                     lignes.append(f"    <url>\n        <loc>{SITE}{art['url']}</loc>\n        <lastmod>{art['date_modif']}</lastmod>\n"
                                   f"        <changefreq>monthly</changefreq>\n        <priority>0.7</priority>\n"
                                   f"        <image:image><image:loc>{SITE}{art['image']}</image:loc></image:image>\n    </url>\n")
